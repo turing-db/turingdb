@@ -6,8 +6,6 @@
 #include <string>
 #include <string_view>
 
-#include <range/v3/view/join.hpp>
-
 #include <spdlog/fmt/bundled/format.h>
 
 #include "BioAssert.h"
@@ -35,9 +33,6 @@
 
 using namespace db;
 
-namespace rg = ranges;
-namespace rv = rg::views;
-
 namespace {
 
 constexpr std::string_view fanoutSizeErr =
@@ -50,21 +45,12 @@ constexpr std::string_view seedErr = "graphSAGE() seed must be a constant int";
 
 constexpr size_t returnValuesPerHop = 3;
 
-using HopReturnValueNames = std::array<std::string, returnValuesPerHop>;
-
-const auto returnValueNames = [] consteval {
-    std::array<HopReturnValueNames, GraphSAGEProcedure::numHops> names;
-
-    for (size_t hop {0}; auto& [dst, src, tgt] : names) {
-        const char hopChar = hop + '0';
-        dst = std::string {"dst_nodes"}, dst += hopChar;
-        src = std::string {"src_nodes"}, src += hopChar;
-        tgt = std::string {"tgt_nodes"}, tgt += hopChar;
-        hop++;
-    }
-
-    return names;
-}();
+constexpr std::array<std::string_view, GraphSAGEProcedure::numHops * returnValuesPerHop> returnValueNames {
+    "dst_nodes0", "src_nodes0", "tgt_nodes0",
+    "dst_nodes1", "src_nodes1", "tgt_nodes1",
+    "dst_nodes2", "src_nodes2", "tgt_nodes2",
+};
+static_assert(GraphSAGEProcedure::numHops == 3, "Update above table");
 
 struct Data final : public IndexedProcedureData {
     std::unique_ptr<GraphSAGESampler> sampler;
@@ -88,8 +74,6 @@ void validFanoutList(const ListView l) {
         throw TuringException(fmt::format(fanoutSizeErr, reqSize, listSize));
     }
 
-    // One node's sample is emitted whole, so a fanout wider than a chunk could not be
-    // returned without a step running over the row budget it promises
     for (const ListElementView ele : l) {
         const size_t fanout = ele.getAs<types::Int64::Primitive>();
         if (fanout > ChunkConfig::CHUNK_SIZE) {
@@ -165,9 +149,9 @@ void prepareImpl(ProcedureState* state) {
     }
 
     ColumnNodeIDs nodes;
-    const Column* x = data.getInputColumn(0);
-    const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(x);
-    bioassert(seeds, "invalid seeds");
+    const Column* seedsErased = data.getInputColumn(0);
+    const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(seedsErased);
+    bioassert(seeds, "Invalid seeds");
     const ListView list = seeds->getRaw();
     for (const ListElementView ele : list) {
         nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
@@ -212,7 +196,7 @@ void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addConstantArgument("fanouts", ProcedureType::LIST);
     proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
 
-    for (const std::string_view name : returnValueNames | rv::join) {
+    for (const std::string_view name : returnValueNames) {
         proc->addNullableReturnValue(name, ProcedureType::NODE);
     }
 

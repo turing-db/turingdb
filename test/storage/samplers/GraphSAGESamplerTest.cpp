@@ -271,7 +271,7 @@ TEST_F(GraphSAGESamplerTest, laterHopFrontiersComeFromTheHopBefore) {
     for (size_t hop = 1; hop < hops; hop++) {
         std::set<uint64_t> reached;
         for (const SampledEdge& edge : rows[hop - 1]._edges) {
-            reached.insert(edge._tgt);
+            reached.insert(edge._src);
         }
 
         for (const uint64_t node : rows[hop]._dstNodes) {
@@ -282,7 +282,7 @@ TEST_F(GraphSAGESamplerTest, laterHopFrontiersComeFromTheHopBefore) {
     }
 }
 
-TEST_F(GraphSAGESamplerTest, everySourceIsAFrontierNodeOfItsHop) {
+TEST_F(GraphSAGESamplerTest, everyTargetIsAFrontierNodeOfItsHop) {
     const ColumnNodeIDs seeds = {0, 1, 15, 17};
     const GraphSAGESampler::Fanouts fanouts {2, 2, 2};
 
@@ -295,8 +295,8 @@ TEST_F(GraphSAGESamplerTest, everySourceIsAFrontierNodeOfItsHop) {
                                           rows[hop]._dstNodes.cend());
 
         for (const SampledEdge& edge : rows[hop]._edges) {
-            EXPECT_TRUE(frontier.contains(edge._src))
-                << "hop " << hop << " sampled " << edge._src
+            EXPECT_TRUE(frontier.contains(edge._tgt))
+                << "hop " << hop << " sampled " << edge._tgt
                 << ", which is not in its frontier";
         }
     }
@@ -311,14 +311,14 @@ TEST_F(GraphSAGESamplerTest, noNodeContributesMoreRowsThanTheFanout) {
     runSample(seeds, fanouts, ChunkConfig::CHUNK_SIZE, 31, rows, stats);
 
     for (size_t hop = 0; hop < hops; hop++) {
-        std::map<uint64_t, size_t> perSource;
+        std::map<uint64_t, size_t> perTarget;
         for (const SampledEdge& edge : rows[hop]._edges) {
-            perSource[edge._src]++;
+            perTarget[edge._tgt]++;
         }
 
-        for (const auto& [source, count] : perSource) {
+        for (const auto& [target, count] : perTarget) {
             EXPECT_LE(count, fanouts[hop])
-                << "hop " << hop << " drew " << count << " rows for " << source;
+                << "hop " << hop << " drew " << count << " rows for " << target;
         }
     }
 }
@@ -463,7 +463,9 @@ TEST_F(GraphSAGESamplerTest, sameSeedGivesTheSameSample) {
 }
 
 TEST_F(GraphSAGESamplerTest, differentSeedsDrawDifferently) {
-    const ColumnNodeIDs seeds = {0, 1, 8, 9, 11, 12, 15, 17};
+    // Gym (13) is the only node with more in-edges than the fanout, so it is the only
+    // seed whose sample the RNG has a say in
+    const ColumnNodeIDs seeds = {13};
     const GraphSAGESampler::Fanouts fanouts {2, 2, 2};
 
     RunRows first;
@@ -513,7 +515,7 @@ TEST_F(GraphSAGESamplerTest, aSeedWithOnlyInEdgesIsSampled) {
     std::vector<SampledEdge> edges = rows[0]._edges;
     std::ranges::sort(edges);
 
-    const std::vector<SampledEdge> expected {{2, 0}, {2, 9}};
+    const std::vector<SampledEdge> expected {{0, 2}, {9, 2}};
     EXPECT_EQ(edges, expected);
 }
 

@@ -15,7 +15,7 @@ namespace {
 const auto resizeImpl = [](auto* col, size_t size) -> void { col->resize(size); };
 const auto clearImpl = [](auto* col) -> void { col->clear(); };
 
-void colAssign(const ColumnNodeIDs* src, ColumnOptVector<NodeID>* dst) {
+void assignColumn(const ColumnNodeIDs* src, ColumnOptVector<NodeID>* dst) {
     if (!dst) {
         return;
     }
@@ -143,8 +143,6 @@ size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
         return 0;
     }
 
-    // One writer reads the whole sample, so it holds a single RNG stream and resumes
-    // where the last step left it however many steps the frontier takes
     if (!data._writer) {
         const bool haveSeed = _seed != NOSEED;
         data._writer = haveSeed
@@ -164,13 +162,13 @@ size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
 
     writer->fill(maxRows);
 
-    colAssign(&srcs, data._srcs);
-    colAssign(&tgts, data._tgts);
+    assignColumn(&srcs, data._srcs);
+    assignColumn(&tgts, data._tgts);
 
     bioassert(srcs.size() == tgts.size(), "Mismatched srcs, tgts");
 
     if (hop + 1 < hops) {
-        pushFrontier(hop + 1, &tgts);
+        pushFrontier(hop + 1, &srcs);
     }
 
     return srcs.size();
