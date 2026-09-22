@@ -142,6 +142,10 @@ private:
     // Entry block of the nl function being built
     mlir::Block* _entryBlock {nullptr};
 
+    // The last constant hoisted to the entry block, which the next one goes after. Null
+    // while the block opens on something else, where the next constant goes to the top
+    mlir::Operation* _lastHoistedConstant {nullptr};
+
     // The block a root scan opens its loop in. It is the entry block at top
     // level, but a db.cross_product lowers its inner factor with the outer
     // factor's innermost loop body as the root, so the inner factor's scans
@@ -527,6 +531,10 @@ private:
     // Point the builder at the end of the entry block's run of hoisted constants, where
     // the next one belongs
     void setInsertionAfterHoistedConstants();
+
+    // Point the builder at the very top of the entry block, above the constants hoisted
+    // there
+    void setInsertionToEntryBlockStart();
 
     // The chunks one group of a db op's column operands lowered to, in order
     void mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
