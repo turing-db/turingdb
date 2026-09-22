@@ -21,16 +21,28 @@ class PropertyContainerDumperTest : public TuringTest {
     }
 };
 
-TEST_F(PropertyContainerDumperTest, emptyStrings) {
+TEST_F(PropertyContainerDumperTest, emptyStringsRoundTrip) {
     fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "strings";
 
-    auto writer = fs::FilePageWriter::open(outDir / "strings");
-    ASSERT_TRUE(writer);
+    TypedPropertyContainer<types::String> original;
 
-    StringPropertyContainerDumper dumper(writer.value());
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        StringPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
 
-    TypedPropertyContainer<types::String> container;
-    ASSERT_TRUE(dumper.dump(container));
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    StringPropertyContainerLoader loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::String>();
+    EXPECT_EQ(loaded.size(), 0);
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
 }
 
 TEST_F(PropertyContainerDumperTest, emptyInts) {
@@ -288,6 +300,43 @@ TEST_F(PropertyContainerDumperTest, stringNullsRoundTrip) {
             ASSERT_NE(value.value(), nullptr) << "id " << id.getValue();
             EXPECT_EQ(*value.value(), str);
         }
+    }
+}
+
+// A container every entity is null in holds no string at all, so its one bucket carries no
+// limit block for the loader to pair it with.
+TEST_F(PropertyContainerDumperTest, stringNullsOnlyRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "string_nulls_only";
+
+    TypedPropertyContainer<types::String> original;
+    for (EntityID id = 0; id < 100; id++) {
+        original.add(id, std::nullopt);
+    }
+    original.sort();
+
+    ASSERT_EQ(original.size(), 0);
+    ASSERT_EQ(original.nullIds().size(), 100);
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        StringPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    StringPropertyContainerLoader loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::String>();
+    EXPECT_EQ(loaded.size(), 0);
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+
+    for (EntityID id = 0; id < 100; id++) {
+        EXPECT_FALSE(loaded.tryGetWithNull(id).has_value()) << "id " << id.getValue();
     }
 }
 
