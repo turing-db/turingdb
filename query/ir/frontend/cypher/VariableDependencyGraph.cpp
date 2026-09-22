@@ -471,7 +471,8 @@ void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) {
         return std::ranges::any_of(v->incoming(), [](const DependencyEdge* e) {
             const EdgeMetadata::EdgeType type = e->data().type();
             return type == EdgeMetadata::EdgeType::GET_OUT_EDGES
-                || type == EdgeMetadata::EdgeType::GET_IN_EDGES;
+                || type == EdgeMetadata::EdgeType::GET_IN_EDGES
+                || type == EdgeMetadata::EdgeType::GET_EDGES;
         });
     };
     const auto inDegree = [](const VariableDependency* v) {

@@ -2639,6 +2639,9 @@ add_call_v3_test(test_query_ir_case_entity_subject CaseEntitySubjectTest.cpp)
 # type() over an edge, run end to end against simpledb.
 add_call_v3_test(test_query_ir_edge_type_function EdgeTypeFunctionTest.cpp)
 
+# A pattern closing a cycle on an undirected hop, run end to end against simpledb.
+add_call_v3_test(test_query_ir_undirected_cycle UndirectedCycleTest.cpp)
+
 # An aggregate aliased to the name it reads, run end to end against simpledb.
 add_turing_test(test_query_ir_shadowed_alias ShadowedAliasTest.cpp)
 target_link_libraries(test_query_ir_shadowed_alias PRIVATE
