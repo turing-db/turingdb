@@ -302,12 +302,19 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             _exprAnalyzer->analyzeExpr(rhs);
             const EvaluatedType rhsType = rhs->getType();
 
-            constexpr bool ALLOW_CREATES = true;
+            // writing null cannot create a new property
+            const bool writesNull = rhsType == EvaluatedType::Null;
+            const bool allowCreates = !writesNull;
+
             const ValueType valType = evaluatedToValueType(rhsType);
             const ValueType lhsEvaluatedVt =
-                _exprAnalyzer->analyzePropertyExpr(lhs, ALLOW_CREATES, valType);
+                _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
 
             _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
+
+            if (writesNull) {
+                return;
+            }
 
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
                 throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
