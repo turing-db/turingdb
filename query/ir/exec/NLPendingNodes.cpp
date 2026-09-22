@@ -29,7 +29,7 @@ void NLPendingNodeScan::setLabelSet(const LabelSet& labelset) {
 void NLPendingNodeScan::setProperty(PropertyTypeID propertyType,
                                     const CommitWriteBuffer::SupportedTypeVariant& value) {
     _propertyType = propertyType;
-    _value = value;
+    _value.emplace(value);
 }
 
 void NLPendingNodeScan::fill(size_t maxCount) {

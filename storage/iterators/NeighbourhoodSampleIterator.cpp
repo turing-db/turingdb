@@ -113,10 +113,11 @@ void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
     }
 }
 
-NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& view,
-                                                               const ColumnNodeIDs* input,
-                                                               size_t sampleSize,
-                                                               std::optional<uint64_t> seed)
+template <typename NodeColumn>
+NeighbourhoodSampleChunkWriter<NodeColumn>::NeighbourhoodSampleChunkWriter(const GraphView& view,
+                                                                           const ColumnNodeIDs* input,
+                                                                           size_t sampleSize,
+                                                                           std::optional<uint64_t> seed)
     : NeighbourhoodSampleIterator(view, input),
     _sampleSize(sampleSize),
     _sampleRatio(_sampleSize == 0 ? 1 :  1.0 / _sampleSize),
@@ -125,26 +126,30 @@ NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& 
 {
 }
 
-void NeighbourhoodSampleChunkWriter::setOutputColumns(ColumnNodeIDs* srcIDs,
-                                                      ColumnEdgeIDs* edgeIDs,
-                                                      ColumnEdgeTypes* edgeTypes,
-                                                      ColumnNodeIDs* otherIDs) {
+template <typename NodeColumn>
+void NeighbourhoodSampleChunkWriter<NodeColumn>::setOutputColumns(NodeColumn* srcIDs,
+                                                                  ColumnEdgeIDs* edgeIDs,
+                                                                  ColumnEdgeTypes* edgeTypes,
+                                                                  NodeColumn* otherIDs) {
     _srcIDs = srcIDs;
     _edgeIDs = edgeIDs;
     _edgeTypes = edgeTypes;
     _otherIDs = otherIDs;
 }
 
-size_t NeighbourhoodSampleChunkWriter::geometricSample(double W) {
+template <typename NodeColumn>
+size_t NeighbourhoodSampleChunkWriter<NodeColumn>::geometricSample(double W) {
     const double u = rand01();
     return std::floor(std::log(u) / std::log(1 - W));
 }
 
-size_t NeighbourhoodSampleChunkWriter::randomSampleOffset() {
+template <typename NodeColumn>
+size_t NeighbourhoodSampleChunkWriter<NodeColumn>::randomSampleOffset() {
     return _replacementGenerator(_generator);
 }
 
-void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
+template <typename NodeColumn>
+void NeighbourhoodSampleChunkWriter<NodeColumn>::fill(size_t maxCount) {
     bioassert(_sampleSize <= maxCount, "Invalid sample size.");
 
 	if (_sampleSize == 0) {
@@ -301,3 +306,6 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
         _indices->resize(writeIndex);
     }
 }
+
+template class db::NeighbourhoodSampleChunkWriter<db::ColumnNodeIDs>;
+template class db::NeighbourhoodSampleChunkWriter<db::ColumnOptVector<db::NodeID>>;

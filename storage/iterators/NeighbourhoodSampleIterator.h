@@ -8,6 +8,7 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
+#include "columns/ColumnOptVector.h"
 
 #include "datapart/EdgeRecord.h"
 
@@ -45,6 +46,7 @@ protected:
 /**
  * @brief Uniform random sample of the in edges of each NodeID in @ref _inputNodeIDs
  */
+template <typename NodeColumn>
 class NeighbourhoodSampleChunkWriter final : public NeighbourhoodSampleIterator {
 public:
     NeighbourhoodSampleChunkWriter(const GraphView& view,
@@ -60,18 +62,18 @@ public:
 
     size_t getSampleSize() const { return _sampleSize; }
 
-    void setOutputColumns(ColumnNodeIDs* srcIDs,
+    void setOutputColumns(NodeColumn* srcIDs,
                           ColumnEdgeIDs* edgeIDs,
                           ColumnEdgeTypes* edgeTypes,
-                          ColumnNodeIDs* otherIDs);
+                          NodeColumn* otherIDs);
 
     void setIndices(ColumnIndices* indices) { _indices = indices; }
 
 private:
-    ColumnNodeIDs* _srcIDs {nullptr};
+    NodeColumn* _srcIDs {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnEdgeTypes* _edgeTypes {nullptr};
-    ColumnNodeIDs* _otherIDs {nullptr};
+    NodeColumn* _otherIDs {nullptr};
     ColumnIndices* _indices {nullptr};
 
     size_t _sampleSize {0};
@@ -89,5 +91,8 @@ private:
 
     size_t randomSampleOffset();
 };
+
+using NeighbourhoodSampleWriter = NeighbourhoodSampleChunkWriter<ColumnNodeIDs>;
+using NullableNeighbourhoodSampleWriter = NeighbourhoodSampleChunkWriter<ColumnOptVector<NodeID>>;
 
 }

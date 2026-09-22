@@ -52,7 +52,7 @@ private:
         // by index, so it picks up nodes that arrive after it reached the end
         ColumnNodeIDs _frontier;
         std::unordered_set<uint64_t> _seen;
-        std::unique_ptr<NeighbourhoodSampleChunkWriter> _writer;
+        std::unique_ptr<NullableNeighbourhoodSampleWriter> _writer;
 
         // A frontier node is one dst_nodes row but up to _fanout edge rows, so the two
         // fill at different rates and dst_nodes needs a cursor of its own
@@ -72,11 +72,15 @@ private:
 
     Samples _sampleData {};
 
+    NodeCol _srcsScratch; // used if srcs not yielded
+
     size_t _seed {NOSEED};
 
     bool _seeded {false};
 
+    void pushNode(HopData& data, NodeID node);
     void pushFrontier(size_t hop, const ColumnNodeIDs* nodes);
+    void pushFrontier(size_t hop, const NodeCol* nodes);
     size_t emitFrontier(size_t hop, size_t maxRows);
     size_t expandHop(size_t hop, size_t maxRows);
 };
