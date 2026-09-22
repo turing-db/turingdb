@@ -64,6 +64,19 @@ if (EMSCRIPTEN)
     # out of the build.
     target_compile_definitions(turing_wasm_decoder PRIVATE FMT_HEADER_ONLY=1)
 
+    # The decoder ships in the npm package, so it is built where the package is
+    # assembled - beside TuringClient.mjs, which imports it as a sibling. This mirrors
+    # python/turingdb/_binary, where the nanobind modules are built into the package.
+    # CMAKE_CURRENT_SOURCE_DIR, not CMAKE_SOURCE_DIR: this directory is its own project,
+    # configured standalone by build_npm.sh, so CMAKE_SOURCE_DIR is wasm/ itself.
+    #
+    # .mjs, not .js: EXPORT_ES6 emits real ES module syntax, which is what lets the
+    # browser load the decoder natively and what lets emscripten locate the wasm through
+    # import.meta.url. A CommonJS decoder only ever works under Node and bundlers.
+    set_target_properties(turing_wasm_decoder PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/npm
+        SUFFIX ".mjs")
+
     # The decode paths throw TuringException; wasm needs exceptions opted in. The
     # exception handling helpers give JS Module.getExceptionMessage to read a thrown
     # exception's type and message.
@@ -75,5 +88,6 @@ if (EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sWASM_BIGINT=1
         -sMODULARIZE=1
+        -sEXPORT_ES6=1
         -sEXPORT_NAME=createTuringDecoderModule)
 endif()

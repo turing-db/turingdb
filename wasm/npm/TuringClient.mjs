@@ -11,8 +11,7 @@
 // only when a row is read.
 //
 // Usage:
-//     const module = await createTuringDecoderModule();
-//     const client = new TuringClient(module, { url: "/api/query", graph: "mygraph" });
+//     const client = new TuringClient({ url: "/api/query", graph: "mygraph" });
 //
 //     const { chunks, execTimeMs } = await client.query("MATCH (n) RETURN n");
 //     // chunks[i] = { names, columns }; columns[j] is a Column: get(row), toArray(),
@@ -506,11 +505,27 @@ function describeWasmError(module, raised) {
     return String(raised);
 }
 
+// The decoder module is an implementation detail: the package does not export it, so
+// the client instantiates it on first use. One instance is shared by every client -
+// compiling the wasm twice in a page costs a megabyte of memory for nothing, and each
+// query gets its own TuringDecoder off it anyway. The import is dynamic so a bundler
+// splits the decoder out and a page that never queries never fetches the wasm.
+let decoderModulePromise = null;
+
+function loadDecoderModule(moduleOptions) {
+    if (!decoderModulePromise) {
+        decoderModulePromise = import("./turing_wasm_decoder.mjs")
+            .then((loaded) => loaded.default(moduleOptions));
+    }
+
+    return decoderModulePromise;
+}
+
 export class TuringClient {
-    // module: an instantiated wasm decoder module (await createTuringDecoderModule()).
-    // options: { url, graph, authToken, bufferCapacity, fetch }.
-    constructor(module, options = {}) {
-        this._module = module;
+    // options: { url, graph, authToken, bufferCapacity, fetch, wasmUrl }.
+    constructor(options = {}) {
+        this._module = null;
+        this._wasmUrl = options.wasmUrl ?? null;
         this._url = options.url ?? "/query";
         this._graph = options.graph ?? "default";
         this._change = "head";
@@ -566,7 +581,8 @@ export class TuringClient {
             throw new TuringQueryError("HTTP_ERROR", `Server returned HTTP ${response.status}`);
         }
 
-        const decoder = new this._module.TuringDecoder(this._bufferCapacity);
+        const module = await this._decoderModule();
+        const decoder = new module.TuringDecoder(this._bufferCapacity);
         try {
             return await this._decodeResponse(decoder, response.body.getReader());
         } finally {
@@ -580,6 +596,15 @@ export class TuringClient {
     async queryData(cypher, options = {}) {
         const { chunks } = await this.query(cypher, options);
         return chunks.map((chunk) => chunk.columns.map((column) => column.toNumberArray()));
+    }
+
+    async _decoderModule() {
+        if (!this._module) {
+            const moduleOptions = this._wasmUrl ? {locateFile: () => this._wasmUrl} : {};
+            this._module = await loadDecoderModule(moduleOptions);
+        }
+
+        return this._module;
     }
 
     async _decodeResponse(decoder, reader) {
