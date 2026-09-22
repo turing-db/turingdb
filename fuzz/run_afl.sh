@@ -7,7 +7,7 @@
 #
 # Usage: ./fuzz/run_afl.sh [OPTIONS] [HARNESS...]
 #
-# Harnesses: --cypher  --csv  --gml  --http  (default: all)
+# Harnesses: --cypher  --csv  --http  (default: all)
 #
 # Options:
 #   --time SECS      Time per harness (default: 300)
@@ -35,7 +35,6 @@ NOSTOP=0
 REBUILD_AFL=0
 RUN_CYPHER=0
 RUN_CSV=0
-RUN_GML=0
 RUN_HTTP=0
 ANY_SELECTED=0
 
@@ -43,7 +42,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --cypher)      RUN_CYPHER=1; ANY_SELECTED=1; shift ;;
         --csv)         RUN_CSV=1; ANY_SELECTED=1; shift ;;
-        --gml)         RUN_GML=1; ANY_SELECTED=1; shift ;;
         --http)        RUN_HTTP=1; ANY_SELECTED=1; shift ;;
         --time)        AFL_TIME="$2"; shift 2 ;;
         --nostop)      NOSTOP=1; shift ;;
@@ -51,11 +49,10 @@ while [[ $# -gt 0 ]]; do
         --skip-build)  SKIP_BUILD=1; shift ;;
         --rebuild-afl) REBUILD_AFL=1; shift ;;
         -h|--help)
-            echo "Usage: $0 [--cypher] [--csv] [--gml] [--http] [--time SECS] [--nostop] [--build-only] [--skip-build] [--rebuild-afl]"
+            echo "Usage: $0 [--cypher] [--csv] [--http] [--time SECS] [--nostop] [--build-only] [--skip-build] [--rebuild-afl]"
             echo ""
             echo "  --cypher       Fuzz the Cypher parser"
             echo "  --csv          Fuzz the CSV parser"
-            echo "  --gml          Fuzz the GML importer"
             echo "  --http         Fuzz the HTTP parser"
             echo "  --time SECS    Time per harness (default: 300)"
             echo "  --nostop       Run forever until Ctrl+C (ignores --time)"
@@ -72,7 +69,7 @@ done
 
 # Default: run all
 if [[ $ANY_SELECTED -eq 0 ]]; then
-    RUN_CYPHER=1; RUN_CSV=1; RUN_GML=1; RUN_HTTP=1
+    RUN_CYPHER=1; RUN_CSV=1; RUN_HTTP=1
 fi
 
 # Build harness list
@@ -80,7 +77,6 @@ HARNESSES=()
 CORPORA=()
 if [[ $RUN_CYPHER -eq 1 ]]; then HARNESSES+=(fuzz_query_engine); CORPORA+=("$FUZZ_DIR/corpus/cypher"); fi
 if [[ $RUN_CSV -eq 1 ]];    then HARNESSES+=(fuzz_csv_parser);    CORPORA+=("$FUZZ_DIR/corpus/csv"); fi
-if [[ $RUN_GML -eq 1 ]];    then HARNESSES+=(fuzz_gml_importer);  CORPORA+=("$FUZZ_DIR/corpus/gml"); fi
 if [[ $RUN_HTTP -eq 1 ]];   then HARNESSES+=(fuzz_http_parser);   CORPORA+=("$FUZZ_DIR/corpus/http"); fi
 
 # =========================================================================

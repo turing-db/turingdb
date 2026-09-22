@@ -28,13 +28,6 @@ target_link_libraries(fuzz_csv_parser PRIVATE
     turing_db_memory_s
     turing_common_s)
 
-add_executable(fuzz_gml_importer fuzz_gml_importer.cpp)
-target_link_libraries(fuzz_gml_importer PRIVATE
-    turing_db_import_gml_s
-    turing_db_storage_s
-    turing_db_jobs_s
-    turing_common_s)
-
 add_executable(fuzz_http_parser fuzz_http_parser.cpp)
 target_link_libraries(fuzz_http_parser PRIVATE
     turing_db_http_common_s

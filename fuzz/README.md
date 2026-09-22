@@ -32,7 +32,6 @@ CLANG_BUILD=1 ./dependencies.sh
 | `--cypher` | `fuzz_query_engine` | Query engine: parse, analyze, generate the db program, lower and execute against SimpleGraph data |
 | `--http` | `fuzz_http_parser` | Custom HTTP parser: method, URI, headers, Content-Length, payload handling |
 | `--csv` | `fuzz_csv_parser` | CSV parser: `parseCSVLine()` and `peekFileStructure()` |
-| `--gml` | `fuzz_gml_importer` | GML importer: `importContent()` with arbitrary GML data |
 
 If no flag is specified, all harnesses are run.
 
@@ -105,7 +104,6 @@ keyword, function and procedure sections come from `query/parser/CypherLexer.l`,
 - `fuzz/corpus/cypher/` — Cypher queries from the query test suite and the regression tests
 - `fuzz/corpus/http/` — 272 HTTP inputs (AFL++-generated corpus covering all parser edges)
 - `fuzz/corpus/csv/` — 3 CSV files (basic, quoted, no headers)
-- `fuzz/corpus/gml/` — 1 GML graph file
 
 The Cypher seeds go stale as the language grows, so regenerate them from the
 repository's own queries:
