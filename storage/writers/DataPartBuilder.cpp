@@ -135,7 +135,7 @@ bool DataPartBuilder::hasProperty(I id, PropertyTypeID pid) {
     const PropertyManager* propertyManager =
         isNode ? _nodeProperties.get() : _edgeProperties.get();
 
-    const auto maybeProp = propertyManager->tryGet<T>(pid, id.getValue());
+    const auto maybeProp = propertyManager->tryGetWithNull<T>(pid, id.getValue());
     const bool explicitNull = !maybeProp.has_value();
 
     // Explicit null still means that this property has been registered: return true
