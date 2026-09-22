@@ -8,8 +8,6 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include "BioAssert.h"
-#include "iterators/ChunkConfig.h"
 #include "samplers/GraphSAGESampler.h"
 
 #include "ProcUtils.h"
@@ -29,7 +27,10 @@
 
 #include "metadata/PropertyType.h"
 
+#include "iterators/ChunkConfig.h"
+
 #include "TuringException.h"
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -105,6 +106,23 @@ GraphSAGESampler::NodeCol* nodeColumn(Data& data, size_t index) {
     return col->cast<GraphSAGESampler::NodeCol>();
 }
 
+// The seeds are a constant argument, so they are read the same way whether the call is
+// being prepared or rewound for another drive
+void seedSampler(Data& data) {
+    ColumnNodeIDs nodes;
+
+    const Column* seedsErased = data.getInputColumn(0);
+    const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(seedsErased);
+    bioassert(seeds, "Invalid seeds");
+
+    const ListView list = seeds->getRaw();
+    for (const ListElementView ele : list) {
+        nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
+    }
+
+    data.sampler->seed(&nodes);
+}
+
 void prepareImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
     validateInput(data);
@@ -146,16 +164,7 @@ void prepareImpl(ProcedureState* state) {
         data.sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
     }
 
-    ColumnNodeIDs nodes;
-    const Column* seedsErased = data.getInputColumn(0);
-    const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(seedsErased);
-    bioassert(seeds, "Invalid seeds");
-    const ListView list = seeds->getRaw();
-    for (const ListElementView ele : list) {
-        nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
-    }
-
-    data.sampler->seed(&nodes);
+    seedSampler(data);
 }
 
 void executeImpl(ProcedureState* state) {
@@ -207,9 +216,10 @@ void GraphSAGEProcedure::execute(ProcedureState* state) {
         break;
 
         case ProcedureState::Step::RESET: {
-            auto& sampler = state->data<Data>().sampler;
-            if (sampler) {
-                sampler->reset();
+            Data& data = state->data<Data>();
+            if (data.sampler) {
+                data.sampler->reset();
+                seedSampler(data);
             }
         }
         break;
