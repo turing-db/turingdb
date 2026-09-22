@@ -124,7 +124,9 @@ if [[ $REBUILD_AFL -eq 1 ]] || [[ ! -x "$AFL_CC_BIN" ]]; then
     echo "Building AFL++ from source..."
     cd "$AFL_SRC"
     [[ $REBUILD_AFL -eq 1 ]] && make clean 2>/dev/null || true
-    LLVM_CONFIG="$LLVM_CONFIG_PATH" make -j$(nproc) source-only 2>&1
+    # NO_NYX: nyx_mode is for binary-only fuzzing in a VM. We only instrument
+    #         our own source, and its build clones QEMU-Nyx (~180 MB) over the network.
+    NO_NYX=1 LLVM_CONFIG="$LLVM_CONFIG_PATH" make -j$(nproc) source-only 2>&1
     if [[ $? -ne 0 ]]; then
         echo "ERROR: AFL++ build failed."
         exit 1
