@@ -654,6 +654,10 @@ private:
     // Builds the path of a walk out of its seeds and its handles, at the point it is read
     mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
 
+    // The entities a walk stands for, for an aggregate that reads its input's values rather
+    // than counting the rows the handles are
+    mlir::Value readWalkEntities(const Expr* argExpr, mlir::Value column);
+
     // Builds the path of every named-path item a projection publishes or outputs. A handle
     // column says nothing about which of a path's lists it stands for, so the sink would
     // read it as the walk's edges.

@@ -1624,7 +1624,8 @@ void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
     const MapLiteral* properties = node->getProperties();
     const bool haveLabelConstraints = labels && !labels->empty();
     const bool havePropertyConstraints = properties && !properties->empty();
-    if (haveLabelConstraints || havePropertyConstraints) {
+    const bool havePredicate = node->getWhere() != nullptr;
+    if (haveLabelConstraints || havePropertyConstraints || havePredicate) {
         throwError("Constrained node indexes are not yet supported.", node);
     }
     PropertyExpr* propertyExpr = query->propertyExpr();
@@ -1661,7 +1662,8 @@ void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
     const MapLiteral* properties = edge->getProperties();
     const bool haveTypeConstraints = types && !types->empty();
     const bool havePropertyConstraints = properties && !properties->empty();
-    if (haveTypeConstraints || havePropertyConstraints) {
+    const bool havePredicate = edge->getWhere() != nullptr;
+    if (haveTypeConstraints || havePropertyConstraints || havePredicate) {
         throwError("Constrained edge indexes are not yet supported.", edge);
     }
     PropertyExpr* propertyExpr = query->propertyExpr();

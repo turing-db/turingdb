@@ -160,6 +160,10 @@ void WriteStmtAnalyzer::analyze(const PatternElement* element) {
 }
 
 void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
+    if (nodePattern->getWhere()) {
+        throwError("WHERE cannot be used in a write pattern", nodePattern);
+    }
+
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
@@ -239,6 +243,10 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
 }
 
 void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
+    if (edgePattern->getWhere()) {
+        throwError("WHERE cannot be used in a write pattern", edgePattern);
+    }
+
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {

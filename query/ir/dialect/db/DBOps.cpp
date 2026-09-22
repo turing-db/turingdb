@@ -24,6 +24,29 @@ namespace storage = mlir::storage;
 
 namespace {
 
+// What a filter reads as a mask: a boolean column, one whose values may be null, or the
+// untyped null an expression over a property no row carries evaluates to
+bool isMaskColumn(Type type) {
+    const auto column = dyn_cast<ColumnType>(type);
+    if (!column) {
+        return false;
+    }
+
+    const Type element = column.getType();
+    if (isa<storage::BoolType>(element)) {
+        return true;
+    }
+
+    const auto nullable = dyn_cast<storage::NullableType>(element);
+    if (!nullable) {
+        return false;
+    }
+
+    const Type value = nullable.getValueType();
+
+    return isa<storage::BoolType>(value) || isa<NoneType>(value);
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -252,10 +275,9 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop) {
         return op->emitOpError("hop region must end with a db.yield");
     }
 
-    const Type boolColumn = ColumnType::get(context, storage::BoolType::get(context));
-    const bool yieldsOneMask = yield.getColumns().size() == 1 && yield.getColumns().front().getType() == boolColumn;
+    const bool yieldsOneMask = yield.getColumns().size() == 1 && isMaskColumn(yield.getColumns().front().getType());
     if (!yieldsOneMask) {
-        return op->emitOpError("hop region must yield exactly one ") << boolColumn;
+        return op->emitOpError("hop region must yield exactly one boolean column");
     }
 
     for (Operation& inner : block) {

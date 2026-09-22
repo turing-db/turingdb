@@ -47,6 +47,10 @@ public:
                uint64_t maxHops);
 
     bool isBuilt() const { return _built; }
+
+    // Forgets the search, so an index reused for another shape does not answer from it
+    void clear();
+
     uint8_t getDistance(NodeID node) const;
     bool isEnd(NodeID node) const { return getDistance(node) == 0; }
     bool canReachEndWithin(NodeID node, uint64_t hops) const;

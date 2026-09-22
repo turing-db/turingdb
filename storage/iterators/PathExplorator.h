@@ -88,7 +88,7 @@ private:
     struct KeySet {
         std::vector<uint64_t> _keys;
         std::vector<uint32_t> _stamps;
-        uint32_t _generation {0};
+        uint32_t _generation {1};
         size_t _used {0};
 
         void clear();
@@ -162,6 +162,8 @@ private:
     // Set while the walk only owes its caller the set of nodes it ends on, which lets a
     // subtree that no held edge constrained stand in for every later arrival at its node
     bool _prunes {false};
+    uint64_t _expansionSpan {0};
+    bool _keysDepth {false};
     KeySet _emittedEnds;
     KeySet _cleanExpansions;
     size_t _descentTaint {NO_TAINT};

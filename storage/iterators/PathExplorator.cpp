@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <limits>
 
 #include "EdgeTypeMatch.h"
 #include "PathDistanceIndex.h"
@@ -172,7 +173,9 @@ bool PathExplorator::searchesLevels() const {
 }
 
 uint64_t PathExplorator::expansionKey(NodeID node, uint64_t budget) const {
-    return node.getValue() * (_maxHops + 1) + budget;
+    const uint64_t offset = _keysDepth ? std::min(_maxHops - budget, _expansionSpan) : budget;
+
+    return node.getValue() * (_expansionSpan + 1) + offset;
 }
 
 void PathExplorator::setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound) {
@@ -232,7 +235,11 @@ bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
         return false;
     }
 
-    if (_distances) {
+    // Both indices are built over the committed parts alone, so a node this change wrote is
+    // outside them: reading one would report it unreachable and drop the row it ends
+    const bool indexed = !isPendingNode(node);
+
+    if (_distances && indexed) {
         return _distances->isEnd(node);
     }
 
@@ -246,6 +253,10 @@ bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
 }
 
 bool PathExplorator::canReachTargetWithin(NodeID node, uint64_t hops) const {
+    if (isPendingNode(node)) {
+        return true;
+    }
+
     if (_filtersByEndNodeSet) {
         return !_targetIndex || _targetIndex->canReachAnyWithin(node, hops);
     }
@@ -296,6 +307,19 @@ void PathExplorator::fill(size_t maxCount) {
     }
 
     _prunes = _distinctEnds && _hopFilter == nullptr;
+
+    if (_prunes) {
+        // A trail spends each edge once, so a maximum past the edge count never binds the
+        // walk: the budget is then the same at every depth and would key every node alike.
+        // What separates two arrivals there is the depth, which decides how much of the
+        // subtree clears the minimum, and it stops mattering once the minimum is reached
+        const uint64_t hopCeiling = std::max<uint64_t>(_parts.getAllocatedEdgeCount(), _pendingEdgeIDBound);
+        _keysDepth = _maxHops > hopCeiling;
+        _expansionSpan = _keysDepth ? std::min(_minHops, hopCeiling) : _maxHops;
+
+        const uint64_t nodeBound = std::max<uint64_t>(nodeIDBound(), 1);
+        _prunes = _expansionSpan < std::numeric_limits<uint64_t>::max() / nodeBound;
+    }
 
     if (_paths) {
         retainWalkedPath();

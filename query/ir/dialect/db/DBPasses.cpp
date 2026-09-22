@@ -2528,7 +2528,7 @@ bool trimsColumns(Operation* op) {
 }
 
 size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
-    return op->getNumOperands() - layout._operandOffset;
+    return op->getNumOperands() - layout._operandOffset - layout._trailingOperandCount;
 }
 
 size_t collectValueCount(Collect collect) {
