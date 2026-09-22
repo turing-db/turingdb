@@ -4585,6 +4585,14 @@ mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) con
     return mlir::Value {};
 }
 
+mlir::Value DBProgramGenerator::readWalkEntities(const Expr* argExpr, mlir::Value column) {
+    if (!isPathColumn(column)) {
+        return column;
+    }
+
+    return listColumnOf(argExpr->getExprVarDecl(), column);
+}
+
 mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
                                                         const VariableColumnMap* variableColumns) {
     const EvaluatedType argType = argExpr->getType();
@@ -4817,9 +4825,9 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
     llvm::SmallVector<llvm::StringRef> outputNames;
     translateProjection(projection, variableColumns, outputted, outputNames);
 
-    translateProjectionTail(projection, variableColumns, outputted);
-
     buildNamedPathItems(projection, outputted);
+
+    translateProjectionTail(projection, variableColumns, outputted);
 
     if (branch) {
         broadcastUnionProjection(outputted);
@@ -4936,9 +4944,9 @@ void DBProgramGenerator::publishProjection(const Projection* projection) {
 
     broadcastConstantProjection(projected);
 
-    translateProjectionTail(projection, variableColumns, projected);
-
     buildNamedPathItems(projection, projected);
+
+    translateProjectionTail(projection, variableColumns, projected);
 
     publishBoundColumns(projection, names, projected);
 }
@@ -7439,7 +7447,11 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
     const Expr* argExpr = args->front();
-    const mlir::Value inputColumn = translateAggregateInput(argExpr, nullptr);
+    const mlir::Value translated = translateAggregateInput(argExpr, nullptr);
+
+    // A quantified pattern binds the handle of the walk. A count reads its rows off the
+    // handles, and every other aggregate the entities each one stands for
+    const mlir::Value inputColumn = funcName == "count" ? translated : readWalkEntities(argExpr, translated);
 
     const bool isDistinct = invocation->isDistinct();
 
@@ -7745,7 +7757,7 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
         const ExprChain* args = invocation->getArguments();
         bioassert(args && !args->empty(), "collect() with no arguments.");
 
-        valueColumns.push_back(translateAggregateInput(args->front(), &variableColumns));
+        valueColumns.push_back(readWalkEntities(args->front(), translateAggregateInput(args->front(), &variableColumns)));
     }
 
     llvm::SmallVector<int64_t> distinctValues;
@@ -7949,7 +7961,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         if (funcName == "collect") {
             const mlir::Value collectInput = translateAggregateInput(argExpr, &variableColumns);
 
-            collectInputColumns.push_back(collectInput);
+            collectInputColumns.push_back(readWalkEntities(argExpr, collectInput));
             collectFuncExprs.push_back(funcExpr);
             continue;
         }
@@ -7978,8 +7990,9 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
 
         const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);
+        const bool countsHandles = funcName == "count";
 
-        aggInputColumns.push_back(inputColumn);
+        aggInputColumns.push_back(countsHandles ? inputColumn : readWalkEntities(argExpr, inputColumn));
         aggKinds.push_back(*kind);
         aggFuncExprs.push_back(funcExpr);
     }

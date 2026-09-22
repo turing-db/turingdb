@@ -9,6 +9,8 @@
 #include "indexers/EdgeIndexer.h"
 #include "versioning/Tombstones.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 namespace {
@@ -99,7 +101,9 @@ bool PathTargetBatch::isQueued(NodeID node) const {
         return _denseQueued[node.getValue()] != 0;
     }
 
-    return _queued[find(node)] != 0;
+    const size_t slot = find(node);
+
+    return slot != _keys.size() && _queued[slot] != 0;
 }
 
 void PathTargetBatch::setQueued(NodeID node, bool queued) {
@@ -108,7 +112,10 @@ void PathTargetBatch::setQueued(NodeID node, bool queued) {
         return;
     }
 
-    _queued[find(node)] = queued ? 1 : 0;
+    const size_t slot = find(node);
+    bioassert(slot != _keys.size(), "Queueing a node the batch never reached");
+
+    _queued[slot] = queued ? 1 : 0;
 }
 
 void PathTargetBatch::beginLevel() {
@@ -216,6 +223,7 @@ void PathTargetIndex::build(const GraphView& view,
 
     _handles.clear();
     _batches.clear();
+    _set.clear();
 
     // The handles point into the batches, so the vector must not grow under them
     const size_t batchCount = (targets.size() + targetsPerBatch - 1) / targetsPerBatch;
@@ -269,6 +277,7 @@ void PathTargetIndex::buildSet(const GraphView& view,
 
     _handles.clear();
     _batches.clear();
+    _set.clear();
 
     if (plan._sparse) {
         const Tombstones& tombstones = view.tombstones();

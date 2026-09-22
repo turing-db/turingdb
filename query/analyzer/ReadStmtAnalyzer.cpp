@@ -409,6 +409,11 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
         decl = _ctxt->getOrCreateNodePatternVariable(_ast, symbol->getName());
+        if (decl->isQuantifiedPath()) {
+            throwError(fmt::format("Variable '{}' is already bound to the nodes a quantified pattern grouped", symbol->getName()),
+                       nodePattern);
+        }
+
         nodePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
@@ -626,17 +631,35 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
 
     enterScope(outer);
 
-    if (source && source->getSymbol()) {
-        VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, source->getSymbol()->getName());
-        group->setIsQuantifiedPath(true);
-        edgePattern->setHopSourceGroup(group);
+    const Symbol* sourceSymbol = source ? source->getSymbol() : nullptr;
+    const Symbol* endSymbol = end ? end->getSymbol() : nullptr;
+
+    throwIfGroupNameIsBound(outer, sourceSymbol, edgePattern);
+    throwIfGroupNameIsBound(outer, endSymbol, edgePattern);
+
+    if (sourceSymbol) {
+        edgePattern->setHopSourceGroup(declareGroupVariable(outer, sourceSymbol->getName()));
     }
 
-    if (end && end->getSymbol()) {
-        VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, end->getSymbol()->getName());
-        group->setIsQuantifiedPath(true);
-        edgePattern->setHopEndGroup(group);
+    if (endSymbol) {
+        edgePattern->setHopEndGroup(declareGroupVariable(outer, endSymbol->getName()));
     }
+}
+
+void ReadStmtAnalyzer::throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* edgePattern) const {
+    if (!symbol || !outer->getDecl(symbol->getName())) {
+        return;
+    }
+
+    throwError(fmt::format("Variable '{}' is already bound: a quantified pattern groups a name of its own", symbol->getName()),
+               edgePattern);
+}
+
+VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, std::string_view name) {
+    VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, name);
+    group->setIsQuantifiedPath(true);
+
+    return group;
 }
 
 void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {

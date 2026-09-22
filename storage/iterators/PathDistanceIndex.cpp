@@ -96,6 +96,12 @@ PathDistanceIndex::PathDistanceIndex() {
 PathDistanceIndex::~PathDistanceIndex() {
 }
 
+void PathDistanceIndex::clear() {
+    _distances.clear();
+    _reached = 0;
+    _built = false;
+}
+
 void PathDistanceIndex::build(const GraphView& view,
                               const LabelSet& endLabels,
                               PathExplorationDir direction,

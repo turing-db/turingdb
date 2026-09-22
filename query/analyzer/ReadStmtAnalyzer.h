@@ -86,6 +86,11 @@ private:
     // the whole path's lists
     void analyzeHop(EdgePattern* edgePattern, EdgePatternData* data);
 
+    // The name a quantified pattern's inner node groups, rejected when the query has
+    // already bound it and declared as the list of that name otherwise
+    void throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* edgePattern) const;
+    VarDecl* declareGroupVariable(DeclContext* outer, std::string_view name);
+
     // Declares the variable a `MATCH p = ...` names the whole element with, once its
     // entities are bound
     void analyzeNamedPath(PatternElement* element);
