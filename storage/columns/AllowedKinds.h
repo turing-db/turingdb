@@ -163,10 +163,13 @@ struct PairRestrictions<Op> {
 
         OptionalKindPairs<ListView, ListView>::Pairs,
 
+        // An entity is nullable on either side when it comes from an OPTIONAL MATCH or
+        // from a procedure declaring a nullable entity return value
+        OptionalKindPairs<NodeID, NodeID>::Pairs,
+        OptionalKindPairs<EdgeID, EdgeID>::Pairs,
+
         std::tuple<
             // Filtering by ID or labels/edge type
-            KindPair<NodeID, NodeID>,
-            KindPair<EdgeID, EdgeID>,
             KindPair<LabelSetID, LabelSetID>,
             KindPair<EdgeTypeID, EdgeTypeID>,
 

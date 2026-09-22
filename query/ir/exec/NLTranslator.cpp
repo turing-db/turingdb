@@ -3032,11 +3032,17 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         output = allocOptListElementColumn();
         copySuffix = NLExecutor::selectOptListElementCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             output = allocOptOwnedStringColumn();
             copySuffix = NLExecutor::selectOptOwnedStringCopy();
+        } else if (isIDElement(wrappedType)) {
+            const NLChunkKind kind = chunkKindFromElementType(wrappedType);
+
+            output = allocOptIDColumn(kind);
+            copySuffix = NLExecutor::selectOptCopyFunction(kind);
         } else {
-            const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+            const ValueType valueType = valueTypeFromElementType(wrappedType);
             output = allocOptColumnForValueType(valueType);
             copySuffix = NLExecutor::selectOptCopyFunction(valueType);
         }
@@ -4099,6 +4105,17 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             NLExecutor::selectCollectOptTaggedHandlers(isDistinct, fold, listEmit);
 
             value._buffer = allocListElementColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (const auto nullableElement = mlir::dyn_cast<storage::NullableType>(element);
+                   nullableElement && isIDElement(nullableElement.getValueType())) {
+            const NLChunkKind kind = chunkKindFromElementType(nullableElement.getValueType());
+
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectOptEntityHandlers(kind, isDistinct, fold, listEmit);
+
+            value._buffer = allocColumnForKind(kind);
             value._fold = fold;
             value._listEmit = listEmit;
         } else if (mlir::isa<storage::NullableType>(element)) {

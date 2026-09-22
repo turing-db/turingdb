@@ -200,10 +200,7 @@ TEST_F(CallGraphSAGETest, DISABLED_aYieldedNodeCarriesItsProperties) {
 
 // A yielded column can be matched on, which is what makes the sample usable as a seed
 // set for the rest of a query.
-// Comparing a node to a nullable node fails: "Unsupported binary operation of columns
-// of kinds ColumnVector<NodeID> and ColumnVector<optional<NodeID>>". Enable once
-// equality accepts a nullable node on one side.
-TEST_F(CallGraphSAGETest, DISABLED_aYieldedNodeFlowsIntoAMatch) {
+TEST_F(CallGraphSAGETest, aYieldedNodeFlowsIntoAMatch) {
     StringRowSink sink;
     runQuery("CALL gnn.graphSAGE([0], [2, 2, 2], 42) YIELD dst_nodes0 "
              "WHERE dst_nodes0 IS NOT NULL "
@@ -235,9 +232,7 @@ TEST_F(CallGraphSAGETest, DISABLED_aHopsSourceAndTargetAreRowAligned) {
 }
 
 // SKIP and LIMIT apply to the rows the call hands over, as they do to any other source.
-// SKIP/LIMIT over a nullable node column fails: "Unsupported nullable value chunk
-// element type". Enable once a nullable node chunk can be sliced.
-TEST_F(CallGraphSAGETest, DISABLED_skipAndLimitApplyToTheYieldedRows) {
+TEST_F(CallGraphSAGETest, skipAndLimitApplyToTheYieldedRows) {
     StringRowSink sink;
     runQuery("CALL gnn.graphSAGE([0, 1, 8, 9, 11], [2, 2, 2], 42) YIELD dst_nodes0 "
              "RETURN dst_nodes0 SKIP 1 LIMIT 2",
@@ -266,9 +261,7 @@ TEST_F(CallGraphSAGETest, distinctCollapsesThePadding) {
 
 // collect() gathers a yielded column into one list, which is the shape a caller feeding
 // the sample onward wants.
-// collect() over a nullable node column fails: "Unsupported nullable value chunk
-// element type". Enable once a nullable node is a collectable element.
-TEST_F(CallGraphSAGETest, DISABLED_aYieldedColumnCollectsIntoAList) {
+TEST_F(CallGraphSAGETest, aYieldedColumnCollectsIntoAList) {
     StringRowSink sink;
     runQuery("CALL gnn.graphSAGE([0], [2, 2, 2], 42) YIELD dst_nodes0 "
              "WHERE dst_nodes0 IS NOT NULL "
