@@ -1,0 +1,30 @@
+FID,OBJECTID,NAME,EASTING,NORTHING,LINES,NETWORK,Zone,x,y
+0,78,Temple,530959,180803,"District, Circle",London Underground,1,-0.112643564,51.5104742
+1,79,Blackfriars,531694,180893,"District, Circle",London Underground,1,-0.102020251,51.51111447
+2,80,Mansion House,532354,180932,"District, Circle",London Underground,1,-0.092495313,51.51130597
+3,81,Cannon Street,532611,180900,"District, Circle",London Underground,1,-0.088801035,51.51096254
+4,82,Monument,532912,180824,"District, Circle",London Underground,1,-0.084502291,51.51020898
+5,83,Tower Hill,533579,180755,"District, Circle",London Underground,1,-0.074913869,51.50943419
+6,84,Aldgate,533613,181262,"Metropolitan, Circle",London Underground,1,-0.0742363,51.51398203
+7,85,Liverpool Street,533094,181567,"Metropolitan, Central, Circle, Hammersmith & City",London Underground,1,-0.081601363,51.5168424
+8,86,Moorgate,532668,181668,"Metropolitan, Northern, Circle, Hammersmith & City",London Underground,1,-0.087700241,51.5178533
+9,87,Barbican,532004,181856,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.097189673,51.51969921
+10,88,Farringdon,531560,181874,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.103582415,51.51996102
+11,89,King's Cross St. Pancras,530175,182875,"Metropolitan, Northern, Piccadilly, Circle, Victoria, Hammersmith & City",London Underground,1,-0.123168404,51.52927728
+12,90,Euston Square,529417,182393,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.134270582,51.52512499
+13,91,Great Portland Street,528838,182180,"Metropolitan, Circle, Hammersmith & City",London Underground,1,-0.142685711,51.52333822
+14,92,Baker Street,527955,182064,"Metropolitan, Bakerloo, Circle, Jubilee, Hammersmith & City",London Underground,1,-0.155454387,51.52249387
+15,93,Edgware Road (Circle Line),527220,181697,Circle,London Underground,1,-0.166170742,51.51936413
+16,94,Paddington,526704,181198,"Hammersmith & City, District, Circle, Bakerloo",London Underground,1,-0.173789485,51.51499491
+17,95,Bayswater,525843,180823,"District, Circle",London Underground,1,-0.186322701,51.51181507
+18,96,High Street Kensington,525578,179494,"District, Circle",London Underground,1,-0.190607248,51.49993492
+19,97,Gloucester Road,526183,178846,"District, Piccadilly, Circle",London Underground,1,-0.182135121,51.49397763
+20,98,South Kensington,526918,178820,"District, Piccadilly, Circle",London Underground,1,-0.171564291,51.49357736
+21,110,Victoria,528999,179130,"District, Circle, Victoria",London Underground,1,-0.141485017,51.49588954
+22,112,Pimlico,529671,178333,Victoria,London Underground,1,-0.132103672,51.48856954
+23,114,Warren Street,529249,182266,"Northern, Victoria",London Underground,1,-0.136735811,51.52401887
+24,119,Queensway,525903,180594,Central,London Underground,1,-0.185538472,51.50974305
+25,14,Hyde Park Corner,528213,179817,Piccadilly,London Underground,1,-0.152546395,51.50224103
+26,15,Knightsbridge,527710,179636,Piccadilly,London Underground,1,-0.159863737,51.50073061
+27,16,Leicester Square,529980,180824,"Piccadilly, Northern",London Underground,1,-0.126725567,51.51089472
+28,17,Covent Garden,530251,181025,Piccadilly,London Underground,1,-0.122759938,51.51263471
