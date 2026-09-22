@@ -259,6 +259,8 @@ public:
             }
         }
 
+        rawLimits.resize(rawBuckets.size());
+
         // Loading string limits
         for (size_t i = 0; i < limitsPageCount; i++) {
             _reader.nextPage();
@@ -281,11 +283,11 @@ public:
                 const uint64_t bucketIndex = it.get<uint64_t>();
                 const uint32_t blockStrCount = it.get<uint32_t>();
 
-                // If did not change bucket, retrieve previous limit container
-                // else, push new limit container corresponding to new bucket
-                auto& limits = bucketIndex < rawLimits.size()
-                                 ? rawLimits.back()
-                                 : rawLimits.emplace_back();
+                if (bucketIndex >= rawLimits.size()) {
+                    return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
+                }
+
+                auto& limits = rawLimits[bucketIndex];
 
                 const size_t prevSize = limits.size();
                 limits.resize(prevSize + blockStrCount);
@@ -296,10 +298,6 @@ public:
                     lim._count = it.get<uint32_t>();
                 }
             }
-        }
-
-        if (rawBuckets.size() != rawLimits.size()) {
-            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
         }
 
         // Loading null ids
