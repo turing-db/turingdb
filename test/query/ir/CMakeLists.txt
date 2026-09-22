@@ -1529,6 +1529,18 @@ target_link_libraries(test_query_ir_optional_match PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_optional_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# An OPTIONAL MATCH nested behind another one, carrying a WHERE of its own.
+add_turing_test(test_query_ir_nested_optional_match_where NestedOptionalMatchWhereTest.cpp)
+target_link_libraries(test_query_ir_nested_optional_match_where PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_nested_optional_match_where PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_null_predicate NullPredicateTest.cpp)
 target_link_libraries(test_query_ir_null_predicate PRIVATE
         turing_db_s
