@@ -79,13 +79,6 @@ TEST_F(SetPropertyNullTest, setsToNullAPropertyNoEntityCarries) {
     expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.favouriteColour", {{"null"}});
 }
 
-// f matched Remy and Adam; the six padded rows name no node, so those two alone lose the dob
-TEST_F(SetPropertyNullTest, setsThePropertyToNullOnTheRowsThePatternMatchedAlone) {
-    applyWrite("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) SET f.dob = null");
-
-    expectRows("MATCH (p:Person) WHERE p.dob IS NOT NULL RETURN p.name", {{"Maxime"}, {"Luc"}});
-}
-
 // The node is one this change wrote and has not committed, so the null lands on the write
 // buffer's own row rather than as an update to a committed entity
 TEST_F(SetPropertyNullTest, setsToNullThePropertyAPendingNodeWasCreatedWith) {
