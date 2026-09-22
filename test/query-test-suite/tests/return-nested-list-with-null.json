@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN [[1, null], [null, 'x']] AS values",
+  "expect": {
+    "result": "values\n\"[[1, null], [null, x]]\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"values\"],\"column_types\":[\"List\"]},\"data\":[[[[[1, null], [null, \"x\"]]]]]}"
+  },
+  "tags": [
+    "lists",
+    "literal",
+    "null",
+    "nested",
+    "return"
+  ],
+  "write-required": false
+}
