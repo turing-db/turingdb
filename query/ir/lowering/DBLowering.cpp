@@ -876,7 +876,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _entryBlock = nlFunction.addEntryBlock();
 
     // Create the ReturnOp of the target function right away
-    _builder.setInsertionPointToStart(_entryBlock);
+    setInsertionToEntryBlockStart();
     _builder.create<mlir::func::ReturnOp>(loc);
 
     // Lower each operation of the db function. Top-level scans root their loop
@@ -2422,7 +2422,7 @@ mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyNa
 
     // The handle reads no chunk, so it sits at the very top of the entry block,
     // above every loop, where it dominates all the fetches that use it.
-    _builder.setInsertionPointToStart(_entryBlock);
+    setInsertionToEntryBlockStart();
 
     nl::GetPropertyType handleOp = _builder.create<nl::GetPropertyType>(_builder.getUnknownLoc(),
                                                                         _builder.getStringAttr(propertyName));
@@ -2441,7 +2441,7 @@ mlir::Value DBLowering::getOrCreateEdgeTypeSetHandle(mlir::ArrayAttr edgeTypeNam
         return existing->second;
     }
 
-    _builder.setInsertionPointToStart(_entryBlock);
+    setInsertionToEntryBlockStart();
 
     nl::GetEdgeTypeSet handleOp = _builder.create<nl::GetEdgeTypeSet>(_builder.getUnknownLoc(),
                                                                      edgeTypeNames);
@@ -2866,7 +2866,7 @@ mlir::Value DBLowering::typedNullChunk(mlir::Value chunk, mlir::Type chunkType) 
 // loops, so it is emptied once per execution and dominates each branch's filter - the
 // same placement lowerRemoveDuplicates gives a dedup's private set.
 void DBLowering::lowerDistinctSet(mlir::db::DistinctSet distinctSet) {
-    _builder.setInsertionPointToStart(_entryBlock);
+    setInsertionToEntryBlockStart();
 
     _valueMap[distinctSet.getSet()] = _builder.create<nl::Distinct>(_builder.getUnknownLoc()).getState();
 }
@@ -2983,7 +2983,7 @@ void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
     // The tally comes from the graph's node counts rather than from a relation, so the op
     // reads no column and is loop-invariant: hoist it the way lowerConstant hoists a
     // constant, where it dominates every loop a later op may emit from.
-    _builder.setInsertionPointToStart(_entryBlock);
+    setInsertionToEntryBlockStart();
 
     nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(),
                                                                 countScanRows.getLabelsAttr(),
@@ -4060,23 +4060,20 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
 
     nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
+    _lastHoistedConstant = nlConstant.getOperation();
 }
 
 void DBLowering::setInsertionAfterHoistedConstants() {
-    mlir::Operation* lastConstant = nullptr;
-    for (mlir::Operation& operation : *_entryBlock) {
-        if (!mlir::isa<nl::Constant>(operation)) {
-            break;
-        }
-
-        lastConstant = &operation;
-    }
-
-    if (lastConstant) {
-        _builder.setInsertionPointAfter(lastConstant);
+    if (_lastHoistedConstant) {
+        _builder.setInsertionPointAfter(_lastHoistedConstant);
     } else {
         _builder.setInsertionPointToStart(_entryBlock);
     }
+}
+
+void DBLowering::setInsertionToEntryBlockStart() {
+    _builder.setInsertionPointToStart(_entryBlock);
+    _lastHoistedConstant = nullptr;
 }
 
 void DBLowering::lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast) {
@@ -4436,7 +4433,7 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
         if (operandDef) {
             _builder.setInsertionPointAfter(operandDef);
         } else {
-            _builder.setInsertionPointToStart(_entryBlock);
+            setInsertionToEntryBlockStart();
         }
     }
 
@@ -4453,7 +4450,7 @@ void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
         if (operandDef) {
             _builder.setInsertionPointAfter(operandDef);
         } else {
-            _builder.setInsertionPointToStart(_entryBlock);
+            setInsertionToEntryBlockStart();
         }
     }
 }
@@ -4755,7 +4752,7 @@ void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
     if (lastDef) {
         _builder.setInsertionPointAfter(lastDef);
     } else {
-        _builder.setInsertionPointToStart(_entryBlock);
+        setInsertionToEntryBlockStart();
     }
 }
 
