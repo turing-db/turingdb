@@ -483,6 +483,21 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     output->set(functor(typedInput->getRaw()));
 }
 
+// The constant whose single cell can be absent: the functor is handed the optional and
+// answers the absence itself, as functionNullReadingKernel hands it one per row.
+template <typename Functor>
+void functionOptConstKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
+    using Arg = typename Functor::ArgType;
+    using Res = typename Functor::ResultType;
+
+    const auto* typedInput = dynamic_cast<const ColumnConst<std::optional<Arg>>*>(input);
+    bioassert(typedInput, "Function operand has an unexpected column type.");
+    auto* output = static_cast<ColumnConst<Res>*>(result);
+
+    Functor functor = makeFunctor<Functor>(context, memory);
+    output->set(functor(typedInput->getRaw()));
+}
+
 // A null constant argument converts to a null result whatever the function; the
 // ColumnConst<PropertyNull> result already reads as null, so nothing is computed.
 void functionNullKernel(NLExecutionContext*, Column*, const Column*, LocalMemory*) {
@@ -510,7 +525,8 @@ bool readsTaggedCells(const Column* input) {
 
     return kind == ColumnVector<ListElementView>::staticKind()
         || kind == ColumnConst<ListElementView>::staticKind()
-        || kind == ColumnOptVector<ListElementView>::staticKind();
+        || kind == ColumnOptVector<ListElementView>::staticKind()
+        || kind == ColumnConst<std::optional<ListElementView>>::staticKind();
 }
 
 template <typename Functor>
@@ -567,7 +583,13 @@ void functionNullReadingKernel(NLExecutionContext* context, Column* result, cons
 // reads the null a cell's own tag carries, so its answer fills a plain column either way.
 template <typename Functor>
 NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
+
+    if (input->getKind() == ColumnConst<std::optional<Arg>>::staticKind()) {
+        result = memory->alloc<ColumnConst<Res>>();
+        return &functionOptConstKernel<Functor>;
+    }
 
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
