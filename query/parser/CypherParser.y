@@ -144,6 +144,7 @@
 %token CARET
 %token PIPE
 %token PLUS
+%token CONCAT
 %token MULT
 %token ESC
 %token SUB
@@ -1252,6 +1253,10 @@ addSubExpr
       }
     | addSubExpr SUB multDivExpr {
         $$ = BinaryExpr::create(ast, BinaryOperator::Sub, $1, $3);
+        LOC($$, @$);
+      }
+    | addSubExpr CONCAT multDivExpr {
+        $$ = BinaryExpr::create(ast, BinaryOperator::Concat, $1, $3);
         LOC($$, @$);
       }
     ;

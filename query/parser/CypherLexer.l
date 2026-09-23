@@ -57,6 +57,7 @@ using Token = db::YCypherParser::token;
 "^"  { return Token::CARET; }
 "|"  { return Token::PIPE; }
 "+"  { return Token::PLUS; }
+"||" { return Token::CONCAT; }
 "*"  { return Token::MULT; }
 "`"  { return Token::ESC; }
 "-"  { return Token::SUB; }
@@ -164,7 +165,6 @@ using Token = db::YCypherParser::token;
 "ADD" { KEYWORD(ADD) }
 "AND" { KEYWORD(AND) }
 "OR" { KEYWORD(OR) }
-"||" { KEYWORD(OR) }
 "IN" { KEYWORD(IN) }
 "IS" { KEYWORD(IS) }
 "S3" { KEYWORD(S3) }

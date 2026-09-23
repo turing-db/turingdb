@@ -6018,17 +6018,18 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         return;
     }
 
-    // Arithmetic over an unknown value is unknown, and the null names no column the result
-    // could be carried in, so the analyzer types such an expression Null. A list
-    // concatenation is not one of them: [1, 2] + null appends the null instead
-    const bool isArithmetic = op == BinaryOperator::Add
-                              || op == BinaryOperator::Sub
-                              || op == BinaryOperator::Mult
-                              || op == BinaryOperator::Div
-                              || op == BinaryOperator::Mod
-                              || op == BinaryOperator::Pow;
+    // Arithmetic or concatenation over an unknown value is unknown, and the null names no
+    // column the result could be carried in, so the analyzer types such an expression Null.
+    // A '+' appending to a list is not one of them: [1, 2] + null is [1, 2, null]
+    const bool propagatesNull = op == BinaryOperator::Add
+                                || op == BinaryOperator::Sub
+                                || op == BinaryOperator::Mult
+                                || op == BinaryOperator::Div
+                                || op == BinaryOperator::Mod
+                                || op == BinaryOperator::Pow
+                                || op == BinaryOperator::Concat;
 
-    if (isArithmetic && binExpr->getType() == EvaluatedType::Null) {
+    if (propagatesNull && binExpr->getType() == EvaluatedType::Null) {
         _part._exprMap[expr] = nullConstantColumn();
         return;
     }
@@ -6082,6 +6083,9 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
             }
         }
+        break;
+        case BinaryOperator::Concat:
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Sub:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhs, rhs).getResult();
