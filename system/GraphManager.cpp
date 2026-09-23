@@ -112,6 +112,15 @@ void GraphManager::listGraphs(std::vector<std::string_view>& names) const {
 void GraphManager::loadOrCreateDefaultGraph() {
     const LoadGraphResult<Graph*> loadRes = loadGraph("default");
 
+    if (!loadRes) {
+        const LoadGraphError& loadError = loadRes.error();
+        const std::optional<DumpError> dumpError = loadError.getDumpError();
+        const bool graphIsMissing = dumpError && dumpError->getType() == DumpErrorType::GRAPH_DOES_NOT_EXIST;
+        if (!graphIsMissing) {
+            spdlog::error(loadError.fmtMessage());
+        }
+    }
+
     Graph* graph = loadRes.has_value() ? loadRes.value() : createGraph("default");
 
     if (!graph) {
