@@ -39,8 +39,9 @@ counted, so `EXISTS { MATCH (p)-->(k) RETURN count(k) }` holds for every row.
 
 Out of scope: UNION inside the body, which is rejected the way a CALL body's is, and the
 conditional `WHEN ... THEN { } ELSE { }` body, which the grammar has no clause for at all.
-`test/query/ir/ExistsNeo4jManualTest.cpp` holds both as failing tests against the rows the
-manual documents for them.
+`test/query/ir/ExistsNeo4jManualTest.cpp` holds both, skipping with what is missing and
+keeping the rows the manual documents, so each is the test to make pass when its clause
+lands.
 
 ## 2. Ops
 
