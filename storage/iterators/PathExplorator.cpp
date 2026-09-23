@@ -527,7 +527,7 @@ void PathExplorator::descend(NodeID node) {
     if (_hopFilter && end > begin) {
         const std::span<NodeID> candidateNodes(_candidateNodes.data() + begin, end - begin);
         const std::span<EdgeID> candidateEdges(_candidateEdges.data() + begin, end - begin);
-        const size_t survivors = _hopFilter->filter(node, candidateNodes, candidateEdges);
+        const size_t survivors = _hopFilter->filter(_seedRow, node, candidateNodes, candidateEdges);
 
         end = begin + survivors;
         _candidateNodes.resize(end);
@@ -794,7 +794,7 @@ void PathExplorator::collectReachCandidates(NodeID node) {
     }
 
     if (_hopFilter && !reach._candidateNodes.empty()) {
-        const size_t survivors = _hopFilter->filter(node, reach._candidateNodes, reach._candidateEdges);
+        const size_t survivors = _hopFilter->filter(reach._batchFirstRow, node, reach._candidateNodes, reach._candidateEdges);
         reach._candidateNodes.resize(survivors);
         reach._candidateEdges.resize(survivors);
     }

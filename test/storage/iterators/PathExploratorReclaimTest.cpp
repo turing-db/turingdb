@@ -90,7 +90,7 @@ protected:
             emitted._index = indices[row];
             emitted._target = targets[row].getValue();
 
-            const ListView edges = trie.expandEdges(paths[row], _buffer);
+            const ListView edges = trie.expandEdges(paths[row], _buffer, false);
             for (const ListElementView& element : edges) {
                 emitted._edges.push_back(element.getAs<EdgeID>().getValue());
             }

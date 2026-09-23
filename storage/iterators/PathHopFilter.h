@@ -14,8 +14,11 @@ public:
     PathHopFilter();
     virtual ~PathHopFilter();
 
-    // Compacts both spans in place to the candidates that pass and returns how many did
-    virtual size_t filter(NodeID source,
+    // Compacts both spans in place to the candidates that pass and returns how many did.
+    // @param seedRow is the input row the walk left from, which is what a predicate reading
+    // a column outside the hop reads its one value at
+    virtual size_t filter(size_t seedRow,
+                          NodeID source,
                           std::span<NodeID> candidateNodes,
                           std::span<EdgeID> candidateEdges) = 0;
 };

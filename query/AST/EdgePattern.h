@@ -49,6 +49,10 @@ public:
     // Every analyzed predicate a hop of a quantified pattern must pass
     const std::vector<Expr*>& hopPredicates() const { return _hopPredicates; }
 
+    // The variables a hop predicate reads from outside the hop: one value each for the whole
+    // walk leaving a seed, which the exploration hands the predicate alongside the hop
+    const std::vector<const VarDecl*>& hopImports() const { return _hopImports; }
+
     void setDirection(Direction direction) { _direction = direction; }
 
     void setTypes(SymbolChain* types) { _types = types; }
@@ -64,6 +68,7 @@ public:
     void setHopSourceGroup(VarDecl* decl) { _hopSourceGroup = decl; }
     void setHopEndGroup(VarDecl* decl) { _hopEndGroup = decl; }
     void addHopPredicate(Expr* predicate) { _hopPredicates.push_back(predicate); }
+    void addHopImport(const VarDecl* decl) { _hopImports.push_back(decl); }
 
 private:
     Direction _direction {Direction::Undirected};
@@ -77,6 +82,7 @@ private:
     VarDecl* _hopSourceGroup {nullptr};
     VarDecl* _hopEndGroup {nullptr};
     std::vector<Expr*> _hopPredicates;
+    std::vector<const VarDecl*> _hopImports;
 
     EdgePattern(Direction direction);
     ~EdgePattern() override;

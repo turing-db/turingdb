@@ -560,9 +560,18 @@ bool constrainsHop(const NodePattern* node) {
     return data && (!data->labelConstraints().empty() || !data->exprConstraints().empty());
 }
 
+// Both ends of the repetition under one name: the hop must land where it left from
+bool repeatsItsHopName(const EdgePattern* pattern) {
+    const NodePattern* source = pattern->getHopSource();
+    const NodePattern* end = pattern->getHopEnd();
+
+    return source && end && source->getDecl() == end->getDecl();
+}
+
 bool hasHopConstraints(const EdgePattern* pattern) {
     return pattern
         && (!pattern->hopPredicates().empty()
+            || repeatsItsHopName(pattern)
             || constrainsHop(pattern->getHopSource())
             || constrainsHop(pattern->getHopEnd()));
 }
@@ -1283,6 +1292,7 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                          const std::vector<const VariableDependency*>& carrySet,
                                          const EdgeMetadata& metadata,
                                          mlir::storage::PathDirection direction,
+                                         bool reversed,
                                          mlir::Value* joinedTarget) {
     bioassert(src, "Null source");
     bioassert(tgt, "Null target");
@@ -1317,6 +1327,15 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
         results.push_back(column.getType());
     }
 
+    const auto patternIt = _part._quantifiedEdges.find(edgeDecl);
+    const EdgePattern* pattern = patternIt != end(_part._quantifiedEdges) ? patternIt->second : nullptr;
+
+    llvm::SmallVector<const VarDecl*> hopImports;
+    llvm::SmallVector<mlir::Value> hopImportColumns;
+    if (pattern) {
+        collectHopImports(pattern, hopImports, hopImportColumns);
+    }
+
     mlir::IntegerAttr maxHopsAttr;
     if (metadata.getMaxHops() != EdgeMetadata::UNBOUNDED_HOPS) {
         const mlir::IntegerType hopType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
@@ -1337,6 +1356,7 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         input,
                                                         carried._columns,
                                                         mlir::Value(),
+                                                        hopImportColumns,
                                                         direction,
                                                         metadata.getMinHops(),
                                                         maxHopsAttr,
@@ -1356,24 +1376,45 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
 
     rebindInFlightColumns(op.getResults(), 3, carried);
 
-    _part._pathBindings[edgeDecl] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Edges, src, edge};
+    _part._pathBindings[edgeDecl] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Edges, src, edge, reversed};
 
-    const auto patternIt = _part._quantifiedEdges.find(edgeDecl);
-    const EdgePattern* pattern = patternIt != end(_part._quantifiedEdges) ? patternIt->second : nullptr;
     if (!pattern) {
         return;
     }
 
+    // A walk taken against the pattern swaps the two: its ends read backwards are the
+    // nodes each repetition of the pattern started from, and its sources its ends
+    const mlir::storage::PathExpansionKind sourceKind = reversed ? mlir::storage::PathExpansionKind::Ends
+                                                                 : mlir::storage::PathExpansionKind::Sources;
+    const mlir::storage::PathExpansionKind endKind = reversed ? mlir::storage::PathExpansionKind::Sources
+                                                              : mlir::storage::PathExpansionKind::Ends;
+
     if (const VarDecl* sourceGroup = pattern->getHopSourceGroup()) {
-        _part._pathBindings[sourceGroup] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Sources, src, edge};
+        _part._pathBindings[sourceGroup] = PartScope::PathBinding {sourceKind, src, edge, reversed};
     }
 
     if (const VarDecl* endGroup = pattern->getHopEndGroup()) {
-        _part._pathBindings[endGroup] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Ends, src, edge};
+        _part._pathBindings[endGroup] = PartScope::PathBinding {endKind, src, edge, reversed};
     }
 
     if (hasHopConstraints(pattern)) {
-        generateHopRegion(op, pattern);
+        generateHopRegion(op, pattern, hopImports);
+    }
+}
+
+void DBProgramGenerator::collectHopImports(const EdgePattern* pattern,
+                                           llvm::SmallVectorImpl<const VarDecl*>& imports,
+                                           llvm::SmallVectorImpl<mlir::Value>& columns) {
+    for (const VarDecl* decl : pattern->hopImports()) {
+        const mlir::Value column = resolveEntityColumn(decl);
+        const bool readable = column && isRowAlignedHere(column);
+        if (!readable) {
+            throw TuringException(fmt::format("A predicate on a hop cannot read '{}': it holds no value while the path is walked",
+                                              decl->getName()));
+        }
+
+        imports.push_back(decl);
+        columns.push_back(column);
     }
 }
 
@@ -1425,14 +1466,20 @@ void DBProgramGenerator::collectHopNodeMasks(const NodePattern* node,
     }
 }
 
-void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration, const EdgePattern* pattern) {
+void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
+                                          const EdgePattern* pattern,
+                                          llvm::ArrayRef<const VarDecl*> imports) {
     const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
     const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType edgeType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
-    const llvm::SmallVector<mlir::Type, 3> argumentTypes {nodeType, edgeType, nodeType};
-    const llvm::SmallVector<mlir::Location, 3> argumentLocations {loc, loc, loc};
+    llvm::SmallVector<mlir::Type> argumentTypes {nodeType, edgeType, nodeType};
+    for (const mlir::Value column : exploration.getHopImports()) {
+        argumentTypes.push_back(column.getType());
+    }
+
+    const llvm::SmallVector<mlir::Location> argumentLocations(argumentTypes.size(), loc);
 
     mlir::Region& hop = exploration.getHop();
     mlir::Block* block = _opBuilder.createBlock(&hop, hop.end(), argumentTypes, argumentLocations);
@@ -1444,16 +1491,28 @@ void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration, c
     _part._hopColumns.clear();
     _part._hopColumns[pattern->getHopDecl()] = edgeColumn;
 
+    for (size_t importIndex = 0; importIndex < imports.size(); importIndex++) {
+        _part._hopColumns[imports[importIndex]] = block->getArgument(static_cast<unsigned>(3 + importIndex));
+    }
+
     llvm::SmallVector<mlir::Value> masks;
 
-    if (const NodePattern* source = pattern->getHopSource()) {
+    const NodePattern* source = pattern->getHopSource();
+    const NodePattern* end = pattern->getHopEnd();
+
+    if (source) {
         _part._hopColumns[source->getDecl()] = sourceColumn;
         collectHopNodeMasks(source, sourceColumn, masks);
     }
 
-    if (const NodePattern* end = pattern->getHopEnd()) {
+    if (end) {
         _part._hopColumns[end->getDecl()] = endColumn;
         collectHopNodeMasks(end, endColumn, masks);
+    }
+
+    if (repeatsItsHopName(pattern)) {
+        const mlir::db::ColumnType maskType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+        masks.push_back(_opBuilder.create<mlir::db::EqOp>(loc, maskType, sourceColumn, endColumn).getResult());
     }
 
     std::vector<const Expr*> conjuncts;
@@ -1508,7 +1567,12 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
                                      : static_cast<mlir::Type>(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType listType = allocColumnType(mlir::storage::ListType::get(_mlirCtxt, elementType));
 
-    return _opBuilder.create<mlir::db::ExpandPath>(_opBuilder.getUnknownLoc(), listType, column, seeds, binding._kind).getResult();
+    return _opBuilder.create<mlir::db::ExpandPath>(_opBuilder.getUnknownLoc(),
+                                                   listType,
+                                                   column,
+                                                   seeds,
+                                                   binding._kind,
+                                                   binding._reversed).getResult();
 }
 
 void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
@@ -2631,7 +2695,7 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     const EdgeMetadata::EdgeType direction = metadata.type();
 
     if (metadata.isQuantified()) {
-        addExplorePaths(source, edge, target, carriedSet, metadata, toPathDirection(direction), &landed);
+        addExplorePaths(source, edge, target, carriedSet, metadata, toPathDirection(direction), /*reversed=*/false, &landed);
     } else {
         switch (direction) {
             case EdgeMetadata::EdgeType::GET_OUT_EDGES:
@@ -2849,7 +2913,7 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
             edgeSrcDefined ? prodType : reverseEdge(prodType);
 
         if (metadata.isQuantified()) {
-            addExplorePaths(src, edge, tgt, carriedSet, metadata, toPathDirection(logicalDir), nullptr);
+            addExplorePaths(src, edge, tgt, carriedSet, metadata, toPathDirection(logicalDir), !edgeSrcDefined, nullptr);
         } else {
             switch (logicalDir) {
                 case EdgeMetadata::EdgeType::GET_OUT_EDGES:
@@ -3193,7 +3257,7 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
         bioassert(bindingIt != end(_part._pathBindings), "Quantified relationship without a path column");
 
         const PartScope::PathBinding& binding = bindingIt->second;
-        _part._namedPathWalks[pathDecl] = PartScope::NamedPathWalk {binding._seed, binding._path};
+        _part._namedPathWalks[pathDecl] = PartScope::NamedPathWalk {binding._seed, binding._path, binding._reversed};
 
         return;
     }
@@ -3242,12 +3306,23 @@ mlir::Value DBProgramGenerator::pathHandleColumn(const VarDecl* edgeDecl) {
 }
 
 mlir::Value DBProgramGenerator::namedPathColumn(const PartScope::NamedPathWalk& walk) {
-    const llvm::SmallVector<mlir::Value, 2> entities {_part._varMap.at(walk._seed).back(),
-                                                      _part._varMap.at(walk._path).back()};
+    const mlir::Value seedColumn = _part._varMap.at(walk._seed).back();
+    const mlir::Value pathColumn = _part._varMap.at(walk._path).back();
+
+    // A walk taken against the pattern ends on the node the pattern opens with, so its hops
+    // come first and the node it seeded from is the element's last entity
+    llvm::SmallVector<mlir::Value, 2> entities;
+    mlir::ArrayAttr reversedPaths;
+    if (walk._reversed) {
+        entities = {pathColumn, seedColumn};
+        reversedPaths = _opBuilder.getI64ArrayAttr({0});
+    } else {
+        entities = {seedColumn, pathColumn};
+    }
 
     const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::EntityListType::get(_mlirCtxt));
 
-    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities).getResult();
+    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities, reversedPaths).getResult();
 }
 
 void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
@@ -4826,6 +4901,7 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
     translateProjection(projection, variableColumns, outputted, outputNames);
 
     buildNamedPathItems(projection, outputted);
+    expandPathItems(projection, outputted);
 
     translateProjectionTail(projection, variableColumns, outputted);
 

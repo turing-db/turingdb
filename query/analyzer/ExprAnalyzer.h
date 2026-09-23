@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <vector>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -63,6 +64,11 @@ public:
     // declares the variables that pattern binds
     void setReadAnalyzer(ReadStmtAnalyzer* readAnalyzer) { _readAnalyzer = readAnalyzer; }
 
+    // Collects, while set, every variable an expression reads from a scope enclosing the
+    // current one. A hop of a quantified pattern analyses its predicate in a scope of its
+    // own, and what that predicate reaches out of it is what the exploration must hand it
+    void setImportSink(std::vector<const VarDecl*>* sink) { _importSink = sink; }
+
     // Declares the statement a CSV row variable is loaded by, so `row[2]` and `row.age`
     // resolve to fields of that statement rather than to accesses of their own
     void registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV);
@@ -117,6 +123,10 @@ private:
     std::unordered_map<const VarDecl*, LoadCSVStmt*> _csvSources;
 
     std::unordered_set<const Expr*> _analyzedExprs;
+    std::vector<const VarDecl*>* _importSink {nullptr};
+
+    // The declaration a name reads as, noting it when it came from an enclosing scope
+    VarDecl* resolveVariable(std::string_view name);
 
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
     void analyzeMapEntries(Expr* expr, const MapLiteral* map);

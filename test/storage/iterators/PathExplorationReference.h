@@ -92,7 +92,7 @@ public:
     explicit PredicateHopFilter(HopPredicate predicate);
     ~PredicateHopFilter() override;
 
-    size_t filter(db::NodeID source, std::span<db::NodeID> nodes, std::span<db::EdgeID> edges) override;
+    size_t filter(size_t seedRow, db::NodeID source, std::span<db::NodeID> nodes, std::span<db::EdgeID> edges) override;
 
 private:
     HopPredicate _predicate {nullptr};

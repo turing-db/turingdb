@@ -277,6 +277,22 @@ using NLGatherFunction = void (*)(const Column* input,
                                   const ColumnVector<size_t>* indices,
                                   Column* output);
 
+// Type of handle per column type that lays one row of the input out over every row of the
+// output: what a hop predicate reads a column outside the hop as, the seed's own value
+// standing for the candidates of every hop the walk takes from it
+using NLRepeatRowFunction = void (*)(const Column* input,
+                                     size_t row,
+                                     size_t rowCount,
+                                     Column* output);
+
+// One column a hop predicate reads from outside the hop: the loop's own column, and the
+// chunk the region's argument reads, filled with the seed row's value before each run
+struct NLHopImport {
+    const Column* _source {nullptr};
+    Column* _chunk {nullptr};
+    NLRepeatRowFunction _repeat {nullptr};
+};
+
 // Type of handle that appends the indices of the rows an nl.filter keeps into the
 // indices column. One per mask nullability: a plain mask keeps every true row, a
 // nullable mask keeps only present-and-true rows (a null drops).
@@ -890,6 +906,9 @@ public:
         _hopSurvivors = hopSurvivors;
     }
 
+    void addHopImport(const NLHopImport& import) { _hopImports.push_back(import); }
+    std::span<const NLHopImport> getHopImports() const { return _hopImports; }
+
     ColumnNodeIDs* getHopSources() const { return _hopSources; }
     ColumnEdgeIDs* getHopEdges() const { return _hopEdges; }
     ColumnNodeIDs* getHopEnds() const { return _hopEnds; }
@@ -957,6 +976,7 @@ private:
     ColumnNodeIDs* _hopEnds {nullptr};
     const Column* _hopMask {nullptr};
     NLMaskSurvivorFunction _hopSurvivors {nullptr};
+    std::vector<NLHopImport> _hopImports;
     NLStmtContainer _hopStmts;
 };
 
@@ -976,12 +996,14 @@ public:
                      const ColumnNodeIDs* seeds,
                      ColumnVector<ListView>* output,
                      PathExpansionKind kind,
+                     bool reversed,
                      const PathTrie* trie,
                      QueryListBuffer* listBuffer)
         : _paths(paths),
         _seeds(seeds),
         _output(output),
         _kind(kind),
+        _reversed(reversed),
         _trie(trie),
         _listBuffer(listBuffer)
     {
@@ -991,6 +1013,7 @@ public:
     const ColumnNodeIDs* getSeeds() const { return _seeds; }
     ColumnVector<ListView>* getOutput() const { return _output; }
     PathExpansionKind getKind() const { return _kind; }
+    bool isReversed() const { return _reversed; }
     const PathTrie* getTrie() const { return _trie; }
     QueryListBuffer* getListBuffer() const { return _listBuffer; }
 
@@ -999,6 +1022,7 @@ private:
     const ColumnNodeIDs* _seeds {nullptr};
     ColumnVector<ListView>* _output {nullptr};
     PathExpansionKind _kind {PathExpansionKind::Edges};
+    bool _reversed {false};
     const PathTrie* _trie {nullptr};
     QueryListBuffer* _listBuffer {nullptr};
 };
@@ -1034,6 +1058,8 @@ struct NLPathEntity {
 
     const Column* _column {nullptr};
     Kind _kind {Kind::Node};
+    // A Path whose walk ran against the pattern, whose hops read back from its far end
+    bool _reversed {false};
 };
 
 // nl.make_path data: one entity sequence per row, appended in operand order. A Path

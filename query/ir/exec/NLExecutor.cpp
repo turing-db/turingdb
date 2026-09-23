@@ -1202,6 +1202,18 @@ void gatherColumn(const Column* input,
     }
 }
 
+// Lay one row of a column out over every row of the output
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
+void repeatRowColumn(const Column* input, size_t row, size_t rowCount, Column* output) {
+    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
+    ColumnType* typedOutput = static_cast<ColumnType*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, typedInput->getRaw()[row]);
+}
+
 // Fill a chunk with a run of null rows. Every element type reads its own
 // default-constructed value as null: an ID defaults to the invalid ID that ID::isValid
 // rejects, which is how an entity an OPTIONAL MATCH did not match is spelled.
@@ -5704,7 +5716,7 @@ public:
     ~NLHopFilter() override {
     }
 
-    size_t filter(NodeID source, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
+    size_t filter(size_t seedRow, NodeID source, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
         const size_t chunkSize = _context->getChunkSize();
         ColumnNodeIDs* sources = _loopData->getHopSources();
         ColumnEdgeIDs* edges = _loopData->getHopEdges();
@@ -5712,6 +5724,7 @@ public:
         const Column* mask = _loopData->getHopMask();
         const NLMaskSurvivorFunction survivors = _loopData->getHopSurvivors();
         const NLStmtContainer* stmts = _loopData->getHopStmts();
+        const std::span<const NLHopImport> imports = _loopData->getHopImports();
 
         size_t kept = 0;
         for (size_t begin = 0; begin < candidateNodes.size(); begin += chunkSize) {
@@ -5725,6 +5738,10 @@ public:
 
             ends->resize(count);
             std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
+
+            for (const NLHopImport& import : imports) {
+                import._repeat(import._source, seedRow, count, import._chunk);
+            }
 
             runBody(_context, stmts);
 
@@ -5999,24 +6016,26 @@ void NLExecutor::runExpandPath(NLExecutionContext* context, NLFunctionData* data
 
     lists.resize(paths.size());
 
+    const bool reversed = expand->isReversed();
+
     switch (expand->getKind()) {
         case PathExpansionKind::Edges:
             for (size_t row = 0; row < paths.size(); row++) {
-                lists[row] = trie.expandEdges(paths[row], listBuffer);
+                lists[row] = trie.expandEdges(paths[row], listBuffer, reversed);
             }
         break;
 
         case PathExpansionKind::Sources: {
             const std::vector<NodeID>& seeds = expand->getSeeds()->getRaw();
             for (size_t row = 0; row < paths.size(); row++) {
-                lists[row] = trie.expandSources(paths[row], seeds[row], listBuffer);
+                lists[row] = trie.expandSources(paths[row], seeds[row], listBuffer, reversed);
             }
         }
         break;
 
         case PathExpansionKind::Ends:
             for (size_t row = 0; row < paths.size(); row++) {
-                lists[row] = trie.expandEnds(paths[row], listBuffer);
+                lists[row] = trie.expandEnds(paths[row], listBuffer, reversed);
             }
         break;
     }
@@ -6077,7 +6096,7 @@ void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) 
             case NLPathEntity::Kind::Path: {
                 const std::vector<PathRef>& handles = static_cast<const ColumnVector<PathRef>*>(entity._column)->getRaw();
                 for (size_t row = 0; row < rowCount; row++) {
-                    trie.appendHops(handles[row], paths[row]);
+                    trie.appendHops(handles[row], paths[row], entity._reversed);
                 }
             }
             break;
@@ -6202,7 +6221,7 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
 
             lists.resize(paths.size());
             for (size_t row = 0; row < paths.size(); row++) {
-                lists[row] = trie.expandEdges(paths[row], listBuffer);
+                lists[row] = trie.expandEdges(paths[row], listBuffer, false);
             }
         }
     }
@@ -8486,6 +8505,13 @@ NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
 
 NLGatherFunction NLExecutor::selectCountGatherFunction() {
     return &gatherColumn<uint64_t>;
+}
+
+NLRepeatRowFunction NLExecutor::selectRepeatRowFunction(NLChunkKind kind) {
+    NLRepeatRowFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &repeatRowColumn<ElementType>; });
+
+    return selected;
 }
 
 NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, bool untypedNull) {

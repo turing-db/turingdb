@@ -36,6 +36,19 @@ VarDecl* DeclContext::getDecl(std::string_view name) const {
     return it->second;
 }
 
+VarDecl* DeclContext::lookup(std::string_view name) const {
+    const DeclContext* scope = this;
+    while (scope) {
+        if (VarDecl* decl = scope->getDecl(name)) {
+            return decl;
+        }
+
+        scope = scope->_readsEnclosing ? scope->_parent : nullptr;
+    }
+
+    return nullptr;
+}
+
 VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name) {
     VarDecl* decl = getDecl(name);
     if (!decl) {

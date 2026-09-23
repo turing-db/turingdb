@@ -2196,6 +2196,7 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     exploration.getInputNodes(),
                                                     keptColumns,
                                                     endResult,
+                                                    exploration.getHopImports(),
                                                     exploration.getDirection(),
                                                     exploration.getMinHops(),
                                                     exploration.getMaxHopsAttr(),
@@ -2422,6 +2423,12 @@ bool matchDistinctEnds(ExplorePaths exploration) {
         return false;
     }
 
+    // The search expands a batch of seeds one level at a time, so it has no one row to read
+    // a hop import at: a walk whose predicate reads outside the hop stays a walk
+    if (!exploration.getHopImports().empty()) {
+        return false;
+    }
+
     llvm::SmallPtrSet<Operation*, 16> visited;
 
     return usersReadRowsAsASet(exploration.getOperation(), visited);
@@ -2498,9 +2505,10 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
         return true;
     } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        const size_t endNodeCount = exploration.getEndNodes() ? 1u : 0u;
         layout = CarrySetLayout {._operandOffset = 1,
                                  ._resultOffset = pathFixedResultCount,
-                                 ._trailingOperandCount = exploration.getEndNodes() ? 1u : 0u};
+                                 ._trailingOperandCount = endNodeCount + exploration.getHopImports().size()};
         return true;
     } else if (isa<FilterOp>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
@@ -2700,8 +2708,10 @@ void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, Op
 void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
     const int32_t keptCount = static_cast<int32_t>(kept.size());
     const int32_t endNodeCount = exploration.getEndNodes() ? 1 : 0;
+    const int32_t importCount = static_cast<int32_t>(exploration.getHopImports().size());
 
-    state.attributes.set(exploration.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount}));
+    state.attributes.set(exploration.getOperandSegmentSizesAttrName(),
+                         builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount, importCount}));
 }
 
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {

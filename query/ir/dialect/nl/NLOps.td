@@ -820,6 +820,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        Variadic<NLChunk>:$columns_to_filter,
                        Optional<NLNodeSetStateHandle>:$end_nodes,
                        Optional<NLEdgeTypeHandle>:$edge_types,
+                       Variadic<NLChunk>:$hop_imports,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -834,7 +835,8 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
-    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
+    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
+    (`hop_imports` `{` $hop_imports^ `:` qualified(type($hop_imports)) `}`)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];
@@ -856,11 +858,15 @@ def ExpandPath : NLOp<"expand_path", [Pure, RowAlignedThroughOperands]> {
              : (!nl.chunk<!storage.path_ref>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.list<!storage.edge_id>>
   }];
 
-  let arguments = (ins NLChunk:$paths, Optional<NLNodeIDChunk>:$srcids, PathExpansionKind:$kind);
+  let arguments = (ins NLChunk:$paths,
+                       Optional<NLNodeIDChunk>:$srcids,
+                       PathExpansionKind:$kind,
+                       UnitAttr:$reversed);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $paths (`,` $srcids^)? `)` `kind` $kind attr-dict `:` functional-type(operands, results)
+    `(` $paths (`,` $srcids^)? `)` `kind` $kind (`reversed` $reversed^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -898,7 +904,8 @@ def MakePath : NLOp<"make_path", [Pure, RowAlignedThroughOperands]> {
                -> !nl.chunk<!storage.entity_list>
   }];
 
-  let arguments = (ins Variadic<NLChunk>:$entities);
+  let arguments = (ins Variadic<NLChunk>:$entities,
+                       OptionalAttr<I64ArrayAttr>:$reversed_paths);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{

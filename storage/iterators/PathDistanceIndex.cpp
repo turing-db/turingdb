@@ -379,8 +379,10 @@ double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
         return 0.0;
     }
 
+    // The search walks the ends back against @param direction, so it is the reverse walk's
+    // branching that prices it: the support of one direction is the graph's other end
     TypeBranching branching;
-    sampleBranching(parts, direction, edgeTypes, branching);
+    sampleBranching(parts, reverseOf(direction), edgeTypes, branching);
 
     const double fanOut = std::max(1.0, branching._fanOut);
     const double support = std::clamp(branching._supportNodes, 1.0, static_cast<double>(nodeCount));
@@ -480,7 +482,7 @@ double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
         }
 
         offered += candidateNodes.size();
-        kept += hopFilter.filter(sample, candidateNodes, candidateEdges);
+        kept += hopFilter.filter(0, sample, candidateNodes, candidateEdges);
     }
 
     if (offered == 0) {

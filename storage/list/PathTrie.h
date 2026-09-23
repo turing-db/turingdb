@@ -49,12 +49,15 @@ public:
     void clear();
 
     // Appends the hops of the path in walk order, an edge entry then the node it lands
-    // on for each, to what the caller has already built
-    void appendHops(PathRef path, EntityList& entities) const;
+    // on for each, to what the caller has already built. Reversed it appends them from the
+    // far end back, the node an edge lands on before that edge, which is the order a
+    // pattern walked from its own far end spells out
+    void appendHops(PathRef path, EntityList& entities, bool reversed) const;
 
-    ListView expandEdges(PathRef path, QueryListBuffer& buffer) const;
-    ListView expandEnds(PathRef path, QueryListBuffer& buffer) const;
-    ListView expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer) const;
+    // Each list in walk order, or backwards from the node the walk ended on
+    ListView expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed) const;
+    ListView expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed) const;
+    ListView expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const;
 
     static size_t arenaOf(PathRef path) { return path.getValue() >> indexBits; }
     static size_t indexOf(PathRef path) { return path.getValue() & indexMask; }

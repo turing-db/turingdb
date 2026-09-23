@@ -229,6 +229,8 @@ private:
             mlir::storage::PathExpansionKind _kind {mlir::storage::PathExpansionKind::Edges};
             const VariableDependency* _seed {nullptr};
             const VariableDependency* _path {nullptr};
+            // Whether the walk ran against the pattern, its far end having seeded it
+            bool _reversed {false};
         };
 
         std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
@@ -240,6 +242,7 @@ private:
         struct NamedPathWalk {
             const VariableDependency* _seed {nullptr};
             const VariableDependency* _path {nullptr};
+            bool _reversed {false};
         };
 
         std::unordered_map<const VarDecl*, NamedPathWalk> _namedPathWalks;
@@ -1065,6 +1068,7 @@ private:
                          const std::vector<const VariableDependency*>& carrySet,
                          const EdgeMetadata& metadata,
                          mlir::storage::PathDirection direction,
+                         bool reversed,
                          mlir::Value* joinedTarget);
 
     // Indexes the quantified edge patterns of a part by their declaration
@@ -1073,7 +1077,15 @@ private:
     // Generates the hop region of an exploration from the pattern's hop constraints: the
     // inner nodes' labels and properties and every hop predicate, over the region's three
     // block arguments, yielding one mask
-    void generateHopRegion(mlir::db::ExplorePaths exploration, const EdgePattern* pattern);
+    void generateHopRegion(mlir::db::ExplorePaths exploration,
+                           const EdgePattern* pattern,
+                           llvm::ArrayRef<const VarDecl*> imports);
+
+    // The columns a hop predicate reads from outside the hop, in the order the region's
+    // arguments take them
+    void collectHopImports(const EdgePattern* pattern,
+                           llvm::SmallVectorImpl<const VarDecl*>& imports,
+                           llvm::SmallVectorImpl<mlir::Value>& columns);
 
     // Appends the masks of one inner node's label and property constraints, read over the
     // hop column that node is bound to

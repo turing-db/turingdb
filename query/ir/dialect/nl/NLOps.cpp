@@ -347,19 +347,34 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("end_nodes names the end already named by end_column or ends_on_seed");
     }
 
+    const OperandRange imports = getHopImports();
+
     Region& hop = getHop();
     if (hop.empty()) {
+        if (!imports.empty()) {
+            return emitOpError("hop imports without a hop region to read them");
+        }
+
         return success();
+    }
+
+    if (getDistinct() && !imports.empty()) {
+        return emitOpError("a distinct search expands many seeds at one level, so it cannot "
+                           "read a chunk that holds one value per seed");
     }
 
     Block& block = hop.front();
     MLIRContext* context = getContext();
     const Type nodeChunk = getNodeIDChunkType(context);
     const Type edgeChunk = getEdgeIDChunkType(context);
-    const llvm::SmallVector<Type, 3> expectedArguments {nodeChunk, edgeChunk, nodeChunk};
+    llvm::SmallVector<Type> expectedArguments {nodeChunk, edgeChunk, nodeChunk};
+    for (const Value import : imports) {
+        expectedArguments.push_back(import.getType());
+    }
 
     if (block.getNumArguments() != expectedArguments.size()) {
-        return emitOpError("hop region must take the source node, edge and end node chunks");
+        return emitOpError("hop region must take the source node, edge and end node chunks, "
+                           "then one argument per hop import");
     }
 
     for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
