@@ -39,6 +39,7 @@ using Int64 = db::types::Int64::Primitive;
 using StringView = db::types::String::Primitive;
 using Bool = db::types::Bool::Primitive;
 using Embedding = db::types::Embedding::Primitive;
+using DateTime = db::types::DateTime::Primitive;
 
 struct FramedPacket {
     net::proto::MessageTypes _type;
@@ -249,6 +250,70 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
                   (std::vector<UInt64> {1, 2, 3, 4, 5, 6}));
         EXPECT_EQ(decodedScores->getRaw(),
                   (std::vector<Int64> {-10, 25, 99, -42, 0, 7}));
+    }
+}
+
+// A datetime is eight bytes on the wire like an integer, but under its own type code, so
+// what this pins is that the decoder rebuilds a DateTime column rather than the Int64 it
+// would be indistinguishable from otherwise. The nullable shape is the one a property read
+// produces, so both go over.
+TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
+    using OptionalDateTime = std::optional<DateTime>;
+
+    constexpr int64_t microsecondsPerHour = 3600LL * 1000000;
+
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        // One instant before the epoch, so the negative count crosses the wire too
+        auto* created = localMem.alloc<db::ColumnVector<DateTime>>();
+        created->push_back(DateTime {0});
+        created->push_back(DateTime {microsecondsPerHour});
+        created->push_back(DateTime {-microsecondsPerHour});
+        created->push_back(DateTime {1790172300LL * 1000000});
+        addColumn(&dfMan, &source, "created", created);
+
+        auto* joined = localMem.alloc<db::ColumnOptVector<DateTime>>();
+        joined->push_back(DateTime {microsecondsPerHour});
+        joined->push_back(std::nullopt);
+        joined->push_back(DateTime {2 * microsecondsPerHour});
+        joined->push_back(std::nullopt);
+        addColumn(&dfMan, &source, "joined", joined);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::MapBuffer<> mapBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 2u);
+        EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+
+        const auto* decodedCreated = decoded.cols().at(0)->as<db::ColumnVector<DateTime>>();
+        const auto* decodedJoined = decoded.cols().at(1)->as<db::ColumnOptVector<DateTime>>();
+        ASSERT_NE(decodedCreated, nullptr);
+        ASSERT_NE(decodedJoined, nullptr);
+
+        EXPECT_EQ(decodedCreated->getRaw(),
+                  (std::vector<DateTime> {DateTime {0},
+                                          DateTime {microsecondsPerHour},
+                                          DateTime {-microsecondsPerHour},
+                                          DateTime {1790172300LL * 1000000}}));
+
+        EXPECT_EQ(decodedJoined->getRaw(),
+                  (std::vector<OptionalDateTime> {DateTime {microsecondsPerHour},
+                                                  std::nullopt,
+                                                  DateTime {2 * microsecondsPerHour},
+                                                  std::nullopt}));
     }
 }
 

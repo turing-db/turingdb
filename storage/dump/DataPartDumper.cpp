@@ -71,6 +71,13 @@ DumpResult<void> dumpProperties(fs::FilePageWriter& writer, PropertyContainer* c
             }
             break;
         }
+        case ValueType::DateTime: {
+            TrivialPropertyContainerDumper<types::DateTime> dumper(writer);
+            if (auto res = dumper.dump(container->cast<types::DateTime>()); !res) {
+                return res.get_unexpected();
+            }
+            break;
+        }
         case ValueType::_SIZE:
         case ValueType::Invalid: {
             panic("Error, invalid type");

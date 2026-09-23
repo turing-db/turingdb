@@ -122,4 +122,5 @@ template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const ListVi
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const PropertyNull&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const NodeID&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const EdgeID&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::DateTime::Primitive&);
 }

@@ -289,6 +289,13 @@ public:
         write(v._boolean ? "true" : "false");
     }
 
+    void writeValue(types::DateTime::Primitive v) {
+        _formatted.clear();
+        DateTime::format(_formatted, v);
+
+        writeValue(std::string_view {_formatted});
+    }
+
     void writeValue(bool v) {
         write(v ? "true" : "false");
     }
@@ -408,6 +415,7 @@ public:
 private:
     net::NetWriter* _writer {nullptr};
     std::string _sanitized;
+    std::string _formatted;
 };
 
 }

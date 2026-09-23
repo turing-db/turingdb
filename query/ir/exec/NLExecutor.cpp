@@ -1835,6 +1835,12 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
             return;
         break;
 
+        case ListBufferTypeTag::DateTime:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<types::DateTime::Primitive>().getMicroseconds());
+            return;
+        break;
+
         case ListBufferTypeTag::Embedding:
             throw IRException("cannot dedup by an embedding element");
         break;
@@ -1967,6 +1973,10 @@ uint64_t hashKeyValue(ID<T, I> id) {
 
 uint64_t hashKeyValue(CustomBool value) {
     return mixKeyBits(value._boolean);
+}
+
+uint64_t hashKeyValue(types::DateTime::Primitive value) {
+    return mixKeyBits(static_cast<uint64_t>(value.getMicroseconds()));
 }
 
 // -0.0 hashes as +0.0, the one value it equals; a NaN never reaches a lookup
@@ -2460,6 +2470,10 @@ NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
 
         case ValueType::String:
             return &aggregateUpdateMinMax<types::String::Primitive, IsMax>;
+        break;
+
+        case ValueType::DateTime:
+            return &aggregateUpdateMinMax<types::DateTime::Primitive, IsMax>;
         break;
 
         default:
@@ -3183,6 +3197,10 @@ ListBuffer<>::ListItemVariant taggedListItem(const ListElementView element) {
             return ListBuffer<>::ListItemVariant {element.getAs<EdgeID>()};
         break;
 
+        case ListBufferTypeTag::DateTime:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::DateTime::Primitive>()};
+        break;
+
         case ListBufferTypeTag::INVALID:
             throw IRException("cannot collect an untagged element");
         break;
@@ -3716,6 +3734,10 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
 
         case ValueType::String:
             return &groupFoldMinMax<types::String::Primitive, IsMax>;
+        break;
+
+        case ValueType::DateTime:
+            return &groupFoldMinMax<types::DateTime::Primitive, IsMax>;
         break;
 
         default:
@@ -6145,6 +6167,7 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(con
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<TaggedIdFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<toDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListLastFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
@@ -6918,6 +6941,10 @@ NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
             return &collectFold<ListView>;
         break;
 
+        case ValueType::DateTime:
+            return &collectFold<types::DateTime::Primitive>;
+        break;
+
         default:
             throw IRException("collect does not support this value type");
         break;
@@ -6953,6 +6980,10 @@ NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType)
 
         case ValueType::List:
             return &collectFoldDistinct<ListView>;
+        break;
+
+        case ValueType::DateTime:
+            return &collectFoldDistinct<types::DateTime::Primitive>;
         break;
 
         default:
@@ -7057,6 +7088,10 @@ NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueT
             return &unwindCollectValueEmit<ListView>;
         break;
 
+        case ValueType::DateTime:
+            return &unwindCollectValueEmit<types::DateTime::Primitive>;
+        break;
+
         default:
             throw IRException("unwind does not support this value type");
         break;
@@ -7089,6 +7124,10 @@ NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType)
 
         case ValueType::List:
             return &collectListEmit<ListView>;
+        break;
+
+        case ValueType::DateTime:
+            return &collectListEmit<types::DateTime::Primitive>;
         break;
 
         default:
@@ -7947,6 +7986,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         case NLChunkKind::Path:
             throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
         break;
+
+        case NLChunkKind::DateTime:
+            return &distinctKeyAppendPlainColumn<types::DateTime::Primitive>;
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -7986,6 +8029,10 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
 
         case ValueType::List:
             return &distinctKeyAppendOptListColumn;
+        break;
+
+        case ValueType::DateTime:
+            return &distinctKeyAppendOptColumn<types::DateTime::Primitive>;
         break;
 
         case ValueType::Invalid:
@@ -8095,6 +8142,10 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::Path:
             throw IRException("A path column cannot be a join key: a path has no scalar value to key on");
+        break;
+
+        case NLChunkKind::DateTime:
+            return joinKeyFunctions<types::DateTime::Primitive>();
         break;
     }
 
@@ -8431,6 +8482,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
             return &groupFoldCountDistinctPresentList;
         break;
 
+        case ValueType::DateTime:
+            return &groupFoldCountDistinctPresent<types::DateTime::Primitive>;
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid count(DISTINCT) value type");
@@ -8505,6 +8560,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
 
         case NLChunkKind::Path:
             throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
+        break;
+
+        case NLChunkKind::DateTime:
+            return &groupFoldCountDistinctValue<types::DateTime::Primitive>;
         break;
     }
 
@@ -8690,6 +8749,11 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::Path:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
         break;
+
+        case NLChunkKind::DateTime:
+            throwUnlessKeyedAsItsOwnType(ValueType::DateTime, keyType);
+            return &mergeKeyAppendPlainColumn<types::DateTime::Primitive>;
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -8726,6 +8790,11 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
 
         case ValueType::List:
             throw IRException("a MERGE pattern cannot constrain a property to a list");
+        break;
+
+        case ValueType::DateTime:
+            throwUnlessKeyedAsItsOwnType(ValueType::DateTime, keyType);
+            return &mergeKeyAppendConstColumn<types::DateTime::Primitive>;
         break;
 
         case ValueType::Invalid:
@@ -8910,6 +8979,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
         case NLChunkKind::Path:
             throw IRException("A path column cannot be a sort key: a path has no order here");
         break;
+
+        case NLChunkKind::DateTime:
+            return &compareColumn<types::DateTime::Primitive>;
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -8948,6 +9021,10 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
 
         case ValueType::List:
             return &compareOptListColumn;
+        break;
+
+        case ValueType::DateTime:
+            return &compareOptColumn<types::DateTime::Primitive>;
         break;
 
         case ValueType::Invalid:
@@ -9032,6 +9109,7 @@ template void NLExecutor::runPropertyFetch<NodeID, types::Bool>(NLExecutionConte
 template void NLExecutor::runPropertyFetch<NodeID, types::String>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::List>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::DateTime>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Int64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::UInt64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Double>(NLExecutionContext*, NLFunctionData*);
@@ -9039,6 +9117,7 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::Bool>(NLExecutionConte
 template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::List>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::DateTime>(NLExecutionContext*, NLFunctionData*);
 
 void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data) {
     NLGetNodeLabelSetData* fetchData = static_cast<NLGetNodeLabelSetData*>(data);

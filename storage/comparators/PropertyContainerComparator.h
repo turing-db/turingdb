@@ -142,6 +142,15 @@ public:
                 break;
             }
 
+            case ValueType::DateTime: {
+                if (!TypedPropertyContainerComparator<types::DateTime>::same(
+                        a->cast<types::DateTime>(),
+                        b->cast<types::DateTime>())) {
+                    return false;
+                }
+                break;
+            }
+
             case ValueType::Invalid:
             case ValueType::_SIZE: {
                 break;

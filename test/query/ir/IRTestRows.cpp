@@ -109,6 +109,11 @@ void renderListElement(const ListElementView& element, std::string& out) {
             return;
         break;
 
+        case ListBufferTypeTag::DateTime:
+            DateTime::format(out, element.getAs<types::DateTime::Primitive>());
+            return;
+        break;
+
         case ListBufferTypeTag::Embedding:
         case ListBufferTypeTag::INVALID:
         break;
@@ -139,6 +144,9 @@ void renderValue(const T& value, std::string& out) {
         out = std::string(value);
     } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
         out = value ? "true" : "false";
+    } else if constexpr (std::is_same_v<T, types::DateTime::Primitive>) {
+        out.clear();
+        DateTime::format(out, value);
     } else {
         out = std::to_string(value);
     }
@@ -242,7 +250,8 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
                || renderValueCell<double>(column, row, out)
                || renderValueCell<types::Bool::Primitive>(column, row, out)
                || renderValueCell<std::string_view>(column, row, out)
-               || renderValueCell<std::string>(column, row, out)) {
+               || renderValueCell<std::string>(column, row, out)
+               || renderValueCell<types::DateTime::Primitive>(column, row, out)) {
         // Rendered by the helper for whichever value type matched
     } else {
         throw std::runtime_error("IRTestRows: unsupported output column type");

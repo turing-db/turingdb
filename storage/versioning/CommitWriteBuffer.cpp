@@ -52,6 +52,10 @@ struct PrimitiveToTag<types::Bool::Primitive> {
     using Type = types::Bool;
 };
 template <>
+struct PrimitiveToTag<types::DateTime::Primitive> {
+    using Type = types::DateTime;
+};
+template <>
 struct PrimitiveToTag<types::Embedding::OwningPrimitive> {
     using Type = types::Embedding;
 };

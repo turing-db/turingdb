@@ -469,6 +469,14 @@ private:
                 std::cout << element.getAs<EdgeID>().getValue();
             break;
 
+            case ListBufferTypeTag::DateTime: {
+                std::string formatted;
+                DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
+
+                std::cout << formatted;
+            }
+            break;
+
             case ListBufferTypeTag::INVALID:
                 std::cout << "?";
             break;

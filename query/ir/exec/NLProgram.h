@@ -67,6 +67,7 @@ enum class NLChunkKind {
     List,
     Map,
     Path,
+    DateTime,
 };
 
 // Invoke handler with the column element type a chunk kind stands for, so the families of
@@ -137,6 +138,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::Path:
             return handler.template operator()<Path>();
+        break;
+
+        case NLChunkKind::DateTime:
+            return handler.template operator()<types::DateTime::Primitive>();
         break;
     }
 

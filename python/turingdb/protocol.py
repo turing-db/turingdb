@@ -13,6 +13,7 @@ DTYPE_MAP = {
     "UInt64": "UInt64",
     "Double": "float64",
     "Bool": "boolean",
+    "DateTime": "datetime64[us, UTC]",
 }
 
 

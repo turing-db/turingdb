@@ -99,6 +99,11 @@ void FunctionDecls::initDefault() {
     countBools->setReturnTypes({{EvaluatedType::Integer}});
     countBools->setIsAggregate(true);
 
+    FunctionSignature* countDateTimes = createFunction("count");
+    countDateTimes->setArguments({EvaluatedType::DateTime});
+    countDateTimes->setReturnTypes({{EvaluatedType::Integer}});
+    countDateTimes->setIsAggregate(true);
+
     FunctionSignature* countListItems = createFunction("count");
     countListItems->setArguments({EvaluatedType::ListItem});
     countListItems->setReturnTypes({{EvaluatedType::Integer}});
@@ -129,6 +134,12 @@ void FunctionDecls::initDefault() {
     collectBools->setReturnTypes({{EvaluatedType::List}});
     collectBools->setIsAggregate(true);
     collectBools->setCollectsItsArgument(true);
+
+    FunctionSignature* collectDateTimes = createFunction("collect");
+    collectDateTimes->setArguments({EvaluatedType::DateTime});
+    collectDateTimes->setReturnTypes({{EvaluatedType::List}});
+    collectDateTimes->setIsAggregate(true);
+    collectDateTimes->setCollectsItsArgument(true);
 
     FunctionSignature* collectNodes = createFunction("collect");
     collectNodes->setArguments({EvaluatedType::NodePattern});
@@ -255,6 +266,17 @@ void FunctionDecls::initDefault() {
     maxBool->setArguments({EvaluatedType::Bool});
     maxBool->setReturnTypes({{EvaluatedType::Bool}});
     maxBool->setIsAggregate(true);
+
+    // An extremum of a datetime column is the earliest or the latest instant in it
+    FunctionSignature* minDateTime = createFunction("min");
+    minDateTime->setArguments({EvaluatedType::DateTime});
+    minDateTime->setReturnTypes({{EvaluatedType::DateTime}});
+    minDateTime->setIsAggregate(true);
+
+    FunctionSignature* maxDateTime = createFunction("max");
+    maxDateTime->setArguments({EvaluatedType::DateTime});
+    maxDateTime->setReturnTypes({{EvaluatedType::DateTime}});
+    maxDateTime->setIsAggregate(true);
 
     // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
     // null, so a column that is null on every row - a name no property in the graph carries,
@@ -422,6 +444,10 @@ void FunctionDecls::initDefault() {
     FunctionSignature* toBoolean = createFunction("toBoolean");
     toBoolean->setArguments({EvaluatedType::String});
     toBoolean->setReturnTypes({{EvaluatedType::Bool}});
+
+    FunctionSignature* dateTime = createFunction("datetime");
+    dateTime->setArguments({EvaluatedType::String});
+    dateTime->setReturnTypes({{EvaluatedType::DateTime}});
 
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they

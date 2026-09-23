@@ -24,6 +24,11 @@ int main() {
             spdlog::info("element: {}", "list");
         } else if constexpr (std::is_same_v<T, PropertyNull>) {
             spdlog::info("element: {}", "null");
+        } else if constexpr (std::is_same_v<T, types::DateTime::Primitive>) {
+            std::string formatted;
+            DateTime::format(formatted, value);
+
+            spdlog::info("element: {}", formatted);
         } else {
             spdlog::info("element: {}", value);
         }

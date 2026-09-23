@@ -76,6 +76,7 @@ enum class ColumnInternalKind : uint32_t {
     PROPERTY_NULL,
     MAP_VIEW,
     MAP_ENTRY_VIEW,
+    DATE_TIME,
 };
 
 enum class ColumnKind : uint8_t {

@@ -100,6 +100,7 @@ private:
     const size_t _offset {0};
     const size_t _rowCount {0};
     std::string _sanitized;
+    std::string _formatted;
 
     template <Optional T>
     void encodeValue(const T& value) {
@@ -151,6 +152,14 @@ private:
 
     void encodeValue(ValueType value) {
         ControlCharactersEscaper::escapeAndSurroundByQuotes(ValueTypeName::value(value), _sanitized);
+        _writer.write(_sanitized);
+    }
+
+    void encodeValue(types::DateTime::Primitive value) {
+        _formatted.clear();
+        DateTime::format(_formatted, value);
+
+        ControlCharactersEscaper::escapeAndSurroundByQuotes(_formatted, _sanitized);
         _writer.write(_sanitized);
     }
 

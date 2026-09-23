@@ -53,6 +53,8 @@ public:
             _bools.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         } else if constexpr (std::is_same_v<T, types::List>) {
             _lists.emplace(ptID, static_cast<PropertyContainer*>(ptr));
+        } else if constexpr (std::is_same_v<T, types::DateTime>) {
+            _dateTimes.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         }
     }
 
@@ -233,6 +235,7 @@ private:
     PropertyContainerReferences _bools;
     PropertyContainerReferences _embeddings;
     PropertyContainerReferences _lists;
+    PropertyContainerReferences _dateTimes;
 
     PropertyIndexer _indexers;
 };

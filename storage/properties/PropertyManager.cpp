@@ -74,6 +74,11 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
         fill(container, ptID);
     }
 
+    for (const auto& [ptID, rawContainer] : _dateTimes) {
+        const auto& container = rawContainer->cast<types::DateTime>();
+        fill(container, ptID);
+    }
+
 }
 
 const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptID) const {

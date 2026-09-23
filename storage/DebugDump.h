@@ -55,6 +55,10 @@ public:
         dumpNull(out);
     }
 
+    inline static void dump(std::ostream& out, DateTime value) {
+        dumpImpl(out, static_cast<uint64_t>(value.getMicroseconds()));
+    }
+
     static void dump(std::ostream& out, std::string_view str);
     static void dump(std::ostream& out, const std::string& str);
 

@@ -272,6 +272,7 @@ void ParquetEdgeVisitor::addEdgeProperty(const EdgeRecord& edge,
         // ValueTypes that aren't represented in Parquet
         case ValueType::UInt64:
         case ValueType::Embedding:
+        case ValueType::DateTime:
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw FatalException(

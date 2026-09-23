@@ -15,6 +15,7 @@
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
+#include "metadata/DateTime.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -87,6 +88,29 @@ bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+// A datetime renders as the ISO-8601 instant it names rather than as its count, which is
+// what every other reader of one shows
+bool textOfDateTime(const Column* chunk, size_t rowIndex, std::string& text) {
+    if (const auto* column = dynamic_cast<const ColumnVector<DateTime>*>(chunk)) {
+        DateTime::format(text, column->getRaw()[rowIndex]);
+        return true;
+    }
+
+    const auto* optional = dynamic_cast<const ColumnOptVector<DateTime>*>(chunk);
+    if (!optional) {
+        return false;
+    }
+
+    const std::optional<DateTime>& value = optional->getRaw()[rowIndex];
+    if (!value) {
+        text = "null";
+        return true;
+    }
+
+    DateTime::format(text, *value);
+    return true;
+}
+
 bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<ValueType>*>(chunk);
     if (!column) {
@@ -129,6 +153,14 @@ std::string elementText(const ListElementView& element) {
 
         case ListBufferTypeTag::EdgeID:
             return fmt::format("{}", element.getAs<EdgeID>().getValue());
+        break;
+
+        case ListBufferTypeTag::DateTime: {
+            std::string formatted;
+            DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
+
+            return formatted;
+        }
         break;
 
         case ListBufferTypeTag::Embedding:
@@ -362,6 +394,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfID<EdgeTypeID>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfValueType(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfDateTime(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPlain<uint64_t>(chunk, rowIndex, text)) {
         return text;
