@@ -280,6 +280,7 @@ int StartCmd::execute() {
             const QueryState state("", &mem, &queryConfig, nullptr);
             const QueryStatus res = turingDB.query("load graph " + graphName, state);
             if (!res.isOk()) {
+                spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError());
                 return EXIT_FAILURE;
             }
         }
