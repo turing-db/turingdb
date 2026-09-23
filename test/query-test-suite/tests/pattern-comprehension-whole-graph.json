@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN [(a:Person)-[:KNOWS_WELL]->(b:Person) | b.name] AS known",
+  "expect": {
+    "result": "known\n\"[Adam, Remy]\""
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "pattern",
+    "return"
+  ],
+  "write-required": false
+}

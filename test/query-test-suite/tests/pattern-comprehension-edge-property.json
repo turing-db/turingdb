@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person {name: 'Adam'}) RETURN [(n)-[e:INTERESTED_IN]->(i) | e.name] AS edges",
+  "expect": {
+    "result": "edges\n\"[Adam -> Bio, Adam -> Cooking]\""
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "pattern",
+    "match",
+    "return"
+  ],
+  "write-required": false
+}
