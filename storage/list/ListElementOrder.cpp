@@ -10,8 +10,8 @@
 #include "ID.h"
 #include "ListBufferTypeTag.h"
 
+#include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 
 #include "metadata/PropertyType.h"
@@ -24,7 +24,8 @@ namespace {
 
 // The class a tagged element sorts in, ascending.
 enum class ListElementOrderClass {
-    Node = 0,
+    Map = 0,
+    Node,
     Edge,
     List,
     String,
@@ -33,93 +34,6 @@ enum class ListElementOrderClass {
     DateTime,
     Null,
 };
-
-std::strong_ordering compareDoubles(double lhs, double rhs);
-
-bool mapsEqual(MapView lhs, MapView rhs);
-
-// Two entries hold the same value when they were stored under the same tag and the values
-// under it match. A map value recurses; a list value goes through list equality.
-bool isNumericValueTag(const MapBufferTypeTag tag) {
-    return tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt
-           || tag == MapBufferTypeTag::Double;
-}
-
-double mapValueAsDouble(const MapEntryView entry) {
-    switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
-            return static_cast<double>(entry.getValueAs<types::Int64::Primitive>());
-        break;
-
-        case MapBufferTypeTag::UInt:
-            return static_cast<double>(entry.getValueAs<types::UInt64::Primitive>());
-        break;
-
-        default:
-            return entry.getValueAs<types::Double::Primitive>();
-        break;
-    }
-}
-
-bool mapValuesEqual(const MapEntryView lhs, const MapEntryView rhs) {
-    const MapBufferTypeTag tag = lhs.getValueTag();
-    const MapBufferTypeTag rhsTag = rhs.getValueTag();
-
-    // A number equals a number whatever tag each was stored under, as two list elements do
-    if (isNumericValueTag(tag) && isNumericValueTag(rhsTag)) {
-        if (tag == MapBufferTypeTag::Int && rhsTag == MapBufferTypeTag::Int) {
-            return lhs.getValueAs<types::Int64::Primitive>() == rhs.getValueAs<types::Int64::Primitive>();
-        } else if (tag == MapBufferTypeTag::UInt && rhsTag == MapBufferTypeTag::UInt) {
-            return lhs.getValueAs<types::UInt64::Primitive>() == rhs.getValueAs<types::UInt64::Primitive>();
-        }
-
-        return compareDoubles(mapValueAsDouble(lhs), mapValueAsDouble(rhs)) == std::strong_ordering::equal;
-    }
-
-    if (tag != rhsTag) {
-        return false;
-    }
-
-    const auto equalAs = [&rhs]<typename T>(const MapEntryView lhsEntry) -> bool {
-        if constexpr (std::same_as<T, MapView>) {
-            return mapsEqual(lhsEntry.getValueAs<MapView>(), rhs.getValueAs<MapView>());
-        } else if constexpr (std::same_as<T, ListView>) {
-            return lhsEntry.getValueAs<ListView>() == rhs.getValueAs<ListView>();
-        } else if constexpr (std::same_as<T, PropertyNull>) {
-            return true;
-        } else if constexpr (std::same_as<T, types::Bool::Primitive>) {
-            return static_cast<bool>(lhsEntry.getValueAs<T>()) == static_cast<bool>(rhs.getValueAs<T>());
-        } else if constexpr (std::same_as<T, types::Embedding::Primitive>) {
-            return std::ranges::equal(lhsEntry.getValueAs<T>(), rhs.getValueAs<T>());
-        } else {
-            return lhsEntry.getValueAs<T>() == rhs.getValueAs<T>();
-        }
-    };
-
-    return MapTagDispatcher {tag}.execute(equalAs, lhs);
-}
-
-// Both producers of a map - the constant path's DictionaryAttr and db.make_map's sorted
-// keys - store entries in key order, so equal maps line up entry for entry.
-bool mapsEqual(const MapView lhs, const MapView rhs) {
-    const std::span<const MapEntryView> lhsEntries = lhs.entries();
-    const std::span<const MapEntryView> rhsEntries = rhs.entries();
-    if (lhsEntries.size() != rhsEntries.size()) {
-        return false;
-    }
-
-    for (size_t index = 0; index < lhsEntries.size(); index++) {
-        if (lhsEntries[index].getKey() != rhsEntries[index].getKey()) {
-            return false;
-        }
-
-        if (!mapValuesEqual(lhsEntries[index], rhsEntries[index])) {
-            return false;
-        }
-    }
-
-    return true;
-}
 
 ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
     switch (tag) {
@@ -162,7 +76,7 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
         break;
 
         case ListBufferTypeTag::MapView:
-            throw FatalException("Cannot order a map list element.");
+            return ListElementOrderClass::Map;
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -173,18 +87,83 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
     throw FatalException("Unknown ListBufferTypeTag.");
 }
 
-double asDouble(const ListElementView element) {
-    switch (element.getTag()) {
+ListBufferTypeTag listTagOf(MapBufferTypeTag tag) {
+    switch (tag) {
+        case MapBufferTypeTag::Int:
+            return ListBufferTypeTag::Int;
+        break;
+        case MapBufferTypeTag::UInt:
+            return ListBufferTypeTag::UInt;
+        break;
+        case MapBufferTypeTag::Double:
+            return ListBufferTypeTag::Double;
+        break;
+        case MapBufferTypeTag::Bool:
+            return ListBufferTypeTag::Bool;
+        break;
+        case MapBufferTypeTag::String:
+            return ListBufferTypeTag::String;
+        break;
+        case MapBufferTypeTag::Embedding:
+            return ListBufferTypeTag::Embedding;
+        break;
+        case MapBufferTypeTag::ListView:
+            return ListBufferTypeTag::ListView;
+        break;
+        case MapBufferTypeTag::MapView:
+            return ListBufferTypeTag::MapView;
+        break;
+        case MapBufferTypeTag::Null:
+            return ListBufferTypeTag::Null;
+        break;
+        case MapBufferTypeTag::NodeID:
+            return ListBufferTypeTag::NodeID;
+        break;
+        case MapBufferTypeTag::EdgeID:
+            return ListBufferTypeTag::EdgeID;
+        break;
+        case MapBufferTypeTag::DateTime:
+            return ListBufferTypeTag::DateTime;
+        break;
+        case MapBufferTypeTag::INVALID:
+            return ListBufferTypeTag::INVALID;
+        break;
+    }
+
+    return ListBufferTypeTag::INVALID;
+}
+
+ListBufferTypeTag tagOf(const ListElementView element) {
+    return element.getTag();
+}
+
+ListBufferTypeTag tagOf(const MapEntryView entry) {
+    return listTagOf(entry.getValueTag());
+}
+
+template <typename T>
+T valueOf(const ListElementView element) {
+    return element.getAs<T>();
+}
+
+template <typename T>
+T valueOf(const MapEntryView entry) {
+    return entry.getValueAs<T>();
+}
+
+template <typename View>
+double asDouble(const View value) {
+    switch (tagOf(value)) {
         case ListBufferTypeTag::Int:
-            return static_cast<double>(element.getAs<types::Int64::Primitive>());
+            return static_cast<double>(valueOf<types::Int64::Primitive>(value));
         break;
 
         case ListBufferTypeTag::UInt:
-            return static_cast<double>(element.getAs<types::UInt64::Primitive>());
+            return static_cast<double>(valueOf<types::UInt64::Primitive>(value));
         break;
 
         default:
-            return element.getAs<types::Double::Primitive>();
+            return valueOf<types::Double::Primitive>(value);
         break;
     }
 }
@@ -214,17 +193,71 @@ std::strong_ordering compareDoubles(const double lhs, const double rhs) {
 // Two numbers compare numerically whatever they are tagged as. A pair of integers of one
 // signedness compares in its own type, so neighbouring values above 2^53 keep their
 // order; any other pair goes through double, the type holding both.
-std::strong_ordering compareNumbers(const ListElementView lhs, const ListElementView rhs) {
-    const ListBufferTypeTag lhsTag = lhs.getTag();
-    const ListBufferTypeTag rhsTag = rhs.getTag();
+template <typename View>
+std::strong_ordering compareNumbers(const View lhs, const View rhs) {
+    const ListBufferTypeTag lhsTag = tagOf(lhs);
+    const ListBufferTypeTag rhsTag = tagOf(rhs);
 
     if (lhsTag == ListBufferTypeTag::Int && rhsTag == ListBufferTypeTag::Int) {
-        return lhs.getAs<types::Int64::Primitive>() <=> rhs.getAs<types::Int64::Primitive>();
+        return valueOf<types::Int64::Primitive>(lhs) <=> valueOf<types::Int64::Primitive>(rhs);
     } else if (lhsTag == ListBufferTypeTag::UInt && rhsTag == ListBufferTypeTag::UInt) {
-        return lhs.getAs<types::UInt64::Primitive>() <=> rhs.getAs<types::UInt64::Primitive>();
+        return valueOf<types::UInt64::Primitive>(lhs) <=> valueOf<types::UInt64::Primitive>(rhs);
     }
 
     return compareDoubles(asDouble(lhs), asDouble(rhs));
+}
+
+// Orders two tagged values - two list elements, or the values of two map entries - on the
+// cross-type order the header documents
+template <typename View>
+std::strong_ordering compareValues(const View lhs, const View rhs) {
+    const ListElementOrderClass lhsClass = orderClassOf(tagOf(lhs));
+    const ListElementOrderClass rhsClass = orderClassOf(tagOf(rhs));
+
+    if (lhsClass != rhsClass) {
+        return lhsClass <=> rhsClass;
+    }
+
+    switch (lhsClass) {
+        case ListElementOrderClass::Map:
+            return valueOf<MapView>(lhs) <=> valueOf<MapView>(rhs);
+        break;
+
+        case ListElementOrderClass::Node:
+            return valueOf<NodeID>(lhs) <=> valueOf<NodeID>(rhs);
+        break;
+
+        case ListElementOrderClass::Edge:
+            return valueOf<EdgeID>(lhs) <=> valueOf<EdgeID>(rhs);
+        break;
+
+        case ListElementOrderClass::List:
+            return valueOf<ListView>(lhs) <=> valueOf<ListView>(rhs);
+        break;
+
+        case ListElementOrderClass::String:
+            return valueOf<types::String::Primitive>(lhs) <=> valueOf<types::String::Primitive>(rhs);
+        break;
+
+        case ListElementOrderClass::Bool:
+            return static_cast<bool>(valueOf<types::Bool::Primitive>(lhs))
+                <=> static_cast<bool>(valueOf<types::Bool::Primitive>(rhs));
+        break;
+
+        case ListElementOrderClass::Number:
+            return compareNumbers(lhs, rhs);
+        break;
+
+        case ListElementOrderClass::DateTime:
+            return valueOf<types::DateTime::Primitive>(lhs) <=> valueOf<types::DateTime::Primitive>(rhs);
+        break;
+
+        case ListElementOrderClass::Null:
+            return std::strong_ordering::equal;
+        break;
+    }
+
+    throw FatalException("Unknown list element order class.");
 }
 
 // Compares a stored number against a value of another numeric type. Two integers
@@ -302,75 +335,39 @@ std::strong_ordering compareElementWithNumber(const ListElementView element, con
     }
 }
 
+// Embeddings have no order, so equality cannot be read off compareValues wherever one may
+// sit - directly, or anywhere inside a nested list or map
+template <typename View>
+bool valuesEqual(const View lhs, const View rhs) {
+    const ListBufferTypeTag lhsTag = tagOf(lhs);
+    const ListBufferTypeTag rhsTag = tagOf(rhs);
+
+    const bool lhsIsEmbedding = lhsTag == ListBufferTypeTag::Embedding;
+    const bool rhsIsEmbedding = rhsTag == ListBufferTypeTag::Embedding;
+    const bool bothMaps = lhsTag == ListBufferTypeTag::MapView && rhsTag == ListBufferTypeTag::MapView;
+    const bool bothLists = lhsTag == ListBufferTypeTag::ListView && rhsTag == ListBufferTypeTag::ListView;
+
+    if (lhsIsEmbedding || rhsIsEmbedding) {
+        return lhsIsEmbedding && rhsIsEmbedding
+            && EmbeddingEqual {}(valueOf<types::Embedding::Primitive>(lhs),
+                                 valueOf<types::Embedding::Primitive>(rhs));
+    } else if (bothMaps) {
+        return valueOf<MapView>(lhs) == valueOf<MapView>(rhs);
+    } else if (bothLists) {
+        return valueOf<ListView>(lhs) == valueOf<ListView>(rhs);
+    }
+
+    return compareValues(lhs, rhs) == std::strong_ordering::equal;
+}
+
 }
 
 std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElementView rhs) {
-    const ListElementOrderClass lhsClass = orderClassOf(lhs.getTag());
-    const ListElementOrderClass rhsClass = orderClassOf(rhs.getTag());
-
-    if (lhsClass != rhsClass) {
-        return lhsClass <=> rhsClass;
-    }
-
-    switch (lhsClass) {
-        case ListElementOrderClass::Node:
-            return lhs.getAs<NodeID>() <=> rhs.getAs<NodeID>();
-        break;
-
-        case ListElementOrderClass::Edge:
-            return lhs.getAs<EdgeID>() <=> rhs.getAs<EdgeID>();
-        break;
-
-        case ListElementOrderClass::List:
-            return lhs.getAs<ListView>() <=> rhs.getAs<ListView>();
-        break;
-
-        case ListElementOrderClass::String:
-            return lhs.getAs<types::String::Primitive>() <=> rhs.getAs<types::String::Primitive>();
-        break;
-
-        case ListElementOrderClass::Bool:
-            return static_cast<bool>(lhs.getAs<types::Bool::Primitive>())
-                <=> static_cast<bool>(rhs.getAs<types::Bool::Primitive>());
-        break;
-
-        case ListElementOrderClass::Number:
-            return compareNumbers(lhs, rhs);
-        break;
-
-        case ListElementOrderClass::DateTime:
-            return lhs.getAs<types::DateTime::Primitive>() <=> rhs.getAs<types::DateTime::Primitive>();
-        break;
-
-        case ListElementOrderClass::Null:
-            return std::strong_ordering::equal;
-        break;
-    }
-
-    throw FatalException("Unknown list element order class.");
+    return compareValues(lhs, rhs);
 }
 
 bool db::operator==(const ListElementView lhs, const ListElementView rhs) {
-    const ListBufferTypeTag lhsTag = lhs.getTag();
-    const ListBufferTypeTag rhsTag = rhs.getTag();
-
-    // A map has no order here, so equality cannot ask <=>; two maps are still plainly equal
-    // or not, entry by entry
-    if (lhsTag == ListBufferTypeTag::MapView || rhsTag == ListBufferTypeTag::MapView) {
-        if (lhsTag != rhsTag) {
-            return false;
-        }
-
-        return mapsEqual(lhs.getAs<MapView>(), rhs.getAs<MapView>());
-    }
-
-    // A nested list may hold a map further down, so it compares pairwise rather than
-    // through <=>, which would reach the ordering a map has none of
-    if (lhsTag == ListBufferTypeTag::ListView && rhsTag == ListBufferTypeTag::ListView) {
-        return lhs.getAs<ListView>() == rhs.getAs<ListView>();
-    }
-
-    return (lhs <=> rhs) == std::strong_ordering::equal;
+    return valuesEqual(lhs, rhs);
 }
 
 std::strong_ordering db::operator<=>(const ListView lhs, const ListView rhs) {
@@ -396,7 +393,50 @@ bool db::operator==(const ListView lhs, const ListView rhs) {
     }
 
     for (size_t index = 0; index < lhsElements.size(); index++) {
-        if (!(lhsElements[index] == rhsElements[index])) {
+        if (!valuesEqual(lhsElements[index], rhsElements[index])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::strong_ordering db::operator<=>(const MapView lhs, const MapView rhs) {
+    const std::span<const MapEntryView> lhsEntries = lhs.entries();
+    const std::span<const MapEntryView> rhsEntries = rhs.entries();
+    const size_t common = std::min(lhsEntries.size(), rhsEntries.size());
+
+    for (size_t index = 0; index < common; index++) {
+        const MapEntryView lhsEntry = lhsEntries[index];
+        const MapEntryView rhsEntry = rhsEntries[index];
+
+        const std::strong_ordering keyOrder = lhsEntry.getKey() <=> rhsEntry.getKey();
+        if (keyOrder != std::strong_ordering::equal) {
+            return keyOrder;
+        }
+
+        const std::strong_ordering valueOrder = compareValues(lhsEntry, rhsEntry);
+        if (valueOrder != std::strong_ordering::equal) {
+            return valueOrder;
+        }
+    }
+
+    return lhsEntries.size() <=> rhsEntries.size();
+}
+
+bool db::operator==(const MapView lhs, const MapView rhs) {
+    const std::span<const MapEntryView> lhsEntries = lhs.entries();
+    const std::span<const MapEntryView> rhsEntries = rhs.entries();
+    if (lhsEntries.size() != rhsEntries.size()) {
+        return false;
+    }
+
+    for (size_t index = 0; index < lhsEntries.size(); index++) {
+        const MapEntryView lhsEntry = lhsEntries[index];
+        const MapEntryView rhsEntry = rhsEntries[index];
+
+        const bool sameEntry = lhsEntry.getKey() == rhsEntry.getKey() && valuesEqual(lhsEntry, rhsEntry);
+        if (!sameEntry) {
             return false;
         }
     }
@@ -429,6 +469,11 @@ bool db::operator==(const ListElementView element, const types::Bool::Primitive 
 bool db::operator==(const ListElementView element, const ListView value) {
     return element.getTag() == ListBufferTypeTag::ListView
         && element.getAs<ListView>() == value;
+}
+
+bool db::operator==(const ListElementView element, const MapView value) {
+    return element.getTag() == ListBufferTypeTag::MapView
+        && element.getAs<MapView>() == value;
 }
 
 bool db::operator==(const ListElementView element, PropertyNull) {

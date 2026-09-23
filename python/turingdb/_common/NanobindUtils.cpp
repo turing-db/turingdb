@@ -501,6 +501,20 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "List";
                 break;
             }
+            case db::ColumnOptVector<db::MapView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnOptVector<db::MapView>*>(col)->getRaw();
+                nb::list lst;
+                for (const std::optional<db::MapView>& mapView : src) {
+                    if (!mapView) {
+                        lst.append(nb::none());
+                    } else {
+                        lst.append(listVisitor.view(*mapView));
+                    }
+                }
+                value = lst;
+                dtypeName = "Map";
+                break;
+            }
 
             case db::ColumnOptVector<db::types::DateTime::Primitive>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnOptVector<db::types::DateTime::Primitive>*>(col)->getRaw();

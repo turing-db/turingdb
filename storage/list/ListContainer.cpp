@@ -5,7 +5,7 @@
 #include "ListElementView.h"
 #include "ListUtils.h"
 
-#include "FatalException.h"
+#include "map/MapContainer.h"
 
 using namespace db;
 
@@ -23,6 +23,7 @@ ListContainer::ListContainer(ListContainer&& other) noexcept
     : _lists(std::move(other._lists)),
     _strings(std::move(other._strings)),
     _embeddings(std::move(other._embeddings)),
+    _maps(std::move(other._maps)),
     _views(std::move(other._views))
 {
 }
@@ -31,6 +32,7 @@ ListContainer& ListContainer::operator=(ListContainer&& other) noexcept {
     _lists = std::move(other._lists);
     _strings = std::move(other._strings);
     _embeddings = std::move(other._embeddings);
+    _maps = std::move(other._maps);
     _views = std::move(other._views);
     return *this;
 }
@@ -58,7 +60,18 @@ void ListContainer::clear() {
     _lists->clear();
     _strings->clear();
     _embeddings->clear();
+    if (_maps) {
+        _maps->clear();
+    }
     _views.clear();
+}
+
+MapContainer& ListContainer::getMaps() {
+    if (!_maps) {
+        _maps = std::make_unique<MapContainer>();
+    }
+
+    return *_maps;
 }
 
 ListView ListContainer::copy(ListView list) {
@@ -69,7 +82,7 @@ ListView ListContainer::copy(ListView list) {
         if constexpr (std::same_as<T, ListView>) {
             return copy(view.getAs<ListView>());
         } else if constexpr (std::same_as<T, MapView>) {
-            throw FatalException("Cannot store a list holding a map: there is no map property type");
+            return getMaps().copy(view.getAs<MapView>());
         } else {
             return view.getAs<T>();
         }
@@ -91,8 +104,6 @@ ListContainer::ListItemVariant ListContainer::own(const ListItemVariant& element
             return _strings->insert(value);
         } else if constexpr (std::same_as<T, types::Embedding::Primitive>) {
             return _embeddings->insert(value);
-        } else if constexpr (std::same_as<T, MapView>) {
-            throw FatalException("Cannot store a list holding a map: there is no map property type");
         } else {
             return value;
         }

@@ -44,7 +44,8 @@ public:
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::OwningPrimitive>,
         std::optional<types::List::OwningPrimitive>,
-        std::optional<types::DateTime::Primitive>
+        std::optional<types::DateTime::Primitive>,
+        std::optional<types::Map::OwningPrimitive>
      >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;

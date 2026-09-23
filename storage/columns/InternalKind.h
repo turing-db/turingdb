@@ -103,7 +103,8 @@ public:
         ListElementView,
         std::optional<ListElementView>,
         MapView,
-        MapEntryView
+        MapEntryView,
+        std::optional<MapView>
     >;
 
     using Code = uint8_t;

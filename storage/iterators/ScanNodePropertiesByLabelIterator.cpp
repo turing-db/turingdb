@@ -268,6 +268,7 @@ template class ScanNodePropertiesByLabelIterator<types::Bool>;
 template class ScanNodePropertiesByLabelIterator<types::Embedding>;
 template class ScanNodePropertiesByLabelIterator<types::List>;
 template class ScanNodePropertiesByLabelIterator<types::DateTime>;
+template class ScanNodePropertiesByLabelIterator<types::Map>;
 
 template class ScanNodePropertiesByLabelChunkWriter<types::Int64>;
 template class ScanNodePropertiesByLabelChunkWriter<types::UInt64>;
@@ -277,5 +278,6 @@ template class ScanNodePropertiesByLabelChunkWriter<types::Bool>;
 template class ScanNodePropertiesByLabelChunkWriter<types::Embedding>;
 template class ScanNodePropertiesByLabelChunkWriter<types::List>;
 template class ScanNodePropertiesByLabelChunkWriter<types::DateTime>;
+template class ScanNodePropertiesByLabelChunkWriter<types::Map>;
 
 }

@@ -19,6 +19,9 @@
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
+#include "map/MapBufferTypeTag.h"
+#include "map/MapEntryView.h"
+#include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -61,6 +64,7 @@ bool renderOptEntityCell(const Column* column, size_t row, std::string& out) {
 }
 
 void renderList(const ListView& list, std::string& out);
+void renderMap(const MapView& map, std::string& out);
 
 void renderListElement(const ListElementView& element, std::string& out) {
     switch (element.getTag()) {
@@ -114,8 +118,12 @@ void renderListElement(const ListElementView& element, std::string& out) {
             return;
         break;
 
-        case ListBufferTypeTag::Embedding:
         case ListBufferTypeTag::MapView:
+            renderMap(element.getAs<MapView>(), out);
+            return;
+        break;
+
+        case ListBufferTypeTag::Embedding:
         case ListBufferTypeTag::INVALID:
         break;
     }
@@ -137,6 +145,89 @@ void renderList(const ListView& list, std::string& out) {
     }
 
     out += ']';
+}
+
+void renderMapValue(const MapEntryView& entry, std::string& out) {
+    switch (entry.getValueTag()) {
+        case MapBufferTypeTag::Int:
+            out += std::to_string(entry.getValueAs<int64_t>());
+            return;
+        break;
+
+        case MapBufferTypeTag::UInt:
+            out += std::to_string(entry.getValueAs<uint64_t>());
+            return;
+        break;
+
+        case MapBufferTypeTag::Double:
+            out += std::to_string(entry.getValueAs<double>());
+            return;
+        break;
+
+        case MapBufferTypeTag::Bool:
+            out += entry.getValueAs<bool>() ? "true" : "false";
+            return;
+        break;
+
+        case MapBufferTypeTag::String:
+            out += entry.getValueAs<std::string_view>();
+            return;
+        break;
+
+        case MapBufferTypeTag::ListView:
+            renderList(entry.getValueAs<ListView>(), out);
+            return;
+        break;
+
+        case MapBufferTypeTag::MapView:
+            renderMap(entry.getValueAs<MapView>(), out);
+            return;
+        break;
+
+        case MapBufferTypeTag::Null:
+            out += "null";
+            return;
+        break;
+
+        case MapBufferTypeTag::NodeID:
+            out += std::to_string(entry.getValueAs<NodeID>().getValue());
+            return;
+        break;
+
+        case MapBufferTypeTag::EdgeID:
+            out += std::to_string(entry.getValueAs<EdgeID>().getValue());
+            return;
+        break;
+
+        case MapBufferTypeTag::DateTime:
+            DateTime::format(out, entry.getValueAs<types::DateTime::Primitive>());
+            return;
+        break;
+
+        case MapBufferTypeTag::Embedding:
+        case MapBufferTypeTag::INVALID:
+        break;
+    }
+
+    throw std::runtime_error("IRTestRows: unsupported map value tag");
+}
+
+void renderMap(const MapView& map, std::string& out) {
+    out += '{';
+
+    bool isFirst = true;
+    for (const MapEntryView& entry : map) {
+        if (!isFirst) {
+            out += ", ";
+        }
+
+        isFirst = false;
+        out += entry.getKey();
+        out += ": ";
+        renderMapValue(entry, out);
+    }
+
+    out += '}';
 }
 
 template <typename T>
@@ -242,6 +333,28 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
         } else {
             out = "null";
         }
+    } else if (const auto* constMap = dynamic_cast<const ColumnConst<MapView>*>(column)) {
+        out.clear();
+        renderMap(constMap->at(0), out);
+    } else if (const auto* constOptMap = dynamic_cast<const ColumnConst<std::optional<MapView>>*>(column)) {
+        const std::optional<MapView>& map = constOptMap->at(0);
+        out.clear();
+        if (map) {
+            renderMap(*map, out);
+        } else {
+            out = "null";
+        }
+    } else if (const auto* optMaps = dynamic_cast<const ColumnOptVector<MapView>*>(column)) {
+        const std::optional<MapView>& map = (*optMaps)[row];
+        out.clear();
+        if (map) {
+            renderMap(*map, out);
+        } else {
+            out = "null";
+        }
+    } else if (const auto* maps = dynamic_cast<const ColumnVector<MapView>*>(column)) {
+        out.clear();
+        renderMap((*maps)[row], out);
     } else if (renderOptEntityCell<NodeID>(column, row, out)
                || renderOptEntityCell<EdgeID>(column, row, out)
                || renderOptEntityCell<EdgeTypeID>(column, row, out)) {

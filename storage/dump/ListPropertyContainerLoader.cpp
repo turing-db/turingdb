@@ -1,6 +1,7 @@
 #include "PropertyContainerLoader.h"
 
 #include <string.h>
+#include <algorithm>
 
 #include "DumpConfig.h"
 #include "GraphDumpHelper.h"
@@ -151,6 +152,8 @@ DumpResult<std::unique_ptr<PropertyContainer>> ListPropertyContainerLoader::load
     for (const EntityID id : nullIds) {
         entityIndexMap[id] = container->NULL_INDEX;
     }
+
+    container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
     return {std::unique_ptr<PropertyContainer> {container}};
 }

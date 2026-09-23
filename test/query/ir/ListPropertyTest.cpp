@@ -100,13 +100,24 @@ protected:
     }
 
     void expectRows(std::string_view query, const Rows& expected) {
+        expectRowsIn(ChangeID::head(), query, expected);
+    }
+
+    void expectWrittenRows(std::string_view query, const Rows& expected) {
+        ChangeID changeID;
+        openChange(changeID);
+
+        expectRowsIn(changeID, query, expected);
+    }
+
+    void expectRowsIn(const ChangeID& changeID, std::string_view query, const Rows& expected) {
         RowSink sink;
         QueryStatus status;
         _interpreter->execute(status,
                               query,
                               _graphName,
                               CommitHash::head(),
-                              ChangeID::head(),
+                              changeID,
                               &_env->getMem(),
                               &sink);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
@@ -245,4 +256,31 @@ TEST_F(ListPropertyTest, unwindsAStoredList) {
     write("CREATE (n:Tagged {name: 'a', tags: [1, 2, 3]})");
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS tag RETURN tag",
                {{"1"}, {"2"}, {"3"}});
+}
+
+TEST_F(ListPropertyTest, readsAListTheSameQuerySet) {
+    expectWrittenRows("MATCH (n:Person {name: 'Remy'}) SET n.tags = [1, 2] RETURN n.tags",
+                      {{"[1, 2]"}});
+}
+
+TEST_F(ListPropertyTest, storesAListOfMaps) {
+    write("CREATE (n:Tagged {name: 'a', tags: [{a: 1}, {b: 'x', c: [2, 3]}]})");
+    expectRows("MATCH (n:Tagged) RETURN n.tags", {{"[{a: 1}, {b: x, c: [2, 3]}]"}});
+}
+
+TEST_F(ListPropertyTest, storesAListOfMapsReadingARow) {
+    write("MATCH (n:Person {name: 'Remy'}) CREATE (t:Tagged {name: 'a', tags: [{who: n.name}]})");
+    expectRows("MATCH (n:Tagged) RETURN n.tags", {{"[{who: Remy}]"}});
+}
+
+TEST_F(ListPropertyTest, copiesAStoredListOfMapsOntoAnotherNode) {
+    write("CREATE (a:Tagged {name: 'a', tags: [{a: 1}]})");
+    write("MATCH (a:Tagged {name: 'a'}) CREATE (b:Copied {name: 'b', tags: a.tags})");
+
+    expectRows("MATCH (n:Copied) RETURN n.tags", {{"[{a: 1}]"}});
+}
+
+TEST_F(ListPropertyTest, readsAListOfMapsTheSameQuerySet) {
+    expectWrittenRows("MATCH (n:Person {name: 'Remy'}) SET n.tags = [{a: 1}] RETURN n.tags",
+                      {{"[{a: 1}]"}});
 }

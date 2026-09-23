@@ -9,6 +9,7 @@
 
 #include "embedding/EmbeddingContainer.h"
 #include "list/ListContainer.h"
+#include "map/MapContainer.h"
 #include "StringContainer.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -28,6 +29,7 @@ class TrivialPropertyContainerLoader;
 class StringPropertyContainerLoader;
 class EmbeddingPropertyContainerLoader;
 class ListPropertyContainerLoader;
+class MapPropertyContainerLoader;
 
 class PropertyContainer {
 public:
@@ -498,6 +500,101 @@ private:
     friend DataPartMerger;
 
     ListContainer _values;
+};
+
+template <>
+class TypedPropertyContainer<types::Map> : public PropertyContainer {
+public:
+    TypedPropertyContainer()
+        : PropertyContainer(types::Map::_valueType)
+    {
+    }
+
+    TypedPropertyContainer(const TypedPropertyContainer&) = delete;
+    TypedPropertyContainer(TypedPropertyContainer&&) noexcept = default;
+    TypedPropertyContainer& operator=(const TypedPropertyContainer&) = delete;
+    TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
+    ~TypedPropertyContainer() override = default;
+
+    void add(EntityID entityID, MapView v) {
+        const size_t index = _values.size();
+        _values.alloc(v);
+        _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
+        _sorted = false;
+    }
+
+    void add(EntityID entityID, const EncodedMap& v) {
+        const size_t index = _values.size();
+        _values.append(v.decodeInto(_values));
+        _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
+        _sorted = false;
+    }
+
+    void add(EntityID entityID, const std::optional<types::Map::Primitive>& arg) {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
+            _entityIndexMap[entityID] = NULL_INDEX;
+            return;
+        }
+
+        add(entityID, *arg);
+    }
+
+    types::Map::Primitive get(EntityID entityID) const {
+        const auto it = _entityIndexMap.find(entityID);
+        bioassert(it != _entityIndexMap.end(), "Reading a map property the entity does not carry");
+        bioassert(it->second != NULL_INDEX, "Reading a map property the entity holds as null");
+
+        return _values.getView(it->second);
+    }
+
+    std::optional<const types::Map::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto& views = _values.get();
+
+        return &views[offset];
+    }
+
+    std::span<const types::Map::Primitive> all() const {
+        const auto& views = _values.get();
+        return views;
+    }
+
+    std::span<const types::Map::Primitive> getSpan(size_t first, size_t count) const {
+        const auto& views = _values.get();
+        return std::span {views}.subspan(first, count);
+    }
+
+    const MapContainer& getRawContainer() const {
+        return _values;
+    }
+
+    auto zipped() const { return ranges::views::zip(_ids, _values.get()); }
+
+    size_t size() const override { return _values.size(); }
+
+    void sort() override;
+
+private:
+    friend MapPropertyContainerLoader;
+    friend DataPartMerger;
+
+    MapContainer _values;
 };
 
 }

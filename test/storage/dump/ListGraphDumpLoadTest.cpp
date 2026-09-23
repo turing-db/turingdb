@@ -12,6 +12,8 @@
 #include "comparators/GraphComparator.h"
 #include "list/ListContainer.h"
 #include "list/ListView.h"
+#include "map/MapContainer.h"
+#include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "writers/GraphWriter.h"
 
@@ -224,6 +226,40 @@ TEST_F(ListGraphDumpLoadTest, ListsSpanningManyPages) {
                 elements.push_back(static_cast<int64_t>(i * elementCount + element));
             }
 
+            writer.addNodeProperty<types::List>(node, "tags", lists.insert(elements));
+        }
+
+        writer.submit();
+    }
+
+    dumpAndCompare(graph.get());
+}
+
+TEST_F(ListGraphDumpLoadTest, ListsHoldingMaps) {
+    constexpr size_t nodeCount = 20;
+
+    auto graph = Graph::create("listgraph", fs::Path {_outDir} / "original");
+    ListContainer lists;
+    std::vector<std::string> names;
+    names.reserve(nodeCount);
+
+    {
+        JobSystem jobSystem;
+        jobSystem.init();
+        GraphWriter writer(graph.get(), &jobSystem);
+
+        for (size_t i = 0; i < nodeCount; i++) {
+            const NodeID node = writer.addNode({"Item"});
+            MapContainer& maps = lists.getMaps();
+
+            const std::string& name = names.emplace_back("item_" + std::to_string(i));
+            const std::vector<ListItem> innerList = {static_cast<int64_t>(i)};
+            const std::vector<MapContainer::MapKeyValuePair> entries = {
+                {"name", types::String::Primitive {name}},
+                {"values", maps.getLists().insert(innerList)},
+            };
+
+            const std::vector<ListItem> elements = {maps.insert(entries), static_cast<int64_t>(i)};
             writer.addNodeProperty<types::List>(node, "tags", lists.insert(elements));
         }
 

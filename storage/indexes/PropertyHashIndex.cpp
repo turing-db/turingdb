@@ -219,6 +219,7 @@ template class PropertyHashIndex<types::Bool, NodeID>;
 template class PropertyHashIndex<types::Embedding, NodeID>;
 template class PropertyHashIndex<types::List, NodeID>;
 template class PropertyHashIndex<types::DateTime, NodeID>;
+template class PropertyHashIndex<types::Map, NodeID>;
 
 template class PropertyHashIndex<types::Int64, EdgeID>;
 template class PropertyHashIndex<types::UInt64, EdgeID>;
@@ -228,4 +229,5 @@ template class PropertyHashIndex<types::Bool, EdgeID>;
 template class PropertyHashIndex<types::Embedding, EdgeID>;
 template class PropertyHashIndex<types::List, EdgeID>;
 template class PropertyHashIndex<types::DateTime, EdgeID>;
+template class PropertyHashIndex<types::Map, EdgeID>;
 }

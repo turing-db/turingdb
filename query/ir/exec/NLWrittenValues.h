@@ -8,6 +8,7 @@
 
 #include "ID.h"
 #include "list/ListContainer.h"
+#include "map/MapContainer.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitWriteBuffer.h"
 
@@ -37,10 +38,10 @@ public:
     // the column would otherwise come to point at bytes a later row has freed.
     const Value& retain(const Value& value);
 
-    // The list a change wrote, as a column reads one. The buffer holds it encoded, since
-    // the bytes have to outlive the query that wrote them, and a view of it stands only
-    // while something owns the elements - which is what this container does.
-    types::List::Primitive decode(const types::List::OwningPrimitive& encoded);
+    // A written list or map is held encoded; these decode it into containers this object
+    // owns, so the view a column reads stays valid for the rest of the query.
+    ListView decode(const EncodedList& list);
+    MapView decode(const EncodedMap& map);
 
 private:
     struct Key {
@@ -71,8 +72,8 @@ private:
     size_t _indexedEdgeUpdates {0};
 
     std::deque<Value> _retained;
-
     ListContainer _decodedLists;
+    MapContainer _decodedMaps;
 };
 
 }

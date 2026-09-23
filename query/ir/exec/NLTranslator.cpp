@@ -216,6 +216,8 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
         return ValueType::List;
     } else if (mlir::isa<storage::DateTimeType>(elementType)) {
         return ValueType::DateTime;
+    } else if (mlir::isa<storage::MapType>(elementType)) {
+        return ValueType::Map;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
         return ValueType::Double;
     } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {

@@ -14,4 +14,7 @@ namespace db {
 size_t hashList(ListView list);
 size_t hashListElement(ListElementView element);
 
+/// Hashes a number by its value, so an integer and a double that compare equal hash alike
+size_t hashNumber(double value);
+
 }

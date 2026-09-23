@@ -490,6 +490,77 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalListColumnsAcrossChunkSizes) {
     }
 }
 
+TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
+    using OptionalMap = std::optional<db::MapView>;
+    using MapEntry = db::MapBuffer<>::MapKeyValuePair;
+    using namespace std::string_view_literals;
+
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 63, 95, 192}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        const std::vector<MapEntry> firstEntries = {
+            {"a", Int64 {1}},
+            {"b", StringView {"this value is deliberately long enough to cross chunk boundaries"sv}},
+        };
+        const db::MapView first = localMem.mapBuffer().insert(firstEntries);
+
+        const std::vector<MapEntry> emptyEntries;
+        const db::MapView empty = localMem.mapBuffer().insert(emptyEntries);
+
+        const std::vector<MapEntry> lastEntries = {{"z", Int64 {8}}};
+        const db::MapView last = localMem.mapBuffer().insert(lastEntries);
+
+        auto* attrs = localMem.alloc<db::ColumnOptVector<db::MapView>>();
+        attrs->push_back(OptionalMap {first});
+        attrs->push_back(std::nullopt);
+        attrs->push_back(OptionalMap {empty});
+        attrs->push_back(OptionalMap {last});
+        addColumn(&dfMan, &source, "attrs", attrs);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::MapBuffer<> mapBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 1u);
+        EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+
+        const auto* decodedAttrs = decoded.cols().at(0)->as<db::ColumnOptVector<db::MapView>>();
+        ASSERT_NE(decodedAttrs, nullptr);
+
+        const std::vector<OptionalMap>& rows = decodedAttrs->getRaw();
+        ASSERT_EQ(rows.size(), 4u);
+
+        ASSERT_TRUE(rows[0].has_value());
+        ASSERT_EQ(rows[0]->size(), 2u);
+        EXPECT_EQ(rows[0]->front().getKey(), "a"sv);
+        EXPECT_EQ(rows[0]->front().getValueAs<Int64>(), 1);
+        EXPECT_EQ(rows[0]->back().getKey(), "b"sv);
+        EXPECT_EQ(rows[0]->back().getValueAs<StringView>(),
+                  "this value is deliberately long enough to cross chunk boundaries"sv);
+
+        EXPECT_FALSE(rows[1].has_value());
+
+        ASSERT_TRUE(rows[2].has_value());
+        EXPECT_EQ(rows[2]->size(), 0u);
+
+        ASSERT_TRUE(rows[3].has_value());
+        ASSERT_EQ(rows[3]->size(), 1u);
+        EXPECT_EQ(rows[3]->front().getKey(), "z"sv);
+        EXPECT_EQ(rows[3]->front().getValueAs<Int64>(), 8);
+    }
+}
+
 TEST(TuringProtoRoundTripTest, RoundTripsHugeStringsAcrossMultipleBuffers) {
     for (const size_t chunkSize : std::array<size_t, 2> {64, 96}) {
         SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);

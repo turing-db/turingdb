@@ -189,6 +189,11 @@ void FunctionDecls::initDefault() {
     countLists->setReturnTypes({{EvaluatedType::Integer}});
     countLists->setIsAggregate(true);
 
+    FunctionSignature* countMaps = createFunction("count");
+    countMaps->setArguments({EvaluatedType::Map});
+    countMaps->setReturnTypes({{EvaluatedType::Integer}});
+    countMaps->setIsAggregate(true);
+
     FunctionSignature* countEmbeddings = createFunction("count");
     countEmbeddings->setArguments({EvaluatedType::Embedding});
     countEmbeddings->setReturnTypes({{EvaluatedType::Integer}});

@@ -72,7 +72,7 @@ template <typename T>
 concept IsListElement = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ListElementView>;
 
 template <typename T>
-concept IsMap = std::is_same_v<T, MapView>;
+concept IsMap = std::is_same_v<TypeUtils::unwrap_optional_t<T>, MapView>;
 
 template <typename T>
 concept IsMapEntry = std::is_same_v<T, MapEntryView>;

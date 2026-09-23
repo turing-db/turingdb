@@ -398,6 +398,51 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
 };
 
 template <ProtoDecodeSink Sink>
+struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
+    using T = SinkMapView<Sink>;
+
+    static bool decode(DecodeContext* context,
+                       Sink* sink,
+                       SinkColumnOptVector<T, Sink>* typedColumn,
+                       ProtoColumnState* columnState) {
+        const size_t numRows = columnState->getNumRows();
+        const ProtoColumnState::BitMask& mask = columnState->getBitMask();
+
+        while (context->_rowIndex < numRows) {
+            auto& entry = (*typedColumn)[context->_rowIndex];
+
+            const bool mapStarted = entry.has_value();
+            if (!mapStarted) {
+                if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
+                    return false;
+                }
+
+                WireSize entryCount = 0;
+                WireSize mapByteSize = 0;
+                context->_inBuf->readData(&entryCount, sizeof(entryCount));
+                context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
+
+                if (!mask.test(context->_rowIndex)) {
+                    ++context->_rowIndex;
+                    continue;
+                }
+
+                entry.emplace(sink->beginMap(entryCount, mapByteSize));
+            }
+
+            auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+            if (!drainContainerStack(context, sink, onTopLevelElement)) {
+                return false;
+            }
+
+            ++context->_rowIndex;
+        }
+
+        return true;
+    }
+};
+
+template <ProtoDecodeSink Sink>
 struct OptionalVectorColumnDecoder<SinkListElementView<Sink>, Sink> {
     using T = SinkListElementView<Sink>;
 
