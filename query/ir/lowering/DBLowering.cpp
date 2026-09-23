@@ -124,6 +124,10 @@ mlir::Type booleanFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElem
     return builder.getI1Type();
 }
 
+mlir::Type dateTimeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    return storage::DateTimeType::get(builder.getContext());
+}
+
 // A list function reads a list cell, or the type-erased cell an unwind of a list of lists
 // hands its nested lists on as. Anything else is IR no query produces.
 void throwIfNotAListInput(mlir::Type inputElement) {
@@ -221,6 +225,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
+    {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, &dateTimeFunctionElement,   ResultNullability::AlwaysNullable}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::FollowsInput}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
@@ -366,6 +371,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isInteger = integerType && !isBool;
     const bool isNumeric = isFloat || isInteger;
     const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
+    const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
@@ -401,8 +407,8 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         case storage::AggregateKind::Min:
         case storage::AggregateKind::Max: {
             // min/max order the values, so anything with a natural order is fine -
-            // numbers, strings and bools - but an embedding has none.
-            if (!isNumeric && !isString && !isBool) {
+            // numbers, strings, bools and instants - but an embedding has none.
+            if (!isNumeric && !isString && !isBool && !isDateTime) {
                 throw IRException("db.min/db.max requires an orderable column");
             }
             return inputElement;

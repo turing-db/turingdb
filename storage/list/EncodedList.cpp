@@ -51,6 +51,9 @@ void encodeElement(ListElementView element, std::vector<std::byte>& out) {
         case ListBufferTypeTag::EdgeID:
             appendValue(out, element.getAs<EdgeID>());
         break;
+        case ListBufferTypeTag::DateTime:
+            appendValue(out, element.getAs<types::DateTime::Primitive>());
+        break;
         case ListBufferTypeTag::Null:
         break;
         case ListBufferTypeTag::String: {
@@ -161,6 +164,9 @@ private:
             break;
             case ListBufferTypeTag::EdgeID:
                 return read<EdgeID>();
+            break;
+            case ListBufferTypeTag::DateTime:
+                return read<types::DateTime::Primitive>();
             break;
             case ListBufferTypeTag::Null:
                 return PropertyNull {};

@@ -15,6 +15,7 @@ concept TrivialInternalTypes = std::is_same_v<T, db::types::UInt64::Primitive>
 || std::is_same_v<T, db::types::Int64::Primitive>
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
+|| std::is_same_v<T, db::types::DateTime::Primitive>
 || std::is_same_v<T, db::ValueType>
 || std::is_same_v<T, db::NodeID>
 || std::is_same_v<T, db::EdgeID>
@@ -29,6 +30,7 @@ concept SupportedColumnVectorTypes = std::is_same_v<T, db::types::UInt64::Primit
 || std::is_same_v<T, db::types::Int64::Primitive>
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
+|| std::is_same_v<T, db::types::DateTime::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, db::ValueType>
 || std::is_same_v<T, db::NodeID>
@@ -50,6 +52,7 @@ concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Pri
 || std::is_same_v<T, db::types::Int64::Primitive>
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
+|| std::is_same_v<T, db::types::DateTime::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, db::ValueType>
 || std::is_same_v<T, db::NodeID>
@@ -66,6 +69,7 @@ concept SupportedColumnConstTypes = std::is_same_v<T, db::types::UInt64::Primiti
 || std::is_same_v<T, db::types::Int64::Primitive>
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
+|| std::is_same_v<T, db::types::DateTime::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, db::PropertyNull>
 || std::is_same_v<T, typename Sink::ListView>
@@ -78,6 +82,7 @@ concept SupportedColumnOptConstTypes = std::is_same_v<T, db::types::UInt64::Prim
 || std::is_same_v<T, db::types::Int64::Primitive>
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
+|| std::is_same_v<T, db::types::DateTime::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, typename Sink::ListElementView>
 || std::is_same_v<T, db::types::String::Primitive>;

@@ -74,6 +74,13 @@ void appendListElement(std::string& out, ListElementView element) {
         case ListBufferTypeTag::EdgeID:
             out += fmt::format("{}", element.getAs<EdgeID>().getValue());
         break;
+        case ListBufferTypeTag::DateTime: {
+            std::string formatted;
+            DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
+
+            ProcUtils::appendJsonString(out, formatted);
+        }
+        break;
         case ListBufferTypeTag::Null:
         case ListBufferTypeTag::INVALID:
             out += "null";
@@ -110,6 +117,11 @@ void appendPropertyValue(std::string& out, const PropertyVariant& value) {
                 out += (static_cast<bool>(*ptr) ? "true" : "false");
             } else if constexpr (std::is_same_v<V, ListView>) {
                 appendListValue(out, *ptr);
+            } else if constexpr (std::is_same_v<V, DateTime>) {
+                std::string formatted;
+                DateTime::format(formatted, *ptr);
+
+                ProcUtils::appendJsonString(out, formatted);
             } else if constexpr (std::is_same_v<V, std::span<const float>>) {
                 out += '[';
                 bool firstElem = true;

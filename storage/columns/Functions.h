@@ -268,6 +268,16 @@ private:
     static void strToLower(std::string& lower, std::string_view src);
 };
 
+class toDateTimeFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = std::optional<types::DateTime::Primitive>;
+
+    ResultType operator()(std::string_view sv) {
+        return DateTime::parse(sv);
+    }
+};
+
 // toInteger() and toFloat() over a number rather than a string. Every conversion keeps an
 // optional result so one column type carries it whatever the argument was, and so a double
 // that no integer can represent reads as null.

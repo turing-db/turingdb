@@ -87,6 +87,13 @@ template <int I>
     return value ? "true" : "false";
 }
 
+[[maybe_unused]] std::string valueToString(const db::DateTime& value) {
+    std::string result;
+    db::DateTime::format(result, value);
+
+    return result;
+}
+
 [[maybe_unused]] std::string valueToString(const db::CommitBuilder* value) {
     return value ? "commit_builder_ptr" : "null";
 }

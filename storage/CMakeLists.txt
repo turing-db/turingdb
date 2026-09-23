@@ -31,6 +31,7 @@ set(storage_sources
         map/MapEntryViewBuffer.cpp
         map/MapWriteCursor.cpp
 
+        metadata/DateTime.cpp
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp
         metadata/LabelMap.cpp

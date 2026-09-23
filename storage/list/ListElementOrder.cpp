@@ -26,6 +26,7 @@ enum class ListElementOrderClass {
     String,
     Bool,
     Number,
+    DateTime,
     Null,
 };
 
@@ -59,6 +60,10 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
 
         case ListBufferTypeTag::Null:
             return ListElementOrderClass::Null;
+        break;
+
+        case ListBufferTypeTag::DateTime:
+            return ListElementOrderClass::DateTime;
         break;
 
         case ListBufferTypeTag::Embedding:
@@ -236,6 +241,10 @@ std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElemen
 
         case ListElementOrderClass::Number:
             return compareNumbers(lhs, rhs);
+        break;
+
+        case ListElementOrderClass::DateTime:
+            return lhs.getAs<types::DateTime::Primitive>() <=> rhs.getAs<types::DateTime::Primitive>();
         break;
 
         case ListElementOrderClass::Null:

@@ -97,6 +97,6 @@ private:
     void removeProperty(PropertyTypeID propTypeID);
 };
 
-static_assert((size_t)ValueType::_SIZE == 8);
+static_assert((size_t)ValueType::_SIZE == 9);
 
 }

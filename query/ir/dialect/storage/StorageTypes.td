@@ -106,6 +106,15 @@ def ChangeID : StorageType<"ChangeID", "change_id"> {
     }];
 }
 
+def DateTime : StorageType<"DateTime", "datetime"> {
+    let summary = "A datetime property value";
+    let description = [{
+        The element type of a chunk holding one instant per row - storage's
+        ColumnVector<DateTime>. It wraps a 64-bit count of microseconds since the Unix
+        epoch.
+    }];
+}
+
 def Nullable : StorageType<"Nullable", "nullable"> {
     let summary = "A nullable property value";
     let description = [{

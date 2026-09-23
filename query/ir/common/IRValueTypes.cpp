@@ -38,6 +38,10 @@ mlir::Type db::valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueT
             return mlir::storage::ListType::get(builder.getContext(), builder.getNoneType());
         break;
 
+        case ValueType::DateTime:
+            return mlir::storage::DateTimeType::get(builder.getContext());
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("Invalid property value type");

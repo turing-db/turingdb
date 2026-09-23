@@ -228,6 +228,7 @@ template class ScanEdgePropertiesIterator<types::String>;
 template class ScanEdgePropertiesIterator<types::Bool>;
 template class ScanEdgePropertiesIterator<types::Embedding>;
 template class ScanEdgePropertiesIterator<types::List>;
+template class ScanEdgePropertiesIterator<types::DateTime>;
 
 template class ScanEdgePropertiesChunkWriter<types::Int64>;
 template class ScanEdgePropertiesChunkWriter<types::UInt64>;

@@ -517,6 +517,10 @@ void asString(std::string& out, db::ValueType v) {
     out += ValueTypeName::value(v);
 }
 
+void asString(std::string& out, const db::DateTime v) {
+    db::DateTime::format(out, v);
+}
+
 template <int I>
 void asString(std::string& out, const TemplateCommitHash<I>& hash) {
     out += fmt::format("{:x}", hash.get());

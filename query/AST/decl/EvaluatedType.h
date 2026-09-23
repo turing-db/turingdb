@@ -35,6 +35,7 @@ enum class EvaluatedType : uint8_t {
     LabelSet,
     PropertyType,
     EdgeType,
+    DateTime,
 
     _SIZE,
 };
@@ -83,11 +84,12 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Label, "Label">,
     EnumStringPair<EvaluatedType::LabelSet, "LabelSet">,
     EnumStringPair<EvaluatedType::PropertyType, "PropertyType">,
-    EnumStringPair<EvaluatedType::EdgeType, "EdgeType">>;
+    EnumStringPair<EvaluatedType::EdgeType, "EdgeType">,
+    EnumStringPair<EvaluatedType::DateTime, "DateTime">>;
 
 // Evaluated Type to ValueType conversion
 static constexpr size_t VALUE_TYPE_COUNT = std::to_underlying(ValueType::_SIZE);
-static_assert(VALUE_TYPE_COUNT == 8, "ValueType added: please update below map.");
+static_assert(VALUE_TYPE_COUNT == 9, "ValueType added: please update below map.");
 
 static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_COUNT + 1] = {
     {ValueType::Int64,     EvaluatedType::Integer  },
@@ -97,6 +99,7 @@ static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_CO
     {ValueType::Embedding, EvaluatedType::Embedding},
     {ValueType::Bool,      EvaluatedType::Bool     },
     {ValueType::List,      EvaluatedType::List     },
+    {ValueType::DateTime,  EvaluatedType::DateTime },
 
     {ValueType::Invalid,   EvaluatedType::Invalid  },
     {ValueType::_SIZE,     EvaluatedType::Invalid  }
@@ -139,7 +142,8 @@ inline bool namesAComparableValue(EvaluatedType e) {
         || e == EvaluatedType::Char
         || e == EvaluatedType::Bool
         || e == EvaluatedType::Embedding
-        || e == EvaluatedType::List;
+        || e == EvaluatedType::List
+        || e == EvaluatedType::DateTime;
 }
 
 // Whether two types can never hold equal values, which makes an equality between them

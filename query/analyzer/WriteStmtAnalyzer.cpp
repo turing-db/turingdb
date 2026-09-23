@@ -358,6 +358,8 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::Embedding;
         case EvaluatedType::List:
             return ValueType::List;
+        case EvaluatedType::DateTime:
+            return ValueType::DateTime;
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:

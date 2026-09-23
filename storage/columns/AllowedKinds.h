@@ -143,6 +143,7 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
+        OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
         OptionalKindPairs<ListView, ListView>::Pairs,
 
         // Equality against a type-erased cell, which holds its own type
@@ -180,6 +181,7 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::DateTime::Primitive>, PropertyNull>,
             KindPair<std::optional<ListElementView>, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
 
@@ -223,6 +225,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
 
+        // A datetime orders against another datetime only: it is an instant, not a number
+        OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
+
         // Lexicographic ordering of strings, whether each side borrows its characters
         // from the graph or owns them - what labels(), type() and a CSV field answer -
         // either way round, since which side the query writes it on is its choice
@@ -263,6 +268,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
+
+        // A datetime orders against another datetime only: it is an instant, not a number
+        OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
 
         // Lexicographic ordering of strings, whether each side borrows its characters
         // from the graph or owns them - what labels(), type() and a CSV field answer -
@@ -581,6 +589,7 @@ struct OutputtedTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        types::DateTime::Primitive,
         std::optional<types::Int64::Primitive>,
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
@@ -588,6 +597,7 @@ struct OutputtedTypes {
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
+        std::optional<types::DateTime::Primitive>,
         PropertyNull,
 
         std::optional<std::string>,
@@ -671,6 +681,7 @@ struct WriteProcessorPropertyTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        types::DateTime::Primitive,
         ListView,
 
         std::optional<types::Int64::Primitive>,
@@ -679,6 +690,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
+        std::optional<types::DateTime::Primitive>,
         std::optional<ListView>,
 
         std::string, // For LOAD CSV inputs
@@ -695,6 +707,7 @@ struct WriteProcessorPropertyTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        types::DateTime::Primitive,
         ListView,
 
         std::optional<types::Int64::Primitive>,
@@ -703,6 +716,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
+        std::optional<types::DateTime::Primitive>,
         std::optional<ListView>,
 
         std::string // For LOAD CSV inputs
@@ -835,6 +849,9 @@ struct CartesianProductKinds {
         std::optional<types::Double::Primitive>,
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
+
+        types::DateTime::Primitive,
+        std::optional<types::DateTime::Primitive>,
 
         // Entities and metadata
         NodeID,

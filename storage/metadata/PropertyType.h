@@ -8,6 +8,8 @@
 #include "ID.h"
 #include "SupportedType.h"
 
+#include "metadata/DateTime.h"
+
 #include "list/EncodedList.h"
 #include "list/ListHash.h"
 #include "list/ListView.h"
@@ -25,6 +27,7 @@ enum class ValueType : uint8_t {
     Bool,
     Embedding,
     List,
+    DateTime,
 
     _SIZE,
 };
@@ -37,7 +40,8 @@ using ValueTypeName = EnumToString<ValueType>::Create<
     EnumStringPair<ValueType::String, "String">,
     EnumStringPair<ValueType::Bool, "Bool">,
     EnumStringPair<ValueType::Embedding, "Embedding">,
-    EnumStringPair<ValueType::List, "List">>;
+    EnumStringPair<ValueType::List, "List">,
+    EnumStringPair<ValueType::DateTime, "DateTime">>;
 
 struct CustomBool {
     CustomBool() = default;
@@ -133,6 +137,13 @@ struct List : public PropertyType {
     static constexpr auto _valueType = ValueType::List;
 };
 
+struct DateTime : public PropertyType {
+    using Primitive = db::DateTime;
+    using MandatorySpan = std::span<const Primitive>;
+    using OptionalSpan = std::span<const std::optional<Primitive>>;
+    static constexpr auto _valueType = ValueType::DateTime;
+};
+
 }
 
 template <typename T>
@@ -185,6 +196,9 @@ struct ValueTypeDispatcher {
             break;
             case ValueType::List:
                 executor.template operator()<types::List>();
+            break;
+            case ValueType::DateTime:
+                executor.template operator()<types::DateTime>();
             break;
             case ValueType::_SIZE:
             case ValueType::Invalid: {

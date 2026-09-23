@@ -157,6 +157,7 @@ template class GetPropertiesWithNullChunkWriter<NodeID, types::String>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Bool>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::Embedding>;
 template class GetPropertiesWithNullChunkWriter<NodeID, types::List>;
+template class GetPropertiesWithNullChunkWriter<NodeID, types::DateTime>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Int64>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::UInt64>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Double>;
@@ -164,5 +165,6 @@ template class GetPropertiesWithNullChunkWriter<EdgeID, types::String>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Bool>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::Embedding>;
 template class GetPropertiesWithNullChunkWriter<EdgeID, types::List>;
+template class GetPropertiesWithNullChunkWriter<EdgeID, types::DateTime>;
 
 }

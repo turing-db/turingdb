@@ -1,6 +1,7 @@
 #include "NanobindUtils.h"
 
 #include <stdint.h>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -139,6 +140,25 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
 
         addToColumn(srcCol, dstCol, offset, rowCount);
     }
+}
+
+int64_t dateTimeMicroseconds(db::DateTime value) {
+    return value.getMicroseconds();
+}
+
+int64_t dateTimeMicroseconds(const std::optional<db::DateTime>& value) {
+    if (!value.has_value()) {
+        return std::numeric_limits<int64_t>::min();
+    }
+
+    return value->getMicroseconds();
+}
+
+template <typename T>
+nb::object dateTimeColumnAsNdarray(const std::vector<T>& src) {
+    return transformVectorAsNdarray<int64_t>(src, [](const T& value) {
+        return dateTimeMicroseconds(value);
+    });
 }
 
 nb::object embeddingToNdarray(std::span<const float> s) {
@@ -327,6 +347,12 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "String";
                 break;
             }
+            case db::ColumnVector<db::types::DateTime::Primitive>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::types::DateTime::Primitive>*>(col)->getRaw();
+                value = dateTimeColumnAsNdarray(src);
+                dtypeName = "DateTime";
+                break;
+            }
             case db::ColumnVector<db::types::Embedding::Primitive>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnVector<db::types::Embedding::Primitive>*>(col)->getRaw();
                 nb::list lst;
@@ -464,6 +490,13 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 break;
             }
 
+            case db::ColumnOptVector<db::types::DateTime::Primitive>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnOptVector<db::types::DateTime::Primitive>*>(col)->getRaw();
+                value = dateTimeColumnAsNdarray(src);
+                dtypeName = "DateTime";
+                break;
+            }
+
             case db::ColumnConst<db::types::UInt64::Primitive>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::types::UInt64::Primitive>*>(col)->getRaw();
                 value = repeatValueAsNdarray(v, rowCount);
@@ -517,6 +550,20 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 const auto& v = static_cast<const db::ColumnConst<db::EdgeID>*>(col)->getRaw();
                 value = repeatValueAsNdarray(v.getValue(), rowCount);
                 dtypeName = "UInt64";
+                break;
+            }
+            case db::ColumnConst<db::types::DateTime::Primitive>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::types::DateTime::Primitive>*>(col)->getRaw();
+                value = repeatValueAsNdarray(dateTimeMicroseconds(v), rowCount);
+                dtypeName = "DateTime";
+                break;
+            }
+            // datetime() reads its own nulls, so a constant one is nullable even where
+            // every row of it holds an instant
+            case db::ColumnConst<std::optional<db::types::DateTime::Primitive>>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::DateTime::Primitive>>*>(col)->getRaw();
+                value = repeatValueAsNdarray(dateTimeMicroseconds(v), rowCount);
+                dtypeName = "DateTime";
                 break;
             }
             case db::ColumnConst<db::types::Embedding::Primitive>::staticKind(): {

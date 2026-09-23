@@ -297,3 +297,4 @@ INSTANTIATE(types::Double);
 INSTANTIATE(types::String);
 INSTANTIATE(types::Bool);
 INSTANTIATE(types::List);
+INSTANTIATE(types::DateTime);

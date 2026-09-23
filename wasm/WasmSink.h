@@ -48,6 +48,8 @@ consteval ColumnType wireCodeOfElement() {
         return ColumnType::STRING;
     } else if constexpr (std::is_same_v<Element, db::types::Embedding::Primitive>) {
         return ColumnType::EMBEDDING;
+    } else if constexpr (std::is_same_v<Element, db::types::DateTime::Primitive>) {
+        return ColumnType::DATE_TIME;
     } else if constexpr (std::is_same_v<Element, db::Path>) {
         return ColumnType::PATH;
     } else if constexpr (std::is_same_v<Element, db::EntityList>) {

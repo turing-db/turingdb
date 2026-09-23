@@ -46,6 +46,9 @@ struct ListTagDispatcher {
             case ListBufferTypeTag::EdgeID:
                 return executor.template operator()<EdgeID>(view);
             break;
+            case ListBufferTypeTag::DateTime:
+                return executor.template operator()<types::DateTime::Primitive>(view);
+            break;
 
             case ListBufferTypeTag::INVALID:
             break;
@@ -106,6 +109,11 @@ struct TypeToListBufferTag<NodeID> {
 template <>
 struct TypeToListBufferTag<EdgeID> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::EdgeID;
+};
+
+template <>
+struct TypeToListBufferTag<types::DateTime::Primitive> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::DateTime;
 };
 
 }

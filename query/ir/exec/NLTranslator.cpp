@@ -104,6 +104,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_integer", &NLExecutor::selectConversion<toIntegerFunction>},
     {"nl.to_float",   &NLExecutor::selectConversion<toFloatFunction>},
     {"nl.to_boolean", &NLExecutor::selectFunction<toBoolFunction>},
+    {"nl.to_datetime", &NLExecutor::selectFunction<toDateTimeFunction>},
     {"nl.element_id", &NLExecutor::selectFunction<TaggedIdFunction>},
     {"nl.size",       &NLExecutor::selectSize},
     {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
@@ -211,6 +212,8 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
         return ValueType::Embedding;
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return ValueType::List;
+    } else if (mlir::isa<storage::DateTimeType>(elementType)) {
+        return ValueType::DateTime;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
         return ValueType::Double;
     } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
@@ -4514,6 +4517,10 @@ Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
             return allocListColumn();
         break;
 
+        case ValueType::DateTime:
+            return _memory->alloc<ColumnVector<types::DateTime::Primitive>>();
+        break;
+
         default:
             throw IRException("collect does not support this value type");
         break;
@@ -5705,6 +5712,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::Map;
     } else if (mlir::isa<storage::PathType>(elementType)) {
         return NLChunkKind::Path;
+    } else if (mlir::isa<storage::DateTimeType>(elementType)) {
+        return NLChunkKind::DateTime;
     } else if (mlir::isa<storage::BoolType>(elementType)) {
         return NLChunkKind::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {

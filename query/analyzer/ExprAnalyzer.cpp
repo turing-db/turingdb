@@ -321,7 +321,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::Label, EvaluatedType::Label)
                 || pair == TypePairBitset(EvaluatedType::EdgeType, EvaluatedType::EdgeType)
                 || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)
-                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
+                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
+                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)) {
                 break;
             }
 
@@ -334,6 +335,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Null)
             ) {
                 break;
             }
@@ -423,7 +425,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
+                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
+                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)) {
                 // Valid pair
                 break;
             }
@@ -1292,6 +1295,8 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::Embedding;
         case EvaluatedType::List:
             return vt == ValueType::List;
+        case EvaluatedType::DateTime:
+            return vt == ValueType::DateTime;
         case EvaluatedType::Map:
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:

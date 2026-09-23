@@ -83,6 +83,9 @@ concept IsNull = std::is_same_v<T, PropertyNull>;
 template <typename T>
 concept IsEmbedding = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Embedding::Primitive>;
 
+template <typename T>
+concept IsDateTime = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::DateTime::Primitive>;
+
 struct ColumnTypeGenerator {
     std::string& _name;
 
@@ -90,6 +93,8 @@ struct ColumnTypeGenerator {
     void operator()(const U<T>*) {
         if constexpr (IsEmbedding<T>) {
             _name = fmt::format("Embedding");
+        } else if constexpr (IsDateTime<T>) {
+            _name = fmt::format("DateTime");
         } else if constexpr (IsUInt64<T>) {
             _name = fmt::format("UInt64");
         } else if constexpr (IsInt64<T>) {
