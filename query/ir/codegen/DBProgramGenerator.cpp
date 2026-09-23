@@ -78,6 +78,7 @@
 #include "expr/BinaryExpr.h"
 #include "expr/CaseExpr.h"
 #include "expr/EntityTypeExpr.h"
+#include "expr/ExistsExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/ExprChildren.h"
@@ -297,6 +298,10 @@ bool isHiddenName(std::string_view name) {
 // The row tag an OPTIONAL CALL body carries, under a hidden name no input's own hidden
 // name can be: an identifier holds no backtick
 constexpr std::string_view subqueryTagName {"`hidden_`tag"};
+
+// The row tag an EXISTS body carries, under a hidden name no clause of the body resolves
+// or drops - a barrier inside it carries the column on as it does a CALL's tag
+constexpr std::string_view existsTagName {"`hidden_`exists_tag"};
 
 bool matchCarriesRows(const MatchStmt* matchStmt) {
     return !matchStmt->hasOrderBy() && !matchStmt->hasSkip() && !matchStmt->hasLimit();
@@ -5363,6 +5368,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::EXISTS: {
+            const ExistsExpr* existsExpr = static_cast<const ExistsExpr*>(expr);
+            translateExistsExpr(expr, existsExpr);
+        }
+        break;
+
         case Expr::Kind::LIST_COMPREHENSION: {
             const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
             translateListComprehensionExpr(expr, comprehension);
@@ -5522,6 +5533,131 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     _part._projectedColumns = outerProjectedColumns;
 
     _part._exprMap[expr] = comprehensionOp.getResult();
+}
+
+void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr* existsExpr) {
+    const SinglePartQuery* body = existsExpr->getBody();
+    const bool carriesScope = subqueryCarriesRows(body);
+
+    llvm::SmallVector<PublishedColumn> scopeColumns;
+    collectPublishedColumns(scopeColumns);
+
+    // A constant holds one value standing for every row rather than rows of its own, so it
+    // is no input of the body: it stays bound where it is and the body reads it there
+    llvm::SmallVector<PublishedColumn> inputs;
+    llvm::SmallVector<PublishedColumn> constants;
+
+    for (const PublishedColumn& column : scopeColumns) {
+        if (yieldsConstantColumn(column._column)) {
+            constants.push_back(column);
+        } else {
+            inputs.push_back(column);
+        }
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType tagType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
+
+    llvm::SmallVector<mlir::Value> inputColumns;
+    for (const PublishedColumn& input : inputs) {
+        inputColumns.push_back(input._column);
+    }
+
+    // A body that cannot keep its rows paired with the ones it was given carries no tag:
+    // it is run one input row at a time, and the row it was handed is the one it answers for
+    const bool tagsRows = carriesScope && !inputs.empty();
+
+    auto existsOp = _opBuilder.create<mlir::db::ExistsSubquery>(loc, boolType, inputColumns, carriesScope);
+
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    llvm::SmallVector<mlir::Location> argumentLocations;
+    for (const mlir::Value column : inputColumns) {
+        argumentTypes.push_back(column.getType());
+        argumentLocations.push_back(loc);
+    }
+
+    if (tagsRows) {
+        argumentTypes.push_back(tagType);
+        argumentLocations.push_back(loc);
+    }
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    mlir::Block* const bodyBlock = _opBuilder.createBlock(&existsOp.getBody(),
+                                                         {},
+                                                         argumentTypes,
+                                                         argumentLocations);
+
+    // EXISTS is correlated: the body reads every variable in flight, under the declaration
+    // its own context holds for it
+    const DeclContext* bodyContext = body->getDeclContext();
+
+    llvm::SmallVector<PublishedColumn> bodyScope;
+    for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
+        const PublishedColumn& input = inputs[inputIndex];
+        const mlir::Value argument = bodyBlock->getArgument(static_cast<unsigned>(inputIndex));
+
+        if (const VarDecl* correlated = bodyContext->getDecl(input._name)) {
+            bodyScope.push_back({correlated, input._name, argument});
+        }
+    }
+
+    if (tagsRows) {
+        const mlir::Value tagArgument = bodyBlock->getArgument(static_cast<unsigned>(inputs.size()));
+        bodyScope.push_back({nullptr, std::string(existsTagName), tagArgument});
+    }
+
+    for (const PublishedColumn& constant : constants) {
+        if (const VarDecl* correlated = bodyContext->getDecl(constant._name)) {
+            bodyScope.push_back({correlated, constant._name, constant._column});
+        }
+    }
+
+    // What the query holds is set aside while the body builds a scope of its own: the body
+    // binds nothing the query goes on to read, EXISTS handing back one boolean and no column
+    PartScope outerPart = std::move(_part);
+    VariableDependencyGraph outerGraph = std::move(_vdg);
+
+    rebindScope(bodyScope);
+
+    generateQueryParts(body);
+
+    // A RETURN answers for no column here, but its cut does: SKIP can empty a body that
+    // matched, so the projection is emitted and the rows it leaves are the ones counted
+    if (const ReturnStmt* returnStmt = body->getReturnStmt()) {
+        publishProjection(returnStmt->getProjection());
+    }
+
+    llvm::SmallVector<PublishedColumn> held;
+    collectPublishedColumns(held);
+
+    // The tag is named by the yield itself, and a constant stays bound outside the region
+    llvm::SmallVector<mlir::Value> heldColumns;
+    for (const PublishedColumn& column : held) {
+        mlir::Value heldColumn = column._column;
+        const bool boundInsideTheBody = heldColumn.getParentRegion() == &existsOp.getBody();
+
+        if (column._name != existsTagName && boundInsideTheBody) {
+            heldColumns.push_back(heldColumn);
+        }
+    }
+
+    // A barrier in the body carries the tag on under its hidden name, so the column the
+    // body left it in is found by that name rather than through the binding it entered on
+    mlir::Value carriedTag;
+    if (tagsRows) {
+        const auto tagIt = std::ranges::find(held, existsTagName, &PublishedColumn::_name);
+        bioassert(tagIt != held.end(), "Row tag lost by an EXISTS body");
+
+        carriedTag = tagIt->_column;
+    }
+
+    _opBuilder.create<mlir::db::ExistsYield>(loc, carriedTag, heldColumns);
+
+    _part = std::move(outerPart);
+    _vdg = std::move(outerGraph);
+
+    _part._exprMap[expr] = existsOp.getResult();
 }
 
 void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr) {

@@ -211,6 +211,18 @@ const ColumnVector<size_t>& NLOptionalState::missedRows() {
     return _missedRows;
 }
 
+size_t NLExistsState::getRowCount() const {
+    if (_inputColumns.empty()) {
+        return 1;
+    }
+
+    return _inputColumns.front()->size();
+}
+
+void NLExistsState::reset() {
+    _matched.assign(getRowCount(), false);
+}
+
 void NLSortState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();

@@ -3764,6 +3764,100 @@ private:
     NLStmtContainer _stmts;
 };
 
+// Runtime state of one EXISTS over one step of the rows it answers for: a matched flag
+// per row of that step. The lighter sibling of NLOptionalState - EXISTS answers for the
+// input rows rather than re-emitting rows, so it buffers none of them and keeps the input
+// chunks only for the row count they carry.
+class NLExistsState {
+public:
+    // One chunk of the step the EXISTS answers for; borrowed, since they are the enclosing
+    // loop's own variables.
+    void addInputColumn(const Column* input) { _inputColumns.push_back(input); }
+
+    // The rows this step answers for: the input chunks' row count, and one - the single
+    // empty row an EXISTS over nothing in flight joins onto - when there are none.
+    size_t getRowCount() const;
+
+    // Clear every matched flag, so the accumulator covers this step alone. Runs each time
+    // nl.exists_buffer's block runs.
+    void reset();
+
+    void markMatched(size_t row) {
+        bioassert(row < _matched.size(), "Row tag {} is outside the {} rows of the step", row, _matched.size());
+        _matched[row] = true;
+    }
+
+    const std::vector<bool>& matched() const { return _matched; }
+
+private:
+    std::vector<const Column*> _inputColumns;
+
+    // One flag per row of this step's input chunks, cleared by the reset and set by the
+    // mark through the row tag.
+    std::vector<bool> _matched;
+};
+
+// nl.exists_buffer data: empties an accumulator and lays the row tag out over this step's
+// input rows, each time the block it lives in runs.
+class NLExistsResetData : public NLFunctionData {
+public:
+    NLExistsResetData(NLExistsState* state, ColumnVector<uint64_t>* tag)
+        : _state(state),
+        _tag(tag)
+    {
+    }
+
+    NLExistsState* getState() const { return _state; }
+    ColumnVector<uint64_t>* getTag() const { return _tag; }
+
+private:
+    NLExistsState* _state {nullptr};
+    ColumnVector<uint64_t>* _tag {nullptr};
+};
+
+// nl.exists_mark data: marks the input rows the tag names. An accumulator with no input
+// column is answered for by the columns instead: the step is the single empty row, which
+// this step's rows mark when they hold one at all.
+class NLExistsMarkData : public NLFunctionData {
+public:
+    NLExistsMarkData(NLExistsState* state)
+        : _state(state)
+    {
+    }
+
+    NLExistsState* getState() const { return _state; }
+
+    const ColumnVector<uint64_t>* getTag() const { return _tag; }
+    void setTag(const ColumnVector<uint64_t>* tag) { _tag = tag; }
+
+    const std::vector<const Column*>& columns() const { return _columns; }
+
+    void addColumn(const Column* column) { _columns.push_back(column); }
+
+private:
+    NLExistsState* _state {nullptr};
+    const ColumnVector<uint64_t>* _tag {nullptr};
+    std::vector<const Column*> _columns;
+};
+
+// nl.exists_result data: lays the accumulator's flags out as the boolean chunk the EXISTS
+// stands for, row-aligned with the chunks the accumulator was opened over.
+class NLExistsResultData : public NLFunctionData {
+public:
+    NLExistsResultData(NLExistsState* state, ColumnMask* result)
+        : _state(state),
+        _result(result)
+    {
+    }
+
+    NLExistsState* getState() const { return _state; }
+    ColumnMask* getResult() const { return _result; }
+
+private:
+    NLExistsState* _state {nullptr};
+    ColumnMask* _result {nullptr};
+};
+
 class NLProgram {
 public:
     NLProgram();
@@ -3899,6 +3993,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one EXISTS's runtime accumulator, owned by the program; the reset, mark and
+    // result statements that share it hold a borrowed pointer. The semi-join sibling of
+    // allocOptionalState.
+    NLExistsState* allocExistsState() {
+        auto state = std::make_unique<NLExistsState>();
+        NLExistsState* statePtr = state.get();
+        _existsStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     // The candidate index one chain-node signature already has, or a null pointer for a
     // signature no chain node of the program has reached yet. Two nodes of the same
     // labels and key properties look their candidates up in one index, so the label set
@@ -3957,6 +4061,7 @@ private:
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
+    std::vector<std::unique_ptr<NLExistsState>> _existsStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;

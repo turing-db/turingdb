@@ -139,6 +139,19 @@ def NLOptionalState : NLType<"OptionalState", "optional_state"> {
     }];
 }
 
+def NLExistsState : NLType<"ExistsState", "exists_state"> {
+    let summary = "An EXISTS accumulator handle";
+    let description = [{
+        Stands for one EXISTS subquery's state over the current step of the rows it
+        answers for: the input chunks and a matched flag per input row. Produced by
+        nl.exists_buffer at the top of the block whose step it covers - so it is
+        reset once per step - marked by nl.exists_mark as the body walks, and read
+        by nl.exists_result, which lays the flags out as the boolean chunk the op
+        produces. The lighter sibling of !nl.optional_state: EXISTS answers for the
+        input rows rather than re-emitting rows, so it buffers none of them.
+    }];
+}
+
 def NLCollectState : NLType<"CollectState", "collect_state"> {
     let summary = "A per-group value-list accumulator handle for one collect";
     let description = [{
@@ -397,6 +410,14 @@ def NLOptionalStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::OptionalStateType>($_self)">,
         "optional state handle", "::mlir::nl::OptionalStateType">,
     BuildableType<"::mlir::nl::OptionalStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.exists_state handle, as NLOptionalStateHandle
+// constrains the optional one, and carries the recipe that lets nl.exists_mark and
+// nl.exists_result omit the handle's type.
+def NLExistsStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::ExistsStateType>($_self)">,
+        "exists state handle", "::mlir::nl::ExistsStateType">,
+    BuildableType<"::mlir::nl::ExistsStateType::get($_builder.getContext())">;
 
 // Constrains an operand to a chunk of unsigned 64-bit counts, the way
 // NLNodeIDChunk constrains an ID chunk. It is what an OPTIONAL MATCH's row tag

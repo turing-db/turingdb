@@ -872,6 +872,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateOptionalBuffer(optionalBuffer, body);
         } else if (nl::OptionalCollect optionalCollect = mlir::dyn_cast<nl::OptionalCollect>(operation)) {
             translateOptionalCollect(optionalCollect, body);
+        } else if (nl::ExistsBuffer existsBuffer = mlir::dyn_cast<nl::ExistsBuffer>(operation)) {
+            translateExistsBuffer(existsBuffer, body);
+        } else if (nl::ExistsMark existsMark = mlir::dyn_cast<nl::ExistsMark>(operation)) {
+            translateExistsMark(existsMark, body);
+        } else if (nl::ExistsResult existsResult = mlir::dyn_cast<nl::ExistsResult>(operation)) {
+            translateExistsResult(existsResult, body);
         } else if (nl::CreateNode createNode = mlir::dyn_cast<nl::CreateNode>(operation)) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
@@ -3300,6 +3306,56 @@ void NLTranslator::translateOptionalDrainLoop(const IteratorConfig& config,
     body->emplaceStmt(&NLExecutor::runOptionalDrainLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateExistsBuffer(nl::ExistsBuffer buffer, NLStmtContainer* body) {
+    NLExistsState* state = _program->allocExistsState();
+    _existsStates[buffer.getState()] = state;
+
+    // This step's own chunks: their row count is how many matched flags the reset clears,
+    // and how many booleans the result lays out.
+    for (const mlir::Value column : buffer.getInputColumns()) {
+        state->addInputColumn(getColumn(column));
+    }
+
+    ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
+
+    NLExistsResetData* resetData = _program->allocFunctionData<NLExistsResetData>(state, tag);
+    body->emplaceStmt(&NLExecutor::runExistsReset, resetData);
+}
+
+void NLTranslator::translateExistsMark(nl::ExistsMark mark, NLStmtContainer* body) {
+    NLExistsState* state = existsStateFor(mark.getState());
+
+    NLExistsMarkData* data = _program->allocFunctionData<NLExistsMarkData>(state);
+
+    if (const mlir::Value tag = mark.getTag()) {
+        data->setTag(static_cast<const ColumnVector<uint64_t>*>(getColumn(tag)));
+    }
+
+    for (const mlir::Value column : mark.getColumns()) {
+        data->addColumn(getColumn(column));
+    }
+
+    body->emplaceStmt(&NLExecutor::runExistsMark, data);
+}
+
+void NLTranslator::translateExistsResult(nl::ExistsResult result, NLStmtContainer* body) {
+    NLExistsState* state = existsStateFor(result.getState());
+
+    ColumnMask* answer = static_cast<ColumnMask*>(allocColumn(result.getResult()));
+
+    NLExistsResultData* data = _program->allocFunctionData<NLExistsResultData>(state, answer);
+    body->emplaceStmt(&NLExecutor::runExistsResult, data);
+}
+
+NLExistsState* NLTranslator::existsStateFor(mlir::Value handle) const {
+    const auto stateIt = _existsStates.find(handle);
+    if (stateIt == _existsStates.end()) {
+        throw IRException("exists handle must be produced by an nl.exists_buffer");
+    }
+
+    return stateIt->second;
 }
 
 NLOptionalState* NLTranslator::optionalStateFor(mlir::Value handle) const {
