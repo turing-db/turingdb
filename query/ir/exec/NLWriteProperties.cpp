@@ -62,10 +62,61 @@ public:
         }
     }
 
+    // A conversion of a literal - datetime('...'), toInteger('...') - answers a cell that
+    // may hold no value, so the const it stands for is already the optional the write
+    // buffer stages and must not be wrapped in a second one.
+    template <typename T>
+    void operator()(const ColumnConst<std::optional<T>>* typed) {
+        fillRows(typed->getRaw());
+    }
+
+    void operator()(const ColumnConst<std::optional<types::String::Primitive>>* typed) {
+        const std::optional<types::String::Primitive>& value = typed->getRaw();
+
+        std::optional<types::String::OwningPrimitive> owned;
+        if (value.has_value()) {
+            owned.emplace(*value);
+        }
+
+        fillRows(owned);
+    }
+
+    void operator()(const ColumnConst<std::optional<types::Embedding::Primitive>>* typed) {
+        const std::optional<types::Embedding::Primitive>& value = typed->getRaw();
+
+        std::optional<types::Embedding::OwningPrimitive> owned;
+        if (value.has_value()) {
+            owned.emplace(value->begin(), value->end());
+        }
+
+        fillRows(owned);
+    }
+
+    void operator()(const ColumnConst<std::optional<ListView>>* typed) {
+        const std::optional<ListView>& value = typed->getRaw();
+
+        std::optional<types::List::OwningPrimitive> owned;
+        if (value.has_value()) {
+            owned.emplace(*value);
+        }
+
+        fillRows(owned);
+    }
+
 private:
     CommitWriteBuffer::UntypedProperties& _buf;
     PropertyTypeID _propID;
     size_t _rowCount;
+
+    template <typename T>
+    void fillRows(const T& value) {
+        _buf.clear();
+        _buf.reserve(_rowCount);
+
+        for (size_t i = 0; i < _rowCount; i++) {
+            _buf.emplace_back(_propID, value);
+        }
+    }
 };
 
 class VectorPropertyExtractor {

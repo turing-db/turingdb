@@ -685,7 +685,9 @@ struct WriteProcessorPropertyTypes {
         std::optional<std::string> // For labels() and type(), which own their strings
     >>;
 
-    // Used for specialised dispatching logic for only consts (shouldn't hold optional)
+    // Used for specialised dispatching logic for only consts. toInteger('5') is one cell
+    // standing for every row that may hold no value, so a nullable const is a column shape
+    // a write meets too
     using AllowedConst = GenerateKindList<std::tuple<
         types::Int64::Primitive,
         types::UInt64::Primitive,
@@ -694,6 +696,14 @@ struct WriteProcessorPropertyTypes {
         types::Bool::Primitive,
         types::Embedding::Primitive,
         ListView,
+
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::String::Primitive>,
+        std::optional<types::Bool::Primitive>,
+        std::optional<types::Embedding::Primitive>,
+        std::optional<ListView>,
 
         std::string // For LOAD CSV inputs
     >>;
