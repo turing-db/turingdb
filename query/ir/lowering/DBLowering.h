@@ -214,6 +214,7 @@ private:
     // and the op built around it, since the type of the lists is the type of what that
     // body yields
     void lowerListComprehension(mlir::db::ListComprehension comprehension);
+    void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
     void lowerScanOutEdgesByLabelSrc(mlir::db::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc);

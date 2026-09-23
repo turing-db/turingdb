@@ -40,6 +40,8 @@ class ListExpr;
 class ListComprehensionExpr;
 class ExistsExpr;
 class MapLiteral;
+class PatternComprehensionExpr;
+class ReadStmtAnalyzer;
 
 class ExprAnalyzer {
 public:
@@ -57,6 +59,10 @@ public:
     // which only the query analyzer knows how to walk
     void setQueryAnalyzer(CypherAnalyzer* analyzer) { _queryAnalyzer = analyzer; }
 
+    // The analyzer of the MATCH a pattern comprehension holds its pattern as, which
+    // declares the variables that pattern binds
+    void setReadAnalyzer(ReadStmtAnalyzer* readAnalyzer) { _readAnalyzer = readAnalyzer; }
+
     // Declares the statement a CSV row variable is loaded by, so `row[2]` and `row.age`
     // resolve to fields of that statement rather than to accesses of their own
     void registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV);
@@ -70,6 +76,7 @@ public:
     void analyzeLiteralExpr(LiteralExpr* expr);
     void analyzeListExpr(ListExpr* expr);
     void analyzeListComprehensionExpr(ListComprehensionExpr* expr);
+    void analyzePatternComprehensionExpr(PatternComprehensionExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
@@ -97,6 +104,7 @@ private:
     CypherAnalyzer* _queryAnalyzer {nullptr};
     GraphView _graphView;
     DeclContext* _ctxt {nullptr};
+    ReadStmtAnalyzer* _readAnalyzer {nullptr};
     const GraphMetadata& _graphMetadata;
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;

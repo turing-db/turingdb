@@ -1133,6 +1133,10 @@ LogicalResult ListComprehension::verify() {
         return emitOpError("body argument 1 must be the ui64 column of row tags");
     }
 
+    if (!yield.getRowTags()) {
+        return emitOpError("body must yield the row tag of every surviving element");
+    }
+
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
         const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
 
@@ -1141,6 +1145,54 @@ LogicalResult ListComprehension::verify() {
                                                  << " must have the type of carried column "
                                                  << carriedIndex;
         }
+    }
+
+    return success();
+}
+
+// The pattern takes one argument per input column and the row tag, and ends naming what
+// each match contributes to the list of the row it came from.
+LogicalResult PatternComprehension::verify() {
+    Block& patternBlock = getPattern().front();
+
+    auto yield = dyn_cast_or_null<ComprehensionYield>(patternBlock.empty() ? nullptr : &patternBlock.back());
+    if (!yield) {
+        return emitOpError("pattern region must end with a db.comprehension_yield");
+    }
+
+    const mlir::OperandRange inputs = getInputColumns();
+    const size_t inputCount = inputs.size();
+
+    // No input column means no input row to tag: the one list covers the single empty row
+    // the query starts from, which every match belongs to.
+    const size_t expectedArguments = inputCount == 0 ? 0 : inputCount + 1;
+
+    if (patternBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("pattern region takes one argument per input column plus the row tag, ")
+               << "expected " << expectedArguments << " but has " << patternBlock.getNumArguments();
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (patternBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
+            return emitOpError("pattern argument ") << inputIndex << " must have the type of input column "
+                                                    << inputIndex;
+        }
+    }
+
+    if (inputCount != 0) {
+        const auto rowTagType =
+            llvm::dyn_cast<ColumnType>(patternBlock.getArgument(inputCount).getType());
+
+        if (!rowTagType || !rowTagType.getType().isUnsignedInteger(64)) {
+            return emitOpError("pattern argument ") << inputCount << " must be the ui64 column of row tags";
+        }
+    }
+
+    const bool tagsRows = inputCount != 0;
+    const bool yieldsATag = yield.getRowTags() != nullptr;
+
+    if (tagsRows != yieldsATag) {
+        return emitOpError("the pattern yields a row tag exactly when the op takes input columns");
     }
 
     return success();

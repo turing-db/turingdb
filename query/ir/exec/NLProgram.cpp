@@ -223,6 +223,54 @@ void NLExistsState::reset() {
     _matched.assign(getRowCount(), false);
 }
 
+void NLPatternComprehensionState::reset(size_t rowCount) {
+    _rowCount = rowCount;
+    _values.clear();
+    _rows.clear();
+}
+
+void NLPatternComprehensionState::stage(size_t row, const ListBuffer<>::ListItemVariant& value) {
+    bioassert(row < _rowCount, "Row tag {} is outside the {} rows of the step", row, _rowCount);
+
+    _values.push_back(value);
+    _rows.push_back(row);
+}
+
+void NLPatternComprehensionState::buildLists(ListBuffer<>& listBuffer, std::vector<ListView>& lists) {
+    _starts.assign(_rowCount + 1, 0);
+
+    for (const size_t row : _rows) {
+        _starts[row + 1]++;
+    }
+
+    for (size_t row = 0; row < _rowCount; row++) {
+        _starts[row + 1] += _starts[row];
+    }
+
+    // The values under the row they belong to: each row's run of the buffer is the list it
+    // gets, and a run of its own is what the insert needs.
+    _ordered.resize(_values.size());
+
+    _next.assign(_starts.begin(), _starts.end() - 1);
+
+    for (size_t valueIndex = 0; valueIndex < _values.size(); valueIndex++) {
+        const size_t row = _rows[valueIndex];
+
+        _ordered[_next[row]] = _values[valueIndex];
+        _next[row]++;
+    }
+
+    lists.clear();
+    lists.reserve(_rowCount);
+
+    for (size_t row = 0; row < _rowCount; row++) {
+        const std::span<const ListBuffer<>::ListItemVariant> values {_ordered.data() + _starts[row],
+                                                                     _starts[row + 1] - _starts[row]};
+
+        lists.push_back(listBuffer.insert(values));
+    }
+}
+
 void NLSortState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();

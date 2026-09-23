@@ -57,6 +57,7 @@ class MapLiteral;
 class MatchStmt;
 class MergeStmt;
 class NodePattern;
+class PatternComprehensionExpr;
 class PatternData;
 class Projection;
 class PropertyExpr;
@@ -419,7 +420,9 @@ private:
 
     void throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const;
 
-    void throwOnOptionalOverWrittenEntity(const MatchStmt* matchStmt) const;
+    // Rejects a pattern of @param matchStmt that names an entity a CREATE of the same
+    // query wrote, which the clause named by @param clause cannot read
+    void throwOnMatchOverWrittenEntity(const MatchStmt* matchStmt, std::string_view clause) const;
 
     // Records what a CREATE wrote for one named entity of its pattern, so the projection
     // reads that back rather than fetching an ID the graph does not hold yet
@@ -842,6 +845,12 @@ private:
     // the columns in flight as its carry set, and a body region binding the element to
     // the variable and yielding what each one contributes
     void translateListComprehensionExpr(const Expr* expr, const ListComprehensionExpr* comprehension);
+
+    // Emits the db.pattern_comprehension of `[(a)-[:KNOWS]->(b) WHERE p(b) | f(b)]`: the
+    // columns in flight as its inputs, and a pattern region generated as a MATCH of its
+    // own, ending on what each match contributes to the list of the row it came from
+    void translatePatternComprehensionExpr(const Expr* expr,
+                                           const PatternComprehensionExpr* comprehension);
 
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one

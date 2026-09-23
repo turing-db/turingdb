@@ -40,6 +40,7 @@ NodePattern* NodePattern::fromExpr(CypherAST* ast, Expr* expr) {
         NodePattern* pattern = NodePattern::create(ast);
         pattern->setSymbol(nodeLabelExpr->getSymbol());
         pattern->setLabels(nodeLabelExpr->getTypes());
+        return pattern;
     }
 
     return nullptr;

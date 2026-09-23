@@ -3043,4 +3043,104 @@ def ExistsResult : NLOp<"exists_result", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
+/**
+* PatternComprehensionBuffer
+*/
+// NOT Pure: it re-initializes the accumulator, so it must run exactly where it sits -
+// once per step of the rows the comprehension is read on - and must not be hoisted,
+// CSE'd or eliminated (like nl.optional_buffer).
+def PatternComprehensionBuffer : NLOp<"pattern_comprehension_buffer", [RowAlignedThroughOperands]> {
+  let summary = "Create (and reset) the accumulator for one pattern comprehension over this step's rows";
+
+  let description = [{
+    Sits at the top of the block whose step it covers - the innermost loop body binding
+    the columns the comprehension is read beside - so the accumulator is empty again at
+    every step. It sizes itself to the rows of the cardinality chunk and produces the row
+    tag: a chunk holding each row's position, which the pattern carries alongside the
+    columns it walks so nl.pattern_comprehension_collect knows which row's list a match
+    goes into.
+
+      %state, %tag = nl.pattern_comprehension_buffer %a : !nl.chunk<!storage.node_id>
+
+    The cardinality operand is absent when nothing is in flight where the comprehension is
+    read - RETURN [(a:Person)-->(b) | b.name] - which is one row of its own. The pattern
+    has nothing to join onto there, so it never carries that tag, which is why the op is
+    row-aligned through its operands: a tag over the step's rows holds exactly the rows
+    that chunk does.
+  }];
+
+  // Any chunk of the step, which the tag runs over.
+  let arguments = (ins Optional<NLChunk>:$cardinality);
+
+  // The accumulator, then the row tag over this step's rows.
+  let results = (outs NLPatternComprehensionState:$state, NLUInt64Chunk:$tag);
+
+  // The tag's type is buildable and so omitted; only the cardinality chunk's is spelled.
+  let assemblyFormat = [{
+    ($cardinality^ `:` qualified(type($cardinality)))? attr-dict
+  }];
+}
+
+/**
+* PatternComprehensionCollect
+*/
+// NOT Pure: it stages this step's matches in the accumulator, so it must run exactly
+// where it sits (like nl.optional_collect).
+def PatternComprehensionCollect : NLOp<"pattern_comprehension_collect", []> {
+  let summary = "Stage what this step of a pattern comprehension's matches contribute";
+
+  let description = [{
+    Runs in the innermost loop body of the pattern's nest, once per step of it. Stages one
+    value per matched row, each under the row the tag names, so once the pattern is walked
+    every row's values are in hand.
+
+      nl.pattern_comprehension_collect %state, %tag, %name : !nl.chunk<!storage.nullable<!storage.string>>
+
+    The tag is absent when the accumulator has no input column: every match then belongs
+    to the single empty row the step is.
+  }];
+
+  let arguments = (ins NLPatternComprehensionStateHandle:$state,
+                       Optional<NLUInt64Chunk>:$tag,
+                       NLChunk:$value);
+
+  let assemblyFormat = [{
+    $state (`,` $tag^)? `,` $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
+* PatternComprehension
+*/
+// Pure: given a filled accumulator it deterministically builds the same lists, and
+// produces no side effect of its own. Mirrors nl.collect, except that it writes a chunk
+// in place rather than opening an iterator: the rows are the step's own.
+def PatternComprehension : NLOp<"pattern_comprehension", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Build this step's lists out of a filled pattern comprehension accumulator";
+
+  let description = [{
+    The build phase of a pattern comprehension. Consumes a filled
+    !nl.pattern_comprehension_state and produces one list cell per row of the step, in row
+    order: the values the pattern's matches staged for that row, and the empty list for a
+    row it matched nothing for.
+
+      %lists = nl.pattern_comprehension(%state, %a) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.list<!storage.string>>
+
+    Its lists are complete only once every match is staged, so place it after the
+    pattern's loop nest, in the block holding the nl.pattern_comprehension_buffer that
+    opened the accumulator. The cardinality operand is a chunk of that step, which the
+    lists are row-aligned with; it is absent when nothing was in flight where the
+    comprehension is read, which is one row of its own.
+  }];
+
+  // The cardinality is the only variable-length operand, so MLIR can tell it apart from
+  // the handle without operand-segment sizes (as nl.broadcast_constant's is).
+  let arguments = (ins NLPatternComprehensionStateHandle:$state, Optional<NLChunk>:$cardinality);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $state (`,` $cardinality^)? `)` attr-dict `:` functional-type($cardinality, results)
+  }];
+}
+
 #endif //TURINGDB_NL_OPS

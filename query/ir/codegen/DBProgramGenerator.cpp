@@ -87,6 +87,7 @@
 #include "expr/ListComprehensionExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
+#include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/StructuralExpressionComparator.h"
@@ -283,6 +284,10 @@ size_t passRunNumber(std::span<const std::string_view> pipelinePasses, size_t pa
 // can appear in no Cypher identifier, quoted or not, so no variable of the query's own is
 // ever taken for the tag - the columns are keyed by name.
 constexpr std::string_view optionalTagName {"`optional_tag"};
+
+// The row tag a pattern comprehension carries beside the columns its pattern walks, under
+// a name of the same shape and for the same reason as the one above.
+constexpr std::string_view comprehensionTagName {"`comprehension_tag"};
 
 // The columns a CALL subquery carries past its body are bound under this prefix, so no
 // clause of the body resolves or drops them - the columns are keyed by name.
@@ -4567,7 +4572,7 @@ void DBProgramGenerator::appendHiddenColumns(llvm::SmallVectorImpl<PublishedColu
 void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
     const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt.front());
 
-    throwOnOptionalOverWrittenEntity(matchStmt);
+    throwOnMatchOverWrittenEntity(matchStmt, "An OPTIONAL MATCH");
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -4776,7 +4781,8 @@ void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection, con
 // An optional pattern reads the graph, which holds nothing this change wrote until the
 // commit. A pattern naming such an entity is turned away; one that only carries it past the
 // join is not, because the join hands its input columns back unchanged
-void DBProgramGenerator::throwOnOptionalOverWrittenEntity(const MatchStmt* matchStmt) const {
+void DBProgramGenerator::throwOnMatchOverWrittenEntity(const MatchStmt* matchStmt,
+                                                       std::string_view clause) const {
     const Pattern* pattern = matchStmt->getPattern();
 
     for (const PatternElement* element : pattern->elements()) {
@@ -4784,7 +4790,8 @@ void DBProgramGenerator::throwOnOptionalOverWrittenEntity(const MatchStmt* match
             const VarDecl* decl = entity->getDecl();
 
             if (isPendingThroughout(decl)) {
-                throwError(fmt::format("An OPTIONAL MATCH cannot read what a CREATE in the same query wrote: '{}'",
+                throwError(fmt::format("{} cannot read what a CREATE in the same query wrote: '{}'",
+                                       clause,
                                        decl->getName()),
                            matchStmt);
             }
@@ -5458,6 +5465,13 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::PATTERN_COMPREHENSION: {
+            const PatternComprehensionExpr* comprehension =
+                static_cast<const PatternComprehensionExpr*>(expr);
+            translatePatternComprehensionExpr(expr, comprehension);
+        }
+        break;
+
         case Expr::Kind::LIST:
         case Expr::Kind::PATH:
             throwError(fmt::format("Unsupported expression: {}",
@@ -5609,6 +5623,85 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     _part._createdEntities = outerCreatedEntities;
     _part._exprMap = outerExprMap;
     _part._projectedColumns = outerProjectedColumns;
+
+    _part._exprMap[expr] = comprehensionOp.getResult();
+}
+
+void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
+                                                           const PatternComprehensionExpr* comprehension) {
+    MatchStmt* const match = comprehension->getMatch();
+
+    throwOnMatchOverWrittenEntity(match, "A pattern comprehension");
+
+    // The lists stand beside the rows in flight, so every column of those rows is handed
+    // to the op: the pattern joins onto the ones it names and carries the rest along
+    CarrySet carrySet;
+    collectCarrySet(carrySet);
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    auto comprehensionOp = _opBuilder.create<mlir::db::PatternComprehension>(loc,
+                                                                             noneType,
+                                                                             carrySet._columns);
+
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    llvm::SmallVector<mlir::Location> argumentLocations;
+
+    for (const mlir::Value column : carrySet._columns) {
+        argumentTypes.push_back(column.getType());
+        argumentLocations.push_back(loc);
+    }
+
+    // No column in flight means no input row to tag: the one list the comprehension builds
+    // covers the single empty row the query starts from
+    const bool tagsRows = !carrySet._columns.empty();
+
+    if (tagsRows) {
+        argumentTypes.push_back(allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false)));
+        argumentLocations.push_back(loc);
+    }
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    mlir::Block* const patternBlock = _opBuilder.createBlock(&comprehensionOp.getPattern(),
+                                                             {},
+                                                             argumentTypes,
+                                                             argumentLocations);
+
+    const PartScope outerPart = _part;
+
+    // The pattern reads the rows in flight through the block arguments, so the scope is
+    // moved onto them before it is handed over
+    rebindCarrySet(patternBlock->getArguments(), /*firstColumn=*/0, carrySet);
+
+    llvm::SmallVector<PublishedColumn> patternScope;
+    collectPublishedColumns(patternScope);
+
+    // The pattern is a MATCH of its own and is walked over a dependency graph of its own;
+    // the one the query is being generated from is put back once it has been.
+    VariableDependencyGraph outerVdg = std::move(_vdg);
+
+    rebindScopeKeepingWrittenEntities(patternScope);
+
+    const VariableDependency* tagVariable = nullptr;
+    if (tagsRows) {
+        tagVariable = _vdg.registerBoundVariable(comprehensionTagName, nullptr);
+        const unsigned tagArgument = static_cast<unsigned>(carrySet._columns.size());
+        registerValue(tagVariable, patternBlock->getArgument(tagArgument));
+    }
+
+    _opBuilder.setInsertionPointToStart(patternBlock);
+
+    Stmt* const patternStatements[] = {match};
+    generatePart(patternStatements);
+
+    const mlir::Value value = getOrTranslateExprColumn(comprehension->getProjection());
+    const mlir::Value rowTags = tagsRows ? _part._varMap.at(tagVariable).back() : mlir::Value {};
+
+    _opBuilder.create<mlir::db::ComprehensionYield>(loc, rowTags, value);
+
+    _part = outerPart;
+    _vdg = std::move(outerVdg);
 
     _part._exprMap[expr] = comprehensionOp.getResult();
 }

@@ -3741,6 +3741,118 @@ private:
     std::vector<Append> _appends;
 };
 
+// Runtime state of one pattern comprehension over one step of the rows it is read on: how
+// many rows that step has, and what its pattern's matches contributed to each of them. The
+// list-valued sibling of NLOptionalState - both cover one step rather than the whole
+// relation - except that it reduces what the pattern found to one cell per row instead of
+// re-emitting it as rows.
+class NLPatternComprehensionState {
+public:
+    // Drop what the last step staged and size the accumulator to this one. Runs each time
+    // nl.pattern_comprehension_buffer's block runs.
+    void reset(size_t rowCount);
+
+    void stage(size_t row, const ListBuffer<>::ListItemVariant& value);
+
+    // One list per row of the step, in row order, built into @param lists: the values that
+    // row's matches staged, and the empty list for a row the pattern missed.
+    void buildLists(ListBuffer<>& listBuffer, std::vector<ListView>& lists);
+
+private:
+    size_t _rowCount {0};
+
+    // What the matches contributed and, row-aligned with it, the row each value belongs
+    // to: they are staged in the order the pattern walked them, which is not the rows'.
+    std::vector<ListBuffer<>::ListItemVariant> _values;
+    std::vector<size_t> _rows;
+
+    // The values under the row they belong to, where each row's run of them starts and how
+    // far that run has been filled: held here so a step pays for the buffers once rather
+    // than once per build.
+    std::vector<ListBuffer<>::ListItemVariant> _ordered;
+    std::vector<size_t> _starts;
+    std::vector<size_t> _next;
+};
+
+// nl.pattern_comprehension_buffer data: empties an accumulator and lays the row tag out
+// over this step's rows, each time the block it lives in runs. The cardinality column is
+// null where nothing is in flight, which is the single empty row.
+class NLPatternComprehensionResetData : public NLFunctionData {
+public:
+    NLPatternComprehensionResetData(NLPatternComprehensionState* state,
+                                    const Column* cardinality,
+                                    ColumnVector<uint64_t>* tag)
+        : _state(state),
+        _cardinality(cardinality),
+        _tag(tag)
+    {
+    }
+
+    NLPatternComprehensionState* getState() const { return _state; }
+    const Column* getCardinality() const { return _cardinality; }
+    ColumnVector<uint64_t>* getTag() const { return _tag; }
+
+private:
+    NLPatternComprehensionState* _state {nullptr};
+    const Column* _cardinality {nullptr};
+    ColumnVector<uint64_t>* _tag {nullptr};
+};
+
+// nl.pattern_comprehension_collect data: stages what this step of the pattern's matches
+// contributes, each value under the row its tag names, through the read its column shape
+// takes. The tag is null when the accumulator covers the single empty row.
+class NLPatternComprehensionCollectData : public NLFunctionData {
+public:
+    NLPatternComprehensionCollectData(NLPatternComprehensionState* state,
+                                      const ColumnVector<uint64_t>* tag,
+                                      const Column* value,
+                                      NLListItemReadFunction valueRead,
+                                      LocalMemory* memory)
+        : _state(state),
+        _tag(tag),
+        _value(value),
+        _valueRead(valueRead),
+        _memory(memory)
+    {
+    }
+
+    NLPatternComprehensionState* getState() const { return _state; }
+    const ColumnVector<uint64_t>* getTag() const { return _tag; }
+    const Column* getValue() const { return _value; }
+    NLListItemReadFunction getValueRead() const { return _valueRead; }
+    LocalMemory* getMemory() const { return _memory; }
+
+private:
+    NLPatternComprehensionState* _state {nullptr};
+    const ColumnVector<uint64_t>* _tag {nullptr};
+    const Column* _value {nullptr};
+    NLListItemReadFunction _valueRead {nullptr};
+    LocalMemory* _memory {nullptr};
+};
+
+// nl.pattern_comprehension data: the build phase of a pattern comprehension, writing one
+// list per row of the step into the result column once the pattern's nest has been walked.
+class NLPatternComprehensionData : public NLFunctionData {
+public:
+    NLPatternComprehensionData(NLPatternComprehensionState* state,
+                               ColumnVector<ListView>* result,
+                               LocalMemory* memory)
+        : _state(state),
+        _result(result),
+        _memory(memory)
+    {
+    }
+
+    NLPatternComprehensionState* getState() const { return _state; }
+    ColumnVector<ListView>* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+private:
+    NLPatternComprehensionState* _state {nullptr};
+    ColumnVector<ListView>* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+};
+
 // nl.for over nl.optional_drain data: the emit phase of an OPTIONAL MATCH. Holds the
 // accumulator and, per column, the buffer the matched rows are read from, the input chunk
 // a missed row's value is read from - null for a column the pattern binds, which a missed
@@ -4022,6 +4134,15 @@ public:
         return statePtr;
     }
 
+    // Allocate one pattern comprehension's runtime accumulator, owned by the program; the
+    // reset, collect and build statements that share it hold a borrowed pointer.
+    NLPatternComprehensionState* allocPatternComprehensionState() {
+        auto state = std::make_unique<NLPatternComprehensionState>();
+        NLPatternComprehensionState* statePtr = state.get();
+        _patternComprehensionStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     // The candidate index one chain-node signature already has, or a null pointer for a
     // signature no chain node of the program has reached yet. Two nodes of the same
     // labels and key properties look their candidates up in one index, so the label set
@@ -4081,6 +4202,7 @@ private:
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;
+    std::vector<std::unique_ptr<NLPatternComprehensionState>> _patternComprehensionStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;

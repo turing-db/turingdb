@@ -1024,6 +1024,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerRange(range);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
         lowerListComprehension(listComprehension);
+    } else if (mlir::db::PatternComprehension patternComprehension = mlir::dyn_cast<mlir::db::PatternComprehension>(operation)) {
+        lowerPatternComprehension(patternComprehension);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<mlir::db::ScanEdgesByType>(operation)) {
@@ -1538,6 +1540,116 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
     listsChunk.setType(resultType);
 
     _valueMap[comprehension.getResult()] = listsChunk;
+}
+
+void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension comprehension) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks;
+    for (const mlir::Value column : comprehension.getInputColumns()) {
+        inputChunks.push_back(mapValue(column));
+    }
+
+    // The step the accumulator covers is the one binding the columns the comprehension is
+    // read beside, so it is emptied once per chunk of them - and the pattern's nest and
+    // the build both go there, the build after the nest.
+    mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
+
+    // Any chunk of the step counts its rows; a comprehension read where nothing is in
+    // flight has none, and covers the single empty row instead.
+    const mlir::Value cardinality = inputChunks.empty() ? mlir::Value {} : cardinalityDriver(inputChunks);
+
+    setInsertionInto(stepBlock);
+    nl::PatternComprehensionBuffer buffer = _builder.create<nl::PatternComprehensionBuffer>(loc, cardinality);
+    const mlir::Value state = buffer.getState();
+
+    // The pattern reads this step's rows through its block arguments, and the row tag
+    // through the trailing one; a pattern with nothing to join onto has neither.
+    mlir::Block& patternBlock = comprehension.getPattern().front();
+    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
+        _valueMap[patternBlock.getArgument(static_cast<unsigned>(inputIndex))] = inputChunks[inputIndex];
+    }
+
+    if (!inputChunks.empty()) {
+        _valueMap[patternBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
+    }
+
+    // A dataflow of its own, rooted where the accumulator sits so its loops nest inside
+    // this step; the caller's root and innermost loop are restored once it is lowered.
+    mlir::Block* const previousRoot = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _rootBlock = stepBlock;
+    _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
+
+    mlir::Value rowTagChunk;
+    mlir::Value valueChunk;
+
+    for (mlir::Operation& operation : patternBlock) {
+        mlir::db::ComprehensionYield yield = mlir::dyn_cast<mlir::db::ComprehensionYield>(operation);
+        if (!yield) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        if (yield.getRowTags()) {
+            rowTagChunk = mapValue(yield.getRowTags());
+        }
+
+        valueChunk = mapValue(yield.getValue());
+    }
+
+    // PatternComprehension::verify guarantees the yield, so an empty one here means
+    // unverified IR - the defensive backstop lowerOptionalMatch keeps too.
+    if (!valueChunk) {
+        throw IRException("db.pattern_comprehension yields no value");
+    }
+
+    // A value computed from constants alone holds one cell standing for every match, so it
+    // is laid out over the matches it is read against - the ones the tag counts, since a
+    // WHERE has cut both together
+    valueChunk = rowAlignedChunk(valueChunk, rowTagChunk ? rowTagChunk : _innermostCardinality);
+
+    // An entity ID, a list, a tagged cell and a CSV field's owned characters are present
+    // in every row and go into the list as they stand; only a scalar value column is read
+    // as nullable, the way lowerMakeList reads the columns it builds from
+    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
+    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
+                                                       storage::EdgeIDType,
+                                                       storage::ListType,
+                                                       storage::ListElementType,
+                                                       storage::OwnedStringType>(valueElement);
+
+    if (!holdsCellsPresentInEveryRow) {
+        valueChunk = nullableValueChunk(valueChunk);
+    }
+
+    llvm::SmallVector<mlir::Value, 2> stagedChunks {valueChunk};
+    if (rowTagChunk) {
+        stagedChunks.push_back(rowTagChunk);
+    }
+
+    setInsertionInto(deepestOwnerBlock(stagedChunks, stepBlock));
+    _builder.create<nl::PatternComprehensionCollect>(loc, state, rowTagChunk, valueChunk);
+
+    _rootBlock = previousRoot;
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    // Every row gets a list, the empty one where the pattern matched nothing, so the
+    // lists are a container chunk rather than the nullable one a list comprehension builds
+    const mlir::Type listType = storage::ListType::get(context, listedElementType(context, valueChunk));
+    const nl::ChunkType resultType = nl::ChunkType::get(context, listType);
+
+    setInsertionInto(stepBlock);
+    nl::PatternComprehension lists = _builder.create<nl::PatternComprehension>(loc,
+                                                                               resultType,
+                                                                               state,
+                                                                               cardinality);
+
+    _valueMap[comprehension.getResult()] = lists.getResult();
 }
 
 mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks) {

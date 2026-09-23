@@ -315,6 +315,7 @@
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
 %type<db::ListComprehensionExpr*> listComprehension
+%type<db::PatternComprehensionExpr*> patternComprehension
 %type<db::ListComprehensionExpr*> filterExpr
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
@@ -1332,7 +1333,7 @@ atomExpr
     | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | listComprehension { $$ = $1; }
-    //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
+    | patternComprehension { $$ = $1; }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
@@ -1581,14 +1582,14 @@ pathExpr
 pathExprElem
     : patternElemChain {
         $$ = PatternElement::create(ast);
-        $$->addRootEntity($1.second);
-        $$->addRootEntity($1.first);
+        $$->addEntity($1.first);
+        $$->addEntity($1.second);
         LOC($$, @$);
       }
     | pathExprElem patternElemChain {
         $$ = $1;
-        $$->addRootEntity($2.second);
-        $$->addRootEntity($2.first);
+        $$->addEntity($2.first);
+        $$->addEntity($2.second);
       }
     ;
 
@@ -1607,17 +1608,23 @@ filterKeyword
     | SINGLE
     ;
 
-//patternComprehension
-//    : OBRACK edgesChainPattern PIPE expr CBRACK
-//    | OBRACK lhs edgesChainPattern PIPE expr CBRACK
-//    | OBRACK edgesChainPattern whereClause PIPE expr CBRACK
-//    | OBRACK lhs edgesChainPattern whereClause PIPE expr CBRACK
-//    ;
+patternComprehension
+    : OBRACK pathExpr opt_whereClause PIPE expr CBRACK {
+        if ($2->getKind() != Expr::Kind::PATH) {
+            error(@2, "Invalid pattern comprehension. The pattern must be a path '(...)-[...]-(...)'");
+        }
 
-//edgesChainPattern
-//    : nodePattern patternElemChain
-//    | edgesChainPattern patternElemChain
-//    ;
+        Pattern* pattern = Pattern::create(ast);
+        pattern->addElement(static_cast<PathExpr*>($2)->pattern());
+        pattern->setWhere($3);
+
+        MatchStmt* match = MatchStmt::create(ast, pattern);
+        LOC(match, @2);
+
+        $$ = PatternComprehensionExpr::create(ast, match, $5);
+        LOC($$, @$);
+      }
+    ;
 
 listComprehension
     : OBRACK filterExpr CBRACK { $$ = $2; LOC($$, @$); }

@@ -41,6 +41,7 @@ class FunctionInvocationExpr;
 class IndexExpr;
 class ListExpr;
 class ListComprehensionExpr;
+class PatternComprehensionExpr;
 class CaseExpr;
 class Pattern;
 class PatternElement;
@@ -144,6 +145,7 @@ public:
     friend IndexExpr;
     friend ListExpr;
     friend ListComprehensionExpr;
+    friend PatternComprehensionExpr;
     friend CaseExpr;
     friend Pattern;
     friend PatternElement;
