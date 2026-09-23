@@ -209,6 +209,27 @@ TEST_F(ExistsSubqueryTest, answersOnTheRowsAnOptionalMatchLeft) {
                 {"Doruk", "null", "true"}});
 }
 
+// A WITH inside the body does not descope the row the EXISTS answers for: the pattern below
+// it still reads that row's own p. Were p descoped, a pattern naming it would bind a fresh
+// scan instead and the body would answer for anyone who knows somebody well - Remy, Luc,
+// Suhas, Cyrus and Doruk - rather than for Remy alone.
+TEST_F(ExistsSubqueryTest, aBarrierInTheBodyKeepsTheRowItAnswersFor) {
+    expectRows("MATCH (p:Person) "
+               "WHERE EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) WITH i WHERE i.isReal = true "
+               "               MATCH (p)-[:KNOWS_WELL]->(k) RETURN k } "
+               "RETURN p.name",
+               {{"Remy"}});
+}
+
+// The same over a WITH that binds a constant and projects nothing of the body
+TEST_F(ExistsSubqueryTest, aConstantBarrierInTheBodyKeepsTheRowItAnswersFor) {
+    expectRows("MATCH (p:Person) "
+               "WHERE EXISTS { WITH 'Gym' AS wanted "
+               "               MATCH (p)-[:INTERESTED_IN]->(i) WHERE i.name = wanted } "
+               "RETURN p.name",
+               {{"Suhas"}, {"Cyrus"}, {"Doruk"}});
+}
+
 // A body that aggregates, dedups, sorts, skips or limits cannot keep its rows paired with
 // the ones it was given, so it runs one input row at a time. One test per clause that
 // triggers it, each answering for a proper subset of the eight people so a body answering
