@@ -5243,6 +5243,11 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
         edgeTypeSet = getOrCreateEdgeTypeSetHandle(edgeTypes);
     }
 
+    llvm::SmallVector<mlir::Value, 2> importChunks;
+    for (const mlir::Value importColumn : explorePaths.getHopImports()) {
+        importChunks.push_back(mapValue(importColumn));
+    }
+
     setInsertionInto(ownerBlock(inputChunk));
 
     nl::ExplorePaths exploration = _builder.create<nl::ExplorePaths>(_builder.getUnknownLoc(),
@@ -5250,6 +5255,7 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      carriedChunks,
                                                                      endNodeSet,
                                                                      edgeTypeSet,
+                                                                     importChunks,
                                                                      explorePaths.getDirection(),
                                                                      explorePaths.getMinHops(),
                                                                      explorePaths.getMaxHopsAttr(),
@@ -5261,20 +5267,24 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
     mlir::Region& dbHop = explorePaths.getHop();
     if (!dbHop.empty()) {
         const mlir::OpBuilder::InsertionGuard guard(_builder);
-        lowerHopRegion(dbHop.front(), exploration.getHop());
+        lowerHopRegion(dbHop.front(), exploration.getHop(), importChunks);
     }
 
     buildLoopForSource(exploration.getResult(), explorePaths.getOperation());
 }
 
-void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop) {
+void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, mlir::ValueRange imports) {
     mlir::MLIRContext* context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
     const mlir::Type nodeChunk = nl::ChunkType::get(context, storage::NodeIDType::get(context));
     const mlir::Type edgeChunk = nl::ChunkType::get(context, storage::EdgeIDType::get(context));
-    const llvm::SmallVector<mlir::Type, 3> argumentTypes {nodeChunk, edgeChunk, nodeChunk};
-    const llvm::SmallVector<mlir::Location, 3> argumentLocations {loc, loc, loc};
+    llvm::SmallVector<mlir::Type> argumentTypes {nodeChunk, edgeChunk, nodeChunk};
+    for (const mlir::Value import : imports) {
+        argumentTypes.push_back(import.getType());
+    }
+
+    const llvm::SmallVector<mlir::Location> argumentLocations(argumentTypes.size(), loc);
 
     mlir::Block* nlBlock = _builder.createBlock(&nlHop, nlHop.end(), argumentTypes, argumentLocations);
     for (unsigned argumentIndex = 0; argumentIndex < argumentTypes.size(); argumentIndex++) {
@@ -5313,7 +5323,8 @@ void DBLowering::lowerExpandPath(mlir::db::ExpandPath expandPath) {
                                                                resultType,
                                                                pathsChunk,
                                                                seedsChunk,
-                                                               expandPath.getKind());
+                                                               expandPath.getKind(),
+                                                               expandPath.getReversed());
     _valueMap[expandPath.getResult()] = expansion.getResult();
 }
 
@@ -5340,7 +5351,10 @@ void DBLowering::lowerMakePath(mlir::db::MakePath makePath) {
     const auto resultColumn = mlir::cast<mlir::db::ColumnType>(makePath.getResult().getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultColumn.getType());
 
-    nl::MakePath path = _builder.create<nl::MakePath>(_builder.getUnknownLoc(), resultType, entityChunks);
+    nl::MakePath path = _builder.create<nl::MakePath>(_builder.getUnknownLoc(),
+                                                      resultType,
+                                                      entityChunks,
+                                                      makePath.getReversedPathsAttr());
     _valueMap[makePath.getResult()] = path.getResult();
 }
 

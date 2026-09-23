@@ -772,8 +772,21 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
     }
 }
 
+VarDecl* ExprAnalyzer::resolveVariable(std::string_view name) {
+    if (VarDecl* local = _ctxt->getDecl(name)) {
+        return local;
+    }
+
+    VarDecl* outer = _ctxt->lookup(name);
+    if (outer && _importSink && !std::ranges::contains(*_importSink, outer)) {
+        _importSink->push_back(outer);
+    }
+
+    return outer;
+}
+
 void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
-    VarDecl* varDecl = _ctxt->getDecl(expr->getSymbol()->getName());
+    VarDecl* varDecl = resolveVariable(expr->getSymbol()->getName());
     if (!varDecl) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
@@ -861,7 +874,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     // predicate its inline property map becomes arrives with that declaration already set
     VarDecl* varDecl = expr->getEntityVarDecl();
     if (!varDecl) {
-        varDecl = _ctxt->getDecl(varName->getName());
+        varDecl = resolveVariable(varName->getName());
     }
 
     if (!varDecl) {
@@ -1182,7 +1195,7 @@ void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
 void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
     expr->setType(EvaluatedType::Bool);
 
-    VarDecl* decl = _ctxt->getDecl(expr->getSymbol()->getName());
+    VarDecl* decl = resolveVariable(expr->getSymbol()->getName());
 
     if (!decl) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);

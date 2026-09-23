@@ -83,7 +83,7 @@ PathRef PathTrie::handleOf(size_t arena, size_t index) {
     return PathRef((static_cast<uint64_t>(arena) << indexBits) | index);
 }
 
-void PathTrie::appendHops(PathRef path, EntityList& entities) const {
+void PathTrie::appendHops(PathRef path, EntityList& entities, bool reversed) const {
     const uint64_t depth = getDepth(path);
     const size_t firstEntry = entities.size();
     entities.resize(firstEntry + depth * 2);
@@ -91,44 +91,47 @@ void PathTrie::appendHops(PathRef path, EntityList& entities) const {
     PathRef current = path;
     for (uint64_t hop = depth; hop > 0; hop--) {
         const PathTrieEntry& entry = get(current);
-        const size_t entryIndex = firstEntry + (hop - 1) * 2;
+        const size_t entryIndex = firstEntry + (reversed ? (depth - hop) : (hop - 1)) * 2;
 
-        entities[entryIndex] = {EntityType::Edge, EntityID(entry._edge.getValue())};
-        entities[entryIndex + 1] = {EntityType::Node, EntityID(entry._node.getValue())};
+        const EntityList::Entry edge {EntityType::Edge, EntityID(entry._edge.getValue())};
+        const EntityList::Entry node {EntityType::Node, EntityID(entry._node.getValue())};
+
+        entities[entryIndex] = reversed ? node : edge;
+        entities[entryIndex + 1] = reversed ? edge : node;
 
         current = entry._parent;
     }
 }
 
-ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer) const {
+ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed) const {
     const uint64_t depth = getDepth(path);
     ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(EdgeID));
 
     PathRef current = path;
     for (uint64_t index = depth; index > 0; index--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(index - 1, ListBufferTypeTag::EdgeID, entry._edge);
+        cursor.writeValueAt(reversed ? depth - index : index - 1, ListBufferTypeTag::EdgeID, entry._edge);
         current = entry._parent;
     }
 
     return cursor.getView();
 }
 
-ListView PathTrie::expandEnds(PathRef path, QueryListBuffer& buffer) const {
+ListView PathTrie::expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed) const {
     const uint64_t depth = getDepth(path);
     ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(NodeID));
 
     PathRef current = path;
     for (uint64_t index = depth; index > 0; index--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(index - 1, ListBufferTypeTag::NodeID, entry._node);
+        cursor.writeValueAt(reversed ? depth - index : index - 1, ListBufferTypeTag::NodeID, entry._node);
         current = entry._parent;
     }
 
     return cursor.getView();
 }
 
-ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer) const {
+ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const {
     const uint64_t depth = getDepth(path);
     ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(NodeID));
 
@@ -139,11 +142,11 @@ ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buf
     PathRef current = get(path)._parent;
     for (uint64_t index = depth - 1; index > 0; index--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(index, ListBufferTypeTag::NodeID, entry._node);
+        cursor.writeValueAt(reversed ? depth - 1 - index : index, ListBufferTypeTag::NodeID, entry._node);
         current = entry._parent;
     }
 
-    cursor.writeValueAt(0, ListBufferTypeTag::NodeID, seed);
+    cursor.writeValueAt(reversed ? depth - 1 : 0, ListBufferTypeTag::NodeID, seed);
 
     return cursor.getView();
 }

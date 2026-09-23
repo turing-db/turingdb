@@ -1162,9 +1162,18 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     disjunction as `-[:KNOWS|LIKES*]->` spells it; a name absent from the schema drops
     out, and a set left empty that way matches no edge. The optional `hop`
     region is a predicate on each hop, evaluated over its source node, its edge and its
-    end node - the three block arguments - and yielding one boolean column; a hop that
-    fails it is neither emitted nor expanded. The region reads nothing from outside but
-    constants. `columns_to_filter` is the carry set, exactly as on get_out_edges.
+    end node - the first three block arguments - and yielding one boolean column; a hop
+    that fails it is neither emitted nor expanded. The region reads nothing from outside
+    but constants. `columns_to_filter` is the carry set, exactly as on get_out_edges.
+
+    `hop_imports` are the columns the hop predicate reads from outside the hop, the way
+    `MATCH (n)-[e*1..3 WHERE e.since > n.born]->(m)` reads the seed. Each is row-aligned
+    with `input_nodes` and becomes one further block argument of the region, in that order,
+    holding the seed row's own value repeated over the candidates of the hop. They are
+    operands of their own rather than carried columns: a carry set is trimmed and
+    reordered, and nothing comes back for them. An exploration that imports is walked seed
+    by seed, so the distinct search, which expands many seeds at one level, is not used for
+    it.
 
     `end_labels` keeps only the paths ending on a node carrying every listed label, the
     way `(m:Interest)` constrains the end of `MATCH (n)-[e]->{2,4}(m:Interest)`. The
@@ -1213,6 +1222,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
   let arguments = (ins Column:$input_nodes,
                        Variadic<Column>:$columns_to_filter,
                        Optional<ColumnNodeIDs>:$end_nodes,
+                       Variadic<Column>:$hop_imports,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -1232,7 +1242,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
-    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
+    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
+    (`hop_imports` `{` $hop_imports^ `}`)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)
   }];
@@ -1253,16 +1264,27 @@ def ExpandPath : TuringOp<"expand_path", [Pure]> {
     followed by every end but the last) - the lists the group variables of a
     quantified path pattern bind to.
 
+    `reversed` writes the list backwards, for an exploration the pattern's far end seeded:
+    the walk took its hops the other way round, so the last one it took is the pattern's
+    first. The kinds swap with it - a reversed `kind ends` is the pattern's source list and
+    a reversed `kind sources` its end list - so it is the reversed `kind sources` that
+    reads the seed.
+
       %e = db.expand_path(%p, %s) kind edges
              : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
   }];
 
-  // The seeds are read by `kind sources` alone, so the other kinds leave them out
-  let arguments = (ins ColumnPathRefs:$paths, Optional<ColumnNodeIDs>:$srcids, PathExpansionKind:$kind);
+  // The seeds are read by whichever kind ends up holding them - `kind sources` in walk
+  // order, `kind ends` reversed - so the other kind leaves them out
+  let arguments = (ins ColumnPathRefs:$paths,
+                       Optional<ColumnNodeIDs>:$srcids,
+                       PathExpansionKind:$kind,
+                       UnitAttr:$reversed);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $paths (`,` $srcids^)? `)` `kind` $kind attr-dict `:` functional-type(operands, results)
+    `(` $paths (`,` $srcids^)? `)` `kind` $kind (`reversed` $reversed^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
@@ -1316,9 +1338,19 @@ def MakePath : TuringOp<"make_path", [Pure]> {
 
     A path of no hops contributes no entry, so `MATCH p = (a)-[e]->*(m)` reads back as
     the single node `a` on the rows where the walk stayed put.
+
+    `reversed_paths` lists the path operands the exploration walked against the pattern,
+    because the pattern's far end was bound first and seeding there was cheaper. Such an
+    operand contributes its hops from the far end back - the node an edge lands on, then
+    that edge - so the sequence still reads the way the pattern is written. The node the
+    walk seeded from is then the element's last entity, so it is written after the path
+    rather than before it.
+
+      %p = db.make_path(%pe, %b) {reversed_paths = [0]} : (...) -> !db.column<!storage.entity_list>
   }];
 
-  let arguments = (ins Variadic<Column>:$entities);
+  let arguments = (ins Variadic<Column>:$entities,
+                       OptionalAttr<I64ArrayAttr>:$reversed_paths);
   let results   = (outs ColumnEntityList:$result);
 
   let assemblyFormat = [{

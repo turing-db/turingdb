@@ -148,7 +148,7 @@ PredicateHopFilter::PredicateHopFilter(HopPredicate predicate)
 PredicateHopFilter::~PredicateHopFilter() {
 }
 
-size_t PredicateHopFilter::filter(NodeID source, std::span<NodeID> nodes, std::span<EdgeID> edges) {
+size_t PredicateHopFilter::filter(size_t seedRow, NodeID source, std::span<NodeID> nodes, std::span<EdgeID> edges) {
     size_t kept = 0;
     for (size_t candidate = 0; candidate < edges.size(); candidate++) {
         if (_predicate(source.getValue(), edges[candidate].getValue(), nodes[candidate].getValue())) {
@@ -207,7 +207,7 @@ size_t turing::test::collectPaths(const GraphView& view,
             emitted._target = options._collectTargets ? targets[row].getValue() : 0;
 
             if (collectPaths) {
-                const ListView edges = trie.expandEdges(paths[row], buffer);
+                const ListView edges = trie.expandEdges(paths[row], buffer, false);
                 for (const ListElementView& element : edges) {
                     emitted._edges.push_back(element.getAs<EdgeID>().getValue());
                 }

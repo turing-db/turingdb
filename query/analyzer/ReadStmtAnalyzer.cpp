@@ -585,6 +585,7 @@ void ReadStmtAnalyzer::enterScope(DeclContext* scope) {
 void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* data) {
     DeclContext* outer = _ctxt;
     DeclContext* hopScope = DeclContext::create(_ast, outer);
+    hopScope->setReadsEnclosingScope(true);
     enterScope(hopScope);
 
     VarDecl* hopDecl = nullptr;
@@ -610,6 +611,10 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
     const WhereClause* sourceWhere = source ? source->getWhere() : nullptr;
     const WhereClause* endWhere = end ? end->getWhere() : nullptr;
     const std::initializer_list<const WhereClause*> wheres {edgePattern->getWhere(), edgePattern->getHopWhere(), sourceWhere, endWhere};
+
+    std::vector<const VarDecl*> imports;
+    _exprAnalyzer->setImportSink(&imports);
+
     for (const WhereClause* where : wheres) {
         if (!where) {
             continue;
@@ -627,6 +632,12 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
         }
 
         edgePattern->addHopPredicate(predicate);
+    }
+
+    _exprAnalyzer->setImportSink(nullptr);
+
+    for (const VarDecl* decl : imports) {
+        edgePattern->addHopImport(decl);
     }
 
     enterScope(outer);

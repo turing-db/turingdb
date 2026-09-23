@@ -43,13 +43,13 @@ TEST_F(PathTrieTest, rootIsTheEmptyPath) {
 
     std::vector<uint64_t> ids;
 
-    readIDs<EdgeID>(_trie.expandEdges(PathTrie::ROOT, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(PathTrie::ROOT, _buffer, false), ids);
     EXPECT_TRUE(ids.empty());
 
-    readIDs<NodeID>(_trie.expandEnds(PathTrie::ROOT, _buffer), ids);
+    readIDs<NodeID>(_trie.expandEnds(PathTrie::ROOT, _buffer, false), ids);
     EXPECT_TRUE(ids.empty());
 
-    readIDs<NodeID>(_trie.expandSources(PathTrie::ROOT, NodeID(7), _buffer), ids);
+    readIDs<NodeID>(_trie.expandSources(PathTrie::ROOT, NodeID(7), _buffer, false), ids);
     EXPECT_TRUE(ids.empty());
 }
 
@@ -65,19 +65,19 @@ TEST_F(PathTrieTest, expandsAChainRootFirst) {
 
     std::vector<uint64_t> ids;
 
-    readIDs<EdgeID>(_trie.expandEdges(third, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(third, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {10, 11, 12}));
 
-    readIDs<NodeID>(_trie.expandEnds(third, _buffer), ids);
+    readIDs<NodeID>(_trie.expandEnds(third, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {1, 2, 3}));
 
-    readIDs<NodeID>(_trie.expandSources(third, NodeID(0), _buffer), ids);
+    readIDs<NodeID>(_trie.expandSources(third, NodeID(0), _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {0, 1, 2}));
 
-    readIDs<EdgeID>(_trie.expandEdges(first, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(first, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {10}));
 
-    readIDs<NodeID>(_trie.expandSources(first, NodeID(0), _buffer), ids);
+    readIDs<NodeID>(_trie.expandSources(first, NodeID(0), _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {0}));
 }
 
@@ -91,10 +91,10 @@ TEST_F(PathTrieTest, sharedPrefixIsStoredOnce) {
 
     std::vector<uint64_t> ids;
 
-    readIDs<EdgeID>(_trie.expandEdges(left, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(left, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {10, 11}));
 
-    readIDs<EdgeID>(_trie.expandEdges(right, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(right, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {10, 12}));
 }
 
@@ -126,7 +126,7 @@ TEST_F(PathTrieTest, arenasHoldTheirOwnEntries) {
     EXPECT_EQ(_trie.size(), 3u);
 
     std::vector<uint64_t> ids;
-    readIDs<EdgeID>(_trie.expandEdges(theirs, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(theirs, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {20}));
 
     _trie.releaseArena(other);
@@ -149,7 +149,7 @@ TEST_F(PathTrieTest, truncateDropsTheTopOfAnArena) {
     EXPECT_EQ(PathTrie::indexOf(next), 1u);
 
     std::vector<uint64_t> ids;
-    readIDs<EdgeID>(_trie.expandEdges(next, _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(next, _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {10, 13}));
 }
 
@@ -172,10 +172,10 @@ TEST_F(PathTrieTest, retainChainRewritesItToTheBottom) {
     EXPECT_EQ(_trie.getDepth(chain[3]), 3u);
 
     std::vector<uint64_t> ids;
-    readIDs<EdgeID>(_trie.expandEdges(chain[3], _buffer), ids);
+    readIDs<EdgeID>(_trie.expandEdges(chain[3], _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {10, 11, 13}));
 
-    readIDs<NodeID>(_trie.expandSources(chain[3], NodeID(0), _buffer), ids);
+    readIDs<NodeID>(_trie.expandSources(chain[3], NodeID(0), _buffer, false), ids);
     EXPECT_EQ(ids, (std::vector<uint64_t> {0, 1, 2}));
 
     std::vector<PathRef> empty;

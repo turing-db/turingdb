@@ -680,6 +680,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._minHops = explorePaths.getMinHops();
             config._maxHops = explorePaths.getMaxHops().value_or(std::numeric_limits<uint64_t>::max());
             config._hopRegion = &explorePaths.getHop();
+            const mlir::OperandRange hopImports = explorePaths.getHopImports();
+            config._hopImports.assign(hopImports.begin(), hopImports.end());
             if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
                 for (const mlir::Attribute label : *endLabels) {
                     config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
@@ -1894,6 +1896,18 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
         _valueSlots[hopBlock.getArgument(1)] = hopEdges;
         _valueSlots[hopBlock.getArgument(2)] = hopEnds;
 
+        for (size_t importIndex = 0; importIndex < config._hopImports.size(); importIndex++) {
+            const mlir::Value importValue = config._hopImports[importIndex];
+            const mlir::Type importType = importValue.getType();
+
+            Column* const importChunk = allocColumnForChunkType(importType);
+            _valueSlots[hopBlock.getArgument(static_cast<unsigned>(3 + importIndex))] = importChunk;
+
+            loopData->addHopImport(NLHopImport {getColumn(importValue),
+                                                importChunk,
+                                                NLExecutor::selectRepeatRowFunction(getChunkKind(importType))});
+        }
+
         translateBlock(hopBlock, loopData->getHopStmts());
 
         nl::Yield yield = mlir::cast<nl::Yield>(hopBlock.getTerminator());
@@ -1943,6 +1957,7 @@ void NLTranslator::translateExpandPath(nl::ExpandPath expand, NLStmtContainer* b
                                                                            seeds,
                                                                            output,
                                                                            kind,
+                                                                           expand.getReversed(),
                                                                            &_memory->pathTrie(),
                                                                            &_memory->listBuffer());
     body->emplaceStmt(&NLExecutor::runExpandPath, data);
@@ -1964,9 +1979,19 @@ void NLTranslator::translateMakePath(nl::MakePath makePath, NLStmtContainer* bod
 
     NLMakePathData* data = _program->allocFunctionData<NLMakePathData>(output, &_memory->pathTrie());
 
+    llvm::SmallVector<bool> reversedPaths(makePath.getEntities().size(), false);
+    if (const std::optional<mlir::ArrayAttr> reversed = makePath.getReversedPaths()) {
+        for (const mlir::Attribute entry : *reversed) {
+            reversedPaths[mlir::cast<mlir::IntegerAttr>(entry).getInt()] = true;
+        }
+    }
+
+    size_t entityIndex = 0;
     for (const mlir::Value entityValue : makePath.getEntities()) {
         NLPathEntity entity;
         entity._column = getColumn(entityValue);
+        entity._reversed = reversedPaths[entityIndex];
+        entityIndex++;
 
         switch (getChunkKind(entityValue.getType())) {
             case NLChunkKind::NodeID:

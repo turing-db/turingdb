@@ -251,16 +251,21 @@ LogicalResult verifyPassThrough(Operation* op,
 
 // The hop region of an explore_paths: one block over (source, edge, end) yielding a boolean
 // column, reading nothing defined outside it but constants
-LogicalResult verifyHopRegion(Operation* op, Region& hop) {
+LogicalResult verifyHopRegion(Operation* op, Region& hop, ValueRange imports) {
     Block& block = hop.front();
     MLIRContext* context = op->getContext();
 
     const Type nodeColumn = ColumnType::get(context, storage::NodeIDType::get(context));
     const Type edgeColumn = ColumnType::get(context, storage::EdgeIDType::get(context));
-    const llvm::SmallVector<Type, 3> expectedArguments {nodeColumn, edgeColumn, nodeColumn};
+    llvm::SmallVector<Type> expectedArguments {nodeColumn, edgeColumn, nodeColumn};
+
+    for (const Value import : imports) {
+        expectedArguments.push_back(import.getType());
+    }
 
     if (block.getNumArguments() != expectedArguments.size()) {
-        return op->emitOpError("hop region must take the source node, edge and end node columns");
+        return op->emitOpError("hop region must take the source node, edge and end node columns, "
+                               "then one argument per hop import");
     }
 
     for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
@@ -417,12 +422,23 @@ LogicalResult ExplorePaths::verify() {
         }
     }
 
+    const OperandRange imports = getHopImports();
+
     Region& hop = getHop();
     if (hop.empty()) {
+        if (!imports.empty()) {
+            return emitOpError("hop imports without a hop region to read them");
+        }
+
         return success();
     }
 
-    return verifyHopRegion(getOperation(), hop);
+    if (getDistinct() && !imports.empty()) {
+        return emitOpError("a distinct search expands many seeds at one level, so it cannot "
+                           "read a column that holds one value per seed");
+    }
+
+    return verifyHopRegion(getOperation(), hop, imports);
 }
 
 LogicalResult ExpandPath::verify() {
@@ -441,7 +457,10 @@ LogicalResult ExpandPath::verify() {
         return emitOpError("kind sources and ends expand to a list of node IDs");
     }
 
-    if (getKind() == storage::PathExpansionKind::Sources && !getSrcids()) {
+    // Reversed, the kinds swap: the pattern's end list is the walk's source list read
+    // backwards, so that is the one holding the seed
+    const bool readsTheSeed = getKind() == storage::PathExpansionKind::Sources;
+    if (readsTheSeed && !getSrcids()) {
         return emitOpError("kind sources reads the seed of each path from srcids");
     }
 
@@ -459,16 +478,51 @@ LogicalResult MakePath::verify() {
         return column ? column.getType() : Type();
     };
 
-    if (!isa_and_nonnull<storage::NodeIDType>(elementOf(entities.front()))) {
+    llvm::SmallVector<bool> reversed(entities.size(), false);
+    if (const std::optional<ArrayAttr> reversedPaths = getReversedPaths()) {
+        for (const Attribute entry : *reversedPaths) {
+            const auto index = dyn_cast<IntegerAttr>(entry);
+            if (!index || index.getInt() < 0 || static_cast<size_t>(index.getInt()) >= entities.size()) {
+                return emitOpError("reversed_paths names no operand of this path");
+            }
+
+            const size_t operandIndex = static_cast<size_t>(index.getInt());
+            if (!isa_and_nonnull<storage::PathRefType>(elementOf(entities[operandIndex]))) {
+                return emitOpError("reversed_paths names operand ") << operandIndex << ", which is no path column";
+            }
+
+            reversed[operandIndex] = true;
+        }
+    }
+
+    // A walk taken against the pattern opens on the node it ended at, so it may open the
+    // path itself; one taken with the pattern opens on its first edge and may not
+    const Type openingElement = elementOf(entities.front());
+    const bool opensOnANode = isa_and_nonnull<storage::NodeIDType>(openingElement);
+    const bool opensOnAReversedWalk = isa_and_nonnull<storage::PathRefType>(openingElement) && reversed.front();
+    if (!opensOnANode && !opensOnAReversedWalk) {
         return emitOpError("a path opens on a node column");
     }
 
-    size_t entityIndex = 1;
+    size_t entityIndex = opensOnANode ? 1 : 0;
     while (entityIndex < entities.size()) {
         const Type element = elementOf(entities[entityIndex]);
 
         if (isa_and_nonnull<storage::PathRefType>(element)) {
-            entityIndex++;
+            // A reversed walk closes on the edge it took first, so the node it seeded from
+            // is written after it; a forward one closes on a node of its own
+            if (!reversed[entityIndex]) {
+                entityIndex++;
+                continue;
+            }
+
+            const bool closesOnANode = entityIndex + 1 < entities.size()
+                                    && isa_and_nonnull<storage::NodeIDType>(elementOf(entities[entityIndex + 1]));
+            if (!closesOnANode) {
+                return emitOpError("the reversed path at operand ") << entityIndex << " closes on no node column";
+            }
+
+            entityIndex += 2;
             continue;
         }
 

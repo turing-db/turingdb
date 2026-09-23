@@ -255,7 +255,7 @@ private:
     // Lower the hop predicate of a db.explore_paths into the nl op's region: one block over
     // the source, edge and end chunks, its ops lowered as any other, ending in an nl.yield of
     // the mask laid out over the hop's rows
-    void lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop);
+    void lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, mlir::ValueRange imports);
 
     void lowerExpandPath(mlir::db::ExpandPath expandPath);
     void lowerPathLength(mlir::db::PathLength pathLength);

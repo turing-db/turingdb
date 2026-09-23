@@ -140,6 +140,7 @@ private:
         uint64_t _minHops {0};
         uint64_t _maxHops {0};
         mlir::Region* _hopRegion {nullptr};
+        llvm::SmallVector<mlir::Value, 2> _hopImports;
 
         // The carried column holding each seed's own end, when the exploration is bound,
         // and whether it reports each (seed, end) pair once instead of every path

@@ -29,6 +29,16 @@ public:
 
     VarDecl* getDecl(std::string_view name) const;
 
+    // The declaration a name reads as, searched out through the enclosing scopes that this
+    // one reads. A scope declares into itself, so this is what an expression resolves with
+    // and getDecl what a declaration checks against: the hop of a quantified pattern binds
+    // its own entities while its predicate still reads the variables around it
+    VarDecl* lookup(std::string_view name) const;
+
+    // Whether a name this scope does not declare reads as the enclosing scope's. A WITH
+    // opens a scope that does not: what its projection dropped is gone behind the barrier
+    void setReadsEnclosingScope(bool reads) { _readsEnclosing = reads; }
+
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
 
     // The name a node of a pattern binds. An integer already in scope is the node IDs an
@@ -53,6 +63,7 @@ public:
 
 private:
     DeclContext* _parent {nullptr};
+    bool _readsEnclosing {false};
     DeclMap _declMap;
     Decls _decls;
 

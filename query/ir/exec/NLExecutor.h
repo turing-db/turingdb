@@ -484,6 +484,7 @@ public:
     static NLUnaryFn selectMaskToNullable(LocalMemory* memory, Column*& result);
 
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
+    static NLRepeatRowFunction selectRepeatRowFunction(NLChunkKind kind);
 
     // The null fill for a chunk of this kind: an invalid ID for an ID chunk, which is how
     // an entity an OPTIONAL MATCH did not match is spelled.
