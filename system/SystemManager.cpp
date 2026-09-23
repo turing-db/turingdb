@@ -187,8 +187,9 @@ void SystemManager::listGraphs(std::vector<std::string_view>& names) const {
 
 Graph* SystemManager::importGraph(const fs::Path& path,
                                   std::string_view graphName,
-                                  const EmbeddingsSpec& embeddingSpecs) {
-    return _graphManager.importGraph(graphName, path, &_jobSystem, embeddingSpecs);
+                                  const EmbeddingsSpec& embeddingSpecs,
+                                  const DateTimeSpec& dateTimeSpecs) {
+    return _graphManager.importGraph(graphName, path, &_jobSystem, embeddingSpecs, dateTimeSpecs);
 }
 
 DumpResult<void> SystemManager::dumpGraph(std::string_view graphName) {

@@ -92,7 +92,9 @@
     #include "MergeDataPartsQuery.h"
     #include "stmt/UnwindStmt.h"
     #include "stmt/WithStmt.h"
+    #include "DateTimeSpec.h"
     #include "EmbeddingsSpec.h"
+    #include "JsonlImportSpecs.h"
 
     namespace db {
         class YCypherScanner;
@@ -196,6 +198,7 @@
 %token<std::string_view> GRAPHS
 %token<std::string_view> AVAILABLE
 %token<std::string_view> HEADERS
+%token<std::string_view> DATETIMES
 %token<std::string_view> EMBEDDINGS
 %token<std::string_view> JSONL
 %token<std::string_view> LIST
@@ -424,6 +427,9 @@
 %type<db::UnwindStmt*> unwindSt
 %type<EmbeddingsSpec> embeddingSpecs
 %type<std::pair<std::string_view, size_t>> embeddingSpec
+%type<db::JsonlImportSpecs> jsonlOptions
+%type<db::JsonlImportSpecs> jsonlOption
+%type<DateTimeSpec> dateTimeSpecs
 
 %expect 0
 
@@ -553,16 +559,54 @@ loadJsonl
         $$->setGraphName($5);
         LOC($$, @$);
       }
-    | LOAD JSONL STRING_LITERAL WITH EMBEDDINGS OBRACK embeddingSpecs CBRACK {
+    | LOAD JSONL STRING_LITERAL jsonlOptions {
         $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
-        $$->setEmbeddingSpecs(std::move($7));
+        $$->setEmbeddingSpecs(std::move($4._embeddings));
+        $$->setDateTimeSpecs(std::move($4._dateTimes));
         LOC($$, @$);
       }
-    | LOAD JSONL STRING_LITERAL AS ID WITH EMBEDDINGS OBRACK embeddingSpecs CBRACK {
+    | LOAD JSONL STRING_LITERAL AS ID jsonlOptions {
         $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
         $$->setGraphName($5);
-        $$->setEmbeddingSpecs(std::move($9));
+        $$->setEmbeddingSpecs(std::move($6._embeddings));
+        $$->setDateTimeSpecs(std::move($6._dateTimes));
         LOC($$, @$);
+      }
+    ;
+
+jsonlOptions
+    : jsonlOption {
+        $$ = std::move($1);
+      }
+    | jsonlOptions jsonlOption {
+        $$ = std::move($1);
+        $$.absorb(std::move($2));
+      }
+    ;
+
+jsonlOption
+    : WITH EMBEDDINGS OBRACK embeddingSpecs CBRACK {
+        $$._embeddings = std::move($4);
+      }
+    | WITH DATETIMES OBRACK dateTimeSpecs CBRACK {
+        $$._dateTimes = std::move($4);
+      }
+    ;
+
+dateTimeSpecs
+    : STRING_LITERAL {
+        $$.emplace($1);
+      }
+    | ID {
+        $$.emplace($1);
+      }
+    | dateTimeSpecs COMMA STRING_LITERAL {
+        $$ = std::move($1);
+        $$.emplace($3);
+      }
+    | dateTimeSpecs COMMA ID {
+        $$ = std::move($1);
+        $$.emplace($3);
       }
     ;
 
@@ -1762,6 +1806,7 @@ name
 symbol
     : ESC_LITERAL { $$ = Symbol::create(ast, $1); }
     | ID { $$ = Symbol::create(ast, $1); }
+    | DATETIMES { $$ = Symbol::create(ast, $1); }
     | FILTER { $$ = Symbol::create(ast, $1); }
     | EXTRACT { $$ = Symbol::create(ast, $1); }
     | EMBEDDING { $$ = Symbol::create(ast, $1); }

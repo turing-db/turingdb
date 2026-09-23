@@ -301,10 +301,26 @@ void DBSystemProgramGenerator::generateLoadJsonl(const LoadJsonlQuery* query) {
     const mlir::DictionaryAttr embeddings =
         entries.empty() ? mlir::DictionaryAttr() : _opBuilder->getDictionaryAttr(entries);
 
+    const DateTimeSpec& dateTimeSpecs = query->getDateTimeSpecs();
+
+    // A named property carries no value of its own, so each name is a unit entry. A
+    // dictionary rather than an array because it sorts and uniques its own names, which
+    // the hash set the spec holds does neither.
+    llvm::SmallVector<mlir::NamedAttribute, 4> dateTimeEntries;
+    for (const std::string_view propertyName : dateTimeSpecs) {
+        dateTimeEntries.emplace_back(_opBuilder->getStringAttr(toStringRef(propertyName)),
+                                     _opBuilder->getUnitAttr());
+    }
+
+    const mlir::DictionaryAttr dateTimes =
+        dateTimeEntries.empty() ? mlir::DictionaryAttr()
+                                : _opBuilder->getDictionaryAttr(dateTimeEntries);
+
     generateImportGraph(query->getFilePath().get(),
                         query->getGraphName(),
                         mlir::storage::GraphImportFormat::Jsonl,
-                        embeddings);
+                        embeddings,
+                        dateTimes);
 }
 
 void DBSystemProgramGenerator::generateLoadGML(const LoadGMLQuery* query) {
@@ -324,13 +340,15 @@ void DBSystemProgramGenerator::generateLoadParquet(const LoadParquetQuery* query
 void DBSystemProgramGenerator::generateImportGraph(std::string_view path,
                                                    std::string_view graphName,
                                                    mlir::storage::GraphImportFormat format,
-                                                   mlir::DictionaryAttr embeddings) {
+                                                   mlir::DictionaryAttr embeddings,
+                                                   mlir::DictionaryAttr dateTimes) {
     mlir::db::ImportGraph op = _opBuilder->create<mlir::db::ImportGraph>(_opBuilder->getUnknownLoc(),
                                                         stringColumnType(),
                                                         toStringRef(path),
                                                         toStringRef(graphName),
                                                         format,
-                                                        embeddings);
+                                                        embeddings,
+                                                        dateTimes);
 
     emitOutput(op.getGraph(), {"graphName"});
 }

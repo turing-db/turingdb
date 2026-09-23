@@ -235,6 +235,7 @@ template class ScanNodePropertiesChunkWriter<types::String>;
 template class ScanNodePropertiesChunkWriter<types::Bool>;
 template class ScanNodePropertiesChunkWriter<types::Embedding>;
 template class ScanNodePropertiesChunkWriter<types::List>;
+template class ScanNodePropertiesChunkWriter<types::DateTime>;
 
 }
 

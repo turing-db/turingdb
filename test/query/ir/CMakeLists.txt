@@ -3386,3 +3386,36 @@ target_link_libraries(test_query_ir_const_conversion_property PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_const_conversion_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_load_jsonl_datetime LoadJsonlDateTimeTest.cpp)
+target_sources(test_query_ir_load_jsonl_datetime PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_jsonl_datetime PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_jsonl_datetime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_keyword_named_identifier KeywordNamedIdentifierTest.cpp)
+target_sources(test_query_ir_keyword_named_identifier PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_keyword_named_identifier PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_keyword_named_identifier PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_load_jsonl_datetime_null LoadJsonlDateTimeNullTest.cpp)
+target_sources(test_query_ir_load_jsonl_datetime_null PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_jsonl_datetime_null PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_jsonl_datetime_null PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

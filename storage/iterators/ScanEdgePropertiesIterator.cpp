@@ -237,6 +237,7 @@ template class ScanEdgePropertiesChunkWriter<types::String>;
 template class ScanEdgePropertiesChunkWriter<types::Bool>;
 template class ScanEdgePropertiesChunkWriter<types::Embedding>;
 template class ScanEdgePropertiesChunkWriter<types::List>;
+template class ScanEdgePropertiesChunkWriter<types::DateTime>;
 
 }
 

@@ -37,6 +37,12 @@ public:
 
     static void format(std::string& out, DateTime value);
 
+    // Whether format spells this instant as a value parse reads back. A year needs four
+    // digits on both sides, and std::chrono leaves the calendar conversion unspecified
+    // well before an int64 count of microseconds runs out, so an instant arriving from
+    // outside - an import - is checked against this rather than rendered blind.
+    static bool isRenderable(DateTime value);
+
 private:
     // No initializer, as CustomBool's bool has none: a default member initializer makes the
     // default constructor non-trivial, and the datapart loader reads a trivial property's

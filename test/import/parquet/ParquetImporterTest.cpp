@@ -22,6 +22,7 @@
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/GraphMetadata.h"
+#include "metadata/DateTime.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
@@ -235,6 +236,117 @@ TEST_F(ParquetImporterTest, ImportsPropertiesWithRequiredIdColumns) {
     }
     std::ranges::sort(weights);
     ASSERT_EQ(weights, (std::vector<double>{1.5, 2.5}));
+}
+
+// Parquet names what a TIMESTAMP column counts in beside the column, so the importer reads
+// the unit off the logical type and scales every one to the microseconds a DateTime holds.
+// All four scalar columns of the fixture carry the same instant written in a different unit.
+TEST_F(ParquetImporterTest, ImportsTimestampColumnsAsDateTimes) {
+    constexpr std::string_view graphName = "datetimes";
+    constexpr int64_t instant = 1710408600000000;
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = importSplit(system,
+                                  graphName,
+                                  "datetime_property_nodes.parquet",
+                                  "datetime_property_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const GraphMetadata& metadata = reader.getMetadata();
+
+    for (const std::string_view name : {"atMicros", "atMillis", "atNaive"}) {
+        const auto propType = metadata.propTypes().get(name);
+        ASSERT_TRUE(propType.has_value()) << name;
+        EXPECT_EQ(propType->_valueType, ValueType::DateTime) << name;
+
+        std::vector<int64_t> microseconds;
+        for (const DateTime at : reader.scanNodeProperties<types::DateTime>(propType->_id)) {
+            microseconds.push_back(at.getMicroseconds());
+        }
+        std::ranges::sort(microseconds);
+
+        EXPECT_EQ(microseconds, (std::vector<int64_t> {-1000000, instant})) << name;
+    }
+}
+
+// A nanosecond count is finer than a DateTime holds, so it lands on the microsecond below
+// it - which for an instant before the epoch is the one further from it, not nearer
+TEST_F(ParquetImporterTest, FloorsATimestampFinerThanAMicrosecond) {
+    constexpr std::string_view graphName = "datetimenanos";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = importSplit(system,
+                                  graphName,
+                                  "datetime_property_nodes.parquet",
+                                  "datetime_property_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const auto propType = reader.getMetadata().propTypes().get("atNanos");
+    ASSERT_TRUE(propType.has_value());
+
+    std::vector<int64_t> microseconds;
+    for (const DateTime at : reader.scanNodeProperties<types::DateTime>(propType->_id)) {
+        microseconds.push_back(at.getMicroseconds());
+    }
+    std::ranges::sort(microseconds);
+
+    ASSERT_EQ(microseconds, (std::vector<int64_t> {-1000001, 1710408600000000}));
+}
+
+TEST_F(ParquetImporterTest, ImportsATimestampColumnOnEdges) {
+    constexpr std::string_view graphName = "datetimeedges";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = importSplit(system,
+                                  graphName,
+                                  "datetime_property_nodes.parquet",
+                                  "datetime_property_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const auto propType = reader.getMetadata().propTypes().get("at");
+    ASSERT_TRUE(propType.has_value());
+    EXPECT_EQ(propType->_valueType, ValueType::DateTime);
+
+    std::vector<int64_t> microseconds;
+    for (const DateTime at : reader.scanEdgeProperties<types::DateTime>(propType->_id)) {
+        microseconds.push_back(at.getMicroseconds());
+    }
+
+    ASSERT_EQ(microseconds, (std::vector<int64_t> {1710408600000000}));
+}
+
+// A LIST<TIMESTAMP> column keeps the element type its values carry, so its elements are
+// read back as the instants they were written as rather than as the integers on disk
+TEST_F(ParquetImporterTest, ImportsAListOfTimestamps) {
+    constexpr std::string_view graphName = "datetimelists";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = importSplit(system,
+                                  graphName,
+                                  "datetime_property_nodes.parquet",
+                                  "datetime_property_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const auto propType = reader.getMetadata().propTypes().get("atList");
+    ASSERT_TRUE(propType.has_value());
+    EXPECT_EQ(propType->_valueType, ValueType::List);
+
+    std::vector<std::vector<int64_t>> lists;
+    for (const ListView list : reader.scanNodeProperties<types::List>(propType->_id)) {
+        std::vector<int64_t>& microseconds = lists.emplace_back();
+        for (const ListElementView element : list) {
+            ASSERT_EQ(element.getTag(), ListBufferTypeTag::DateTime);
+            microseconds.push_back(element.getAs<types::DateTime::Primitive>().getMicroseconds());
+        }
+    }
+    std::ranges::sort(lists);
+
+    ASSERT_EQ(lists,
+              (std::vector<std::vector<int64_t>> {{}, {1710408600000000, -1000000}}));
 }
 
 // --- Bug-demonstration tests (branch code-review findings 1-5) ---

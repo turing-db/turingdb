@@ -199,6 +199,17 @@ std::optional<DateTime> DateTime::parse(std::string_view text) {
     return DateTime {seconds * MICROSECONDS_PER_SECOND + fraction};
 }
 
+bool DateTime::isRenderable(DateTime value) {
+    // 0000-01-01T00:00:00Z and 9999-12-31T23:59:59.999999Z, the ends of the four-digit
+    // years format writes and parse reads
+    constexpr int64_t firstRenderable = -62167219200000000;
+    constexpr int64_t lastRenderable = 253402300799999999;
+
+    const int64_t microseconds = value.getMicroseconds();
+
+    return microseconds >= firstRenderable && microseconds <= lastRenderable;
+}
+
 void DateTime::format(std::string& out, DateTime value) {
     const int64_t microseconds = value.getMicroseconds();
 

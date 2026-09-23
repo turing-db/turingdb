@@ -56,10 +56,18 @@ protected:
         int16_t maxDefLevel {0};
         int16_t maxRepLevel {0};
 
+        // What a TIMESTAMP column counts in, UNKNOWN for a column holding anything else.
+        // A list of timestamps is a List column whose elements still carry it.
+        parquet::LogicalType::TimeUnit::unit timeUnit {parquet::LogicalType::TimeUnit::UNKNOWN};
+
         // Indexed by repetition depth: the definition level a value must reach for the
         // list at that depth to hold an element. Index 0 is unused.
         std::vector<int16_t> listDefLevels;
     };
+
+    // The instant a TIMESTAMP column's raw value stands for, scaled from the unit the
+    // column counts in to the microseconds a DateTime holds
+    static types::DateTime::Primitive toDateTime(const PropertyColumn& prop, int64_t value);
 
     CommitBuilder* _builder {nullptr};
 
