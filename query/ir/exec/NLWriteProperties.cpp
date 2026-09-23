@@ -103,6 +103,15 @@ public:
         fillRows(owned);
     }
 
+    void operator()(const ColumnConst<MapView>* typed) {
+        _buf.clear();
+        _buf.reserve(_rowCount);
+        const types::Map::OwningPrimitive encoded(typed->getRaw());
+        for (size_t i = 0; i < _rowCount; i++) {
+            _buf.emplace_back(_propID, encoded);
+        }
+    }
+
 private:
     CommitWriteBuffer::UntypedProperties& _buf;
     PropertyTypeID _propID;
@@ -161,6 +170,14 @@ public:
         }
     }
 
+    void operator()(const ColumnVector<MapView>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const MapView val : *typed) {
+            _buf.emplace_back(_propID, types::Map::OwningPrimitive(val));
+        }
+    }
+
     template <typename T>
     void operator()(const ColumnVector<std::optional<T>>* typed) {
         _buf.clear();
@@ -212,6 +229,21 @@ public:
             }
 
             _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
+        }
+    }
+
+    /// Owning encoding as outlives query
+    void operator()(const ColumnVector<std::optional<MapView>>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const std::optional<MapView>& val : *typed) {
+            if (!val.has_value()) {
+                using Disengaged = std::optional<types::Map::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
+                continue;
+            }
+
+            _buf.emplace_back(_propID, types::Map::OwningPrimitive(*val));
         }
     }
 

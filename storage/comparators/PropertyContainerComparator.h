@@ -7,6 +7,7 @@
 #include <range/v3/view/zip.hpp>
 
 #include "list/ListElementOrder.h"
+#include "map/MapHash.h"
 #include "properties/PropertyContainer.h"
 
 namespace db {
@@ -33,6 +34,29 @@ public:
 
         for (const auto& [idA, idB, vA, vB] : rv::zip(idsA, idsB, valuesA, valuesB)) {
             if (idA != idB || vA != vB) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
+
+// A dump round trip must give back each value under the tag it was written with, so maps
+// compare structurally here rather than by Cypher's =, under which 1 and 1.0 are equal
+template <>
+class TypedPropertyContainerComparator<types::Map> {
+public:
+    [[nodiscard]] static bool same(const TypedPropertyContainer<types::Map>& a,
+                                   const TypedPropertyContainer<types::Map>& b) {
+        namespace rv = ranges::views;
+
+        if (a.size() != b.size()) {
+            return false;
+        }
+
+        for (const auto& [idA, idB, mapA, mapB] : rv::zip(a.ids(), b.ids(), a.all(), b.all())) {
+            if (idA != idB || !sameMap(mapA, mapB)) {
                 return false;
             }
         }
@@ -146,6 +170,13 @@ public:
                 if (!TypedPropertyContainerComparator<types::DateTime>::same(
                         a->cast<types::DateTime>(),
                         b->cast<types::DateTime>())) {
+                    return false;
+                }
+                break;
+            }
+
+            case ValueType::Map: {
+                if (!TypedPropertyContainerComparator<types::Map>::same(a->cast<types::Map>(), b->cast<types::Map>())) {
                     return false;
                 }
                 break;

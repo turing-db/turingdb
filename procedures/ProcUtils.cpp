@@ -17,8 +17,9 @@
 #include "list/ListView.h"
 #include "list/ListElementView.h"
 #include "list/ListBufferTypeTag.h"
-
-#include "FatalException.h"
+#include "map/MapBufferTypeTag.h"
+#include "map/MapEntryView.h"
+#include "map/MapView.h"
 #include "ID.h"
 
 using namespace db;
@@ -26,6 +27,7 @@ using namespace db;
 namespace {
 
 void appendListValue(std::string& out, ListView list);
+void appendMapValue(std::string& out, MapView map);
 
 // Append a double as JSON; there are no nan/inf tokens, so those become null.
 void appendDouble(std::string& out, double value) {
@@ -84,7 +86,7 @@ void appendListElement(std::string& out, ListElementView element) {
         }
         break;
         case ListBufferTypeTag::MapView:
-            throw FatalException("Cannot render a map in a procedure's list output");
+            appendMapValue(out, element.getAs<MapView>());
         break;
         case ListBufferTypeTag::Null:
         case ListBufferTypeTag::INVALID:
@@ -109,6 +111,81 @@ void appendListValue(std::string& out, ListView list) {
     out += ']';
 }
 
+// Append the value of a single map entry as its typed JSON representation.
+void appendMapEntryValue(std::string& out, MapEntryView entry) {
+    switch (entry.getValueTag()) {
+        case MapBufferTypeTag::Int:
+            out += fmt::format("{}", entry.getValueAs<types::Int64::Primitive>());
+        break;
+        case MapBufferTypeTag::UInt:
+            out += fmt::format("{}", entry.getValueAs<types::UInt64::Primitive>());
+        break;
+        case MapBufferTypeTag::Double:
+            appendDouble(out, entry.getValueAs<types::Double::Primitive>());
+        break;
+        case MapBufferTypeTag::Bool:
+            out += (static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()) ? "true" : "false");
+        break;
+        case MapBufferTypeTag::String:
+            ProcUtils::appendJsonString(out, entry.getValueAs<types::String::Primitive>());
+        break;
+        case MapBufferTypeTag::Embedding: {
+            out += '[';
+            bool firstValue = true;
+            for (const float value : entry.getValueAs<types::Embedding::Primitive>()) {
+                if (!firstValue) {
+                    out += ',';
+                }
+                firstValue = false;
+                appendDouble(out, value);
+            }
+            out += ']';
+        }
+        break;
+        case MapBufferTypeTag::ListView:
+            appendListValue(out, entry.getValueAs<ListView>());
+        break;
+        case MapBufferTypeTag::MapView:
+            appendMapValue(out, entry.getValueAs<MapView>());
+        break;
+        case MapBufferTypeTag::NodeID:
+            out += fmt::format("{}", entry.getValueAs<NodeID>().getValue());
+        break;
+        case MapBufferTypeTag::EdgeID:
+            out += fmt::format("{}", entry.getValueAs<EdgeID>().getValue());
+        break;
+        case MapBufferTypeTag::DateTime: {
+            std::string formatted;
+            DateTime::format(formatted, entry.getValueAs<types::DateTime::Primitive>());
+
+            ProcUtils::appendJsonString(out, formatted);
+        }
+        break;
+        case MapBufferTypeTag::Null:
+        case MapBufferTypeTag::INVALID:
+            out += "null";
+        break;
+    }
+}
+
+// Append a map as a JSON object of its entries.
+void appendMapValue(std::string& out, MapView map) {
+    out += '{';
+
+    bool firstEntry = true;
+    for (const MapEntryView entry : map) {
+        if (!firstEntry) {
+            out += ',';
+        }
+        firstEntry = false;
+        ProcUtils::appendJsonString(out, entry.getKey());
+        out += ':';
+        appendMapEntryValue(out, entry);
+    }
+
+    out += '}';
+}
+
 // Append a single property value as its typed JSON representation.
 void appendPropertyValue(std::string& out, const PropertyVariant& value) {
     std::visit(
@@ -127,6 +204,8 @@ void appendPropertyValue(std::string& out, const PropertyVariant& value) {
                 DateTime::format(formatted, *ptr);
 
                 ProcUtils::appendJsonString(out, formatted);
+            } else if constexpr (std::is_same_v<V, MapView>) {
+                appendMapValue(out, *ptr);
             } else if constexpr (std::is_same_v<V, std::span<const float>>) {
                 out += '[';
                 bool firstElem = true;

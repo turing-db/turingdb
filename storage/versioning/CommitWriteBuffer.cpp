@@ -63,6 +63,10 @@ template <>
 struct PrimitiveToTag<types::List::OwningPrimitive> {
     using Type = types::List;
 };
+template <>
+struct PrimitiveToTag<types::Map::OwningPrimitive> {
+    using Type = types::Map;
+};
 
 // Registers one staged property on the builder, unless a more recent update already
 // registered it - the updates are replayed newest first, so the first registration wins.

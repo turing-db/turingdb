@@ -1451,6 +1451,19 @@ target_link_libraries(test_query_ir_list_literal_property_value PRIVATE
         turing_db_storage_s)
 target_include_directories(test_query_ir_list_literal_property_value PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_map_literal_property_value MapLiteralPropertyValueTest.cpp)
+target_link_libraries(test_query_ir_map_literal_property_value PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_map_literal_property_value PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_cypher_output CypherOutputTest.cpp)
 target_link_libraries(test_query_ir_cypher_output PRIVATE
         turing_db_s
@@ -1855,6 +1868,72 @@ target_link_libraries(test_query_ir_list_property PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_property MapPropertyTest.cpp)
+target_link_libraries(test_query_ir_map_property PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_of_map_properties ListOfMapPropertiesTest.cpp)
+target_link_libraries(test_query_ir_list_of_map_properties PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_of_map_properties PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_against_other_type MapAgainstOtherTypeTest.cpp)
+target_link_libraries(test_query_ir_map_against_other_type PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_against_other_type PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_property_join MapPropertyJoinTest.cpp)
+target_link_libraries(test_query_ir_map_property_join PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_property_join PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_datetime_property MapDateTimePropertyTest.cpp)
+target_link_libraries(test_query_ir_map_datetime_property PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_datetime_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_property_equality MapPropertyEqualityTest.cpp)
+target_link_libraries(test_query_ir_map_property_equality PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_property_equality PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_list_property_equality ListPropertyEqualityTest.cpp)
 target_link_libraries(test_query_ir_list_property_equality PRIVATE

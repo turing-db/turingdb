@@ -89,7 +89,7 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
 
 // Evaluated Type to ValueType conversion
 static constexpr size_t VALUE_TYPE_COUNT = std::to_underlying(ValueType::_SIZE);
-static_assert(VALUE_TYPE_COUNT == 9, "ValueType added: please update below map.");
+static_assert(VALUE_TYPE_COUNT == 10, "ValueType added: please update below map.");
 
 static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_COUNT + 1] = {
     {ValueType::Int64,     EvaluatedType::Integer  },
@@ -100,6 +100,7 @@ static constexpr std::pair<ValueType, EvaluatedType> EVConversions[VALUE_TYPE_CO
     {ValueType::Bool,      EvaluatedType::Bool     },
     {ValueType::List,      EvaluatedType::List     },
     {ValueType::DateTime,  EvaluatedType::DateTime },
+    {ValueType::Map,       EvaluatedType::Map      },
 
     {ValueType::Invalid,   EvaluatedType::Invalid  },
     {ValueType::_SIZE,     EvaluatedType::Invalid  }
@@ -133,8 +134,8 @@ inline bool convertibleToValueType(EvaluatedType e) {
 }
 
 // The types naming a value an equality can be answered over without reading a row: the
-// scalars and the list, but not a tagged cell, whose type is the row's rather than the
-// column's
+// scalars, the list and the map, but not a tagged cell, whose type is the row's rather
+// than the column's
 inline bool namesAComparableValue(EvaluatedType e) {
     return e == EvaluatedType::Integer
         || e == EvaluatedType::Double
@@ -143,7 +144,8 @@ inline bool namesAComparableValue(EvaluatedType e) {
         || e == EvaluatedType::Bool
         || e == EvaluatedType::Embedding
         || e == EvaluatedType::List
-        || e == EvaluatedType::DateTime;
+        || e == EvaluatedType::DateTime
+        || e == EvaluatedType::Map;
 }
 
 // Whether two types can never hold equal values, which makes an equality between them

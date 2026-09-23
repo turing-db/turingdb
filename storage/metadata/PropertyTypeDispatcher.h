@@ -31,6 +31,8 @@ struct PropertyTypeDispatcher {
                 return executor.template operator()<types::List>();
             case ValueType::DateTime:
                 return executor.template operator()<types::DateTime>();
+            case ValueType::Map:
+                return executor.template operator()<types::Map>();
             case ValueType::_SIZE:
             case ValueType::Invalid: {
                 throw TuringException("Unsupported property type");

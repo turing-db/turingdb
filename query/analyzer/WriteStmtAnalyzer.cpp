@@ -374,11 +374,12 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::List;
         case EvaluatedType::DateTime:
             return ValueType::DateTime;
+        case EvaluatedType::Map:
+            return ValueType::Map;
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:
         case EvaluatedType::StringTable:
-        case EvaluatedType::Map:
         case EvaluatedType::Invalid:
         case EvaluatedType::Wildcard:
         case EvaluatedType::GraphPath:

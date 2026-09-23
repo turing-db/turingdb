@@ -5,6 +5,8 @@
 #include "ListElementView.h"
 #include "ListView.h"
 
+#include "map/MapView.h"
+
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -13,10 +15,11 @@ namespace db {
 /**
  * @brief Orders two elements of a @ref ListByteBuffer, which need not share a type.
  *
- * Follows Cypher's orderability across types - NODE < EDGE < LIST < STRING < BOOLEAN <
+ * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < STRING < BOOLEAN <
  * NUMBER < NULL - so a null sorts after every value and two elements of one type compare
  * by their own order: entities by their ID, numbers numerically whatever they are tagged
- * as, strings lexicographically, lists element-wise. An embedding has no order and throws.
+ * as, strings lexicographically, lists element-wise. An embedding has no order, so <=>
+ * throws on one; == still compares embeddings element-wise, at any depth.
  */
 std::strong_ordering operator<=>(ListElementView lhs, ListElementView rhs);
 bool operator==(ListElementView lhs, ListElementView rhs);
@@ -32,11 +35,19 @@ std::strong_ordering operator<=>(ListView lhs, ListView rhs);
 bool operator==(ListView lhs, ListView rhs);
 
 /**
+ * @brief Orders two maps entry by entry, on the key and then on the value, putting the
+ * shorter map first when one is a prefix of the other. Entries are compared in the order
+ * the maps hold them, which is sorted by key for every map codegen or a MapContainer builds.
+ */
+std::strong_ordering operator<=>(MapView lhs, MapView rhs);
+bool operator==(MapView lhs, MapView rhs);
+
+/**
  * @brief Compares an element of a @ref ListByteBuffer against a value of a known type.
  *
  * Equal only when the element holds that value: a number compares numerically whatever
- * it is tagged as, a nested list element-wise against a list, and an element of any other
- * type - a null included - equals neither.
+ * it is tagged as, a nested list element-wise against a list, a map entry-wise against a
+ * map, and an element of any other type - a null included - equals neither.
  */
 bool operator==(ListElementView element, types::Int64::Primitive value);
 bool operator==(ListElementView element, types::UInt64::Primitive value);
@@ -44,6 +55,7 @@ bool operator==(ListElementView element, types::Double::Primitive value);
 bool operator==(ListElementView element, types::String::Primitive value);
 bool operator==(ListElementView element, types::Bool::Primitive value);
 bool operator==(ListElementView element, ListView value);
+bool operator==(ListElementView element, MapView value);
 
 /**
  * @brief Tests an element of a @ref ListByteBuffer for null, as IS (NOT) NULL does.

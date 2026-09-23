@@ -1,0 +1,119 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <string_view>
+
+#include "QueryInterpreterV3.h"
+#include "QueryStatus.h"
+
+#include "Graph.h"
+#include "QueryConfig.h"
+#include "SimpleGraph.h"
+#include "SystemAccessor.h"
+#include "SystemManager.h"
+#include "TuringDB.h"
+#include "versioning/ChangeID.h"
+#include "versioning/CommitHash.h"
+
+#include "IRTestRows.h"
+#include "TuringTest.h"
+#include "TuringTestEnv.h"
+
+using namespace db;
+using namespace turing::test;
+
+class MapPropertyJoinTest : public TuringTest {
+protected:
+    void initialize() override {
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        Graph* graph = system.createGraph(_graphName);
+        SimpleGraph::createSimpleGraph(graph);
+    }
+
+    void openChange(ChangeID& changeID) {
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        const auto res = system.newChange(_graphName);
+        ASSERT_TRUE(res);
+
+        changeID = res.value()->id();
+    }
+
+    void submit(const ChangeID& changeID) {
+        const QueryState submitState(_graphName,
+                                     &_env->getMem(),
+                                     &_queryConfig,
+                                     nullptr,
+                                     CommitHash::head(),
+                                     changeID);
+        const QueryStatus status = _env->getDB().query("CHANGE SUBMIT", submitState);
+        ASSERT_TRUE(status.isOk()) << "CHANGE SUBMIT failed";
+    }
+
+    void write(std::string_view query) {
+        ChangeID changeID;
+        openChange(changeID);
+
+        RowSink sink;
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              changeID,
+                              &_env->getMem(),
+                              &sink);
+        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
+
+        submit(changeID);
+    }
+
+    void expectRows(std::string_view query, const Rows& expected) {
+        expectRowsIn(ChangeID::head(), query, expected);
+    }
+
+    void expectRowsIn(const ChangeID& changeID, std::string_view query, const Rows& expected) {
+        RowSink sink;
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              changeID,
+                              &_env->getMem(),
+                              &sink);
+        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
+
+        Rows actual;
+        sink.sortedRows(actual);
+
+        Rows sortedExpected = expected;
+        std::sort(sortedExpected.begin(), sortedExpected.end());
+
+        std::string actualText;
+        describeRows(actual, actualText);
+
+        EXPECT_EQ(actual, sortedExpected) << "query: " << query << "\ngot:\n" << actualText;
+    }
+
+    const std::string _graphName = "simpledb";
+    std::unique_ptr<TuringTestEnv> _env;
+    std::unique_ptr<QueryInterpreterV3> _interpreter;
+    QueryConfig _queryConfig;
+};
+
+// 400 nodes give 160000 pairs, past the size where the planner turns the filtered product
+// into a hash join; 40 give 1600, which it leaves as a filter.
+TEST_F(MapPropertyJoinTest, joinsManyNodesOnEqualMapProperties) {
+    write("UNWIND range(1, 400) AS i CREATE (:Tagged {name: 'a', attrs: {x: i % 2}})");
+    expectRows("MATCH (a:Tagged), (b:Tagged) WHERE a.attrs = b.attrs RETURN count(*)", {{"80000"}});
+}
+
+TEST_F(MapPropertyJoinTest, joinsFewNodesOnEqualMapProperties) {
+    write("UNWIND range(1, 40) AS i CREATE (:Tagged {name: 'a', attrs: {x: i % 2}})");
+    expectRows("MATCH (a:Tagged), (b:Tagged) WHERE a.attrs = b.attrs RETURN count(*)", {{"800"}});
+}

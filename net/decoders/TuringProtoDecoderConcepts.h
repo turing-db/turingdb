@@ -62,6 +62,7 @@ concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Pri
 || std::is_same_v<T, db::LabelID>
 || std::is_same_v<T, typename Sink::ListElementView>
 || std::is_same_v<T, typename Sink::ListView>
+|| std::is_same_v<T, typename Sink::MapView>
 || std::is_same_v<T, db::types::String::Primitive>;
 
 template <typename T, typename Sink>

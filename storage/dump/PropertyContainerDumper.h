@@ -302,4 +302,15 @@ private:
     fs::FilePageWriter& _writer;
 };
 
+class MapPropertyContainerDumper {
+public:
+    explicit MapPropertyContainerDumper(fs::FilePageWriter& writer);
+    ~MapPropertyContainerDumper();
+
+    [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<types::Map>& props);
+
+private:
+    fs::FilePageWriter& _writer;
+};
+
 }

@@ -163,6 +163,7 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
         OptionalKindPairs<ListView, ListView>::Pairs,
+        OptionalKindPairs<MapView, MapView>::Pairs,
 
         // Equality against a type-erased cell, which holds its own type
         ListElementKindPairs<types::Int64::Primitive>::Pairs,
@@ -172,6 +173,7 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
         ListElementKindPairs<ListView>::Pairs,
+        ListElementKindPairs<MapView>::Pairs,
 
         // A loaded CSV field owns its characters, so a comparison against a string
         // property meets a borrowed view on one side and an owned string on the other -
@@ -203,6 +205,7 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::DateTime::Primitive>, PropertyNull>,
             KindPair<std::optional<ListElementView>, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
+            KindPair<std::optional<MapView>, PropertyNull>,
 
             KindPair<std::optional<NodeID>, PropertyNull>,
             KindPair<std::optional<EdgeID>, PropertyNull>,
@@ -687,7 +690,8 @@ struct OutputtedTypes {
         std::optional<ListView>,
 
         MapView,
-        MapEntryView
+        MapEntryView,
+        std::optional<MapView>
     >>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
@@ -738,6 +742,7 @@ struct WriteProcessorPropertyTypes {
         types::Embedding::Primitive,
         types::DateTime::Primitive,
         ListView,
+        MapView,
 
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
@@ -747,6 +752,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
         std::optional<ListView>,
+        std::optional<MapView>,
 
         std::string, // For LOAD CSV inputs
         std::optional<std::string> // For labels() and type(), which own their strings
@@ -764,6 +770,7 @@ struct WriteProcessorPropertyTypes {
         types::Embedding::Primitive,
         types::DateTime::Primitive,
         ListView,
+        MapView,
 
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,

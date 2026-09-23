@@ -78,6 +78,13 @@ DumpResult<void> dumpProperties(fs::FilePageWriter& writer, PropertyContainer* c
             }
             break;
         }
+        case ValueType::Map: {
+            MapPropertyContainerDumper dumper(writer);
+            if (auto res = dumper.dump(container->cast<types::Map>()); !res) {
+                return res.get_unexpected();
+            }
+            break;
+        }
         case ValueType::_SIZE:
         case ValueType::Invalid: {
             panic("Error, invalid type");

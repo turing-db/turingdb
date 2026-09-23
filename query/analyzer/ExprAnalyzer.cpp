@@ -375,7 +375,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map);
 
             // A stored list compares against another list, and against null for
             // IS (NOT) NULL
@@ -383,7 +384,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
                 || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::Null);
 
-            if (comparesListItem || comparesList) {
+            const bool comparesMap =
+                pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Map)
+                || pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Null);
+
+            if (comparesListItem || comparesList || comparesMap) {
                 break;
             }
 
@@ -1376,6 +1381,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::DateTime:
             return vt == ValueType::DateTime;
         case EvaluatedType::Map:
+            return vt == ValueType::Map;
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:
         case EvaluatedType::Tuple:

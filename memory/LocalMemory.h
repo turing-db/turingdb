@@ -127,7 +127,9 @@ public:
         MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type,
 
         MakeMemoryPool<ColumnVector<MapView>>::type,
-        MakeMemoryPool<ColumnConst<MapView>>::type
+        MakeMemoryPool<ColumnOptVector<MapView>>::type,
+        MakeMemoryPool<ColumnConst<MapView>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<MapView>>>::type
     >;
 
     template <typename KeyT, typename ValueT>

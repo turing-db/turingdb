@@ -199,7 +199,7 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
 }
 
 template <SupportedType T>
-requires std::same_as<T, types::List>
+requires std::same_as<T, types::List> || std::same_as<T, types::Map>
 void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
                                       std::optional<typename T::OwningPrimitive>&& value) {
@@ -220,7 +220,7 @@ void DataPartBuilder::addNodeProperty(NodeID nodeID,
 }
 
 template <SupportedType T>
-requires std::same_as<T, types::List>
+requires std::same_as<T, types::List> || std::same_as<T, types::Map>
 void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
                                       std::optional<typename T::OwningPrimitive>&& value,
@@ -252,6 +252,13 @@ template void DataPartBuilder::addEdgeProperty<types::List>(const EdgeRecord&,
                                                             PropertyTypeID,
                                                             std::optional<types::List::OwningPrimitive>&&,
                                                             LabelSetHandle);
+template void DataPartBuilder::addNodeProperty<types::Map>(NodeID,
+                                                           PropertyTypeID,
+                                                           std::optional<types::Map::OwningPrimitive>&&);
+template void DataPartBuilder::addEdgeProperty<types::Map>(const EdgeRecord&,
+                                                           PropertyTypeID,
+                                                           std::optional<types::Map::OwningPrimitive>&&,
+                                                           LabelSetHandle);
 
 size_t DataPartBuilder::getNodeEmbeddingDimension(PropertyTypeID ptID) const {
     for (const WeakArc<DataPart>& part : rv::reverse(_view.dataparts())) {
@@ -298,3 +305,4 @@ INSTANTIATE(types::String);
 INSTANTIATE(types::Bool);
 INSTANTIATE(types::List);
 INSTANTIATE(types::DateTime);
+INSTANTIATE(types::Map);

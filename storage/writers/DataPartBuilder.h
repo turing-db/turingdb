@@ -53,16 +53,16 @@ public:
                          std::optional<typename T::Primitive>&& value,
                          LabelSetHandle srcLblSet = {});
 
-    // A list arrives from the write buffer as its owning encoding rather than as a
-    // ListView, which only names elements the buffer that built it still owns.
+    // A list or map arrives from the write buffer as its owning encoding rather than as a
+    // view, which only names elements the buffer that built it still owns.
     template <SupportedType T>
-    requires std::same_as<T, types::List>
+    requires std::same_as<T, types::List> || std::same_as<T, types::Map>
     void addNodeProperty(NodeID nodeID,
                          PropertyTypeID ptID,
                          std::optional<typename T::OwningPrimitive>&& value);
 
     template <SupportedType T>
-    requires std::same_as<T, types::List>
+    requires std::same_as<T, types::List> || std::same_as<T, types::Map>
     void addEdgeProperty(const EdgeRecord& edge,
                          PropertyTypeID ptID,
                          std::optional<typename T::OwningPrimitive>&& value,

@@ -56,6 +56,10 @@ const NLWrittenValues::Value& NLWrittenValues::retain(const Value& value) {
     return _retained.emplace_back(value);
 }
 
-types::List::Primitive NLWrittenValues::decode(const types::List::OwningPrimitive& encoded) {
-    return encoded.decodeInto(_decodedLists);
+ListView NLWrittenValues::decode(const EncodedList& list) {
+    return list.decodeInto(_decodedLists);
+}
+
+MapView NLWrittenValues::decode(const EncodedMap& map) {
+    return map.decodeInto(_decodedMaps);
 }

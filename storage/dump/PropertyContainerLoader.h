@@ -378,4 +378,15 @@ private:
     fs::FilePageReader& _reader;
 };
 
+class MapPropertyContainerLoader {
+public:
+    explicit MapPropertyContainerLoader(fs::FilePageReader& reader);
+    ~MapPropertyContainerLoader();
+
+    [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load();
+
+private:
+    fs::FilePageReader& _reader;
+};
+
 }

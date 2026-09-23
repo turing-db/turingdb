@@ -48,6 +48,7 @@
 #include "columns/UnaryPredicates.h"
 #include "list/ListElementOrder.h"
 #include "list/ListUtils.h"
+#include "map/MapHash.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -2169,6 +2170,19 @@ void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::strin
     distinctAppendListBytes(key, *list);
 }
 
+void distinctKeyAppendOptMapColumn(const Column* column, size_t row, std::string& key) {
+    const std::vector<std::optional<MapView>>& raw =
+        static_cast<const ColumnOptVector<MapView>*>(column)->getRaw();
+    const std::optional<MapView>& map = raw[row];
+
+    if (!map.has_value()) {
+        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        return;
+    }
+
+    distinctAppendMapBytes(key, *map);
+}
+
 // The 64-bit finalizer of MurmurHash3, so a key's bits spread over every bucket
 uint64_t mixKeyBits(uint64_t bits) {
     bits ^= bits >> 33;
@@ -2211,6 +2225,10 @@ uint64_t hashKeyValue(std::string_view value) {
 
 uint64_t hashKeyValue(const std::string& value) {
     return hashKeyValue(std::string_view(value));
+}
+
+uint64_t hashKeyValue(MapView map) {
+    return mixKeyBits(hashMap(map));
 }
 
 uint64_t hashKeyValue(types::Embedding::Primitive embedding) {
@@ -3166,6 +3184,30 @@ void groupFoldCountDistinctPresentList(Column* accumulator,
 
         distinct.beginKey(group);
         distinctAppendListBytes(distinct.getKey(), *value);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
+void groupFoldCountDistinctPresentMap(Column* accumulator,
+                                      std::vector<uint64_t>& counts,
+                                      const Column* input,
+                                      const std::vector<size_t>& groups,
+                                      NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnOptVector<MapView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<MapView>& value = inputRaw[row];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendMapBytes(distinct.getKey(), *value);
 
         if (distinct.insertIfNew()) {
             counts[group]++;
@@ -4222,8 +4264,10 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
     const auto convert = [&written](const auto& held) -> std::optional<Primitive> {
         using Inner = typename std::decay_t<decltype(held)>::value_type;
 
-        if constexpr (std::is_same_v<Inner, types::List::OwningPrimitive>
-                      && std::is_same_v<Primitive, types::List::Primitive>) {
+        constexpr bool isEncodedList = std::is_same_v<T, types::List> && std::is_same_v<Inner, EncodedList>;
+        constexpr bool isEncodedMap = std::is_same_v<T, types::Map> && std::is_same_v<Inner, EncodedMap>;
+
+        if constexpr (isEncodedList || isEncodedMap) {
             if (!held) {
                 return std::nullopt;
             }
@@ -6475,8 +6519,12 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
             return selectToNullableOf<types::List::Primitive>(operand, memory, result);
         break;
 
+        case ValueType::Map:
+            return selectToNullableOf<types::Map::Primitive>(operand, memory, result);
+        break;
+
         default:
-            throw IRException("Only a scalar or a list column can be read as a nullable value column");
+            throw IRException("Only a scalar, a list or a map column can be read as a nullable value column");
         break;
     }
 
@@ -8634,6 +8682,10 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
             return &distinctKeyAppendOptColumn<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Map:
+            return &distinctKeyAppendOptMapColumn;
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid distinct key value type");
@@ -8736,7 +8788,7 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
         break;
 
         case NLChunkKind::Map:
-            throw IRException("A map column cannot be a join key: a map has no scalar value to key on");
+            return joinKeyFunctions<MapView>();
         break;
 
         case NLChunkKind::Path:
@@ -9085,6 +9137,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
             return &groupFoldCountDistinctPresent<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Map:
+            return &groupFoldCountDistinctPresentMap;
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid count(DISTINCT) value type");
@@ -9396,6 +9452,10 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
             return &mergeKeyAppendConstColumn<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Map:
+            throw IRException("a MERGE pattern cannot constrain a property to a map");
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid MERGE property value type");
@@ -9626,6 +9686,10 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
             return &compareOptColumn<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Map:
+            throw IRException("cannot sort by a map column");
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid sort key value type");
@@ -9709,6 +9773,7 @@ template void NLExecutor::runPropertyFetch<NodeID, types::String>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<NodeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::List>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::DateTime>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::Map>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Int64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::UInt64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Double>(NLExecutionContext*, NLFunctionData*);
@@ -9717,6 +9782,7 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::List>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::DateTime>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::Map>(NLExecutionContext*, NLFunctionData*);
 
 void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data) {
     NLGetNodeLabelSetData* fetchData = static_cast<NLGetNodeLabelSetData*>(data);

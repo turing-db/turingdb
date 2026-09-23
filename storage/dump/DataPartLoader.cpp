@@ -153,7 +153,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
             }
 
             auto* ptr = props.value().release();
-            manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            manager._containers.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
             if constexpr (std::is_same_v<T, types::UInt64>) {
                 manager._uint64s.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
@@ -184,7 +184,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
             }
 
             auto* ptr = props.value().release();
-            manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            manager._containers.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
             manager._strings.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
 
@@ -231,7 +231,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
                 }
 
                 auto* container = props.value().release();
-                manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(container));
+                manager._containers.emplace(pt->_id, static_cast<PropertyContainer*>(container));
                 manager._embeddings.emplace(pt->_id, static_cast<PropertyContainer*>(container));
                 break;
             }
@@ -244,7 +244,7 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
                 }
 
                 auto* container = props.value().release();
-                manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(container));
+                manager._containers.emplace(pt->_id, static_cast<PropertyContainer*>(container));
                 manager._lists.emplace(pt->_id, static_cast<PropertyContainer*>(container));
                 break;
             }
@@ -252,6 +252,19 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
                 if (auto res = storeTrivialContainer.operator()<types::DateTime>(manager); !res) {
                     return res.get_unexpected();
                 }
+                break;
+            }
+            case ValueType::Map: {
+                MapPropertyContainerLoader loader(reader.value());
+
+                auto props = loader.load();
+                if (!props) {
+                    return props.get_unexpected();
+                }
+
+                auto* container = props.value().release();
+                manager._containers.emplace(pt->_id, static_cast<PropertyContainer*>(container));
+                manager._maps.emplace(pt->_id, static_cast<PropertyContainer*>(container));
                 break;
             }
             case ValueType::Invalid:

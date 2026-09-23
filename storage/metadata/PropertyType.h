@@ -13,6 +13,9 @@
 #include "list/EncodedList.h"
 #include "list/ListHash.h"
 #include "list/ListView.h"
+#include "map/EncodedMap.h"
+#include "map/MapHash.h"
+#include "map/MapView.h"
 
 #include "FatalException.h"
 
@@ -28,6 +31,7 @@ enum class ValueType : uint8_t {
     Embedding,
     List,
     DateTime,
+    Map,
 
     _SIZE,
 };
@@ -41,7 +45,8 @@ using ValueTypeName = EnumToString<ValueType>::Create<
     EnumStringPair<ValueType::Bool, "Bool">,
     EnumStringPair<ValueType::Embedding, "Embedding">,
     EnumStringPair<ValueType::List, "List">,
-    EnumStringPair<ValueType::DateTime, "DateTime">>;
+    EnumStringPair<ValueType::DateTime, "DateTime">,
+    EnumStringPair<ValueType::Map, "Map">>;
 
 struct CustomBool {
     CustomBool() = default;
@@ -144,13 +149,22 @@ struct DateTime : public PropertyType {
     static constexpr auto _valueType = ValueType::DateTime;
 };
 
+struct Map : public PropertyType {
+    using Primitive = MapView;
+    using OwningPrimitive = EncodedMap;
+    using MandatorySpan = std::span<const Primitive>;
+    using OptionalSpan = std::span<const std::optional<Primitive>>;
+    static constexpr auto _valueType = ValueType::Map;
+};
+
 }
 
 template <typename T>
 concept TrivialSupportedType = SupportedType<T>
     && !std::same_as<T, types::String>
     && !std::same_as<T, types::Embedding>
-    && !std::same_as<T, types::List>;
+    && !std::same_as<T, types::List>
+    && !std::same_as<T, types::Map>;
 
 enum class PropertyImportance : uint8_t {
     Mandatory = 0,
@@ -200,6 +214,9 @@ struct ValueTypeDispatcher {
             case ValueType::DateTime:
                 executor.template operator()<types::DateTime>();
             break;
+            case ValueType::Map:
+                executor.template operator()<types::Map>();
+            break;
             case ValueType::_SIZE:
             case ValueType::Invalid: {
                 throw FatalException("Unsupported property type");
@@ -230,6 +247,13 @@ template <>
 struct std::hash<db::ListView> {
     std::size_t operator()(const db::ListView& list) const noexcept {
         return db::hashList(list);
+    }
+};
+
+template <>
+struct std::hash<db::MapView> {
+    std::size_t operator()(const db::MapView& map) const noexcept {
+        return db::hashMap(map);
     }
 };
 

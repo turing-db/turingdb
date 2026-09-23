@@ -6,6 +6,9 @@
 #include "ListContainer.h"
 #include "ListElementView.h"
 
+#include "map/EncodedMap.h"
+#include "map/MapContainer.h"
+
 #include "ID.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -71,8 +74,11 @@ void encodeElement(ListElementView element, std::vector<std::byte>& out) {
         case ListBufferTypeTag::ListView:
             encodeList(element.getAs<ListView>(), out);
         break;
-        case ListBufferTypeTag::MapView:
-            throw FatalException("Cannot store a list holding a map: there is no map property type");
+        case ListBufferTypeTag::MapView: {
+            const EncodedMap map(element.getAs<MapView>());
+            appendValue<uint64_t>(out, map.byteSize());
+            appendBytes(out, map.bytes().data(), map.byteSize());
+        }
         break;
         case ListBufferTypeTag::INVALID:
             throw FatalException("Cannot encode a list element with an invalid type tag");
@@ -184,6 +190,8 @@ private:
                 return decodeList();
             break;
             case ListBufferTypeTag::MapView:
+                return decodeMap();
+            break;
             case ListBufferTypeTag::INVALID:
             break;
         }
@@ -203,6 +211,13 @@ private:
         const std::span<const std::byte> payload = readPayload(count * sizeof(float));
 
         return {reinterpret_cast<const float*>(payload.data()), count};
+    }
+
+    MapView decodeMap() {
+        const uint64_t size = read<uint64_t>();
+        const EncodedMap map(readPayload(size));
+
+        return map.decodeInto(_container.getMaps());
     }
 };
 

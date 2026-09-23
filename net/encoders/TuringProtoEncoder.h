@@ -261,6 +261,10 @@ public:
             for (const auto& val : *col) {
                 _nestedWriter.writeListView(val.has_value() ? *val : db::ListView {});
             }
+        } else if constexpr (db::IsMap<T>) {
+            for (const auto& val : values) {
+                _nestedWriter.writeMapView(val.has_value() ? *val : db::MapView {});
+            }
         } else if constexpr (db::IsEntityList<T>) {
             static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
         } else if constexpr (db::IsListView<T>) {
@@ -356,6 +360,8 @@ public:
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsListView<T>) {
             _nestedWriter.writeListView(*opt);
+        } else if constexpr (db::IsMap<T>) {
+            _nestedWriter.writeMapView(*opt);
         } else if constexpr (db::IsEntityList<T>) {
             // EntityList is only used as ColumnVector<EntityList>, never optional.
             // Dependent condition (see the ColumnOptVector<EntityList> branch above).

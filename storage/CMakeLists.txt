@@ -26,10 +26,13 @@ set(storage_sources
         list/ListElementViewBuffer.cpp
         list/ListWriteCursor.cpp
 
+        map/EncodedMap.cpp
         map/MapByteBuffer.cpp
         map/MapBuffer.cpp
         map/MapEntryViewBuffer.cpp
         map/MapWriteCursor.cpp
+        map/MapContainer.cpp
+        map/MapHash.cpp
 
         metadata/DateTime.cpp
         metadata/EdgeTypeMap.cpp
@@ -152,8 +155,10 @@ set(storage_sources
         dump/StringIndexerLoader.cpp
         dump/EmbeddingPropertyContainerDumper.cpp
         dump/ListPropertyContainerDumper.cpp
+        dump/MapPropertyContainerDumper.cpp
         dump/EmbeddingPropertyContainerLoader.cpp
         dump/ListPropertyContainerLoader.cpp
+        dump/MapPropertyContainerLoader.cpp
         dump/CommitJournalDumper.cpp
         dump/CommitJournalLoader.cpp
         dump/CommitMetaDataDumper.cpp
