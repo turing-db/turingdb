@@ -2879,6 +2879,19 @@ target_link_libraries(test_query_ir_call_subquery_per_row PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_call_subquery_per_row PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Every example of the Neo4j manual's EXISTS subqueries page, over the graph that page
+# builds, answering the rows it documents.
+add_turing_test(test_query_ir_exists_neo4j_manual ExistsNeo4jManualTest.cpp)
+target_link_libraries(test_query_ir_exists_neo4j_manual PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_jobs_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_exists_neo4j_manual PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # Which path each kind of EXISTS body compiles to: the tag the rows carry, or the loop
 # that runs the body one input row at a time.
 add_ir_tests(test_query_ir_exists_subquery_codegen ExistsSubqueryCodegenTest.cpp)
