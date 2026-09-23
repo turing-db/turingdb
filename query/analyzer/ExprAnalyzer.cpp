@@ -523,6 +523,34 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             throwError(error, expr);
         } break;
 
+        case BinaryOperator::Concat: {
+            if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
+                type = EvaluatedType::String;
+                break;
+            }
+
+            if (pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
+                type = EvaluatedType::List;
+                expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
+                break;
+            }
+
+            // '||' joins two strings or two lists, so an unknown value is no side of one
+            // rather than an element to append: [1, 2] || null is null where [1, 2] + null
+            // is [1, 2, null]
+            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+                type = EvaluatedType::Null;
+                break;
+            }
+
+            const std::string error = fmt::format(
+                "Operands are not valid and compatible types for '||': '{}' and '{}'",
+                EvaluatedTypeName::value(a),
+                EvaluatedTypeName::value(b));
+
+            throwError(error, expr);
+        } break;
+
         case BinaryOperator::Sub:
         case BinaryOperator::Mult:
         case BinaryOperator::Div:
