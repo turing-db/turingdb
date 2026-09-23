@@ -1,5 +1,6 @@
 #include "ParquetImportVisitor.h"
 
+#include <limits>
 #include <ranges>
 #include <string>
 #include <utility>
@@ -19,6 +20,16 @@
 using namespace db;
 
 namespace {
+
+// A nanosecond count is finer than a DateTime holds, so it lands on the microsecond below
+// it rather than the one nearer zero - the direction an instant before the epoch is read
+// in everywhere else.
+int64_t floorDivide(int64_t value, int64_t divisor) {
+    const int64_t quotient = value / divisor;
+    const bool roundedUp = (value % divisor) < 0;
+
+    return roundedUp ? quotient - 1 : quotient;
+}
 
 // Parquet nests a LIST's values under synthetic group names, so the leaf path carries a
 // suffix the property must not be named after - one per level of nesting, so a list of
@@ -150,6 +161,22 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
             break;
     }
 
+    // A timestamp is physically an INT64, so what it counts is named by the logical type
+    // beside it. parquet-cpp fills that in from the legacy ConvertedType too, so a file
+    // written before logical types existed reads the same. A column not adjusted to UTC
+    // carries a wall clock rather than an instant, which no property type here holds, so
+    // its reading is taken as the UTC one - what a writer of tz-naive data means by it.
+    const parquet::LogicalType* logicalType = descriptor.logical_type().get();
+    const bool isTimestamp = valueType == ValueType::Int64 && logicalType && logicalType->is_timestamp();
+
+    parquet::LogicalType::TimeUnit::unit timeUnit = parquet::LogicalType::TimeUnit::UNKNOWN;
+    if (isTimestamp) {
+        const auto& timestamp = static_cast<const parquet::TimestampLogicalType&>(*logicalType);
+
+        valueType = ValueType::DateTime;
+        timeUnit = timestamp.time_unit();
+    }
+
     const bool isList = maxRepLevel > 0;
     if (isList) {
         valueType = ValueType::List;
@@ -158,18 +185,77 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
     const std::string name {isList ? listPropertyName(path) : std::string_view {path}};
     const PropertyType propType = metadataBuilder.getOrCreatePropertyType(name, valueType);
 
+    // A name already registered keeps the type it was registered with, and the values this
+    // column holds would go into a container the metadata calls something else. A DateTime
+    // and an Int64 are the same width, so that pair reads back as plausible instants rather
+    // than failing - the clash is turned away here instead.
+    if (propType._valueType != valueType) {
+        throw TuringException(
+            fmt::format("Property '{}' is a {} here and a {} elsewhere in the same import.",
+                        name,
+                        ValueTypeName::value(valueType),
+                        ValueTypeName::value(propType._valueType)));
+    }
+
     PropertyColumn col {.name = name,
                         .valueType = valueType,
                         .propertyTypeID = propType._id,
                         .physicalType = physicalType,
                         .maxDefLevel = maxDefLevel,
-                        .maxRepLevel = maxRepLevel};
+                        .maxRepLevel = maxRepLevel,
+                        .timeUnit = timeUnit};
 
     if (isList) {
         collectListDefLevels(descriptor, col.listDefLevels);
     }
 
     _propertyColumns[columnIndex] = std::move(col);
+}
+
+types::DateTime::Primitive ParquetImportVisitor::toDateTime(const PropertyColumn& prop,
+                                                           int64_t value) {
+    constexpr int64_t microsecondsPerMillisecond = 1000;
+    constexpr int64_t nanosecondsPerMicrosecond = 1000;
+
+    int64_t microseconds = 0;
+
+    switch (prop.timeUnit) {
+        case parquet::LogicalType::TimeUnit::MILLIS: {
+            const int64_t limit = std::numeric_limits<int64_t>::max() / microsecondsPerMillisecond;
+            if (value > limit || value < -limit) {
+                throw TuringException(
+                    fmt::format("Timestamp property '{}': {} milliseconds names no instant.",
+                                prop.name,
+                                value));
+            }
+
+            microseconds = value * microsecondsPerMillisecond;
+        }
+        break;
+
+        case parquet::LogicalType::TimeUnit::MICROS:
+            microseconds = value;
+        break;
+
+        case parquet::LogicalType::TimeUnit::NANOS:
+            microseconds = floorDivide(value, nanosecondsPerMicrosecond);
+        break;
+
+        case parquet::LogicalType::TimeUnit::UNKNOWN:
+            throw TuringException(
+                fmt::format("Timestamp property '{}': the column names no time unit.", prop.name));
+        break;
+    }
+
+    if (!DateTime::isRenderable(DateTime {microseconds})) {
+        throw TuringException(
+            fmt::format("Timestamp property '{}': {} names an instant outside the years "
+                        "an ISO-8601 value spells.",
+                        prop.name,
+                        value));
+    }
+
+    return DateTime {microseconds};
 }
 
 void ParquetImportVisitor::capturePropertyLevels(size_t columnIndex,
@@ -337,8 +423,16 @@ ListContainer::ListItemVariant ParquetImportVisitor::listElement(const PropertyC
                                                                  size_t columnIndex,
                                                                  size_t valueIndex) {
     switch (prop.physicalType) {
-        case parquet::Type::INT64:
-            return _propListInt64Vals.at(columnIndex).at(valueIndex);
+        case parquet::Type::INT64: {
+            const int64_t value = _propListInt64Vals.at(columnIndex).at(valueIndex);
+            const bool holdsTimestamps = prop.timeUnit != parquet::LogicalType::TimeUnit::UNKNOWN;
+
+            if (holdsTimestamps) {
+                return toDateTime(prop, value);
+            }
+
+            return value;
+        }
         break;
         case parquet::Type::DOUBLE:
             return _propListDoubleVals.at(columnIndex).at(valueIndex);

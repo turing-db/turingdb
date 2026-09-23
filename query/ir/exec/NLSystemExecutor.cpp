@@ -189,7 +189,8 @@ void NLSystemExecutor::runImportGraph(NLExecutionContext* context, NLFunctionDat
 
     const Graph* graph = accessor.importGraph(command->getPath(),
                                               graphName,
-                                              command->getEmbeddings());
+                                              command->getEmbeddings(),
+                                              command->getDateTimes());
     if (!graph) {
         throw IRException(fmt::format("{}: failed to import graph '{}' from '{}'",
                                       command->getStatement(),

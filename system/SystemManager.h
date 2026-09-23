@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "DateTimeSpec.h"
 #include "EmbeddingsSpec.h"
 #include "GraphManager.h"
 
@@ -103,7 +104,8 @@ private:
     // Import graph from file
     Graph* importGraph(const fs::Path& path,
                        std::string_view graphName,
-                       const EmbeddingsSpec& embeddingSpecs);
+                       const EmbeddingsSpec& embeddingSpecs,
+                       const DateTimeSpec& dateTimeSpecs);
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 

@@ -12,6 +12,7 @@
 #include "NLOps.h"
 #include "StorageEnums.h"
 
+#include "DateTimeSpec.h"
 #include "EmbeddingsSpec.h"
 #include "Path.h"
 
@@ -170,6 +171,19 @@ void fillEmbeddingsSpec(mlir::DictionaryAttr attribute, EmbeddingsSpec& specs) {
     }
 }
 
+// The properties a LOAD JSONL named as instants, one unit entry each - the name is the
+// whole of it. A null attribute - every other import, and a JSONL one with no such clause -
+// leaves the spec empty.
+void fillDateTimeSpec(mlir::DictionaryAttr attribute, DateTimeSpec& specs) {
+    if (!attribute) {
+        return;
+    }
+
+    for (const mlir::NamedAttribute& entry : attribute) {
+        specs.emplace(toStringView(entry.getName().getValue()));
+    }
+}
+
 }
 
 NLSystemTranslator::NLSystemTranslator(NLProgram* program, LocalMemory* memory, ValueSlots* valueSlots)
@@ -205,10 +219,14 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         EmbeddingsSpec embeddings;
         fillEmbeddingsSpec(importGraph.getEmbeddingsAttr(), embeddings);
 
+        DateTimeSpec dateTimes;
+        fillDateTimeSpec(importGraph.getDateTimesAttr(), dateTimes);
+
         NLImportGraphData* data =
             _program->allocFunctionData<NLImportGraphData>(fs::Path(importGraph.getPath().str()),
                                                            toStringView(importGraph.getGraphName()),
                                                            embeddings,
+                                                           dateTimes,
                                                            importStatement(importGraph.getFormat()),
                                                            allocResult<NLViewColumn>(importGraph.getGraph()));
         body->emplaceStmt(&NLSystemExecutor::runImportGraph, data);

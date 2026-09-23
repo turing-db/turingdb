@@ -116,6 +116,7 @@ template class GetPropertiesIteratorWithNull<NodeID, types::String>;
 template class GetPropertiesIteratorWithNull<NodeID, types::Bool>;
 template class GetPropertiesIteratorWithNull<NodeID, types::Embedding>;
 template class GetPropertiesIteratorWithNull<NodeID, types::List>;
+template class GetPropertiesIteratorWithNull<NodeID, types::DateTime>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Int64>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::UInt64>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Double>;
@@ -123,6 +124,7 @@ template class GetPropertiesIteratorWithNull<EdgeID, types::String>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Bool>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::Embedding>;
 template class GetPropertiesIteratorWithNull<EdgeID, types::List>;
+template class GetPropertiesIteratorWithNull<EdgeID, types::DateTime>;
 
 }
 

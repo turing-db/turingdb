@@ -133,7 +133,8 @@ void GraphManager::loadOrCreateDefaultGraph() {
 Graph* GraphManager::importGraph(std::string_view graphName,
                                  const fs::Path& filePath,
                                  JobSystem* jobSystem,
-                                const EmbeddingsSpec& embeddingSpecs) {
+                                 const EmbeddingsSpec& embeddingSpecs,
+                                 const DateTimeSpec& dateTimeSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
     // Step 1. Check if graph was already loaded || is already loading
@@ -162,7 +163,7 @@ Graph* GraphManager::importGraph(std::string_view graphName,
             return loadGmlDB(graphName, absolute, jobSystem);
         break;
         case GraphFileType::JSONL:
-            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs);
+            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs, dateTimeSpecs);
         break;
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
@@ -173,7 +174,7 @@ Graph* GraphManager::importGraph(std::string_view graphName,
         case GraphFileType::UNKNOWN:
             // If we can not determine the file type, assume it is a JSONL graph
             // FIXME To be changed
-            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs);
+            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs, dateTimeSpecs);
         break;
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
@@ -248,7 +249,8 @@ Graph* GraphManager::loadBinaryDB(std::string_view graphName,
 Graph* GraphManager::loadJsonlDB(std::string_view graphName,
                                  const fs::Path& dbPath,
                                  JobSystem* jobSystem,
-                                 const EmbeddingsSpec& embeddingSpecs) {
+                                 const EmbeddingsSpec& embeddingSpecs,
+                                 const DateTimeSpec& dateTimeSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return nullptr;
@@ -276,7 +278,7 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
     Change* change = _changes.createChange(graph.get(), CommitHash::head());
     ChangeAccessor changeAccessor = change->access();
 
-    const auto importRes = JsonlParser::parse(changeAccessor, file, embeddingSpecs);
+    const auto importRes = JsonlParser::parse(changeAccessor, file, embeddingSpecs, dateTimeSpecs);
 
     if (!importRes) {
         _graphLoadStatus.removeLoadingGraph(graphName);

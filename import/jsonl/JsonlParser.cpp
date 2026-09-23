@@ -14,6 +14,7 @@
 #include "versioning/CommitBuilder.h"
 #include "writers/DataPartBuilder.h"
 
+#include "DateTimeSpec.h"
 #include "EmbeddingsSpec.h"
 
 #include "Profiler.h"
@@ -113,6 +114,36 @@ ListView fillList(const json& array, ListContainer& lists) {
     return lists.insert(elements);
 }
 
+// The instant a property the query named as a datetime holds. A name it did not is left
+// alone, so a string that happens to read as a date stays the text it was written as.
+JsonlImportResult<std::optional<DateTime>> tryGetDateTime(std::string_view name,
+                                                          const json& value,
+                                                          const DateTimeSpec& dateTimeSpecs,
+                                                          size_t lineNo) {
+    if (!dateTimeSpecs.contains(name)) {
+        return std::optional<DateTime> {};
+    }
+
+    // The query said this property holds an instant, so a value that names none is the
+    // malformed input it reports rather than a property silently written as something
+    // else. A null is not such a value - the caller drops it before reaching here.
+    if (!value.is_string()) {
+        return JsonlImportError::result(JsonlImportErrorType::NON_DATETIME_VALUE,
+                                        lineNo,
+                                        fmt::format("property '{}' is not a string", name));
+    }
+
+    const std::string_view text = value.get<std::string_view>();
+    const std::optional<DateTime> instant = DateTime::parse(text);
+    if (!instant) {
+        return JsonlImportError::result(JsonlImportErrorType::NON_DATETIME_VALUE,
+                                        lineNo,
+                                        fmt::format("property '{}' reads '{}'", name, text));
+    }
+
+    return instant;
+}
+
 std::optional<size_t> tryGetEmbDim(std::string_view name,
                                    const json& value,
                                    const EmbeddingsSpec& embeddingSpecs) {
@@ -131,7 +162,8 @@ std::optional<size_t> tryGetEmbDim(std::string_view name,
 
 JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                                            std::istream& stream,
-                                           const EmbeddingsSpec& embeddingSpecs) {
+                                           const EmbeddingsSpec& embeddingSpecs,
+                                           const DateTimeSpec& dateTimeSpecs) {
     Profile profile("JsonlParser::parse");
 
     std::string line;
@@ -213,7 +245,24 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         }
                         const bool valueIsEmbedding = embDim.has_value();
 
-                        if (value.is_number_float()) {
+                        // A JSONL export spells a missing column as a null, so a null
+                        // in a property named as a datetime is that entity having no
+                        // instant rather than the file contradicting the clause
+                        if (value.is_null() && dateTimeSpecs.contains(ptName)) {
+                            continue;
+                        }
+
+                        const JsonlImportResult<std::optional<DateTime>> instant =
+                            tryGetDateTime(ptName, value, dateTimeSpecs, lineNumber);
+                        if (!instant) {
+                            return instant.get_unexpected();
+                        }
+
+                        const bool valueIsDateTime = instant.value().has_value();
+
+                        if (valueIsDateTime) {
+                            vt = ValueType::DateTime;
+                        } else if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {
                             vt = ValueType::Bool;
@@ -233,7 +282,9 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             pt = metadataBuilder.getOrCreatePropertyType(ptName, vt);
                         }
 
-                        if (value.is_number_float()) {
+                        if (valueIsDateTime) {
+                            builder.addNodeProperty<types::DateTime>(nodeID, pt._id, *instant.value());
+                        } else if (value.is_number_float()) {
                             builder.addNodeProperty<types::Double>(nodeID, pt._id, value.get<double>());
                         } else if (value.is_boolean()) {
                             builder.addNodeProperty<types::Bool>(nodeID, pt._id, value.get<bool>());
@@ -318,7 +369,24 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         }
                         const bool valueIsEmbedding = embDim.has_value();
 
-                        if (value.is_number_float()) {
+                        // A JSONL export spells a missing column as a null, so a null
+                        // in a property named as a datetime is that entity having no
+                        // instant rather than the file contradicting the clause
+                        if (value.is_null() && dateTimeSpecs.contains(ptName)) {
+                            continue;
+                        }
+
+                        const JsonlImportResult<std::optional<DateTime>> instant =
+                            tryGetDateTime(ptName, value, dateTimeSpecs, lineNumber);
+                        if (!instant) {
+                            return instant.get_unexpected();
+                        }
+
+                        const bool valueIsDateTime = instant.value().has_value();
+
+                        if (valueIsDateTime) {
+                            vt = ValueType::DateTime;
+                        } else if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {
                             vt = ValueType::Bool;
@@ -338,7 +406,9 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             pt = metadataBuilder.getOrCreatePropertyType(ptName, vt);
                         }
 
-                        if (value.is_number_float()) {
+                        if (valueIsDateTime) {
+                            builder.addEdgeProperty<types::DateTime>(edge, pt._id, *instant.value());
+                        } else if (value.is_number_float()) {
                             builder.addEdgeProperty<types::Double>(edge, pt._id, value.get<double>());
                         } else if (value.is_boolean()) {
                             builder.addEdgeProperty<types::Bool>(edge, pt._id, value.get<bool>());

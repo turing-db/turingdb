@@ -55,6 +55,7 @@ export const ColumnType = Object.freeze({
     PROPERTY_NULL: 19,
     MAP_VIEW: 20,
     MAP_ENTRY_VIEW: 21,
+    DATE_TIME: 22,
 });
 
 export const ColumnEncoding = Object.freeze({
@@ -75,6 +76,7 @@ const LIST_TAG_LIST_VIEW = 6;
 const LIST_TAG_NULL = 7;
 const LIST_TAG_NODE_ID = 8;
 const LIST_TAG_EDGE_ID = 9;
+const LIST_TAG_DATETIME = 10;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -203,6 +205,9 @@ const FIXED_WIDTH_KINDS = {
     [ColumnType.LABEL_SET_ID]: { size: 4, wrap: (buffer) => new Uint32Array(buffer) },
     [ColumnType.CHANGE_ID]: { size: 8, wrap: (buffer) => new BigUint64Array(buffer) },
     [ColumnType.PROPERTY_NULL]: { size: 1, wrap: (buffer) => new Uint8Array(buffer), read: () => null },
+    // Microseconds from the epoch, which is what a JS Date counts in milliseconds; the
+    // count is handed over as it arrived so no precision is lost on the way
+    [ColumnType.DATE_TIME]: { size: 8, wrap: (buffer) => new BigInt64Array(buffer) },
 };
 
 // Strings are decoded with one TextDecoder call over the whole column and sliced by
@@ -269,6 +274,9 @@ export class ListReader {
             case LIST_TAG_EDGE_ID:
                 this._cursor = payload + 8;
                 return this._view.getBigUint64(payload, true);
+            case LIST_TAG_DATETIME:
+                this._cursor = payload + 8;
+                return this._view.getBigInt64(payload, true);
             case LIST_TAG_DOUBLE:
                 this._cursor = payload + 8;
                 return this._view.getFloat64(payload, true);

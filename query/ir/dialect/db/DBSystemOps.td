@@ -74,6 +74,12 @@ def ImportGraph : SystemOp<"import_graph"> {
     `LOAD JSONL`: one entry per property that holds a vector, mapping the
     property name to its dimension. The other two formats never carry it.
 
+    `date_times` is its `WITH DATETIMES [prop, ...]` clause: the properties whose
+    strings name an instant rather than text. A datetime is spelled as a string
+    in JSON, so the query says which names carry one. The names carry no value of
+    their own, so each is a unit entry - a dictionary rather than an array because
+    that sorts and uniques its names itself.
+
       %g = db.import_graph jsonl("/data/social.jsonl") as "social"
              embeddings {vec = 128 : ui64} : !db.column<!storage.string>
   }];
@@ -81,12 +87,13 @@ def ImportGraph : SystemOp<"import_graph"> {
   let arguments = (ins StrAttr:$path,
                        StrAttr:$graph_name,
                        GraphImportFormat:$format,
-                       OptionalAttr<DictionaryAttr>:$embeddings);
+                       OptionalAttr<DictionaryAttr>:$embeddings,
+                       OptionalAttr<DictionaryAttr>:$date_times);
   let results   = (outs ColumnStrings:$graph);
 
   let assemblyFormat = [{
     $format `(` $path `)` `as` $graph_name (`embeddings` $embeddings^)?
-    attr-dict `:` qualified(type($graph))
+    (`datetimes` $date_times^)? attr-dict `:` qualified(type($graph))
   }];
 }
 

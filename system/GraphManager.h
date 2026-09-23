@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ChangeManager.h"
+#include "DateTimeSpec.h"
 #include "EmbeddingsSpec.h"
 #include "GraphFileType.h"
 #include "GraphLoadStatus.h"
@@ -46,7 +47,8 @@ public:
     Graph* importGraph(std::string_view graphName,
                        const fs::Path& filePath,
                        JobSystem* jobSystem,
-                       const EmbeddingsSpec& embeddingSpecs = {});
+                       const EmbeddingsSpec& embeddingSpecs = {},
+                       const DateTimeSpec& dateTimeSpecs = {});
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
@@ -73,7 +75,8 @@ private:
     Graph* loadJsonlDB(std::string_view graphName,
                        const fs::Path& dbPath,
                        JobSystem* jobSystem,
-                       const EmbeddingsSpec& embeddingSpecs);
+                       const EmbeddingsSpec& embeddingSpecs,
+                       const DateTimeSpec& dateTimeSpecs);
 
     Graph* loadGmlDB(std::string_view graphName,
                      const fs::Path& dbPath,
