@@ -24,7 +24,9 @@ The pattern shorthand is one MATCH the parser builds; everything below reads the
 both.
 
 EXISTS is correlated and imports nothing: every variable in flight is readable inside the
-body, under no scope clause. What the body binds stays inside it - `EXISTS { (p)-->(k) }`
+body, under no scope clause, and stays readable through the whole of it - a WITH inside the
+body carries those variables past the barrier rather than descoping them, as a CALL carries
+what its scope clause names. What the body binds stays inside it - `EXISTS { (p)-->(k) }`
 leaves `k` unbound outside, and a later clause naming it fails to resolve.
 
 The body is read-only. A body holding an updating clause is rejected by the analyzer, which

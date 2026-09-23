@@ -528,21 +528,34 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = body->getDeclContext();
 
+    // Each one stays readable through the whole body, as what a CALL's scope clause names
+    // does: a WITH inside it carries them past the barrier rather than descoping them,
+    // which is what keeps a pattern below that WITH reading the row the EXISTS answers for
+    std::vector<std::string_view> correlated;
+
     for (const VarDecl* decl : outer->decls()) {
         if (decl->isUnnamed()) {
             continue;
         }
 
-        VarDecl* correlated = inner->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
-        correlated->setListShape(decl->getListShape());
+        const std::string_view name = decl->getName();
+
+        VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
+        imported->setListShape(decl->getListShape());
+
+        correlated.push_back(name);
     }
 
     const bool outerHasCreate = _writeAnalyzer->hasCreate();
+
+    std::swap(_subqueryImports, correlated);
 
     setScope(inner);
     _writeAnalyzer->startPart();
 
     analyzeQueryBody(body, /*returnRequired=*/false);
+
+    std::swap(_subqueryImports, correlated);
 
     // A RETURN answers for no column outside the body, but the code generator reads the
     // declarations its items publish, so they are declared in a scope nothing else holds
