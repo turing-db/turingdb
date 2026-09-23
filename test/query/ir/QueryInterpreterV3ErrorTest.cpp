@@ -76,18 +76,12 @@ TEST_F(QueryInterpreterV3ErrorTest, reportsRejectedExpressionWithItsLocation) {
               "-------* Expressions in DELETE statements can only be symbols");
 }
 
-// A map is built once as a constant, so a value reading a row has no attribute to ride.
-// The rejection names that value rather than the map holding it.
-TEST_F(QueryInterpreterV3ErrorTest, reportsMapValueReadingARowWithItsLocation) {
+TEST_F(QueryInterpreterV3ErrorTest, reportsMapSortKey) {
     QueryStatus status;
     runQuery("MATCH (n) RETURN n.name ORDER BY {a: n.age}", status);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(),
-              "-------* Query error\n"
-              "     1 | MATCH (n) RETURN n.name ORDER BY {a: n.age}\n"
-              "       |                                      ^^^^^\n"
-              "-------* Only literal values are supported in a map.");
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(status.getError(), "A map column cannot be a sort key: a map has no order here");
 }
 
 TEST_F(QueryInterpreterV3ErrorTest, deleteOutsideWrite) {

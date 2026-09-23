@@ -71,6 +71,13 @@ def ColumnRowTags : Type<
     BuildableType<"::mlir::db::ColumnType::get($_builder.getContext(), "
                   "$_builder.getIntegerType(64, false))">;
 
+def ColumnMaps : Type<
+        CPred<"::llvm::isa<::mlir::db::ColumnType>($_self) && "
+              "::llvm::isa<::mlir::storage::MapType>(::llvm::cast<::mlir::db::ColumnType>($_self).getType())">,
+        "column of maps", "::mlir::db::ColumnType">,
+    BuildableType<"::mlir::db::ColumnType::get($_builder.getContext(), "
+                  "::mlir::storage::MapType::get($_builder.getContext()))">;
+
 // The seen-set several db.remove_duplicates share, so that one dedup spans dataflows
 // that never meet: the branches of a UNION, whose rows reach the result through one
 // db.output each and are still deduped against one another.

@@ -10,6 +10,7 @@
 #include "MapView.h"
 #include "MapWriteCursor.h"
 
+#include "ID.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -20,7 +21,8 @@ using MappableTypesImpl =
     std::tuple<db::types::Int64::Primitive, db::types::UInt64::Primitive,
                db::types::Double::Primitive, db::types::Bool::Primitive,
                db::types::String::Primitive, db::types::Embedding::Primitive,
-               db::ListView, db::MapView, db::PropertyNull>;
+               db::ListView, db::MapView, db::PropertyNull, db::NodeID, db::EdgeID,
+               db::types::DateTime::Primitive>;
 }
 
 namespace db {

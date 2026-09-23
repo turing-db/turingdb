@@ -147,8 +147,8 @@ createTuringDecoderModule().then((Module) => {
     assert.deepStrictEqual(Array.from(new BigUint64Array(counts.values.buffer)), [10n, 0n, 30n]);
     assert.deepStrictEqual(Array.from(counts.validity), [0b101]);
 
-    assert.strictEqual(decoder.getListBytes().length, 0);
-    assert.strictEqual(decoder.getListStrings().count, 0);
+    assert.strictEqual(decoder.getNestedBytes().length, 0);
+    assert.strictEqual(decoder.getNestedStrings().count, 0);
 
     decoder.delete();
     console.log("wasm decoder smoke test passed: 4 columns decoded");

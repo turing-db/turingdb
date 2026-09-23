@@ -297,3 +297,52 @@ TEST_F(ListOfMapsTest, unwindsAMapBesideOtherElements) {
 TEST_F(ListOfMapsTest, holdsTheMapsAComprehensionProjects) {
     expectRows("RETURN [x IN [1, 2] | {a: 1}]", {"[{a: 1}, {a: 1}]"});
 }
+
+TEST_F(ListOfMapsTest, holdsTheMapsAComprehensionProjectsPerElement) {
+    expectRows("RETURN [x IN [1, 2] | {a: x}]", {"[{a: 1}, {a: 2}]"});
+}
+
+TEST_F(ListOfMapsTest, holdsTheMapsAComprehensionProjectsFromARow) {
+    expectRows("MATCH (n:Person) RETURN [x IN [1] | {name: n.name}] LIMIT 2",
+               {"[{name: 'Remy'}]", "[{name: 'Adam'}]"});
+}
+
+// The map a row reads is built per row, so the list holding it is built per row too
+TEST_F(ListOfMapsTest, holdsAMapReadingARow) {
+    expectRows("MATCH (n:Person) RETURN [{name: n.name}] LIMIT 3",
+               {"[{name: 'Remy'}]", "[{name: 'Adam'}]", "[{name: 'Maxime'}]"});
+}
+
+TEST_F(ListOfMapsTest, holdsAMapReadingARowBesideAConstant) {
+    expectRows("MATCH (n:Person) RETURN [1, {name: n.name}] LIMIT 2",
+               {"[1, {name: 'Remy'}]", "[1, {name: 'Adam'}]"});
+}
+
+// A collect gathers its rows into a list, so a map value should collect like any other.
+// Disabled: collect's signature rejects a Map argument in the analyzer, before the lowering
+// gap in lowerCollect's cell-presence set is even reached.
+TEST_F(ListOfMapsTest, DISABLED_collectsMapsReadingARow) {
+    expectRows("UNWIND [1, 2] AS x RETURN collect({a: x})", {"[{a: 1}, {a: 2}]"});
+}
+
+TEST_F(ListOfMapsTest, DISABLED_collectsAConstantMap) {
+    expectRows("UNWIND [1, 2] AS x RETURN collect({a: 1})", {"[{a: 1}, {a: 1}]"});
+}
+
+// Two maps that compare equal dedup together, so a map keys a DISTINCT like any other value
+TEST_F(ListOfMapsTest, dedupsEqualMaps) {
+    expectRows("UNWIND [{a: 1}, {a: 1}] AS x RETURN DISTINCT x", {"{a: 1}"});
+}
+
+TEST_F(ListOfMapsTest, keepsMapsThatDiffer) {
+    expectRows("UNWIND [{a: 1}, {a: 2}] AS x RETURN DISTINCT x", {"{a: 1}", "{a: 2}"});
+}
+
+// The key normalises numbers the way a list element's does, so it agrees with equality
+TEST_F(ListOfMapsTest, dedupsMapsWhoseNumbersDifferOnlyByTag) {
+    expectRows("UNWIND [{a: 1}, {a: 1.0}] AS x RETURN DISTINCT x", {"{a: 1}"});
+}
+
+TEST_F(ListOfMapsTest, dedupsListsHoldingEqualMaps) {
+    expectRows("UNWIND [[{a: 1}], [{a: 1}]] AS x RETURN DISTINCT x", {"[{a: 1}]"});
+}

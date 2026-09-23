@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person {name: 'Remy'})-[r:KNOWS_WELL]->(m) RETURN {src: n, rel: r, dst: m}",
+  "expect": {
+    "result": "\"{src: n, rel: r, dst: m}\"\n\"{dst: 1, rel: 0, src: 0}\""
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

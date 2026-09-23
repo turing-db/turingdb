@@ -9,8 +9,7 @@ struct ListView {
     uint32_t _offset {0};
 };
 
-// The same for a map. Declared so the sink satisfies ProtoDecodeSink; the flat-bytes layout
-// a map would take, and the JS reader for it, are not written yet.
+// The same for a map: the byte offset of its entry-count header.
 struct MapView {
     uint32_t _offset {0};
 };

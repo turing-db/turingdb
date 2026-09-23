@@ -58,6 +58,9 @@ export const ColumnType = Object.freeze({
     DATE_TIME: 22,
 });
 
+// The column types whose values the nested reader walks out of the flat nested bytes
+const NESTED_COLUMN_TYPES = [ColumnType.LIST_VIEW, ColumnType.LIST_ELEMENT_VIEW, ColumnType.MAP_VIEW];
+
 export const ColumnEncoding = Object.freeze({
     VECTOR: 0,
     OPTIONAL_VECTOR: 1,
@@ -77,6 +80,7 @@ const LIST_TAG_NULL = 7;
 const LIST_TAG_NODE_ID = 8;
 const LIST_TAG_EDGE_ID = 9;
 const LIST_TAG_DATETIME = 10;
+const LIST_TAG_MAP_VIEW = 11;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -230,9 +234,9 @@ function makeStringReader(bytes, byteOffsets, utf16Offsets) {
 }
 
 // Walks the decoder's flat list bytes: a list or a single element from a byte offset.
-// A cursor tracks the read position so a nested list resumes where its child ended.
-// Strings are referenced by index into the dataframe's list string set.
-export class ListReader {
+// A cursor tracks the read position so a nested list or map resumes where its child ended.
+// Strings and map keys are referenced by index into the dataframe's nested string set.
+export class NestedReader {
     constructor(bytes, strings) {
         this._bytes = bytes;
         this._view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -250,6 +254,11 @@ export class ListReader {
         return this._readElement();
     }
 
+    readMapAt(offset) {
+        this._cursor = offset;
+        return this._readMap();
+    }
+
     _readList() {
         const count = this._view.getUint32(this._cursor, true);
         this._cursor += 4;
@@ -259,6 +268,22 @@ export class ListReader {
             values[index] = this._readElement();
         }
         return values;
+    }
+
+    // An entry is its key's string index, then its value laid out as a list element.
+    _readMap() {
+        const count = this._view.getUint32(this._cursor, true);
+        this._cursor += 4;
+
+        const entries = new Array(count);
+        for (let index = 0; index < count; index++) {
+            const key = this._readString(this._view.getUint32(this._cursor, true));
+            this._cursor += 4;
+            entries[index] = [key, this._readElement()];
+        }
+
+        // fromEntries defines each key as an own property, so a "__proto__" key stays a key
+        return Object.fromEntries(entries);
     }
 
     _readElement() {
@@ -299,6 +324,9 @@ export class ListReader {
             case LIST_TAG_LIST_VIEW:
                 this._cursor = payload;
                 return this._readList();
+            case LIST_TAG_MAP_VIEW:
+                this._cursor = payload;
+                return this._readMap();
             default:
                 throw new TuringQueryError("DECODE_ERROR", `Unknown list element tag ${tag}`);
         }
@@ -317,7 +345,7 @@ function readEntityList(bytes, view, start, end) {
 // Builds the item reader for a column's buffers: { read: (itemIndex) => JS value,
 // values: the typed array over fixed-width values or null, direct: whether values[i]
 // already is the JS value }.
-function makeItemReader(buffers, listReader) {
+function makeItemReader(buffers, nestedReader) {
     const typeCode = buffers.typeCode;
     const fixed = FIXED_WIDTH_KINDS[typeCode];
 
@@ -345,20 +373,27 @@ function makeItemReader(buffers, listReader) {
             return variable((index) => readEntityList(buffers.values, view, offsets[index], offsets[index + 1]));
         }
         case ColumnType.LIST_VIEW:
-            return variable((index) => listReader.readListAt(offsets[index]));
+            return variable((index) => nestedReader.readListAt(offsets[index]));
         case ColumnType.LIST_ELEMENT_VIEW:
-            return variable((index) => listReader.readElementAt(offsets[index]));
+            return variable((index) => nestedReader.readElementAt(offsets[index]));
+        case ColumnType.MAP_VIEW:
+            return variable((index) => nestedReader.readMapAt(offsets[index]));
         default:
             throw new TuringQueryError("DECODE_ERROR", `Unsupported column type ${typeCode}`);
     }
 }
 
-function bigIntToNumberDeep(value) {
+// Only a nested column's plain objects are maps: an entity list's entries are plain objects
+// too, and keep their BigInt ids.
+function bigIntToNumberDeep(value, convertsMaps) {
     if (typeof value === "bigint") {
         return Number(value);
     }
     if (Array.isArray(value)) {
-        return value.map(bigIntToNumberDeep);
+        return value.map((item) => bigIntToNumberDeep(item, convertsMaps));
+    }
+    if (convertsMaps && typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, bigIntToNumberDeep(entry, true)]));
     }
     return value;
 }
@@ -366,7 +401,7 @@ function bigIntToNumberDeep(value) {
 // One decoded column: the flat buffers the decoder handed over, read row by row on
 // demand. 64-bit integers and IDs read as BigInt; a missing optional reads as null.
 export class Column {
-    constructor(name, buffers, listReader, rowCount) {
+    constructor(name, buffers, nestedReader, rowCount) {
         this.name = name;
         this.typeCode = buffers.typeCode;
         this.encoding = buffers.encoding;
@@ -375,7 +410,7 @@ export class Column {
         this._itemCount = buffers.count;
         this._validity = buffers.validity ?? null;
 
-        const reader = makeItemReader(buffers, listReader);
+        const reader = makeItemReader(buffers, nestedReader);
         this._read = reader.read;
         this._typedValues = reader.values;
         this._direct = reader.direct;
@@ -425,7 +460,8 @@ export class Column {
     toNumberArray() {
         const fixed = FIXED_WIDTH_KINDS[this.typeCode];
         if (fixed === undefined) {
-            return this.toArray().map(bigIntToNumberDeep);
+            const convertsMaps = NESTED_COLUMN_TYPES.includes(this.typeCode);
+            return this.toArray().map((value) => bigIntToNumberDeep(value, convertsMaps));
         }
         if (fixed.size !== 8 || this.typeCode === ColumnType.DOUBLE) {
             return this.toArray();
@@ -476,10 +512,10 @@ function readDataframe(decoder) {
         buffers.push(decoder.getColumnBuffers(index));
     }
 
-    const hasLists = buffers.some((column) => column.typeCode === ColumnType.LIST_VIEW || column.typeCode === ColumnType.LIST_ELEMENT_VIEW);
-    const listReader = hasLists ? new ListReader(decoder.getListBytes(), decoder.getListStrings()) : null;
+    const hasNested = buffers.some((column) => NESTED_COLUMN_TYPES.includes(column.typeCode));
+    const nestedReader = hasNested ? new NestedReader(decoder.getNestedBytes(), decoder.getNestedStrings()) : null;
 
-    const columns = buffers.map((columnBuffers, index) => new Column(names[index], columnBuffers, listReader, rowCount));
+    const columns = buffers.map((columnBuffers, index) => new Column(names[index], columnBuffers, nestedReader, rowCount));
     return { names, columns };
 }
 

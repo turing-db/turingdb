@@ -15,6 +15,15 @@ add_storage_tests(test_storage_stringpropertycontainer StringPropertyContainerTe
 add_storage_tests(test_storage_trivialpropertycontainer TrivialPropertyContainerTest.cpp)
 add_storage_tests(test_storage_listpropertycontainer ListPropertyContainerTest.cpp)
 add_storage_tests(test_storage_datetime_parse DateTimeParseTest.cpp)
+
+# LocalMemory::clear() is the server's after-every-request reset: it must reclaim every
+# buffer a query writes into.
+add_storage_tests(test_storage_local_memory_clear LocalMemoryClearTest.cpp)
+target_link_libraries(test_storage_local_memory_clear PRIVATE turing_db_memory_s)
+
+# A map value compares the way the same value does as a list element.
+add_storage_tests(test_storage_map_value_equality MapValueEqualityTest.cpp)
+target_link_libraries(test_storage_map_value_equality PRIVATE turing_db_memory_s)
 add_storage_tests(test_storage_labelset LabelSetTest.cpp)
 add_storage_tests(test_storage_labelsetmap LabelSetMapTest.cpp)
 add_storage_tests(test_storage_labelmap LabelMapTest.cpp)

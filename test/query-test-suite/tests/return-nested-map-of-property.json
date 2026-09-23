@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) RETURN {outer: {name: n.name}, list: [n.name, 1]} ORDER BY n.name",
+  "expect": {
+    "result": "\"{outer: {name: n.name}, list: [n.name, 1]}\"\n\"{list: [Adam, 1], outer: {name: Adam}}\"\n\"{list: [Cyrus, 1], outer: {name: Cyrus}}\"\n\"{list: [Doruk, 1], outer: {name: Doruk}}\"\n\"{list: [Luc, 1], outer: {name: Luc}}\"\n\"{list: [Martina, 1], outer: {name: Martina}}\"\n\"{list: [Maxime, 1], outer: {name: Maxime}}\"\n\"{list: [Remy, 1], outer: {name: Remy}}\"\n\"{list: [Suhas, 1], outer: {name: Suhas}}\""
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

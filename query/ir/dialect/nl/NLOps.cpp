@@ -3,6 +3,7 @@
 
 #include <optional>
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -548,6 +549,27 @@ LogicalResult MakeList::verify() {
     const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
     if (!llvm::isa<storage::ListType>(elementType)) {
         return emitOpError("result must be a chunk of lists");
+    }
+
+    return success();
+}
+
+LogicalResult MakeMap::verify() {
+    const size_t valueCount = getValues().size();
+    if (valueCount == 0) {
+        return emitOpError("requires at least one value chunk");
+    }
+
+    const ArrayAttr keys = getKeys();
+    if (keys.size() != valueCount) {
+        return emitOpError("requires one key per value chunk");
+    }
+
+    llvm::SmallDenseSet<StringRef, 8> seenKeys;
+    for (const Attribute key : keys) {
+        if (!seenKeys.insert(llvm::cast<StringAttr>(key).getValue()).second) {
+            return emitOpError("requires distinct keys");
+        }
     }
 
     return success();

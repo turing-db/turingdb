@@ -13,8 +13,8 @@ namespace db {
 /**
  * @brief Non-owning view of an entry (key-value pair) in a @ref MapByteBuffer.
  *
- * @detail Layout in the byte buffer: [key string_view (16 bytes)][value tag (1 byte)]
- * [value bytes (sizeof(T) bytes)].
+ * @detail Layout in the byte buffer: [key string_view (sizeof(std::string_view) bytes)]
+ * [value tag (1 byte)][value bytes (sizeof(T) bytes)].
  */
 class MapEntryView {
 public:
@@ -27,8 +27,7 @@ public:
 
     /// Returns the key of this entry. Keys are always strings.
     std::string_view getKey() const {
-        static_assert(sizeof(std::string_view) == 16,
-                      "string_view size changed: function may need modifying.");
+        static_assert(std::is_trivially_copyable_v<std::string_view>);
 
         std::string_view out;
         std::memcpy(&out, _start, sizeof(std::string_view));

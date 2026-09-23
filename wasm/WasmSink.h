@@ -10,6 +10,8 @@
 #include "ChunkedBuffer.h"
 #include "TuringProtoDecoderConcepts.h"
 #include "list/ListBufferTypeTag.h"
+#include "list/ListUtils.h"
+#include "map/MapBufferTypeTag.h"
 
 #include "Column.h"
 #include "ColumnConst.h"
@@ -58,6 +60,8 @@ consteval ColumnType wireCodeOfElement() {
         return ColumnType::LIST_VIEW;
     } else if constexpr (std::is_same_v<Element, ListElementView>) {
         return ColumnType::LIST_ELEMENT_VIEW;
+    } else if constexpr (std::is_same_v<Element, MapView>) {
+        return ColumnType::MAP_VIEW;
     } else if constexpr (std::is_same_v<Element, db::ValueType>) {
         return ColumnType::VALUE_TYPE;
     } else if constexpr (std::is_same_v<Element, db::PropertyNull>) {
@@ -81,11 +85,12 @@ consteval ColumnType wireCodeOfElement() {
     }
 }
 
-// Lists are serialised depth-first into one flat little-endian byte buffer that JS reads
-// directly: a list is [u32 elementCount] then its elements, an element [u8 tag] then its
-// payload — 8 bytes for Int/UInt/Double/NodeID/EdgeID, 1 for Bool/Null, [u32 index] into
-// the list string set for String, [u32 byteSize][bytes] for Embedding, a nested list
-// inline for ListView.
+// Lists and maps are serialised depth-first into one flat little-endian byte buffer that JS
+// reads directly: a list is [u32 elementCount] then its elements, an element [u8 tag] then
+// its payload — 8 bytes for Int/UInt/Double/NodeID/EdgeID, 1 for Bool/Null, [u32 index] into
+// the nested string set for String, [u32 byteSize][bytes] for Embedding, a nested list or map inline
+// for ListView or MapView. A map is [u32 entryCount] then its entries, an entry [u32 index]
+// of its key in the nested string set then its value, written exactly as a list element is.
 class WasmSink {
 public:
     using ColumnContainer = wasm::ColumnContainer;
@@ -124,15 +129,20 @@ public:
     ListElementView writeListValue(std::string_view value);
     ListElementView writeListValue(std::span<const float> value);
     ListElementView writeListElementBytes(const char* bytes, size_t byteSize);
-    // Maps are not decodable by this family yet: the flat-bytes layout and the JS reader
-    // for one do not exist, so every entry point throws rather than writing a half-format.
+
     MapView beginMap(size_t entryCount, size_t byteSize);
-    void beginNestedMap(size_t entryCount, size_t byteSize);
+    ListElementView beginNestedMap(size_t entryCount, size_t byteSize);
     void writeMapKey(std::string_view key);
+    void writeMapValue(std::string_view value);
+    void writeMapValue(std::span<const float> value);
 
     template <typename T>
     void writeMapValue(const T& value) {
-        throwMapUnsupported();
+        const db::ListBufferTypeTag tag = db::TypeToListBufferTag<T>::Tag;
+        appendBytes(&tag, sizeof(tag));
+        appendBytes(&value, sizeof(value));
+
+        countElementWritten();
     }
 
     void writeMapValueBytes(const char* bytes, size_t byteSize);
@@ -146,15 +156,17 @@ public:
     size_t openContainerCount() const;
     size_t topLevelValuesWritten() const;
 
-    std::span<const char> getListBytes();
-    std::span<const std::string_view> getListStrings() const;
+    std::span<const char> getNestedBytes();
+    std::span<const std::string_view> getNestedStrings() const;
 
     void reset();
 
 private:
-    struct OpenList {
+    struct OpenContainer {
         uint32_t _expectedCount {0};
         uint32_t _writtenCount {0};
+        bool _isMap {false};
+        bool _keyPending {false};
     };
 
     // The decoder hands over an embedding view before filling its floats (the payload
@@ -168,15 +180,15 @@ private:
 
     net::proto::ChunkedBuffer<float> _embeddingBuffer;
     net::proto::ChunkedBuffer<char> _stringBuffer;
-    std::vector<char> _listBytes;
-    std::vector<std::string_view> _listStrings;
-    std::vector<OpenList> _listStack;
+    std::vector<char> _nestedBytes;
+    std::vector<std::string_view> _nestedStrings;
+    std::vector<OpenContainer> _containerStack;
     std::vector<DeferredPayload> _deferredPayloads;
 
     uint32_t appendBytes(const void* bytes, size_t byteSize);
-    uint32_t appendListHeader(size_t elementCount);
+    uint32_t appendCountHeader(size_t count);
+    ListElementView appendNestedHeader(db::ListBufferTypeTag tag, size_t count);
     ListElementView appendDeferredPayload(db::ListBufferTypeTag tag, const char* source, size_t byteSize);
-    [[noreturn]] static void throwMapUnsupported();
     void countElementWritten();
 };
 

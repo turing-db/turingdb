@@ -946,6 +946,8 @@ private:
     // what a list whose items are not all literals evaluates to
     mlir::Value translateListOfColumns(const ListLiteral* list);
 
+    mlir::Value translateMapOfColumns(const MapLiteral* map);
+
     void addScanNodes(const VariableDependency* var);
 
     // Opens a dataflow from the column a CALL yielded, the way addScanNodes opens one from

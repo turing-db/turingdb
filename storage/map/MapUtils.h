@@ -4,6 +4,7 @@
 #include "MapEntryView.h"
 #include "MapBufferTypeTag.h"
 
+#include "ID.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -44,6 +45,15 @@ struct MapTagDispatcher {
             break;
             case MapBufferTypeTag::Null:
                 return executor.template operator()<PropertyNull>(view);
+            break;
+            case MapBufferTypeTag::NodeID:
+                return executor.template operator()<NodeID>(view);
+            break;
+            case MapBufferTypeTag::EdgeID:
+                return executor.template operator()<EdgeID>(view);
+            break;
+            case MapBufferTypeTag::DateTime:
+                return executor.template operator()<types::DateTime::Primitive>(view);
             break;
             case MapBufferTypeTag::INVALID:
             break;
@@ -99,6 +109,21 @@ struct TypeToMapBufferTag<MapView> {
 template <>
 struct TypeToMapBufferTag<PropertyNull> {
     static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Null;
+};
+
+template <>
+struct TypeToMapBufferTag<NodeID> {
+    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::NodeID;
+};
+
+template <>
+struct TypeToMapBufferTag<EdgeID> {
+    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::EdgeID;
+};
+
+template <>
+struct TypeToMapBufferTag<types::DateTime::Primitive> {
+    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::DateTime;
 };
 
 }

@@ -15,6 +15,9 @@ enum class MapBufferTypeTag : uint8_t {
     ListView,
     MapView,
     Null,
+    NodeID,
+    EdgeID,
+    DateTime,
 
     INVALID,
 };

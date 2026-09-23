@@ -345,12 +345,19 @@ private:
     // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
     // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads
     // chunk by chunk and a constant list keeps whole. A nested array is materialized
-    // first and kept as one element of the list holding it. A string element stores the
-    // string_view, not the characters, so the module the literals came from must outlive
-    // execution - not just this call.
+    // first and kept as one element of the list holding it.
     ListView materializeListView(mlir::ArrayAttr elements);
 
     MapView materializeMapView(mlir::DictionaryAttr entries);
+
+    // The characters of @param text, copied into the query's string buffer. The list and
+    // map buffers store a view rather than the characters, and an attribute's characters die
+    // with the MLIR context when the query returns - before an embedded client reads the rows
+    std::string_view ownedCharacters(llvm::StringRef text);
+
+    // The floats of @param embedding, copied into the query's embedding buffer, for the
+    // same reason ownedCharacters copies characters
+    types::Embedding::Primitive ownedFloats(llvm::ArrayRef<float> embedding);
 
     // The bytes the elements' values occupy, which sizes the region materializeListView
     // reserves before writing them
@@ -898,6 +905,7 @@ private:
     // Allocates the list column an nl.make_list writes, and binds the read each element
     // column's cells go into the list buffer through
     void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);
+    void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
 
     // Translate an nl.list_comprehension: allocate the element chunk, one chunk per
     // carried column and the list column the step fills, pick the handlers that read the
@@ -915,6 +923,8 @@ private:
     // The read one element column of an nl.make_list contributes its cell through, chosen
     // by what the chunk holds
     static NLListItemReadFunction selectListItemRead(mlir::Type chunkType);
+
+    static NLMapValueReadFunction selectMapValueRead(mlir::Type chunkType);
 
     // The read one bound column of an nl.range is taken through, chosen by the integer
     // the chunk holds

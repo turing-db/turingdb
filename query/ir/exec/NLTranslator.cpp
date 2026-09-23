@@ -1,6 +1,7 @@
 #include "NLTranslator.h"
 
 #include <optional>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 
@@ -767,6 +768,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakeList(makeList, body);
         } else if (nl::ListSlice listSlice = mlir::dyn_cast<nl::ListSlice>(operation)) {
             translateListSlice(listSlice, body);
+        } else if (nl::MakeMap makeMap = mlir::dyn_cast<nl::MakeMap>(operation)) {
+            translateMakeMap(makeMap, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
             translateRange(range, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
@@ -1423,6 +1426,14 @@ size_t NLTranslator::mapValueBytes(mlir::DictionaryAttr entries) {
     return valueBytes;
 }
 
+std::string_view NLTranslator::ownedCharacters(llvm::StringRef text) {
+    return _memory->stringBuffer().insert(std::span<const char> {text.data(), text.size()});
+}
+
+types::Embedding::Primitive NLTranslator::ownedFloats(llvm::ArrayRef<float> embedding) {
+    return _memory->embeddingBuffer().insert(std::span<const float> {embedding.data(), embedding.size()});
+}
+
 MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
     // The region is reserved and committed up front, so the entries are written straight
     // into their final place - no staging container between the attributes and the buffer.
@@ -1435,7 +1446,7 @@ MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
         const mlir::StringAttr name = entry.getName();
         const mlir::Attribute value = entry.getValue();
 
-        cursor.writeKey(std::string_view {name.data(), name.size()});
+        cursor.writeKey(ownedCharacters(name.getValue()));
 
         if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(value)) {
             cursor.writeValue(MapBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
@@ -1446,16 +1457,9 @@ MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
             cursor.writeValue(MapBufferTypeTag::Double,
                               static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(value)) {
-            // The payload stays in the attribute, which outlives the query, so the stored
-            // view points at it rather than at a copy
-            cursor.writeValue(MapBufferTypeTag::String,
-                              types::String::Primitive(stringAttr.data(), stringAttr.size()));
+            cursor.writeValue(MapBufferTypeTag::String, ownedCharacters(stringAttr.getValue()));
         } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(value)) {
-            // The floats stay in the attribute, as a string entry's bytes do, so the
-            // stored span points at them rather than at a copy
-            const llvm::ArrayRef<float> floats = embeddingAttr.asArrayRef();
-            cursor.writeValue(MapBufferTypeTag::Embedding,
-                              types::Embedding::Primitive(floats.data(), floats.size()));
+            cursor.writeValue(MapBufferTypeTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
         } else if (const auto nestedList = mlir::dyn_cast<mlir::ArrayAttr>(value)) {
             cursor.writeValue(MapBufferTypeTag::ListView, materializeListView(nestedList));
         } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(value)) {
@@ -1488,17 +1492,9 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
             cursor.writeValue(ListBufferTypeTag::Double,
                               static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
-            // The payload stays in the attribute, which outlives the query, so the stored
-            // view points at it rather than at a copy
-            const llvm::StringRef value = stringAttr.getValue();
-            cursor.writeValue(ListBufferTypeTag::String,
-                              types::String::Primitive(value.data(), value.size()));
+            cursor.writeValue(ListBufferTypeTag::String, ownedCharacters(stringAttr.getValue()));
         } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(element)) {
-            // The floats stay in the attribute, as a string element's bytes do, so the
-            // stored span points at them rather than at a copy
-            const llvm::ArrayRef<float> floats = embeddingAttr.asArrayRef();
-            cursor.writeValue(ListBufferTypeTag::Embedding,
-                              types::Embedding::Primitive(floats.data(), floats.size()));
+            cursor.writeValue(ListBufferTypeTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
             cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
         } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
@@ -2349,7 +2345,15 @@ void NLTranslator::translateConstant(nl::Constant constant) {
     Column* column = nullptr;
     const auto materialize = [&]<SupportedType T>() {
         auto* typed = _memory->alloc<ColumnConst<typename T::Primitive>>();
-        typed->set(constantValueAs<T>(value));
+
+        if constexpr (std::same_as<T, types::String>) {
+            typed->set(ownedCharacters(mlir::cast<mlir::StringAttr>(value).getValue()));
+        } else if constexpr (std::same_as<T, types::Embedding>) {
+            typed->set(ownedFloats(mlir::cast<mlir::DenseF32ArrayAttr>(value).asArrayRef()));
+        } else {
+            typed->set(constantValueAs<T>(value));
+        }
+
         column = typed;
     };
     ValueTypeDispatcher(valueType).execute(materialize);
@@ -2587,6 +2591,62 @@ void NLTranslator::translateMakeList(nl::MakeList makeList, NLStmtContainer* bod
     }
 
     body->emplaceStmt(&NLExecutor::runMakeList, data);
+}
+
+NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    if (mlir::isa<storage::NodeIDType>(elementType)) {
+        return NLExecutor::selectNodeMapValueRead();
+    } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
+        return NLExecutor::selectEdgeMapValueRead();
+    } else if (mlir::isa<storage::MapType>(elementType)) {
+        return NLExecutor::selectNestedMapValueRead();
+    } else if (mlir::isa<storage::ListType>(elementType)) {
+        return NLExecutor::selectNestedListMapValueRead();
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectTaggedMapValueRead(/*nullable=*/false);
+    } else if (isNullableList(elementType)) {
+        return NLExecutor::selectOptNestedListMapValueRead();
+    } else if (isNullableListElement(elementType)) {
+        return NLExecutor::selectTaggedMapValueRead(/*nullable=*/true);
+    } else if (isOwnedStringElement(elementType)) {
+        return NLExecutor::selectOwnedStringMapValueRead(/*nullable=*/false);
+    }
+
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
+    if (!nullableType) {
+        throw IRException("nl.make_map requires a nullable value chunk for a scalar value column");
+    }
+
+    const mlir::Type valueElement = nullableType.getValueType();
+    if (isOwnedStringElement(valueElement)) {
+        return NLExecutor::selectOwnedStringMapValueRead(/*nullable=*/true);
+    }
+
+    return NLExecutor::selectValueMapValueRead(valueTypeFromElementType(valueElement));
+}
+
+void NLTranslator::translateMakeMap(nl::MakeMap makeMap, NLStmtContainer* body) {
+    const mlir::Value resultValue = makeMap.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLMakeMapData* data = _program->allocFunctionData<NLMakeMapData>(result, _memory);
+
+    const mlir::ArrayAttr keys = makeMap.getKeys();
+    for (const auto& [key, valueChunk] : llvm::zip_equal(keys, makeMap.getValues())) {
+        const llvm::StringRef keyName = mlir::cast<mlir::StringAttr>(key).getValue();
+
+        data->addEntry(NLMakeMapData::Entry {
+            ._key = ownedCharacters(keyName),
+            ._column = getColumn(valueChunk),
+            ._read = selectMapValueRead(valueChunk.getType()),
+        });
+    }
+
+    body->emplaceStmt(&NLExecutor::runMakeMap, data);
 }
 
 NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType) {

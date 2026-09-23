@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "ID.h"
 #include "list/ListView.h"
 #include "map/MapView.h"
 #include "metadata/PropertyNull.h"
@@ -65,4 +66,7 @@ template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::
 template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Double::Primitive&);
 template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Bool::Primitive&);
 template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const PropertyNull&);
+template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const NodeID&);
+template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const EdgeID&);
+template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::DateTime::Primitive&);
 }

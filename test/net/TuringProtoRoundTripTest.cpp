@@ -1297,6 +1297,73 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapKeysAndValuesAcrossMultipleBuffers) 
     EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view(longValue));
 }
 
+// One map per row, with a chunk size small enough that maps split across packets, some of
+// them mid-entry: the vector decoder must resume the open row rather than start a new one.
+TEST(TuringProtoRoundTripTest, RoundTripsMapVectorColumnAcrossMultipleBuffers) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    constexpr size_t rowCount = 20;
+    std::vector<std::string> names;
+    names.reserve(rowCount);
+    for (size_t row = 0; row < rowCount; row++) {
+        names.push_back("name-" + std::to_string(row) + std::string(row * 3, 'x'));
+    }
+
+    auto* mapCol = localMem.alloc<db::ColumnVector<db::MapView>>();
+    for (size_t row = 0; row < rowCount; row++) {
+        std::vector<db::MapBuffer<>::MapKeyValuePair> entries;
+        entries.emplace_back("age", Int64(static_cast<int64_t>(row)));
+        entries.emplace_back("name", StringView {names[row]});
+        entries.emplace_back("missing", db::PropertyNull {});
+        entries.emplace_back("node", db::NodeID {row});
+        entries.emplace_back("edge", db::EdgeID {row + 100});
+
+        mapCol->push_back(localMem.mapBuffer().insert(entries));
+    }
+
+    addColumn(&dfMan, &source, "my_maps", mapCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 32);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 10u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedMaps = decoded.cols().at(0)->as<db::ColumnVector<db::MapView>>();
+    ASSERT_NE(decodedMaps, nullptr);
+    ASSERT_EQ(decodedMaps->size(), rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const db::MapView view = decodedMaps->at(row);
+        ASSERT_EQ(view.size(), 5u) << "row " << row;
+
+        auto entry = view.begin();
+        EXPECT_EQ(entry->getKey(), "age");
+        EXPECT_EQ(entry->getValueAs<Int64>(), static_cast<int64_t>(row));
+        ++entry;
+        EXPECT_EQ(entry->getKey(), "name");
+        EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view(names[row]));
+        ++entry;
+        EXPECT_EQ(entry->getKey(), "missing");
+        EXPECT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Null);
+        ++entry;
+        EXPECT_EQ(entry->getKey(), "node");
+        EXPECT_EQ(entry->getValueAs<db::NodeID>(), db::NodeID {row});
+        ++entry;
+        EXPECT_EQ(entry->getKey(), "edge");
+        EXPECT_EQ(entry->getValueAs<db::EdgeID>(), db::EdgeID {row + 100});
+    }
+}
+
 // A map holding a list, and a list nested inside that: the two container kinds interleave on
 // one stack, so each level has to resume on the right one.
 TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingNestedLists) {
@@ -1409,6 +1476,8 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingEveryValueTag) {
     entries.emplace_back("l", list);
     entries.emplace_back("m", nested);
     entries.emplace_back("n", db::PropertyNull {});
+    entries.emplace_back("node", db::NodeID {42});
+    entries.emplace_back("edge", db::EdgeID {43});
 
     auto* mapCol = localMem.alloc<db::ColumnConst<db::MapView>>();
     mapCol->set(localMem.mapBuffer().insert(entries));
@@ -1428,7 +1497,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingEveryValueTag) {
     ASSERT_NE(decodedMap, nullptr);
 
     const db::MapView view = decodedMap->at(0);
-    ASSERT_EQ(view.size(), 9u);
+    ASSERT_EQ(view.size(), 11u);
 
     const std::span<const db::MapEntryView> decodedEntries = view.entries();
 
@@ -1461,4 +1530,133 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingEveryValueTag) {
 
     EXPECT_EQ(decodedEntries[8].getKey(), "n");
     EXPECT_EQ(decodedEntries[8].getValueTag(), db::MapBufferTypeTag::Null);
+
+    EXPECT_EQ(decodedEntries[9].getKey(), "node");
+    ASSERT_EQ(decodedEntries[9].getValueTag(), db::MapBufferTypeTag::NodeID);
+    EXPECT_EQ(decodedEntries[9].getValueAs<db::NodeID>(), db::NodeID {42});
+
+    EXPECT_EQ(decodedEntries[10].getKey(), "edge");
+    ASSERT_EQ(decodedEntries[10].getValueTag(), db::MapBufferTypeTag::EdgeID);
+    EXPECT_EQ(decodedEntries[10].getValueAs<db::EdgeID>(), db::EdgeID {43});
+}
+
+// The mirror of RoundTripsAMapHoldingNestedLists: a list may hold a map, so the wire has to
+// carry one in that direction too. The encoder writes the map's entries inside the list's
+// payload and the decoder rebuilds it as the MapView element the list stored.
+TEST(TuringProtoRoundTripTest, RoundTripsAListHoldingAMap) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> entries;
+    entries.emplace_back("age", Int64 {32});
+    entries.emplace_back("name", StringView {"Remy"});
+    const db::MapView inner = localMem.mapBuffer().insert(entries);
+
+    std::vector<db::ListBuffer<>::ListItemVariant> outerItems;
+    outerItems.emplace_back(Int64 {7});
+    outerItems.emplace_back(inner);
+    outerItems.emplace_back(StringView {"end"});
+
+    auto* listCol = localMem.alloc<db::ColumnConst<db::ListView>>();
+    listCol->set(localMem.listBuffer().insert(outerItems));
+    addColumn(&dfMan, &source, "with_map", listCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 4096);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
+    ASSERT_NE(decodedList, nullptr);
+
+    const db::ListView view = decodedList->at(0);
+    ASSERT_EQ(view.size(), 3u);
+
+    auto element = view.begin();
+    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(element->getAs<Int64>(), 7);
+
+    ++element;
+    ASSERT_EQ(element->getTag(), db::ListBufferTypeTag::MapView);
+
+    const db::MapView decodedMap = element->getAs<db::MapView>();
+    ASSERT_EQ(decodedMap.size(), 2u);
+
+    auto entry = decodedMap.begin();
+    EXPECT_EQ(entry->getKey(), "age");
+    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Int);
+    EXPECT_EQ(entry->getValueAs<Int64>(), 32);
+
+    ++entry;
+    EXPECT_EQ(entry->getKey(), "name");
+    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::String);
+    EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view("Remy"));
+
+    ++element;
+    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(element->getAs<StringView>(), std::string_view("end"));
+}
+
+// The row-capture sibling of RoundTripsAListHoldingAMap: each row of a ListElementView
+// column is one top-level tagged element, so a map row has to record the element view the
+// list cursor hands back. A constant list column never exercises that - its rows are the
+// one list - so this is where a dropped view shows up.
+TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfMaps) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> firstEntries;
+    firstEntries.emplace_back("a", Int64 {1});
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> secondEntries;
+    secondEntries.emplace_back("b", Int64 {2});
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    items.emplace_back(localMem.mapBuffer().insert(firstEntries));
+    items.emplace_back(Int64 {7});
+    items.emplace_back(localMem.mapBuffer().insert(secondEntries));
+
+    const db::ListView list = localMem.listBuffer().insert(items);
+
+    auto* col = localMem.alloc<db::ColumnVector<db::ListElementView>>();
+    for (const auto& element : list) {
+        col->push_back(element);
+    }
+    addColumn(&dfMan, &source, "elements", col);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 4096);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
+    ASSERT_NE(decodedCol, nullptr);
+    ASSERT_EQ(decodedCol->size(), 3u);
+
+    ASSERT_EQ((*decodedCol)[0].getTag(), db::ListBufferTypeTag::MapView);
+    const db::MapView first = (*decodedCol)[0].getAs<db::MapView>();
+    ASSERT_EQ(first.size(), 1u);
+    EXPECT_EQ(first.front().getKey(), "a");
+    EXPECT_EQ(first.front().getValueAs<Int64>(), 1);
+
+    EXPECT_EQ((*decodedCol)[1].getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ((*decodedCol)[1].getAs<Int64>(), 7);
+
+    ASSERT_EQ((*decodedCol)[2].getTag(), db::ListBufferTypeTag::MapView);
+    const db::MapView second = (*decodedCol)[2].getAs<db::MapView>();
+    ASSERT_EQ(second.size(), 1u);
+    EXPECT_EQ(second.front().getKey(), "b");
+    EXPECT_EQ(second.front().getValueAs<Int64>(), 2);
 }

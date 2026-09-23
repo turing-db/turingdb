@@ -127,6 +127,31 @@ TEST_F(ListEqualityTest, filtersOnAListEquality) {
     expectRows("UNWIND [1, 2] AS x WITH collect(x) AS xs WHERE xs = [1, null] RETURN xs", {});
 }
 
+// A list may hold a map, so two such lists compare like any other pair: entry by entry.
+// Equality is not ordering - a map has no order here, but two maps are plainly equal or not.
+TEST_F(ListEqualityTest, listsHoldingMapsComparePairwise) {
+    expectRows("RETURN [{a: 1}] = [{a: 1}]", {{"true"}});
+    expectRows("RETURN [{a: 1}] = [{a: 2}]", {{"false"}});
+    expectRows("RETURN [{a: 1}] = [{b: 1}]", {{"false"}});
+    expectRows("RETURN [{a: 1}] = [{a: 1, b: 2}]", {{"false"}});
+    expectRows("RETURN [1, {a: 1}] = [1, {a: 1}]", {{"true"}});
+}
+
+// The map may sit under another list, which compares its elements the same way
+TEST_F(ListEqualityTest, nestedListsHoldingMapsComparePairwise) {
+    expectRows("RETURN [[{a: 1}]] = [[{a: 1}]]", {{"true"}});
+    expectRows("RETURN [[{a: 1}]] = [[{a: 2}]]", {{"false"}});
+    expectRows("RETURN [{a: [1, 2]}] = [{a: [1, 2]}]", {{"true"}});
+    expectRows("RETURN [{a: [1, 2]}] = [{a: [1, 3]}]", {{"false"}});
+}
+
+// A number equals a number whatever tag it was stored under, inside a map as outside one
+TEST_F(ListEqualityTest, mapValuesCompareNumericallyAcrossTags) {
+    expectRows("RETURN [1] = [1.0]", {{"true"}});
+    expectRows("RETURN [{a: 1}] = [{a: 1.0}]", {{"true"}});
+    expectRows("RETURN [{a: 1}] = [{a: 1.5}]", {{"false"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

@@ -1312,6 +1312,33 @@ func.func @main() {
 }
 )mlir";
 
+const char* const makeMapProgram = R"mlir(
+func.func @main() {
+  %srcs, %eids, %etypes, %tgts = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %m = db.make_map(%srcs, %tgts) keys ["dst", "src"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  db.output(%m) : !db.column<!storage.map>
+  return
+}
+)mlir";
+
+const char* const keyCountMismatchMakeMapProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %m = db.make_map(%n) keys ["a", "b"] : !db.column<!storage.node_id>
+  db.output(%m) : !db.column<!storage.map>
+  return
+}
+)mlir";
+
+const char* const duplicateKeyMakeMapProgram = R"mlir(
+func.func @main() {
+  %srcs, %eids, %etypes, %tgts = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %m = db.make_map(%srcs, %tgts) keys ["a", "a"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  db.output(%m) : !db.column<!storage.map>
+  return
+}
+)mlir";
+
 // RETURN [1, 2, 3]: the same literals as a value rather than a source, so the whole list
 // is one cell. A list literal is a db.constant value like any other, carried as the array
 // of its elements; the column type is inferred from them, so it is never spelled.
@@ -1772,6 +1799,35 @@ TEST_F(DBDialectTest, verifierRejectsMakeListProducingAScalarColumn) {
 
 TEST_F(DBDialectTest, verifierRejectsMakeListWithoutElementColumns) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyMakeListProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, parsesMakeMap) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(makeMapProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::MakeMap makeMap;
+    module.get().walk([&](mlir::db::MakeMap op) {
+        makeMap = op;
+    });
+    ASSERT_TRUE(makeMap);
+
+    ASSERT_EQ(makeMap.getValues().size(), 2u);
+    ASSERT_EQ(makeMap.getKeys().size(), 2u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(makeMap.getKeys()[0]).getValue(), "dst");
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(makeMap.getKeys()[1]).getValue(), "src");
+
+    const mlir::Type mapColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::MapType::get(&_context));
+    EXPECT_EQ(makeMap.getResult().getType(), mapColumnType);
+}
+
+TEST_F(DBDialectTest, verifierRejectsMakeMapWithKeyCountMismatch) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(keyCountMismatchMakeMapProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsMakeMapWithDuplicateKeys) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(duplicateKeyMakeMapProgram);
     EXPECT_FALSE(module);
 }
 
