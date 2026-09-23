@@ -68,7 +68,7 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
     { sink.writeListElementBytes(bytes, count) } -> std::same_as<typename Sink::ListElementView>;
 
     { sink.beginMap(count, count) } -> std::same_as<typename Sink::MapView>;
-    { sink.beginNestedMap(count, count) };
+    { sink.beginNestedMap(count, count) } -> std::same_as<typename Sink::ListElementView>;
     { sink.writeMapKey(stringValue) };
     { sink.writeMapValue(scalarValue) };
     { sink.writeMapValue(stringValue) };

@@ -352,6 +352,10 @@ public:
     // holds at r, in operand order, as one contiguous run of the query's list buffer.
     static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
 
+    // Build one map per row (nl.make_map): row r of the result maps each key to what its
+    // value column holds at r, as one contiguous run of the query's map buffer.
+    static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
+
     // Build one list per row (nl.range): row r counts from its start bound to its end
     // bound by its step, as one contiguous run of the query's list buffer.
     static void runRange(NLExecutionContext* context, NLFunctionData* data);
@@ -772,6 +776,17 @@ public:
     static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
     static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
+
+    // The reads an nl.make_map takes one value out of a column with, one per column kind as
+    // for nl.make_list, plus a nested map as the cell it holds in every row.
+    static NLMapValueReadFunction selectValueMapValueRead(ValueType valueType);
+    static NLMapValueReadFunction selectNodeMapValueRead();
+    static NLMapValueReadFunction selectEdgeMapValueRead();
+    static NLMapValueReadFunction selectNestedListMapValueRead();
+    static NLMapValueReadFunction selectOptNestedListMapValueRead();
+    static NLMapValueReadFunction selectNestedMapValueRead();
+    static NLMapValueReadFunction selectTaggedMapValueRead(bool nullable);
+    static NLMapValueReadFunction selectOwnedStringMapValueRead(bool nullable);
 
     // The read an nl.range takes one bound out of a column with, which is a nullable
     // integer one however the query wrote the bound.

@@ -636,6 +636,7 @@ void TuringAsyncClient::reset() {
     _embeddingBuffer.clear();
     _stringBuffer.clear();
     _listBuffer.clear();
+    _mapBuffer.clear();
     _columnSchemas.clear();
     _decoder.reset();
     _dfMan = std::make_unique<db::DataframeManager>();

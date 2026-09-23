@@ -571,3 +571,16 @@ NLMergeData::NLMergeData(NLMergePendingNodes* pendingNodes,
 
 NLMergeData::~NLMergeData() {
 }
+
+NLMakeMapData::NLMakeMapData(Column* result, LocalMemory* memory)
+    : _result(result),
+    _memory(memory)
+{
+}
+
+NLMakeMapData::~NLMakeMapData() {
+}
+
+void NLMakeMapData::addEntry(const Entry& entry) {
+    _entries.push_back(entry);
+}

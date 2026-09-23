@@ -217,6 +217,7 @@ private:
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerUnwind(mlir::db::Unwind unwind);
     void lowerMakeList(mlir::db::MakeList makeList);
+    void lowerMakeMap(mlir::db::MakeMap makeMap);
     void lowerRange(mlir::db::Range range);
 
     // Lowers `[x IN xs WHERE p(x) | f(x)]`: the body is lowered into a region of its own
@@ -630,6 +631,10 @@ private:
     mlir::Value rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality);
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
+
+    // The chunks a container build reads its cells from: every operand laid out over the
+    // same rows, and a scalar value read as nullable
+    void containerCellChunks(mlir::ValueRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
 
     mlir::Value unionColumnChunk(mlir::Value chunk);
 

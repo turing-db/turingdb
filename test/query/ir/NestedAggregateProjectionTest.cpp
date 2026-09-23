@@ -33,12 +33,6 @@
 using namespace db;
 using namespace turing::test;
 
-namespace {
-
-const std::string_view nestedAggregateReason = "Nested aggregates are not supported";
-
-}
-
 // An item carrying an aggregate is not itself the aggregate function: {total: count(n)}
 // and count(n) + 1 are both flagged aggregate without being a function invocation
 class NestedAggregateProjectionTest : public TuringTest {
@@ -82,21 +76,6 @@ protected:
         generator.generate(&ast);
     }
 
-    // The query is turned away, and on @param reason rather than on anything the parser or
-    // the analyzer may have had to say about it first
-    void expectRejected(std::string_view query, std::string_view reason) {
-        try {
-            generateProgram(query);
-        } catch (const TuringException& error) {
-            const std::string message = error.what();
-            EXPECT_NE(message.find(reason), std::string::npos)
-                << "query: " << query << "\nerror: " << message;
-            return;
-        }
-
-        ADD_FAILURE() << "query was accepted: " << query;
-    }
-
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     Graph* _graph {nullptr};
@@ -110,22 +89,19 @@ TEST_F(NestedAggregateProjectionTest, generatesTheSameAggregateOutsideAMap) {
 }
 
 // A map holding a constant next to the same grouping key: every value is a literal, so the
-// map builds as a constant and generates. What the cases below reject is the aggregate
-// inside the map, not the map itself.
+// map builds as a constant and generates.
 TEST_F(NestedAggregateProjectionTest, generatesAMapHoldingAConstant) {
     EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, {total: 1}"));
 }
 
-// The map on its own leaves the projection with no grouping key, so the grouped aggregate
-// codegen does not run and the aggregate is turned away as a value no constant map carries
-TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateAlone) {
-    EXPECT_THROW(generateProgram("MATCH (n:Person) RETURN {total: count(n)}"), TuringException);
+TEST_F(NestedAggregateProjectionTest, generatesAMapHoldingAnAggregateAlone) {
+    EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN {total: count(n)}"));
 }
 
-// An expression over an aggregate is computed from the aggregate's result, but a map is
-// built once as a constant, so the aggregate it holds has nowhere to go.
-TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateBesideAGroupingKey) {
-    expectRejected("MATCH (n:Person) RETURN n.name, {total: count(n)}", nestedAggregateReason);
+// The aggregate the map holds is registered with the grouped aggregate and the map is
+// built over the result, as a list holding one is
+TEST_F(NestedAggregateProjectionTest, generatesAMapHoldingAnAggregateBesideAGroupingKey) {
+    EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, {total: count(n)}"));
 }
 
 // An aggregate wrapped in arithmetic is valid openCypher - count(n) + 1 is the group's
@@ -136,9 +112,8 @@ TEST_F(NestedAggregateProjectionTest, generatesAnAggregateInsideAnExpression) {
     EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, 2 * count(n) + 20"));
 }
 
-// Unlike a map, a list is a value this codegen builds a column of, so the aggregate it
-// holds is registered with the grouped aggregate and the list is built over the result -
-// the same route an aggregate inside arithmetic takes.
+// The aggregate a list holds is registered with the grouped aggregate and the list is
+// built over the result - the same route an aggregate inside arithmetic takes.
 TEST_F(NestedAggregateProjectionTest, generatesAListHoldingAnAggregateBesideAGroupingKey) {
     EXPECT_NO_THROW(generateProgram("MATCH (n) RETURN DISTINCT n, [count(n.age)]"));
     EXPECT_NO_THROW(generateProgram("MATCH (n) RETURN n.age, [count(n.name)]"));

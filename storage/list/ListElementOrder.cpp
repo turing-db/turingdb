@@ -10,6 +10,10 @@
 #include "ID.h"
 #include "ListBufferTypeTag.h"
 
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
+
 #include "metadata/PropertyType.h"
 
 #include "FatalException.h"
@@ -29,6 +33,93 @@ enum class ListElementOrderClass {
     DateTime,
     Null,
 };
+
+std::strong_ordering compareDoubles(double lhs, double rhs);
+
+bool mapsEqual(MapView lhs, MapView rhs);
+
+// Two entries hold the same value when they were stored under the same tag and the values
+// under it match. A map value recurses; a list value goes through list equality.
+bool isNumericValueTag(const MapBufferTypeTag tag) {
+    return tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt
+           || tag == MapBufferTypeTag::Double;
+}
+
+double mapValueAsDouble(const MapEntryView entry) {
+    switch (entry.getValueTag()) {
+        case MapBufferTypeTag::Int:
+            return static_cast<double>(entry.getValueAs<types::Int64::Primitive>());
+        break;
+
+        case MapBufferTypeTag::UInt:
+            return static_cast<double>(entry.getValueAs<types::UInt64::Primitive>());
+        break;
+
+        default:
+            return entry.getValueAs<types::Double::Primitive>();
+        break;
+    }
+}
+
+bool mapValuesEqual(const MapEntryView lhs, const MapEntryView rhs) {
+    const MapBufferTypeTag tag = lhs.getValueTag();
+    const MapBufferTypeTag rhsTag = rhs.getValueTag();
+
+    // A number equals a number whatever tag each was stored under, as two list elements do
+    if (isNumericValueTag(tag) && isNumericValueTag(rhsTag)) {
+        if (tag == MapBufferTypeTag::Int && rhsTag == MapBufferTypeTag::Int) {
+            return lhs.getValueAs<types::Int64::Primitive>() == rhs.getValueAs<types::Int64::Primitive>();
+        } else if (tag == MapBufferTypeTag::UInt && rhsTag == MapBufferTypeTag::UInt) {
+            return lhs.getValueAs<types::UInt64::Primitive>() == rhs.getValueAs<types::UInt64::Primitive>();
+        }
+
+        return compareDoubles(mapValueAsDouble(lhs), mapValueAsDouble(rhs)) == std::strong_ordering::equal;
+    }
+
+    if (tag != rhsTag) {
+        return false;
+    }
+
+    const auto equalAs = [&rhs]<typename T>(const MapEntryView lhsEntry) -> bool {
+        if constexpr (std::same_as<T, MapView>) {
+            return mapsEqual(lhsEntry.getValueAs<MapView>(), rhs.getValueAs<MapView>());
+        } else if constexpr (std::same_as<T, ListView>) {
+            return lhsEntry.getValueAs<ListView>() == rhs.getValueAs<ListView>();
+        } else if constexpr (std::same_as<T, PropertyNull>) {
+            return true;
+        } else if constexpr (std::same_as<T, types::Bool::Primitive>) {
+            return static_cast<bool>(lhsEntry.getValueAs<T>()) == static_cast<bool>(rhs.getValueAs<T>());
+        } else if constexpr (std::same_as<T, types::Embedding::Primitive>) {
+            return std::ranges::equal(lhsEntry.getValueAs<T>(), rhs.getValueAs<T>());
+        } else {
+            return lhsEntry.getValueAs<T>() == rhs.getValueAs<T>();
+        }
+    };
+
+    return MapTagDispatcher {tag}.execute(equalAs, lhs);
+}
+
+// Both producers of a map - the constant path's DictionaryAttr and db.make_map's sorted
+// keys - store entries in key order, so equal maps line up entry for entry.
+bool mapsEqual(const MapView lhs, const MapView rhs) {
+    const std::span<const MapEntryView> lhsEntries = lhs.entries();
+    const std::span<const MapEntryView> rhsEntries = rhs.entries();
+    if (lhsEntries.size() != rhsEntries.size()) {
+        return false;
+    }
+
+    for (size_t index = 0; index < lhsEntries.size(); index++) {
+        if (lhsEntries[index].getKey() != rhsEntries[index].getKey()) {
+            return false;
+        }
+
+        if (!mapValuesEqual(lhsEntries[index], rhsEntries[index])) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
     switch (tag) {
@@ -260,6 +351,25 @@ std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElemen
 }
 
 bool db::operator==(const ListElementView lhs, const ListElementView rhs) {
+    const ListBufferTypeTag lhsTag = lhs.getTag();
+    const ListBufferTypeTag rhsTag = rhs.getTag();
+
+    // A map has no order here, so equality cannot ask <=>; two maps are still plainly equal
+    // or not, entry by entry
+    if (lhsTag == ListBufferTypeTag::MapView || rhsTag == ListBufferTypeTag::MapView) {
+        if (lhsTag != rhsTag) {
+            return false;
+        }
+
+        return mapsEqual(lhs.getAs<MapView>(), rhs.getAs<MapView>());
+    }
+
+    // A nested list may hold a map further down, so it compares pairwise rather than
+    // through <=>, which would reach the ordering a map has none of
+    if (lhsTag == ListBufferTypeTag::ListView && rhsTag == ListBufferTypeTag::ListView) {
+        return lhs.getAs<ListView>() == rhs.getAs<ListView>();
+    }
+
     return (lhs <=> rhs) == std::strong_ordering::equal;
 }
 
@@ -279,7 +389,19 @@ std::strong_ordering db::operator<=>(const ListView lhs, const ListView rhs) {
 }
 
 bool db::operator==(const ListView lhs, const ListView rhs) {
-    return (lhs <=> rhs) == std::strong_ordering::equal;
+    const std::span<const ListElementView> lhsElements = lhs.elements();
+    const std::span<const ListElementView> rhsElements = rhs.elements();
+    if (lhsElements.size() != rhsElements.size()) {
+        return false;
+    }
+
+    for (size_t index = 0; index < lhsElements.size(); index++) {
+        if (!(lhsElements[index] == rhsElements[index])) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool db::operator==(const ListElementView element, const types::Int64::Primitive value) {

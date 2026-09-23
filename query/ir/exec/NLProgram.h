@@ -3446,6 +3446,38 @@ private:
     std::vector<Element> _elements;
 };
 
+// Read the cell one value column holds at @param row as the value the map buffer stores
+// for it. The map sibling of NLListItemReadFunction.
+using NLMapValueReadFunction = MapBuffer<>::MapItemVariant (*)(const Column* input,
+                                                              size_t row,
+                                                              LocalMemory* memory);
+
+// Row-wise map build (nl.make_map): row r of the result maps each key to row r of its
+// value column, written into the query's map buffer as one contiguous run.
+class NLMakeMapData : public NLFunctionData {
+public:
+    struct Entry {
+        std::string_view _key;
+        const Column* _column {nullptr};
+        NLMapValueReadFunction _read {nullptr};
+    };
+
+    NLMakeMapData(Column* result, LocalMemory* memory);
+    ~NLMakeMapData() override;
+
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const std::vector<Entry>& entries() const { return _entries; }
+
+    void addEntry(const Entry& entry);
+
+private:
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    std::vector<Entry> _entries;
+};
+
 // Read the bound one column of an nl.range holds at @param row, or nothing where the row
 // has no bound. One per integer column kind, selected during translation the way the list
 // item reads are.

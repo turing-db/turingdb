@@ -479,16 +479,24 @@ TEST_F(OrderByTest, constantContainerKeysGenerateNoSort) {
     }
 }
 
-// A map holding a property reads a row through it, so it is not constant and the key is
-// not dropped. The generator has no column to read a map into, so the query is rejected
-// - which is the point: a key that varies must never be silently discarded, and the
-// error names the unsupported map rather than answering in an order nothing decided
-TEST_F(OrderByTest, mapKeyReadingARowIsNotDropped) {
+// A map holding a property reads a row through it, so it is a column of one map per row
+// and the key is kept rather than taken for a constant and dropped
+TEST_F(OrderByTest, mapKeyReadingARowIsAppended) {
     mlir::MLIRContext context;
     mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name ORDER BY {a: n.age}", context, module);
 
-    EXPECT_THROW(generateProgram("MATCH (n) RETURN n.name ORDER BY {a: n.age}", context, module),
-                 TuringException);
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::db::Sort sortOp) {
+        sortCount++;
+
+        EXPECT_EQ(sortOp.getColumns().size(), 2u);
+        ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+        EXPECT_EQ(sortOp.getKeyColumns()[0], 1);
+    });
+
+    EXPECT_EQ(sortCount, 1u);
 }
 
 // The list mirror of the case above: a list holding a property reads a row through it, so
@@ -512,15 +520,22 @@ TEST_F(OrderByTest, listKeyReadingARowIsAppended) {
     EXPECT_EQ(sortCount, 1u);
 }
 
-// A map is a literal, so a list may hold one and reach the propagation the case above
-// cannot: the map reads a row, the list varies with it and the key is rejected like the
-// bare map rather than being taken for a constant and dropped
-TEST_F(OrderByTest, listKeyHoldingAMapReadingARowIsNotDropped) {
+// The map reads a row, so the list holding it varies with it and the key is kept rather
+// than taken for a constant and dropped
+TEST_F(OrderByTest, listKeyHoldingAMapReadingARowIsAppended) {
     mlir::MLIRContext context;
     mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name ORDER BY [{age: n.age}]", context, module);
 
-    EXPECT_THROW(generateProgram("MATCH (n) RETURN n.name ORDER BY [{age: n.age}]", context, module),
-                 TuringException);
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::db::Sort sortOp) {
+        sortCount++;
+
+        ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+    });
+
+    EXPECT_EQ(sortCount, 1u);
 }
 
 // A call over constant arguments answers the same in every row, so it ties them all and

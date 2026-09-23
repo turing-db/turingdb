@@ -50,18 +50,20 @@ db::MapView TuringSink::beginMap(size_t entryCount, size_t byteSize) {
     return mapCursor().getView();
 }
 
-// A list cannot hold a map: ListBufferTypeTag has no member for one, so neither side of the
-// wire can represent it.
-void TuringSink::beginNestedMap(size_t entryCount, size_t byteSize) {
-    if (!topContainerIsMap()) {
-        throw FatalException("A list cannot hold a map");
+db::ListElementView TuringSink::beginNestedMap(size_t entryCount, size_t byteSize) {
+    const db::MapWriteCursor childCursor = _mapBuffer->reserveMap(entryCount, byteSize);
+    const db::MapView childView = childCursor.getView();
+
+    db::ListElementView elementView;
+    if (topContainerIsMap()) {
+        mapCursor().writeValue<db::MapView>(db::TypeToMapBufferTag<db::MapView>::Tag, childView);
+    } else {
+        elementView = listCursor().writeValue<db::MapView>(db::TypeToListBufferTag<db::MapView>::Tag, childView);
     }
 
-    const db::MapWriteCursor childCursor = _mapBuffer->reserveMap(entryCount, byteSize);
-
-    mapCursor().writeValue<db::MapView>(db::TypeToMapBufferTag<db::MapView>::Tag, childCursor.getView());
-
     _containerStack.push_back(NestedContainerCursor::map(childCursor));
+
+    return elementView;
 }
 
 bool TuringSink::topContainerComplete() const {

@@ -116,7 +116,7 @@ struct NestedValueReadVisitor {
             _context->_inBuf->readData(&numEntries, sizeof(numEntries));
             _context->_inBuf->readData(&numBytes, sizeof(numBytes));
 
-            _sink->beginNestedMap(numEntries, numBytes);
+            captureOutView(_sink->beginNestedMap(numEntries, numBytes));
 
             return true;
         } else {

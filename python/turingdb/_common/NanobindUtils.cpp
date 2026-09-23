@@ -212,6 +212,8 @@ struct ValueToPyObject {
             return floats;
         } else if constexpr (std::is_same_v<T, db::ListView>) {
             return view(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::MapView>) {
+            return view(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
             return nb::none();
         } else {
@@ -400,6 +402,16 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 }
                 value = lst;
                 dtypeName = "List";
+                break;
+            }
+            case db::ColumnVector<db::MapView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::MapView>*>(col)->getRaw();
+                nb::list lst;
+                for (const db::MapView& mapView : src) {
+                    lst.append(listVisitor.view(mapView));
+                }
+                value = lst;
+                dtypeName = "Map";
                 break;
             }
             case db::ColumnVector<db::ListElementView>::staticKind(): {

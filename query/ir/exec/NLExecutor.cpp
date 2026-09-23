@@ -1825,10 +1825,26 @@ void distinctAppendValueBytes(std::string& key, const ListView value) {
 // Serialize a number by its value rather than by the type it is tagged with: an integer
 // and a float holding the same value are one Cypher value, so a float with no fractional
 // part keys as that integer and only a fractional one keys as a double.
+// A number keys under the Int tag whenever it holds one, so 1, 1.0 and a small unsigned 1
+// all key alike - which is what makes the key agree with numeric equality.
+void distinctAppendIntegerKey(std::string& key, const types::Int64::Primitive value) {
+    key.push_back(static_cast<char>(ListBufferTypeTag::Int));
+    distinctAppendValueBytes(key, value);
+}
+
+bool unsignedHoldsAnInteger(const types::UInt64::Primitive value) {
+    return value <= static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max());
+}
+
+bool doubleHoldsAnInteger(const types::Double::Primitive value) {
+    constexpr types::Double::Primitive integerBound = 9223372036854775808.0;
+
+    return std::isfinite(value) && std::trunc(value) == value && std::abs(value) < integerBound;
+}
+
 void distinctAppendNumberBytes(std::string& key, const ListElementView element) {
     const auto appendInteger = [&key](types::Int64::Primitive value) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Int));
-        distinctAppendValueBytes(key, value);
+        distinctAppendIntegerKey(key, value);
     };
 
     switch (element.getTag()) {
@@ -1838,7 +1854,7 @@ void distinctAppendNumberBytes(std::string& key, const ListElementView element) 
 
         case ListBufferTypeTag::UInt: {
             const types::UInt64::Primitive value = element.getAs<types::UInt64::Primitive>();
-            if (value <= static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max())) {
+            if (unsignedHoldsAnInteger(value)) {
                 return appendInteger(static_cast<types::Int64::Primitive>(value));
             }
 
@@ -1849,16 +1865,9 @@ void distinctAppendNumberBytes(std::string& key, const ListElementView element) 
         break;
 
         case ListBufferTypeTag::Double: {
-            constexpr types::Double::Primitive integerBound = 9223372036854775808.0;
-
             const types::Double::Primitive value = element.getAs<types::Double::Primitive>();
-            const types::Double::Primitive truncated = std::trunc(value);
-            const bool holdsAnInteger = std::isfinite(value)
-                                     && truncated == value
-                                     && std::abs(value) < integerBound;
-
-            if (holdsAnInteger) {
-                return appendInteger(static_cast<types::Int64::Primitive>(truncated));
+            if (doubleHoldsAnInteger(value)) {
+                return appendInteger(static_cast<types::Int64::Primitive>(std::trunc(value)));
             }
 
             key.push_back(static_cast<char>(ListBufferTypeTag::Double));
@@ -1876,6 +1885,120 @@ void distinctAppendNumberBytes(std::string& key, const ListElementView element) 
 // Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
 // two types never collide because the tag leads, and a null is the tag alone, so all
 // nulls dedup together as they do in a nullable value column.
+void distinctAppendMapBytes(std::string& key, MapView map);
+
+// Serialize one map value into the row key the way a list element is serialized: a number
+// normalised first, then the tag and the value's bytes.
+void distinctAppendMapValueBytes(std::string& key, const MapEntryView entry) {
+    const MapBufferTypeTag tag = entry.getValueTag();
+
+    switch (tag) {
+        case MapBufferTypeTag::Int:
+            distinctAppendIntegerKey(key, entry.getValueAs<types::Int64::Primitive>());
+            return;
+        break;
+
+        case MapBufferTypeTag::UInt: {
+            const types::UInt64::Primitive value = entry.getValueAs<types::UInt64::Primitive>();
+            if (unsignedHoldsAnInteger(value)) {
+                distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(value));
+                return;
+            }
+
+            key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
+            distinctAppendValueBytes(key, value);
+            return;
+        }
+        break;
+
+        case MapBufferTypeTag::Double: {
+            const types::Double::Primitive value = entry.getValueAs<types::Double::Primitive>();
+            if (doubleHoldsAnInteger(value)) {
+                distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(std::trunc(value)));
+                return;
+            }
+
+            key.push_back(static_cast<char>(ListBufferTypeTag::Double));
+            distinctAppendValueBytes(key, value);
+            return;
+        }
+        break;
+
+        case MapBufferTypeTag::Bool:
+            key.push_back(static_cast<char>(ListBufferTypeTag::Bool));
+            distinctAppendValueBytes(key, static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()));
+            return;
+        break;
+
+        case MapBufferTypeTag::String:
+            key.push_back(static_cast<char>(ListBufferTypeTag::String));
+            distinctAppendValueBytes(key, entry.getValueAs<types::String::Primitive>());
+            return;
+        break;
+
+        case MapBufferTypeTag::ListView:
+            key.push_back(static_cast<char>(ListBufferTypeTag::ListView));
+            distinctAppendListBytes(key, entry.getValueAs<ListView>());
+            return;
+        break;
+
+        case MapBufferTypeTag::MapView:
+            key.push_back(static_cast<char>(ListBufferTypeTag::MapView));
+            distinctAppendMapBytes(key, entry.getValueAs<MapView>());
+            return;
+        break;
+
+        case MapBufferTypeTag::Null:
+            key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+            return;
+        break;
+
+        case MapBufferTypeTag::NodeID:
+            key.push_back(static_cast<char>(ListBufferTypeTag::NodeID));
+            distinctAppendValueBytes(key, entry.getValueAs<NodeID>().getValue());
+            return;
+        break;
+
+        case MapBufferTypeTag::EdgeID:
+            key.push_back(static_cast<char>(ListBufferTypeTag::EdgeID));
+            distinctAppendValueBytes(key, entry.getValueAs<EdgeID>().getValue());
+            return;
+        break;
+
+        case MapBufferTypeTag::DateTime:
+            key.push_back(static_cast<char>(ListBufferTypeTag::DateTime));
+            distinctAppendValueBytes(key, entry.getValueAs<types::DateTime::Primitive>().getMicroseconds());
+            return;
+        break;
+
+        case MapBufferTypeTag::Embedding:
+            throw IRException("cannot dedup by an embedding map value");
+        break;
+
+        case MapBufferTypeTag::INVALID:
+            throw IRException("cannot dedup by an untagged map value");
+        break;
+    }
+
+    bioassert(false, "Unknown MapBufferTypeTag");
+}
+
+// Serialize a map into the row key as its size, then each entry's key length, key bytes and
+// value. Both producers store entries in key order, so equal maps serialize alike.
+void distinctAppendMapBytes(std::string& key, const MapView map) {
+    const size_t size = map.size();
+    key.append(reinterpret_cast<const char*>(&size), sizeof(size));
+
+    for (const MapEntryView entry : map) {
+        const std::string_view entryKey = entry.getKey();
+        const size_t keySize = entryKey.size();
+        key.append(reinterpret_cast<const char*>(&keySize), sizeof(keySize));
+        key.append(entryKey);
+
+        distinctAppendMapValueBytes(key, entry);
+    }
+}
+
 void distinctAppendElementBytes(std::string& key, const ListElementView element) {
     const ListBufferTypeTag tag = element.getTag();
 
@@ -1932,7 +2055,9 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
         break;
 
         case ListBufferTypeTag::MapView:
-            throw IRException("cannot dedup by a map element");
+            key.push_back(static_cast<char>(tag));
+            distinctAppendMapBytes(key, element.getAs<MapView>());
+            return;
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -2024,6 +2149,11 @@ void distinctKeyAppendOptListElementColumn(const Column* column, size_t row, std
 void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& key) {
     const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
     distinctAppendListBytes(key, raw[row]);
+}
+
+void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<MapView>*>(column)->getRaw();
+    distinctAppendMapBytes(key, raw[row]);
 }
 
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
@@ -3241,58 +3371,59 @@ void collectValidIDFoldDistinct(Column* values,
     }
 }
 
-// The list-buffer value a tagged cell holds, read back as the type its tag names, so a
-// collect of type-erased cells buffers each one under the type it came in with.
-ListBuffer<>::ListItemVariant taggedListItem(const ListElementView element) {
+// The list- or map-buffer value a tagged cell holds, read back as the type its tag names, so
+// a collect of type-erased cells buffers each one under the type it came in with.
+template <typename Item>
+Item taggedItem(const ListElementView element) {
     const ListBufferTypeTag tag = element.getTag();
 
     switch (tag) {
         case ListBufferTypeTag::Int:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::Int64::Primitive>()};
+            return Item {element.getAs<types::Int64::Primitive>()};
         break;
 
         case ListBufferTypeTag::UInt:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::UInt64::Primitive>()};
+            return Item {element.getAs<types::UInt64::Primitive>()};
         break;
 
         case ListBufferTypeTag::Double:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::Double::Primitive>()};
+            return Item {element.getAs<types::Double::Primitive>()};
         break;
 
         case ListBufferTypeTag::Bool:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::Bool::Primitive>()};
+            return Item {element.getAs<types::Bool::Primitive>()};
         break;
 
         case ListBufferTypeTag::String:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::String::Primitive>()};
+            return Item {element.getAs<types::String::Primitive>()};
         break;
 
         case ListBufferTypeTag::Embedding:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::Embedding::Primitive>()};
+            return Item {element.getAs<types::Embedding::Primitive>()};
         break;
 
         case ListBufferTypeTag::ListView:
-            return ListBuffer<>::ListItemVariant {element.getAs<ListView>()};
+            return Item {element.getAs<ListView>()};
         break;
 
         case ListBufferTypeTag::Null:
-            return ListBuffer<>::ListItemVariant {element.getAs<PropertyNull>()};
+            return Item {element.getAs<PropertyNull>()};
         break;
 
         case ListBufferTypeTag::NodeID:
-            return ListBuffer<>::ListItemVariant {element.getAs<NodeID>()};
+            return Item {element.getAs<NodeID>()};
         break;
 
         case ListBufferTypeTag::EdgeID:
-            return ListBuffer<>::ListItemVariant {element.getAs<EdgeID>()};
+            return Item {element.getAs<EdgeID>()};
         break;
 
         case ListBufferTypeTag::DateTime:
-            return ListBuffer<>::ListItemVariant {element.getAs<types::DateTime::Primitive>()};
+            return Item {element.getAs<types::DateTime::Primitive>()};
         break;
 
         case ListBufferTypeTag::MapView:
-            return ListBuffer<>::ListItemVariant {element.getAs<MapView>()};
+            return Item {element.getAs<MapView>()};
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -3379,7 +3510,7 @@ void collectTaggedListEmit(const Column* values,
         elements.clear();
         elements.reserve(positions.size());
         for (const size_t position : positions) {
-            elements.push_back(taggedListItem(valuesRaw[position]));
+            elements.push_back(taggedItem<ListBuffer<>::ListItemVariant>(valuesRaw[position]));
         }
 
         outputRaw.push_back(listBuffer.insert(elements));
@@ -3546,16 +3677,16 @@ bool absentOptTaggedCell(const Column* source, size_t row) {
     return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
 }
 
-// Read one cell of a nullable value column as the element it contributes to a list: the
-// value it holds, or the tagged null Cypher leaves in the list where the row has none.
-template <typename Primitive>
-ListBuffer<>::ListItemVariant valueListItem(const Column* input, size_t row, LocalMemory*) {
+// Read one cell of a nullable value column as the value it contributes to a list or a map:
+// the value it holds, or the tagged null Cypher leaves where the row has none.
+template <typename Item, typename Primitive>
+Item valueItem(const Column* input, size_t row, LocalMemory*) {
     const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
     if (!cell.has_value()) {
-        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+        return Item {PropertyNull {}};
     }
 
-    return ListBuffer<>::ListItemVariant {*cell};
+    return Item {*cell};
 }
 
 // A range's list is held in memory in full, and one row of it is enough to exhaust the
@@ -3630,73 +3761,77 @@ std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t ro
     return static_cast<types::Int64::Primitive>(*cell);
 }
 
-// The sibling of valueListItem for a column whose cells are present in every row: a
-// nested list, held as the one element it is.
-template <typename Element>
-ListBuffer<>::ListItemVariant plainListItem(const Column* input, size_t row, LocalMemory*) {
-    return ListBuffer<>::ListItemVariant {(*static_cast<const ColumnVector<Element>*>(input))[row]};
+// The sibling of valueItem for a column whose cells are present in every row: a nested
+// list or map, held as the one value it is.
+template <typename Item, typename Element>
+Item plainItem(const Column* input, size_t row, LocalMemory*) {
+    return Item {(*static_cast<const ColumnVector<Element>*>(input))[row]};
 }
 
-template <typename Element>
-ListBuffer<>::ListItemVariant optListItem(const Column* input, size_t row, LocalMemory*) {
+template <typename Item, typename Element>
+Item optItem(const Column* input, size_t row, LocalMemory*) {
     const std::optional<Element>& cell = (*static_cast<const ColumnOptVector<Element>*>(input))[row];
     if (!cell.has_value()) {
-        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+        return Item {PropertyNull {}};
     }
 
-    return ListBuffer<>::ListItemVariant {*cell};
+    return Item {*cell};
 }
 
-// The entity sibling of valueListItem: an entity an OPTIONAL MATCH did not match is an
-// invalid ID, which is how a null entity is spelled, so it joins the list as the tagged
-// null rather than as the value 2^64-1 - the null collectValidIDFold drops instead.
-template <typename IDType>
-ListBuffer<>::ListItemVariant validIDListItem(const Column* input, size_t row, LocalMemory*) {
+// The entity sibling of valueItem: an entity an OPTIONAL MATCH did not match is an invalid
+// ID, which is how a null entity is spelled, so it is stored as the tagged null rather than
+// as the value 2^64-1 - the null collectValidIDFold drops instead.
+template <typename Item, typename IDType>
+Item validIDItem(const Column* input, size_t row, LocalMemory*) {
     const IDType id = (*static_cast<const ColumnVector<IDType>*>(input))[row];
     if (!id.isValid()) {
-        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+        return Item {PropertyNull {}};
     }
 
-    return ListBuffer<>::ListItemVariant {id};
+    return Item {id};
 }
 
-// The sibling of valueListItem for a type-erased column: the cell already carries the tag
-// its value is stored under, so it goes into the list as the type that tag names.
-ListBuffer<>::ListItemVariant taggedColumnListItem(const Column* input, size_t row, LocalMemory*) {
-    return taggedListItem((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
+// The sibling of valueItem for a type-erased column: the cell already carries the tag its
+// value is stored under, so it is stored as the type that tag names.
+template <typename Item>
+Item taggedColumnItem(const Column* input, size_t row, LocalMemory*) {
+    return taggedItem<Item>((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
 }
 
-// The nullable sibling of taggedColumnListItem: a column an OPTIONAL MATCH padded, or one
-// an index read off a list, has no cell in every row.
-ListBuffer<>::ListItemVariant optTaggedColumnListItem(const Column* input, size_t row, LocalMemory*) {
+// The nullable sibling of taggedColumnItem: a column an OPTIONAL MATCH padded, or one an
+// index read off a list, has no cell in every row.
+template <typename Item>
+Item optTaggedColumnItem(const Column* input, size_t row, LocalMemory*) {
     const std::optional<ListElementView>& element =
         (*static_cast<const ColumnOptVector<ListElementView>*>(input))[row];
     if (!element.has_value()) {
-        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+        return Item {PropertyNull {}};
     }
 
-    return taggedListItem(*element);
+    return taggedItem<Item>(*element);
 }
 
-// The sibling of valueListItem for a column that owns its characters - a CSV field's. The
-// list stores a view rather than the characters, and the column refills on the next step,
+// The sibling of valueItem for a column that owns its characters - a CSV field's. A list or
+// a map stores a view rather than the characters, and the column refills on the next step,
 // so they are copied into the query's string buffer for the view to span.
-ListBuffer<>::ListItemVariant ownedStringListItem(const Column* input, size_t row, LocalMemory* memory) {
+template <typename Item>
+Item ownedStringItem(const Column* input, size_t row, LocalMemory* memory) {
     const std::string& owned = (*static_cast<const ColumnVector<std::string>*>(input))[row];
     const std::span<const char> characters {owned.data(), owned.size()};
 
-    return ListBuffer<>::ListItemVariant {memory->stringBuffer().insert(characters)};
+    return Item {memory->stringBuffer().insert(characters)};
 }
 
-ListBuffer<>::ListItemVariant optOwnedStringListItem(const Column* input, size_t row, LocalMemory* memory) {
+template <typename Item>
+Item optOwnedStringItem(const Column* input, size_t row, LocalMemory* memory) {
     const std::optional<std::string>& owned = (*static_cast<const ColumnOptVector<std::string>*>(input))[row];
     if (!owned.has_value()) {
-        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+        return Item {PropertyNull {}};
     }
 
     const std::span<const char> characters {owned->data(), owned->size()};
 
-    return ListBuffer<>::ListItemVariant {memory->stringBuffer().insert(characters)};
+    return Item {memory->stringBuffer().insert(characters)};
 }
 
 // The fold and the list emit an entity collect of this ID reads. The list emits through
@@ -5817,6 +5952,40 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runMakeMap(NLExecutionContext*, NLFunctionData* data) {
+    const NLMakeMapData* makeMap = static_cast<NLMakeMapData*>(data);
+
+    const std::vector<NLMakeMapData::Entry>& entries = makeMap->entries();
+    LocalMemory* memory = makeMap->getMemory();
+    MapBuffer<>& mapBuffer = memory->mapBuffer();
+
+    const size_t rowCount = entries.front()._column->size();
+
+    const auto isRowAligned = [rowCount](const NLMakeMapData::Entry& entry) {
+        return entry._column->size() == rowCount;
+    };
+    bioassert(std::ranges::all_of(entries, isRowAligned),
+              "Value columns of a map build are not row-aligned.");
+
+    std::vector<MapView>& outputRaw = static_cast<ColumnVector<MapView>*>(makeMap->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::vector<MapBuffer<>::MapKeyValuePair> row;
+    row.reserve(entries.size());
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        row.clear();
+        for (const NLMakeMapData::Entry& entry : entries) {
+            row.push_back(MapBuffer<>::MapKeyValuePair {
+                .key = entry._key,
+                .value = entry._read(entry._column, rowIndex, memory),
+            });
+        }
+
+        outputRaw[rowIndex] = mapBuffer.insert(row);
+    }
+}
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 
@@ -6044,7 +6213,7 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
     NLListItemReadFunction selected = nullptr;
 
     const auto select = [&]<SupportedType T>() {
-        selected = &valueListItem<typename T::Primitive>;
+        selected = &valueItem<ListBuffer<>::ListItemVariant, typename T::Primitive>;
     };
     ValueTypeDispatcher(valueType).execute(select);
 
@@ -6092,27 +6261,66 @@ NLRangeBoundReadFunction NLExecutor::selectRangeBoundRead(ValueType valueType) {
 }
 
 NLListItemReadFunction NLExecutor::selectNodeListItemRead() {
-    return &validIDListItem<NodeID>;
+    return &validIDItem<ListBuffer<>::ListItemVariant, NodeID>;
 }
 
 NLListItemReadFunction NLExecutor::selectEdgeListItemRead() {
-    return &validIDListItem<EdgeID>;
+    return &validIDItem<ListBuffer<>::ListItemVariant, EdgeID>;
 }
 
 NLListItemReadFunction NLExecutor::selectNestedListItemRead() {
-    return &plainListItem<ListView>;
+    return &plainItem<ListBuffer<>::ListItemVariant, ListView>;
 }
 
 NLListItemReadFunction NLExecutor::selectNestedMapListItemRead() {
-    return &plainListItem<MapView>;
+    return &plainItem<ListBuffer<>::ListItemVariant, MapView>;
 }
 
 NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {
-    return nullable ? &optTaggedColumnListItem : &taggedColumnListItem;
+    return nullable ? &optTaggedColumnItem<ListBuffer<>::ListItemVariant> : &taggedColumnItem<ListBuffer<>::ListItemVariant>;
 }
 
 NLListItemReadFunction NLExecutor::selectOwnedStringListItemRead(bool nullable) {
-    return nullable ? &optOwnedStringListItem : &ownedStringListItem;
+    return nullable ? &optOwnedStringItem<ListBuffer<>::ListItemVariant> : &ownedStringItem<ListBuffer<>::ListItemVariant>;
+}
+
+NLMapValueReadFunction NLExecutor::selectValueMapValueRead(ValueType valueType) {
+    NLMapValueReadFunction selected = nullptr;
+
+    const auto select = [&]<SupportedType T>() {
+        selected = &valueItem<MapBuffer<>::MapItemVariant, typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
+NLMapValueReadFunction NLExecutor::selectNodeMapValueRead() {
+    return &validIDItem<MapBuffer<>::MapItemVariant, NodeID>;
+}
+
+NLMapValueReadFunction NLExecutor::selectEdgeMapValueRead() {
+    return &validIDItem<MapBuffer<>::MapItemVariant, EdgeID>;
+}
+
+NLMapValueReadFunction NLExecutor::selectNestedListMapValueRead() {
+    return &plainItem<MapBuffer<>::MapItemVariant, ListView>;
+}
+
+NLMapValueReadFunction NLExecutor::selectOptNestedListMapValueRead() {
+    return &optItem<MapBuffer<>::MapItemVariant, ListView>;
+}
+
+NLMapValueReadFunction NLExecutor::selectNestedMapValueRead() {
+    return &plainItem<MapBuffer<>::MapItemVariant, MapView>;
+}
+
+NLMapValueReadFunction NLExecutor::selectTaggedMapValueRead(bool nullable) {
+    return nullable ? &optTaggedColumnItem<MapBuffer<>::MapItemVariant> : &taggedColumnItem<MapBuffer<>::MapItemVariant>;
+}
+
+NLMapValueReadFunction NLExecutor::selectOwnedStringMapValueRead(bool nullable) {
+    return nullable ? &optOwnedStringItem<MapBuffer<>::MapItemVariant> : &ownedStringItem<MapBuffer<>::MapItemVariant>;
 }
 
 NLCellAbsentFunction NLExecutor::selectPresentCell() {
@@ -8056,7 +8264,7 @@ NLCopyFunction NLExecutor::selectOptListCopyFunction() {
 }
 
 NLListItemReadFunction NLExecutor::selectOptNestedListItemRead() {
-    return &optListItem<ListView>;
+    return &optItem<ListBuffer<>::ListItemVariant, ListView>;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptListFold() {
@@ -8371,7 +8579,7 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::Map:
-            throw IRException("A map column cannot be a DISTINCT or grouping key: a map has no scalar value to key on");
+            return &distinctKeyAppendMapColumn;
         break;
 
         case NLChunkKind::Path:

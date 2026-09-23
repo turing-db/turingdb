@@ -1037,6 +1037,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerUnwind(unwind);
     } else if (mlir::db::MakeList makeList = mlir::dyn_cast<mlir::db::MakeList>(operation)) {
         lowerMakeList(makeList);
+    } else if (mlir::db::MakeMap makeMap = mlir::dyn_cast<mlir::db::MakeMap>(operation)) {
+        lowerMakeMap(makeMap);
     } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
         lowerRange(range);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
@@ -1700,27 +1702,20 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
     return shared;
 }
 
-void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
-    llvm::SmallVector<mlir::Value, 4> chunks;
-    for (const mlir::Value elementColumn : makeList.getElements()) {
-        chunks.push_back(mapValue(elementColumn));
-    }
-
-    // MakeList::verify guarantees an element column, so an empty operand list here means
-    // unverified IR - the defensive backstop lowerCollect keeps too.
-    if (chunks.empty()) {
-        throw IRException("db.make_list requires at least one element column");
+void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    for (const mlir::Value column : columns) {
+        chunks.push_back(mapValue(column));
     }
 
     // An element holding one value for every row rather than one per row is laid out over
-    // the rows the others carry, so every cell of a list is read at the same row index.
+    // the rows the others carry, so every cell of a container is read at the same row index.
     const mlir::Value cardinality = cardinalityDriver(chunks);
 
     for (mlir::Value& chunk : chunks) {
         chunk = rowAlignedChunk(chunk, cardinality);
 
-        // An entity ID, a list, a tagged cell and a CSV field's owned characters are
-        // present in every row and go into the list as they stand; only a scalar value
+        // An entity ID, a list, a map, a tagged cell and a CSV field's owned characters are
+        // present in every row and go into the container as they stand; only a scalar value
         // column is read as nullable, the way lowerCollect reads the column it gathers.
         const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
         const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
@@ -1734,6 +1729,17 @@ void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
             chunk = nullableValueChunk(chunk);
         }
     }
+}
+
+void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
+    // MakeList::verify guarantees an element column, so an empty operand list here means
+    // unverified IR - the defensive backstop lowerCollect keeps too.
+    if (makeList.getElements().empty()) {
+        throw IRException("db.make_list requires at least one element column");
+    }
+
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    containerCellChunks(makeList.getElements(), chunks);
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type listType = storage::ListType::get(context, listedElementType(context, chunks));
@@ -1810,6 +1816,20 @@ void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     nl::ListSlice run = _builder.create<nl::ListSlice>(loc, resultType, listChunk, fromChunk, toChunk);
 
     _valueMap[slice.getResult()] = run.getResult();
+}
+
+void DBLowering::lowerMakeMap(mlir::db::MakeMap makeMap) {
+    if (makeMap.getValues().empty()) {
+        throw IRException("db.make_map requires at least one value column");
+    }
+
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    containerCellChunks(makeMap.getValues(), chunks);
+
+    setInsertionForNaryOp(chunks);
+
+    nl::MakeMap maps = _builder.create<nl::MakeMap>(_builder.getUnknownLoc(), chunks, makeMap.getKeys());
+    _valueMap[makeMap.getResult()] = maps.getResult();
 }
 
 void DBLowering::lowerRange(mlir::db::Range range) {

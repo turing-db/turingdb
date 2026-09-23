@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n)-->(m) RETURN {name: n.name, age: m.age} ORDER BY n.name, m.name",
+  "expect": {
+    "result": "\"{name: n.name, age: m.age}\"\n\"{age: null, name: Adam}\"\n\"{age: null, name: Adam}\"\n\"{age: 32, name: Adam}\"\n\"{age: null, name: Cyrus}\"\n\"{age: null, name: Cyrus}\"\n\"{age: null, name: Doruk}\"\n\"{age: 32, name: Ghosts}\"\n\"{age: null, name: Luc}\"\n\"{age: null, name: Luc}\"\n\"{age: null, name: Martina}\"\n\"{age: null, name: Maxime}\"\n\"{age: null, name: Maxime}\"\n\"{age: 32, name: Remy}\"\n\"{age: null, name: Remy}\"\n\"{age: null, name: Remy}\"\n\"{age: null, name: Remy}\"\n\"{age: null, name: Suhas}\"\n\"{age: null, name: Suhas}\""
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

@@ -456,6 +456,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     _embeddingBuffer.clear();
     _stringBuffer.clear();
     _listBuffer.clear();
+    _mapBuffer.clear();
     db::DataframeManager dfMan;
     db::QueryStatus res;
     std::vector<DecodedColumnSchema> columnSchemas;

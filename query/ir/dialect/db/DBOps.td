@@ -400,6 +400,32 @@ def MakeList : TuringOp<"make_list", [Pure]> {
 }
 
 /**
+* MakeMap
+*/
+def MakeMap : TuringOp<"make_map", [Pure]> {
+  let summary = "Build one map per row out of the row's cell in each value column";
+
+  let description = [{
+    The map `{name: n.name, age: m.age}` whose values are read per row rather than known
+    at plan time. Key i names the value read from operand i:
+
+      %m = db.make_map(%age, %name) keys ["age", "name"] : !db.column<none>, !db.column<none>
+
+    Row r of the result is the map of row r of each operand. A null cell is an entry
+    holding null, not a missing key. An operand holding one value for every row is laid
+    out over the rows during lowering.
+  }];
+
+  let arguments = (ins Variadic<Column>:$values, StrArrayAttr:$keys);
+  let results   = (outs ColumnMaps:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $values `)` `keys` $keys attr-dict `:` type($values)
+  }];
+}
+
+/**
 * Range
 */
 def Range : TuringOp<"range", [Pure]> {

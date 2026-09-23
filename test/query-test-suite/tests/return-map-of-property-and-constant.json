@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) RETURN {name: n.name, k: 1} ORDER BY n.name",
+  "expect": {
+    "result": "\"{name: n.name, k: 1}\"\n\"{k: 1, name: Adam}\"\n\"{k: 1, name: Cyrus}\"\n\"{k: 1, name: Doruk}\"\n\"{k: 1, name: Luc}\"\n\"{k: 1, name: Martina}\"\n\"{k: 1, name: Maxime}\"\n\"{k: 1, name: Remy}\"\n\"{k: 1, name: Suhas}\""
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

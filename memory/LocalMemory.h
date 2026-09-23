@@ -20,6 +20,7 @@
 #include "map/MapBuffer.h"
 #include "map/MapView.h"
 
+#include "buffers/SpanBuffer.h"
 #include "buffers/StringBuffer.h"
 
 #include "metadata/PropertyType.h"
@@ -35,6 +36,7 @@ class Change;
 class LocalMemory {
 public:
     using DefaultMapBuffer = MapBuffer<>;
+    using EmbeddingBuffer = SpanBuffer<float, types::Embedding::Primitive>;
 
     template <typename T>
     struct MakeMemoryPool {
@@ -155,7 +157,9 @@ public:
     void clear() {
         _pools.transform<ClearTransform>();
         _listBuffer.clear();
+        _mapBuffer.clear();
         _stringBuf.clear();
+        _embeddingBuf.clear();
     }
 
     QueryListBuffer& listBuffer() { return _listBuffer; }
@@ -164,6 +168,8 @@ public:
 
     StringBuffer& stringBuffer() { return _stringBuf; }
 
+    EmbeddingBuffer& embeddingBuffer() { return _embeddingBuf; }
+
 private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
@@ -171,6 +177,7 @@ private:
     QueryListBuffer _listBuffer;
     DefaultMapBuffer _mapBuffer;
     StringBuffer _stringBuf;
+    EmbeddingBuffer _embeddingBuf;
 };
 
 }

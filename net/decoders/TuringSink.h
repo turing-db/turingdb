@@ -79,7 +79,7 @@ public:
     }
 
     db::MapView beginMap(size_t entryCount, size_t byteSize);
-    void beginNestedMap(size_t entryCount, size_t byteSize);
+    db::ListElementView beginNestedMap(size_t entryCount, size_t byteSize);
 
     void writeMapKey(std::string_view key) { mapCursor().writeKey(key); }
 

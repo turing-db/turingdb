@@ -20,8 +20,11 @@ const MESSAGE_ERROR = 4;
 const TYPE_UINT64 = 0;
 const TYPE_DOUBLE = 2;
 const TYPE_STRING = 3;
+const TYPE_ENTITY_LIST = 7;
 const TYPE_LIST_VIEW = 8;
+const TYPE_LIST_ELEMENT_VIEW = 10;
 const TYPE_NODE_ID = 11;
+const TYPE_MAP_VIEW = 20;
 
 const ENCODING_VECTOR = 0;
 const ENCODING_OPTIONAL_VECTOR = 1;
@@ -31,12 +34,35 @@ const TAG_INT = 0;
 const TAG_BOOL = 3;
 const TAG_STRING = 4;
 const TAG_LIST_VIEW = 6;
+const TAG_MAP_VIEW = 11;
+
+// A map value carries MapBufferTypeTag, whose ordinals differ from the list tags past 6
+const MAP_TAG_INT = 0;
+const MAP_TAG_DOUBLE = 2;
+const MAP_TAG_STRING = 4;
+const MAP_TAG_LIST_VIEW = 6;
+const MAP_TAG_MAP_VIEW = 7;
+const MAP_TAG_NULL = 8;
+const MAP_TAG_NODE_ID = 9;
 
 const encoder = new TextEncoder();
 
 class Writer {
     constructor() {
         this.bytes = [];
+        this.marks = [];
+    }
+    // A place the payload may be cut into another CHUNK packet
+    mark() {
+        this.marks.push(this.bytes.length);
+    }
+    // A string whose bytes are cut after @param at, as the server streams a long one
+    splitString(text, at) {
+        const bytes = encoder.encode(text);
+        this.u32(bytes.length);
+        this.raw(bytes.slice(0, at));
+        this.mark();
+        this.raw(bytes.slice(at));
     }
     u8(value) {
         this.bytes.push(value & 0xff);
@@ -225,6 +251,132 @@ function makeSecondDataframe() {
     return [frame(MESSAGE_CHUNK, chunk)];
 }
 
+// Map columns, and maps nested in lists and lists in maps. A map row is [entryCount]
+// [mapByteSize] then entries [keyLen][key][tag][value]; mapByteSize is the server-side sum of
+// sizeof over the values, which the wasm sink does not need but the wire always carries.
+// One CHUNK packet, or one per stretch between the writer's marks - the server cuts a
+// dataframe at its chunk size, so the decoder has to resume wherever a mark falls.
+function chunkFrames(chunk, split) {
+    if (!split) {
+        return [frame(MESSAGE_CHUNK, chunk)];
+    }
+
+    const bounds = [0, ...chunk.marks, chunk.bytes.length];
+    const frames = [];
+    for (let index = 0; index + 1 < bounds.length; index++) {
+        const part = new Writer();
+        part.raw(chunk.bytes.slice(bounds[index], bounds[index + 1]));
+        frames.push(frame(MESSAGE_CHUNK, part));
+    }
+    return frames;
+}
+
+function makeMapDataframe(split) {
+    const header = makeHeader([
+        { name: "person", typeCode: TYPE_MAP_VIEW, encoding: ENCODING_VECTOR },
+        { name: "mixed", typeCode: TYPE_LIST_VIEW, encoding: ENCODING_VECTOR },
+        { name: "row", typeCode: TYPE_LIST_ELEMENT_VIEW, encoding: ENCODING_VECTOR },
+        { name: "tags", typeCode: TYPE_MAP_VIEW, encoding: ENCODING_CONSTANT },
+    ]);
+
+    const chunk = new Writer();
+
+    // person: {age: 32, name: "remy"}, {}, {id: node 9, inner: {a: 1}, xs: [true]}
+    chunk.u32(3);
+
+    chunk.u32(2);
+    chunk.u32(24);
+    chunk.splitString("age", 1);
+    chunk.u8(MAP_TAG_INT);
+    chunk.i64(32n);
+    chunk.string("name");
+    chunk.mark();
+    chunk.u8(MAP_TAG_STRING);
+    chunk.splitString("remy", 2);
+
+    chunk.u32(0);
+    chunk.u32(0);
+
+    chunk.u32(3);
+    chunk.u32(40);
+    chunk.mark();
+    chunk.string("id");
+    chunk.u8(MAP_TAG_NODE_ID);
+    chunk.u64(9n);
+    chunk.string("inner");
+    chunk.u8(MAP_TAG_MAP_VIEW);
+    chunk.u32(1);
+    chunk.u32(8);
+    chunk.string("a");
+    chunk.mark();
+    chunk.u8(MAP_TAG_INT);
+    chunk.i64(1n);
+    chunk.string("xs");
+    chunk.u8(MAP_TAG_LIST_VIEW);
+    chunk.u32(1);
+    chunk.u32(1);
+    chunk.u8(TAG_BOOL);
+    chunk.u8(1);
+
+    // mixed: [{a: 1}, 7], [], [{"__proto__": 5}]
+    chunk.u32(3);
+
+    chunk.u32(2);
+    chunk.u32(24);
+    chunk.u8(TAG_MAP_VIEW);
+    chunk.u32(1);
+    chunk.u32(8);
+    chunk.string("a");
+    chunk.u8(MAP_TAG_INT);
+    chunk.i64(1n);
+    chunk.mark();
+    chunk.u8(TAG_INT);
+    chunk.i64(7n);
+
+    chunk.u32(0);
+    chunk.u32(0);
+
+    chunk.u32(1);
+    chunk.u32(16);
+    chunk.u8(TAG_MAP_VIEW);
+    chunk.u32(1);
+    chunk.u32(8);
+    chunk.string("__proto__");
+    chunk.u8(MAP_TAG_INT);
+    chunk.i64(5n);
+
+    // row: one element per row - {b: 2}, 7, {c: null} - the path that records each row's view
+    chunk.u32(3);
+    chunk.u32(40);
+    chunk.u8(TAG_MAP_VIEW);
+    chunk.u32(1);
+    chunk.u32(8);
+    chunk.string("b");
+    chunk.u8(MAP_TAG_INT);
+    chunk.i64(2n);
+    chunk.mark();
+    chunk.u8(TAG_INT);
+    chunk.i64(7n);
+    chunk.u8(TAG_MAP_VIEW);
+    chunk.u32(1);
+    chunk.u32(1);
+    chunk.string("c");
+    chunk.u8(MAP_TAG_NULL);
+    chunk.u8(0);
+
+    // tags: {k: "v", n: 1.5} - a constant has no row count
+    chunk.u32(2);
+    chunk.u32(24);
+    chunk.string("k");
+    chunk.u8(MAP_TAG_STRING);
+    chunk.string("v");
+    chunk.string("n");
+    chunk.u8(MAP_TAG_DOUBLE);
+    chunk.f64(1.5);
+
+    return [frame(MESSAGE_CHUNK_HEADER, header), ...chunkFrames(chunk, split)];
+}
+
 function makeEnd(execTimeMs) {
     const end = new Writer();
     end.f32(execTimeMs);
@@ -324,9 +476,92 @@ async function testError(module) {
     });
 }
 
+async function testMaps(module, split) {
+    const bytes = concatPackets([...makeMapDataframe(split), makeEndChunk(3), makeEnd(1.0)]);
+
+    const client = new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) });
+    const { chunks } = await client.query("RETURN {a: 1}");
+    const [person, mixed, row, tags] = chunks[0].columns;
+
+    assert.strictEqual(person.typeCode, TYPE_MAP_VIEW);
+    assert.deepStrictEqual(person.toArray(), [
+        { age: 32n, name: "remy" },
+        {},
+        { id: 9n, inner: { a: 1n }, xs: [true] },
+    ]);
+    assert.deepStrictEqual(mixed.toArray(), [
+        [{ a: 1n }, 7n],
+        [],
+        [Object.fromEntries([["__proto__", 5n]])],
+    ]);
+    assert.deepStrictEqual(row.toArray(), [{ b: 2n }, 7n, { c: null }]);
+    assert.ok(tags.isConstant);
+    assert.deepStrictEqual(tags.toArray(), [{ k: "v", n: 1.5 }, { k: "v", n: 1.5 }, { k: "v", n: 1.5 }]);
+
+    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN {a: 1}");
+    assert.deepStrictEqual(data[0][0], [{ age: 32, name: "remy" }, {}, { id: 9, inner: { a: 1 }, xs: [true] }]);
+}
+
+// A column may carry fewer items than the dataframe has rows; queryData reads the missing
+// rows as undefined rather than failing, map columns included.
+async function testRaggedQueryData(module) {
+    const header = makeHeader([
+        { name: "name", typeCode: TYPE_STRING, encoding: ENCODING_VECTOR },
+        { name: "props", typeCode: TYPE_MAP_VIEW, encoding: ENCODING_VECTOR },
+        { name: "n", typeCode: TYPE_UINT64, encoding: ENCODING_VECTOR },
+    ]);
+
+    const chunk = new Writer();
+
+    chunk.u32(1);
+    chunk.string("a");
+
+    chunk.u32(1);
+    chunk.u32(1);
+    chunk.u32(8);
+    chunk.string("k");
+    chunk.u8(MAP_TAG_INT);
+    chunk.i64(1n);
+
+    chunk.u32(3);
+    chunk.u64(1n);
+    chunk.u64(2n);
+    chunk.u64(3n);
+
+    const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(3), makeEnd(1.0)]);
+    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+
+    assert.deepStrictEqual(data, [[
+        ["a", undefined, undefined],
+        [{ k: 1 }, undefined, undefined],
+        [1, 2, 3],
+    ]]);
+}
+
+// An entity list's entries are plain objects, but not maps: queryData keeps their ids BigInt,
+// so an id above 2^53 survives exactly.
+async function testEntityListIdsStayExact(module) {
+    const header = makeHeader([{ name: "path", typeCode: TYPE_ENTITY_LIST, encoding: ENCODING_VECTOR }]);
+
+    const chunk = new Writer();
+    chunk.u32(1);
+    chunk.u32(1);
+    chunk.u8(0);
+    chunk.u64(9007199254740993n);
+
+    const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(1), makeEnd(1.0)]);
+    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+
+    assert.deepStrictEqual(data, [[[[{ type: 0, id: 9007199254740993n }]]]]);
+}
+
 createTuringDecoderModule().then(async (module) => {
     await testQuery(module);
     await testQueryData(module);
     await testError(module);
-    console.log("wasm client smoke test passed: query, queryData, error");
+    await testMaps(module, false);
+    await testMaps(module, true);
+    await testRaggedQueryData(module);
+    await testEntityListIdsStayExact(module);
+    console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, entity lists");
 });

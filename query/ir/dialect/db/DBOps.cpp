@@ -3,6 +3,7 @@
 
 #include <optional>
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "IRLiteralList.h"
@@ -1254,6 +1255,27 @@ LogicalResult MakeList::verify() {
 
     if (!llvm::isa<storage::ListType>(resultColumn.getType())) {
         return emitOpError("result must be a column of lists");
+    }
+
+    return success();
+}
+
+LogicalResult MakeMap::verify() {
+    const size_t valueCount = getValues().size();
+    if (valueCount == 0) {
+        return emitOpError("requires at least one value column");
+    }
+
+    const ArrayAttr keys = getKeys();
+    if (keys.size() != valueCount) {
+        return emitOpError("requires one key per value column");
+    }
+
+    llvm::SmallDenseSet<StringRef, 8> seenKeys;
+    for (const Attribute key : keys) {
+        if (!seenKeys.insert(llvm::cast<StringAttr>(key).getValue()).second) {
+            return emitOpError("requires distinct keys");
+        }
     }
 
     return success();

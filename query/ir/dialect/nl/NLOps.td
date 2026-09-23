@@ -265,6 +265,28 @@ def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* MakeMap
+*/
+def MakeMap : NLOp<"make_map", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise build of one map per row out of every value chunk";
+  let description = [{
+    Imperative counterpart of db.make_map. Row r of the result is the map whose key i
+    holds row r of operand i, written into the query's map buffer as one contiguous run:
+
+      %m = nl.make_map(%age, %name) keys ["age", "name"]
+             : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>
+
+    Every operand carries rows - lowering lays a constant one out over them first.
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$values, StrArrayAttr:$keys);
+  let results   = (outs NLMapChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $values `)` `keys` $keys attr-dict `:` type($values)";
+}
+
+/**
 * Range
 */
 def Range : NLOp<"range", [Pure, RowAlignedThroughOperands]> {

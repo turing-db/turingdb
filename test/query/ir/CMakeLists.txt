@@ -541,6 +541,10 @@ target_include_directories(test_query_ir_call_driven_island_codegen PRIVATE ${CM
 
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
+# The distinct-key rule nl.make_map shares with db.make_map.
+add_ir_tests(test_query_ir_nl_make_map_keys NLMakeMapKeysTest.cpp)
+target_link_libraries(test_query_ir_nl_make_map_keys PRIVATE turing_db_ir_nldialect_s)
+
 # The db.merge / nl.merge textual form and the shape rules the two ops share.
 add_ir_tests(test_query_ir_merge_dialect MergeDialectTest.cpp)
 target_link_libraries(test_query_ir_merge_dialect PRIVATE turing_db_ir_nldialect_s)
@@ -1393,6 +1397,27 @@ target_link_libraries(test_query_ir_list_of_maps PRIVATE
         turing_db_storage_s
         MLIRParser)
 target_include_directories(test_query_ir_list_of_maps PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_cypher_dynamic_map_literal CypherDynamicMapLiteralTest.cpp)
+target_link_libraries(test_query_ir_cypher_dynamic_map_literal PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_exec_s
+        turing_db_ir_lowering_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s
+        MLIRParser)
+target_include_directories(test_query_ir_cypher_dynamic_map_literal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_list_literal_element_type ListLiteralElementTypeTest.cpp)
 target_link_libraries(test_query_ir_list_literal_element_type PRIVATE

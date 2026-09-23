@@ -981,6 +981,10 @@ mlir::Value DBProgramGenerator::translateListOfColumns(const ListLiteral* list) 
 }
 
 mlir::Value DBProgramGenerator::translateMapLiteral(const MapLiteral* map) {
+    if (!map->isLiteralTree()) {
+        return translateMapOfColumns(map);
+    }
+
     llvm::SmallVector<mlir::NamedAttribute> entries;
     translateMapEntries(map, entries);
 
@@ -990,6 +994,36 @@ mlir::Value DBProgramGenerator::translateMapLiteral(const MapLiteral* map) {
                                                                             _opBuilder.getDictionaryAttr(entries));
 
     return constant.getResult();
+}
+
+mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
+    llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
+    entries.reserve(map->size());
+
+    for (const auto& [key, valueExpr] : *map) {
+        entries.emplace_back(key->getName(), valueExpr);
+    }
+
+    // Sorted on key name, as the DictionaryAttr of a constant map is
+    std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.first < rhs.first;
+    });
+
+    llvm::SmallVector<mlir::Attribute> keys;
+    llvm::SmallVector<mlir::Value> valueColumns;
+    keys.reserve(entries.size());
+    valueColumns.reserve(entries.size());
+
+    for (const auto& [keyName, valueExpr] : entries) {
+        keys.push_back(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())));
+        valueColumns.push_back(getOrTranslateExprColumn(valueExpr));
+    }
+
+    mlir::db::MakeMap makeMap = _opBuilder.create<mlir::db::MakeMap>(_opBuilder.getUnknownLoc(),
+                                                                     mlir::ValueRange {valueColumns},
+                                                                     _opBuilder.getArrayAttr(keys));
+
+    return makeMap.getResult();
 }
 
 void DBProgramGenerator::translateMapEntries(const MapLiteral* map,

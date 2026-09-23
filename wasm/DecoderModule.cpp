@@ -33,7 +33,9 @@ template <typename T>
 constexpr bool isFixedWidth = TrivialInternalTypes<T> || std::is_same_v<T, db::PropertyNull>;
 
 template <typename T>
-constexpr bool isListHandle = std::is_same_v<T, wasm::ListView> || std::is_same_v<T, wasm::ListElementView>;
+constexpr bool isNestedHandle = std::is_same_v<T, wasm::ListView>
+                             || std::is_same_v<T, wasm::ListElementView>
+                             || std::is_same_v<T, wasm::MapView>;
 
 template <typename T>
 constexpr bool isString = std::is_same_v<T, db::types::String::Primitive>;
@@ -114,7 +116,7 @@ void appendItem(ExportBuffers& out, const T* item) {
         if (item) {
             memcpy(out._values.data() + offset, item, sizeof(T));
         }
-    } else if constexpr (isListHandle<T>) {
+    } else if constexpr (isNestedHandle<T>) {
         out._offsets.push_back(item ? item->_offset : 0);
     } else {
         if (item) {
@@ -140,7 +142,7 @@ val exportItems(ExportBuffers& out, ColumnInternalKind typeCode, ColumnKind enco
 
     if constexpr (isFixedWidth<T>) {
         out._values.reserve(itemCount * sizeof(T));
-    } else if constexpr (!isListHandle<T>) {
+    } else if constexpr (!isNestedHandle<T>) {
         out._offsets.push_back(0);
         if constexpr (isString<T>) {
             out._utf16Offsets.push_back(0);
@@ -168,7 +170,7 @@ val exportItems(ExportBuffers& out, ColumnInternalKind typeCode, ColumnKind enco
     if constexpr (isFixedWidth<T>) {
         descriptor.set("elementSize", static_cast<uint32_t>(sizeof(T)));
         descriptor.set("values", copyToUint8Array(out._values));
-    } else if constexpr (isListHandle<T>) {
+    } else if constexpr (isNestedHandle<T>) {
         descriptor.set("offsets", copyToUint8Array(out._offsets));
     } else {
         descriptor.set("values", copyToUint8Array(out._values));
@@ -321,15 +323,15 @@ public:
                                                                       ColumnBuffersFn {_container[index], &_exportBuffers});
     }
 
-    val getListBytes() {
-        const std::span<const char> bytes = _sink.getListBytes();
+    val getNestedBytes() {
+        const std::span<const char> bytes = _sink.getNestedBytes();
         return copyToUint8Array(bytes.data(), bytes.size());
     }
 
     // The strings referenced by index from the list bytes, in the layout of a STRING
     // vector column.
-    val getListStrings() {
-        const std::span<const std::string_view> strings = _sink.getListStrings();
+    val getNestedStrings() {
+        const std::span<const std::string_view> strings = _sink.getNestedStrings();
         const auto getItem = [strings](size_t index) -> const std::string_view* { return &strings[index]; };
 
         return exportItems<db::types::String::Primitive>(_exportBuffers, ColumnInternalKind::STRING, ColumnKind::VECTOR, strings.size(), getItem);
@@ -389,8 +391,8 @@ EMSCRIPTEN_BINDINGS(turingdb_decoder) {
         .function("getRowCount", &TuringDecoder::getRowCount)
         .function("getColumnName", &TuringDecoder::getColumnName)
         .function("getColumnBuffers", &TuringDecoder::getColumnBuffers)
-        .function("getListBytes", &TuringDecoder::getListBytes)
-        .function("getListStrings", &TuringDecoder::getListStrings)
+        .function("getNestedBytes", &TuringDecoder::getNestedBytes)
+        .function("getNestedStrings", &TuringDecoder::getNestedStrings)
         .function("endChunk", &TuringDecoder::endChunk)
         .function("reset", &TuringDecoder::reset);
 }

@@ -152,17 +152,23 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
 
         case Expr::Kind::LITERAL: {
             const Literal* literal = static_cast<const LiteralExpr*>(expr)->getLiteral();
+            const Literal::Kind literalKind = literal->getKind();
 
-            // A map holds its values under keys rather than in a list this can hand back
-            if (literal->getKind() != Literal::Kind::LIST) {
-                return false;
+            if (literalKind == Literal::Kind::LIST) {
+                for (const Expr* item : static_cast<const ListLiteral*>(literal)->items()) {
+                    children.push_back(item);
+                }
+
+                return true;
+            } else if (literalKind == Literal::Kind::MAP) {
+                for (const auto& [key, value] : *static_cast<const MapLiteral*>(literal)) {
+                    children.push_back(value);
+                }
+
+                return true;
             }
 
-            for (const Expr* item : static_cast<const ListLiteral*>(literal)->items()) {
-                children.push_back(item);
-            }
-
-            return true;
+            return false;
         }
         break;
 
