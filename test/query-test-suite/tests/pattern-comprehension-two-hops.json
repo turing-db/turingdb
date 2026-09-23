@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person {name: 'Remy'}) RETURN [(n)-[:KNOWS_WELL]->(m)-[:INTERESTED_IN]->(i) | i.name] AS friendInterests",
+  "expect": {
+    "result": "friendInterests\n\"[Bio, Cooking]\""
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "pattern",
+    "match",
+    "return"
+  ],
+  "write-required": false
+}

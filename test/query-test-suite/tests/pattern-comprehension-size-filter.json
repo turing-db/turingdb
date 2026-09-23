@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) WHERE size([(n)-[:INTERESTED_IN]->(i) | i]) > 2 RETURN n.name",
+  "expect": {
+    "result": "n.name\nRemy"
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "pattern",
+    "where",
+    "match",
+    "return"
+  ],
+  "write-required": false
+}
