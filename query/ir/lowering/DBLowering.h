@@ -192,7 +192,7 @@ private:
     // hoistBlock and assign it to the loops producing the limited columns. A limit
     // inside a body run one row at a time belongs to that body, so only the limits
     // whose innermost such body is @param holder - none at function level - are taken.
-    void hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock, mlir::db::CallSubquery holder);
+    void hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock, mlir::Operation* holder);
 
     // Lower one op of the system-command family - db.load_graph, db.change,
     // db.commit and their siblings - by copying it to its nl sibling at function
@@ -276,6 +276,12 @@ private:
     // the matched rows then one null-padded row per input row the pattern missed. A
     // pipeline breaker like db.sort, but its accumulator covers one step, not the relation.
     void lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch);
+
+    // Lower a db.exists_subquery into an nl.exists_buffer, the body's own loop nest ending
+    // in an nl.exists_mark, and the nl.exists_result that reads the flags back as the
+    // boolean the op stands for. A body that cannot carry the rows it was given runs under
+    // a loop over them, which the rest of the query then goes on inside.
+    void lowerExistsSubquery(mlir::db::ExistsSubquery exists);
 
     // Lower a db.call_subquery. A body carrying its scope, and a unit body, are lowered in
     // place: the block arguments become the step's chunks, the body's loops nest in the
@@ -490,12 +496,12 @@ private:
     bool assignProducerLoops(mlir::Value column,
                              mlir::Value handle,
                              bool rowsDroppedBeforeTheCut,
-                             mlir::db::CallSubquery holder);
+                             mlir::Operation* holder);
 
     // Records that the loops producing the relation which drives @param limit's projection
     // carry its handle, so a cut charged to constants alone stops its nest as any other
     // cut does rather than letting it run to the end.
-    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::db::CallSubquery holder);
+    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::Operation* holder);
 
     // Peephole over the lowered nl function: where an nl.limit_truncate's results
     // are consumed exactly by one adjacent nl.output (the terminal-LIMIT shape),

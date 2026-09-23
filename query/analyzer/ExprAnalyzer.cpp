@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "CypherAnalyzer.h"
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "CypherAST.h"
@@ -23,6 +24,8 @@
 
 #include "expr/All.h"
 #include "expr/Expr.h"
+
+#include "BioAssert.h"
 
 using namespace db;
 
@@ -239,12 +242,27 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
         break;
+        case Expr::Kind::EXISTS:
+            analyzeExistsExpr(static_cast<ExistsExpr*>(expr));
+        break;
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type in ExprAnalyzer.");
         break;
 
     }
+}
+
+void ExprAnalyzer::analyzeExistsExpr(ExistsExpr* expr) {
+    bioassert(_queryAnalyzer, "EXISTS analyzed without a query analyzer.");
+
+    _queryAnalyzer->analyzeExistsBody(expr);
+
+    expr->setType(EvaluatedType::Bool);
+
+    // The body reads the graph over the rows in flight, so the answer is a value per row
+    // even where the body names nothing of the scope around it
+    expr->setDynamic();
 }
 
 void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {

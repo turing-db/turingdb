@@ -40,6 +40,7 @@ class Stmt;
 class StmtContainer;
 class WithStmt;
 class CallSubqueryStmt;
+class ExistsExpr;
 class Projection;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
@@ -79,6 +80,10 @@ public:
     void analyze(const CreateNodePropertyIndexQuery* query);
     void analyze(const CreateEdgePropertyIndexQuery* query);
 
+    // Analyzes the body of an EXISTS subquery under a scope of its own, seeded with the
+    // variables in flight so the body reads them and binds nothing outside itself
+    void analyzeExistsBody(ExistsExpr* exists);
+
     // Sub-statements
     void analyze(OrderBy* orderBySt, const Projection* projection);
     void analyze(Skip* skipSt);
@@ -101,6 +106,10 @@ private:
     // leading WITH holds none: those names are an ordinary projection, which an ordinary
     // WITH descopes.
     std::vector<std::string_view> _subqueryImports;
+
+    // The shared body of a query and of a subquery's. @param returnRequired says whether a
+    // body ending on a reading clause needs a RETURN: an EXISTS body does not
+    void analyzeQueryBody(const SinglePartQuery* query, bool returnRequired);
 
     void analyzeProjection(Projection* projection, const Stmt* clause);
     void openWithScope(Projection* projection);

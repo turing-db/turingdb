@@ -294,6 +294,7 @@
 %type<db::ExprChain*> exprChain
 %type<db::ExprChain*> parenExprChain
 %type<db::Expr*> expr
+%type<db::Expr*> subqueryExist
 %type<db::Expr*> xorExpr
 %type<db::Expr*> andExpr
 %type<db::Expr*> notExpr
@@ -1290,7 +1291,7 @@ atomExpr
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    | subqueryExist { scanner.notImplemented(@$, "EXISTS"); }
+    | subqueryExist { $$ = $1; }
     | collectExpr
     ;
 
@@ -1430,8 +1431,22 @@ unionSt
     ;
 
 subqueryExist
-    : EXISTS OBRACE query CBRACE { scanner.notImplemented(@$, "EXISTS"); }
-    | EXISTS OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "EXISTS"); }
+    : EXISTS OBRACE subqueryBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
+    | EXISTS OBRACE patternWhere CBRACE {
+        MatchStmt* match = MatchStmt::create(ast, $3);
+        LOC(match, @3);
+
+        StmtContainer* stmts = StmtContainer::create(ast);
+        stmts->add(match);
+        LOC(stmts, @3);
+
+        SinglePartQuery* body = SinglePartQuery::create(ast);
+        body->setStmts(stmts);
+        LOC(body, @3);
+
+        $$ = ExistsExpr::create(ast, body);
+        LOC($$, @$);
+      }
     ;
 
 qualifiedName

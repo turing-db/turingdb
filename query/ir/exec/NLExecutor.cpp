@@ -6311,6 +6311,54 @@ void NLExecutor::runOptionalDrainLoop(NLExecutionContext* context, NLFunctionDat
     }
 }
 
+void NLExecutor::runExistsReset(NLExecutionContext* context, NLFunctionData* data) {
+    NLExistsResetData* reset = static_cast<NLExistsResetData*>(data);
+    NLExistsState* state = reset->getState();
+
+    state->reset();
+
+    // The tag holds each input row's position, so the body carries it the way it carries
+    // any other column and the mark reads the rows it reached off it.
+    std::vector<uint64_t>& tagRaw = reset->getTag()->getRaw();
+    tagRaw.resize(state->getRowCount());
+    std::iota(tagRaw.begin(), tagRaw.end(), uint64_t {0});
+}
+
+void NLExecutor::runExistsMark(NLExecutionContext* context, NLFunctionData* data) {
+    NLExistsMarkData* mark = static_cast<NLExistsMarkData*>(data);
+    NLExistsState* state = mark->getState();
+
+    const ColumnVector<uint64_t>* tag = mark->getTag();
+    if (!tag) {
+        // No input row to tag: the step is the single empty row, which this step's rows
+        // mark - and a predicate that cut them all leaves nothing to mark it.
+        const std::vector<const Column*>& columns = mark->columns();
+        bioassert(!columns.empty(), "nl.exists_mark needs at least one column when it has no tag");
+
+        if (columns.front()->size() > 0) {
+            state->markMatched(0);
+        }
+
+        return;
+    }
+
+    for (const uint64_t row : tag->getRaw()) {
+        state->markMatched(row);
+    }
+}
+
+void NLExecutor::runExistsResult(NLExecutionContext* context, NLFunctionData* data) {
+    NLExistsResultData* result = static_cast<NLExistsResultData*>(data);
+    const NLExistsState* state = result->getState();
+
+    const std::vector<bool>& matched = state->matched();
+
+    std::vector<ColumnMask::Bool_t>& answer = result->getResult()->getRaw();
+    answer.resize(matched.size());
+
+    std::copy(matched.begin(), matched.end(), answer.begin());
+}
+
 void NLExecutor::runDistinctReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLDistinctResetData* reset = static_cast<NLDistinctResetData*>(data);
     reset->getState()->reset();

@@ -764,6 +764,41 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::CallProcedure>(operation);
 }
 
+// A body whose own dataflow cannot keep the input rows paired with what it makes of them
+// runs one input row at a time, whatever it ends on
+bool runsPerRow(mlir::Operation* operation) {
+    if (mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(operation)) {
+        return !call.getCarriesScope();
+    } else if (mlir::db::ExistsSubquery exists = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
+        return !exists.getCarriesScope();
+    }
+
+    return false;
+}
+
+// The columns an op holding a body hands it through its block arguments, empty for an op
+// holding none
+mlir::OperandRange subqueryInputColumns(mlir::Operation* operation) {
+    if (mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(operation)) {
+        return call.getInputColumns();
+    } else if (mlir::db::ExistsSubquery exists = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
+        return exists.getInputColumns();
+    }
+
+    return mlir::OperandRange(operation->operand_end(), operation->operand_end());
+}
+
+// The innermost body run one row at a time that holds the op, or null when none does
+mlir::Operation* nearestPerRowSubquery(mlir::Operation* operation) {
+    for (mlir::Operation* parent = operation->getParentOp(); parent; parent = parent->getParentOp()) {
+        if (runsPerRow(parent)) {
+            return parent;
+        }
+    }
+
+    return nullptr;
+}
+
 // The db ops whose rows a projection is emitted over: a source, the nest a cross product
 // or a hash join builds, and the emit loop a pipeline breaker opens over what it
 // accumulated
@@ -771,8 +806,13 @@ bool opensRowLoop(mlir::Operation* operation) {
     const bool returningSubquery = mlir::isa<mlir::db::CallSubquery>(operation)
                                    && operation->getNumResults() > 0;
 
+    // An EXISTS answering for the rows in flight opens no loop of its own; one run a row
+    // at a time opens the loop over those rows, which the ops after it are emitted into.
+    const bool perRowExists = mlir::isa<mlir::db::ExistsSubquery>(operation) && runsPerRow(operation);
+
     return opensSourceLoop(operation)
         || returningSubquery
+        || perRowExists
         || mlir::isa<mlir::db::CrossProduct,
                      mlir::db::HashJoin,
                      mlir::db::Sort,
@@ -788,24 +828,6 @@ bool reducesToOneRow(mlir::Operation* operation) {
                      mlir::db::Min,
                      mlir::db::Max,
                      mlir::db::Avg>(operation);
-}
-
-// A body whose own dataflow cannot keep the input rows paired with what it makes of them
-// runs one input row at a time, whatever it ends on
-bool runsPerRow(mlir::db::CallSubquery call) {
-    return !call.getCarriesScope();
-}
-
-// The innermost body run one row at a time that holds the op, or null when none does
-mlir::db::CallSubquery nearestPerRowSubquery(mlir::Operation* operation) {
-    for (mlir::Operation* parent = operation->getParentOp(); parent; parent = parent->getParentOp()) {
-        mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(parent);
-        if (call && runsPerRow(call)) {
-            return call;
-        }
-    }
-
-    return mlir::db::CallSubquery {};
 }
 
 // Passes some of its rows on and keeps the rest back, so the rows reaching a cut below it
@@ -897,7 +919,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // the bound. Detect before the limit pre-scan so the fused ones are skipped.
     detectTopKFusion(dbFunction);
 
-    hoistLimitHandles(dbFunction.getBody(), _entryBlock, mlir::db::CallSubquery {});
+    hoistLimitHandles(dbFunction.getBody(), _entryBlock, nullptr);
 
     for (mlir::Operation& operation : dbBody.front()) {
         lowerOperation(operation);
@@ -922,7 +944,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     return nlFunction;
 }
 
-void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock, mlir::db::CallSubquery holder) {
+void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock, mlir::Operation* holder) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
     // Pre-scan for db.limits before any loop is built: nl.for's limit operand is
@@ -1060,6 +1082,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerOptionalMatch(optionalMatch);
     } else if (mlir::db::CallSubquery callSubquery = mlir::dyn_cast<mlir::db::CallSubquery>(operation)) {
         lowerCallSubquery(callSubquery);
+    } else if (mlir::db::ExistsSubquery existsSubquery = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
+        lowerExistsSubquery(existsSubquery);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
@@ -2283,6 +2307,124 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
     nl::OptionalDrain drain = _builder.create<nl::OptionalDrain>(loc, iteratorType, state);
 
     buildLoopForSource(drain.getResult(), call.getOperation());
+}
+
+void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks;
+    for (const mlir::Value column : exists.getInputColumns()) {
+        inputChunks.push_back(mapValue(column));
+    }
+
+    // The step the accumulator covers is the one binding the columns the EXISTS answers
+    // for, so it is emptied once per chunk of them - and the body's nest and the read of
+    // the flags both go there, the read after the nest.
+    mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
+
+    // A body run one row at a time makes the accumulator's step one input row: the loop
+    // over the rows is opened first and the body roots in it. A body carrying the scope,
+    // and one over the single empty row, run in the step block as they otherwise would.
+    const bool perRow = runsPerRow(exists) && !inputChunks.empty();
+
+    mlir::Block* bodyRoot = stepBlock;
+    llvm::SmallVector<mlir::Value, 4> stepChunks(inputChunks.begin(), inputChunks.end());
+
+    if (perRow) {
+        const mlir::Value limitHandle = _loopLimitHandle.lookup(exists.getOperation());
+
+        setInsertionInto(stepBlock);
+        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
+        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+        bodyRoot = rowLoop.getBody();
+
+        stepChunks.clear();
+        for (const mlir::BlockArgument rowChunk : bodyRoot->getArguments()) {
+            stepChunks.push_back(rowChunk);
+        }
+    }
+
+    setInsertionInto(bodyRoot);
+    nl::ExistsBuffer buffer = _builder.create<nl::ExistsBuffer>(loc, stepChunks);
+    const mlir::Value state = buffer.getState();
+
+    // The body reads this step's rows through its block arguments, and the row tag through
+    // the trailing one; a body run per row, or with nothing to join onto, takes no tag.
+    mlir::Block& bodyBlock = exists.getBody().front();
+    for (size_t inputIndex = 0; inputIndex < stepChunks.size(); inputIndex++) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputIndex))] = stepChunks[inputIndex];
+    }
+
+    if (bodyBlock.getNumArguments() > inputChunks.size()) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
+    }
+
+    if (perRow) {
+        hoistLimitHandles(exists.getBody(), bodyRoot, exists);
+    }
+
+    // A dataflow of its own, rooted where the accumulator sits so its loops nest inside
+    // this step; the caller's root and innermost loop are restored once it is lowered.
+    mlir::Block* const previousRoot = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _rootBlock = bodyRoot;
+    _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
+
+    llvm::SmallVector<mlir::Value, 4> heldChunks;
+    mlir::Value heldTag;
+
+    for (mlir::Operation& operation : bodyBlock) {
+        mlir::db::ExistsYield yield = mlir::dyn_cast<mlir::db::ExistsYield>(operation);
+        if (!yield) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        for (const mlir::Value column : yield.getColumns()) {
+            heldChunks.push_back(mapValue(column));
+        }
+
+        if (yield.getTag()) {
+            heldTag = mapValue(yield.getTag());
+        }
+    }
+
+    // The mark goes where the body left its rows - its innermost loop body - which is the
+    // deepest block the tag and the columns it holds are bound in.
+    llvm::SmallVector<mlir::Value, 4> markedChunks = heldChunks;
+    if (heldTag) {
+        markedChunks.push_back(heldTag);
+    }
+
+    setInsertionInto(deepestOwnerBlock(markedChunks, bodyRoot));
+    _builder.create<nl::ExistsMark>(loc, state, heldTag, heldChunks);
+
+    _rootBlock = previousRoot;
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType boolChunk = nl::ChunkType::get(context, mlir::storage::BoolType::get(context));
+
+    setInsertionInto(bodyRoot);
+    nl::ExistsResult result = _builder.create<nl::ExistsResult>(loc, boolChunk, state);
+    _valueMap[exists.getResult()] = result.getResult();
+
+    if (!perRow) {
+        return;
+    }
+
+    // The answer is one flag per row of the loop's own chunks, so what follows the op
+    // reads the rows in flight through those: the rest of the query goes on inside the
+    // loop, where every column of the step is bound a row at a time.
+    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
+        _valueMap[exists.getInputColumns()[inputIndex]] = stepChunks[inputIndex];
+    }
+
+    _innermostLoopBody = bodyRoot;
+    _innermostCardinality = stepChunks.front();
 }
 
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
@@ -3530,7 +3672,7 @@ const Procedure* DBLowering::procedureFor(llvm::StringRef name) const {
 bool DBLowering::assignProducerLoops(mlir::Value column,
                                      mlir::Value handle,
                                      bool rowsDroppedBeforeTheCut,
-                                     mlir::db::CallSubquery holder) {
+                                     mlir::Operation* holder) {
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
         // A subquery body reads the rows in flight through its block arguments, so the
@@ -3538,20 +3680,20 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
         // factor's loop variable is a block argument too, with no producer to reach from
         // here: its loop is reached through the factor's yield in the branch below.
         const mlir::BlockArgument argument = mlir::cast<mlir::BlockArgument>(column);
-        mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(argument.getOwner()->getParentOp());
+        mlir::Operation* const bodyHolder = argument.getOwner()->getParentOp();
+        const mlir::OperandRange inputs = subqueryInputColumns(bodyHolder);
 
-        const bool standsForAnInput = call && argument.getArgNumber() < call.getInputColumns().size();
-        if (!standsForAnInput) {
+        if (argument.getArgNumber() >= inputs.size()) {
             return false;
         }
 
         // The handle this body holds is created inside the loop over its input rows, so a
         // loop outside the body cannot carry it: the walk stops at the boundary.
-        if (call == holder) {
+        if (bodyHolder == holder) {
             return false;
         }
 
-        return assignProducerLoops(call.getInputColumns()[argument.getArgNumber()],
+        return assignProducerLoops(inputs[argument.getArgNumber()],
                                    handle,
                                    rowsDroppedBeforeTheCut,
                                    holder);
@@ -3650,7 +3792,7 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
     return reachedALoop;
 }
 
-void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::db::CallSubquery holder) {
+void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::Operation* holder) {
     mlir::Operation* const limitOp = limit.getOperation();
 
     // The relation driving the projection is the loop opened last before the cut: its rows

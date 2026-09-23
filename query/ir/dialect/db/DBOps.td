@@ -2751,4 +2751,79 @@ def SubqueryYield : TuringOp<"subquery_yield", [Pure, Terminator, AttrSizedOpera
   }];
 }
 
+/**
+* ExistsSubquery
+*/
+def ExistsSubquery : TuringOp<"exists_subquery", [Pure]> {
+  let summary = "Answer, per row in flight, whether a body produces a row of its own for it";
+
+  let description = [{
+    Models Cypher's `EXISTS { ... }`: a semi-join of the rows in flight against a
+    read-only body. The result is one boolean per input row - true exactly when the
+    body produced at least one row for it - so the op changes no row count, which is
+    what lets it stand in an expression.
+
+    `input_columns` are every named column the query holds at this point, and the body
+    region takes one argument per input column - the body reads the scope around it
+    through them, EXISTS being correlated - plus a trailing `!db.column<ui64>` row tag:
+    the position of each input row, carried through the body the way any other column
+    is, so the rows that produced one are known once the body is walked. An EXISTS over
+    no input column joins onto the single empty row Cypher starts from and takes no tag.
+
+      %b = db.exists_subquery(%p) carries_scope ({
+        ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
+          %s, %e, %et, %k, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
+          db.exists_yield %tag2, {%s, %e, %k} : {...}
+      }) : (!db.column<!storage.node_id>) -> !db.column<!storage.bool>
+
+    `carries_scope` says the body's own dataflow keeps every input row paired with what
+    it made of it, so it runs over a whole chunk of input rows at once and the tag comes
+    back naming the rows that survived. A body that aggregates, sorts, cuts or dedups
+    cannot: it is run one input row at a time instead, and the row is marked when the
+    body yielded anything at all for it.
+
+    The db.exists_yield names the tag as the body left it and the columns the body holds
+    there. Those columns say nothing about which rows matched when the tag is present;
+    they carry the row count for a body with no tag to answer from.
+
+    Reading the graph is deterministic and an EXISTS body writes nothing, so it is Pure.
+  }];
+
+  let arguments = (ins Variadic<Column>:$input_columns, UnitAttr:$carries_scope);
+
+  let results = (outs ColumnBools:$result);
+
+  // Exactly one block, ending in a db.exists_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` (`carries_scope` $carries_scope^)? $body attr-dict
+    `:` functional-type($input_columns, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* ExistsYield
+*/
+def ExistsYield : TuringOp<"exists_yield", [Pure, Terminator, AttrSizedOperandSegments, HasParent<"ExistsSubquery">]> {
+  let summary = "Name the row tag and the columns a db.exists_subquery's body holds";
+
+  let description = [{
+    Terminates a db.exists_subquery's body region. `tag` is the row tag as the body left
+    it - the input row each surviving row came from, absent when the op has no input
+    column - and `columns` are the columns the body holds there, which a body with no tag
+    reads its row count off.
+  }];
+
+  let arguments = (ins Optional<ColumnRowTags>:$tag, Variadic<Column>:$columns);
+
+  // The tag's type is buildable and so left out; only the held column types are spelled,
+  // in braces as db.optional_yield spells the ones its pattern contributes.
+  let assemblyFormat = [{
+    ($tag^ `,`)? `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
 #endif //TURINGDB_OPS

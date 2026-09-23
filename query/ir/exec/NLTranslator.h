@@ -236,6 +236,7 @@ private:
     // nl.optional_collect and the nl.for over nl.optional_drain find the same buffers and
     // matched flags
     llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
+    llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
 
     // nl.procedure handle SSA value -> the runtime call it produces, so every op that
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
@@ -620,6 +621,23 @@ private:
     // The runtime accumulator an optional handle names. Throws if the handle was not
     // produced by an nl.optional_buffer translated earlier.
     NLOptionalState* optionalStateFor(mlir::Value handle) const;
+
+    // Translate an nl.exists_buffer: allocate the runtime accumulator, map the handle to
+    // it, record this step's input chunks and the row tag column, and record the reset
+    // statement (run each time the block runs).
+    void translateExistsBuffer(mlir::nl::ExistsBuffer buffer, NLStmtContainer* body);
+
+    // Translate an nl.exists_mark: wire the row tag, or the columns an untagged
+    // accumulator answers from, and record the per-step statement.
+    void translateExistsMark(mlir::nl::ExistsMark mark, NLStmtContainer* body);
+
+    // Translate an nl.exists_result: allocate the boolean chunk the flags are laid out
+    // into and record the statement that fills it.
+    void translateExistsResult(mlir::nl::ExistsResult result, NLStmtContainer* body);
+
+    // The runtime accumulator an exists handle names. Throws if the handle was not
+    // produced by an nl.exists_buffer translated earlier.
+    NLExistsState* existsStateFor(mlir::Value handle) const;
 
     // Translate the nl.for over an nl.unwind_collect iterator: allocate one loop variable per
     // grouping key plus the element value, wire the key outputs and value output onto

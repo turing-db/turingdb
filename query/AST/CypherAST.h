@@ -30,6 +30,7 @@ class ExprChain;
 class BinaryExpr;
 class LiteralExpr;
 class EntityTypeExpr;
+class ExistsExpr;
 class ParameterExpr;
 class PathExpr;
 class PropertyExpr;
@@ -132,6 +133,7 @@ public:
     friend BinaryExpr;
     friend LiteralExpr;
     friend EntityTypeExpr;
+    friend ExistsExpr;
     friend ParameterExpr;
     friend PathExpr;
     friend PropertyExpr;

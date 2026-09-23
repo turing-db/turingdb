@@ -60,6 +60,8 @@
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateEdgePropertyIndexQuery.h"
 
+#include "expr/ExistsExpr.h"
+
 #include "FunctionDecls.h"
 
 #include "BioAssert.h"
@@ -97,6 +99,7 @@ CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     _readAnalyzer(std::make_unique<ReadStmtAnalyzer>(_ast, _graphView)),
     _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
 {
+    _exprAnalyzer->setQueryAnalyzer(this);
     _readAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
     _writeAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
 }
@@ -190,10 +193,14 @@ void CypherAnalyzer::analyze() {
 }
 
 void CypherAnalyzer::analyze(const SinglePartQuery* query) {
+    analyzeQueryBody(query, /*returnRequired=*/true);
+}
+
+void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnRequired) {
     const StmtContainer* stmts = query->getStmts();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
-    bool returnMandatory = true;
+    bool returnMandatory = returnRequired;
 
     if (stmts) {
         throwOnReadAfterUpdate(stmts);
@@ -214,7 +221,7 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
             } else if (kind == Stmt::Kind::WITH) {
                 // A part of its own opens here: `CREATE (n) WITH n MATCH (m)` ends on a
                 // reading clause, and a query ending on one needs a RETURN
-                returnMandatory = true;
+                returnMandatory = returnRequired;
 
                 analyze(static_cast<const WithStmt*>(stmt));
                 _writeAnalyzer->startPart();
@@ -507,6 +514,44 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     if (subquery->isReturning()) {
         publishSubqueryReturn(subquery);
     }
+}
+
+void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
+    const SinglePartQuery* body = exists->getBody();
+
+    if (body->writesToTheGraph()) {
+        throwError("An EXISTS subquery is read-only: its body cannot write to the graph", exists);
+    }
+
+    // EXISTS is correlated: the body reads every variable in flight, through declarations
+    // of its own, so the variables it binds stay inside it
+    DeclContext* const outer = _ctxt;
+    DeclContext* const inner = body->getDeclContext();
+
+    for (const VarDecl* decl : outer->decls()) {
+        if (decl->isUnnamed()) {
+            continue;
+        }
+
+        VarDecl* correlated = inner->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
+        correlated->setListShape(decl->getListShape());
+    }
+
+    const bool outerHasCreate = _writeAnalyzer->hasCreate();
+
+    setScope(inner);
+    _writeAnalyzer->startPart();
+
+    analyzeQueryBody(body, /*returnRequired=*/false);
+
+    // A RETURN answers for no column outside the body, but the code generator reads the
+    // declarations its items publish, so they are declared in a scope nothing else holds
+    if (const ReturnStmt* returnStmt = body->getReturnStmt()) {
+        publishProjection(returnStmt->getProjection(), DeclContext::create(_ast, inner));
+    }
+
+    setScope(outer);
+    _writeAnalyzer->setHasCreate(outerHasCreate);
 }
 
 void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const {

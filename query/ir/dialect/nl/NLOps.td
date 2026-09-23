@@ -2953,4 +2953,93 @@ def OptionalDrain : NLOp<"optional_drain", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
+/**
+* ExistsBuffer
+*/
+def ExistsBuffer : NLOp<"exists_buffer", [RowAlignedThroughOperands]> {
+  let summary = "Create (and reset) the accumulator for one EXISTS over this step's rows";
+  let description = [{
+    Sits at the top of the block whose step it covers - the innermost loop body
+    binding the columns the EXISTS answers for - so the accumulator is empty again at
+    every step. It records this step's input chunks, clears the matched flag of each
+    of their rows, and produces the row tag: a chunk holding each input row's
+    position, which the body carries alongside the columns it walks so nl.exists_mark
+    knows which rows it produced a row for.
+
+      %state, %tag = nl.exists_buffer (%p) : {!nl.chunk<!storage.node_id>}
+
+    With no input columns - an EXISTS over the single empty row Cypher starts from -
+    the accumulator holds one flag and the tag one row. The body has nothing to join
+    onto there, so it never carries that tag, which is why the op is row-aligned
+    through its operands: a tag over input rows holds exactly the rows those chunks do.
+  }];
+
+  // The chunks the EXISTS answers for; the accumulator reads its row count from the
+  // first of them, and nl.exists_result lays its answer out over the same rows.
+  let arguments = (ins Variadic<NLChunk>:$input_columns);
+
+  // The accumulator, then the row tag over this step's input rows.
+  let results = (outs NLExistsState:$state, NLUInt64Chunk:$tag);
+
+  // The tag's type is buildable and so omitted; only the input chunk types are
+  // spelled, in braces as nl.optional_buffer spells its own.
+  let assemblyFormat = [{
+    `(` $input_columns `)` attr-dict `:` `{` qualified(type($input_columns)) `}`
+  }];
+}
+
+/**
+* ExistsMark
+*/
+// NOT Pure: it marks the input rows this step's rows came from, so it must run exactly
+// where it sits (like nl.optional_collect).
+def ExistsMark : NLOp<"exists_mark", [AttrSizedOperandSegments]> {
+  let summary = "Mark the input rows an EXISTS body produced a row for";
+  let description = [{
+    Runs in the body's innermost loop body, once per step. Marks as matched each input
+    row the tag names, so once the body is walked the marked rows are exactly the ones
+    it produced a row for.
+
+      nl.exists_mark %state, %tag, (%k) : {!nl.chunk<!storage.node_id>}
+
+    The tag is absent when the accumulator has no input column: the step is then the
+    single empty row, which the columns mark when they hold a row at all - which is
+    what they are named for, an untagged mark having nothing else to answer from.
+  }];
+
+  let arguments = (ins NLExistsStateHandle:$state,
+                       Optional<NLUInt64Chunk>:$tag,
+                       Variadic<NLChunk>:$columns);
+
+  let assemblyFormat = [{
+    $state (`,` $tag^)? `,` `(` $columns `)` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
+/**
+* ExistsResult
+*/
+// Pure: given a filled accumulator it deterministically lays out the same flags and
+// produces no side effect of its own. Mirrors nl.optional_drain, and like it must be
+// placed after the body's loop nest, in the block holding the nl.exists_buffer.
+def ExistsResult : NLOp<"exists_result", [Pure]> {
+  let summary = "Read an EXISTS accumulator's flags as a boolean chunk";
+  let description = [{
+    The answer phase of an EXISTS. Consumes a filled nl.exists_state and produces one
+    boolean per input row of the step - true for a row the body produced a row for -
+    row-aligned with the chunks the accumulator was opened over, which is what lets the
+    result stand beside them in the rows in flight.
+
+      %b = nl.exists_result(%state) : !nl.chunk<!storage.bool>
+
+    Its read must find every mark already made, so place it after the body's loop nest,
+    in the block holding the nl.exists_buffer that opened the accumulator.
+  }];
+
+  let arguments = (ins NLExistsStateHandle:$state);
+  let results   = (outs NLBoolChunk:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
 #endif //TURINGDB_NL_OPS

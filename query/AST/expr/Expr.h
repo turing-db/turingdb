@@ -30,6 +30,7 @@ public:
         LIST,
         LIST_COMPREHENSION,
         CASE,
+        EXISTS,
 
         _SIZE
     };
@@ -115,7 +116,8 @@ using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::INDEX, "INDEX">,
     EnumStringPair<Expr::Kind::LIST, "LIST">,
     EnumStringPair<Expr::Kind::LIST_COMPREHENSION, "LIST_COMPREHENSION">,
-    EnumStringPair<Expr::Kind::CASE, "CASE">
+    EnumStringPair<Expr::Kind::CASE, "CASE">,
+    EnumStringPair<Expr::Kind::EXISTS, "EXISTS">
 >;
 
 }

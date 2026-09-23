@@ -17,6 +17,7 @@ class GraphMetadata;
 namespace db {
 
 class CypherAST;
+class CypherAnalyzer;
 class DeclContext;
 class FunctionResolver;
 class LoadCSVStmt;
@@ -37,6 +38,7 @@ class NodePattern;
 class EdgePattern;
 class ListExpr;
 class ListComprehensionExpr;
+class ExistsExpr;
 class MapLiteral;
 
 class ExprAnalyzer {
@@ -50,6 +52,10 @@ public:
     ExprAnalyzer& operator=(ExprAnalyzer&&) = delete;
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
+
+    // The analyzer an EXISTS body is analyzed by: its statements are a query of their own,
+    // which only the query analyzer knows how to walk
+    void setQueryAnalyzer(CypherAnalyzer* analyzer) { _queryAnalyzer = analyzer; }
 
     // Declares the statement a CSV row variable is loaded by, so `row[2]` and `row.age`
     // resolve to fields of that statement rather than to accesses of their own
@@ -65,6 +71,7 @@ public:
     void analyzeListExpr(ListExpr* expr);
     void analyzeListComprehensionExpr(ListComprehensionExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
+    void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
@@ -87,6 +94,7 @@ public:
 
 private:
     CypherAST* _ast {nullptr};
+    CypherAnalyzer* _queryAnalyzer {nullptr};
     GraphView _graphView;
     DeclContext* _ctxt {nullptr};
     const GraphMetadata& _graphMetadata;

@@ -154,6 +154,18 @@ public:
     // the pattern missed.
     static void runOptionalDrainLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Clear the matched flags of an EXISTS accumulator and lay its row tag out over this
+    // step's input rows; runs each time its block runs.
+    static void runExistsReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Mark as matched each input row the row tag names, or - for an accumulator with no
+    // input column - the single empty row, when this step holds a row at all.
+    static void runExistsMark(NLExecutionContext* context, NLFunctionData* data);
+
+    // The answer phase of an EXISTS: lay the matched flags out as the boolean chunk the
+    // expression stands for, one per input row of the step.
+    static void runExistsResult(NLExecutionContext* context, NLFunctionData* data);
+
     // Empty the buffers and the key index of a hash join's build side; runs each time
     // its block runs.
     static void runHashJoinReset(NLExecutionContext* context, NLFunctionData* data);

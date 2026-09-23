@@ -922,6 +922,11 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
             out << "        ASTType CaseExpr\n";
             out << "    }\n";
             break;
+        case Expr::Kind::EXISTS:
+            out << "    _" << std::hex << expr << " {\n";
+            out << "        ASTType ExistsExpr\n";
+            out << "    }\n";
+            break;
         case Expr::Kind::_SIZE:
             out << "    _" << std::hex << expr << " {\n";
             out << "        ASTType __INVALIDEXPR__\n";

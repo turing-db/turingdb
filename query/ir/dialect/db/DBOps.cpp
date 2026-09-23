@@ -1354,6 +1354,50 @@ LogicalResult OptionalMatch::verify() {
     return success();
 }
 
+LogicalResult ExistsSubquery::verify() {
+    Block& bodyBlock = getBody().front();
+
+    auto yield = dyn_cast_or_null<ExistsYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return emitOpError("body region must end with a db.exists_yield");
+    }
+
+    const OperandRange inputs = getInputColumns();
+    const size_t inputCount = inputs.size();
+
+    // The body carries the row tag through its dataflow only when it carries the scope,
+    // and only over rows it has: a body run one row at a time, or over the single empty
+    // row, is marked by the lowering instead.
+    const bool tagsRows = getCarriesScope() && inputCount > 0;
+
+    const size_t expectedArguments = tagsRows ? inputCount + 1 : inputCount;
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes one argument per input column")
+               << (tagsRows ? " plus the row tag" : "") << ", expected " << expectedArguments
+               << " but has " << bodyBlock.getNumArguments();
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (bodyBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
+            return emitOpError("body argument ") << inputIndex << " must have the type of input column "
+                                                 << inputIndex;
+        }
+    }
+
+    const bool yieldsATag = yield.getTag() != nullptr;
+    if (tagsRows != yieldsATag) {
+        return emitOpError("the body yields a row tag exactly when it takes one");
+    }
+
+    // A body with no tag is answered for by the rows its columns hold, so it has to hold
+    // one; a tagged body is answered for by the tag, and holds whatever its clauses left.
+    if (!tagsRows && yield.getColumns().empty()) {
+        return emitOpError("an untagged body must yield at least one column, to answer from its rows");
+    }
+
+    return success();
+}
+
 LogicalResult CallSubquery::verify() {
     Block& bodyBlock = getBody().front();
 
