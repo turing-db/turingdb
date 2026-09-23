@@ -156,6 +156,12 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             return true;
         break;
 
+        case Expr::Kind::PATTERN_COMPREHENSION:
+            // Its WHERE and its projection read the variables its pattern binds, which
+            // name nothing in the expression around it
+            return false;
+        break;
+
         default:
             // A path holds a pattern, which is not a list of sub-expressions this can
             // hand back

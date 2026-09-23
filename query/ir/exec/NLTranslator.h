@@ -238,6 +238,10 @@ private:
     llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
     llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
 
+    // nl.pattern_comprehension_state handle SSA value -> the accumulator it names, so the
+    // collect staging the matches and the build reading them find the one the buffer opened
+    llvm::DenseMap<mlir::Value, NLPatternComprehensionState*> _patternComprehensionStates;
+
     // nl.procedure handle SSA value -> the runtime call it produces, so every op that
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
     llvm::DenseMap<mlir::Value, NLProcedureState*> _procedureStates;
@@ -638,6 +642,25 @@ private:
     // The runtime accumulator an exists handle names. Throws if the handle was not
     // produced by an nl.exists_buffer translated earlier.
     NLExistsState* existsStateFor(mlir::Value handle) const;
+
+    // Translate an nl.pattern_comprehension_buffer: allocate the accumulator this step's
+    // matches are staged in and the row tag column the pattern carries
+    void translatePatternComprehensionBuffer(mlir::nl::PatternComprehensionBuffer buffer,
+                                             NLStmtContainer* body);
+
+    // Translate an nl.pattern_comprehension_collect: bind the tag and the value the
+    // pattern's matches contribute, under the read the value column's shape takes
+    void translatePatternComprehensionCollect(mlir::nl::PatternComprehensionCollect collect,
+                                              NLStmtContainer* body);
+
+    // Translate an nl.pattern_comprehension: allocate the list column the step fills once
+    // the pattern's nest has been walked
+    void translatePatternComprehension(mlir::nl::PatternComprehension comprehension,
+                                       NLStmtContainer* body);
+
+    // The runtime accumulator a pattern comprehension handle names. Throws if the handle
+    // was not produced by an nl.pattern_comprehension_buffer.
+    NLPatternComprehensionState* patternComprehensionStateFor(mlir::Value handle) const;
 
     // Translate the nl.for over an nl.unwind_collect iterator: allocate one loop variable per
     // grouping key plus the element value, wire the key outputs and value output onto

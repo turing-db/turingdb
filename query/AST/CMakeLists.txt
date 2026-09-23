@@ -79,6 +79,7 @@ set(ast_sources
     stmt/VectorSearchStmt.cpp
     expr/ListExpr.cpp
     expr/ListComprehensionExpr.cpp
+    expr/PatternComprehensionExpr.cpp
     expr/CaseExpr.cpp
     NodePattern.cpp
     EdgePattern.cpp

@@ -881,6 +881,15 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateExistsMark(existsMark, body);
         } else if (nl::ExistsResult existsResult = mlir::dyn_cast<nl::ExistsResult>(operation)) {
             translateExistsResult(existsResult, body);
+        } else if (nl::PatternComprehensionBuffer comprehensionBuffer =
+                       mlir::dyn_cast<nl::PatternComprehensionBuffer>(operation)) {
+            translatePatternComprehensionBuffer(comprehensionBuffer, body);
+        } else if (nl::PatternComprehensionCollect comprehensionCollect =
+                       mlir::dyn_cast<nl::PatternComprehensionCollect>(operation)) {
+            translatePatternComprehensionCollect(comprehensionCollect, body);
+        } else if (nl::PatternComprehension patternComprehension =
+                       mlir::dyn_cast<nl::PatternComprehension>(operation)) {
+            translatePatternComprehension(patternComprehension, body);
         } else if (nl::CreateNode createNode = mlir::dyn_cast<nl::CreateNode>(operation)) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
@@ -3409,6 +3418,67 @@ NLExistsState* NLTranslator::existsStateFor(mlir::Value handle) const {
     const auto stateIt = _existsStates.find(handle);
     if (stateIt == _existsStates.end()) {
         throw IRException("exists handle must be produced by an nl.exists_buffer");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::translatePatternComprehensionBuffer(nl::PatternComprehensionBuffer buffer,
+                                                       NLStmtContainer* body) {
+    NLPatternComprehensionState* state = _program->allocPatternComprehensionState();
+    _patternComprehensionStates[buffer.getState()] = state;
+
+    const mlir::Value cardinality = buffer.getCardinality();
+    const Column* const rows = cardinality ? getColumn(cardinality) : nullptr;
+
+    ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
+
+    NLPatternComprehensionResetData* resetData =
+        _program->allocFunctionData<NLPatternComprehensionResetData>(state, rows, tag);
+    body->emplaceStmt(&NLExecutor::runPatternComprehensionReset, resetData);
+}
+
+void NLTranslator::translatePatternComprehensionCollect(nl::PatternComprehensionCollect collect,
+                                                        NLStmtContainer* body) {
+    NLPatternComprehensionState* state = patternComprehensionStateFor(collect.getState());
+
+    const mlir::Value value = collect.getValue();
+    const mlir::Value tag = collect.getTag();
+
+    const ColumnVector<uint64_t>* tagColumn = nullptr;
+    if (tag) {
+        tagColumn = static_cast<const ColumnVector<uint64_t>*>(getColumn(tag));
+    }
+
+    NLPatternComprehensionCollectData* data =
+        _program->allocFunctionData<NLPatternComprehensionCollectData>(state,
+                                                                       tagColumn,
+                                                                       getColumn(value),
+                                                                       selectListItemRead(value.getType()),
+                                                                       _memory);
+    body->emplaceStmt(&NLExecutor::runPatternComprehensionCollect, data);
+}
+
+void NLTranslator::translatePatternComprehension(nl::PatternComprehension comprehension,
+                                                 NLStmtContainer* body) {
+    NLPatternComprehensionState* state = patternComprehensionStateFor(comprehension.getState());
+
+    const mlir::Value resultValue = comprehension.getResult();
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLPatternComprehensionData* data =
+        _program->allocFunctionData<NLPatternComprehensionData>(state,
+                                                                static_cast<ColumnVector<ListView>*>(result),
+                                                                _memory);
+    body->emplaceStmt(&NLExecutor::runPatternComprehension, data);
+}
+
+NLPatternComprehensionState* NLTranslator::patternComprehensionStateFor(mlir::Value handle) const {
+    const auto stateIt = _patternComprehensionStates.find(handle);
+    if (stateIt == _patternComprehensionStates.end()) {
+        throw IRException("pattern comprehension handle must be produced by an "
+                          "nl.pattern_comprehension_buffer");
     }
 
     return stateIt->second;

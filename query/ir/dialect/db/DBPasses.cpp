@@ -655,7 +655,7 @@ bool standsInForTheElements(Value comparedColumn) {
 // column of another type cannot be put in its place.
 bool readThroughABlockArgument(Value column) {
     const auto takesItThroughARegion = [](Operation* user) {
-        return isa<OptionalMatch, CallSubquery, ExistsSubquery>(user);
+        return isa<OptionalMatch, CallSubquery, ExistsSubquery, PatternComprehension>(user);
     };
 
     return llvm::any_of(column.getUsers(), takesItThroughARegion);

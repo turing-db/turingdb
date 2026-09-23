@@ -5,12 +5,15 @@
 #include "CypherAnalyzer.h"
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
+#include "ReadStmtAnalyzer.h"
 #include "CypherAST.h"
 #include "FunctionDecls.h"
 #include "FunctionResolver.h"
 #include "FunctionInvocation.h"
 #include "EdgePattern.h"
 #include "NodePattern.h"
+#include "Pattern.h"
+#include "PatternElement.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
@@ -238,6 +241,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         break;
         case Expr::Kind::LIST_COMPREHENSION:
             analyzeListComprehensionExpr(static_cast<ListComprehensionExpr*>(expr));
+        break;
+        case Expr::Kind::PATTERN_COMPREHENSION:
+            analyzePatternComprehensionExpr(static_cast<PatternComprehensionExpr*>(expr));
         break;
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
@@ -1594,6 +1600,58 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     if (source->isAggregate()) {
         expr->setAggregate();
     }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
+}
+
+void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* expr) {
+    const Pattern* pattern = expr->getPattern();
+
+    // A name the pattern binds that the scope does not hold yet is the comprehension's
+    // own: the WHERE and the projection read it, and nothing outside them does
+    std::vector<std::string_view> ownVariables;
+
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const Symbol* symbol = entity->getSymbol();
+
+            if (!symbol || _ctxt->hasDecl(symbol->getName())) {
+                continue;
+            }
+
+            ownVariables.push_back(symbol->getName());
+
+            // A SET analyzes the expression it assigns twice, and the reads in the body
+            // hold the declarations the first pass bound: binding the names back to them
+            // leaves the second pass reading the variables the pattern already has, not
+            // fresh ones the traversal knows nothing about.
+            if (VarDecl* bound = entity->getDecl()) {
+                _ctxt->declareAlias(symbol->getName(), bound);
+            }
+        }
+    }
+
+    _readAnalyzer->analyze(pattern);
+
+    Expr* const projection = expr->getProjection();
+    analyzeExpr(projection);
+
+    for (const std::string_view name : ownVariables) {
+        _ctxt->dropVariable(name);
+    }
+
+    if (projection->isAggregate()) {
+        throwError("Aggregate functions may not be used over the matches of a pattern "
+                   "comprehension: the pattern names one match, not a group",
+                   expr);
+    }
+
+    expr->setType(EvaluatedType::List);
+    expr->setListShape(ListShape::collecting(projection->getType(), projection->getListShape()));
+
+    // The pattern is matched row by row, so the list is never the compile-time value an
+    // argument declared constant takes
+    expr->setDynamic();
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
 }

@@ -166,6 +166,19 @@ public:
     // expression stands for, one per input row of the step.
     static void runExistsResult(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty a pattern comprehension accumulator and lay its row tag out over this step's
+    // rows; runs each time its block runs.
+    static void runPatternComprehensionReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Stage what this step of the pattern's matches contributes, each value under the row
+    // its tag names.
+    static void runPatternComprehensionCollect(NLExecutionContext* context, NLFunctionData* data);
+
+    // The build phase of a pattern comprehension: one list per row of the step, holding
+    // the values that row's matches staged, as one contiguous run of the query's list
+    // buffer.
+    static void runPatternComprehension(NLExecutionContext* context, NLFunctionData* data);
+
     // Empty the buffers and the key index of a hash join's build side; runs each time
     // its block runs.
     static void runHashJoinReset(NLExecutionContext* context, NLFunctionData* data);

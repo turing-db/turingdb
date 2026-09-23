@@ -29,6 +29,7 @@ public:
         INDEX,
         LIST,
         LIST_COMPREHENSION,
+        PATTERN_COMPREHENSION,
         CASE,
         EXISTS,
 
@@ -116,6 +117,7 @@ using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::INDEX, "INDEX">,
     EnumStringPair<Expr::Kind::LIST, "LIST">,
     EnumStringPair<Expr::Kind::LIST_COMPREHENSION, "LIST_COMPREHENSION">,
+    EnumStringPair<Expr::Kind::PATTERN_COMPREHENSION, "PATTERN_COMPREHENSION">,
     EnumStringPair<Expr::Kind::CASE, "CASE">,
     EnumStringPair<Expr::Kind::EXISTS, "EXISTS">
 >;

@@ -491,23 +491,80 @@ def ListComprehension : TuringOp<"list_comprehension", [Pure]> {
 }
 
 /**
-* ComprehensionYield
+* PatternComprehension
 */
-def ComprehensionYield : TuringOp<"comprehension_yield", [Pure, Terminator, HasParent<"ListComprehension">]> {
-  let summary = "Name the row each surviving element of a db.list_comprehension came from and what it contributes";
+def PatternComprehension : TuringOp<"pattern_comprehension", [Pure]> {
+  let summary = "Build one list per row out of the matches a pattern finds for that row";
 
   let description = [{
-    Terminates a db.list_comprehension's body. `row_tags` is the row tag as the body left
-    it - the row each surviving element came from, which a WHERE cuts alongside the
-    element - and `value` is what that element contributes to its row's list.
+    Cypher's `[(a)-[:KNOWS]->(b) WHERE p(b) | f(b)]`. The op matches a pattern once per row
+    in flight and produces one list cell per row - the values the matches of that row
+    contribute - so the rows in flight are the ones it started with, as
+    db.list_comprehension leaves them:
+
+      %names = db.pattern_comprehension(%a, %c) ({
+        ^bb0(%aIn: !db.column<!storage.node_id>, %cIn: !db.column<none>, %tag: !db.column<ui64>):
+          %s, %e, %et, %b, %tag2 = db.get_out_edges(%aIn, {%tag}) : ...
+          %name = db.get_node_properties(%b) {property = "name"} : ...
+          db.comprehension_yield %tag2, %name : !db.column<none>
+      }) : (!db.column<!storage.node_id>, !db.column<none>) -> !db.column<none>
+
+    `input_columns` are every column in flight where the comprehension is read, and the
+    region's entry block takes one argument per input column plus a trailing
+    `!db.column<ui64>` row tag - the position of each input row, carried through the
+    pattern the way any other column is, so the row each match belongs to is known once
+    the pattern is walked. The pattern joins onto the columns whose variables it names and
+    carries the rest along, exactly as db.optional_match's does; a comprehension read
+    where no column is in flight - `RETURN [(a:Person)-->(b) | b.name]` - has no input
+    column and so no tag either, and its one list covers the single empty row Cypher
+    starts from.
+
+    The WHERE is a db.filter inside the region, so a match it drops is one the projection
+    is never computed for, and it cuts the tag alongside the match. The db.comprehension_yield
+    names the tag as the pattern left it and the value each match contributes.
+
+    The result's type is the body's to decide and is resolved during lowering, as
+    db.list_comprehension's is: the list is of whatever the body yields. A row the pattern
+    matches nothing for gets the empty list, never a null - a pattern comprehension is the
+    one list-valued expression that cannot be null.
   }];
 
-  let arguments = (ins ColumnRowTags:$row_tags, Column:$value);
+  let arguments = (ins Variadic<Column>:$input_columns);
+  let results   = (outs Column:$result);
+
+  // Exactly one block, ending in a db.comprehension_yield.
+  let regions = (region SizedRegion<1>:$pattern);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` $pattern attr-dict `:` functional-type($input_columns, results)
+  }];
+}
+
+/**
+* ComprehensionYield
+*/
+def ComprehensionYield : TuringOp<"comprehension_yield",
+                                  [Pure, Terminator,
+                                   ParentOneOf<["ListComprehension", "PatternComprehension"]>]> {
+  let summary = "Name the row each surviving element of a comprehension came from and what it contributes";
+
+  let description = [{
+    Terminates the body of a db.list_comprehension or the pattern of a
+    db.pattern_comprehension. `row_tags` is the row tag as the body left it - the row each
+    surviving element came from, which a WHERE cuts alongside the element - and `value` is
+    what that element contributes to its row's list. The tag is absent only for a
+    db.pattern_comprehension that takes no input column: the one list it builds covers the
+    single empty row, which every match belongs to.
+  }];
+
+  let arguments = (ins Optional<ColumnRowTags>:$row_tags, Column:$value);
 
   // The tag's type is buildable and so left out, as db.optional_yield leaves it out; only
   // the value's is spelled.
   let assemblyFormat = [{
-    $row_tags `,` $value attr-dict `:` qualified(type($value))
+    ($row_tags^ `,`)? $value attr-dict `:` qualified(type($value))
   }];
 }
 

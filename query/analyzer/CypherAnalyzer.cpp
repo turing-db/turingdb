@@ -100,6 +100,7 @@ CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     _writeAnalyzer(std::make_unique<WriteStmtAnalyzer>(_ast, _graphView))
 {
     _exprAnalyzer->setQueryAnalyzer(this);
+    _exprAnalyzer->setReadAnalyzer(_readAnalyzer.get());
     _readAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
     _writeAnalyzer->setExprAnalyzer(_exprAnalyzer.get());
 }
