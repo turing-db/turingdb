@@ -1823,6 +1823,7 @@ symbol
     | EXTRACT { $$ = Symbol::create(ast, $1); }
     | EMBEDDING { $$ = Symbol::create(ast, $1); }
     | TYPE { $$ = Symbol::create(ast, $1); }
+    | LIST { $$ = Symbol::create(ast, $1); }
     //| ANY { $$ = Symbol::create(ast, $1); } // Causes conflicts
     //| NONE { $$ = Symbol::create(ast, $1); } // Causes conflicts
     //| SINGLE { $$ = Symbol::create(ast, $1); } // Causes conflicts
@@ -1897,7 +1898,6 @@ reservedWord
     | CSV { $$ = Symbol::create(ast, $1); }
     | FAIL { $$ = Symbol::create(ast, $1); }
     | ERROR_ { $$ = Symbol::create(ast, $1); }
-    | LIST { $$ = Symbol::create(ast, $1); }
     | GRAPHS { $$ = Symbol::create(ast, $1); }
     | AVAILABLE { $$ = Symbol::create(ast, $1); }
     | DESC { $$ = Symbol::create(ast, $1); }
