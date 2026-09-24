@@ -141,6 +141,39 @@ TEST_F(ListSliceTest, slicesOncePerRow) {
                {{"Bio", "[Adam]"}, {"Cooking", "[Adam]"}});
 }
 
+TEST_F(ListSliceTest, readsNullWhereThereIsNoListToSlice) {
+    expectRows("RETURN null[1..2] AS none", {{"null"}});
+}
+
+TEST_F(ListSliceTest, readsNullWhereTheRowCarriesNoList) {
+    expectRows("WITH null AS xs RETURN xs[0..1] AS none", {{"null"}});
+}
+
+TEST_F(ListSliceTest, slicesOneListOverEveryRow) {
+    expectRows("MATCH (n:Person) RETURN n.name AS name, [10, 20, 30][0..n.age] AS xs",
+               {{"Remy", "[10, 20, 30]"},
+                {"Adam", "[10, 20, 30]"},
+                {"Maxime", "null"},
+                {"Luc", "null"},
+                {"Martina", "null"},
+                {"Suhas", "null"},
+                {"Cyrus", "null"},
+                {"Doruk", "null"}});
+}
+
+TEST_F(ListSliceTest, slicesAListTheRowsCarryFromAnAggregate) {
+    expectRows("MATCH (n:Person) WITH collect(n.name) AS names "
+               "MATCH (m:Person) RETURN m.name AS name, size(names[0..2]) AS taken",
+               {{"Remy", "2"},
+                {"Adam", "2"},
+                {"Maxime", "2"},
+                {"Luc", "2"},
+                {"Martina", "2"},
+                {"Suhas", "2"},
+                {"Cyrus", "2"},
+                {"Doruk", "2"}});
+}
+
 TEST_F(ListSliceTest, slicesSomethingThatIsNoList) {
     expectError("RETURN 3[1..2] AS n", "A slice reads a list");
 }

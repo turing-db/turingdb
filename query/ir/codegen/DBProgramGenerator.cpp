@@ -6160,6 +6160,13 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 }
 
 void DBProgramGenerator::translateListSliceExpr(const Expr* expr, const ListSliceExpr* slice) {
+    // There is no list to read where the query sliced a null, and the null names no column
+    // the result could be carried in: the analyzer types such a slice Null
+    if (expr->getType() == EvaluatedType::Null) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
     const mlir::Value list = getOrTranslateExprColumn(slice->getBase());
 
     // A bound the query left out is no operand: the slice then runs from the start, or to
