@@ -239,9 +239,6 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::PROPERTY:
             analyzePropertyExpr(static_cast<PropertyExpr*>(expr));
         break;
-        case Expr::Kind::PATH:
-            analyzePathExpr(static_cast<PathExpr*>(expr));
-        break;
         case Expr::Kind::SYMBOL:
             analyzeSymbolExpr(static_cast<SymbolExpr*>(expr));
         break;
@@ -1099,10 +1096,6 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
     expr->setEntityDecl(decl);
     expr->setDynamic();
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
-}
-
-void ExprAnalyzer::analyzePathExpr(PathExpr* expr) {
-    throwError("Path expressions not supported", expr);
 }
 
 void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver) {

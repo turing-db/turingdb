@@ -9,8 +9,11 @@ namespace db {
 
 class CypherAST;
 class EmbeddingLiteral;
+class ExistsExpr;
 class Expr;
 class ListLiteral;
+class Pattern;
+class PatternElement;
 class SetStmt;
 class SinglePartQuery;
 
@@ -37,6 +40,17 @@ public:
     // call yields is the result it reports. A subquery body is not such a query: it is a
     // clause of the query around it, and the RETURN it owes is its own
     static void markStandaloneCall(const SinglePartQuery* query);
+
+    // `MATCH (a WHERE p)-[r WHERE q]->(b) WHERE w` filters as `WHERE p AND q AND w`
+    static void foldEntityWheres(CypherAST* ast, Pattern* pattern);
+
+    static SinglePartQuery* createPatternBody(CypherAST* ast,
+                                              Pattern* pattern,
+                                              const SourceLocation& location);
+
+    static ExistsExpr* createPatternPredicate(CypherAST* ast,
+                                              PatternElement* element,
+                                              const SourceLocation& location);
 
     static void startComparisonChain(CypherAST* ast,
                                      ComparisonChain& chain,

@@ -32,7 +32,6 @@ class LiteralExpr;
 class EntityTypeExpr;
 class ExistsExpr;
 class ParameterExpr;
-class PathExpr;
 class PropertyExpr;
 class StringExpr;
 class SymbolExpr;
@@ -137,7 +136,6 @@ public:
     friend EntityTypeExpr;
     friend ExistsExpr;
     friend ParameterExpr;
-    friend PathExpr;
     friend PropertyExpr;
     friend StringExpr;
     friend SymbolExpr;

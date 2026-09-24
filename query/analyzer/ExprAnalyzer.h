@@ -30,7 +30,6 @@ class LiteralExpr;
 class PropertyExpr;
 class StringExpr;
 class EntityTypeExpr;
-class PathExpr;
 class FunctionInvocationExpr;
 class IndexExpr;
 class Symbol;
@@ -83,7 +82,6 @@ public:
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
-    void analyzePathExpr(PathExpr* expr);
     void analyzeIndexExpr(IndexExpr* expr);
     void analyzeListSliceExpr(ListSliceExpr* expr);
 

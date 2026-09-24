@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "views/GraphView.h"
 
 namespace db {
@@ -29,6 +31,7 @@ class GraphMetadata;
 class UnwindStmt;
 class YieldItems;
 class Expr;
+class EntityPattern;
 
 class ReadStmtAnalyzer {
 public:
@@ -63,6 +66,8 @@ public:
     void analyze(EdgePattern* edge);
 
 private:
+    using DeclSet = std::unordered_set<const VarDecl*>;
+
     CypherAST* _ast {nullptr};
     GraphView _graphView;
     DeclContext* _ctxt {nullptr};
@@ -79,6 +84,13 @@ private:
     // plan time, so anything but a list - null aside, which unwinds into no row - is a
     // type error rather than a value to spread over rows
     void throwOnNonListLiteral(const Expr* arg) const;
+
+    // `MATCH (a)-->(b WHERE b.age > a.age)` is invalid: the predicate inside a pattern
+    // entity reads that entity and variables bound before the MATCH, not the other
+    // entities the same MATCH introduces
+    void throwOnPatternReference(const Expr* expr,
+                                 const EntityPattern* entity,
+                                 const DeclSet& patternDecls) const;
 
     VarDecl* resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const;
 

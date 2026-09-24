@@ -181,7 +181,7 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
         break;
 
         default:
-            // A path holds a pattern, which is not a list of sub-expressions this can
+            // An EXISTS holds a query, which is not a list of sub-expressions this can
             // hand back
             return false;
         break;

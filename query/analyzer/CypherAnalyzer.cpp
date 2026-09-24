@@ -9,6 +9,8 @@
 #include "EntityPattern.h"
 #include "Literal.h"
 #include "NodePattern.h"
+#include "Pattern.h"
+#include "PatternElement.h"
 #include "QualifiedName.h"
 #include "ReadStmtAnalyzer.h"
 #include "Symbol.h"
@@ -532,6 +534,10 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = body->getDeclContext();
 
+    if (const Pattern* predicatePattern = exists->getPredicatePattern()) {
+        throwOnPatternPredicateVariable(predicatePattern, outer);
+    }
+
     // Each one stays readable through the whole body, as what a CALL's scope clause names
     // does: a WITH inside it carries them past the barrier rather than descoping them,
     // which is what keeps a pattern below that WITH reading the row the EXISTS answers for
@@ -569,6 +575,20 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
 
     setScope(outer);
     _writeAnalyzer->setHasCreate(outerHasCreate);
+}
+
+void CypherAnalyzer::throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const Symbol* symbol = entity->getSymbol();
+
+            if (symbol && !outer->hasDecl(symbol->getName())) {
+                throwError(fmt::format("A pattern predicate cannot introduce new variables: '{}'",
+                                       symbol->getName()),
+                           entity);
+            }
+        }
+    }
 }
 
 void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const {

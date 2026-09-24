@@ -74,13 +74,17 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     _hasCreate = true;
-    if (createStmt->getPattern()) {
-        analyze(createStmt->getPattern());
+    if (const Pattern* pattern = createStmt->getPattern()) {
+        throwOnEntityWhere(pattern, "CREATE");
+        analyze(pattern);
     }
 }
 
 void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
-    analyze(mergeStmt->getPattern());
+    const Pattern* pattern = mergeStmt->getPattern();
+
+    throwOnEntityWhere(pattern, "MERGE");
+    analyze(pattern);
 
     for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
         if (!actions) {
@@ -124,6 +128,16 @@ void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
 void WriteStmtAnalyzer::analyze(const Pattern* pattern) {
     for (const PatternElement* element : pattern->elements()) {
         analyze(element);
+    }
+}
+
+void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            if (entity->getWhere()) {
+                throwError(fmt::format("WHERE is not allowed in a {} pattern", clause), entity);
+            }
+        }
     }
 }
 

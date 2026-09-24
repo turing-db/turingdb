@@ -3261,6 +3261,17 @@ target_link_libraries(test_query_ir_pattern_comprehension PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_pattern_comprehension PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_pattern_comprehension_where PatternComprehensionWhereTest.cpp)
+target_link_libraries(test_query_ir_pattern_comprehension_where PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_pattern_comprehension_where PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_list_comprehension ListComprehensionTest.cpp)
 target_link_libraries(test_query_ir_list_comprehension PRIVATE
         turing_db_s
@@ -3530,3 +3541,25 @@ target_link_libraries(test_query_ir_load_jsonl_datetime_null PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_load_jsonl_datetime_null PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_where_pattern_neo4j_manual WherePatternNeo4jManualTest.cpp)
+target_link_libraries(test_query_ir_where_pattern_neo4j_manual PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_jobs_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_where_pattern_neo4j_manual PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_pattern_predicate PatternPredicateTest.cpp)
+target_link_libraries(test_query_ir_pattern_predicate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_jobs_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_pattern_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -671,6 +671,10 @@ indexType
 
 createNodePropertyIndexQuery
     : CREATE INDEX ID FOR nodePattern ON propertyExpr {
+        if ($5->getWhere()) {
+            scanner.syntaxError(@5, "WHERE is not allowed in an index pattern");
+        }
+
         $$ = CreateNodePropertyIndexQuery::create(ast, $3, $5, dynamic_cast<PropertyExpr*>($7));
         LOC($$, @$);
       }
@@ -678,6 +682,10 @@ createNodePropertyIndexQuery
 
 createEdgePropertyIndexQuery
     : CREATE INDEX ID FOR OBRACK edgeDetail CBRACK ON propertyExpr {
+        if ($6->getWhere()) {
+            scanner.syntaxError(@6, "WHERE is not allowed in an index pattern");
+        }
+
         $$ = CreateEdgePropertyIndexQuery::create(ast, $3, $6, dynamic_cast<PropertyExpr*>($9));
         LOC($$, @$);
       }
@@ -1185,8 +1193,8 @@ createSt
     ;
 
 patternWhere
-    : pattern { $$ = $1; LOC($$, @$); }
-    | pattern whereClause { $1->setWhere($2); $$ = $1; LOC($$, @$); }
+    : pattern { $$ = $1; ParserUtils::foldEntityWheres(ast, $$); LOC($$, @$); }
+    | pattern whereClause { $1->setWhere($2); $$ = $1; ParserUtils::foldEntityWheres(ast, $$); LOC($$, @$); }
     ;
 
 whereClause
@@ -1428,11 +1436,12 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties CPAREN {
+    : OPAREN opt_symbol opt_nodeLabels opt_properties opt_whereClause CPAREN {
         $$ = NodePattern::create(ast);
         $$->setSymbol($2);
         $$->setLabels($3);
         $$->setProperties($4);
+        $$->setWhere($5);
         LOC($$, @$);
       }
     ;
@@ -1472,11 +1481,12 @@ edgePattern
     ;
 
 edgeDetail
-    : opt_symbol opt_edgeTypes opt_properties { 
+    : opt_symbol opt_edgeTypes opt_properties opt_whereClause { 
         $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
         $$->setTypes($2);
         $$->setProperties($3);
+        $$->setWhere($4);
         LOC($$, @$); 
       }
     ;
@@ -1495,17 +1505,7 @@ unionSt
 subqueryExist
     : EXISTS OBRACE subqueryBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
     | EXISTS OBRACE patternWhere CBRACE {
-        MatchStmt* match = MatchStmt::create(ast, $3);
-        LOC(match, @3);
-
-        StmtContainer* stmts = StmtContainer::create(ast);
-        stmts->add(match);
-        LOC(stmts, @3);
-
-        SinglePartQuery* body = SinglePartQuery::create(ast);
-        body->setStmts(stmts);
-        LOC(body, @3);
-
+        SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
         $$ = ExistsExpr::create(ast, body);
         LOC($$, @$);
       }
@@ -1534,40 +1534,43 @@ functionInvocation
 
 pathExpr
     : parenthesizedExpr { $$ = $1; }
-    | OPAREN CPAREN pathExprElem { $$ = PathExpr::create(ast, $3); LOC($$, @$); }
+    | OPAREN CPAREN pathExprElem {
+        NodePattern* node = NodePattern::create(ast);
+        $3->addRootEntity(node);
+        LOC(node, @$);
+        $$ = ParserUtils::createPatternPredicate(ast, $3, @$);
+      }
     | OPAREN symbol properties CPAREN pathExprElem { 
-        $$ = PathExpr::create(ast, $5);
         NodePattern* nodePattern = NodePattern::create(ast);
         nodePattern->setProperties($3);
         nodePattern->setSymbol($2);
         $5->addRootEntity(nodePattern);
-        LOC($$, @$);
+        LOC(nodePattern, @$);
+        $$ = ParserUtils::createPatternPredicate(ast, $5, @$);
       }
     | OPAREN symbol nodeLabels properties CPAREN pathExprElem { 
-        $$ = PathExpr::create(ast, $6);
         NodePattern* nodePattern = NodePattern::create(ast);
         nodePattern->setLabels($3);
         nodePattern->setProperties($4);
         nodePattern->setSymbol($2);
         $6->addRootEntity(nodePattern);
-        LOC($$, @$);
+        LOC(nodePattern, @$);
+        $$ = ParserUtils::createPatternPredicate(ast, $6, @$);
       }
     | OPAREN nodeLabels CPAREN pathExprElem {
-        $$ = PathExpr::create(ast, $4);
         NodePattern* node = NodePattern::create(ast);
         node->setLabels($2);
         $4->addRootEntity(node);
-        LOC($$, @$);
         LOC(node, @$);
+        $$ = ParserUtils::createPatternPredicate(ast, $4, @$);
       }
     | OPAREN nodeLabels properties CPAREN pathExprElem {
-        $$ = PathExpr::create(ast, $5);
         NodePattern* node = NodePattern::create(ast);
         node->setLabels($2);
         node->setProperties($3);
         $5->addRootEntity(node);
-        LOC($$, @$);
         LOC(node, @$);
+        $$ = ParserUtils::createPatternPredicate(ast, $5, @$);
       }
 
     // Those three exprs are tricky and cause conflicts with 'OPAREN expr CPAREN'
@@ -1584,15 +1587,15 @@ pathExpr
     // Instead, they are handled by the rule below
 
     | OPAREN expr CPAREN pathExprElem {
-        $$ = PathExpr::create(ast, $4);
+        NodePattern* nodePattern = NodePattern::fromExpr(ast, $2);
 
-        if (NodePattern* nodePattern = NodePattern::fromExpr(ast, $2)) {
-            $4->addRootEntity(nodePattern);
-        } else {
-            error(@1, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
+        if (!nodePattern) {
+            scanner.syntaxError(@1, "Invalid path expr. Root must be a valid node pattern '(symbol? nodeLabels? properties?)'");
         }
 
-        LOC($$, @$);
+        $4->addRootEntity(nodePattern);
+        LOC(nodePattern, @$);
+        $$ = ParserUtils::createPatternPredicate(ast, $4, @$);
       }
     ;
 
@@ -1627,13 +1630,19 @@ filterKeyword
 
 patternComprehension
     : OBRACK pathExpr opt_whereClause PIPE expr CBRACK {
-        if ($2->getKind() != Expr::Kind::PATH) {
+        const bool isExists = $2->getKind() == Expr::Kind::EXISTS;
+        const Pattern* predicatePattern = isExists ? static_cast<ExistsExpr*>($2)->getPredicatePattern() : nullptr;
+
+        if (!predicatePattern) {
             error(@2, "Invalid pattern comprehension. The pattern must be a path '(...)-[...]-(...)'");
         }
 
         Pattern* pattern = Pattern::create(ast);
-        pattern->addElement(static_cast<PathExpr*>($2)->pattern());
+        for (PatternElement* element : predicatePattern->elements()) {
+            pattern->addElement(element);
+        }
         pattern->setWhere($3);
+        ParserUtils::foldEntityWheres(ast, pattern);
 
         MatchStmt* match = MatchStmt::create(ast, pattern);
         LOC(match, @2);
