@@ -340,9 +340,7 @@ bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
 
     // Both indices are built over the committed parts alone, so a node this change wrote is
     // outside them: reading one would report it unreachable and drop the row it ends
-    const bool indexed = !isPendingNode(node);
-
-    if (_distances && indexed) {
+    if (_distances && !isPendingNode(node)) {
         return _distances->isEnd(node);
     }
 
@@ -692,6 +690,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
     const uint64_t remainingHops = _maxHops - candidateDepth;
 
     const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+    const bool checksTarget = _target.isValid() || (_filtersByEndNodeSet && _targetIndex);
 
     _candidateChecks += edges.size();
 
@@ -704,10 +703,11 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const size_t heldAt = backtracks ? _pathEdges.size() - 1
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
         const bool onTrail = heldAt != NO_TAINT;
-        const bool beyondLabels = _distances && !_distances->canReachEndWithin(record._otherID, remainingHops);
-        const bool beyondTarget = !canReachTargetWithin(record._otherID, remainingHops);
+        const bool ruledOut = backtracks || wrongType || deleted || onTrail;
+        const bool beyondLabels = !ruledOut && _distances && !_distances->canReachEndWithin(record._otherID, remainingHops);
+        const bool beyondTarget = !ruledOut && !beyondLabels && checksTarget && !canReachTargetWithin(record._otherID, remainingHops);
 
-        if (backtracks || wrongType || deleted || onTrail || beyondLabels || beyondTarget) {
+        if (ruledOut || beyondLabels || beyondTarget) {
             if (_prunes && onTrail) {
                 dependOnBlockedEdge(edge, record._otherID, candidateDepth, heldAt);
             }
