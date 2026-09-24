@@ -542,8 +542,10 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
     const bool hasPathEdges = !_pathEdges.empty();
     const EdgeID lastEdge = hasPathEdges ? _pathEdges.back() : EdgeID();
 
+    const uint64_t candidateDepth = _pathEdges.size() + 1;
+
     // The hops a candidate may still take after the one that reaches it
-    const uint64_t remainingHops = _maxHops - (_pathEdges.size() + 1);
+    const uint64_t remainingHops = _maxHops - candidateDepth;
 
     const auto positionOnPath = [this](EdgeID edge) {
         const auto found = std::find(_pathEdges.begin(), _pathEdges.end(), edge);
@@ -568,7 +570,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const bool beyondTarget = !canReachTargetWithin(record._otherID, remainingHops);
 
         if (backtracks || wrongType || deleted || onTrail || beyondLabels || beyondTarget) {
-            if (_prunes && onTrail) {
+            if (_prunes && onTrail && !reachesOnlyEmittedEnds(record._otherID, candidateDepth)) {
                 _descentTaint = std::min(_descentTaint, heldAt);
             }
 
@@ -578,6 +580,17 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         _candidateNodes.push_back(record._otherID);
         _candidateEdges.push_back(edge);
     }
+}
+
+bool PathExplorator::reachesOnlyEmittedEnds(NodeID node, uint64_t depth) const {
+    const bool emits = depth >= _minHops && isEnd(_seedRow, node);
+    if (emits && !_emittedEnds.contains(node.getValue())) {
+        return false;
+    }
+
+    const bool expands = depth < _maxHops;
+
+    return !expands || _cleanExpansions.contains(expansionKey(node, _maxHops - depth));
 }
 
 void PathExplorator::emit(size_t seedRow, NodeID target, PathRef path) {
