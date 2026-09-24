@@ -176,7 +176,7 @@ private:
     // Every branch of a union must project the same columns, in the same order and
     // under the same names: the union emits one result table, so a branch naming
     // other columns has no column of that table to fill
-    void analyzeUnionColumns(std::span<const SinglePartQuery* const> branches) const;
+    void analyzeUnionColumns(const SinglePartQuery* first, const SinglePartQuery* branch) const;
     const Projection* unionBranchProjection(const SinglePartQuery* branch) const;
     static void collectProjectionNames(const Projection* projection,
                                        std::vector<std::string_view>& names);
