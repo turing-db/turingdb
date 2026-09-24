@@ -1990,9 +1990,7 @@ def ToString : UnaryFunctionOp<"to_string">;
 // final element. A stored list may mix types, so those two answer with the type-erased
 // !storage.list_element every element of a heterogeneous list rides, and an empty list
 // reads as the null such a cell carries itself rather than as a nullable column of its own.
-// The ID a type-erased cell's entity is named by, as an integer. id() over a node or an
-// edge is the column it was handed, so the call emits this only where the entity rides a
-// cell - what an UNWIND or an index of a stored list binds.
+// The ID of a node, an edge, or the entity a type-erased cell holds, as an integer.
 def ElementID : UnaryFunctionOp<"element_id">;
 
 def Size : UnaryFunctionOp<"size">;

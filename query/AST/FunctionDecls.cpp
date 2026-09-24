@@ -30,8 +30,6 @@ void FunctionDecls::initDefault() {
     endNode->setArguments({EvaluatedType::EdgePattern});
     endNode->setReturnTypes({{EvaluatedType::NodePattern}});
 
-    // The engine names an entity by its ID, so id() hands back the column it was given and
-    // the answer is that name read as a number.
     FunctionSignature* idOfNode = createFunction("id");
     idOfNode->setArguments({EvaluatedType::NodePattern});
     idOfNode->setReturnTypes({{EvaluatedType::Integer}});

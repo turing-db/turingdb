@@ -278,3 +278,41 @@ TEST_F(IdFunctionTest, rejectsAStoredListElementThatIsNoEntity) {
 
     expectRejected("MATCH (m:Bag) UNWIND m.items AS x RETURN id(x)", "reads a node or an edge");
 }
+
+TEST_F(IdFunctionTest, filtersByAnIDBelowANumber) {
+    expectRows("MATCH (b:Person) WHERE id(b) < 2 RETURN b.name", {{"Remy"}, {"Adam"}});
+}
+
+TEST_F(IdFunctionTest, filtersByANumberBelowAnID) {
+    expectRows("MATCH (b:Person) WHERE 15 < id(b) RETURN b.name", {{"Doruk"}});
+}
+
+TEST_F(IdFunctionTest, filtersByAnInclusiveIDRange) {
+    expectRows("MATCH (b:Person) WHERE id(b) >= 9 AND id(b) <= 12 RETURN b.name",
+               {{"Luc"}, {"Martina"}, {"Suhas"}});
+}
+
+TEST_F(IdFunctionTest, filtersByAnIDAgainstAFloat) {
+    expectRows("MATCH (b:Person) WHERE id(b) > 1.5 AND id(b) < 9 RETURN b.name", {{"Maxime"}});
+}
+
+TEST_F(IdFunctionTest, filtersEdgesByAnIDRange) {
+    expectRows("MATCH ()-[e:KNOWS_WELL]->() WHERE id(e) > 3 RETURN id(e)", {{"4"}, {"7"}});
+}
+
+TEST_F(IdFunctionTest, filtersByAnIDInAList) {
+    expectRows("MATCH (b:Person) WHERE id(b) IN [0, 17] RETURN b.name", {{"Remy"}, {"Doruk"}});
+}
+
+TEST_F(IdFunctionTest, addsToAnID) {
+    expectRows("MATCH (b:Person) WHERE b.name = 'Doruk' RETURN id(b) + 1", {{"18"}});
+}
+
+TEST_F(IdFunctionTest, convertsAnIDToAString) {
+    expectRows("MATCH (b:Person) WHERE b.name = 'Doruk' RETURN toString(id(b))", {{"17"}});
+}
+
+TEST_F(IdFunctionTest, ordersTheIDOfAnUnmatchedOptionalNodeAsNull) {
+    expectRows("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) WITH n, m WHERE id(m) < 1 RETURN n.name",
+               {{"Adam"}});
+}
