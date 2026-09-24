@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "columns/ColumnConst.h"
+#include "columns/ValueText.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
@@ -278,6 +279,31 @@ public:
     }
 };
 
+// toString() of a string is that string. The conversions below produce the characters they
+// answer, so their result is a string of its own rather than a view of one the graph holds.
+class toStringFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = std::string;
+
+    ResultType operator()(std::string_view sv) const {
+        return std::string(sv);
+    }
+};
+
+// toString() of a number or a boolean. A double keeps the point Cypher prints it with, so
+// toString(1.0) is "1.0" where the shortest round trip of it is "1".
+template <typename Value>
+class toStringFromValueFunction {
+public:
+    using ArgType = Value;
+    using ResultType = std::string;
+
+    ResultType operator()(const Value value) const {
+        return valueText(value);
+    }
+};
+
 // toInteger() and toFloat() over a number rather than a string. Every conversion keeps an
 // optional result so one column type carries it whatever the argument was, and so a double
 // that no integer can represent reads as null.
@@ -344,6 +370,11 @@ struct ConversionFunctorFor<toIntegerFunction, Argument> {
 template <ConvertibleNumber Argument>
 struct ConversionFunctorFor<toFloatFunction, Argument> {
     using Type = toFloatFromNumberFunction<Argument>;
+};
+
+template <ConvertibleNumber Argument>
+struct ConversionFunctorFor<toStringFunction, Argument> {
+    using Type = toStringFromValueFunction<Argument>;
 };
 
 // The list family over a type-erased cell, which is what a list looks like wherever its

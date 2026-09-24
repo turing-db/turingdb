@@ -2247,6 +2247,7 @@ def ToInteger : NLUnaryFunctionOp<"to_integer", [ConstantThroughOperands]>;
 def ToFloat : NLUnaryFunctionOp<"to_float", [ConstantThroughOperands]>;
 def ToBoolean : NLUnaryFunctionOp<"to_boolean", [ConstantThroughOperands]>;
 def ToDateTime : NLUnaryFunctionOp<"to_datetime", [ConstantThroughOperands]>;
+def ToString : NLUnaryFunctionOp<"to_string", [ConstantThroughOperands]>;
 
 // The list family db.size / db.head / db.last / db.tail lower to. A literal list is one
 // cell standing for every row, and so is what these read off it, so each carries its

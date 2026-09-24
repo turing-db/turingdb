@@ -399,6 +399,11 @@ public:
     template <typename StringFunctor>
     static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    // toString reads one more column shape than its siblings - a boolean converts to text
+    // where it converts to no number - and answers a string it owns rather than a view of
+    // one the graph holds.
+    static NLUnaryFunctionKernel selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
     // size() counts the elements of a list or the characters of a string, so it picks
     // its functor from the argument column as a conversion does.
     static NLUnaryFunctionKernel selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

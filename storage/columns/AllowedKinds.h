@@ -385,7 +385,13 @@ template <ColumnOperator Op>
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<ListView, ListView>::Pairs
+        OptionalKindPairs<ListView, ListView>::Pairs,
+
+        // A string a function produced owns its characters - what type() and a CSV field
+        // answer - and concatenates with one the graph lends, either way round
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
