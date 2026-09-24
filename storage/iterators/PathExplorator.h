@@ -196,6 +196,9 @@ private:
     void descend(NodeID node);
     void generateCandidates(std::span<const EdgeRecord> edges);
     void generatePendingCandidates(NodeID node);
+    // Whether a walk arriving on the node at that depth ends only where this seed's walk has
+    // already emitted, so an edge held above that leads there constrains nothing
+    bool reachesOnlyEmittedEnds(NodeID node, uint64_t depth) const;
     void emit(size_t seedRow, NodeID target, PathRef path);
 
     void acquireArena();
