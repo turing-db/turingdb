@@ -7039,6 +7039,13 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
     }
 
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const auto* itemPtr = std::get_if<Expr*>(&returnItem);
+        if (itemPtr && (*itemPtr)->isAggregate()) {
+            bindGroupedKeyColumn(*itemPtr, groupedColumns);
+        }
+    }
+
     bindOrderByKeyColumns(projection, groupedColumns);
 }
 
