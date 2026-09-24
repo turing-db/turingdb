@@ -250,12 +250,12 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
 }
 
 void CypherAnalyzer::analyze(const UnionQuery* query) {
-    std::vector<const SinglePartQuery*> branchQueries;
+    const UnionQuery::Branches& branches = query->branches();
 
     // Each branch is a query body of its own: it declares its own variables and writes
     // its own clauses, so the scope and the part the write analyzer is tracking are both
     // opened fresh for it, exactly as a WITH opens them
-    for (const UnionQuery::Branch& branch : query->branches()) {
+    for (const UnionQuery::Branch& branch : branches) {
         _ctxt = branch._query->getDeclContext();
 
         _exprAnalyzer->setDeclContext(_ctxt);
@@ -264,43 +264,36 @@ void CypherAnalyzer::analyze(const UnionQuery* query) {
         _writeAnalyzer->startPart();
 
         analyze(branch._query);
-
-        branchQueries.push_back(branch._query);
     }
 
-    analyzeUnionColumns(branchQueries);
+    for (size_t index = 1; index < branches.size(); index++) {
+        analyzeUnionColumns(branches.front()._query, branches[index]._query);
+    }
 }
 
-void CypherAnalyzer::analyzeUnionColumns(std::span<const SinglePartQuery* const> branches) const {
-    const Projection* first = unionBranchProjection(branches.front());
-
+void CypherAnalyzer::analyzeUnionColumns(const SinglePartQuery* first, const SinglePartQuery* branch) const {
     std::vector<std::string_view> firstNames;
-    collectProjectionNames(first, firstNames);
+    collectProjectionNames(unionBranchProjection(first), firstNames);
 
     std::vector<std::string_view> names;
-    for (size_t index = 1; index < branches.size(); index++) {
-        const SinglePartQuery* branch = branches[index];
-        const Projection* projection = unionBranchProjection(branch);
+    collectProjectionNames(unionBranchProjection(branch), names);
 
-        collectProjectionNames(projection, names);
+    if (names.size() != firstNames.size()) {
+        throwError(fmt::format("All sub-queries of a UNION must return the same number of columns: "
+                               "this one returns {} where the first returns {}",
+                               names.size(),
+                               firstNames.size()),
+                   branch);
+    }
 
-        if (names.size() != firstNames.size()) {
-            throwError(fmt::format("All sub-queries of a UNION must return the same number of columns: "
-                                   "this one returns {} where the first returns {}",
-                                   names.size(),
-                                   firstNames.size()),
+    for (size_t index = 0; index < names.size(); index++) {
+        if (names[index] != firstNames[index]) {
+            throwError(fmt::format("All sub-queries of a UNION must return the same column names: "
+                                   "column {} is '{}' where the first returns '{}'",
+                                   index + 1,
+                                   names[index],
+                                   firstNames[index]),
                        branch);
-        }
-
-        for (size_t index = 0; index < names.size(); index++) {
-            if (names[index] != firstNames[index]) {
-                throwError(fmt::format("All sub-queries of a UNION must return the same column names: "
-                                       "column {} is '{}' where the first returns '{}'",
-                                       index + 1,
-                                       names[index],
-                                       firstNames[index]),
-                           branch);
-            }
         }
     }
 }
@@ -471,22 +464,20 @@ void CypherAnalyzer::setScope(DeclContext* scope) {
 void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     const bool outerHasCreate = _writeAnalyzer->hasCreate();
 
-    std::vector<const SinglePartQuery*> branchQueries;
+    CallSubqueryStmt::Branches& branches = subquery->branches();
 
-    for (CallSubqueryStmt::Branch& branch : subquery->branches()) {
+    for (CallSubqueryStmt::Branch& branch : branches) {
         if (!subquery->hasScopeClause()) {
             importThroughLeadingWith(branch);
         }
 
         analyzeSubqueryBranch(branch, subquery->hasScopeClause());
-
-        branchQueries.push_back(branch._query);
     }
 
     _writeAnalyzer->setHasCreate(outerHasCreate);
 
-    if (subquery->isUnion()) {
-        analyzeUnionColumns(branchQueries);
+    for (size_t index = 1; index < branches.size(); index++) {
+        analyzeUnionColumns(branches.front()._query, branches[index]._query);
     }
 
     if (subquery->isReturning()) {
@@ -554,9 +545,10 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
     };
 
     const bool namesColumns = std::ranges::any_of(branches, hasReturn);
-    if (branches.size() > 1 && namesColumns) {
-        const std::vector<const SinglePartQuery*> branchQueries(branches.begin(), branches.end());
-        analyzeUnionColumns(branchQueries);
+    if (namesColumns) {
+        for (size_t index = 1; index < branches.size(); index++) {
+            analyzeUnionColumns(branches.front(), branches[index]);
+        }
     }
 }
 
