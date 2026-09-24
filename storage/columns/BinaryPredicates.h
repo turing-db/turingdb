@@ -19,6 +19,15 @@
 
 namespace db {
 
+// A mask's boolean reaches the comparisons of a type-erased cell only through its
+// conversion to a number, so it is compared as the boolean property type
+inline bool operator==(ListElementView element, ColumnMask::Bool_t predicate) {
+    return element == types::Bool::Primitive {predicate._value};
+}
+
+inline std::strong_ordering operator<=>(ListElementView element, ColumnMask::Bool_t predicate) {
+    return element <=> types::Bool::Primitive {predicate._value};
+}
 
 namespace {
 
@@ -286,7 +295,7 @@ struct BinaryPredicateExecutor {
     }
 
     static void apply(ColumnOptMask* res,
-                      const ColumnOptMask* lhs,
+                      const ColumnVector<T>* lhs,
                       const ColumnMask* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
         const size_t size = lhs->size();
@@ -304,7 +313,7 @@ struct BinaryPredicateExecutor {
 
     static void apply(ColumnOptMask* res,
                       const ColumnMask* lhs,
-                      const ColumnOptMask* rhs) {
+                      const ColumnVector<U>* rhs) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
         const size_t size = lhs->size();
 
@@ -317,6 +326,40 @@ struct BinaryPredicateExecutor {
         for (size_t i = 0; i < size; i++) {
             resd[i] = op(lhsd[i], rhsd[i]);
        }
+    }
+
+    static void apply(ColumnMask* res,
+                      const ColumnVector<T>* lhs,
+                      const ColumnMask* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
+        }
+    }
+
+    static void apply(ColumnMask* res,
+                      const ColumnMask* lhs,
+                      const ColumnVector<U>* rhs) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnMasks.");
+        const size_t size = lhs->size();
+
+        res->resize(size);
+        auto& resd = res->getRaw();
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+
+        auto op = Op {};
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
+        }
     }
 
     /// Specialisations when filtering IDs by literals, e.g. n = 1
@@ -357,13 +400,13 @@ struct BinaryPredicateExecutor {
     }
 
     static void apply(ColumnMask* res,
-                      const ColumnConst<CustomBool>* lhs,
+                      const ColumnConst<T>* lhs,
                       const ColumnMask* rhs) {
         const size_t size = rhs->size();
 
         res->resize(size);
         auto& resd = res->getRaw();
-        const CustomBool& val = lhs->getRaw();
+        const auto& val = lhs->getRaw();
         const auto& rhsd = rhs->getRaw();
 
         auto op = Op {};
@@ -374,13 +417,13 @@ struct BinaryPredicateExecutor {
 
     static void apply(ColumnMask* res,
                       const ColumnMask* lhs,
-                      const ColumnConst<CustomBool>* rhs) {
+                      const ColumnConst<U>* rhs) {
         const size_t size = lhs->size();
 
         res->resize(size);
         auto& resd = res->getRaw();
         const auto& lhsd = lhs->getRaw();
-        const CustomBool& val = rhs->getRaw();
+        const auto& val = rhs->getRaw();
 
         auto op = Op {};
         for (size_t i = 0; i < size; i++) {

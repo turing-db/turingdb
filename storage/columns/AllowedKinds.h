@@ -228,7 +228,9 @@ struct PairRestrictions<Op> {
 
     using AllowedMixed = AllowedMixedList<
         MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>
+        MixedKind<ColumnMask, std::optional<CustomBool>>,
+        MixedKind<ColumnMask, ListElementView>,
+        MixedKind<ColumnMask, std::optional<ListElementView>>
     >;
 
     using Excluded = ExcludedContainers<
@@ -273,7 +275,9 @@ struct PairRestrictions<Op> {
 
     using AllowedMixed = AllowedMixedList<
         MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>
+        MixedKind<ColumnMask, std::optional<CustomBool>>,
+        MixedKind<ColumnMask, ListElementView>,
+        MixedKind<ColumnMask, std::optional<ListElementView>>
     >;
 
     using Excluded = ExcludedContainers<
@@ -318,7 +322,9 @@ struct PairRestrictions<Op> {
 
     using AllowedMixed = AllowedMixedList<
         MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>
+        MixedKind<ColumnMask, std::optional<CustomBool>>,
+        MixedKind<ColumnMask, ListElementView>,
+        MixedKind<ColumnMask, std::optional<ListElementView>>
     >;
 
     using Excluded = ExcludedContainers<

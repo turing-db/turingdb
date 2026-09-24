@@ -128,3 +128,15 @@ TEST_F(FuzzMaskBinaryOperationTest, ReturnPredicateEqualsBooleanListElement) {
                {{"Remy", "false"},
                 {"true", "true"}});
 }
+
+TEST_F(FuzzMaskBinaryOperationTest, ReturnPredicateOrderedAgainstBooleanListElement) {
+    expectRows("UNWIND [true, 'Remy'] AS v MATCH (n:Person) WHERE v = true RETURN n.name, (n = 0) < v",
+               {{"Adam", "true"},
+                {"Cyrus", "true"},
+                {"Doruk", "true"},
+                {"Luc", "true"},
+                {"Martina", "true"},
+                {"Maxime", "true"},
+                {"Remy", "false"},
+                {"Suhas", "true"}});
+}
