@@ -3414,6 +3414,10 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // into a function-scope nl.output reading it - the block that holds the chunk is
     // the entry block, so lowerOutput places nl.output there.
     _valueMap[count.getResult()] = result.getResult();
+
+    // The count collapses the rows in flight to its one row, so from here on that row is
+    // what sizes a projection of constants alone
+    _innermostCardinality = result.getResult();
 }
 
 void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
@@ -3428,6 +3432,7 @@ void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
                                                                 countScanRows.getPropertyScanAttr());
 
     _valueMap[countScanRows.getResult()] = rows.getResult();
+    _innermostCardinality = rows.getResult();
 }
 
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {
@@ -3501,6 +3506,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The db aggregate's result maps to that chunk, so the db.output that follows
     // lowers into a function-scope nl.output reading it, exactly as db.count does.
     _valueMap[result] = aggregateResult.getResult();
+    _innermostCardinality = aggregateResult.getResult();
 }
 
 void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {

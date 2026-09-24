@@ -92,6 +92,7 @@ public:
 
     void setArguments(ArgumentTypes&& args) {
         _argumentTypes = std::move(args);
+        _requiredArgCount = _argumentTypes.size();
     }
 
     void setRequiredArgCount(size_t count) { _requiredArgCount = count; }

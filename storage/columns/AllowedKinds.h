@@ -217,8 +217,12 @@ struct PairRestrictions<Op> {
 
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
+            KindPair<NodeID, types::UInt64::Primitive>,               // RETURN n = count(n)
             KindPair<EdgeID, types::Int64::Primitive>,                // WHERE n = 1
-            KindPair<EdgeID, std::optional<types::Int64::Primitive>>  // WHERE e = e.dur
+            KindPair<EdgeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.dur
+            KindPair<EdgeID, types::UInt64::Primitive>,               // RETURN e = count(e)
+            KindPair<types::UInt64::Primitive, NodeID>,               // RETURN count(n) = n
+            KindPair<types::UInt64::Primitive, EdgeID>                // RETURN count(e) = e
         >
     >;
 

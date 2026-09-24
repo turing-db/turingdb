@@ -539,6 +539,16 @@ struct TuringEqual {
         return n.getValue() == id;
     }
 
+    template <TypedInternalID IDT>
+    bool operator()(IDT n, types::UInt64::Primitive i) {
+        return n.getValue() == i;
+    }
+
+    template <TypedInternalID IDT>
+    bool operator()(types::UInt64::Primitive i, IDT n) {
+        return n.getValue() == i;
+    }
+
     // Generalist fallback for all other types
     template <typename T, typename U>
         requires (!ListOperand<T> || !ListOperand<U>)

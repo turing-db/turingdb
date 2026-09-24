@@ -850,6 +850,10 @@ private:
     // them all. One collect needs no help: its own translation is that op.
     void generateKeylessCollect(const Projection* projection);
 
+    // Reduces every aggregate of a keyless projection before its items are built, so what an
+    // item computes beside an aggregate reads the one row the reduction leaves
+    void generateKeylessAggregates(const Projection* projection);
+
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);

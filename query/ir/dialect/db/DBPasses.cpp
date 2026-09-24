@@ -2317,6 +2317,16 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
     return false;
 }
 
+bool isUntypedNullMask(Value mask) {
+    const auto columnType = dyn_cast<ColumnType>(mask.getType());
+    if (!columnType) {
+        return false;
+    }
+
+    const auto nullableType = dyn_cast<storage::NullableType>(columnType.getType());
+    return nullableType && isa<mlir::NoneType>(nullableType.getValueType());
+}
+
 // Rebuilds the conjuncts the fused scan does not carry over its rows, as the mask of the
 // filter that stays. The clone reads the fused column wherever the original read the scan.
 Value cloneResidualMask(llvm::ArrayRef<Value> residual,
@@ -2339,7 +2349,15 @@ Value cloneResidualMask(llvm::ArrayRef<Value> residual,
 
     Value mask = mapping.lookup(residual.front());
     for (const Value conjunct : residual.drop_front()) {
-        AndOp conjunction = builder.create<AndOp>(loc, maskType, mask, mapping.lookup(conjunct));
+        const Value clonedConjunct = mapping.lookup(conjunct);
+
+        // null AND null is null, so a second null conjunct adds nothing to the mask
+        const bool bothUnknown = isUntypedNullMask(mask) && isUntypedNullMask(clonedConjunct);
+        if (bothUnknown) {
+            continue;
+        }
+
+        AndOp conjunction = builder.create<AndOp>(loc, maskType, mask, clonedConjunct);
         mask = conjunction.getResult();
     }
 
