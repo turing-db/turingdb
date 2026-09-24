@@ -6464,6 +6464,60 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
     }
 }
 
+void NLExecutor::runUnionReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLUnionResetData* reset = static_cast<NLUnionResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runUnionCollect(NLExecutionContext* context, NLFunctionData* data) {
+    const NLUnionCollectData* collect = static_cast<NLUnionCollectData*>(data);
+
+    for (const NLSortCollectData::Append& append : collect->appends()) {
+        if (append._appendLists) {
+            append._appendLists(append._input, append._buffer, collect->getState()->listBuffer());
+            continue;
+        }
+
+        append._append(append._input, append._buffer);
+    }
+}
+
+void NLExecutor::runUnionLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnionLoopData* loopData = static_cast<NLUnionLoopData*>(data);
+    const size_t totalRows = loopData->getState()->getRowCount();
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const size_t chunkSize = context->getChunkSize();
+    ColumnVector<size_t>* indices = loopData->getIndices();
+
+    const NLLimitState* limit = loopData->getLimit();
+
+    const auto runIteration = [&](size_t offset) {
+        const size_t stepRows = std::min(chunkSize, totalRows - offset);
+
+        std::vector<size_t>& indicesRaw = indices->getRaw();
+        indicesRaw.resize(stepRows);
+        std::iota(indicesRaw.begin(), indicesRaw.end(), offset);
+
+        for (const NLCarriedColumn& column : loopData->columns()) {
+            const NLGatherFunction gather = column.getGatherFunc();
+            gather(column.getInput(), indices, column.getOutput());
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        for (size_t offset = 0; offset < totalRows && limit->getRemaining() > 0; offset += chunkSize) {
+            runIteration(offset);
+        }
+    } else {
+        for (size_t offset = 0; offset < totalRows; offset += chunkSize) {
+            runIteration(offset);
+        }
+    }
+}
+
 void NLExecutor::runOptionalReset(NLExecutionContext* context, NLFunctionData* data) {
     NLOptionalResetData* reset = static_cast<NLOptionalResetData*>(data);
     NLOptionalState* state = reset->getState();

@@ -18,6 +18,7 @@
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
+#include "stmt/CallSubqueryStmt.h"
 
 #include "ExplainRequest.h"
 
@@ -38,7 +39,6 @@ class FunctionInvocationExpr;
 class FunctionInvocation;
 class UnaryExpr;
 class CallStmt;
-class CallSubqueryStmt;
 class CreateStmt;
 class CypherAST;
 class DeleteStmt;
@@ -412,6 +412,26 @@ private:
                                       bool isNode);
 
     using CarriedEntities = llvm::SmallVector<std::pair<const VarDecl*, PartScope::WrittenEntity>>;
+
+    // The scope one branch of a CALL body opens with: the imports it names, read through
+    // @param inputArguments or where they are bound as constants, and - for a body carrying
+    // the scope - every input under a hidden name
+    void collectSubqueryBranchScope(const CallSubqueryStmt::Branch& branch,
+                                    llvm::ArrayRef<PublishedColumn> inputs,
+                                    llvm::ArrayRef<mlir::Value> inputArguments,
+                                    mlir::Value tagArgument,
+                                    llvm::ArrayRef<PublishedColumn> constants,
+                                    bool bindsHidden,
+                                    llvm::SmallVectorImpl<PublishedColumn>& scope,
+                                    CarriedEntities& importedEntities) const;
+
+    // Emits the db.union of a CALL body that is a UNION, and fills @param yielded with its
+    // results under the names and declarations the body returns them as
+    void generateSubqueryUnion(const CallSubqueryStmt* subquery,
+                               std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
+                               std::span<CarriedEntities> importedEntities,
+                               llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                               CarriedEntities& returnedEntities);
 
     // Re-keys what the query has written to the declarations a WITH publishes it under,
     // so the part below the cut still reads it as this change's own

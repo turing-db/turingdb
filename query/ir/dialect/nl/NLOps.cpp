@@ -432,6 +432,16 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
+// An nl.union_collect must append at least one column: the buffers' row count is read
+// from the first of them.
+LogicalResult UnionCollect::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
+    }
+
+    return success();
+}
+
 // An nl.hash_join_collect must append at least one column: the build side's row
 // count is read from the first buffer, and one of the columns is the key the
 // buffer op names.

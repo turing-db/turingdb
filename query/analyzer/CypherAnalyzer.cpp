@@ -255,6 +255,8 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
 }
 
 void CypherAnalyzer::analyze(const UnionQuery* query) {
+    std::vector<const SinglePartQuery*> branchQueries;
+
     // Each branch is a query body of its own: it declares its own variables and writes
     // its own clauses, so the scope and the part the write analyzer is tracking are both
     // opened fresh for it, exactly as a WITH opens them
@@ -267,22 +269,23 @@ void CypherAnalyzer::analyze(const UnionQuery* query) {
         _writeAnalyzer->startPart();
 
         analyze(branch._query);
+
+        branchQueries.push_back(branch._query);
     }
 
-    analyzeUnionColumns(query);
+    analyzeUnionColumns(branchQueries);
 }
 
-void CypherAnalyzer::analyzeUnionColumns(const UnionQuery* query) const {
-    const UnionQuery::Branches& branches = query->branches();
-    const Projection* first = unionBranchProjection(branches.front()._query);
+void CypherAnalyzer::analyzeUnionColumns(std::span<const SinglePartQuery* const> branches) const {
+    const Projection* first = unionBranchProjection(branches.front());
 
     std::vector<std::string_view> firstNames;
     collectProjectionNames(first, firstNames);
 
     std::vector<std::string_view> names;
     for (size_t index = 1; index < branches.size(); index++) {
-        const UnionQuery::Branch& branch = branches[index];
-        const Projection* projection = unionBranchProjection(branch._query);
+        const SinglePartQuery* branch = branches[index];
+        const Projection* projection = unionBranchProjection(branch);
 
         collectProjectionNames(projection, names);
 
@@ -291,7 +294,7 @@ void CypherAnalyzer::analyzeUnionColumns(const UnionQuery* query) const {
                                    "this one returns {} where the first returns {}",
                                    names.size(),
                                    firstNames.size()),
-                       branch._query);
+                       branch);
         }
 
         for (size_t index = 0; index < names.size(); index++) {
@@ -301,7 +304,7 @@ void CypherAnalyzer::analyzeUnionColumns(const UnionQuery* query) const {
                                        index + 1,
                                        names[index],
                                        firstNames[index]),
-                           branch._query);
+                           branch);
             }
         }
     }
@@ -471,17 +474,39 @@ void CypherAnalyzer::setScope(DeclContext* scope) {
 }
 
 void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
-    if (!subquery->hasScopeClause()) {
-        importThroughLeadingWith(subquery);
+    const bool outerHasCreate = _writeAnalyzer->hasCreate();
+
+    std::vector<const SinglePartQuery*> branchQueries;
+
+    for (CallSubqueryStmt::Branch& branch : subquery->branches()) {
+        if (!subquery->hasScopeClause()) {
+            importThroughLeadingWith(branch);
+        }
+
+        analyzeSubqueryBranch(branch, subquery->hasScopeClause());
+
+        branchQueries.push_back(branch._query);
     }
 
+    _writeAnalyzer->setHasCreate(outerHasCreate);
+
+    if (subquery->isUnion()) {
+        analyzeUnionColumns(branchQueries);
+    }
+
+    if (subquery->isReturning()) {
+        publishSubqueryReturn(subquery);
+    }
+}
+
+void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause) {
     // The body reads the imported variables and nothing else of the scope around it, so
     // its context is seeded with a declaration per import and the body resolves in that
-    const SinglePartQuery* body = subquery->getBody();
+    const SinglePartQuery* body = branch._query;
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = body->getDeclContext();
 
-    for (const Symbol* import : subquery->imports()) {
+    for (const Symbol* import : branch._imports) {
         const std::string_view name = import->getName();
 
         const VarDecl* decl = outer->getDecl(name);
@@ -493,14 +518,12 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
         imported->setListShape(decl->getListShape());
     }
 
-    const bool outerHasCreate = _writeAnalyzer->hasCreate();
-
     // What the scope clause names is readable everywhere in the body. A body importing
     // through a leading WITH carries nothing this way: that WITH is an ordinary
     // projection, and an ordinary WITH below it descopes what it does not project.
     std::vector<std::string_view> outerImports;
-    if (subquery->hasScopeClause()) {
-        for (const Symbol* import : subquery->imports()) {
+    if (hasScopeClause) {
+        for (const Symbol* import : branch._imports) {
             outerImports.push_back(import->getName());
         }
     }
@@ -515,11 +538,6 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     std::swap(_subqueryImports, outerImports);
 
     setScope(outer);
-    _writeAnalyzer->setHasCreate(outerHasCreate);
-
-    if (subquery->isReturning()) {
-        publishSubqueryReturn(subquery);
-    }
 }
 
 void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
@@ -591,8 +609,8 @@ void CypherAnalyzer::throwOnPatternPredicateVariable(const Pattern* pattern, con
     }
 }
 
-void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const {
-    const StmtContainer* stmts = subquery->getBody()->getStmts();
+void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt::Branch& branch) const {
+    const StmtContainer* stmts = branch._query->getStmts();
     if (!stmts || stmts->stmts().empty()) {
         return;
     }
@@ -635,7 +653,7 @@ void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const 
                        with);
         }
 
-        subquery->addImport(static_cast<const SymbolExpr*>(item)->getSymbol());
+        branch._imports.push_back(static_cast<const SymbolExpr*>(item)->getSymbol());
     }
 }
 
@@ -710,7 +728,8 @@ void CypherAnalyzer::throwOnRedeclaredImport(const Projection* projection,
 }
 
 void CypherAnalyzer::publishSubqueryReturn(const CallSubqueryStmt* subquery) {
-    const ReturnStmt* returnStmt = subquery->getBody()->getReturnStmt();
+    const CallSubqueryStmt::Branches& branches = subquery->branches();
+    const ReturnStmt* returnStmt = branches.front()._query->getReturnStmt();
     Projection* projection = returnStmt->getProjection();
 
     for (const Projection::ReturnItem& returnItem : projection->items()) {
@@ -732,6 +751,44 @@ void CypherAnalyzer::publishSubqueryReturn(const CallSubqueryStmt* subquery) {
     }
 
     publishProjection(projection, _ctxt);
+
+    for (size_t branchIndex = 1; branchIndex < branches.size(); branchIndex++) {
+        Projection* branchProjection = branches[branchIndex]._query->getReturnStmt()->getProjection();
+        publishUnionBranchReturn(branchProjection, projection);
+    }
+}
+
+// Every branch of a union publishes its columns under the declarations the first one
+// made. A branch returning null says nothing about what the column holds, so the first
+// branch returning something else types the declaration.
+void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, const Projection* firstProjection) {
+    const Projection::PublishedDecls& published = firstProjection->publishedDecls();
+
+    size_t index = 0;
+    for (const Projection::ReturnItem& returnItem : branchProjection->items()) {
+        VarDecl* decl = published[index];
+
+        EvaluatedType itemType = EvaluatedType::Invalid;
+        const ListShape* itemShape = nullptr;
+
+        if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
+            itemType = (*declPtr)->getType();
+            itemShape = &(*declPtr)->getListShape();
+        } else {
+            const Expr* item = std::get<Expr*>(returnItem);
+            itemType = item->getType();
+            itemShape = &item->getListShape();
+        }
+
+        const bool typesTheColumn = decl->getType() == EvaluatedType::Null && itemType != EvaluatedType::Null;
+        if (typesTheColumn) {
+            decl->setType(itemType);
+            decl->setListShape(*itemShape);
+        }
+
+        branchProjection->addPublishedDecl(decl);
+        index++;
+    }
 }
 
 // RETURN needs no such rule: it names its columns for the caller and nothing downstream

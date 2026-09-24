@@ -3045,6 +3045,11 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
 // rows and then the next. What a branch binds is unreachable from the next, so the
 // innermost-loop record is cleared between them rather than carried over.
 void DBLowering::lowerUnion(mlir::db::Union unionOp) {
+    if (unionOp.getNumResults() > 0) {
+        lowerUnionResults(unionOp);
+        return;
+    }
+
     const mlir::MutableArrayRef<mlir::Region> branches = unionOp.getBranches();
 
     mlir::Block* const previousRoot = _rootBlock;
@@ -3061,7 +3066,7 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
         mlir::db::Output branchOutput = mlir::cast<mlir::db::Output>(branch.front().back());
 
         for (mlir::Operation& operation : branch.front()) {
-            convertUnionResultChunks(operation, branchOutput);
+            convertUnionResultChunks(operation, branchOutput.getColumns());
 
             if (&operation == branchOutput.getOperation()) {
                 branchOutputs.push_back(lowerOutput(branchOutput));
@@ -3072,41 +3077,114 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
         }
     }
 
-    reconcileBranchResultTypes(branchOutputs);
+    llvm::SmallVector<mlir::MutableOperandRange, 4> branchColumns;
+    for (nl::Output branchOutput : branchOutputs) {
+        branchColumns.push_back(branchOutput.getColumnsMutable());
+    }
+
+    nl::Output firstOutput = branchOutputs.front();
+    const std::optional<mlir::ArrayAttr> columnNames = firstOutput.getColumnNames();
+
+    reconcileBranchResultTypes(branchColumns, columnNames.value_or(mlir::ArrayAttr()));
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
     _innermostCardinality = previousInnermostCardinality;
 }
 
+// The branches of a union inside a CALL body feed the rest of the body, which is lowered
+// once, so their rows meet in an accumulator: each branch is rooted in the block the body
+// runs over, collects what it yields there, and the loop draining it is where the body
+// goes on from.
+void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::Block* const root = _rootBlock;
+
+    _builder.setInsertionPointToStart(root);
+    const mlir::Value state = _builder.create<nl::UnionBuffer>(loc).getState();
+
+    llvm::SmallVector<nl::UnionCollect, 4> collects;
+
+    for (mlir::Region& branch : unionOp.getBranches()) {
+        _innermostLoopBody = nullptr;
+        _innermostCardinality = mlir::Value();
+
+        mlir::db::Yield branchYield = mlir::cast<mlir::db::Yield>(branch.front().back());
+
+        for (mlir::Operation& operation : branch.front()) {
+            convertUnionResultChunks(operation, branchYield.getColumns());
+
+            if (&operation != branchYield.getOperation()) {
+                lowerOperation(operation);
+                continue;
+            }
+
+            llvm::SmallVector<mlir::Value, 4> chunks;
+            for (const mlir::Value column : branchYield.getColumns()) {
+                chunks.push_back(mapValue(column));
+            }
+
+            rowAlignBufferedChunks(chunks);
+
+            // A branch of constants alone lays them out where they are bound, above the
+            // root, which the collect must still run once per step of
+            setInsertionInto(deepestOwnerBlock(chunks, root));
+            collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
+        }
+    }
+
+    llvm::SmallVector<mlir::MutableOperandRange, 4> branchColumns;
+    for (nl::UnionCollect collect : collects) {
+        branchColumns.push_back(collect.getColumnsMutable());
+    }
+
+    reconcileBranchResultTypes(branchColumns, mlir::ArrayAttr());
+
+    nl::UnionCollect firstCollect = collects.front();
+    const llvm::SmallVector<mlir::Type, 4> chunkTypes(firstCollect.getColumns().getTypes());
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
+
+    setInsertionInto(root);
+    nl::UnionDrain drain = _builder.create<nl::UnionDrain>(loc, iteratorType, state);
+
+    buildLoopForSource(drain.getResult(), unionOp.getOperation());
+}
+
 // A dedup keys a row on the bytes of the chunk it is handed, so a branch's result columns
 // are converted on their way into it rather than on their way out: a count keyed as a
 // plain ui64 and a property keyed as a nullable i64 spell the same number two different
 // ways, and the duplicate the union exists to drop survives.
-void DBLowering::convertUnionResultChunks(mlir::Operation& operation, mlir::db::Output branchOutput) {
-    if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
-        for (const mlir::Value column : output.getColumns()) {
-            _valueMap[column] = unionColumnChunk(mapValue(column));
-        }
+void DBLowering::convertUnionResultChunks(mlir::Operation& operation, mlir::OperandRange resultColumns) {
+    llvm::SmallVector<mlir::Value, 4> columns;
 
+    if (mlir::isa<mlir::db::Output, mlir::db::Yield>(operation)) {
+        columns.assign(resultColumns.begin(), resultColumns.end());
+    } else if (mlir::db::RemoveDuplicates dedup = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation)) {
+        const mlir::OperandRange dedupColumns = dedup.getColumns();
+        const mlir::ResultRange results = dedup.getResults();
+
+        for (size_t columnIndex = 0; columnIndex < results.size(); columnIndex++) {
+            if (llvm::is_contained(resultColumns, results[columnIndex])) {
+                columns.push_back(dedupColumns[columnIndex]);
+            }
+        }
+    }
+
+    if (columns.empty()) {
         return;
     }
 
-    mlir::db::RemoveDuplicates dedup = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation);
-    if (!dedup) {
-        return;
+    // A constant is converted once it holds rows: a union inside a CALL body lays its
+    // constants out here rather than in codegen
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : columns) {
+        chunks.push_back(mapValue(column));
     }
 
-    const mlir::OperandRange columns = dedup.getColumns();
-    const mlir::ResultRange results = dedup.getResults();
-    const mlir::OperandRange outputColumns = branchOutput.getColumns();
+    rowAlignBufferedChunks(chunks);
 
-    for (size_t columnIndex = 0; columnIndex < results.size(); columnIndex++) {
-        if (llvm::is_contained(outputColumns, results[columnIndex])) {
-            const mlir::Value column = columns[columnIndex];
-
-            _valueMap[column] = unionColumnChunk(mapValue(column));
-        }
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        _valueMap[columns[columnIndex]] = unionColumnChunk(chunks[columnIndex]);
     }
 }
 
@@ -3114,20 +3192,21 @@ void DBLowering::convertUnionResultChunks(mlir::Operation& operation, mlir::db::
 // resolve their columns to the same types. The types are only known here: a property fetch
 // is typed none until its name is resolved against the schema, so a union of columns that
 // turn out to disagree is a program the db level cannot tell from a valid one.
-void DBLowering::reconcileBranchResultTypes(llvm::ArrayRef<nl::Output> branchOutputs) {
-    nl::Output firstBranch = branchOutputs.front();
-    const size_t columnCount = firstBranch.getColumns().size();
+void DBLowering::reconcileBranchResultTypes(llvm::ArrayRef<mlir::MutableOperandRange> branchColumns,
+                                            mlir::ArrayAttr columnNames) {
+    const size_t columnCount = branchColumns.front().size();
 
     for (size_t columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-        const mlir::Type columnType = unionResultType(branchOutputs, columnIndex);
+        const mlir::Type columnType = unionResultType(branchColumns, columnIndex, columnNames);
 
-        for (nl::Output branchOutput : branchOutputs) {
-            const mlir::Value chunk = branchOutput.getColumns()[columnIndex];
+        for (const mlir::MutableOperandRange& columns : branchColumns) {
+            mlir::OpOperand& operand = columns[static_cast<unsigned>(columnIndex)];
+            const mlir::Value chunk = operand.get();
             if (chunk.getType() == columnType) {
                 continue;
             }
 
-            branchOutput.setOperand(static_cast<unsigned>(columnIndex), typedNullChunk(chunk, columnType));
+            operand.set(typedNullChunk(chunk, columnType));
         }
     }
 }
@@ -3136,31 +3215,31 @@ void DBLowering::reconcileBranchResultTypes(llvm::ArrayRef<nl::Output> branchOut
 // agree on. A branch spelling the value null names no type of its own, so it is laid out as
 // that column - and where every branch spells it null, the first branch's untyped null is
 // the column, there being nothing else it could hold.
-mlir::Type DBLowering::unionResultType(llvm::ArrayRef<nl::Output> branchOutputs, size_t columnIndex) {
-    mlir::Type resultType;
-    nl::Output resultBranch;
+mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange> branchColumns,
+                                       size_t columnIndex,
+                                       mlir::ArrayAttr columnNames) {
+    const unsigned operandIndex = static_cast<unsigned>(columnIndex);
 
-    for (nl::Output branchOutput : branchOutputs) {
-        const mlir::Type branchType = branchOutput.getColumns()[columnIndex].getType();
+    mlir::Type resultType;
+
+    for (const mlir::MutableOperandRange& columns : branchColumns) {
+        const mlir::Type branchType = columns[operandIndex].get().getType();
         if (isUntypedNullChunk(branchType)) {
             continue;
         }
 
         if (!resultType) {
             resultType = branchType;
-            resultBranch = branchOutput;
             continue;
         }
 
         if (branchType != resultType) {
-            throwOnDisagreeingBranchTypes(branchOutput, resultBranch, columnIndex);
+            throwOnDisagreeingBranchTypes(branchType, resultType, columnNames, columnIndex);
         }
     }
 
     if (!resultType) {
-        nl::Output firstBranch = branchOutputs.front();
-
-        return firstBranch.getColumns()[columnIndex].getType();
+        return branchColumns.front()[operandIndex].get().getType();
     }
 
     // A null rides a nullable value column, so a column of anything else - an entity, a
@@ -3170,27 +3249,28 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<nl::Output> branchOutputs,
         return resultType;
     }
 
-    for (nl::Output branchOutput : branchOutputs) {
-        if (isUntypedNullChunk(branchOutput.getColumns()[columnIndex].getType())) {
-            throwOnDisagreeingBranchTypes(branchOutput, resultBranch, columnIndex);
+    for (const mlir::MutableOperandRange& columns : branchColumns) {
+        const mlir::Type branchType = columns[operandIndex].get().getType();
+        if (isUntypedNullChunk(branchType)) {
+            throwOnDisagreeingBranchTypes(branchType, resultType, columnNames, columnIndex);
         }
     }
 
     return resultType;
 }
 
-void DBLowering::throwOnDisagreeingBranchTypes(nl::Output branchOutput,
-                                               nl::Output resultBranch,
+void DBLowering::throwOnDisagreeingBranchTypes(mlir::Type branchType,
+                                               mlir::Type resultType,
+                                               mlir::ArrayAttr columnNames,
                                                size_t columnIndex) {
     std::string branchName;
-    describeColumnType(branchOutput.getColumns()[columnIndex].getType(), branchName);
+    describeColumnType(branchType, branchName);
 
     std::string resultName;
-    describeColumnType(resultBranch.getColumns()[columnIndex].getType(), resultName);
+    describeColumnType(resultType, resultName);
 
-    const std::optional<mlir::ArrayAttr> names = branchOutput.getColumnNames();
-    const llvm::StringRef columnName = names ? mlir::cast<mlir::StringAttr>((*names)[columnIndex]).getValue()
-                                             : llvm::StringRef();
+    const llvm::StringRef columnName = columnNames ? mlir::cast<mlir::StringAttr>(columnNames[columnIndex]).getValue()
+                                                   : llvm::StringRef();
 
     throw IRException(fmt::format("A UNION column holds one value type for the whole result: "
                                   "'{}' is {} in this sub-query and {} in another",
@@ -3208,11 +3288,11 @@ mlir::Value DBLowering::typedNullChunk(mlir::Value chunk, mlir::Type chunkType) 
     return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), chunkType, chunk).getResult();
 }
 
-// The shared seen-set is hoisted to the top of the entry block, above every branch's
-// loops, so it is emptied once per execution and dominates each branch's filter - the
-// same placement lowerRemoveDuplicates gives a dedup's private set.
+// The shared seen-set is hoisted to the top of the root block, above every branch's
+// loops, so it is emptied once per step of that block and dominates each branch's filter -
+// the same placement lowerRemoveDuplicates gives a dedup's private set.
 void DBLowering::lowerDistinctSet(mlir::db::DistinctSet distinctSet) {
-    setInsertionToEntryBlockStart();
+    _builder.setInsertionPointToStart(_rootBlock);
 
     _valueMap[distinctSet.getSet()] = _builder.create<nl::Distinct>(_builder.getUnknownLoc()).getState();
 }
@@ -3252,8 +3332,7 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     // emits each step's not-yet-seen rows as fresh survivor chunks. It opens no
     // loop of its own: DISTINCT streams, so - unlike db.sort - the rows are
     // filtered in place in the producing loop, not accumulated and re-emitted.
-    const mlir::Value representative = chunks.front();
-    setInsertionInto(ownerBlock(representative));
+    setInsertionInto(deepestOwnerBlock(chunks, _rootBlock));
     nl::DistinctFilter filter = _builder.create<nl::DistinctFilter>(loc, state, chunks);
 
     // Map db.remove_duplicates' results to the survivor chunks, so its consumer

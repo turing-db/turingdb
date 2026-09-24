@@ -281,6 +281,22 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
+size_t NLUnionState::getRowCount() const {
+    if (_buffers.empty()) {
+        return 0;
+    }
+
+    return _buffers.front()->size();
+}
+
+void NLUnionState::reset() {
+    for (Column* buffer : _buffers) {
+        buffer->clear();
+    }
+
+    _listBuffer.clear();
+}
+
 void NLHashJoinState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();

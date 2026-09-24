@@ -168,6 +168,18 @@ def NLPatternComprehensionState : NLType<"PatternComprehensionState", "pattern_c
     }];
 }
 
+def NLUnionState : NLType<"UnionState", "union_state"> {
+    let summary = "A UNION accumulator handle";
+    let description = [{
+        Stands for the rows the branches of a UNION inside a CALL body produce over
+        the current step. Produced by nl.union_buffer at the top of the block whose
+        step it covers - so it is reset once per step - appended to by one
+        nl.union_collect per branch, and drained by the nl.for over nl.union_drain,
+        which emits the rows in the order they were collected. The unordered sibling
+        of !nl.sort_state, fed by several collects rather than one.
+    }];
+}
+
 def NLCollectState : NLType<"CollectState", "collect_state"> {
     let summary = "A per-group value-list accumulator handle for one collect";
     let description = [{
@@ -436,6 +448,14 @@ def NLOptionalStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::OptionalStateType>($_self)">,
         "optional state handle", "::mlir::nl::OptionalStateType">,
     BuildableType<"::mlir::nl::OptionalStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.union_state handle, as NLSortStateHandle constrains
+// the sort one, and carries the recipe that lets nl.union_collect and nl.union_drain
+// omit the handle's type.
+def NLUnionStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::UnionStateType>($_self)">,
+        "union state handle", "::mlir::nl::UnionStateType">,
+    BuildableType<"::mlir::nl::UnionStateType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.exists_state handle, as NLOptionalStateHandle
 // constrains the optional one, and carries the recipe that lets nl.exists_mark and

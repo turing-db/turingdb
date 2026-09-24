@@ -688,6 +688,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::OptionalDrain;
             config._optionalState = optionalStateFor(optionalDrain.getState());
             _iteratorConfigs[optionalDrain.getResult()] = config;
+        } else if (nl::UnionDrain unionDrain = mlir::dyn_cast<nl::UnionDrain>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::UnionDrain;
+            config._unionState = unionStateFor(unionDrain.getState());
+            _iteratorConfigs[unionDrain.getResult()] = config;
         } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::ProcedureInit;
@@ -829,6 +834,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSkipTruncate(truncate, body);
         } else if (nl::SortBuffer sortBuffer = mlir::dyn_cast<nl::SortBuffer>(operation)) {
             translateSortBuffer(sortBuffer, body);
+        } else if (nl::UnionBuffer unionBuffer = mlir::dyn_cast<nl::UnionBuffer>(operation)) {
+            translateUnionBuffer(unionBuffer, body);
+        } else if (nl::UnionCollect unionCollect = mlir::dyn_cast<nl::UnionCollect>(operation)) {
+            translateUnionCollect(unionCollect, body);
         } else if (nl::SortCollect sortCollect = mlir::dyn_cast<nl::SortCollect>(operation)) {
             translateSortCollect(sortCollect, body);
         } else if (nl::HashJoinBuffer hashJoinBuffer = mlir::dyn_cast<nl::HashJoinBuffer>(operation)) {
@@ -983,6 +992,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateUnwindLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::OptionalDrain) {
         translateOptionalDrainLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::UnionDrain) {
+        translateUnionLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::CrossProduct) {
@@ -3304,6 +3315,85 @@ void NLTranslator::translateSortLoop(const IteratorConfig& config,
     body->emplaceStmt(&NLExecutor::runSortLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateUnionBuffer(nl::UnionBuffer buffer, NLStmtContainer* body) {
+    NLUnionState* state = _program->allocUnionState();
+    _unionStates[buffer.getState()] = state;
+
+    NLUnionResetData* resetData = _program->allocFunctionData<NLUnionResetData>(state);
+    body->emplaceStmt(&NLExecutor::runUnionReset, resetData);
+}
+
+void NLTranslator::translateUnionCollect(nl::UnionCollect collect, NLStmtContainer* body) {
+    NLUnionState* state = unionStateFor(collect.getState());
+    const mlir::OperandRange columns = collect.getColumns();
+
+    if (state->buffers().empty()) {
+        for (const mlir::Value column : columns) {
+            state->addBuffer(allocColumnForChunkType(column.getType()));
+        }
+    } else if (state->buffers().size() != columns.size()) {
+        throw IRException("every nl.union_collect of an accumulator must append the same number of columns");
+    }
+
+    NLUnionCollectData* data = _program->allocFunctionData<NLUnionCollectData>(state);
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Value column = columns[columnIndex];
+        const mlir::Type columnType = column.getType();
+
+        const NLListAppendFunction appendLists = selectOwnedListAppendForChunkType(columnType);
+        const NLAppendFunction append = appendLists ? nullptr : selectAppendForChunkType(columnType);
+
+        data->addAppend(NLSortCollectData::Append {getColumn(column),
+                                                   state->buffer(columnIndex),
+                                                   append,
+                                                   appendLists});
+    }
+
+    body->emplaceStmt(&NLExecutor::runUnionCollect, data);
+}
+
+void NLTranslator::translateUnionLoop(const IteratorConfig& config,
+                                      mlir::Block& loopBody,
+                                      NLLimitState* limit,
+                                      NLStmtContainer* body) {
+    NLUnionState* state = config._unionState;
+
+    const size_t bufferCount = state->buffers().size();
+    if (loopBody.getNumArguments() != bufferCount) {
+        throw IRException("nl.union_drain loop must bind one variable per collected column");
+    }
+
+    NLUnionLoopData* loopData = _program->allocFunctionData<NLUnionLoopData>(state);
+    loopData->setLimit(limit);
+    loopData->getIndices()->reserve(_program->getChunkSize());
+
+    for (size_t columnIndex = 0; columnIndex < bufferCount; columnIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(columnIndex));
+
+        Column* output = allocColumnForChunkType(loopVariable.getType());
+        _valueSlots[loopVariable] = output;
+
+        const NLCarriedColumn column(state->buffer(columnIndex),
+                                     output,
+                                     selectGatherForChunkType(loopVariable.getType()));
+        loopData->addColumn(column);
+    }
+
+    body->emplaceStmt(&NLExecutor::runUnionLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLUnionState* NLTranslator::unionStateFor(mlir::Value handle) const {
+    const auto stateIt = _unionStates.find(handle);
+    if (stateIt == _unionStates.end()) {
+        throw IRException("union handle must be produced by an nl.union_buffer");
+    }
+
+    return stateIt->second;
 }
 
 void NLTranslator::translateOptionalBuffer(nl::OptionalBuffer buffer, NLStmtContainer* body) {
