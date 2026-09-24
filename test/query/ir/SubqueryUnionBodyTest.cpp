@@ -165,6 +165,18 @@ TEST_F(SubqueryUnionBodyTest, unionsAPropertyWithAConstant) {
                {{"16"}});
 }
 
+TEST_F(SubqueryUnionBodyTest, keepsAnImportedConstantABranchReturnsAfterTheCall) {
+    expectRows("WITH 5 AS c MATCH (p:Person) "
+               "CALL (c) { RETURN 7 AS v UNION ALL RETURN c AS v } "
+               "RETURN count(c)",
+               {{"16"}});
+
+    expectRows("WITH 5 AS c MATCH (p:Person {name: 'Remy'}) "
+               "CALL (c) { RETURN c AS v UNION ALL RETURN 7 AS v } "
+               "RETURN p.name, c, v",
+               {{"Remy", "5", "5"}, {"Remy", "5", "7"}});
+}
+
 TEST_F(SubqueryUnionBodyTest, writesInEveryBranchForEachRow) {
     expectWriteRows("MATCH (p:Person) "
                     "CALL (p) { CREATE (a:Audit) RETURN a AS x UNION ALL CREATE (b:Audit) RETURN b AS x } "

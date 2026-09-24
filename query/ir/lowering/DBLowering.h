@@ -266,8 +266,12 @@ private:
 
     // Brings a union branch's result columns to the value type the whole result carries,
     // reaching them through @param resultColumns, what the branch's db.output or db.yield
-    // names
-    void convertUnionResultChunks(mlir::Operation& operation, mlir::OperandRange resultColumns);
+    // names. The mappings it overwrites go into @param replacedMappings, for the caller to
+    // restore once the operation is lowered: a column imported from outside the union is
+    // read again after it.
+    void convertUnionResultChunks(mlir::Operation& operation,
+                                  mlir::OperandRange resultColumns,
+                                  llvm::SmallVectorImpl<std::pair<mlir::Value, mlir::Value>>& replacedMappings);
 
     // Opens the one nl.distinct seen-set the branches of a deduping union record their
     // rows in, hoisted where every branch's filter can reach it
