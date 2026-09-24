@@ -40,6 +40,7 @@ public:
         NONE = 0,
         AGGREGATE = 1U << 0U,
         DYNAMIC = 1U << 1U,
+        PARENTHESIZED = 1U << 2U,
     };
 
     Kind getKind() const { return _exprKind; }
@@ -74,12 +75,20 @@ public:
         return ((uint8_t)_flags & (uint8_t)Flags::DYNAMIC) != 0;
     }
 
+    [[nodiscard]] bool isParenthesized() const {
+        return ((uint8_t)_flags & (uint8_t)Flags::PARENTHESIZED) != 0;
+    }
+
     void setAggregate() {
         _flags = (Flags)((uint8_t)_flags | (uint8_t)Flags::AGGREGATE);
     }
 
     void setDynamic() {
         _flags = (Flags)((uint8_t)_flags | (uint8_t)Flags::DYNAMIC);
+    }
+
+    void setParenthesized() {
+        _flags = (Flags)((uint8_t)_flags | (uint8_t)Flags::PARENTHESIZED);
     }
 
 protected:

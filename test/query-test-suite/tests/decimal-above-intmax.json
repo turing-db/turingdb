@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "RETURN 9223372036854775808",
   "expect": {
-    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | RETURN 9223372036854775808\n       |        ^^^^^^^^^^^^^^^^^^^\n-------* Decimal literal exceeded int64 range.",
-    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | RETURN 9223372036854775808\\n       |        ^^^^^^^^^^^^^^^^^^^\\n-------* Decimal literal exceeded int64 range.\"}"
+    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | RETURN 9223372036854775808\n       |        ^^^^^^^^^^^^^^^^^^^\n-------* syntax error, unexpected integer literal 9223372036854775808, which exceeds int64 range unless negated",
+    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | RETURN 9223372036854775808\\n       |        ^^^^^^^^^^^^^^^^^^^\\n-------* syntax error, unexpected integer literal 9223372036854775808, which exceeds int64 range unless negated\"}"
   },
   "tags": [
     "error",

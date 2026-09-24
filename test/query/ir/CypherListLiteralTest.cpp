@@ -853,9 +853,7 @@ TEST_F(CypherListLiteralTest, buildsAListOfAnAbsentIndexedElement) {
     expectRows("UNWIND [[1, 'a']] AS xs WITH xs[7] AS missing RETURN [missing]", expected);
 }
 
-TEST_F(CypherListLiteralTest, rejectsAnArithmeticListElement) {
-    // The grammar admits no expression inside a list, so an arithmetic element is turned
-    // away by the parser rather than built per row. Pinned so that teaching the grammar
-    // the expression shows up as the element becoming supported, rather than silently.
-    expectRejected("RETURN [1 + 1]", "syntax error");
+TEST_F(CypherListLiteralTest, returnsAnArithmeticListElement) {
+    const Rows expected = {{"[2]"}};
+    expectRows("RETURN [1 + 1]", expected);
 }

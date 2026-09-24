@@ -542,6 +542,11 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
     }
 
     if (const Pattern* predicatePattern = exists->getPredicatePattern()) {
+        const bool hasARelationship = predicatePattern->elements().front()->getEntities().size() > 1;
+        if (!hasARelationship) {
+            throwError("A pattern in an expression needs at least one relationship", exists);
+        }
+
         throwOnPatternPredicateVariable(predicatePattern, _ctxt);
     }
 

@@ -153,6 +153,10 @@ TEST_F(SignedNumberLexingTest, readsANegativeIndex) {
     expectRows("WITH [1, 2, 3] AS xs RETURN xs[-1] AS last", {{"3"}});
 }
 
+TEST_F(SignedNumberLexingTest, readsTheSmallestInteger) {
+    expectRows("RETURN -9223372036854775808 AS answer", {{"-9223372036854775808"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

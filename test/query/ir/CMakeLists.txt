@@ -3663,3 +3663,9 @@ target_link_libraries(test_query_ir_exists_outer_edge PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_exists_outer_edge PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Arithmetic inside a list literal.
+add_call_v3_test(test_query_ir_list_literal_arithmetic ListLiteralArithmeticTest.cpp)
+
+# Two dashes as a subtraction of a negation, or as an undirected hop between nodes.
+add_call_v3_test(test_query_ir_double_dash DoubleDashTest.cpp)

@@ -16,6 +16,7 @@
 
 %code requires {
 
+    #include <limits>
     #include <optional>
     #include <string_view>
     #include <utility>
@@ -118,13 +119,10 @@
 
 %token PROG_END 0
 
-%token TAIL_TAIL
 %token TIP_TAIL_TAIL
 %token TAIL_TAIL_TIP
 %token TIP_TAIL_BRACKET
-%token BRACKET_TAIL_TIP
 %token TAIL_BRACKET
-%token BRACKET_TAIL
 %token SEMI_COLON
 %token ADD_ASSIGN
 %token NOT_EQUAL
@@ -269,6 +267,7 @@
 %token<std::string_view> ID
 %token<int64_t> DIGIT
 %token<double> DOUBLE
+%token INT64_MIN_MAGNITUDE "integer literal 9223372036854775808, which exceeds int64 range unless negated"
 
 %token UNKNOWN
 
@@ -315,8 +314,8 @@
 %type<db::Expr*> propertyExpr
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
-%type<db::ListComprehensionExpr*> listComprehension
-%type<db::PatternComprehensionExpr*> patternComprehension
+%type<db::Expr*> bracketExpr
+%type<std::pair<db::WhereClause*, db::Expr*>> comprehensionTail
 %type<db::ListComprehensionExpr*> filterExpr
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
@@ -342,8 +341,10 @@
 %type<db::NodePattern*> nodePattern
 %type<db::NodePattern*> predicateRoot
 %type<db::EdgePattern*> edgePattern
+%type<db::EdgePattern*> exprEdgePattern
 %type<db::EdgePattern*> edgeDetail
 %type<std::pair<db::EdgePattern*, db::NodePattern*>> patternElemChain
+%type<std::pair<db::EdgePattern*, db::NodePattern*>> exprPatternElemChain
 %type<db::WhereClause*> whereClause
 %type<db::WhereClause*> opt_whereClause
 %type<db::YieldClause*> yieldClause
@@ -377,7 +378,6 @@
 %type<db::EmbeddingLiteral*> embeddingLit
 %type<db::EmbeddingLiteral*> embeddingLitItems
 %type<double> embeddingLitItem
-%type<db::ListLiteral*> listLit
 %type<db::ListLiteral*> listLitItems
 %type<db::Expr*> listLitItem
 %type<db::QueryCommand*> singleQuery
@@ -1280,10 +1280,7 @@ addSubExpr
         $$ = BinaryExpr::create(ast, BinaryOperator::Add, $1, $3);
         LOC($$, @$);
       }
-    | addSubExpr SUB multDivExpr {
-        $$ = BinaryExpr::create(ast, BinaryOperator::Sub, $1, $3);
-        LOC($$, @$);
-      }
+    | addSubExpr SUB multDivExpr { $$ = ParserUtils::createSubtraction(ast, $1, $3, @$); }
     | addSubExpr CONCAT multDivExpr {
         $$ = BinaryExpr::create(ast, BinaryOperator::Concat, $1, $3);
         LOC($$, @$);
@@ -1328,7 +1325,11 @@ stringExpPrefix
 unaryAddSubExpr
     : atomicExpr { $$ = $1; }
     | PLUS unaryAddSubExpr { $$ = UnaryExpr::create(ast, UnaryOperator::Plus, $2); LOC($$, @$); }
-    | SUB unaryAddSubExpr { $$ = UnaryExpr::create(ast, UnaryOperator::Minus, $2); LOC($$, @$); }
+    | SUB unaryAddSubExpr { $$ = ParserUtils::createNegation(ast, $2); LOC($$, @$); }
+    | SUB INT64_MIN_MAGNITUDE {
+        $$ = LiteralExpr::create(ast, IntegerLiteral::create(ast, std::numeric_limits<int64_t>::min()));
+        LOC($$, @$);
+      }
     // this allows chaining operators like -+--1 (which is +1)
     ;
 
@@ -1372,14 +1373,18 @@ propertyExpr
 
 atomExpr
     : pathExpr { $$ = $1; }
+    | OPAREN predicateRoot CPAREN {
+        PatternElement* element = PatternElement::create(ast);
+        element->addEntity($2);
+        $$ = ParserUtils::createPatternPredicate(ast, element, @$);
+      }
     | literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
     | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    | listComprehension { $$ = $1; }
-    | patternComprehension { $$ = $1; }
+    | bracketExpr { $$ = $1; }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
@@ -1429,6 +1434,15 @@ patternElem
 patternElemChain
     : edgePattern opt_quantifiedPath nodePattern {
         if ($2) $1->setQuantifiedPath($2);
+        $$ = std::make_pair($1, $3);
+    }
+    ;
+
+exprPatternElemChain
+    : exprEdgePattern opt_quantifiedPath nodePattern {
+        if ($2) {
+            $1->setQuantifiedPath($2);
+        }
         $$ = std::make_pair($1, $3);
     }
     ;
@@ -1493,12 +1507,16 @@ opt_edgeTypes
 
 
 edgePattern
-    : TAIL_TAIL     { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
-    | TIP_TAIL_TAIL { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
+    : SUB SUB { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
+    | exprEdgePattern { $$ = $1; }
+    ;
+
+exprEdgePattern
+    : TIP_TAIL_TAIL { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
     | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL     { $$ = $2; $$->setDirection(EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
-    | TIP_TAIL_BRACKET edgeDetail BRACKET_TAIL { $$ = $2; $$->setDirection(EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
-    | TAIL_BRACKET edgeDetail BRACKET_TAIL_TIP { $$ = $2; $$->setDirection(EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
+    | TAIL_BRACKET edgeDetail CBRACK SUB     { $$ = $2; $$->setDirection(EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
+    | TIP_TAIL_BRACKET edgeDetail CBRACK SUB { $$ = $2; $$->setDirection(EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
+    | TAIL_BRACKET edgeDetail CBRACK SUB GT  { $$ = $2; $$->setDirection(EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
     ;
 
 edgeDetail
@@ -1598,13 +1616,13 @@ predicateRoot
     ;
 
 pathExprElem
-    : patternElemChain {
+    : exprPatternElemChain {
         $$ = PatternElement::create(ast);
         $$->addEntity($1.first);
         $$->addEntity($1.second);
         LOC($$, @$);
       }
-    | pathExprElem patternElemChain {
+    | pathExprElem exprPatternElemChain {
         $$ = $1;
         $$->addEntity($2.first);
         $$->addEntity($2.second);
@@ -1612,7 +1630,7 @@ pathExprElem
     ;
 
 parenthesizedExpr
-    : OPAREN expr CPAREN { $$ = $2; }
+    : OPAREN expr CPAREN { $$ = $2; $$->setParenthesized(); }
     ;
 
 filterWith
@@ -1626,33 +1644,31 @@ filterKeyword
     | SINGLE
     ;
 
-patternComprehension
-    : OBRACK pathExpr opt_whereClause PIPE expr CBRACK {
-        const bool isExists = $2->getKind() == Expr::Kind::EXISTS;
-        const Pattern* predicatePattern = isExists ? static_cast<ExistsExpr*>($2)->getPredicatePattern() : nullptr;
-
-        if (!predicatePattern) {
-            error(@2, "Invalid pattern comprehension. The pattern must be a path '(...)-[...]-(...)'");
+bracketExpr
+    : OBRACK CBRACK {
+        ListLiteral* list = ListLiteral::create(ast);
+        LOC(list, @$);
+        $$ = LiteralExpr::create(ast, list);
+        LOC($$, @$);
+      }
+    | OBRACK listLitItems CBRACK {
+        LOC($2, @$);
+        $$ = ParserUtils::createListOrComprehension(ast, $2);
+        LOC($$, @$);
+      }
+    | OBRACK expr comprehensionTail CBRACK {
+        $$ = ParserUtils::createComprehension(ast, $2, $3.first, $3.second, @2);
+        if (!$$) {
+            error(@2, "Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
         }
-
-        Pattern* pattern = Pattern::create(ast);
-        for (PatternElement* element : predicatePattern->elements()) {
-            pattern->addElement(element);
-        }
-        pattern->setWhere($3);
-        ParserUtils::foldEntityWheres(ast, pattern);
-
-        MatchStmt* match = MatchStmt::create(ast, pattern);
-        LOC(match, @2);
-
-        $$ = PatternComprehensionExpr::create(ast, match, $5);
         LOC($$, @$);
       }
     ;
 
-listComprehension
-    : OBRACK filterExpr CBRACK { $$ = $2; LOC($$, @$); }
-    | OBRACK filterExpr PIPE expr CBRACK { $$ = $2; $$->setProjection($4); LOC($$, @$); }
+comprehensionTail
+    : whereClause { $$ = std::make_pair($1, nullptr); }
+    | whereClause PIPE expr { $$ = std::make_pair($1, $3); }
+    | PIPE expr { $$ = std::make_pair(nullptr, $2); }
     ;
 
 filterExpr
@@ -1766,7 +1782,6 @@ literal
     | NULL_ { $$ = NullLiteral::create(ast); }
     | stringLit { $$ = $1; }
     | embeddingLit { $$ = $1; }
-    | listLit { $$ = $1; }
     | mapLit { $$ = $1; }
     ;
 
@@ -1796,12 +1811,8 @@ embeddingLitItems
 embeddingLitItem
     : DIGIT { $$ = $1; LOC($$, @$); }
     | DOUBLE { $$ = $1; LOC($$, @$); }
-    ;
-
-// List literal: build directly
-listLit
-    : OBRACK CBRACK { $$ = ListLiteral::create(ast); LOC($$, @$); }
-    | OBRACK listLitItems CBRACK { $$ = $2; LOC($$, @$); }
+    | SUB DIGIT { $$ = -$2; LOC($$, @$); }
+    | SUB DOUBLE { $$ = -$2; LOC($$, @$); }
     ;
 
 // Build recursively using addItem()
@@ -1811,8 +1822,7 @@ listLitItems
     ;
 
 listLitItem
-    : propertyExpr { $$ = $1; LOC($$, @$); }
-    | atomExpr { $$ = $1; LOC($$, @$); }
+    : expr { $$ = $1; LOC($$, @$); }
     ;
 
 mapLit
@@ -1863,7 +1873,7 @@ nodeConstraintPattern
     ;
 
 edgeConstraintPattern
-    : OPAREN CPAREN TAIL_BRACKET symbol edgeTypes BRACKET_TAIL OPAREN CPAREN
+    : OPAREN CPAREN TAIL_BRACKET symbol edgeTypes CBRACK SUB OPAREN CPAREN
     ;
 
 constraint

@@ -63,6 +63,27 @@ public:
                                               PatternElement* element,
                                               const SourceLocation& location);
 
+    // `-1` stays the literal it spells: an embedding list or a procedure's constant argument
+    // takes literals only
+    static Expr* createNegation(CypherAST* ast, Expr* operand);
+
+    // `(a)--(b)` is `(a) - -(b)`: between a node written in parentheses, or a pattern, and
+    // the negation of another, the two minus signs are an undirected edge
+    static Expr* createSubtraction(CypherAST* ast,
+                                   Expr* lhs,
+                                   Expr* rhs,
+                                   const SourceLocation& location);
+
+    // `[x IN xs]` is the comprehension that copies xs, not a list holding one IN test
+    static Expr* createListOrComprehension(CypherAST* ast, ListLiteral* list);
+
+    // nullptr where the head is neither `variable IN list` nor a pattern with a projection
+    static Expr* createComprehension(CypherAST* ast,
+                                     Expr* head,
+                                     WhereClause* where,
+                                     Expr* projection,
+                                     const SourceLocation& headLocation);
+
     static void startComparisonChain(CypherAST* ast,
                                      ComparisonChain& chain,
                                      Expr* lhs,
