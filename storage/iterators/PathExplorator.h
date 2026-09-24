@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <span>
 #include <stdint.h>
 #include <stddef.h>
@@ -71,16 +72,51 @@ public:
     size_t getCandidateCheckCount() const { return _candidateChecks; }
 
 private:
-    // The candidates of one node on the path, a range of the candidate stacks. _taint is the
-    // shallowest path position of an edge this frame's subtree could not take because the walk
-    // already held it, which is what decides whether the subtree may be remembered
+    static constexpr size_t MAX_DEPENDENCIES = 4;
+
+    // The candidates of one node on the path, a range of the candidate stacks. The held edges
+    // its subtree's ends depend on start at _dependencyBegin on the dependency stack; _taint is
+    // the shallowest path position of the ones folded away past MAX_DEPENDENCIES
     struct Frame {
         size_t _candidateBegin {0};
         size_t _candidateEnd {0};
         size_t _next {0};
         NodeID _node;
         uint64_t _budget {0};
+        size_t _dependencyBegin {0};
         size_t _taint {NO_TAINT};
+    };
+
+    // An edge held at _position on the path that a subtree's ends depend on
+    struct Dependency {
+        EdgeID _edge;
+        size_t _position {0};
+    };
+
+    struct DependencyList {
+        std::array<EdgeID, MAX_DEPENDENCIES> _edges;
+        size_t _count {0};
+    };
+
+    // The expansions walked in full, keyed by node and remaining budget, each with the held
+    // edges its ends depend on: an arrival holding all of them reaches no end the walk missed
+    struct ExpansionMemo {
+        struct Slot {
+            uint64_t _key {0};
+            uint32_t _stamp {0};
+            uint32_t _list {0};
+        };
+
+        std::vector<Slot> _slots;
+        std::vector<DependencyList> _dependencyLists;
+        DependencyList _noDependencies;
+        uint32_t _generation {1};
+        size_t _used {0};
+
+        void clear();
+        void remember(uint64_t key, std::span<const Dependency> dependencies);
+        const DependencyList* find(uint64_t key) const;
+        void grow();
     };
 
     // A set of 64-bit keys emptied in constant time: an entry counts only while its stamp
@@ -165,8 +201,8 @@ private:
     uint64_t _expansionSpan {0};
     bool _keysDepth {false};
     KeySet _emittedEnds;
-    KeySet _cleanExpansions;
-    size_t _descentTaint {NO_TAINT};
+    ExpansionMemo _expansions;
+    std::vector<Dependency> _dependencies;
 
     size_t _seedCursor {0};
     size_t _written {0};
@@ -193,12 +229,22 @@ private:
     void startSeed(size_t row);
     void step();
     void popFrame();
+    // Drops the dependencies from begin on that the subtree at that depth held itself, keeps at
+    // most MAX_DEPENDENCIES of the rest and folds the others into taint
+    void keepDependenciesAbove(size_t begin, size_t depth, size_t& taint);
     void descend(NodeID node);
     void generateCandidates(std::span<const EdgeRecord> edges);
     void generatePendingCandidates(NodeID node);
-    // Whether a walk arriving on the node at that depth ends only where this seed's walk has
-    // already emitted, so an edge held above that leads there constrains nothing
-    bool reachesOnlyEmittedEnds(NodeID node, uint64_t depth) const;
+    size_t positionOnPath(EdgeID edge) const;
+    // Whether the path, extended by the arrival edge, holds every edge of the list
+    bool holdsDependencies(const DependencyList& dependencies, EdgeID arrival) const;
+    // The dependencies of the node's remembered expansion at that depth when the path, extended
+    // by the arrival edge, holds every one of them, or null when a walk there has to be redone
+    const DependencyList* findReusableExpansion(NodeID node, uint64_t depth, EdgeID arrival) const;
+    // Records that the subtree could not take the held edge to the node at that depth, unless
+    // the ends beyond it are all emitted or remembered under edges the path holds
+    void dependOnBlockedEdge(EdgeID edge, NodeID node, uint64_t depth, size_t position);
+    void dependOn(const DependencyList& dependencies, EdgeID arrival);
     void emit(size_t seedRow, NodeID target, PathRef path);
 
     void acquireArena();
