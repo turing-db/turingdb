@@ -27,6 +27,19 @@ bool YCypherScanner::subtractsFromTheLastToken() const {
     }
 }
 
+YCypherScanner::BracketKind YCypherScanner::closeBracket() {
+    // A ']' with nothing open before it is a syntax error the parser reports: the lexer
+    // reads it as the close of an index, which is what an unbalanced one usually is
+    if (_openBrackets.empty()) {
+        return BracketKind::Index;
+    }
+
+    const BracketKind kind = _openBrackets.back();
+    _openBrackets.pop_back();
+
+    return kind;
+}
+
 void YCypherScanner::syntaxError(const SourceLocation& loc,
                                  const std::string& msg) {
     std::string errorMsg;

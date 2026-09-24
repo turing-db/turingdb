@@ -91,6 +91,14 @@ TEST_F(VariableLengthPathRejectionTest, rejectsAnUndirectedQuantifier) {
     expectRejected("MATCH (n:Person)-[e]-*(m) RETURN n.name, m.name");
 }
 
+TEST_F(VariableLengthPathRejectionTest, rejectsAnUndirectedPlusQuantifier) {
+    expectRejected("MATCH (n:Person)-[e]-+(m) RETURN n.name, m.name");
+}
+
+TEST_F(VariableLengthPathRejectionTest, rejectsAnUndirectedRangeQuantifier) {
+    expectRejected("MATCH (n:Person)-[e]-{2,4}(m) RETURN n.name, m.name");
+}
+
 TEST_F(VariableLengthPathRejectionTest, rejectsABackwardQuantifier) {
     expectRejected("MATCH (n:Person)<-[e]-*(m:Person) RETURN n.name, m.name");
 }

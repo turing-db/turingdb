@@ -12,6 +12,7 @@ using namespace db;
 #define YY_USER_ACTION advanceLocation(*yylloc, yyleng);
 
 using Token = db::YCypherParser::token;
+using BracketKind = db::YCypherScanner::BracketKind;
 
 #define STORE_STRING(start, length) yylval->emplace<std::string_view>(getStringView(start, length))
 
@@ -28,20 +29,32 @@ using Token = db::YCypherParser::token;
 \n        { locationNewLine(*yylloc); }
 [ \t\r]+  { }
 
-    /* A minus running into a number is arithmetic, not the tail of a pattern: a
-     * relationship never runs into a digit, so `xs[2]-1` and `4 - -1` are read as the
-     * subtractions they are
+    /* A minus running into a number is the subtraction rather than the sign of that
+     * number: `4 - -1` is 5
      */
-"]"/[ \t\r]*-[ \t\r]*[0-9]  { return Token::CBRACK; }
 "-"/[ \t\r]*-[ \t\r]*[0-9]  { return Token::SUB; }
 
 "-"[ \t\r]*-  { return Token::TAIL_TAIL; }
 "<"[ \t\r]*-[ \t\r]*- { return Token::TIP_TAIL_TAIL; }
 "-"[ \t\r]*-[ \t\r]*> { return Token::TAIL_TAIL_TIP; }
-"<"[ \t\r]*-[ \t\r]*\[ { return Token::TIP_TAIL_BRACKET; }
-"]"[ \t\r]*-[ \t\r]*> { return Token::BRACKET_TAIL_TIP; }
-"-"[ \t\r]*\[  { return Token::TAIL_BRACKET; }
-"]"[ \t\r]*-  { return Token::BRACKET_TAIL; }
+"<"[ \t\r]*-[ \t\r]*\[ { openBracket(BracketKind::EdgeDetail); return Token::TIP_TAIL_BRACKET; }
+"]"[ \t\r]*-[ \t\r]*> { closeBracket(); return Token::BRACKET_TAIL_TIP; }
+"-"[ \t\r]*\[  { openBracket(BracketKind::EdgeDetail); return Token::TAIL_BRACKET; }
+
+    /* `]-` is the tail of an edge only where the bracket it closes opened an edge detail.
+     * Where it closes an index the minus is the subtraction operator, so the bracket is
+     * handed to the parser on its own and the rest goes back to be read again.
+     */
+"]"[ \t\r]*-  {
+    if (closeBracket() == BracketKind::EdgeDetail) {
+        return Token::BRACKET_TAIL;
+    }
+
+    retractToFirstCharacter(*yylloc, yyleng);
+    yyless(1);
+
+    return Token::CBRACK;
+}
 
 "+=" { return Token::ADD_ASSIGN; }
 "<>" { return Token::NOT_EQUAL; }
@@ -55,8 +68,8 @@ using Token = db::YCypherParser::token;
 ")"  { return Token::CPAREN; }
 "{"  { return Token::OBRACE; }
 "}"  { return Token::CBRACE; }
-"["  { return Token::OBRACK; }
-"]"  { return Token::CBRACK; }
+"["  { openBracket(BracketKind::Index); return Token::OBRACK; }
+"]"  { closeBracket(); return Token::CBRACK; }
 "="  { return Token::ASSIGN; }
 "$"  { return Token::DOLLAR; }
 ","  { return Token::COMMA; }
@@ -204,7 +217,7 @@ using Token = db::YCypherParser::token;
 
 -?[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fd]? {
     if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToSign(*yylloc, yyleng);
+        retractToFirstCharacter(*yylloc, yyleng);
         yyless(1);
 
         return Token::SUB;
@@ -220,7 +233,7 @@ using Token = db::YCypherParser::token;
 
 -?[0-9]+[eE][+-]?[0-9]+[fd]? {
     if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToSign(*yylloc, yyleng);
+        retractToFirstCharacter(*yylloc, yyleng);
         yyless(1);
 
         return Token::SUB;
@@ -255,7 +268,7 @@ using Token = db::YCypherParser::token;
      */
 -?0[xX][0-9a-fA-F]+ {
     if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToSign(*yylloc, yyleng);
+        retractToFirstCharacter(*yylloc, yyleng);
         yyless(1);
 
         return Token::SUB;
@@ -302,7 +315,7 @@ using Token = db::YCypherParser::token;
      */
 -?0[oO][0-7]+ {
     if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToSign(*yylloc, yyleng);
+        retractToFirstCharacter(*yylloc, yyleng);
         yyless(1);
 
         return Token::SUB;
@@ -345,7 +358,7 @@ using Token = db::YCypherParser::token;
      */
 -?[0-9]+ {
     if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToSign(*yylloc, yyleng);
+        retractToFirstCharacter(*yylloc, yyleng);
         yyless(1);
 
         return Token::SUB;

@@ -4,6 +4,8 @@
 #include <FlexLexer.h>
 #endif
 
+#include <vector>
+
 #include "GeneratedCypherParser.h"
 #include "SourceLocation.h"
 
@@ -27,13 +29,25 @@ public:
         return _lastToken;
     }
 
+    // Which bracket a ']' closes. '-[' and '<-[' open an edge detail and '[' opens an index
+    // or a list, and the two nest, as in `-[e {name: names[0]}]-(m)`: popping the one a ']'
+    // closes is what tells the tail of `-[:T]-(m)` from the minus of `xs[0] - (1 + 2)`.
+    enum class BracketKind {
+        EdgeDetail,
+        Index,
+    };
+
     // Whether the token before this one ends an operand, which makes a '-' written against
     // it the subtraction operator: `4-1` is three tokens where `[1, -2]` holds two.
     bool subtractsFromTheLastToken() const;
 
-    // Give back the digits a negative-number rule matched past the sign, leaving the
-    // location where the sign ends.
-    void retractToSign(SourceLocation& loc, uint64_t yyleng) {
+    BracketKind closeBracket();
+
+    void openBracket(BracketKind kind) { _openBrackets.push_back(kind); }
+
+    // Give back what a rule matched past its first character, leaving the location where
+    // that character ends.
+    void retractToFirstCharacter(SourceLocation& loc, uint64_t yyleng) {
         const uint64_t handedBack = yyleng - 1;
 
         _nextOffset -= handedBack;
@@ -46,6 +60,7 @@ public:
         _nextOffset = 0;
         _offset = 0;
         _readPos = 0;
+        _openBrackets.clear();
     }
 
     void advanceLocation(SourceLocation& loc, uint64_t yyleng) {
@@ -76,6 +91,8 @@ protected:
 
 private:
     YCypherParser::token_type _lastToken {YCypherParser::token::PROG_END};
+
+    std::vector<BracketKind> _openBrackets;
 
     size_t _nextOffset {0};
     size_t _offset {0};
