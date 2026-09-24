@@ -1376,6 +1376,8 @@ size_t NLTranslator::listValueBytes(mlir::ArrayAttr elements) {
         } else if (mlir::isa<mlir::ArrayAttr>(element)) {
             // A nested list is one element of this one, storing the child's view
             valueBytes += sizeof(ListView);
+        } else if (mlir::isa<mlir::DictionaryAttr>(element)) {
+            valueBytes += sizeof(MapView);
         } else {
             throw IRException("Unsupported literal attribute in a constant list");
         }
@@ -1501,6 +1503,8 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
             cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
         } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
             cursor.writeValue(ListBufferTypeTag::ListView, materializeListView(nestedAttr));
+        } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::MapView, materializeMapView(nestedMap));
         } else {
             throw IRException("Unsupported literal attribute in a constant list");
         }
@@ -2542,6 +2546,8 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
         return NLExecutor::selectEdgeListItemRead();
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLExecutor::selectNestedListItemRead();
+    } else if (mlir::isa<storage::MapType>(elementType)) {
+        return NLExecutor::selectNestedMapListItemRead();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedListItemRead(/*nullable=*/false);
     } else if (isNullableList(elementType)) {

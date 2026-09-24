@@ -71,6 +71,9 @@ void encodeElement(ListElementView element, std::vector<std::byte>& out) {
         case ListBufferTypeTag::ListView:
             encodeList(element.getAs<ListView>(), out);
         break;
+        case ListBufferTypeTag::MapView:
+            throw FatalException("Cannot store a list holding a map: there is no map property type");
+        break;
         case ListBufferTypeTag::INVALID:
             throw FatalException("Cannot encode a list element with an invalid type tag");
         break;
@@ -180,6 +183,7 @@ private:
             case ListBufferTypeTag::ListView:
                 return decodeList();
             break;
+            case ListBufferTypeTag::MapView:
             case ListBufferTypeTag::INVALID:
             break;
         }

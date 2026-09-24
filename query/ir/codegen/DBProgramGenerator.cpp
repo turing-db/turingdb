@@ -925,12 +925,10 @@ mlir::Attribute DBProgramGenerator::literalAttr(const Literal* literal) {
 }
 
 mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
-    const bool isMap = literal->getKind() == Literal::Kind::MAP;
-    //Maps aren't allowed in lists for now
-    const mlir::Attribute element = isMap ? mlir::Attribute {} : literalAttr(literal);
+    const mlir::Attribute element = literalAttr(literal);
 
     if (!element) {
-        throwError("Only booleans, integers, floats, strings, nulls, embeddings and "
+        throwError("Only booleans, integers, floats, strings, nulls, embeddings, maps and "
                    "lists are supported as list elements.",
                    literal);
     }

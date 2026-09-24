@@ -3,6 +3,8 @@
 #include "ListView.h"
 #include "ListBufferTypeTag.h"
 
+#include "map/MapView.h"
+
 #include "ID.h"
 
 #include "metadata/PropertyNull.h"
@@ -48,6 +50,9 @@ struct ListTagDispatcher {
             break;
             case ListBufferTypeTag::DateTime:
                 return executor.template operator()<types::DateTime::Primitive>(view);
+            break;
+            case ListBufferTypeTag::MapView:
+                return executor.template operator()<MapView>(view);
             break;
 
             case ListBufferTypeTag::INVALID:
@@ -114,6 +119,11 @@ struct TypeToListBufferTag<EdgeID> {
 template <>
 struct TypeToListBufferTag<types::DateTime::Primitive> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::DateTime;
+};
+
+template <>
+struct TypeToListBufferTag<MapView> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::MapView;
 };
 
 }

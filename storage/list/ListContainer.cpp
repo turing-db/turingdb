@@ -5,6 +5,8 @@
 #include "ListElementView.h"
 #include "ListUtils.h"
 
+#include "FatalException.h"
+
 using namespace db;
 
 ListContainer::ListContainer()
@@ -66,6 +68,8 @@ ListView ListContainer::copy(ListView list) {
     const auto asVariant = [this]<typename T>(const ListElementView view) -> ListItemVariant {
         if constexpr (std::same_as<T, ListView>) {
             return copy(view.getAs<ListView>());
+        } else if constexpr (std::same_as<T, MapView>) {
+            throw FatalException("Cannot store a list holding a map: there is no map property type");
         } else {
             return view.getAs<T>();
         }
@@ -87,6 +91,8 @@ ListContainer::ListItemVariant ListContainer::own(const ListItemVariant& element
             return _strings->insert(value);
         } else if constexpr (std::same_as<T, types::Embedding::Primitive>) {
             return _embeddings->insert(value);
+        } else if constexpr (std::same_as<T, MapView>) {
+            throw FatalException("Cannot store a list holding a map: there is no map property type");
         } else {
             return value;
         }

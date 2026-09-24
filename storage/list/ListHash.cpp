@@ -4,6 +4,8 @@
 
 #include "ListBufferTypeTag.h"
 
+#include "FatalException.h"
+
 #include "ID.h"
 #include "metadata/PropertyType.h"
 
@@ -61,6 +63,9 @@ size_t db::hashListElement(ListElementView element) {
         break;
         case ListBufferTypeTag::ListView:
             return combine(seed, hashList(element.getAs<ListView>()));
+        break;
+        case ListBufferTypeTag::MapView:
+            throw FatalException("Cannot hash a map list element.");
         break;
         case ListBufferTypeTag::Null:
         case ListBufferTypeTag::INVALID:

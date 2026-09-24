@@ -1540,6 +1540,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
     const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                        storage::EdgeIDType,
                                                        storage::ListType,
+                                                       storage::MapType,
                                                        storage::ListElementType,
                                                        storage::OwnedStringType>(valueElement);
 
@@ -1725,6 +1726,7 @@ void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
         const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                            storage::EdgeIDType,
                                                            storage::ListType,
+                                                           storage::MapType,
                                                            storage::ListElementType,
                                                            storage::OwnedStringType>(element);
 

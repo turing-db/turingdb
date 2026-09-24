@@ -768,6 +768,7 @@ public:
     static NLListItemReadFunction selectNodeListItemRead();
     static NLListItemReadFunction selectEdgeListItemRead();
     static NLListItemReadFunction selectNestedListItemRead();
+    static NLListItemReadFunction selectNestedMapListItemRead();
     static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
     static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);

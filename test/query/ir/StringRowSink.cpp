@@ -165,6 +165,7 @@ std::string elementText(const ListElementView& element) {
 
         case ListBufferTypeTag::Embedding:
         case ListBufferTypeTag::ListView:
+        case ListBufferTypeTag::MapView:
         case ListBufferTypeTag::INVALID:
             throw std::runtime_error("StringRowSink cannot read this list element as text");
         break;

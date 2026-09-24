@@ -70,6 +70,10 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
             throw FatalException("Cannot order an embedding list element.");
         break;
 
+        case ListBufferTypeTag::MapView:
+            throw FatalException("Cannot order a map list element.");
+        break;
+
         case ListBufferTypeTag::INVALID:
             throw FatalException("Cannot order an untagged list element.");
         break;
