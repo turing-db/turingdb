@@ -6367,11 +6367,20 @@ NLUnaryFunctionKernel NLExecutor::selectSize(const Column* input, bool inputNull
     return selectFunction<ListSizeFunction>(input, inputNullable, memory, result);
 }
 
+NLUnaryFunctionKernel NLExecutor::selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<NodeID>(input)) {
+        return selectFunction<IdFunction<NodeID>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<EdgeID>(input)) {
+        return selectFunction<IdFunction<EdgeID>>(input, inputNullable, memory, result);
+    }
+
+    return selectFunction<TaggedIdFunction>(input, inputNullable, memory, result);
+}
+
 template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<TaggedIdFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

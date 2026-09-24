@@ -178,15 +178,21 @@ public:
     ResultType operator()(const EdgeID edge) const { return getEndNode(edge); }
 };
 
-// The ID a type-erased cell's entity is named by. id() over a node or an edge is the
-// column it was handed, but a cell holds its entity behind a tag, so the number has to be
-// read out of it before anything can be compared against it.
 class TaggedIdFunction {
 public:
     using ArgType = ListElementView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
+};
+
+template <TypedInternalID IDT>
+class IdFunction {
+public:
+    using ArgType = IDT;
+    using ResultType = types::Int64::Primitive;
+
+    ResultType operator()(const IDT id) const { return static_cast<types::Int64::Primitive>(id.getValue()); }
 };
 
 class toIntegerFunction {

@@ -2252,8 +2252,7 @@ def ToString : NLUnaryFunctionOp<"to_string", [ConstantThroughOperands]>;
 // The list family db.size / db.head / db.last / db.tail lower to. A literal list is one
 // cell standing for every row, and so is what these read off it, so each carries its
 // operand's constancy rather than being spread over the rows it was read on.
-// db.element_id lowers to this. It reads a cell as the list family does, so it carries its
-// operand's constancy the same way.
+// db.element_id lowers to this, and carries its operand's constancy as the list family does.
 def ElementID : NLUnaryFunctionOp<"element_id", [ConstantThroughOperands]>;
 
 def Size : NLUnaryFunctionOp<"size", [ConstantThroughOperands]>;
