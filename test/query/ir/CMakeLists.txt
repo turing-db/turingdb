@@ -3641,3 +3641,14 @@ target_link_libraries(test_query_ir_bool_ordering PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_bool_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_function_null_argument FunctionNullArgumentTest.cpp)
+target_link_libraries(test_query_ir_function_null_argument PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_function_null_argument PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
