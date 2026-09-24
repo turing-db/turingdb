@@ -239,6 +239,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::LIST:
             analyzeListExpr(static_cast<ListExpr*>(expr));
         break;
+        case Expr::Kind::LIST_SLICE:
+            analyzeListSliceExpr(static_cast<ListSliceExpr*>(expr));
+        break;
         case Expr::Kind::LIST_COMPREHENSION:
             analyzeListComprehensionExpr(static_cast<ListComprehensionExpr*>(expr));
         break;
@@ -1543,6 +1546,62 @@ void ExprAnalyzer::requireComparableToEntity(const Expr* subject, const CaseExpr
                                EvaluatedTypeName::value(valueType)),
                    test._value);
     }
+}
+
+void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
+    Expr* const base = expr->getBase();
+    analyzeExpr(base);
+
+    const EvaluatedType baseType = base->getType();
+
+    // A tagged cell names no type until a row is in hand, and a null slices into a null
+    const bool slicesAList = baseType == EvaluatedType::List
+                          || baseType == EvaluatedType::ListItem
+                          || baseType == EvaluatedType::Null;
+
+    if (!slicesAList) {
+        throwError(fmt::format("A slice reads a list, not '{}'", EvaluatedTypeName::value(baseType)),
+                   expr);
+    }
+
+    bool dynamic = base->isDynamic();
+    bool aggregate = base->isAggregate();
+
+    for (Expr* const bound : {expr->getFrom(), expr->getTo()}) {
+        if (!bound) {
+            continue;
+        }
+
+        analyzeExpr(bound);
+
+        const EvaluatedType boundType = bound->getType();
+        const bool countsPositions = boundType == EvaluatedType::Integer
+                                  || boundType == EvaluatedType::ListItem
+                                  || boundType == EvaluatedType::Null;
+
+        if (!countsPositions) {
+            throwError(fmt::format("A slice counts its bounds in integers, not '{}'",
+                                   EvaluatedTypeName::value(boundType)),
+                       expr);
+        }
+
+        dynamic = dynamic || bound->isDynamic();
+        aggregate = aggregate || bound->isAggregate();
+    }
+
+    // The elements are the ones the base holds, so the slice keeps its shape
+    expr->setType(EvaluatedType::List);
+    expr->setListShape(base->getListShape());
+
+    if (dynamic) {
+        expr->setDynamic();
+    }
+
+    if (aggregate) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
 }
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {

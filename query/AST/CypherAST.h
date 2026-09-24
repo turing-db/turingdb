@@ -40,6 +40,7 @@ class UnaryExpr;
 class FunctionInvocationExpr;
 class IndexExpr;
 class ListExpr;
+class ListSliceExpr;
 class ListComprehensionExpr;
 class PatternComprehensionExpr;
 class CaseExpr;
@@ -144,6 +145,7 @@ public:
     friend FunctionInvocationExpr;
     friend IndexExpr;
     friend ListExpr;
+    friend ListSliceExpr;
     friend ListComprehensionExpr;
     friend PatternComprehensionExpr;
     friend CaseExpr;

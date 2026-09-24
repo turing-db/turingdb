@@ -295,6 +295,36 @@ def Range : NLOp<"range", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* ListSlice
+*/
+def ListSlice : NLOp<"list_slice", [Pure, RowAlignedThroughOperands, AttrSizedOperandSegments]> {
+  let summary = "Row-wise read of the run of a list its bounds span";
+
+  let description = [{
+    Imperative counterpart of db.list_slice. Row r of the result views the elements of row
+    r's list from the lower bound up to but not including the upper one, which needs no
+    copy: a list is a run of elements, and a slice of it is a shorter run of the same ones.
+
+      %run = nl.list_slice %xs, from %a, to %b
+               : (!nl.chunk<!storage.nullable<!storage.list<i64>>>,
+                  !nl.chunk<!storage.nullable<i64>>,
+                  !nl.chunk<!storage.nullable<i64>>)
+               -> !nl.chunk<!storage.nullable<!storage.list<i64>>>
+
+    Each bound carries rows - lowering lays a constant one out over them first - and is
+    read as a nullable value chunk. A bound the query left out is no operand at all, which
+    runs from the start or to the end.
+  }];
+
+  let arguments = (ins NLChunk:$list, Optional<NLChunk>:$from, Optional<NLChunk>:$to);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    $list (`,` `from` $from^)? (`,` `to` $to^)? attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * ListComprehension
 */
 def ListComprehension : NLOp<"list_comprehension", [Pure, RowAlignedThroughOperands]> {

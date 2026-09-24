@@ -3452,6 +3452,10 @@ private:
 using NLRangeBoundReadFunction = std::optional<types::Int64::Primitive> (*)(const Column* input,
                                                                            size_t row);
 
+// The list one column of an nl.list_slice holds at @param row, or nothing where the row
+// holds none. One per list column kind, selected during translation.
+using NLListReadFunction = std::optional<ListView> (*)(const Column* input, size_t row);
+
 // Row-wise list build (nl.range): row r of the result counts from row r of the start to
 // row r of the end by row r of the step, written into the query's list buffer as one
 // contiguous run. The step reads no column where the query gave none, which counts by 1.
@@ -3488,6 +3492,41 @@ private:
     Bound _start;
     Bound _end;
     Bound _step;
+};
+
+// nl.list_slice data: the per-row read of the run of a list its bounds span. Holds the
+// list column with the read telling an absent cell from a list, each bound with the read
+// its column shape takes - absent where the query gave none - and the column of views the
+// step fills. The elements are the ones the list holds, so nothing is copied.
+class NLListSliceData : public NLFunctionData {
+public:
+    using Bound = NLRangeData::Bound;
+
+    NLListSliceData(const Column* list,
+                    NLListReadFunction listRead,
+                    const Bound& from,
+                    const Bound& to,
+                    Column* result)
+        : _list(list),
+        _listRead(listRead),
+        _from(from),
+        _to(to),
+        _result(result)
+    {
+    }
+
+    const Column* getList() const { return _list; }
+    NLListReadFunction getListRead() const { return _listRead; }
+    const Bound& getFrom() const { return _from; }
+    const Bound& getTo() const { return _to; }
+    Column* getResult() const { return _result; }
+
+private:
+    const Column* _list {nullptr};
+    NLListReadFunction _listRead {nullptr};
+    Bound _from;
+    Bound _to;
+    Column* _result {nullptr};
 };
 
 // nl.list_comprehension data: the per-row list build of `[x IN xs WHERE p(x) | f(x)]`.

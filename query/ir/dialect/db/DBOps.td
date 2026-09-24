@@ -436,6 +436,39 @@ def Range : TuringOp<"range", [Pure]> {
 }
 
 /**
+* ListSlice
+*/
+def ListSlice : TuringOp<"list_slice", [Pure, AttrSizedOperandSegments]> {
+  let summary = "Read the run of each row's list that its bounds span";
+
+  let description = [{
+    Cypher's `xs[1..3]`, `xs[..3]`, `xs[1..]`. The op reads one list column and produces
+    one list cell per row - the elements from the lower bound up to but not including the
+    upper one - so the rows in flight are the ones it started with:
+
+      %run = db.list_slice(%xs, from %a, to %b) : (!db.column<!storage.list<i64>>,
+                                                   !db.column<i64>,
+                                                   !db.column<i64>) -> !db.column<none>
+
+    A bound is absent where the query left it out, which runs from the start or to the
+    end. A negative bound counts from the end, and one running past the list is clamped to
+    it, so no row errors on a bound; a row whose list or whose bound is null gets a null
+    cell, which is what Cypher reads `null[1..2]` as.
+
+    The elements are the ones the list already holds, so the result element type is the
+    input's and is resolved during lowering, as db.list_comprehension's is.
+  }];
+
+  let arguments = (ins Column:$list, Optional<Column>:$from, Optional<Column>:$to);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $list (`,` `from` $from^)? (`,` `to` $to^)? `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * ListComprehension
 */
 def ListComprehension : TuringOp<"list_comprehension", [Pure]> {

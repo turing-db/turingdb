@@ -346,6 +346,13 @@ public:
     // bound by its step, as one contiguous run of the query's list buffer.
     static void runRange(NLExecutionContext* context, NLFunctionData* data);
 
+    // Read one run per row (nl.list_slice): row r views the elements of its list between
+    // its bounds, which copies nothing - a slice of a list is a run of the same elements.
+    static void runListSlice(NLExecutionContext* context, NLFunctionData* data);
+
+    // Read the list one column holds at a row, for the slice that reads it
+    static NLListReadFunction selectListRead(const Column* input);
+
     // Build one list per row (nl.list_comprehension): the body runs over the elements of
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own
     // cell as one contiguous run of the query's list buffer.

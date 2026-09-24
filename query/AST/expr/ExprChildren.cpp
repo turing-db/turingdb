@@ -10,6 +10,7 @@
 #include "FunctionInvocationExpr.h"
 #include "IndexExpr.h"
 #include "ListComprehensionExpr.h"
+#include "ListSliceExpr.h"
 #include "ListExpr.h"
 #include "LiteralExpr.h"
 #include "StringExpr.h"
@@ -69,6 +70,23 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
 
             for (const Expr* element : list->getElements()) {
                 children.push_back(element);
+            }
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::LIST_SLICE: {
+            const ListSliceExpr* slice = static_cast<const ListSliceExpr*>(expr);
+
+            children.push_back(slice->getBase());
+
+            if (const Expr* from = slice->getFrom()) {
+                children.push_back(from);
+            }
+
+            if (const Expr* to = slice->getTo()) {
+                children.push_back(to);
             }
 
             return true;
