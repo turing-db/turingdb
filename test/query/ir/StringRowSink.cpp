@@ -316,6 +316,16 @@ bool textOfConstOptionalBool(const Column* chunk, size_t rowIndex, std::string& 
     return true;
 }
 
+bool textOfConstBool(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<CustomBool>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = column->at(rowIndex) ? "true" : "false";
+    return true;
+}
+
 template <typename Primitive>
 bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<Primitive>*>(chunk);
@@ -436,6 +446,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptionalBool(chunk, rowIndex, text)) {
         return text;
     } else if (textOfConstOptionalBool(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstBool(chunk, rowIndex, text)) {
         return text;
     } else if (textOfConst<int64_t>(chunk, rowIndex, text)) {
         return text;
