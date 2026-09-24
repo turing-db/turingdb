@@ -38,8 +38,12 @@ yields nothing for every input row and every row passes through whatever it wrot
 is no row to pad. `OPTIONAL CALL (p) { CREATE (:Audit) }` answers as the same query without
 the keyword.
 
-Out of scope: `CALL { ... } IN TRANSACTIONS`, and UNION inside the body until UNION itself
-is implemented.
+A body can be a UNION of queries. Each branch imports through its own leading WITH, or all
+of them through the scope clause, and every branch returns the same column names. The
+branches run once per input row and a UNION dedups the rows of that input row alone, so
+`UNWIND [1, 1] AS x CALL { RETURN 1 AS y UNION RETURN 1 AS y } RETURN x, y` returns 2 rows.
+
+Out of scope: `CALL { ... } IN TRANSACTIONS`.
 
 ```
 MATCH (p:Person)
@@ -300,7 +304,7 @@ product rejoin. Covers aggregation and cuts inside the body.
 Phase 3. `optional = true` over the optional buffer.
 
 Later. Tag-keyed grouped aggregation and partitioned top-k as lowering specialisations.
-UNION inside the body once UNION exists. `CALL (*)`.
+`CALL (*)`.
 
 ## 5. Tests
 
@@ -398,9 +402,14 @@ over no row reports no group where a keyless one still reports its single row.
 
 Tested against the 21 examples of Neo4j's CALL subquery manual page on its own dataset.
 Every example whose other features the engine has returns Neo4j's rows, and each example
-the page marks as rejected is rejected. The rest need UNION, `CALL (*)`, conditional
+the page marks as rejected is rejected. The rest need `CALL (*)`, conditional
 `WHEN ... THEN`, `REMOVE`, `range()` or `rand()`, none of which is about subqueries.
 
-Still open: the vectorised forms of section 4, UNION inside the body, `CALL (*)`, an import
+A body that is a UNION always runs one input row at a time. Its codegen is a `db.union`
+with results inside the body, each branch ending in a `db.yield`; the lowering collects
+every branch into one `nl.union_buffer` and the rest of the body lowers into the loop over
+`nl.union_drain`.
+
+Still open: the vectorised forms of section 4, `CALL (*)`, an import
 read below a keyless reduction in the body, and trimming inside the region. The scope
 clause alias is settled: the grammar rejects `CALL (t AS teams)`, as Neo4j does.

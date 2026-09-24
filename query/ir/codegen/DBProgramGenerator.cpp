@@ -4365,10 +4365,13 @@ bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
 }
 
 void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) {
-    const SinglePartQuery* body = subquery->getBody();
+    const CallSubqueryStmt::Branches& branches = subquery->branches();
     const bool returning = subquery->isReturning();
-    const bool carriesScope = subqueryCarriesRows(body);
     const bool optional = returning && subquery->isOptional();
+
+    // A UNION dedups the rows of each input row on their own, so a union body runs one
+    // input row at a time
+    const bool carriesScope = !subquery->isUnion() && subqueryCarriesRows(branches.front()._query);
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -4386,21 +4389,6 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
         }
     }
 
-    const DeclContext* bodyContext = body->getDeclContext();
-    const CallSubqueryStmt::Imports& imports = subquery->imports();
-
-    const auto importedDecl = [&imports, bodyContext](std::string_view name) -> const VarDecl* {
-        const auto namesIt = [name](const Symbol* import) {
-            return import->getName() == name;
-        };
-
-        if (!std::ranges::any_of(imports, namesIt)) {
-            return nullptr;
-        }
-
-        return bodyContext->getDecl(name);
-    };
-
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
 
@@ -4410,45 +4398,35 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     mlir::Block* const bodyBlock = new mlir::Block(); // Region destructor frees it
     bodyRegion.push_back(bodyBlock);
 
-    // The body reads an import under the declaration its own context holds for it. A body
-    // carrying the scope holds every input under a hidden name too, so the input comes back
-    // as the body's rows left it whatever its clauses publish, and a write reading no import
-    // still has rows to write one of per. A body run per row reads the row it is handed.
-    const bool bindsHidden = carriesScope;
-
     llvm::SmallVector<mlir::Value> inputColumns;
-    llvm::SmallVector<PublishedColumn> bodyScope;
-    CarriedEntities importedEntities;
+    llvm::SmallVector<mlir::Value> inputArguments;
 
     for (const PublishedColumn& input : inputs) {
         inputColumns.push_back(input._column);
-        const mlir::Value argument = bodyBlock->addArgument(input._column.getType(), loc);
-
-        if (const VarDecl* imported = importedDecl(input._name)) {
-            bodyScope.push_back({imported, input._name, argument});
-
-            if (const PartScope::WrittenEntity* written = findWrittenEntity(input._decl)) {
-                importedEntities.emplace_back(imported, *written);
-            }
-        }
-
-        if (bindsHidden) {
-            bodyScope.push_back({nullptr, hiddenName(input._name), argument});
-        }
+        inputArguments.push_back(bodyBlock->addArgument(input._column.getType(), loc));
     }
 
     // An optional body carrying the scope carries the row tag with it, so the rows it
     // yields are known against the rows it was given; no input row means no row to tag
     const bool tagsRows = optional && carriesScope && !inputs.empty();
+    mlir::Value tagArgument;
     if (tagsRows) {
         const mlir::db::ColumnType tagType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
-        bodyScope.push_back({nullptr, std::string(subqueryTagName), bodyBlock->addArgument(tagType, loc)});
+        tagArgument = bodyBlock->addArgument(tagType, loc);
     }
 
-    for (const PublishedColumn& constant : constants) {
-        if (const VarDecl* imported = importedDecl(constant._name)) {
-            bodyScope.push_back({imported, constant._name, constant._column});
-        }
+    std::vector<llvm::SmallVector<PublishedColumn>> branchScopes(branches.size());
+    std::vector<CarriedEntities> importedEntities(branches.size());
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        collectSubqueryBranchScope(branches[branchIndex],
+                                   inputs,
+                                   inputArguments,
+                                   tagArgument,
+                                   constants,
+                                   carriesScope,
+                                   branchScopes[branchIndex],
+                                   importedEntities[branchIndex]);
     }
 
     // What the query holds is set aside while the body builds a scope of its own. A unit
@@ -4457,51 +4435,58 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     PartScope outerPart = std::move(_part);
     VariableDependencyGraph outerGraph = std::move(_vdg);
 
-    rebindScope(bodyScope);
-
-    for (auto& [decl, written] : importedEntities) {
-        _part._writtenEntities[decl] = std::move(written);
-    }
-
     _opBuilder.setInsertionPointToStart(bodyBlock);
-    generateQueryParts(body);
 
     llvm::SmallVector<PublishedColumn> yielded;
     CarriedEntities returnedEntities;
     mlir::Value yieldedTag;
 
-    if (returning) {
-        publishProjection(body->getReturnStmt()->getProjection());
+    if (subquery->isUnion()) {
+        generateSubqueryUnion(subquery, branchScopes, importedEntities, yielded, returnedEntities);
+    } else {
+        const SinglePartQuery* body = branches.front()._query;
 
-        llvm::SmallVector<PublishedColumn> bodyColumns;
-        collectPublishedColumns(bodyColumns);
+        rebindScope(branchScopes.front());
 
-        if (tagsRows) {
-            const auto tagIt = std::ranges::find(bodyColumns, subqueryTagName, &PublishedColumn::_name);
-            bioassert(tagIt != bodyColumns.end(), "Row tag lost by a CALL subquery body");
-
-            yieldedTag = tagIt->_column;
+        for (auto& [decl, written] : importedEntities.front()) {
+            _part._writtenEntities[decl] = std::move(written);
         }
 
-        if (carriesScope) {
-            for (const PublishedColumn& input : inputs) {
-                const std::string hidden = hiddenName(input._name);
-                const auto foundIt = std::ranges::find(bodyColumns, hidden, &PublishedColumn::_name);
-                bioassert(foundIt != bodyColumns.end(), "Column '{}' lost by a CALL subquery body", input._name);
+        generateQueryParts(body);
 
-                yielded.push_back({input._decl, input._name, foundIt->_column});
+        if (returning) {
+            publishProjection(body->getReturnStmt()->getProjection());
+
+            llvm::SmallVector<PublishedColumn> bodyColumns;
+            collectPublishedColumns(bodyColumns);
+
+            if (tagsRows) {
+                const auto tagIt = std::ranges::find(bodyColumns, subqueryTagName, &PublishedColumn::_name);
+                bioassert(tagIt != bodyColumns.end(), "Row tag lost by a CALL subquery body");
+
+                yieldedTag = tagIt->_column;
             }
-        }
 
-        for (const PublishedColumn& column : bodyColumns) {
-            if (isHiddenName(column._name)) {
-                continue;
+            if (carriesScope) {
+                for (const PublishedColumn& input : inputs) {
+                    const std::string hidden = hiddenName(input._name);
+                    const auto foundIt = std::ranges::find(bodyColumns, hidden, &PublishedColumn::_name);
+                    bioassert(foundIt != bodyColumns.end(), "Column '{}' lost by a CALL subquery body", input._name);
+
+                    yielded.push_back({input._decl, input._name, foundIt->_column});
+                }
             }
 
-            yielded.push_back(column);
+            for (const PublishedColumn& column : bodyColumns) {
+                if (isHiddenName(column._name)) {
+                    continue;
+                }
 
-            if (const PartScope::WrittenEntity* written = findWrittenEntity(column._decl)) {
-                returnedEntities.emplace_back(column._decl, *written);
+                yielded.push_back(column);
+
+                if (const PartScope::WrittenEntity* written = findWrittenEntity(column._decl)) {
+                    returnedEntities.emplace_back(column._decl, *written);
+                }
             }
         }
     }
@@ -4565,6 +4550,178 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
 
     for (auto& [decl, written] : returnedEntities) {
         _part._writtenEntities[decl] = std::move(written);
+    }
+}
+
+void DBProgramGenerator::collectSubqueryBranchScope(const CallSubqueryStmt::Branch& branch,
+                                                    llvm::ArrayRef<PublishedColumn> inputs,
+                                                    llvm::ArrayRef<mlir::Value> inputArguments,
+                                                    mlir::Value tagArgument,
+                                                    llvm::ArrayRef<PublishedColumn> constants,
+                                                    bool bindsHidden,
+                                                    llvm::SmallVectorImpl<PublishedColumn>& scope,
+                                                    CarriedEntities& importedEntities) const {
+    const DeclContext* bodyContext = branch._query->getDeclContext();
+    const CallSubqueryStmt::Imports& imports = branch._imports;
+
+    const auto importedDecl = [&imports, bodyContext](std::string_view name) -> const VarDecl* {
+        const auto namesIt = [name](const Symbol* import) {
+            return import->getName() == name;
+        };
+
+        if (!std::ranges::any_of(imports, namesIt)) {
+            return nullptr;
+        }
+
+        return bodyContext->getDecl(name);
+    };
+
+    // The body reads an import under the declaration its own context holds for it. A body
+    // carrying the scope holds every input under a hidden name too, so the input comes back
+    // as the body's rows left it whatever its clauses publish, and a write reading no import
+    // still has rows to write one of per. A body run per row reads the row it is handed.
+    for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
+        const PublishedColumn& input = inputs[inputIndex];
+        const mlir::Value argument = inputArguments[inputIndex];
+
+        if (const VarDecl* imported = importedDecl(input._name)) {
+            scope.push_back({imported, input._name, argument});
+
+            if (const PartScope::WrittenEntity* written = findWrittenEntity(input._decl)) {
+                importedEntities.emplace_back(imported, *written);
+            }
+        }
+
+        if (bindsHidden) {
+            scope.push_back({nullptr, hiddenName(input._name), argument});
+        }
+    }
+
+    if (tagArgument) {
+        scope.push_back({nullptr, std::string(subqueryTagName), tagArgument});
+    }
+
+    for (const PublishedColumn& constant : constants) {
+        if (const VarDecl* imported = importedDecl(constant._name)) {
+            scope.push_back({imported, constant._name, constant._column});
+        }
+    }
+}
+
+// Each branch is generated into a region of its own under the imports it names, as the
+// branches of a top-level UNION are. Every branch publishes its columns under the
+// declarations the analyzer gave the first one, so they come out in the same order.
+void DBProgramGenerator::generateSubqueryUnion(const CallSubqueryStmt* subquery,
+                                               std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
+                                               std::span<CarriedEntities> importedEntities,
+                                               llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                               CarriedEntities& returnedEntities) {
+    const CallSubqueryStmt::Branches& branches = subquery->branches();
+    const size_t dedupedBranches = subquery->getDedupedBranchCount();
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const bodyBlock = _opBuilder.getInsertionBlock();
+
+    mlir::Value distinctSet;
+    if (dedupedBranches > 0) {
+        distinctSet = _opBuilder.create<mlir::db::DistinctSet>(loc).getSet();
+    }
+
+    std::vector<std::unique_ptr<mlir::Region>> branchRegions;
+    llvm::SmallVector<PublishedColumn> resultColumns;
+    llvm::SmallVector<mlir::Type> resultTypes;
+    std::vector<std::vector<std::optional<PartScope::WrittenEntity>>> writtenColumns(branches.size());
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        const SinglePartQuery* query = branches[branchIndex]._query;
+
+        std::unique_ptr<mlir::Region>& region = branchRegions.emplace_back(std::make_unique<mlir::Region>());
+        mlir::Block* const block = new mlir::Block(); // Region destructor frees it
+        region->push_back(block);
+
+        rebindScope(branchScopes[branchIndex]);
+
+        for (auto& [decl, written] : importedEntities[branchIndex]) {
+            _part._writtenEntities[decl] = std::move(written);
+        }
+
+        _opBuilder.setInsertionPointToStart(block);
+        generateQueryParts(query);
+        publishProjection(query->getReturnStmt()->getProjection());
+
+        llvm::SmallVector<PublishedColumn> branchColumns;
+        collectPublishedColumns(branchColumns);
+
+        llvm::SmallVector<mlir::Value> projected;
+        for (const PublishedColumn& column : branchColumns) {
+            projected.push_back(column._column);
+
+            std::optional<PartScope::WrittenEntity>& written = writtenColumns[branchIndex].emplace_back();
+            if (const PartScope::WrittenEntity* entity = findWrittenEntity(column._decl)) {
+                written = *entity;
+            }
+        }
+
+        if (branchIndex < dedupedBranches) {
+            dedupUnionBranch(distinctSet, projected);
+        }
+
+        _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
+
+        if (branchIndex == 0) {
+            resultColumns = branchColumns;
+            for (const mlir::Value column : projected) {
+                resultTypes.push_back(column.getType());
+            }
+
+            continue;
+        }
+
+        // A null or a property names no element type until lowering resolves it, so the
+        // first branch that names one types the result
+        for (size_t columnIndex = 0; columnIndex < projected.size(); columnIndex++) {
+            const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
+            if (mlir::isa<mlir::NoneType>(resultType.getType())) {
+                resultTypes[columnIndex] = projected[columnIndex].getType();
+            }
+        }
+    }
+
+    _opBuilder.setInsertionPointToEnd(bodyBlock);
+
+    mlir::db::Union unionOp = _opBuilder.create<mlir::db::Union>(loc, resultTypes, branches.size());
+    const mlir::MutableArrayRef<mlir::Region> unionBranches = unionOp.getBranches();
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        unionBranches[branchIndex].takeBody(*branchRegions[branchIndex]);
+    }
+
+    const mlir::ResultRange results = unionOp.getResults();
+    for (size_t columnIndex = 0; columnIndex < resultColumns.size(); columnIndex++) {
+        const PublishedColumn& column = resultColumns[columnIndex];
+        yielded.push_back({column._decl, column._name, results[columnIndex]});
+
+        // A read of what the query wrote goes to the write buffer for every row of the
+        // column or for none, so every branch has to have written it as the same entity
+        const std::optional<PartScope::WrittenEntity>& first = writtenColumns.front()[columnIndex];
+
+        for (const std::vector<std::optional<PartScope::WrittenEntity>>& branchWritten : writtenColumns) {
+            const std::optional<PartScope::WrittenEntity>& written = branchWritten[columnIndex];
+
+            const bool sameEntity = written.has_value() == first.has_value()
+                                    && (!written
+                                        || (written->_labels == first->_labels && written->_edgeType == first->_edgeType));
+
+            if (!sameEntity) {
+                throwError(fmt::format("Column '{}' of a UNION in a CALL subquery holds what one branch "
+                                       "created and another did not, which is not supported",
+                                       column._name));
+            }
+        }
+
+        if (first) {
+            returnedEntities.emplace_back(column._decl, *first);
+        }
     }
 }
 

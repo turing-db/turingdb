@@ -235,6 +235,32 @@ TEST_F(CallSubqueryTeamsTest, theSameWritesWithoutASubqueryMultiplyTheRows) {
                       {{"18"}});
 }
 
+// The Neo4j manual's post-union processing: the youngest and the oldest player
+TEST_F(CallSubqueryTeamsTest, ordersAfterAUnionOfTwoCuts) {
+    expectRowsInOrder("CALL () { "
+                      "  MATCH (p:Player) RETURN p ORDER BY p.age ASC LIMIT 1 "
+                      "  UNION "
+                      "  MATCH (p:Player) RETURN p ORDER BY p.age DESC LIMIT 1 "
+                      "} "
+                      "RETURN p.name AS playerName, p.age AS age ORDER BY age",
+                      {{"Player C", "19"}, {"Player F", "35"}});
+}
+
+// The UNION dedups per team: Team A's two debts of 1500 count once, and so do the two
+// 1500 Team B is owed, so A sums -4500 rather than -6000 and B 7800 rather than 9300
+TEST_F(CallSubqueryTeamsTest, sumsTheDistinctDebtsOfEachTeam) {
+    expectRowsInOrder("MATCH (t:Team) "
+                      "CALL (t) { "
+                      "  OPTIONAL MATCH (t)-[o:OWES]->(other:Team) "
+                      "  RETURN o.dollars * -1 AS moneyOwed "
+                      "  UNION "
+                      "  OPTIONAL MATCH (other)-[o:OWES]->(t) "
+                      "  RETURN o.dollars AS moneyOwed "
+                      "} "
+                      "RETURN t.name AS team, sum(moneyOwed) AS amountOwed ORDER BY amountOwed DESC",
+                      {{"Team B", "7800"}, {"Team C", "-3300"}, {"Team A", "-4500"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

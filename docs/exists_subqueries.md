@@ -37,7 +37,7 @@ A RETURN in the body answers for no column, but its cut answers for rows: `RETUR
 holds only where the body matched twice. A keyless aggregate yields a row whatever it
 counted, so `EXISTS { MATCH (p)-->(k) RETURN count(k) }` holds for every row.
 
-Out of scope: UNION inside the body, which is rejected the way a CALL body's is, and the
+Out of scope: UNION inside the body, which a CALL body has but an EXISTS body does not, and the
 conditional `WHEN ... THEN { } ELSE { }` body, which the grammar has no clause for at all.
 `test/query/ir/ExistsNeo4jManualTest.cpp` holds both, skipping with what is missing and
 keeping the rows the manual documents, so each is the test to make pass when its clause

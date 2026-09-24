@@ -403,6 +403,7 @@
 %type<db::ShortestPathStmt*> shortestPathSt
 %type<db::CallStmt*> callSt
 %type<db::CallSubqueryStmt*> callSubquerySt
+%type<db::CallSubqueryStmt::Branches> callSubqueryBody
 %type<db::SinglePartQuery*> subqueryBody
 %type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
@@ -459,6 +460,10 @@ regularQuery
     : singleQuery
     | singlePartQuery unionList {
         ParserUtils::markStandaloneCall($1);
+        for (const UnionQuery::Branch& branch : $2) {
+            ParserUtils::markStandaloneCall(branch._query);
+        }
+
         $$ = UnionQuery::create(ast, $1, $2);
         LOC($$, @$);
       }
@@ -1055,16 +1060,16 @@ callSt
     ;
 
 callSubquerySt
-    : CALL OBRACE subqueryBody CBRACE {
+    : CALL OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $3);
         LOC($$, @$);
     }
-    | CALL OPAREN CPAREN OBRACE subqueryBody CBRACE {
+    | CALL OPAREN CPAREN OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $5);
         $$->setHasScopeClause(true);
         LOC($$, @$);
     }
-    | CALL OPAREN callScope CPAREN OBRACE subqueryBody CBRACE {
+    | CALL OPAREN callScope CPAREN OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $6);
         $$->setHasScopeClause(true);
         for (const Symbol* symbol : $3) {
@@ -1072,18 +1077,18 @@ callSubquerySt
         }
         LOC($$, @$);
     }
-    | OPTIONAL CALL OBRACE subqueryBody CBRACE {
+    | OPTIONAL CALL OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $4);
         $$->setOptional(true);
         LOC($$, @$);
     }
-    | OPTIONAL CALL OPAREN CPAREN OBRACE subqueryBody CBRACE {
+    | OPTIONAL CALL OPAREN CPAREN OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $6);
         $$->setHasScopeClause(true);
         $$->setOptional(true);
         LOC($$, @$);
     }
-    | OPTIONAL CALL OPAREN callScope CPAREN OBRACE subqueryBody CBRACE {
+    | OPTIONAL CALL OPAREN callScope CPAREN OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $7);
         $$->setHasScopeClause(true);
         $$->setOptional(true);
@@ -1094,9 +1099,19 @@ callSubquerySt
     }
     ;
 
+callSubqueryBody
+    : singlePartQuery { $$.push_back({$1, false, {}}); }
+    | singlePartQuery unionList {
+        $$.push_back({$1, false, {}});
+        for (const UnionQuery::Branch& branch : $2) {
+            $$.push_back({branch._query, branch._all, {}});
+        }
+      }
+    ;
+
 subqueryBody
     : singlePartQuery { $$ = $1; }
-    | singlePartQuery unionList { scanner.notImplemented(@$, "UNION in a CALL subquery"); }
+    | singlePartQuery unionList { scanner.notImplemented(@$, "UNION in an EXISTS subquery"); }
     ;
 
 callScope
@@ -1499,8 +1514,8 @@ edgeTypes
     ;
 
 unionSt
-    : UNION singlePartQuery { ParserUtils::markStandaloneCall($2); $$ = {$2, false}; }
-    | UNION ALL singlePartQuery { ParserUtils::markStandaloneCall($3); $$ = {$3, true}; }
+    : UNION singlePartQuery { $$ = {$2, false}; }
+    | UNION ALL singlePartQuery { $$ = {$3, true}; }
     ;
 
 subqueryExist
