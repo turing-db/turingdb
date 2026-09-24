@@ -197,6 +197,7 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::UInt64::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Double::Primitive>, PropertyNull>,
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::String::OwningPrimitive>, PropertyNull>,
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
             KindPair<std::optional<types::DateTime::Primitive>, PropertyNull>,
