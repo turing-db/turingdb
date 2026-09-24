@@ -43,6 +43,31 @@ template <typename T>
 concept ListOperand =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListView>;
 
+// A list the membership test has to read out of a tag: what an index of a nested list
+// answers, since the type of an element is settled row by row
+template <typename T>
+concept TaggedListOperand =
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
+
+// The list a type-erased cell holds, absent where it holds anything else - a number, a
+// string, a null - which is what a membership test over it then answers
+template <typename C>
+inline std::optional<ListView> taggedList(const C& cell) {
+    if constexpr (TypeUtils::is_optional_v<C>) {
+        if (!cell.has_value()) {
+            return std::nullopt;
+        }
+
+        return taggedList(*cell);
+    } else {
+        if (cell.getTag() != ListBufferTypeTag::ListView) {
+            return std::nullopt;
+        }
+
+        return cell.template getAs<ListView>();
+    }
+}
+
 template <typename F>
 concept TestsEquality =
     (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
@@ -628,6 +653,18 @@ struct TuringIn {
         return std::nullopt;
     }
 
+    // The list a type-erased cell holds is the list the value is looked for in
+    template <typename T, typename C>
+        requires TaggedListOperand<C> && (!ListOperand<T>)
+    std::optional<CustomBool> operator()(const T& value, const C& cell) const {
+        const std::optional<ListView> list = taggedList(cell);
+        if (!list) {
+            return std::nullopt;
+        }
+
+        return (*this)(value, *list);
+    }
+
     template <typename T, typename L>
         requires ListOperand<L>
     std::optional<CustomBool> operator()(const T& value, const L& list) const {
@@ -682,6 +719,13 @@ struct TuringIn {
     template <typename L, typename T>
         requires ListOperand<L> && (!ListOperand<T>)
     std::optional<CustomBool> operator()(const L& list, const T& value) const {
+        throw FatalException("IN operands in incorrect order");
+    }
+
+    // The same for the cell the dispatcher pairs the other way round
+    template <typename C, typename T>
+        requires TaggedListOperand<C> && (!TaggedListOperand<T>) && (!ListOperand<T>)
+    std::optional<CustomBool> operator()(const C& cell, const T& value) const {
         throw FatalException("IN operands in incorrect order");
     }
 

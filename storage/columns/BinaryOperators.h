@@ -8,6 +8,7 @@
 #include <type_traits>
 
 #include "ColumnVector.h"
+#include "ValueText.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
 #include "buffers/StringBuffer.h"
@@ -220,6 +221,14 @@ concept ConcatenatesLists =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<A>>, ListView>
     && std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<B>>, ListView>;
 
+// A concatenation answers null where an operand is null, or where a type-erased cell holds
+// no text of its own. Two plain values always answer the text they make.
+template <typename A, typename B>
+concept ConcatenatesNullableText = TypeUtils::is_optional_v<std::decay_t<A>>
+                                || TypeUtils::is_optional_v<std::decay_t<B>>
+                                || TaggedCell<A>
+                                || TaggedCell<B>;
+
 /**
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
  * accordingly
@@ -303,34 +312,94 @@ struct Concatenate {
     StringBuffer* _stringBuffer {nullptr};
     QueryListBuffer* _listBuffer {nullptr};
 
-    inline std::string_view operator()(std::string_view a, std::string_view b) const {
-        return _stringBuffer->concatenate(a, b);
-    }
-
+    // Two values join as the text each is written with: a string as its own characters, a
+    // number as Cypher prints it, a type-erased cell as whatever its tag says it holds. A
+    // cell holding no text - a null, a nested list - makes the concatenation null, as a
+    // null operand does.
     template <typename A, typename B>
-        requires (TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>)
-              && (!ConcatenatesLists<A, B>)
-    inline std::optional<std::string_view> operator()(const A& a, const B& b) const {
-        if constexpr (TypeUtils::is_optional_v<A>) {
-            if (!a.has_value()) {
-                return std::nullopt;
+        requires (!ConcatenatesLists<A, B>)
+    inline auto operator()(const A& a, const B& b) const {
+        ValueTextScratch leftScratch;
+        ValueTextScratch rightScratch;
+
+        if constexpr (ConcatenatesNullableText<A, B>) {
+            std::string_view left;
+            std::string_view right;
+
+            if (!concatenatedText(a, left, leftScratch) || !concatenatedText(b, right, rightScratch)) {
+                return std::optional<std::string_view> {};
             }
+
+            return std::optional<std::string_view> {_stringBuffer->concatenate(left, right)};
+        } else {
+            return _stringBuffer->concatenate(plainText(a, leftScratch), plainText(b, rightScratch));
         }
-
-        if constexpr (TypeUtils::is_optional_v<B>) {
-            if (!b.has_value()) {
-                return std::nullopt;
-            }
-        }
-
-        const std::string_view av = TypeUtils::unwrap(a);
-        const std::string_view bv = TypeUtils::unwrap(b);
-
-        return _stringBuffer->concatenate(av, bv);
     }
 
     inline ListView operator()(ListView a, ListView b) const {
         return _listBuffer->concatenate(a, b);
+    }
+
+    // The text one side of such a concatenation contributes, false where it contributes
+    // none. @param scratch holds it where the value has to be written out.
+    template <typename T>
+    static bool concatenatedText(const T& value, std::string_view& text, ValueTextScratch& scratch) {
+        if constexpr (TypeUtils::is_optional_v<T>) {
+            if (!value.has_value()) {
+                return false;
+            }
+
+            return concatenatedText(*value, text, scratch);
+        } else if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
+            return cellText(value, text, scratch);
+        } else {
+            text = plainText(value, scratch);
+            return true;
+        }
+    }
+
+    // The text a value always contributes: its own characters, or the ones Cypher writes
+    // the number with
+    template <typename T>
+    static std::string_view plainText(const T& value, ValueTextScratch& scratch) {
+        if constexpr (std::is_arithmetic_v<std::decay_t<T>>) {
+            return valueTextInto(value, scratch);
+        } else {
+            return value;
+        }
+    }
+
+    static bool cellText(const ListElementView cell, std::string_view& text, ValueTextScratch& scratch) {
+        switch (cell.getTag()) {
+            case ListBufferTypeTag::String:
+                text = cell.getAs<types::String::Primitive>();
+                return true;
+            break;
+
+            case ListBufferTypeTag::Int:
+                text = valueTextInto(cell.getAs<types::Int64::Primitive>(), scratch);
+                return true;
+            break;
+
+            case ListBufferTypeTag::UInt:
+                text = valueTextInto(cell.getAs<types::UInt64::Primitive>(), scratch);
+                return true;
+            break;
+
+            case ListBufferTypeTag::Double:
+                text = valueTextInto(cell.getAs<types::Double::Primitive>(), scratch);
+                return true;
+            break;
+
+            case ListBufferTypeTag::Bool:
+                text = valueTextInto(cell.getAs<types::Bool::Primitive>(), scratch);
+                return true;
+            break;
+
+            default:
+                return false;
+            break;
+        }
     }
 
     template <typename A, typename B>

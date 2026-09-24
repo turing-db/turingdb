@@ -1877,6 +1877,9 @@ target_link_libraries(test_query_ir_list_property_in PRIVATE turing_ir_test_writ
 add_turing_test(test_query_ir_list_property_index_concat ListPropertyIndexConcatTest.cpp)
 target_link_libraries(test_query_ir_list_property_index_concat PRIVATE turing_ir_test_write_query_s)
 
+add_turing_test(test_query_ir_list_property_comprehension ListPropertyComprehensionTest.cpp)
+target_link_libraries(test_query_ir_list_property_comprehension PRIVATE turing_ir_test_write_query_s)
+
 add_turing_test(test_query_ir_with_write WithWriteTest.cpp)
 target_link_libraries(test_query_ir_with_write PRIVATE turing_ir_test_write_query_s)
 
@@ -3177,6 +3180,28 @@ target_link_libraries(test_query_ir_to_string_function PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_to_string_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_number_concatenation NumberConcatenationTest.cpp)
+target_link_libraries(test_query_ir_number_concatenation PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_number_concatenation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_tagged_cell_operator TaggedCellOperatorTest.cpp)
+target_link_libraries(test_query_ir_tagged_cell_operator PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_tagged_cell_operator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_tagged_cell_function TaggedCellFunctionTest.cpp)
 target_link_libraries(test_query_ir_tagged_cell_function PRIVATE
