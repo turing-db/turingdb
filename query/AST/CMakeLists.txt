@@ -25,6 +25,7 @@ set(ast_sources
     expr/IndexExpr.cpp
     expr/ExistsExpr.cpp
     expr/ExprChildren.cpp
+    expr/ExprDepth.cpp
     expr/StructuralExpressionComparator.cpp
 
     stmt/Stmt.cpp

@@ -221,6 +221,8 @@ public:
 
     const QueryCommands& queries() const { return _queries; }
 
+    const std::vector<Expr*>& getExpressions() const { return _expressions; }
+
     FunctionDecls& functionDecls() { return *_functionDecls; }
     const FunctionDecls& functionDecls() const { return *_functionDecls; }
 
