@@ -3669,3 +3669,7 @@ add_call_v3_test(test_query_ir_list_literal_arithmetic ListLiteralArithmeticTest
 
 # Two dashes as a subtraction of a negation, or as an undirected hop between nodes.
 add_call_v3_test(test_query_ir_double_dash DoubleDashTest.cpp)
+
+# Expressions nested up to and past the parser's maximum depth.
+add_call_v3_test(test_query_ir_deep_expression DeepExpressionTest.cpp)
+target_link_libraries(test_query_ir_deep_expression PRIVATE turing_db_parser_s)
