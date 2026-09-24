@@ -6,6 +6,7 @@
 #include "ColumnMask.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
+#include "list/ListElementView.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -60,6 +61,32 @@ template <typename Op, typename T>
 class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnMask> {
 public:
     using ResultColumnType = ColumnVector<T>;
+};
+
+/// A type-erased cell holds no truth value of its own, so comparing a mask against one
+/// answers a mask rather than a column of cells
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<ListElementView>> {
+public:
+    using ResultColumnType = ColumnMask;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnVector<ListElementView>, ColumnMask> {
+public:
+    using ResultColumnType = ColumnMask;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<std::optional<ListElementView>>> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnVector<std::optional<ListElementView>>, ColumnMask> {
+public:
+    using ResultColumnType = ColumnOptMask;
 };
 
 /// Const and a mask, e.g. MASK && TRUE
