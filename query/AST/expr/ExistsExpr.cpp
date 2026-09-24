@@ -5,19 +5,21 @@
 
 using namespace db;
 
-ExistsExpr::ExistsExpr(SinglePartQuery* body)
+ExistsExpr::ExistsExpr(const Branches& branches)
     : Expr(Expr::Kind::EXISTS),
-    _body(body)
+    _branches(branches)
 {
 }
 
 ExistsExpr::~ExistsExpr() {
 }
 
-ExistsExpr* ExistsExpr::create(CypherAST* ast, SinglePartQuery* body) {
-    ast->nestQuery(body);
+ExistsExpr* ExistsExpr::create(CypherAST* ast, const Branches& branches) {
+    for (SinglePartQuery* branch : branches) {
+        ast->nestQuery(branch);
+    }
 
-    ExistsExpr* expr = new ExistsExpr(body);
+    ExistsExpr* expr = new ExistsExpr(branches);
     ast->addExpr(expr);
 
     return expr;

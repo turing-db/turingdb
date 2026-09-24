@@ -33,7 +33,7 @@ using namespace turing::test;
 // The graph is the page's own rather than the shared SimpleGraph because the expected rows
 // are the page's: they only mean anything against the nodes it creates.
 //
-// Two examples reach a clause the engine does not have. Each skips with what is missing and
+// One example reaches a clause the engine does not have. It skips with what is missing and
 // keeps the query and the rows the manual documents, so the test is what there is to make
 // pass once the clause lands.
 class ExistsNeo4jManualTest : public TuringTest {
@@ -200,8 +200,6 @@ TEST_F(ExistsNeo4jManualTest, existsSubqueryOutsideOfAWhereClause) {
 }
 
 TEST_F(ExistsNeo4jManualTest, existsSubqueryWithAUnion) {
-    GTEST_SKIP() << "UNION inside an EXISTS body is not implemented";
-
     expectRows("MATCH (person:Person) "
                "RETURN "
                "    person.name AS name, "
