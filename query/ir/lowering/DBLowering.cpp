@@ -1001,6 +1001,7 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
     // shared producer wins, so a loop never needs to carry two handles.
     for (mlir::db::Limit limit : limits) {
         const mlir::Value handle = _limitHandles[limit.getOperation()];
+        _producerWalkVisits.clear();
 
         bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
@@ -3876,6 +3877,25 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
                                      mlir::Value handle,
                                      bool rowsDroppedBeforeTheCut,
                                      mlir::Operation* holder) {
+    // A visit with rows dropped claims a subset of what one without claims, and reaches
+    // the same loops, so only a visit without them can add to one made with them
+    const auto visitIt = _producerWalkVisits.find(column);
+    const bool wasVisited = visitIt != _producerWalkVisits.end();
+    const bool isCovered = wasVisited && (rowsDroppedBeforeTheCut || !visitIt->second._rowsDroppedBeforeTheCut);
+    if (isCovered) {
+        return visitIt->second._reachedALoop;
+    }
+
+    const bool reachedALoop = walkProducerLoops(column, handle, rowsDroppedBeforeTheCut, holder);
+    _producerWalkVisits[column] = ProducerWalkVisit {reachedALoop, rowsDroppedBeforeTheCut};
+
+    return reachedALoop;
+}
+
+bool DBLowering::walkProducerLoops(mlir::Value column,
+                                   mlir::Value handle,
+                                   bool rowsDroppedBeforeTheCut,
+                                   mlir::Operation* holder) {
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
         // A subquery body reads the rows in flight through its block arguments, so the
