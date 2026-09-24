@@ -12,14 +12,37 @@ namespace db {
 #undef YY_DECL
 
 #define YY_DECL \
-    db::YCypherParser::token_type YCypherScanner::lex(db::YCypherParser::semantic_type* yylval, SourceLocation* yylloc)
+    db::YCypherParser::token_type YCypherScanner::lexRaw(db::YCypherParser::semantic_type* yylval, SourceLocation* yylloc)
 
 class YCypherScanner : public yyFlexLexer {
 public:
-    virtual YCypherParser::token_type lex(YCypherParser::semantic_type* yylval, SourceLocation* yylloc);
+    // What the generated scanner matches. The parser reads it through lex(), which keeps
+    // the token, since a '-' opening a number is part of it only where the token before
+    // it ends no operand.
+    virtual YCypherParser::token_type lexRaw(YCypherParser::semantic_type* yylval, SourceLocation* yylloc);
+
+    YCypherParser::token_type lex(YCypherParser::semantic_type* yylval, SourceLocation* yylloc) {
+        _lastToken = lexRaw(yylval, yylloc);
+
+        return _lastToken;
+    }
+
+    // Whether the token before this one ends an operand, which makes a '-' written against
+    // it the subtraction operator: `4-1` is three tokens where `[1, -2]` holds two.
+    bool subtractsFromTheLastToken() const;
+
+    // Give back the digits a negative-number rule matched past the sign, leaving the
+    // location where the sign ends.
+    void retractToSign(SourceLocation& loc, uint64_t yyleng) {
+        const uint64_t handedBack = yyleng - 1;
+
+        _nextOffset -= handedBack;
+        loc._endColumn -= static_cast<uint32_t>(handedBack);
+    }
 
     void setQuery(std::string_view query) {
         _query = query;
+        _lastToken = YCypherParser::token::PROG_END;
         _nextOffset = 0;
         _offset = 0;
         _readPos = 0;
@@ -52,6 +75,8 @@ protected:
     }
 
 private:
+    YCypherParser::token_type _lastToken {YCypherParser::token::PROG_END};
+
     size_t _nextOffset {0};
     size_t _offset {0};
     /// Character position in @ref _query which has been consumed so far (inclusive)

@@ -5,6 +5,28 @@
 
 using namespace db;
 
+bool YCypherScanner::subtractsFromTheLastToken() const {
+    switch (_lastToken) {
+        // A value, a name, or the close of one: what stands before a subtraction
+        case YCypherParser::token::DIGIT:
+        case YCypherParser::token::DOUBLE:
+        case YCypherParser::token::STRING_LITERAL:
+        case YCypherParser::token::TRUE:
+        case YCypherParser::token::FALSE:
+        case YCypherParser::token::ID:
+        case YCypherParser::token::ESC_LITERAL:
+        case YCypherParser::token::CPAREN:
+        case YCypherParser::token::CBRACK:
+        case YCypherParser::token::CBRACE:
+            return true;
+        break;
+
+        default:
+            return false;
+        break;
+    }
+}
+
 void YCypherScanner::syntaxError(const SourceLocation& loc,
                                  const std::string& msg) {
     std::string errorMsg;

@@ -3181,6 +3181,17 @@ target_link_libraries(test_query_ir_to_string_function PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_to_string_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_signed_number_lexing SignedNumberLexingTest.cpp)
+target_link_libraries(test_query_ir_signed_number_lexing PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_signed_number_lexing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_number_concatenation NumberConcatenationTest.cpp)
 target_link_libraries(test_query_ir_number_concatenation PRIVATE
         turing_db_s
