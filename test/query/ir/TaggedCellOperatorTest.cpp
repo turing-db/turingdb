@@ -81,6 +81,14 @@ TEST_F(TaggedCellOperatorTest, concatenatesOntoACell) {
     expectRows("RETURN [x IN ['b'] | 'a' + x] AS said", {{"[ab]"}});
 }
 
+TEST_F(TaggedCellOperatorTest, addsTwoCellsHoldingNumbers) {
+    expectRows("WITH [1, 2, 'x'] AS xs RETURN xs[0] + xs[1] AS sum", {{"3.000000"}});
+}
+
+TEST_F(TaggedCellOperatorTest, subtractsTwoCellsHoldingNumbers) {
+    expectRows("WITH [1, 2, 'x'] AS xs RETURN xs[0] - xs[1] AS difference", {{"-1.000000"}});
+}
+
 TEST_F(TaggedCellOperatorTest, findsAValueInTheListACellHolds) {
     expectRows("WITH [[1, 2, 3], [4, 5, 6]] AS nested RETURN 3 IN nested[0] AS present", {{"true"}});
 }

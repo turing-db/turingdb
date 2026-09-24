@@ -61,10 +61,15 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
 }
 
 // A type-erased cell concatenates as the text it holds, which is how the element of a list
-// joins a string, and two cells join as the texts they hold.
+// joins a string.
 bool concatenatesListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem);
+    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String);
+}
+
+// Two cells join as the texts they hold under '||', which concatenates whatever it is
+// given. '+' computes over them instead, as the other arithmetic operators do.
+bool concatenatesTwoListItems(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem);
 }
 
 // A number joins a string as the text Cypher writes it with: 1 + ' apples' is '1 apples'.
@@ -560,7 +565,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (concatenatesListItem(pair)) {
+            if (concatenatesListItem(pair) || concatenatesTwoListItems(pair)) {
                 type = EvaluatedType::String;
                 break;
             }
