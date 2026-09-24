@@ -2376,6 +2376,20 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
     const Column* lhs = getColumn(op.getLhs());
     const Column* rhs = getColumn(op.getRhs());
 
+    // An i1 chunk is a mask where a comparison produced it, and membership only has
+    // kernels over a boolean value column
+    if constexpr (Op == OP_IN) {
+        if (lhs->getKind() == ColumnMask::staticKind()) {
+            Column* nullableLhs = nullptr;
+            const NLUnaryFn toNullable = NLExecutor::selectMaskToNullable(_memory, nullableLhs);
+
+            NLUnaryData* toNullableData = _program->allocFunctionData<NLUnaryData>(lhs, nullableLhs, toNullable);
+            body->emplaceStmt(&NLExecutor::runUnary, toNullableData);
+
+            lhs = nullableLhs;
+        }
+    }
+
     Column* result = nullptr;
     const NLBinaryFn fn = NLExecutor::selectBinary<Op>(lhs, rhs, _memory, result);
     bioassert(result, "Failed to translate binary operator result.");
