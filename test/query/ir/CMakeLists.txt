@@ -3674,3 +3674,14 @@ target_link_libraries(test_query_ir_id_ordering_comparison PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_id_ordering_comparison PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_edge_type_is_null EdgeTypeIsNullTest.cpp)
+target_sources(test_query_ir_edge_type_is_null PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_edge_type_is_null PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_edge_type_is_null PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
