@@ -2213,6 +2213,8 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
     std::vector<const VariableDependency*> carriedSet;
 
     expandComponent(root, defined, carriedSet, outVars);
+
+    closeBoundJoins(carriedSet, outVars);
 }
 
 void DBProgramGenerator::expandComponent(const VariableDependency* root,
