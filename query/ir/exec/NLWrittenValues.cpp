@@ -55,3 +55,7 @@ const NLWrittenValues::Value* NLWrittenValues::findEdgeUpdate(EdgeID edge, Prope
 const NLWrittenValues::Value& NLWrittenValues::retain(const Value& value) {
     return _retained.emplace_back(value);
 }
+
+types::List::Primitive NLWrittenValues::decode(const types::List::OwningPrimitive& encoded) {
+    return encoded.decodeInto(_decodedLists);
+}

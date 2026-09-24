@@ -4012,10 +4012,17 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
                                                       const CommitWriteBuffer::SupportedTypeVariant& value) {
     using Primitive = typename T::Primitive;
 
-    const auto convert = [](const auto& held) -> std::optional<Primitive> {
+    const auto convert = [&written](const auto& held) -> std::optional<Primitive> {
         using Inner = typename std::decay_t<decltype(held)>::value_type;
 
-        if constexpr (std::is_convertible_v<const Inner&, Primitive>) {
+        if constexpr (std::is_same_v<Inner, types::List::OwningPrimitive>
+                      && std::is_same_v<Primitive, types::List::Primitive>) {
+            if (!held) {
+                return std::nullopt;
+            }
+
+            return written.decode(*held);
+        } else if constexpr (std::is_convertible_v<const Inner&, Primitive>) {
             if (!held) {
                 return std::nullopt;
             }
