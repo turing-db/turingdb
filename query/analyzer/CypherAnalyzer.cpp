@@ -32,6 +32,8 @@
 #include "DeleteVectorIndexQuery.h"
 #include "ShowVectorIndexesQuery.h"
 #include "InstallExtensionQuery.h"
+#include "Pattern.h"
+#include "PatternElement.h"
 #include "Projection.h"
 #include "WhereClause.h"
 #include "decl/DeclContext.h"
@@ -40,6 +42,7 @@
 #include "expr/Expr.h"
 #include "expr/ExprChildren.h"
 #include "expr/ListComprehensionExpr.h"
+#include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -1115,6 +1118,10 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         elements.erase(elementDecl);
 
         return predicateIsGroupWise && projectionIsGroupWise;
+    } else if (kind == Expr::Kind::PATTERN_COMPREHENSION) {
+        const PatternComprehensionExpr* comprehension = static_cast<const PatternComprehensionExpr*>(expr);
+
+        return isGroupWise(comprehension, projection, elements);
     }
 
     std::vector<const Expr*> children;
@@ -1123,6 +1130,62 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
     }
 
     return isGroupWise(children, projection, elements);
+}
+
+// A pattern comprehension reduces the matches of its pattern to one list, so it holds one
+// value per group wherever the rows it is matched on do: the variables it joins onto have
+// to be grouping keys, and the ones it binds of its own stand as an element does.
+bool CypherAnalyzer::isGroupWise(const PatternComprehensionExpr* comprehension,
+                                 const Projection* projection,
+                                 DeclSet& elements) const {
+    const PatternComprehensionExpr::OwnDecls& ownDecls = comprehension->getOwnDecls();
+    elements.insert(ownDecls.begin(), ownDecls.end());
+
+    const Pattern* const pattern = comprehension->getPattern();
+    const WhereClause* const where = pattern->getWhere();
+    const Expr* const predicate = where ? where->getExpr() : nullptr;
+
+    const bool patternIsGroupWise = joinsGroupWiseVariables(pattern, projection, elements);
+    const bool predicateIsGroupWise = isGroupWise(predicate, projection, elements);
+    const bool projectionIsGroupWise = isGroupWise(comprehension->getProjection(), projection, elements);
+
+    for (const VarDecl* const decl : ownDecls) {
+        elements.erase(decl);
+    }
+
+    return patternIsGroupWise && predicateIsGroupWise && projectionIsGroupWise;
+}
+
+bool CypherAnalyzer::joinsGroupWiseVariables(const Pattern* pattern,
+                                             const Projection* projection,
+                                             DeclSet& elements) const {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const MapLiteral* const properties = entity->getProperties();
+
+            if (properties) {
+                for (const auto& [key, value] : *properties) {
+                    if (!isGroupWise(value, projection, elements)) {
+                        return false;
+                    }
+                }
+            }
+
+            // An entity the pattern did not name is matched here and read nowhere else, so
+            // no group can disagree on what it holds
+            if (!entity->getSymbol()) {
+                continue;
+            }
+
+            const VarDecl* const decl = entity->getDecl();
+
+            if (!elements.contains(decl) && !projection->hasVariableItem(decl)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs,

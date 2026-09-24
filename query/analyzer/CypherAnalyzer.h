@@ -42,6 +42,8 @@ class WithStmt;
 class CallSubqueryStmt;
 class ExistsExpr;
 class Projection;
+class Pattern;
+class PatternComprehensionExpr;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
 class DropIndexQuery;
@@ -154,6 +156,12 @@ private:
     bool isGroupWise(std::span<const Expr* const> exprs,
                      const Projection* projection,
                      DeclSet& elements) const;
+    bool isGroupWise(const PatternComprehensionExpr* comprehension,
+                     const Projection* projection,
+                     DeclSet& elements) const;
+    bool joinsGroupWiseVariables(const Pattern* pattern,
+                                 const Projection* projection,
+                                 DeclSet& elements) const;
 
     // Every branch of a union must project the same columns, in the same order and
     // under the same names: the union emits one result table, so a branch naming

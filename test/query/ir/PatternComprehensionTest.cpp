@@ -339,6 +339,41 @@ TEST_F(PatternComprehensionTest, buildsItsListsOneStepOfTheRowsAtATime) {
     }
 }
 
+// Remy has three interests and no other person has more, so the descending order puts
+// that group first whatever the ties behind it do.
+TEST_F(PatternComprehensionTest, ordersTheGroupsByTheListItBuilt) {
+    expectRows("MATCH (n:Person) RETURN n, count(*) "
+               "ORDER BY size([(n)-[:INTERESTED_IN]->(i) | i]) DESC LIMIT 1",
+               {{"0", "1"}});
+}
+
+// The hop leaves 15 rows in flight and the grouping key leaves 8 groups, so the rows the
+// pattern is matched on are the groups and not what the aggregate consumed.
+TEST_F(PatternComprehensionTest, buildsItsListsOverTheGroupsAnAggregateLeft) {
+    expectRows("MATCH (n:Person)-[:INTERESTED_IN]->(x) RETURN n, count(*) "
+               "ORDER BY size([(n)-[:KNOWS_WELL]->(b) | b])",
+               {{"0", "3"},
+                {"1", "2"},
+                {"8", "2"},
+                {"9", "2"},
+                {"11", "1"},
+                {"12", "2"},
+                {"15", "2"},
+                {"17", "1"}});
+}
+
+TEST_F(PatternComprehensionTest, ordersAnAggregatingProjectionByAPatternOverAConsumedVariable) {
+    expectError("MATCH (n:Person)-[:KNOWS_WELL]->(b) RETURN n, count(*) "
+                "ORDER BY size([(b)-[:INTERESTED_IN]->(i) | i])",
+                "ORDER BY with an aggregate may only order by expressions over the returned columns");
+}
+
+TEST_F(PatternComprehensionTest, ordersAnAggregatingProjectionByAPatternOverAGroupedProperty) {
+    expectError("MATCH (n:Person) RETURN n.name, count(*) "
+                "ORDER BY size([(n)-[:INTERESTED_IN]->(i) | i])",
+                "ORDER BY with an aggregate may only order by expressions over the returned columns");
+}
+
 TEST_F(PatternComprehensionTest, aggregatesOverItsMatches) {
     expectError("MATCH (n:Person) RETURN [(n)-[:INTERESTED_IN]->(i) | count(i)]",
                 "Aggregate functions may not be used over the matches");

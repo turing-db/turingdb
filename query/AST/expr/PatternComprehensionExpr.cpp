@@ -15,6 +15,10 @@ PatternComprehensionExpr::PatternComprehensionExpr(MatchStmt* match, Expr* proje
 PatternComprehensionExpr::~PatternComprehensionExpr() {
 }
 
+void PatternComprehensionExpr::setOwnDecls(const OwnDecls& decls) {
+    _ownDecls = decls;
+}
+
 const Pattern* PatternComprehensionExpr::getPattern() const {
     return _match->getPattern();
 }
