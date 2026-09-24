@@ -277,8 +277,7 @@ struct PairRestrictions<Op> {
     >;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
@@ -323,8 +322,7 @@ struct PairRestrictions<Op> {
     >;
 
     using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>(),
-        ContainerKind::code<ColumnMask>()
+        ContainerKind::code<ColumnSet>()
     >;
 };
 
