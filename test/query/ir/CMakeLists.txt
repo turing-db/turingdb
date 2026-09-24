@@ -3723,3 +3723,43 @@ target_link_libraries(test_query_ir_fuzz_function_of_nullable_constant PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_pattern_comprehension_in_list_comprehension FuzzPatternComprehensionInListComprehensionTest.cpp)
+target_link_libraries(test_query_ir_fuzz_pattern_comprehension_in_list_comprehension PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_edge_variable_from_unwound_node FuzzEdgeVariableFromUnwoundNodeTest.cpp)
+target_link_libraries(test_query_ir_fuzz_edge_variable_from_unwound_node PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_mask_binary_operation FuzzMaskBinaryOperationTest.cpp)
+target_link_libraries(test_query_ir_fuzz_mask_binary_operation PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_case_comparison FuzzCaseComparisonTest.cpp)
+target_link_libraries(test_query_ir_fuzz_case_comparison PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
