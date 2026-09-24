@@ -2658,6 +2658,9 @@ add_call_v3_test(test_query_ir_undirected_cycle UndirectedCycleTest.cpp)
 # A hop reaching the head of a cycle before the cycle closes, run end to end against simpledb.
 add_call_v3_test(test_query_ir_cycle_head_hop CycleHeadHopTest.cpp)
 
+# Patterns closing cycles of every shape, each checked against its rewrite with no cycle.
+add_call_v3_test(test_query_ir_cycle_shapes CycleShapesTest.cpp)
+
 # An aggregate aliased to the name it reads, run end to end against simpledb.
 add_turing_test(test_query_ir_shadowed_alias ShadowedAliasTest.cpp)
 target_link_libraries(test_query_ir_shadowed_alias PRIVATE
