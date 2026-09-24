@@ -230,3 +230,59 @@ TEST_F(PathExploratorBlockedMemoTest, remembersSubtreesBlockedOnlyByEdgesLeading
     EXPECT_EQ(ends, nodeCount);
     EXPECT_LE(checks, visitBound) << checks << " checks";
 }
+
+// The seed's only edge leads into a fan of m nodes that all enter y, and every branch below y
+// returns to the seed, where it would take that first edge again. That edge is on every path
+// through the fan, so the walk below y can stand in for every arrival that holds it: the
+// subtree is walked once, not once per fan node.
+TEST_F(PathExploratorBlockedMemoTest, reusesASubtreeBlockedOnlyByAnEdgeEveryArrivalHolds) {
+    const size_t fanCount = 10;
+    const size_t branchCount = 10;
+
+    const size_t seed = 0;
+    const size_t fanRoot = 1;
+    const size_t firstFan = 2;
+    const size_t hub = firstFan + fanCount;
+    const size_t firstBranch = hub + 1;
+    const size_t nodeCount = firstBranch + branchCount;
+
+    std::vector<GeneratedArc> arcs {{seed, fanRoot}, {hub, seed}};
+    for (size_t fan = 0; fan < fanCount; fan++) {
+        arcs.push_back({fanRoot, firstFan + fan});
+        arcs.push_back({firstFan + fan, hub});
+    }
+
+    for (size_t branch = 0; branch < branchCount; branch++) {
+        arcs.push_back({hub, firstBranch + branch});
+        arcs.push_back({firstBranch + branch, seed});
+    }
+
+    build(nodeCount, arcs);
+    expectReferenceEnds(PathExplorationDir::FORWARD, 6, 6);
+
+    size_t ends = 0;
+    const size_t checks = countDistinctChecks(6, ends);
+
+    const size_t hubSubtreeChecks = 3 * branchCount + 2;
+    const size_t walkedOnceBound = 1 + 2 * fanCount + hubSubtreeChecks;
+
+    EXPECT_LE(checks, walkedOnceBound) << checks << " checks";
+}
+
+TEST_F(PathExploratorBlockedMemoTest, deepDistinctEndsAgreeWithTheReferenceOnDenserCyclicGraphs) {
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+
+        std::vector<GeneratedArc> arcs;
+        randomArcs(14, 3, seed, arcs);
+        build(14, arcs);
+
+        for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD}) {
+            expectReferenceEnds(direction, 8, 8);
+            expectReferenceEnds(direction, 3, 8);
+        }
+
+        expectReferenceEnds(PathExplorationDir::BOTH, 6, 6);
+        expectReferenceEnds(PathExplorationDir::BOTH, 2, 6);
+    }
+}

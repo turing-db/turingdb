@@ -104,6 +104,109 @@ bool PathExplorator::KeySet::contains(uint64_t key) const {
     return false;
 }
 
+void PathExplorator::ExpansionMemo::clear() {
+    _used = 0;
+    _dependencyLists.clear();
+    _generation++;
+
+    if (_generation != 0) {
+        return;
+    }
+
+    for (Slot& slot : _slots) {
+        slot._stamp = 0;
+    }
+
+    _generation = 1;
+}
+
+void PathExplorator::ExpansionMemo::grow() {
+    const size_t slotCount = _slots.empty() ? initialKeySetSlots : _slots.size() * 2;
+    const std::vector<Slot> slots(_slots);
+
+    _slots.assign(slotCount, Slot {});
+
+    const size_t mask = slotCount - 1;
+    for (const Slot& slot : slots) {
+        if (slot._stamp != _generation) {
+            continue;
+        }
+
+        size_t target = scatter(slot._key) & mask;
+        while (_slots[target]._stamp == _generation) {
+            target = (target + 1) & mask;
+        }
+
+        _slots[target] = slot;
+    }
+}
+
+// A list with fewer dependencies serves more arrivals, so it replaces a longer one; between two
+// of one length the newer is kept, being the one the prefixes walked next are likelier to hold
+void PathExplorator::ExpansionMemo::remember(uint64_t key, std::span<const Dependency> dependencies) {
+    if ((_used + 1) * 2 >= _slots.size()) {
+        grow();
+    }
+
+    const size_t mask = _slots.size() - 1;
+    size_t index = scatter(key) & mask;
+
+    while (_slots[index]._stamp == _generation && _slots[index]._key != key) {
+        index = (index + 1) & mask;
+    }
+
+    Slot& slot = _slots[index];
+    const bool present = slot._stamp == _generation;
+    const uint32_t list = present ? slot._list : 0;
+
+    if (present) {
+        const size_t presentCount = list == 0 ? 0 : _dependencyLists[list - 1]._count;
+        if (dependencies.size() > presentCount) {
+            return;
+        }
+    } else {
+        slot._key = key;
+        slot._stamp = _generation;
+        _used++;
+    }
+
+    if (dependencies.empty()) {
+        slot._list = 0;
+        return;
+    }
+
+    if (list == 0) {
+        _dependencyLists.emplace_back();
+        slot._list = static_cast<uint32_t>(_dependencyLists.size());
+    }
+
+    DependencyList& stored = _dependencyLists[slot._list - 1];
+    stored._count = dependencies.size();
+    for (size_t index = 0; index < dependencies.size(); index++) {
+        stored._edges[index] = dependencies[index]._edge;
+    }
+}
+
+const PathExplorator::DependencyList* PathExplorator::ExpansionMemo::find(uint64_t key) const {
+    if (_slots.empty()) {
+        return nullptr;
+    }
+
+    const size_t mask = _slots.size() - 1;
+    size_t index = scatter(key) & mask;
+
+    while (_slots[index]._stamp == _generation) {
+        const Slot& slot = _slots[index];
+        if (slot._key == key) {
+            return slot._list == 0 ? &_noDependencies : &_dependencyLists[slot._list - 1];
+        }
+
+        index = (index + 1) & mask;
+    }
+
+    return nullptr;
+}
+
 PathExplorator::PathExplorator(const GraphView& view,
                                const ColumnNodeIDs* inputNodeIDs,
                                PathExplorationDir direction,
@@ -285,6 +388,7 @@ void PathExplorator::reset() {
     _frames.clear();
     _candidateNodes.clear();
     _candidateEdges.clear();
+    _dependencies.clear();
 
     if (_trie) {
         _trie->truncateArena(_arena, 0);
@@ -348,7 +452,7 @@ void PathExplorator::fill(size_t maxCount) {
 void PathExplorator::startSeed(size_t row) {
     if (_prunes) {
         _emittedEnds.clear();
-        _cleanExpansions.clear();
+        _expansions.clear();
     }
 
     _seedRow = row;
@@ -360,6 +464,7 @@ void PathExplorator::startSeed(size_t row) {
     _frames.clear();
     _candidateNodes.clear();
     _candidateEdges.clear();
+    _dependencies.clear();
     _target = PathTargetHandle {};
 
     const NodeID seed = (*_input)[row];
@@ -419,8 +524,15 @@ void PathExplorator::step() {
         return;
     }
 
-    if (_prunes && _cleanExpansions.contains(expansionKey(node, _maxHops - depth))) {
-        return;
+    if (_prunes) {
+        const DependencyList* remembered = _expansions.find(expansionKey(node, _maxHops - depth));
+
+        if (remembered && remembered->_count == 0) {
+            return;
+        } else if (remembered && holdsDependencies(*remembered, edge)) {
+            dependOn(*remembered, edge);
+            return;
+        }
     }
 
     const size_t ahead = candidate + _lookahead;
@@ -446,14 +558,21 @@ void PathExplorator::popFrame() {
     _frames.pop_back();
 
     if (_prunes) {
-        // Every edge this subtree could not take was one it held itself, so the same walk
-        // leaves this node whatever the prefix above it used
-        if (frame._taint >= depth) {
-            _cleanExpansions.insert(expansionKey(frame._node, frame._budget));
+        size_t taint = frame._taint;
+
+        const bool dependsOnHeldEdges = _dependencies.size() > frame._dependencyBegin;
+        if (dependsOnHeldEdges) {
+            keepDependenciesAbove(frame._dependencyBegin, depth, taint);
+        }
+
+        if (taint >= depth) {
+            const std::span<const Dependency> dependencies(_dependencies.data() + frame._dependencyBegin,
+                                                           _dependencies.size() - frame._dependencyBegin);
+            _expansions.remember(expansionKey(frame._node, frame._budget), dependencies);
         }
 
         if (!_frames.empty()) {
-            _frames.back()._taint = std::min(_frames.back()._taint, frame._taint);
+            _frames.back()._taint = std::min(_frames.back()._taint, taint);
         }
     }
 
@@ -467,6 +586,31 @@ void PathExplorator::popFrame() {
     if (_paths) {
         releasePathEntry();
     }
+}
+
+void PathExplorator::keepDependenciesAbove(size_t begin, size_t depth, size_t& taint) {
+    size_t kept = begin;
+
+    for (size_t index = begin; index < _dependencies.size(); index++) {
+        const Dependency dependency = _dependencies[index];
+        const bool heldInside = dependency._position >= depth;
+        const bool repeated = std::any_of(_dependencies.begin() + begin,
+                                          _dependencies.begin() + kept,
+                                          [&](const Dependency& other) { return other._edge == dependency._edge; });
+
+        if (heldInside || repeated) {
+            continue;
+        }
+
+        if (kept - begin < MAX_DEPENDENCIES) {
+            _dependencies[kept] = dependency;
+            kept++;
+        } else {
+            taint = std::min(taint, dependency._position);
+        }
+    }
+
+    _dependencies.resize(kept);
 }
 
 void PathExplorator::generatePendingCandidates(NodeID node) {
@@ -486,7 +630,7 @@ void PathExplorator::generatePendingCandidates(NodeID node) {
 // Reads the node's adjacency wherever it lives and pushes the frame of the candidates it
 // offers, which the next steps walk one at a time
 void PathExplorator::descend(NodeID node) {
-    _descentTaint = NO_TAINT;
+    const size_t dependencyBegin = _dependencies.size();
     const size_t owner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
     prefetchNodeData(node, owner);
 
@@ -534,7 +678,7 @@ void PathExplorator::descend(NodeID node) {
         _candidateEdges.resize(end);
     }
 
-    _frames.push_back({begin, end, begin, node, _maxHops - _pathEdges.size(), _descentTaint});
+    _frames.push_back({begin, end, begin, node, _maxHops - _pathEdges.size(), dependencyBegin, NO_TAINT});
 }
 
 void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
@@ -546,12 +690,6 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
 
     // The hops a candidate may still take after the one that reaches it
     const uint64_t remainingHops = _maxHops - candidateDepth;
-
-    const auto positionOnPath = [this](EdgeID edge) {
-        const auto found = std::find(_pathEdges.begin(), _pathEdges.end(), edge);
-
-        return found == _pathEdges.end() ? NO_TAINT : static_cast<size_t>(found - _pathEdges.begin());
-    };
 
     const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
 
@@ -570,8 +708,8 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const bool beyondTarget = !canReachTargetWithin(record._otherID, remainingHops);
 
         if (backtracks || wrongType || deleted || onTrail || beyondLabels || beyondTarget) {
-            if (_prunes && onTrail && !reachesOnlyEmittedEnds(record._otherID, candidateDepth)) {
-                _descentTaint = std::min(_descentTaint, heldAt);
+            if (_prunes && onTrail) {
+                dependOnBlockedEdge(edge, record._otherID, candidateDepth, heldAt);
             }
 
             continue;
@@ -582,15 +720,61 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
     }
 }
 
-bool PathExplorator::reachesOnlyEmittedEnds(NodeID node, uint64_t depth) const {
-    const bool emits = depth >= _minHops && isEnd(_seedRow, node);
-    if (emits && !_emittedEnds.contains(node.getValue())) {
-        return false;
+size_t PathExplorator::positionOnPath(EdgeID edge) const {
+    if ((_pathSignatures.back() & signatureBit(edge)) == 0) {
+        return NO_TAINT;
     }
 
-    const bool expands = depth < _maxHops;
+    const auto found = std::find(_pathEdges.begin(), _pathEdges.end(), edge);
 
-    return !expands || _cleanExpansions.contains(expansionKey(node, _maxHops - depth));
+    return found == _pathEdges.end() ? NO_TAINT : static_cast<size_t>(found - _pathEdges.begin());
+}
+
+bool PathExplorator::holdsDependencies(const DependencyList& dependencies, EdgeID arrival) const {
+    for (size_t index = 0; index < dependencies._count; index++) {
+        const EdgeID dependency = dependencies._edges[index];
+        const bool held = dependency == arrival || positionOnPath(dependency) != NO_TAINT;
+
+        if (!held) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+const PathExplorator::DependencyList* PathExplorator::findReusableExpansion(NodeID node, uint64_t depth, EdgeID arrival) const {
+    const DependencyList* dependencies = _expansions.find(expansionKey(node, _maxHops - depth));
+    if (!dependencies || !holdsDependencies(*dependencies, arrival)) {
+        return nullptr;
+    }
+
+    return dependencies;
+}
+
+void PathExplorator::dependOnBlockedEdge(EdgeID edge, NodeID node, uint64_t depth, size_t position) {
+    const bool emitsThere = depth >= _minHops && isEnd(_seedRow, node);
+    const bool emitted = !emitsThere || _emittedEnds.contains(node.getValue());
+    const bool expandsThere = depth < _maxHops;
+    const DependencyList* covering = emitted && expandsThere ? findReusableExpansion(node, depth, edge) : nullptr;
+
+    if (emitted && !expandsThere) {
+        return;
+    } else if (covering) {
+        dependOn(*covering, edge);
+    } else {
+        _dependencies.push_back({edge, position});
+    }
+}
+
+void PathExplorator::dependOn(const DependencyList& dependencies, EdgeID arrival) {
+    for (size_t index = 0; index < dependencies._count; index++) {
+        const EdgeID dependency = dependencies._edges[index];
+        const size_t position = positionOnPath(dependency);
+        const bool arrivesThrough = position == NO_TAINT && dependency == arrival;
+
+        _dependencies.push_back({dependency, arrivesThrough ? _pathEdges.size() : position});
+    }
 }
 
 void PathExplorator::emit(size_t seedRow, NodeID target, PathRef path) {
