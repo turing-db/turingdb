@@ -4682,25 +4682,28 @@ void DBProgramGenerator::generateSubqueryUnion(const CallSubqueryStmt* subquery,
         yielded.push_back({column._decl, column._name, results[columnIndex]});
 
         // A read of what the query wrote goes to the write buffer for every row of the
-        // column or for none, so every branch has to have written it as the same entity
-        const std::optional<PartScope::WrittenEntity>& first = writtenColumns.front()[columnIndex];
+        // column or for none, so every branch has to have written it
+        std::optional<PartScope::WrittenEntity> returned = writtenColumns.front()[columnIndex];
 
         for (const std::vector<std::optional<PartScope::WrittenEntity>>& branchWritten : writtenColumns) {
             const std::optional<PartScope::WrittenEntity>& written = branchWritten[columnIndex];
 
-            const bool sameEntity = written.has_value() == first.has_value()
-                                    && (!written
-                                        || (written->_labels == first->_labels && written->_edgeType == first->_edgeType));
-
-            if (!sameEntity) {
+            if (written.has_value() != returned.has_value()) {
                 throwError(fmt::format("Column '{}' of a UNION in a CALL subquery holds what one branch "
                                        "created and another did not, which is not supported",
                                        column._name));
             }
+
+            const bool sameTypes = !written
+                                   || (written->_labels == returned->_labels && written->_edgeType == returned->_edgeType);
+            if (!sameTypes) {
+                returned->_labels.clear();
+                returned->_edgeType.clear();
+            }
         }
 
-        if (first) {
-            returnedEntities.emplace_back(column._decl, *first);
+        if (returned) {
+            returnedEntities.emplace_back(column._decl, *returned);
         }
     }
 }
@@ -6538,7 +6541,8 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     // What the query wrote is in no graph the test would read, so the labels and the type
     // the CREATE spelled decide it here, laid out over the rows the entity carries
     const PartScope::WrittenEntity* written = findWrittenEntity(entityDecl);
-    if (written) {
+    const bool writtenTypesKnown = written && (isNode ? !written->_labels.empty() : !written->_edgeType.empty());
+    if (writtenTypesKnown) {
         const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
         const mlir::Value answer = constantBool(writtenEntityHasTypes(*written, typeNames, isNode));
 
