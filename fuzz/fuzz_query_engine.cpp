@@ -58,6 +58,7 @@ public:
 };
 
 std::unique_ptr<TuringTestEnv> g_env;
+std::string g_rootDirectory;
 const char* g_graphName = "fuzzdb";
 
 void initOnce() {
@@ -67,12 +68,17 @@ void initOnce() {
 
     // TuringDB locks its root directory, so a fixed path would let the fuzzer
     // lock out any triage run reproducing a crash while it is still fuzzing.
-    const std::string rootDirectory = "/tmp/fuzz_query_engine_" + std::to_string(getpid());
+    g_rootDirectory = "/tmp/fuzz_query_engine_" + std::to_string(getpid());
 
-    g_env = TuringTestEnv::create(fs::Path(rootDirectory));
+    g_env = TuringTestEnv::create(fs::Path(g_rootDirectory));
     db::SystemAccessor system = g_env->getSystemManager().accessUnique();
     db::Graph* graph = system.createGraph(g_graphName);
     db::SimpleGraph::createSimpleGraph(graph);
+}
+
+void tearDown() {
+    g_env.reset();
+    fs::Path(g_rootDirectory).rm();
 }
 
 int fuzzOne(const char* data, size_t size) {
@@ -174,15 +180,17 @@ int fuzzOne(const char* data, size_t size) {
 __AFL_FUZZ_INIT();
 
 int main(int argc, char** argv) {
+    __AFL_INIT();
     initOnce();
 
-    __AFL_INIT();
     unsigned char* buf = __AFL_FUZZ_TESTCASE_BUF;
 
     while (__AFL_LOOP(10000)) {
         const int len = __AFL_FUZZ_TESTCASE_LEN;
         fuzzOne(reinterpret_cast<const char*>(buf), len);
     }
+
+    tearDown();
 
     return EXIT_SUCCESS;
 }
@@ -197,6 +205,10 @@ int main(int argc, char** argv) {
         input.append(buf, n);
     }
 
-    return fuzzOne(input.data(), input.size());
+    const int status = fuzzOne(input.data(), input.size());
+
+    tearDown();
+
+    return status;
 }
 #endif
