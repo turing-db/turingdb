@@ -5789,18 +5789,20 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
 
         if (reachesEnd) {
             // A range's span and its stride can each be wider than an int64 holds, so both
-            // are counted unsigned and every element is offset from the first that way
+            // are counted unsigned and every element is offset from the first that way. The
+            // limit bounds the steps: the length over the whole int64 range, 2^64, is one
+            // past what a uint64 holds.
             const uint64_t first = static_cast<uint64_t>(*from);
             const uint64_t last = static_cast<uint64_t>(*to);
             const uint64_t span = ascending ? last - first : first - last;
             const uint64_t stride = ascending ? static_cast<uint64_t>(*by) : 0 - static_cast<uint64_t>(*by);
-            const uint64_t length = span / stride + 1;
+            const uint64_t steps = span / stride;
 
-            if (length > rangeLengthLimit) {
-                throw IRException(fmt::format("range() builds at most {} integers, and this one spans {}",
-                                              rangeLengthLimit,
-                                              length));
+            if (steps >= rangeLengthLimit) {
+                throw IRException(fmt::format("range() size exceeds {} integers", rangeLengthLimit));
             }
+
+            const uint64_t length = steps + 1;
 
             elements.reserve(length);
 

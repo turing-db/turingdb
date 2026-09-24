@@ -196,13 +196,13 @@ TEST_F(RangeFunctionTest, unwindsAListLongerThanAChunk) {
 }
 
 TEST_F(RangeFunctionTest, rejectsALongerListThanTheLimit) {
-    expectRejected("RETURN range(1, 100001)", "range() builds at most 100000 integers");
-    expectRejected("RETURN range(0, 300000, 2)", "and this one spans 150001");
+    expectRejected("RETURN range(1, 100001)", "range() size exceeds 100000 integers");
+    expectRejected("RETURN range(0, 300000, 2)", "range() size exceeds 100000 integers");
 }
 
 TEST_F(RangeFunctionTest, rejectsALongerListThanTheLimitOnOneRow) {
     expectRejected("MATCH (n:Person) RETURN range(1, n.age * 10000)",
-                   "range() builds at most 100000 integers");
+                   "range() size exceeds 100000 integers");
 }
 
 TEST_F(RangeFunctionTest, countsFromAnEntityID) {
