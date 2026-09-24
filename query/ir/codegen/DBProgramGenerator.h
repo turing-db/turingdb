@@ -303,10 +303,6 @@ private:
 
     void generateTraversal(std::span<Stmt* const> stmts);
 
-    // A barrier leaves behind the traversal an edge's column was published under, so a
-    // pattern matching that edge again has nothing to join onto
-    void throwOnRematchedBoundEdge() const;
-
     bool holdsColumn(const VariableDependency* var) const;
 
     // Rejects a pattern variable the traversal left without a column: a shape it cannot
@@ -331,6 +327,8 @@ private:
     // The walk skips a merge target that already holds a column, so the equality closing
     // a cycle through a bound variable is left to be emitted here
     void closeBoundMerges();
+
+    void closeBoundEdges();
 
     // Extends the dataflow the barrier left behind rather than opening one of its own,
     // filling @param dataflowVars with every variable that dataflow carries a column for
