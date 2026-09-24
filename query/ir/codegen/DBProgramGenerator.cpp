@@ -7047,6 +7047,22 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
     }
 }
 
+void DBProgramGenerator::generateKeylessAggregates(const Projection* projection) {
+    llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
+        if (!itemPtr) {
+            continue;
+        }
+
+        collectAggregateInvocations(*itemPtr, aggregateExprs);
+    }
+
+    for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
+        translateExpr(aggregateExpr);
+    }
+}
+
 void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     if (!projection->isAggregate()) {
         return;
@@ -7054,6 +7070,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
     if (!projection->hasGroupingKeys()) {
         generateKeylessCollect(projection);
+        generateKeylessAggregates(projection);
         return;
     }
 
@@ -7171,6 +7188,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     // x, count(n) counts the whole match, as RETURN count(n) does
     if (keyColumns.empty()) {
         generateKeylessCollect(projection);
+        generateKeylessAggregates(projection);
         return;
     }
 

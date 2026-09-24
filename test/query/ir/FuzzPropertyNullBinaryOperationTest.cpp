@@ -155,3 +155,19 @@ TEST_F(FuzzPropertyNullBinaryOperationTest, Where000101) {
 TEST_F(FuzzPropertyNullBinaryOperationTest, Where000110) {
     expectNoRows("MATCH (n) WHERE n.Igage - .0^ n.age / 3< n.agee IS NOT NULL RETURN n.age + 10, n.age - .0^ n.age /00000> 3% n.age * 4%02");
 }
+
+TEST_F(FuzzPropertyNullBinaryOperationTest, Where000146) {
+    expectNoRows("MATCH (n) WHERE'Remy' =n.name= n.nCHANGEame= 'Remy' =n.name = 'Remy' = ',emy'RETURN n");
+}
+
+TEST_F(FuzzPropertyNullBinaryOperationTest, Where000151) {
+    expectNoRows("MATCH (n) WHERE n .name = 'Remy.name = emy' =n.nama = 'Remy'RETURN n");
+}
+
+TEST_F(FuzzPropertyNullBinaryOperationTest, Where000152) {
+    expectNoRows("MATCH (n) WHERE n .name = 'RemyEMBEDDINGSy' =n.nama = 'Remy'RETURN n");
+}
+
+TEST_F(FuzzPropertyNullBinaryOperationTest, WhereChainedComparisonThroughAbsentProperty) {
+    expectNoRows("MATCH (n) WHERE n.name = 'Remy' = n.x = 'b' RETURN n.name");
+}
