@@ -127,3 +127,7 @@ TEST_F(FuzzCaseComparisonTest, ReturnIntegerAgainstBooleanColumn) {
 TEST_F(FuzzCaseComparisonTest, ReturnStringAgainstBooleanConstant) {
     expectEveryPerson("MATCH (n:Person) RETURN n.name, CASE n.name WHEN true THEN 'true' ELSE 'other' END", "other");
 }
+
+TEST_F(FuzzCaseComparisonTest, ReturnStringOrderedAgainstInteger) {
+    expectEveryPerson("MATCH (n:Person) RETURN n.name, CASE n.name WHEN > 13 THEN 'greater' ELSE 'other' END", "other");
+}
