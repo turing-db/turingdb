@@ -249,22 +249,32 @@ private:
     // the loop builders carry is dropped between them.
     void lowerUnion(mlir::db::Union unionOp);
 
+    // Lowers a union with results - the body of a CALL - into branches that collect their
+    // rows into one nl.union_buffer, drained by the loop the rest of the body lowers into
+    void lowerUnionResults(mlir::db::Union unionOp);
+
     // Brings a union branch's result columns to the value type the whole result carries,
-    // reaching them through @param branchOutput, the branch's own db.output
-    void convertUnionResultChunks(mlir::Operation& operation, mlir::db::Output branchOutput);
+    // reaching them through @param resultColumns, what the branch's db.output or db.yield
+    // names
+    void convertUnionResultChunks(mlir::Operation& operation, mlir::OperandRange resultColumns);
 
     // Opens the one nl.distinct seen-set the branches of a deduping union record their
     // rows in, hoisted where every branch's filter can reach it
     void lowerDistinctSet(mlir::db::DistinctSet distinctSet);
 
     // Brings every branch's result columns to the one type each column of the result
-    // carries, once the branches have been lowered and their types are known
-    void reconcileBranchResultTypes(llvm::ArrayRef<mlir::nl::Output> branchOutputs);
+    // carries, once the branches have been lowered and their types are known.
+    // @param columnNames names the columns for a diagnostic, and is null where they have none.
+    void reconcileBranchResultTypes(llvm::ArrayRef<mlir::MutableOperandRange> branchColumns,
+                                    mlir::ArrayAttr columnNames);
 
-    mlir::Type unionResultType(llvm::ArrayRef<mlir::nl::Output> branchOutputs, size_t columnIndex);
+    mlir::Type unionResultType(llvm::ArrayRef<mlir::MutableOperandRange> branchColumns,
+                               size_t columnIndex,
+                               mlir::ArrayAttr columnNames);
 
-    void throwOnDisagreeingBranchTypes(mlir::nl::Output branchOutput,
-                                       mlir::nl::Output resultBranch,
+    void throwOnDisagreeingBranchTypes(mlir::Type branchType,
+                                       mlir::Type resultType,
+                                       mlir::ArrayAttr columnNames,
                                        size_t columnIndex);
 
     // Reads the null literal's chunk as a column of @param chunkType, holding one absent

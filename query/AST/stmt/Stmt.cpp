@@ -52,7 +52,7 @@ bool Stmt::writesToTheGraph(const Stmt* stmt) {
     if (kind == Kind::CALL_SUBQUERY) {
         const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
 
-        return subquery->getBody()->writesToTheGraph();
+        return subquery->writesToTheGraph();
     }
 
     return isUpdating(kind);
@@ -73,7 +73,7 @@ bool Stmt::readsTheGraph(const Stmt* stmt) {
 
     switch (kind) {
         case Kind::CALL_SUBQUERY:
-            return static_cast<const CallSubqueryStmt*>(stmt)->getBody()->readsTheGraph();
+            return static_cast<const CallSubqueryStmt*>(stmt)->readsTheGraph();
         break;
 
         // A MERGE matches before it creates, so it goes to the graph as a MATCH does

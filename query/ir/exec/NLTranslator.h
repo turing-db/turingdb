@@ -66,6 +66,7 @@ private:
         Unwind,
         ProcedureInit,
         OptionalDrain,
+        UnionDrain,
         CrossProduct,
         HashJoinProbe,
         EachRow,
@@ -90,6 +91,9 @@ private:
 
         // The accumulator an OptionalDrain iterator drains; null for the other kinds.
         NLOptionalState* _optionalState {nullptr};
+
+        // The accumulator a UnionDrain iterator drains; null for the other kinds.
+        NLUnionState* _unionState {nullptr};
 
         // The call a ProcedureInit iterator drives; null for the other kinds.
         NLProcedureState* _procedureState {nullptr};
@@ -236,6 +240,7 @@ private:
     // nl.optional_collect and the nl.for over nl.optional_drain find the same buffers and
     // matched flags
     llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
+    llvm::DenseMap<mlir::Value, NLUnionState*> _unionStates;
     llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
 
     // nl.procedure handle SSA value -> the runtime call it produces, so every op that
@@ -621,6 +626,23 @@ private:
     // The runtime accumulator an optional handle names. Throws if the handle was not
     // produced by an nl.optional_buffer translated earlier.
     NLOptionalState* optionalStateFor(mlir::Value handle) const;
+
+    // Translate an nl.union_buffer: allocate the runtime accumulator, map the handle to it
+    // and record the reset statement. The buffers are allocated by the first collect.
+    void translateUnionBuffer(mlir::nl::UnionBuffer buffer, NLStmtContainer* body);
+
+    // Translate the nl.union_collect of one branch: the first allocates the buffers, and
+    // each records the per-step statement appending its columns to them
+    void translateUnionCollect(mlir::nl::UnionCollect collect, NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.union_drain iterator: one loop variable per buffer,
+    // gathered from it chunk by chunk
+    void translateUnionLoop(const IteratorConfig& config,
+                            mlir::Block& loopBody,
+                            NLLimitState* limit,
+                            NLStmtContainer* body);
+
+    NLUnionState* unionStateFor(mlir::Value handle) const;
 
     // Translate an nl.exists_buffer: allocate the runtime accumulator, map the handle to
     // it, record this step's input chunks and the row tag column, and record the reset

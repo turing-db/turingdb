@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "stmt/CallSubqueryStmt.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -39,7 +40,6 @@ class ReturnStmt;
 class Stmt;
 class StmtContainer;
 class WithStmt;
-class CallSubqueryStmt;
 class ExistsExpr;
 class Projection;
 class CreateNodePropertyIndexQuery;
@@ -122,11 +122,15 @@ private:
 
     // A body opening on a WITH of plain variables imports them, when no scope clause says
     // what the body reads
-    void importThroughLeadingWith(CallSubqueryStmt* subquery) const;
+    void importThroughLeadingWith(CallSubqueryStmt::Branch& branch) const;
+
+    // Analyzes one query of a CALL body under its own scope, seeded with what it imports
+    void analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause);
 
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds
     void publishSubqueryReturn(const CallSubqueryStmt* subquery);
+    void publishUnionBranchReturn(Projection* branchProjection, const Projection* firstProjection);
 
     // Adds to a barrier of a subquery body the imports it does not project, so what the
     // scope clause named stays readable below it. Answers whether it added one.
@@ -154,7 +158,7 @@ private:
     // Every branch of a union must project the same columns, in the same order and
     // under the same names: the union emits one result table, so a branch naming
     // other columns has no column of that table to fill
-    void analyzeUnionColumns(const UnionQuery* query) const;
+    void analyzeUnionColumns(std::span<const SinglePartQuery* const> branches) const;
     const Projection* unionBranchProjection(const SinglePartQuery* branch) const;
     static void collectProjectionNames(const Projection* projection,
                                        std::vector<std::string_view>& names);

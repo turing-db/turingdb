@@ -200,8 +200,7 @@ TEST_F(ExistsNeo4jManualTest, existsSubqueryOutsideOfAWhereClause) {
 }
 
 TEST_F(ExistsNeo4jManualTest, existsSubqueryWithAUnion) {
-    GTEST_SKIP() << "UNION inside a subquery body is rejected for every subquery, a CALL's "
-                    "as much as an EXISTS's";
+    GTEST_SKIP() << "UNION inside an EXISTS body is not implemented";
 
     expectRows("MATCH (person:Person) "
                "RETURN "

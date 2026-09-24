@@ -1319,8 +1319,8 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
 /**
 * Yield
 */
-def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "HashJoin"]>]> {
-  let summary = "Name the columns a factor contributes to the result of the op holding it";
+def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "HashJoin", "Union"]>]> {
+  let summary = "Name the columns a region contributes to the result of the op holding it";
 
   let description = [{
     Terminates a factor region of a db.cross_product or a db.hash_join, naming
@@ -1328,6 +1328,9 @@ def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "H
     factor's yielded columns followed by the right factor's. A factor must yield
     at least one column - the holder's verifier rejects an empty yield, since a
     side's row count is read from its first yielded column.
+
+    It also terminates each branch of a db.union that has results, naming the
+    rows that branch adds to them.
   }];
 
   let arguments = (ins Variadic<Column>:$columns);
@@ -1667,7 +1670,22 @@ def Union : TuringOp<"union", [NoTerminator]> {
     holder. It lowers to one loop nest per branch, run in order, in the same nl function -
     the concatenation is the sink seeing each nest's rows in turn. Not Pure: its branches
     emit the result, so it must survive dead-code elimination as db.output does.
+
+    The body of a db.call_subquery is a UNION when the CALL's is. The rows the branches
+    produce then feed the rest of the body rather than the result table, so the op has one
+    result per column and each branch ends in a db.yield of its columns. The branches read
+    the body's arguments, the columns of the row the body runs for:
+
+      %z = db.union {
+        %s, %e, %et, %i = db.get_out_edges(%pIn, {}) : ...
+        db.yield %i : !db.column<!storage.node_id>
+      }, {
+        %s2, %e2, %et2, %k = db.get_in_edges(%pIn, {}) : ...
+        db.yield %k : !db.column<!storage.node_id>
+      } : !db.column<!storage.node_id>
   }];
+
+  let results = (outs Variadic<Column>:$results);
 
   // One region per branch, each exactly one block. The blocks have no arguments: a
   // branch reads nothing the branch before it bound.
@@ -1676,11 +1694,13 @@ def Union : TuringOp<"union", [NoTerminator]> {
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
-  // The only builder takes the branch count and creates that many empty blocks; the
-  // caller fills each region and ends it with a db.output.
+  // Both builders take the branch count and create that many empty blocks; the caller
+  // fills each region and ends it with a db.output, or with a db.yield when the op has
+  // results.
   let skipDefaultBuilders = 1;
   let builders = [
-      OpBuilder<(ins "size_t":$branchCount)>
+      OpBuilder<(ins "size_t":$branchCount)>,
+      OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "size_t":$branchCount)>
   ];
 }
 

@@ -67,6 +67,23 @@ Yield getFactorYield(Region& factor) {
     return dyn_cast_or_null<Yield>(terminator);
 }
 
+// The branches of a union with results feed its results rather than the result table,
+// so each one ends in a db.yield naming one column per result
+LogicalResult verifyYieldingBranches(Union unionOp) {
+    for (Region& branch : unionOp.getBranches()) {
+        Yield yield = getFactorYield(branch);
+        if (!yield) {
+            return unionOp.emitOpError("each branch of a union with results must end with a db.yield");
+        }
+
+        if (yield.getColumns().size() != unionOp.getNumResults()) {
+            return unionOp.emitOpError("each branch must yield one column per result");
+        }
+    }
+
+    return success();
+}
+
 // Appends the columns yielded by a factor region to resultTypes, failing with a
 // diagnostic if the factor is not terminated by a db.yield.
 ParseResult appendFactorYieldTypes(OpAsmParser& parser,
@@ -351,7 +368,13 @@ LogicalResult CrossProduct::verify() {
 // caller fills each region with a query body and ends it with a db.output. The insertion
 // guard keeps the block creation from leaking out of the builder, as CrossProduct's does.
 void Union::build(OpBuilder& builder, OperationState& state, size_t branchCount) {
+    build(builder, state, TypeRange {}, branchCount);
+}
+
+void Union::build(OpBuilder& builder, OperationState& state, TypeRange resultTypes, size_t branchCount) {
     const OpBuilder::InsertionGuard guard(builder);
+
+    state.addTypes(resultTypes);
 
     for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
         Region* branch = state.addRegion();
@@ -364,8 +387,9 @@ void Union::build(OpBuilder& builder, OperationState& state, size_t branchCount)
 //   db.union { ... db.output(%a) names ["name"] : ... },
 //             { ... db.output(%b) names ["name"] : ... }
 //
-// Nothing is spelled after the regions: the op has no operands and no results, and the
-// result table is the one every branch's db.output names.
+// A union with results spells their types after the regions:
+//
+//   %z = db.union { ... db.yield %a : ... }, { ... db.yield %b : ... } : !db.column<none>
 ParseResult Union::parse(OpAsmParser& parser, OperationState& result) {
     do {
         Region* branch = result.addRegion();
@@ -373,6 +397,15 @@ ParseResult Union::parse(OpAsmParser& parser, OperationState& result) {
             return failure();
         }
     } while (succeeded(parser.parseOptionalComma()));
+
+    if (succeeded(parser.parseOptionalColon())) {
+        SmallVector<Type> resultTypes;
+        if (parser.parseTypeList(resultTypes)) {
+            return failure();
+        }
+
+        result.addTypes(resultTypes);
+    }
 
     return parser.parseOptionalAttrDict(result.attributes);
 }
@@ -386,6 +419,12 @@ void Union::print(OpAsmPrinter& printer) {
                      },
                      ",");
 
+    const ResultRange results = getResults();
+    if (!results.empty()) {
+        printer << " : ";
+        llvm::interleaveComma(results.getTypes(), printer);
+    }
+
     printer.printOptionalAttrDict((*this)->getAttrs());
 }
 
@@ -396,6 +435,10 @@ LogicalResult Union::verify() {
     const MutableArrayRef<Region> branches = getBranches();
     if (branches.size() < 2) {
         return emitOpError("requires at least two branches");
+    }
+
+    if (getNumResults() > 0) {
+        return verifyYieldingBranches(*this);
     }
 
     Output first;

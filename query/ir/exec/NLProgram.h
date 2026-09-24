@@ -3877,6 +3877,99 @@ private:
     ColumnMask* _result {nullptr};
 };
 
+// Runtime state of one UNION inside a CALL body: one growing buffer per column, which
+// the nl.union_collect of every branch appends to and the nl.for over nl.union_drain reads
+// back in collected order. The buffer columns are borrowed: the translator pool-allocates
+// them in the same arena as the loop columns.
+class NLUnionState {
+public:
+    void addBuffer(Column* buffer) { _buffers.push_back(buffer); }
+
+    const std::vector<Column*>& buffers() const { return _buffers; }
+    Column* buffer(size_t index) const { return _buffers[index]; }
+
+    size_t getRowCount() const;
+
+    // Clear every buffer; runs each time nl.union_buffer's block runs
+    void reset();
+
+    // The lists the buffers hold, copied in as NLSortState::listBuffer's are
+    QueryListBuffer& listBuffer() { return _listBuffer; }
+
+private:
+    std::vector<Column*> _buffers;
+    QueryListBuffer _listBuffer;
+};
+
+// nl.union_buffer data: resets an accumulator to empty each time its block runs
+class NLUnionResetData : public NLFunctionData {
+public:
+    NLUnionResetData(NLUnionState* state)
+        : _state(state)
+    {
+    }
+
+    NLUnionState* getState() const { return _state; }
+
+private:
+    NLUnionState* _state {nullptr};
+};
+
+// nl.union_collect data: appends the current chunk of every column one branch yields to
+// the matching buffer of the accumulator, in NLSortCollectData's append shape
+class NLUnionCollectData : public NLFunctionData {
+public:
+    NLUnionCollectData(NLUnionState* state)
+        : _state(state)
+    {
+    }
+
+    NLUnionState* getState() const { return _state; }
+
+    const std::vector<NLSortCollectData::Append>& appends() const { return _appends; }
+
+    void addAppend(const NLSortCollectData::Append& append) {
+        _appends.push_back(append);
+    }
+
+private:
+    NLUnionState* _state {nullptr};
+    std::vector<NLSortCollectData::Append> _appends;
+};
+
+// nl.for over nl.union_drain data: the emit phase of a UNION inside a CALL body, which
+// gathers the collected rows chunk by chunk into the loop variables
+class NLUnionLoopData : public NLFunctionData {
+public:
+    NLUnionLoopData(NLUnionState* state)
+        : _state(state)
+    {
+    }
+
+    NLUnionState* getState() const { return _state; }
+
+    const std::vector<NLCarriedColumn>& columns() const { return _columns; }
+
+    void addColumn(const NLCarriedColumn& column) {
+        _columns.push_back(column);
+    }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLUnionState* _state {nullptr};
+    NLLimitState* _limit {nullptr};
+    std::vector<NLCarriedColumn> _columns;
+    ColumnVector<size_t> _indices;
+    NLStmtContainer _stmts;
+};
+
 class NLProgram {
 public:
     NLProgram();
@@ -4022,6 +4115,13 @@ public:
         return statePtr;
     }
 
+    NLUnionState* allocUnionState() {
+        auto state = std::make_unique<NLUnionState>();
+        NLUnionState* statePtr = state.get();
+        _unionStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     // The candidate index one chain-node signature already has, or a null pointer for a
     // signature no chain node of the program has reached yet. Two nodes of the same
     // labels and key properties look their candidates up in one index, so the label set
@@ -4081,6 +4181,7 @@ private:
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;
+    std::vector<std::unique_ptr<NLUnionState>> _unionStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;
