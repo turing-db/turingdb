@@ -1962,6 +1962,7 @@ def ToInteger : UnaryFunctionOp<"to_integer">;
 def ToFloat : UnaryFunctionOp<"to_float">;
 def ToBoolean : UnaryFunctionOp<"to_boolean">;
 def ToDateTime : UnaryFunctionOp<"to_datetime">;
+def ToString : UnaryFunctionOp<"to_string">;
 
 // The list family. Each reads a whole !storage.list cell and answers per row: db.size the
 // element count as an integer, db.tail the same list one element shorter - a subspan of

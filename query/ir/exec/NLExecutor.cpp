@@ -6371,6 +6371,20 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(cons
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListLastFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+NLUnaryFunctionKernel NLExecutor::selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<toStringFromValueFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<toStringFromValueFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<toStringFromValueFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Bool::Primitive>(input)) {
+        return selectFunction<toStringFromValueFunction<types::Bool::Primitive>>(input, inputNullable, memory, result);
+    }
+
+    return selectFunction<toStringFunction>(input, inputNullable, memory, result);
+}
+
 template NLUnaryFunctionKernel NLExecutor::selectConversion<toIntegerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectConversion<toFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
