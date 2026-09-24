@@ -340,6 +340,7 @@
 %type<db::PatternElement*> patternElem
 %type<db::PatternElement*> pathExprElem
 %type<db::NodePattern*> nodePattern
+%type<db::NodePattern*> predicateRoot
 %type<db::EdgePattern*> edgePattern
 %type<db::EdgePattern*> edgeDetail
 %type<std::pair<db::EdgePattern*, db::NodePattern*>> patternElemChain
@@ -1534,43 +1535,9 @@ functionInvocation
 
 pathExpr
     : parenthesizedExpr { $$ = $1; }
-    | OPAREN CPAREN pathExprElem {
-        NodePattern* node = NodePattern::create(ast);
-        $3->addRootEntity(node);
-        LOC(node, @$);
-        $$ = ParserUtils::createPatternPredicate(ast, $3, @$);
-      }
-    | OPAREN symbol properties CPAREN pathExprElem { 
-        NodePattern* nodePattern = NodePattern::create(ast);
-        nodePattern->setProperties($3);
-        nodePattern->setSymbol($2);
-        $5->addRootEntity(nodePattern);
-        LOC(nodePattern, @$);
-        $$ = ParserUtils::createPatternPredicate(ast, $5, @$);
-      }
-    | OPAREN symbol nodeLabels properties CPAREN pathExprElem { 
-        NodePattern* nodePattern = NodePattern::create(ast);
-        nodePattern->setLabels($3);
-        nodePattern->setProperties($4);
-        nodePattern->setSymbol($2);
-        $6->addRootEntity(nodePattern);
-        LOC(nodePattern, @$);
-        $$ = ParserUtils::createPatternPredicate(ast, $6, @$);
-      }
-    | OPAREN nodeLabels CPAREN pathExprElem {
-        NodePattern* node = NodePattern::create(ast);
-        node->setLabels($2);
-        $4->addRootEntity(node);
-        LOC(node, @$);
+    | OPAREN predicateRoot CPAREN pathExprElem {
+        $4->addRootEntity($2);
         $$ = ParserUtils::createPatternPredicate(ast, $4, @$);
-      }
-    | OPAREN nodeLabels properties CPAREN pathExprElem {
-        NodePattern* node = NodePattern::create(ast);
-        node->setLabels($2);
-        node->setProperties($3);
-        $5->addRootEntity(node);
-        LOC(node, @$);
-        $$ = ParserUtils::createPatternPredicate(ast, $5, @$);
       }
 
     // Those three exprs are tricky and cause conflicts with 'OPAREN expr CPAREN'
@@ -1597,6 +1564,17 @@ pathExpr
         LOC(nodePattern, @$);
         $$ = ParserUtils::createPatternPredicate(ast, $4, @$);
       }
+    ;
+
+predicateRoot
+    : %empty { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, nullptr); LOC($$, @$); }
+    | whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, $1); LOC($$, @$); }
+    | symbol whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, nullptr, $2); LOC($$, @$); }
+    | symbol properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, $2, $3); LOC($$, @$); }
+    | symbol nodeLabels whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, nullptr, $3); LOC($$, @$); }
+    | symbol nodeLabels properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, $3, $4); LOC($$, @$); }
+    | nodeLabels opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, $1, $2, $3); LOC($$, @$); }
+    | properties whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, $1, $2); LOC($$, @$); }
     ;
 
 pathExprElem
