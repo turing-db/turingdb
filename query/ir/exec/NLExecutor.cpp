@@ -7495,6 +7495,17 @@ void NLExecutor::selectCollectOptTaggedHandlers(bool distinctValues,
     listEmit = &collectTaggedListEmit;
 }
 
+void NLExecutor::selectCollectOptOwnedStringHandlers(bool distinctValues,
+                                                     NLCollectFoldFunction& fold,
+                                                     NLUnwindCollectValueEmitFunction& unwindCollectEmit,
+                                                     NLCollectListEmitFunction& listEmit) {
+    using OwnedString = types::String::OwningPrimitive;
+
+    fold = distinctValues ? &collectFoldDistinct<OwnedString> : &collectFold<OwnedString>;
+    unwindCollectEmit = &unwindCollectValueEmit<OwnedString>;
+    listEmit = &collectListEmit<OwnedString>;
+}
+
 void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLUnwindCollectLoopData* loopData = static_cast<NLUnwindCollectLoopData*>(data);
     NLCollectState* state = loopData->getState();
