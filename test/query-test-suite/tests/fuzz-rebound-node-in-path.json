@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(b)-->(b) RETURN id(a) ORDER BY id(a)",
   "expect": {
@@ -12,6 +12,5 @@
     "match",
     "multipath"
   ],
-  "write-required": false,
-  "disabled-reason": "Codegen asserts '_part._varMap.contains(var)' in DBProgramGenerator::expandComponent when a hop lands on a node variable already bound in the same component"
+  "write-required": false
 }
