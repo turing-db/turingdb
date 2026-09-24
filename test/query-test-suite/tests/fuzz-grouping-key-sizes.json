@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n.age, toFloat(\"10\"), COUNT(*)",
   "expect": {
@@ -12,6 +12,5 @@
     "count",
     "aggregate"
   ],
-  "write-required": false,
-  "disabled-reason": "Grouping by a per-row key next to a constant-derived one asserts 'keyColumn._input->size() == rowCount' at query/ir/exec/NLExecutor.cpp:6511. Values taken from MATCH (n) RETURN n.age, 10.0, COUNT(*)"
+  "write-required": false
 }

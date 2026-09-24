@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "RETURN COUNT(*) + toInteger(\"9\"), [x IN [1] | x] + COUNT(*)",
   "expect": {
@@ -13,6 +13,5 @@
     "count",
     "aggregate"
   ],
-  "write-required": false,
-  "disabled-reason": "SEGFAULT - keep disabled, the suite runs in one process. gatherColumn reads past the end in NLExecutor::runListComprehension when a list comprehension over an aggregate sits beside another aggregate column. Second crash site, distinct from fuzz-count-with-nullable-key. Values taken from RETURN COUNT(*) + toInteger(\"9\"), [x IN [1] | x] + 1"
+  "write-required": false
 }

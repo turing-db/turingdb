@@ -1848,7 +1848,7 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
-class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
+class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a unary function row-wise to a value column";
 
   let arguments = (ins Column:$input);
@@ -1889,7 +1889,7 @@ def Head : UnaryFunctionOp<"head">;
 def Last : UnaryFunctionOp<"last">;
 def Tail : UnaryFunctionOp<"tail">;
 
-class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
+class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);

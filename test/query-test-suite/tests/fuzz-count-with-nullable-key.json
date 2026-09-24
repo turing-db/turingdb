@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "RETURN COUNT(*), toFloat(\"10\")",
   "expect": {
@@ -12,6 +12,5 @@
     "count",
     "aggregate"
   ],
-  "write-required": false,
-  "disabled-reason": "SEGFAULT - keep disabled, the suite runs in one process. distinctKeyAppendOptColumn reads past the end of the grouping key column in NLExecutor::runGroupAggregateUpdate when COUNT is grouped by a nullable column (toFloat, toInteger, toBoolean, head, size)"
+  "write-required": false
 }
