@@ -115,8 +115,7 @@ TEST_F(WhereExprRegistrationTest, noWhereClause) {
     EXPECT_TRUE(ops.edgeProps.empty());
 }
 
-// TODO: Enable when > supported
-TEST_F(WhereExprRegistrationTest, DISABLED_singleNodeProp) {
+TEST_F(WhereExprRegistrationTest, singleNodeProp) {
     // WHERE n.age > 5 should produce exactly one GetNodeProperties for "age".
     const RegisteredProps ops = generateAndCollect("MATCH (n) WHERE n.age > 5 RETURN n");
 
@@ -125,8 +124,7 @@ TEST_F(WhereExprRegistrationTest, DISABLED_singleNodeProp) {
     EXPECT_TRUE(ops.edgeProps.empty());
 }
 
-// TODO: Enable when > supported
-TEST_F(WhereExprRegistrationTest, DISABLED_twoNodePropsInAnd) {
+TEST_F(WhereExprRegistrationTest, twoNodePropsInAnd) {
     // WHERE n.age > 5 AND n.name = 'Remy' should produce GetNodeProperties for
     // both "age" and "name".
     const RegisteredProps ops = generateAndCollect(
@@ -137,8 +135,7 @@ TEST_F(WhereExprRegistrationTest, DISABLED_twoNodePropsInAnd) {
     EXPECT_TRUE(ops.edgeProps.empty());
 }
 
-// TODO: Enable when > supported
-TEST_F(WhereExprRegistrationTest, DISABLED_threeNodePropsInNestedAnd) {
+TEST_F(WhereExprRegistrationTest, threeNodePropsInNestedAnd) {
     // Three properties in a nested AND structure should each get their own op.
     const RegisteredProps ops = generateAndCollect(
         "MATCH (n) WHERE n.age > 5 AND n.isFrench = true AND n.hasPhD = true RETURN n");
@@ -148,8 +145,7 @@ TEST_F(WhereExprRegistrationTest, DISABLED_threeNodePropsInNestedAnd) {
     EXPECT_TRUE(ops.edgeProps.empty());
 }
 
-// TODO: Enable when > supported
-TEST_F(WhereExprRegistrationTest, DISABLED_edgeProp) {
+TEST_F(WhereExprRegistrationTest, edgeProp) {
     // WHERE e.duration > 10 should produce exactly one GetEdgeProperties for "duration".
     const RegisteredProps ops = generateAndCollect(
         "MATCH (a)-[e]->(b) WHERE e.duration > 10 RETURN a");
@@ -159,8 +155,7 @@ TEST_F(WhereExprRegistrationTest, DISABLED_edgeProp) {
     EXPECT_EQ(ops.edgeProps, expected);
 }
 
-// TODO: Enable when > supported
-TEST_F(WhereExprRegistrationTest, DISABLED_mixedNodeAndEdgeProps) {
+TEST_F(WhereExprRegistrationTest, mixedNodeAndEdgeProps) {
     // WHERE referencing both a node property and an edge property should register both.
     const RegisteredProps ops = generateAndCollect(
         "MATCH (a)-[e]->(b) WHERE a.age > 5 AND e.duration > 10 RETURN a");

@@ -147,9 +147,8 @@ TEST_F(Neo4jCaseExampleTest, caseInWithDrivesASet) {
 }
 
 // Manual example 6 as written, setting a property the graph does not carry yet and reading it
-// back in the same query. Disabled: the read-back fails with "Unknown property", which has
-// nothing to do with CASE — a SET of a fresh property from a literal fails the same way.
-TEST_F(Neo4jCaseExampleTest, DISABLED_caseInWithSetsAFreshProperty) {
+// back in the same query
+TEST_F(Neo4jCaseExampleTest, caseInWithSetsAFreshProperty) {
     runWrite("MATCH (n:Person) WITH n, CASE WHEN n.hasPhD THEN 1 ELSE 2 END AS code "
              "SET n.code = code RETURN n.name, n.code");
 }
