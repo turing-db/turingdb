@@ -5055,6 +5055,11 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
         bind(createdDecl, createdDecl->getName(), created._column);
     }
 
+    // And so is the element a list comprehension bound, inside its body
+    for (const auto& [elementDecl, element] : _part._comprehensionElements) {
+        bind(elementDecl, elementDecl->getName(), element);
+    }
+
     for (const auto& [decl, vars] : _vdg.edgeIdentities()) {
         bioassert(!vars.empty(), "Empty edge identity for '{}'", decl->getName());
         const VariableDependency* representative = vars.front();
