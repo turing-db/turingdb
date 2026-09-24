@@ -4,7 +4,7 @@
   "query": "MATCH (a)-->(b)-->(b) RETURN id(a) ORDER BY id(a)",
   "expect": {
     "result": "id(a)",
-    "resultJson": "{\"header\":{\"column_names\":[\"id(a)\"],\"column_types\":[\"UInt64\"]},\"data\":[]}"
+    "resultJson": "{\"header\":{\"column_names\":[\"id(a)\"],\"column_types\":[\"Int64\"]},\"data\":[]}"
   },
   "tags": [
     "fuzz",
