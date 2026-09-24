@@ -600,6 +600,21 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::ListElementType>(chunk.getElementType());
 }
 
+// The same cell behind the nullable an index wraps it in: reading an element out of a list
+// answers no cell where the row has no such element, and a cell carrying its own tag where
+// it has one
+bool holdsTaggedCells(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+
+    return mlir::isa<storage::ListElementType>(nullable ? nullable.getValueType() : element);
+}
+
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
     if (anyFloat) {
@@ -4467,10 +4482,13 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                     throw IRException("db.concat joins two lists or two strings, not one of each");
                 }
 
-                // string concat
+                // A type-erased cell holds text only where its tag says so, so a row
+                // holding a null or a nested list concatenates to null
+                const bool readsACell = holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType);
+
                 const mlir::Type stringElement = storage::StringType::get(ctx);
-                return operandNullable ? storage::NullableType::get(ctx, stringElement)
-                                       : stringElement;
+                return operandNullable || readsACell ? storage::NullableType::get(ctx, stringElement)
+                                                     : stringElement;
             }
 
             // list concat
@@ -4510,7 +4528,9 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Membership: {
-            if (!isListChunk(rhsType)) {
+            // A tagged cell holds whatever its row put there, a list among it, so the test
+            // reads the list out of the tag rather than out of the column's own type
+            if (!isListChunk(rhsType) && !holdsTaggedCells(rhsType)) {
                 throw IRException("db.in requires a list as its right operand");
             }
 

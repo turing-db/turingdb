@@ -67,9 +67,27 @@ struct ListElementKindPairs {
     using Pairs = typename OptionalKindPairs<ListElementView, T>::Pairs;
 };
 
+// A number joins a string as the text Cypher writes it with, either way round and whichever
+// side owns its characters
+template <typename T>
+struct TextKindPairs {
+    using Pairs = TupleFlatten<
+        typename OptionalKindPairs<T, types::String::Primitive>::Pairs,
+        typename OptionalKindPairs<types::String::Primitive, T>::Pairs,
+        typename OptionalKindPairs<T, types::String::OwningPrimitive>::Pairs,
+        typename OptionalKindPairs<types::String::OwningPrimitive, T>::Pairs>::Type;
+};
+
 template <typename T>
 struct ListMembershipKindPairs {
     using Pairs = typename OptionalKindPairs<T, ListView>::Pairs;
+};
+
+// The same test against the list a type-erased cell holds, which is what an index of a
+// nested list answers
+template <typename T>
+struct TaggedMembershipKindPairs {
+    using Pairs = typename OptionalKindPairs<T, ListElementView>::Pairs;
 };
 
 template <typename T>
@@ -391,7 +409,18 @@ struct PairRestrictions<Op> {
         // answer - and concatenates with one the graph lends, either way round
         OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
         OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
+
+        // A type-erased cell concatenates as the text it holds, which is how the element
+        // of a list joins a string: [x IN xs | x + ' expert']
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
+
+        // A number joins a string as the text Cypher writes it with: 1 + ' apples'
+        TextKindPairs<types::Int64::Primitive>::Pairs,
+        TextKindPairs<types::UInt64::Primitive>::Pairs,
+        TextKindPairs<types::Double::Primitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
@@ -414,6 +443,13 @@ struct PairRestrictions<Op> {
         ListMembershipKindPairs<types::Bool::Primitive>::Pairs,
 
         ListMembershipKindPairs<ListElementView>::Pairs,
+
+        TaggedMembershipKindPairs<types::Int64::Primitive>::Pairs,
+        TaggedMembershipKindPairs<types::UInt64::Primitive>::Pairs,
+        TaggedMembershipKindPairs<types::Double::Primitive>::Pairs,
+        TaggedMembershipKindPairs<types::String::Primitive>::Pairs,
+        TaggedMembershipKindPairs<types::String::OwningPrimitive>::Pairs,
+        TaggedMembershipKindPairs<types::Bool::Primitive>::Pairs,
 
         std::tuple<
             KindPair<PropertyNull, ListView>,

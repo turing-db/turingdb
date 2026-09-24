@@ -60,6 +60,20 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
     return EvaluatedType::Invalid;
 }
 
+// A type-erased cell concatenates as the text it holds, which is how the element of a list
+// joins a string, and two cells join as the texts they hold.
+bool concatenatesListItem(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
+        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem);
+}
+
+// A number joins a string as the text Cypher writes it with: 1 + ' apples' is '1 apples'.
+// A boolean does not: true + 'x' has no meaning in Cypher.
+bool concatenatesAsText(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::String)
+        || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::String);
+}
+
 // Whether an arithmetic operator's operands are a type-erased cell and a number, or two
 // cells. A cell is numeric only once read, and its tag names a type per row rather than
 // one for the column, so the answer is the double a reduction over cells lands on too.
@@ -506,6 +520,14 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // A cell holding text concatenates with a string, as the string it holds
+            // would: the type it holds is settled row by row, so a cell holding a number
+            // joins as the text Cypher writes that number with
+            if (concatenatesListItem(pair) || concatenatesAsText(pair)) {
+                type = EvaluatedType::String;
+                break;
+            }
+
             // Arithmetic over an unknown value is unknown, whatever the other side holds.
             // The list cases come first: [1, 2] + null appends the null instead
             if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
@@ -535,6 +557,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             if (pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
                 type = EvaluatedType::List;
                 expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
+                break;
+            }
+
+            if (concatenatesListItem(pair)) {
+                type = EvaluatedType::String;
                 break;
             }
 
@@ -619,7 +646,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::In: {
             type = EvaluatedType::Bool;
 
-            if (b != EvaluatedType::List && b != EvaluatedType::Map) {
+            // A type-erased cell holds whatever its row put there, so the test reads the
+            // list out of its tag and answers null for a row holding something else
+            const bool searchesACell = b == EvaluatedType::ListItem;
+
+            if (b != EvaluatedType::List && b != EvaluatedType::Map && !searchesACell) {
                 const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
                                                       EvaluatedTypeName::value(b));
                 throwError(error, expr);
