@@ -22,6 +22,8 @@ int main() {
             spdlog::info("element: {}", "embedding");
         } else if constexpr (std::is_same_v<T, ListView>) {
             spdlog::info("element: {}", "list");
+        } else if constexpr (std::is_same_v<T, MapView>) {
+            spdlog::info("element: {}", "map");
         } else if constexpr (std::is_same_v<T, PropertyNull>) {
             spdlog::info("element: {}", "null");
         } else if constexpr (std::is_same_v<T, types::DateTime::Primitive>) {

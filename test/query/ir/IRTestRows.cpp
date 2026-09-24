@@ -115,6 +115,7 @@ void renderListElement(const ListElementView& element, std::string& out) {
         break;
 
         case ListBufferTypeTag::Embedding:
+        case ListBufferTypeTag::MapView:
         case ListBufferTypeTag::INVALID:
         break;
     }

@@ -12,6 +12,8 @@
 #include "ListView.h"
 #include "ListWriteCursor.h"
 
+#include "map/MapView.h"
+
 #include "ID.h"
 
 #include "metadata/PropertyNull.h"
@@ -24,7 +26,7 @@ using ListableTypesImpl =
     std::tuple<db::types::Int64::Primitive, db::types::UInt64::Primitive,
                db::types::Double::Primitive, db::types::String::Primitive,
                db::types::Bool::Primitive, db::types::Embedding::Primitive, db::ListView,
-               db::PropertyNull, db::NodeID, db::EdgeID, db::types::DateTime::Primitive>;
+               db::PropertyNull, db::NodeID, db::EdgeID, db::types::DateTime::Primitive, db::MapView>;
 }
 
 namespace db {

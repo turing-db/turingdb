@@ -803,10 +803,6 @@ TEST_F(CypherUnwindExprTest, rejectsAnUnrepresentableUnwindArgumentAsTheArgument
     expectRejected("UNWIND {a: 1} AS x RETURN x", "UNWIND requires a list, not 'Map'");
 }
 
-TEST_F(CypherUnwindExprTest, rejectsAnUnrepresentableListElementAsAnElement) {
-    expectRejected("UNWIND [{a: 1}] AS x RETURN x", "as list elements");
-}
-
 // An aggregate folds the rows a projection groups, so it names no value an UNWIND could
 // spread: the list has to be published by a WITH first
 TEST_F(CypherUnwindExprTest, rejectsAnAggregateUnwindArgument) {

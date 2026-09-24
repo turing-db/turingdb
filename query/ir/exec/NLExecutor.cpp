@@ -1931,6 +1931,10 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
             throw IRException("cannot dedup by an embedding element");
         break;
 
+        case ListBufferTypeTag::MapView:
+            throw IRException("cannot dedup by a map element");
+        break;
+
         case ListBufferTypeTag::INVALID:
             throw IRException("cannot dedup by an untagged element");
         break;
@@ -3285,6 +3289,10 @@ ListBuffer<>::ListItemVariant taggedListItem(const ListElementView element) {
 
         case ListBufferTypeTag::DateTime:
             return ListBuffer<>::ListItemVariant {element.getAs<types::DateTime::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::MapView:
+            return ListBuffer<>::ListItemVariant {element.getAs<MapView>()};
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -6093,6 +6101,10 @@ NLListItemReadFunction NLExecutor::selectEdgeListItemRead() {
 
 NLListItemReadFunction NLExecutor::selectNestedListItemRead() {
     return &plainListItem<ListView>;
+}
+
+NLListItemReadFunction NLExecutor::selectNestedMapListItemRead() {
+    return &plainListItem<MapView>;
 }
 
 NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {

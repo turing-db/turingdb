@@ -5,6 +5,9 @@
 #include "HTTPWriter.h"
 #include "list/ListUtils.h"
 #include "list/ListView.h"
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyTypeMap.h"
 #include "views/NodeView.h"
@@ -346,6 +349,33 @@ public:
         }
 
         write(']');
+    }
+
+    void writeValue(MapEntryView entry) {
+        writeValue(entry.getKey());
+        write(':');
+
+        const auto writeTyped = [this]<typename T>(const MapEntryView view) {
+            this->writeValue(view.getValueAs<T>());
+        };
+
+        const MapTagDispatcher dispatcher {entry.getValueTag()};
+        dispatcher.execute(writeTyped, entry);
+    }
+
+    void writeValue(MapView map) {
+        write('{');
+
+        bool first = true;
+        for (const MapEntryView entry : map) {
+            if (!first) {
+                write(',');
+            }
+            first = false;
+            writeValue(entry);
+        }
+
+        write('}');
     }
 
     void writeValue(const PropertyTypeMap& propTypes, const NodeView& nodeView) {

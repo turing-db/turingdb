@@ -17,6 +17,7 @@ enum class ListBufferTypeTag : uint8_t {
     NodeID,
     EdgeID,
     DateTime,
+    MapView,
 
     INVALID,
 };

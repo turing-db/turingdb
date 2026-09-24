@@ -477,6 +477,7 @@ private:
             }
             break;
 
+            case ListBufferTypeTag::MapView:
             case ListBufferTypeTag::INVALID:
                 std::cout << "?";
             break;

@@ -558,9 +558,10 @@ void asString(std::string& out, std::span<const float> embedding) {
 
 void asString(std::string& out, const ListElementView v);
 
-// Forward declared so the generic and optional overloads below resolve a list to this
-// one, and so the ListElementView overload sees it: an element may be a list itself
+// Forward declared so the generic and optional overloads below resolve a list or a map to
+// this one, and so the ListElementView overload sees them: an element may be either
 void asString(std::string& out, ListView lv);
+void asString(std::string& out, MapView mv);
 
 template <typename T>
 void asString(std::string& out, const T& value) {
@@ -618,8 +619,6 @@ void asString(std::string& out, const ListView lv) {
 
     out += ']';
 }
-
-void asString(std::string& out, MapView mv);
 
 void asString(std::string& out, MapEntryView v) {
     const auto writeTyped = [&out]<typename T>(const MapEntryView ele) {

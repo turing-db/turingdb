@@ -17,6 +17,8 @@
 #include "list/ListView.h"
 #include "list/ListElementView.h"
 #include "list/ListBufferTypeTag.h"
+
+#include "FatalException.h"
 #include "ID.h"
 
 using namespace db;
@@ -80,6 +82,9 @@ void appendListElement(std::string& out, ListElementView element) {
 
             ProcUtils::appendJsonString(out, formatted);
         }
+        break;
+        case ListBufferTypeTag::MapView:
+            throw FatalException("Cannot render a map in a procedure's list output");
         break;
         case ListBufferTypeTag::Null:
         case ListBufferTypeTag::INVALID:
