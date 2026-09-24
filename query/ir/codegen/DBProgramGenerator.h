@@ -626,6 +626,7 @@ private:
     // Whether a column holds the rows flowing past the current insertion point, which is
     // what an op consuming a whole row set needs of each of its operands.
     bool isRowAlignedHere(mlir::Value column) const;
+    bool holdsTheRowsInFlight(mlir::Value column) const;
 
     // Collect those columns. One bound in another block is skipped: an op here can only
     // take what this block binds.

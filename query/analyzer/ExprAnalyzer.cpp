@@ -1737,6 +1737,7 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     // A name the pattern binds that the scope does not hold yet is the comprehension's
     // own: the WHERE and the projection read it, and nothing outside them does
     std::vector<std::string_view> ownVariables;
+    std::vector<const EntityPattern*> ownEntities;
 
     for (const PatternElement* element : pattern->elements()) {
         for (const EntityPattern* entity : element->getEntities()) {
@@ -1747,6 +1748,7 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
             }
 
             ownVariables.push_back(symbol->getName());
+            ownEntities.push_back(entity);
 
             // A SET analyzes the expression it assigns twice, and the reads in the body
             // hold the declarations the first pass bound: binding the names back to them
@@ -1759,6 +1761,13 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     }
 
     _readAnalyzer->analyze(pattern);
+
+    PatternComprehensionExpr::OwnDecls ownDecls;
+    for (const EntityPattern* entity : ownEntities) {
+        ownDecls.push_back(entity->getDecl());
+    }
+
+    expr->setOwnDecls(ownDecls);
 
     Expr* const projection = expr->getProjection();
     analyzeExpr(projection);

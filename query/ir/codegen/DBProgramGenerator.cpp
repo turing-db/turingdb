@@ -1725,10 +1725,21 @@ bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
     return definingBlock == _opBuilder.getInsertionBlock();
 }
 
+// Whether @param column holds the rows in flight here: the rows of the block the insertion
+// point is in, and the groups rather than what the grouping consumed where an aggregate has
+// reduced them
+bool DBProgramGenerator::holdsTheRowsInFlight(mlir::Value column) const {
+    if (!isRowAlignedHere(column)) {
+        return false;
+    }
+
+    return !_part._aggregateOp || boundAtOrAfter(column, _part._aggregateOp);
+}
+
 void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     for (auto& [var, values] : _part._varMap) {
         const mlir::Value column = values.back();
-        if (!isRowAlignedHere(column)) {
+        if (!holdsTheRowsInFlight(column)) {
             continue;
         }
 
@@ -1743,7 +1754,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     }
 
     for (auto& [var, column] : _part._edgeTypeMap) {
-        if (!isRowAlignedHere(column)) {
+        if (!holdsTheRowsInFlight(column)) {
             continue;
         }
 
@@ -1755,7 +1766,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     // set must take it along, or the rows it holds would stop matching the ones beside it.
     for (size_t yieldedIndex = 0; yieldedIndex < _part._yieldedColumns.size(); yieldedIndex++) {
         const YieldedColumn& yielded = _part._yieldedColumns[yieldedIndex];
-        if (!isRowAlignedHere(yielded._column)) {
+        if (!holdsTheRowsInFlight(yielded._column)) {
             continue;
         }
 
