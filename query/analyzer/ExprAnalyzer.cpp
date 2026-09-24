@@ -1625,8 +1625,12 @@ void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
         aggregate = aggregate || bound->isAggregate();
     }
 
-    // The elements are the ones the base holds, so the slice keeps its shape
-    expr->setType(EvaluatedType::List);
+    // Slicing an unknown value is unknown, as adding to one is: null[1..2] is null. The
+    // elements are otherwise the ones the base holds, so the slice keeps its shape
+    const EvaluatedType slicedType = baseType == EvaluatedType::Null ? EvaluatedType::Null
+                                                                    : EvaluatedType::List;
+
+    expr->setType(slicedType);
     expr->setListShape(base->getListShape());
 
     if (dynamic) {
@@ -1637,7 +1641,7 @@ void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
         expr->setAggregate();
     }
 
-    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, slicedType));
 }
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
