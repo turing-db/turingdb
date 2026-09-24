@@ -233,12 +233,10 @@ TEST_F(WithScopeTest, publishesAPropertyUnderTheNameOfItsVariable) {
                {{"Adam"}, {"Cyrus"}});
 }
 
-// A barrier leaves behind the traversal an edge's column was published under, so a pattern
-// matching that edge again is turned away rather than silently matching something else
-TEST_F(WithScopeTest, rejectsRematchingABoundEdge) {
-    expectRejected("MATCH (a:Person)-[e:KNOWS_WELL]->(b) WITH e MATCH (c)-[e]->(d) "
-                   "RETURN c.name",
-                   QueryStatus::Status::PLAN_ERROR);
+TEST_F(WithScopeTest, rematchesABoundEdge) {
+    expectRows("MATCH (a:Person)-[e:KNOWS_WELL]->(b) WITH e MATCH (c)-[e]->(d) "
+               "RETURN c.name",
+               {{"Remy"}, {"Adam"}});
 }
 
 int main(int argc, char** argv) {

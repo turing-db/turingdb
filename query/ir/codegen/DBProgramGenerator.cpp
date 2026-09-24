@@ -1451,6 +1451,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     throwOnUnboundPatternVariable();
     throwOnDroppedUnwindSeed();
     closeBoundMerges();
+    closeBoundEdges();
     resolveEdgeIdentities();
     generateCSVLoads(stmts);
     generateStatementOperations(stmts);
@@ -1633,7 +1634,6 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
 
         translateComponent(_part._drivenRoot, defined, mainComponent._vars);
     } else if (!bound.empty()) {
-        throwOnRematchedBoundEdge();
         extendBoundDataflow(defined, mainComponent._vars);
     }
 
@@ -1968,19 +1968,6 @@ void DBProgramGenerator::resolveEdgeIdentities() {
     }
 }
 
-void DBProgramGenerator::throwOnRematchedBoundEdge() const {
-    const VariableDependencyGraph::EdgeIdentityMap& identities = _vdg.edgeIdentities();
-
-    for (const VariableDependency* var : _vdg.boundVars()) {
-        if (identities.contains(var->getDecl())) {
-            throwError(fmt::format("Matching the edge variable '{}' again after a "
-                                   "WITH is not yet supported.",
-                                   var->getName()),
-                       var->getDecl());
-        }
-    }
-}
-
 bool DBProgramGenerator::holdsColumn(const VariableDependency* var) const {
     const auto findIt = _part._varMap.find(var);
 
@@ -2061,6 +2048,25 @@ void DBProgramGenerator::closeBoundMerges() {
             auto eq = _opBuilder.create<mlir::db::EqOp>(uloc, boolType, landed, bound);
             filterAllColumns(eq.getResult());
         }
+    }
+}
+
+void DBProgramGenerator::closeBoundEdges() {
+    const VariableDependencyGraph::EdgeIdentityMap& identities = _vdg.edgeIdentities();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+
+    for (const VariableDependency* var : _vdg.boundVars()) {
+        const auto identityIt = identities.find(var->getDecl());
+        if (identityIt == identities.end()) {
+            continue;
+        }
+
+        const mlir::Value matched = findVarOrThrow(_part._varMap, identityIt->second.front());
+        const mlir::Value bound = findVarOrThrow(_part._varMap, var);
+
+        auto eq = _opBuilder.create<mlir::db::EqOp>(uloc, boolType, matched, bound);
+        filterAllColumns(eq.getResult());
     }
 }
 
