@@ -6072,7 +6072,7 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
         mlir::Value condition;
 
         for (const CaseExpr::Test& test : branch._tests) {
-            const mlir::Value tested = translateCaseTest(subject, test);
+            const mlir::Value tested = translateCaseTest(subjectExpr, subject, test);
 
             if (condition) {
                 condition = _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, tested).getResult();
@@ -6146,13 +6146,26 @@ mlir::Value DBProgramGenerator::disjointComparison(mlir::Value lhs, mlir::Value 
     return _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, nullConstantColumn()).getResult();
 }
 
-mlir::Value DBProgramGenerator::translateCaseTest(mlir::Value subject, const CaseExpr::Test& test) {
+mlir::Value DBProgramGenerator::translateCaseTest(const Expr* subjectExpr,
+                                                  mlir::Value subject,
+                                                  const CaseExpr::Test& test) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
+    const bool subjectIsNull = subjectExpr
+                               && (subjectExpr->getType() == EvaluatedType::Null || isUntypedNullColumn(subject));
+
     if (test._kind == CaseExpr::TestKind::IsNull) {
+        if (subjectIsNull) {
+            return constantBool(true);
+        }
+
         return _opBuilder.create<mlir::db::EqOp>(loc, boolType, subject, nullConstantColumn()).getResult();
     } else if (test._kind == CaseExpr::TestKind::IsNotNull) {
+        if (subjectIsNull) {
+            return constantBool(false);
+        }
+
         return _opBuilder.create<mlir::db::NeqOp>(loc, boolType, subject, nullConstantColumn()).getResult();
     }
 
@@ -6160,14 +6173,15 @@ mlir::Value DBProgramGenerator::translateCaseTest(mlir::Value subject, const Cas
     bioassert(_part._exprMap.contains(test._value), "CASE branch with no condition column.");
 
     const mlir::Value value = _part._exprMap.at(test._value);
-
-    if (!subject) {
-        return value;
-    }
+    const EvaluatedType valueType = test._value->getType();
 
     // Null is equal to nothing, itself included, so a branch comparing the subject against
     // it is never taken. IS NULL above is how a Cypher CASE tests for one
-    if (test._value->getType() == EvaluatedType::Null) {
+    const bool comparesAgainstNull = subjectIsNull || valueType == EvaluatedType::Null;
+
+    if (!subject) {
+        return value;
+    } else if (comparesAgainstNull) {
         return constantBool(false);
     }
 
