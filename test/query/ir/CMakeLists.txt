@@ -3563,3 +3563,23 @@ target_link_libraries(test_query_ir_pattern_predicate PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_pattern_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_fuzz_misshapen_column_vectors FuzzMisshapenColumnVectorsTest.cpp)
+target_link_libraries(test_query_ir_fuzz_misshapen_column_vectors PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_misshapen_column_masks FuzzMisshapenColumnMasksTest.cpp)
+target_link_libraries(test_query_ir_fuzz_misshapen_column_masks PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)

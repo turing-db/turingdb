@@ -246,7 +246,8 @@ struct BinaryPredicateExecutor {
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs) {
         auto op = Op {};
-        res->set(op(lhs->getRaw(), rhs->getRaw()));
+        const std::optional<CustomBool> result {op(lhs->getRaw(), rhs->getRaw())};
+        res->set(result);
     }
 
     static void apply(ColumnMask* res,

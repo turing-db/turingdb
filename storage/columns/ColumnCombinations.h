@@ -148,7 +148,7 @@ template <typename Op, typename T, typename U>
     requires OptionalPredicate<Op, T, U> && (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
 class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnConst<std::optional<CustomBool>>;
 };
 
 template <typename Op, typename T, typename U>
