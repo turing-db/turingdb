@@ -1,10 +1,10 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
-  "query": "MATCH (n) RETURN n.age < 1 = toFloat(\"10\")",
+  "query": "MATCH (n) RETURN (n.age < 1) = toFloat(\"10\")",
   "expect": {
-    "result": "\"n.age < 1 = toFloat(\"\"10\"\")\"\nfalse\nfalse\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull",
-    "resultJson": "{\"header\":{\"column_names\":[\"n.age < 1 = toFloat(\\\"10\\\")\"],\"column_types\":[\"Bool\"]},\"data\":[[[false,false,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]]]}"
+    "result": "\"(n.age < 1) = toFloat(\"\"10\"\")\"\nfalse\nfalse\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull",
+    "resultJson": "{\"header\":{\"column_names\":[\"(n.age < 1) = toFloat(\\\"10\\\")\"],\"column_types\":[\"Bool\"]},\"data\":[[[false,false,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]]]}"
   },
   "tags": [
     "fuzz",
@@ -12,6 +12,5 @@
     "expression",
     "filters"
   ],
-  "write-required": false,
-  "disabled-reason": "Comparing the per-row predicate against a constant-derived column asserts 'lhs->size() == rhs->size()' at storage/columns/BinaryPredicates.h:132. Values taken from MATCH (n) RETURN n.age < 1 = 10.0"
+  "write-required": false
 }
