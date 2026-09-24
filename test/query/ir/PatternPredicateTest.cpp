@@ -239,3 +239,54 @@ TEST_F(PatternPredicateTest, introducesEdgeVariable) {
     expectError("MATCH (p:Person) WHERE (p)-[r:KNOWS]->() RETURN p.name",
                 "cannot introduce new variables: 'r'");
 }
+
+TEST_F(PatternPredicateTest, rootWhere) {
+    expectRows("MATCH (p:Person) WHERE (p WHERE p.age > 35)-[:KNOWS]->() RETURN p.name",
+               {{"Andy"}, {"Lisa"}, {"John"}});
+}
+
+TEST_F(PatternPredicateTest, rootWhereWithLabel) {
+    expectRows("MATCH (p:Person) WHERE (p:Person WHERE p.age < 36)-[:KNOWS]->() RETURN p.name",
+               {{"Peter"}});
+}
+
+TEST_F(PatternPredicateTest, rootWhereWithProperties) {
+    expectRows("MATCH (p:Person) WHERE (p {age: 35} WHERE p.name = 'Peter')-[:KNOWS]->() RETURN p.name",
+               {{"Peter"}});
+}
+
+TEST_F(PatternPredicateTest, rootWhereWithLabelAndProperties) {
+    expectRows("MATCH (p:Person) "
+               "WHERE (p:Person {age: 36} WHERE p.name = 'Andy')-[:KNOWS]->() "
+               "RETURN p.name",
+               {{"Andy"}});
+}
+
+TEST_F(PatternPredicateTest, anonymousRootWhereWithLabel) {
+    expectRows("MATCH (p:Person) WHERE (:Person WHERE p.age > 45)-[:KNOWS]->(p) RETURN p.name",
+               {{"Lisa"}});
+}
+
+TEST_F(PatternPredicateTest, anonymousRootWhereWithLabelAndProperties) {
+    expectRows("MATCH (p:Person) "
+               "WHERE (:Person {name: 'Andy'} WHERE p.age > 35)-[:KNOWS]->(p) "
+               "RETURN p.name",
+               {{"Timothy"}});
+}
+
+TEST_F(PatternPredicateTest, anonymousRootWhereWithProperties) {
+    expectRows("MATCH (p:Person) WHERE ({name: 'Lisa'} WHERE p.age > 39)-[:KNOWS]->(p) RETURN p.name",
+               {{"John"}});
+}
+
+TEST_F(PatternPredicateTest, anonymousRootWhere) {
+    expectRows("MATCH (p:Person) WHERE (WHERE p.age > 45)-[:KNOWS]->(p) RETURN p.name",
+               {{"Lisa"}});
+}
+
+TEST_F(PatternPredicateTest, rootWhereReadsOtherBoundEntity) {
+    expectRows("MATCH (a:Person), (b:Person) "
+               "WHERE (a WHERE a.age > b.age)-[:KNOWS]->(b) "
+               "RETURN a.name, b.name",
+               {{"Andy", "Peter"}, {"Lisa", "John"}, {"John", "Susan"}});
+}

@@ -16,6 +16,7 @@
 #include "stmt/StmtContainer.h"
 #include "CypherAST.h"
 #include "Literal.h"
+#include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "SinglePartQuery.h"
@@ -106,6 +107,20 @@ void ParserUtils::foldEntityWheres(CypherAST* ast, Pattern* pattern) {
     } else {
         pattern->setWhere(WhereClause::create(ast, conjunction));
     }
+}
+
+NodePattern* ParserUtils::createNodePattern(CypherAST* ast,
+                                            Symbol* symbol,
+                                            SymbolChain* labels,
+                                            MapLiteral* properties,
+                                            WhereClause* where) {
+    NodePattern* node = NodePattern::create(ast);
+    node->setSymbol(symbol);
+    node->setLabels(labels);
+    node->setProperties(properties);
+    node->setWhere(where);
+
+    return node;
 }
 
 SinglePartQuery* ParserUtils::createPatternBody(CypherAST* ast,

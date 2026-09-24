@@ -12,10 +12,15 @@ class EmbeddingLiteral;
 class ExistsExpr;
 class Expr;
 class ListLiteral;
+class MapLiteral;
+class NodePattern;
 class Pattern;
 class PatternElement;
 class SetStmt;
 class SinglePartQuery;
+class Symbol;
+class SymbolChain;
+class WhereClause;
 
 class ParserUtils {
 public:
@@ -43,6 +48,12 @@ public:
 
     // `MATCH (a WHERE p)-[r WHERE q]->(b) WHERE w` filters as `WHERE p AND q AND w`
     static void foldEntityWheres(CypherAST* ast, Pattern* pattern);
+
+    static NodePattern* createNodePattern(CypherAST* ast,
+                                          Symbol* symbol,
+                                          SymbolChain* labels,
+                                          MapLiteral* properties,
+                                          WhereClause* where);
 
     static SinglePartQuery* createPatternBody(CypherAST* ast,
                                               Pattern* pattern,

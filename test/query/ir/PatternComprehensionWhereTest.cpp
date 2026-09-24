@@ -76,6 +76,18 @@ TEST_F(PatternComprehensionWhereTest, filtersOnTheEndNode) {
                 {"Doruk", "[]"}});
 }
 
+TEST_F(PatternComprehensionWhereTest, filtersOnTheRootNode) {
+    expectRows("MATCH (p:Person) RETURN p.name, [(p WHERE p.age > 30)-[:INTERESTED_IN]->(i) | i.name]",
+               {{"Remy", "[Ghosts, Computers, Eighties]"},
+                {"Adam", "[Bio, Cooking]"},
+                {"Maxime", "[]"},
+                {"Luc", "[]"},
+                {"Martina", "[]"},
+                {"Suhas", "[]"},
+                {"Cyrus", "[]"},
+                {"Doruk", "[]"}});
+}
+
 TEST_F(PatternComprehensionWhereTest, filtersOnTheEdge) {
     expectRows("MATCH (p:Person) RETURN p.name, [(p)-[e:INTERESTED_IN WHERE e.duration = 20]->(i) | i.name]",
                {{"Remy", "[Ghosts, Eighties]"},
