@@ -247,6 +247,8 @@ struct PairRestrictions<Op> {
         // A datetime orders against another datetime only: it is an instant, not a number
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
 
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
+
         // Lexicographic ordering of strings, whether each side borrows its characters
         // from the graph or owns them - what labels(), type() and a CSV field answer -
         // either way round, since which side the query writes it on is its choice
@@ -290,6 +292,8 @@ struct PairRestrictions<Op> {
 
         // A datetime orders against another datetime only: it is an instant, not a number
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
+
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
 
         // Lexicographic ordering of strings, whether each side borrows its characters
         // from the graph or owns them - what labels(), type() and a CSV field answer -

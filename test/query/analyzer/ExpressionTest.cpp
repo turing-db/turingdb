@@ -178,6 +178,7 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(fifteenLiteral, BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Bool);
     EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::LessThanOrEqual, DoubleLiteral::create(&_ast, 5.0), EvaluatedType::Bool);
     EXPECT_BINARY_VALID(sevenLiteral, BinaryOperator::GreaterThanOrEqual, DoubleLiteral::create(&_ast, 6.9), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::LessThanOrEqual, falseLiteral, EvaluatedType::Bool);
     /// Invalid
     EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::LessThan, fiveLiteral);
     EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::GreaterThan, trueLiteral);
@@ -185,7 +186,6 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_INVALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::GreaterThanOrEqual, fiveLiteral);
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::LessThan, StringLiteral::create(&_ast, "10"));
     EXPECT_BINARY_INVALID(StringLiteral::create(&_ast, "5"), BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14));
-    EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::LessThanOrEqual, falseLiteral);
 
     // Add - Sub - Mult - Div - Mod - Pow (Arithmetic operations)
     /// Valid
