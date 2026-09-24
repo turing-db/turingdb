@@ -34,7 +34,6 @@
 #include "WhereClause.h"
 
 #include "expr/Expr.h"
-#include "expr/ExprChildren.h"
 #include "expr/BinaryExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/EntityTypeExpr.h"
@@ -336,18 +335,6 @@ void ReadStmtAnalyzer::analyze(Limit* limit) {
 }
 
 void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
-    std::unordered_set<std::string_view> boundBefore;
-
-    for (const PatternElement* element : pattern->elements()) {
-        for (const EntityPattern* entity : element->getEntities()) {
-            const Symbol* symbol = entity->getSymbol();
-
-            if (symbol && _ctxt->hasDecl(symbol->getName())) {
-                boundBefore.insert(symbol->getName());
-            }
-        }
-    }
-
     for (const PatternElement* element : pattern->elements()) {
         analyze(element);
     }
@@ -363,65 +350,6 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
         if (whereExpr->getType() != EvaluatedType::Bool) {
             throwError("WHERE expression must be a boolean", pattern);
         }
-    }
-
-    DeclSet patternDecls;
-
-    for (const PatternElement* element : pattern->elements()) {
-        for (const EntityPattern* entity : element->getEntities()) {
-            const Symbol* symbol = entity->getSymbol();
-
-            if (symbol && !boundBefore.contains(symbol->getName())) {
-                patternDecls.insert(entity->getDecl());
-            }
-        }
-    }
-
-    for (const PatternElement* element : pattern->elements()) {
-        for (const EntityPattern* entity : element->getEntities()) {
-            if (const WhereClause* entityWhere = entity->getWhere()) {
-                throwOnPatternReference(entityWhere->getExpr(), entity, patternDecls);
-            }
-        }
-    }
-}
-
-void ReadStmtAnalyzer::throwOnPatternReference(const Expr* expr,
-                                               const EntityPattern* entity,
-                                               const DeclSet& patternDecls) const {
-    const VarDecl* referenced = nullptr;
-
-    switch (expr->getKind()) {
-        case Expr::Kind::SYMBOL:
-            referenced = static_cast<const SymbolExpr*>(expr)->getDecl();
-        break;
-        case Expr::Kind::PROPERTY:
-            referenced = static_cast<const PropertyExpr*>(expr)->getEntityVarDecl();
-        break;
-        case Expr::Kind::ENTITY_TYPES:
-            referenced = static_cast<const EntityTypeExpr*>(expr)->getEntityVarDecl();
-        break;
-        default:
-        break;
-    }
-
-    const bool readsOtherEntity = referenced
-                                  && referenced != entity->getDecl()
-                                  && patternDecls.contains(referenced);
-    if (readsOtherEntity) {
-        throwError(fmt::format("A WHERE inside a pattern cannot reference '{}': it may only "
-                               "read its own variable and variables bound before the MATCH",
-                               referenced->getName()),
-                   expr);
-    }
-
-    std::vector<const Expr*> children;
-    if (!ExprChildren::collect(expr, children)) {
-        return;
-    }
-
-    for (const Expr* child : children) {
-        throwOnPatternReference(child, entity, patternDecls);
     }
 }
 

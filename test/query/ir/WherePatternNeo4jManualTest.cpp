@@ -221,18 +221,31 @@ TEST_F(WherePatternNeo4jManualTest, readsVariableOfEarlierMatch) {
 }
 
 TEST_F(WherePatternNeo4jManualTest, readsLaterElementOfSamePattern) {
-    expectError("MATCH (a:Person WHERE a.age > b.age)-[:KNOWS]->(b:Person) RETURN a.name",
-                "cannot reference 'b'");
+    expectRows("MATCH (a:Person WHERE a.age > b.age)-[:KNOWS]->(b:Person) RETURN a.name",
+               {{"Andy"}, {"Lisa"}, {"John"}});
 }
 
 TEST_F(WherePatternNeo4jManualTest, readsEarlierElementOfSamePattern) {
-    expectError("MATCH (a:Person)-[r:KNOWS WHERE a.age > 30]->(b:Person) RETURN a.name",
-                "cannot reference 'a'");
+    expectRows("MATCH (a:Person)-[r:KNOWS WHERE a.age > 36]->(b:Person) RETURN b.name",
+               {{"John"}, {"Susan"}});
 }
 
 TEST_F(WherePatternNeo4jManualTest, readsElementOfOtherPatternPart) {
-    expectError("MATCH (a:Person), (b:Person WHERE b.age = a.age) RETURN b.name",
-                "cannot reference 'a'");
+    expectRows("MATCH (a:Person), (b:Person WHERE b.age = a.age) RETURN b.name",
+               {{"Andy"}, {"Timothy"}, {"Peter"}, {"Lisa"}, {"John"}, {"Susan"}});
+}
+
+TEST_F(WherePatternNeo4jManualTest, readsOtherElementInPatternPredicate) {
+    expectRows("MATCH (a:Person {name: 'Andy'})-[:KNOWS]->(b WHERE (a)-[:KNOWS]->(b)-[:KNOWS]->()) "
+               "RETURN b.name",
+               {{"Peter"}});
+}
+
+TEST_F(WherePatternNeo4jManualTest, readsOtherElementInExists) {
+    expectRows("MATCH (a:Person)-[:KNOWS]->(b:Person WHERE EXISTS { (b)-[:KNOWS]->(c) WHERE c.age > a.age }) "
+               "RETURN a.name, b.name",
+               {{"Andy", "Peter"},
+                {"Peter", "Lisa"}});
 }
 
 TEST_F(WherePatternNeo4jManualTest, nonBooleanPredicate) {
