@@ -6,6 +6,7 @@ own queries, so the seeds track the language the engine currently implements.
 Sources:
   1. test/query-test-suite/tests/*.json  -- the "query" field
   2. regress/**/*.py                     -- client.query("...") / query("...") literals
+  3. test/**/*.cpp                       -- Cypher-looking string literals of the unit tests
 
 Each query is written to fuzz/corpus/cypher/q_<md5[:8]>.cypher. The hand-written
 seeds (files not matching q_*.cypher) are left alone.
@@ -32,6 +33,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TEST_SUITE_DIR = os.path.join(REPO_ROOT, "test", "query-test-suite", "tests")
 REGRESS_DIR = os.path.join(REPO_ROOT, "regress")
+UNIT_TEST_DIR = os.path.join(REPO_ROOT, "test")
 CORPUS_DIR = os.path.join(REPO_ROOT, "fuzz", "corpus", "cypher")
 
 # A query is only worth a seed if it can plausibly reach the parser.
@@ -39,9 +41,20 @@ MIN_QUERY_LENGTH = 3
 
 CYPHER_START = re.compile(
     r"^\s*(MATCH|RETURN|CREATE|DELETE|DETACH|MERGE|SET|REMOVE|WITH|UNWIND|CALL|"
-    r"LOAD|SHOW|CHANGE|COMMIT|VECTOR|INSTALL|DROP|EXPLAIN|OPTIONAL|FOREACH)\b",
+    r"LOAD|SHOW|CHANGE|COMMIT|VECTOR|INSTALL|DROP|EXPLAIN|OPTIONAL|FOREACH|"
+    r"LIST|S3|MERGE_DATAPARTS)\b",
     re.IGNORECASE,
 )
+
+CPP_TOKEN = re.compile(
+    r"(?P<comment>//[^\n]*|/\*.*?\*/)"
+    r"|(?P<char>'(?:[^'\\\n]|\\.)*')"
+    r'|(?:u8|u|U|L)?R"(?P<delimiter>[^()\\\s]{0,16})\((?P<raw>.*?)\)(?P=delimiter)"'
+    r'|(?:u8|u|U|L)?"(?P<string>(?:[^"\\\n]|\\.)*)"',
+    re.DOTALL,
+)
+
+CPP_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0"}
 
 
 def queries_from_test_suite():
@@ -101,6 +114,61 @@ def queries_from_regress():
     return found
 
 
+def cpp_string_literals(source):
+    """Every string literal of a C++ file, adjacent literals joined as the compiler joins them."""
+    found = []
+    group = None
+    group_end = 0
+
+    for token in CPP_TOKEN.finditer(source):
+        adjacent = group is not None and not source[group_end:token.start()].strip()
+
+        if token.group("comment") is not None:
+            if adjacent:
+                group_end = token.end()
+            continue
+
+        if token.group("char") is not None:
+            continue
+
+        if token.group("raw") is not None:
+            text = token.group("raw")
+        else:
+            text = re.sub(r"\\(.)", lambda escape: CPP_ESCAPES.get(escape.group(1), escape.group(1)),
+                          token.group("string"))
+
+        if adjacent:
+            group.append(text)
+        else:
+            if group is not None:
+                found.append("".join(group))
+            group = [text]
+
+        group_end = token.end()
+
+    if group is not None:
+        found.append("".join(group))
+
+    return found
+
+
+def queries_from_unit_tests():
+    """Every Cypher-looking string literal in the C++ unit tests."""
+    found = []
+    for path in sorted(glob.glob(os.path.join(UNIT_TEST_DIR, "**", "*.cpp"), recursive=True)):
+        if "googletest" in path:
+            continue
+
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            source = handle.read()
+
+        for literal in cpp_string_literals(source):
+            if CYPHER_START.match(literal):
+                found.append(literal)
+
+    return found
+
+
 def seed_name(query):
     return "q_" + hashlib.md5(query.encode("utf-8")).hexdigest()[:8] + ".cypher"
 
@@ -113,9 +181,10 @@ def main():
 
     suite = queries_from_test_suite()
     regress = queries_from_regress()
+    unit_tests = queries_from_unit_tests()
 
     wanted = {}
-    for query in suite + regress:
+    for query in suite + regress + unit_tests:
         if len(query.strip()) >= MIN_QUERY_LENGTH:
             wanted[seed_name(query)] = query
 
@@ -125,6 +194,7 @@ def main():
 
     print(f"test suite: {len(suite)} queries")
     print(f"regress:    {len(regress)} queries")
+    print(f"unit tests: {len(unit_tests)} queries")
     print(f"corpus:     {len(existing)} generated seeds, {len(wanted)} wanted")
     print(f"            {len(added)} to add, {len(stale)} stale")
 
