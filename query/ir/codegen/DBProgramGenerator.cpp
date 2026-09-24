@@ -5062,8 +5062,12 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
 
     for (const auto& [decl, vars] : _vdg.edgeIdentities()) {
         bioassert(!vars.empty(), "Empty edge identity for '{}'", decl->getName());
+
         const VariableDependency* representative = vars.front();
-        bioassert(_part._varMap.contains(representative), "Edge identity representative not in varMap");
+        if (!holdsColumn(representative)) {
+            continue;
+        }
+
         bind(decl, decl->getName(), _part._varMap.at(representative).back());
     }
 }
