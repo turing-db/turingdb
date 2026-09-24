@@ -12,7 +12,6 @@ using namespace db;
 #define YY_USER_ACTION advanceLocation(*yylloc, yyleng);
 
 using Token = db::YCypherParser::token;
-using BracketKind = db::YCypherScanner::BracketKind;
 
 #define STORE_STRING(start, length) yylval->emplace<std::string_view>(getStringView(start, length))
 
@@ -29,32 +28,10 @@ using BracketKind = db::YCypherScanner::BracketKind;
 \n        { locationNewLine(*yylloc); }
 [ \t\r]+  { }
 
-    /* A minus running into a number is the subtraction rather than the sign of that
-     * number: `4 - -1` is 5
-     */
-"-"/[ \t\r]*-[ \t\r]*[0-9]  { return Token::SUB; }
-
-"-"[ \t\r]*-  { return Token::TAIL_TAIL; }
 "<"[ \t\r]*-[ \t\r]*- { return Token::TIP_TAIL_TAIL; }
 "-"[ \t\r]*-[ \t\r]*> { return Token::TAIL_TAIL_TIP; }
-"<"[ \t\r]*-[ \t\r]*\[ { openBracket(BracketKind::EdgeDetail); return Token::TIP_TAIL_BRACKET; }
-"]"[ \t\r]*-[ \t\r]*> { closeBracket(); return Token::BRACKET_TAIL_TIP; }
-"-"[ \t\r]*\[  { openBracket(BracketKind::EdgeDetail); return Token::TAIL_BRACKET; }
-
-    /* `]-` is the tail of an edge only where the bracket it closes opened an edge detail.
-     * Where it closes an index the minus is the subtraction operator, so the bracket is
-     * handed to the parser on its own and the rest goes back to be read again.
-     */
-"]"[ \t\r]*-  {
-    if (closeBracket() == BracketKind::EdgeDetail) {
-        return Token::BRACKET_TAIL;
-    }
-
-    retractToFirstCharacter(*yylloc, yyleng);
-    yyless(1);
-
-    return Token::CBRACK;
-}
+"<"[ \t\r]*-[ \t\r]*\[ { return Token::TIP_TAIL_BRACKET; }
+"-"[ \t\r]*\[  { return Token::TAIL_BRACKET; }
 
 "+=" { return Token::ADD_ASSIGN; }
 "<>" { return Token::NOT_EQUAL; }
@@ -68,8 +45,8 @@ using BracketKind = db::YCypherScanner::BracketKind;
 ")"  { return Token::CPAREN; }
 "{"  { return Token::OBRACE; }
 "}"  { return Token::CBRACE; }
-"["  { openBracket(BracketKind::Index); return Token::OBRACK; }
-"]"  { closeBracket(); return Token::CBRACK; }
+"["  { return Token::OBRACK; }
+"]"  { return Token::CBRACK; }
 "="  { return Token::ASSIGN; }
 "$"  { return Token::DOLLAR; }
 ","  { return Token::COMMA; }
@@ -215,14 +192,7 @@ using BracketKind = db::YCypherScanner::BracketKind;
     return Token::STRING_LITERAL;
 }
 
--?[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fd]? {
-    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToFirstCharacter(*yylloc, yyleng);
-        yyless(1);
-
-        return Token::SUB;
-    }
-
+[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fd]? {
     /* Double pattern */
     const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
@@ -231,14 +201,7 @@ using BracketKind = db::YCypherScanner::BracketKind;
 }
 
 
--?[0-9]+[eE][+-]?[0-9]+[fd]? {
-    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToFirstCharacter(*yylloc, yyleng);
-        yyless(1);
-
-        return Token::SUB;
-    }
-
+[0-9]+[eE][+-]?[0-9]+[fd]? {
     /* Double pattern */
     const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
@@ -247,7 +210,7 @@ using BracketKind = db::YCypherScanner::BracketKind;
 }
 
 
--?[0-9]+[fd] {
+[0-9]+[fd] {
     const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
 
@@ -257,43 +220,21 @@ using BracketKind = db::YCypherScanner::BracketKind;
 
     /*
      * Hexadecimal literals.
-     * from_chars using base 16 does not strip the leading 0x,
-     * so + 2 to the token src location, or + 3 if there is leading '-'.
-     * yytext will always be at least 2/3 characters due to the
-     * below regex, so it is always safe to + 2/3.
-     * We also need to manually negate the resultant value.
-     * NOTE: Current implementation disallows literals equal to INT_MIN,
-     * because it requires more complex processing. Values in the range
+     * from_chars using base 16 does not strip the leading 0x.
+     * A sign is the unary minus before the literal, so INT_MIN cannot be
+     * written: its magnitude is out of range. Values in the range
      * [INT_MIN + 1, INT_MAX] are allowed.
      */
--?0[xX][0-9a-fA-F]+ {
-    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToFirstCharacter(*yylloc, yyleng);
-        yyless(1);
-
-        return Token::SUB;
-    }
-
+0[xX][0-9a-fA-F]+ {
     static constexpr int HEX_BASE = 16;
 
-    const char* begin = yytext;
+    const char* begin = yytext + 2; // skip leading "0x"
     const char* end = yytext + yyleng;
-
-    const bool negative = *begin == '-';
-    if (negative) {
-        begin += 3; // skip leading "-0x"
-    } else {
-        begin += 2; // skip leading "0x"
-    }
 
     int64_t v = 0;
     const auto [_, err] = std::from_chars(begin, end, v, HEX_BASE);
     if (err == std::errc::result_out_of_range) {
         syntaxError(*yylloc, "Hexadecimal literal exceeded int64 range.");
-    }
-
-    if (negative) {
-        v = -v;
     }
 
     yylval->emplace<int64_t>(v);
@@ -304,44 +245,22 @@ using BracketKind = db::YCypherScanner::BracketKind;
 
     /*
      * Octal literals.
-     * from_chars using base 8 does not strip the leading 0o,
-     * so + 2 to the token src location, or + 3 if there is leading '-'.
-     * yytext will always be at least 2/3 characters due to the
-     * below regex, so it is always safe to + 2/3.
-     * We also need to manually negate the resultant value.
-     * NOTE: Current implementation disallows literals equal to INT_MIN,
-     * because it requires more complex processing. Values in the range
+     * from_chars using base 8 does not strip the leading 0o.
+     * A sign is the unary minus before the literal, so INT_MIN cannot be
+     * written: its magnitude is out of range. Values in the range
      * [INT_MIN + 1, INT_MAX] are allowed.
      */
--?0[oO][0-7]+ {
-    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToFirstCharacter(*yylloc, yyleng);
-        yyless(1);
-
-        return Token::SUB;
-    }
-
+0[oO][0-7]+ {
     static constexpr int OCT_BASE = 8;
 
-    const char* begin = yytext;
+    const char* begin = yytext + 2; // skips leading "0o"
     const char* end = yytext + yyleng;
-
-    const bool negative = *begin == '-';
-    if (negative) {
-        begin += 3; // skips leading "-0o"
-    } else {
-        begin += 2; // skips leading "0o"
-    }
 
     int64_t v = 0;
     const auto [_, err] = std::from_chars(begin, end, v, OCT_BASE);
 
     if (err == std::errc::result_out_of_range) {
         syntaxError(*yylloc, "Octal literal exceeded int64 range.");
-    }
-
-    if (negative) {
-        v = -v;
     }
 
     yylval->emplace<int64_t>(v);
@@ -352,31 +271,27 @@ using BracketKind = db::YCypherScanner::BracketKind;
 
     /*
      * Decimal literals; no prefix required.
-     * from_chars automatically strips leading '-' for decimal,
-     * and handles negation if present. Allows literals in the
-     * range [INT_MIN, INT_MAX].
+     * A sign is the unary minus before the literal, so the magnitude of
+     * INT_MIN, one past INT_MAX, is a token of its own that only a minus
+     * accepts. Allows literals in the range [INT_MIN, INT_MAX].
      */
--?[0-9]+ {
-    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
-        retractToFirstCharacter(*yylloc, yyleng);
-        yyless(1);
-
-        return Token::SUB;
-    }
-
+[0-9]+ {
     static constexpr int DEC_BASE = 10;
+    static constexpr uint64_t NEGATED_INT64_MIN = uint64_t {1} << 63;
 
     const char* begin = yytext;
     const char* end = yytext + yyleng;
 
-    int64_t v = 0;
+    uint64_t v = 0;
     const auto [_, err] = std::from_chars(begin, end, v, DEC_BASE);
 
-    if (err == std::errc::result_out_of_range) {
+    if (err == std::errc::result_out_of_range || v > NEGATED_INT64_MIN) {
         syntaxError(*yylloc, "Decimal literal exceeded int64 range.");
+    } else if (v == NEGATED_INT64_MIN) {
+        return Token::INT64_MIN_MAGNITUDE;
     }
 
-    yylval->emplace<int64_t>(v);
+    yylval->emplace<int64_t>(static_cast<int64_t>(v));
 
     return Token::DIGIT;
 }
