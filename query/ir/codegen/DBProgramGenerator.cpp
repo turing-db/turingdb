@@ -5492,7 +5492,6 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         break;
 
         case Expr::Kind::LIST:
-        case Expr::Kind::PATH:
             throwError(fmt::format("Unsupported expression: {}",
                                    ExprKindDescription::value(kind)),
                        expr);

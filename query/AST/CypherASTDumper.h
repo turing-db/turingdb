@@ -33,7 +33,6 @@ class UnaryExpr;
 class SymbolExpr;
 class LiteralExpr;
 class ParameterExpr;
-class PathExpr;
 class EntityTypeExpr;
 class StringExpr;
 class PropertyExpr;
@@ -119,7 +118,6 @@ private:
     void dump(std::ostream& out, const UnaryExpr* expr);
     void dump(std::ostream& out, const SymbolExpr* expr);
     void dump(std::ostream& out, const LiteralExpr* expr);
-    void dump(std::ostream& out, const PathExpr* expr);
     void dump(std::ostream& out, const EntityTypeExpr* expr);
     void dump(std::ostream& out, const StringExpr* expr);
     void dump(std::ostream& out, const PropertyExpr* expr);

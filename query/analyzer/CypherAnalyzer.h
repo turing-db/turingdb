@@ -41,6 +41,7 @@ class StmtContainer;
 class WithStmt;
 class CallSubqueryStmt;
 class ExistsExpr;
+class Pattern;
 class Projection;
 class Pattern;
 class PatternComprehensionExpr;
@@ -125,6 +126,8 @@ private:
     // A body opening on a WITH of plain variables imports them, when no scope clause says
     // what the body reads
     void importThroughLeadingWith(CallSubqueryStmt* subquery) const;
+
+    void throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const;
 
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds

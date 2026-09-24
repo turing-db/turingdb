@@ -72,6 +72,8 @@ private:
     void analyze(EdgePattern* edge);
     void analyze(SetItem* item);
 
+    void throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const;
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 
     static ValueType evaluatedToValueType(EvaluatedType type);

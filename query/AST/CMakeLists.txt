@@ -17,7 +17,6 @@ set(ast_sources
     expr/BinaryExpr.cpp
     expr/LiteralExpr.cpp
     expr/EntityTypeExpr.cpp
-    expr/PathExpr.cpp
     expr/PropertyExpr.cpp
     expr/StringExpr.cpp
     expr/SymbolExpr.cpp

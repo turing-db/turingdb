@@ -7,15 +7,20 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "expr/BinaryExpr.h"
+#include "expr/ExistsExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "stmt/CallStmt.h"
+#include "stmt/MatchStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/StmtContainer.h"
 #include "CypherAST.h"
 #include "Literal.h"
+#include "Pattern.h"
+#include "PatternElement.h"
 #include "SinglePartQuery.h"
 #include "SourceManager.h"
+#include "WhereClause.h"
 #include "ParserException.h"
 
 using namespace db;
@@ -68,6 +73,74 @@ void ParserUtils::mergeSetClauses(SetStmt*& held, SetStmt* addition) {
     for (SetItem* item : addition->getItems()) {
         held->addItem(item);
     }
+}
+
+void ParserUtils::foldEntityWheres(CypherAST* ast, Pattern* pattern) {
+    Expr* conjunction = nullptr;
+
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const WhereClause* entityWhere = entity->getWhere();
+            if (!entityWhere) {
+                continue;
+            }
+
+            Expr* predicate = entityWhere->getExpr();
+
+            if (conjunction) {
+                conjunction = BinaryExpr::create(ast, BinaryOperator::And, conjunction, predicate);
+            } else {
+                conjunction = predicate;
+            }
+        }
+    }
+
+    if (!conjunction) {
+        return;
+    }
+
+    WhereClause* where = pattern->getWhere();
+
+    if (where) {
+        where->setExpr(BinaryExpr::create(ast, BinaryOperator::And, conjunction, where->getExpr()));
+    } else {
+        pattern->setWhere(WhereClause::create(ast, conjunction));
+    }
+}
+
+SinglePartQuery* ParserUtils::createPatternBody(CypherAST* ast,
+                                               Pattern* pattern,
+                                               const SourceLocation& location) {
+    SourceManager* sourceManager = ast->getSourceManager();
+
+    MatchStmt* match = MatchStmt::create(ast, pattern);
+    sourceManager->setLocation(match, location);
+
+    StmtContainer* stmts = StmtContainer::create(ast);
+    stmts->add(match);
+    sourceManager->setLocation(stmts, location);
+
+    SinglePartQuery* body = SinglePartQuery::create(ast);
+    body->setStmts(stmts);
+    sourceManager->setLocation(body, location);
+
+    return body;
+}
+
+ExistsExpr* ParserUtils::createPatternPredicate(CypherAST* ast,
+                                                PatternElement* element,
+                                                const SourceLocation& location) {
+    Pattern* pattern = Pattern::create(ast);
+    pattern->addElement(element);
+    foldEntityWheres(ast, pattern);
+
+    SinglePartQuery* body = createPatternBody(ast, pattern, location);
+
+    ExistsExpr* predicate = ExistsExpr::create(ast, body);
+    predicate->setPredicatePattern(pattern);
+    ast->getSourceManager()->setLocation(predicate, location);
+
+    return predicate;
 }
 
 EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const ListLiteral* list) {

@@ -8,7 +8,6 @@
 #include "expr/PropertyExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/EntityTypeExpr.h"
-#include "expr/PathExpr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/IndexExpr.h"

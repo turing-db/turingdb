@@ -890,9 +890,6 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::PROPERTY:
             dump(out, dynamic_cast<const PropertyExpr*>(expr));
             break;
-        case Expr::Kind::PATH:
-            dump(out, dynamic_cast<const PathExpr*>(expr));
-            break;
         case Expr::Kind::SYMBOL:
             dump(out, dynamic_cast<const SymbolExpr*>(expr));
             break;
@@ -1128,12 +1125,6 @@ void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {
         }
     }
 
-    out << "    }\n";
-}
-
-void CypherASTDumper::dump(std::ostream& out, const PathExpr* expr) {
-    out << "    _" << std::hex << expr << " {\n";
-    out << "        ASTType PathExpr\n";
     out << "    }\n";
 }
 
