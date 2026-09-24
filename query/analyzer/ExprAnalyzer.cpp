@@ -1,6 +1,7 @@
 #include "ExprAnalyzer.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "CypherAnalyzer.h"
 #include "DiagnosticsManager.h"
@@ -33,6 +34,28 @@
 using namespace db;
 
 namespace {
+
+bool dateTimePartNamed(std::string_view name, DateTimePart& part) {
+    static const std::unordered_map<std::string_view, DateTimePart> parts = {
+        {"year",        DateTimePart::Year       },
+        {"month",       DateTimePart::Month      },
+        {"day",         DateTimePart::Day        },
+        {"hour",        DateTimePart::Hour       },
+        {"minute",      DateTimePart::Minute     },
+        {"second",      DateTimePart::Second     },
+        {"millisecond", DateTimePart::Millisecond},
+        {"microsecond", DateTimePart::Microsecond},
+    };
+
+    const auto it = parts.find(name);
+    if (it == parts.end()) {
+        return false;
+    }
+
+    part = it->second;
+
+    return true;
+}
 
 // The type a CASE takes when one branch gives @param carried and another gives
 // @param branch: a null branch constrains nothing, an integer beside a double widens,
@@ -823,12 +846,16 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
 ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
-    if (qualifiedName->size() != 2) {
+    // Two names read a property of an entity or a field of a row; three read a calendar
+    // field off a property holding an instant, which is the one chain a value extends
+    const bool readsAComponentOfAProperty = qualifiedName->size() == 3;
+
+    if (qualifiedName->size() != 2 && !readsAComponentOfAProperty) {
         throwError("Invalid property expression.", expr);
     }
 
     const Symbol* varName = qualifiedName->front();
-    const Symbol* propName = qualifiedName->back();
+    const Symbol* propName = qualifiedName->get(1);
 
     // An anonymous pattern's declaration carries no name the context can resolve, so the
     // predicate its inline property map becomes arrives with that declaration already set
@@ -841,7 +868,46 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         throwError(fmt::format("Variable '{}' not found", varName->getName()), expr);
     }
 
-    if (varDecl->getType() == EvaluatedType::StringTable) {
+    const EvaluatedType varType = varDecl->getType();
+
+    DateTimePart part {DateTimePart::Year};
+    if (readsAComponentOfAProperty) {
+        const Symbol* componentName = qualifiedName->back();
+
+        if (!dateTimePartNamed(componentName->getName(), part)) {
+            throwError(fmt::format("'{}' is not a component of a datetime", componentName->getName()), expr);
+        }
+
+        // A write naming a property the graph does not carry would introduce it, and a
+        // component names none: turned away here, before the name is read as a new one
+        if (allowCreate) {
+            throwError("A datetime component cannot name a property.", expr);
+        }
+    }
+
+    // d.year, where d was bound to an instant rather than to an entity
+    if (varType == EvaluatedType::DateTime && !readsAComponentOfAProperty) {
+        if (!dateTimePartNamed(propName->getName(), part)) {
+            throwError(fmt::format("'{}' is not a component of a datetime", propName->getName()), expr);
+        }
+
+        expr->setEntityVarDecl(varDecl);
+        expr->setDateTimePart(part);
+        expr->setType(EvaluatedType::Integer);
+        expr->setDynamic();
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Integer));
+
+        return ValueType::Int64;
+    }
+
+    if (varType == EvaluatedType::StringTable) {
+        if (readsAComponentOfAProperty) {
+            throwError(fmt::format("Field '{}' of '{}' is 'String', only a datetime has components",
+                                   propName->getName(), varName->getName()),
+                       expr);
+        }
+
         // CSV header access: row.columnName
         expr->setEntityVarDecl(varDecl);
         expr->setPropertyName(propName->getName());
@@ -869,11 +935,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::String;
     }
 
-    if (varDecl->getType() != EvaluatedType::NodePattern
-        && varDecl->getType() != EvaluatedType::EdgePattern) {
+    if (varType != EvaluatedType::NodePattern && varType != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
             "Variable '{}' is '{}' it must be a node or edge",
-            varName->getName(), EvaluatedTypeName::value(varDecl->getType()));
+            varName->getName(), EvaluatedTypeName::value(varType));
 
         throwError(error, expr);
     }
@@ -928,6 +993,25 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         type = *maybeEvalType;
     }
 
+    if (readsAComponentOfAProperty) {
+        const bool readsAnInstant = type == EvaluatedType::DateTime;
+
+        // A name no property in the graph carries reads null on every row, and a component
+        // of null is null too: there is no instant to turn away, only nothing to read
+        if (!readsAnInstant && !readsAsNull) {
+            throwError(fmt::format("Property '{}' is '{}', only a datetime has components",
+                                   propName->getName(), EvaluatedTypeName::value(type)),
+                       expr);
+        }
+
+        expr->setDateTimePart(part);
+
+        if (readsAnInstant) {
+            type = EvaluatedType::Integer;
+            vt = ValueType::Int64;
+        }
+    }
+
     expr->setEntityVarDecl(varDecl);
     expr->setType(type);
     expr->setDynamic();
@@ -935,6 +1019,12 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 
     return vt;
+}
+
+void ExprAnalyzer::throwIfReadsADateTimeComponent(const PropertyExpr* expr) {
+    if (expr->readsADateTimeComponent()) {
+        throwError("A datetime component cannot name a property.", expr);
+    }
 }
 
 void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {

@@ -904,6 +904,11 @@ private:
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Type propertyValueType(const PropertyExpr* propExpr);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
+
+    // The instant a dotted access reads, before any component is taken off it: a field of
+    // a loaded row, a property of an entity, or the column a value variable was bound to
+    mlir::Value translatePropertyRead(const PropertyExpr* propExpr);
+    mlir::Value emitDateTimeComponent(const PropertyExpr* propExpr, mlir::Value instant);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
     // labels() / type() of an entity the CREATE wrote, as the constant string it reads:

@@ -6661,6 +6661,16 @@ NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inp
     return selectFunction<StringFunctor>(input, inputNullable, memory, result);
 }
 
+NLUnaryFunctionKernel NLExecutor::selectDateTimeConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<epochSecondsToDateTimeFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<epochSecondsToDateTimeFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    }
+
+    return selectFunction<toDateTimeFunction>(input, inputNullable, memory, result);
+}
+
 NLUnaryFunctionKernel NLExecutor::selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     const bool holdsAString = columnHoldsElement<types::String::Primitive>(input)
                               || columnHoldsElement<types::String::OwningPrimitive>(input);
@@ -6688,6 +6698,16 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(con
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<epochSecondsToDateTimeFunction<types::Int64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<epochSecondsToDateTimeFunction<types::UInt64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Year>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Month>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Day>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Hour>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Minute>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Second>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Millisecond>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Microsecond>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListLastFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

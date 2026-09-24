@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/DenseMap.h"
@@ -179,6 +180,10 @@ private:
     // a function containing an nl.procedure notices.
     const ProcedureContext* _procedureContext {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
+
+    // The clock is read once for the whole program, so a query calling datetime() more
+    // than once answers one instant rather than one per call
+    std::optional<DateTime> _queryInstant;
 
     std::unique_ptr<NLSystemTranslator> _systemTranslator;
 
@@ -887,6 +892,10 @@ private:
 
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);
+
+    // Reads the clock into a singleton column, which is the whole of what datetime()
+    // does: the op leaves no step behind to run
+    void translateCurrentDateTime(mlir::nl::CurrentDateTime currentDateTime);
 
     // Allocates the row-aligned column a constant is laid out into, and binds the
     // fill that writes the driving relation's row count of its value each step

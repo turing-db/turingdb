@@ -3645,6 +3645,50 @@ target_link_libraries(test_query_ir_datetime_property PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_datetime_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_datetime_functions DateTimeFunctionsTest.cpp)
+target_link_libraries(test_query_ir_datetime_functions PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_datetime_functions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_datetime_component DateTimeComponentQueryTest.cpp)
+target_link_libraries(test_query_ir_datetime_component PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_datetime_component PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_datetime_component_cell DateTimeComponentCellTest.cpp)
+target_link_libraries(test_query_ir_datetime_component_cell PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_datetime_component_cell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_datetime_component_ordering DateTimeComponentOrderingTest.cpp)
+target_link_libraries(test_query_ir_datetime_component_ordering PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_datetime_component_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_datetime_ordering DateTimeOrderingTest.cpp)
 target_link_libraries(test_query_ir_datetime_ordering PRIVATE
         turing_db_s

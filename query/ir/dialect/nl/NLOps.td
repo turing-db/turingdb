@@ -2271,6 +2271,33 @@ def ToBoolean : NLUnaryFunctionOp<"to_boolean", [ConstantThroughOperands]>;
 def ToDateTime : NLUnaryFunctionOp<"to_datetime", [ConstantThroughOperands]>;
 def ToString : NLUnaryFunctionOp<"to_string", [ConstantThroughOperands]>;
 
+// The db.datetime_* family lowers to these. Each reads one instant and answers one
+// integer, so a constant instant - what datetime() and datetime('...') are - keeps its
+// constancy through the field read.
+def DateTimeYear : NLUnaryFunctionOp<"datetime_year", [ConstantThroughOperands]>;
+def DateTimeMonth : NLUnaryFunctionOp<"datetime_month", [ConstantThroughOperands]>;
+def DateTimeDay : NLUnaryFunctionOp<"datetime_day", [ConstantThroughOperands]>;
+def DateTimeHour : NLUnaryFunctionOp<"datetime_hour", [ConstantThroughOperands]>;
+def DateTimeMinute : NLUnaryFunctionOp<"datetime_minute", [ConstantThroughOperands]>;
+def DateTimeSecond : NLUnaryFunctionOp<"datetime_second", [ConstantThroughOperands]>;
+def DateTimeMillisecond : NLUnaryFunctionOp<"datetime_millisecond", [ConstantThroughOperands]>;
+def DateTimeMicrosecond : NLUnaryFunctionOp<"datetime_microsecond", [ConstantThroughOperands]>;
+
+def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "The instant the query runs, as a single-value chunk";
+  let description = [{
+      db.current_datetime lowers to this. The translator reads the clock and fills the
+      chunk with the answer, so the op runs no step of its own.
+
+        %now = nl.current_datetime() : !nl.chunk<!storage.datetime>
+  }];
+
+  let arguments = (ins);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "`(` `)` attr-dict `:` type($result)";
+}
+
 // The list family db.size / db.head / db.last / db.tail lower to. A literal list is one
 // cell standing for every row, and so is what these read off it, so each carries its
 // operand's constancy rather than being spread over the rows it was read on.

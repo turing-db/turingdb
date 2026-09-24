@@ -28,6 +28,7 @@
 #include "TypeUtils.h"
 
 #include "BioAssert.h"
+#include "FatalException.h"
 
 namespace db {
 
@@ -307,6 +308,69 @@ public:
 
     ResultType operator()(const Value value) const {
         return valueText(value);
+    }
+};
+
+// datetime() over a count of seconds since the Unix epoch rather than over text. A count
+// naming an instant outside the renderable range reads as null, as unparsable text does.
+template <typename Number>
+class epochSecondsToDateTimeFunction {
+public:
+    using ArgType = Number;
+    using ResultType = std::optional<types::DateTime::Primitive>;
+
+    ResultType operator()(const Number seconds) {
+        if constexpr (std::is_unsigned_v<Number>) {
+            if (seconds > static_cast<Number>(std::numeric_limits<types::Int64::Primitive>::max())) {
+                return std::nullopt;
+            }
+        }
+
+        types::DateTime::Primitive value;
+        if (!DateTime::fromEpochSeconds(static_cast<types::Int64::Primitive>(seconds), value)) {
+            return std::nullopt;
+        }
+
+        return value;
+    }
+};
+
+// The field of an instant a type-erased cell carries, which is what an UNWIND of a list of
+// instants hands each row. A cell holding a null answers null, as every function over a
+// cell does; one holding no instant is a type error only the row it is in can find out
+// about, so it throws.
+template <DateTimePart part>
+class TaggedDateTimeComponentFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(const ArgType cell) const {
+        const ListBufferTypeTag tag = cell.getTag();
+
+        if (tag == ListBufferTypeTag::DateTime) {
+            return DateTime::component(cell.getAs<types::DateTime::Primitive>(), part);
+        } else if (tag == ListBufferTypeTag::Null) {
+            return std::nullopt;
+        }
+
+        throw FatalException("a datetime component reads an instant, and this row holds a value that is not one");
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+};
+
+template <DateTimePart part>
+class DateTimeComponentFunction {
+public:
+    using ArgType = types::DateTime::Primitive;
+    using ResultType = types::Int64::Primitive;
+    using TaggedCounterpart = TaggedDateTimeComponentFunction<part>;
+
+    ResultType operator()(const types::DateTime::Primitive value) {
+        return DateTime::component(value, part);
     }
 };
 

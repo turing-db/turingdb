@@ -10,6 +10,20 @@
 
 namespace db {
 
+// A calendar field of an instant. Millisecond and Microsecond name the sub-second part
+// truncated to that precision, so an instant .123456 of a second in has a Millisecond of
+// 123 and a Microsecond of 123456.
+enum class DateTimePart : uint8_t {
+    Year,
+    Month,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    Millisecond,
+    Microsecond,
+};
+
 // An instant on the UTC timeline, counted in microseconds from the Unix epoch.
 class DateTime {
 public:
@@ -34,6 +48,15 @@ public:
     // the text stands for and is then spent: one count of microseconds cannot carry a zone,
     // so the value is the instant and reads back as UTC.
     static std::optional<DateTime> parse(std::string_view text);
+
+    static DateTime now();
+
+    // A count of seconds since the Unix epoch, as datetime(<integer>) reads one. False
+    // where the count names an instant format cannot spell, which is also what keeps the
+    // scaling to microseconds from overflowing.
+    static bool fromEpochSeconds(int64_t seconds, DateTime& value);
+
+    static int64_t component(DateTime value, DateTimePart part);
 
     static void format(std::string& out, DateTime value);
 
