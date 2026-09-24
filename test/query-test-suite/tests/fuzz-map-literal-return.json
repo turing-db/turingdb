@@ -1,16 +1,16 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "RETURN {}",
   "expect": {
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN {}\n       |        ^^\n-------* Map literals are not supported",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN {}\\n       |        ^^\\n-------* Map literals are not supported\"}"
+    "result": "{}\n{}",
+    "resultJson": "{\"header\":{\"column_names\":[\"{}\"],\"column_types\":[\"Map\"]},\"data\":[[[{}]]]}"
   },
   "tags": [
     "fuzz",
     "crash",
-    "literals"
+    "map",
+    "literal"
   ],
-  "write-required": false,
-  "disabled-reason": "Reaches codegen and throws FatalException 'Unsupported literal kind in WHERE clause expression' for a RETURN with no WHERE; needs a clean analyzer rejection, whose wording this fixture guesses"
+  "write-required": false
 }

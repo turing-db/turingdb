@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (a)-->(b)--(a) RETURN id(a) ORDER BY id(a)",
   "expect": {
@@ -12,6 +12,5 @@
     "match",
     "multipath"
   ],
-  "write-required": false,
-  "disabled-reason": "DBProgramGenerator::addMergeFilter looks the merge sources up with a raw _varMap.at(), which throws an uncaught std::out_of_range when the closing hop is undirected"
+  "write-required": false
 }
