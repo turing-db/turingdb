@@ -5481,6 +5481,11 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
 
     switch (op) {
         case UnaryOperator::Not: {
+            if (isUntypedNullColumn(operandVal)) {
+                _part._exprMap[expr] = nullConstantColumn();
+                break;
+            }
+
             const mlir::db::ColumnType boolType =
                 allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
             auto notOp = _opBuilder.create<mlir::db::NotOp>(loc, boolType, operandVal);
@@ -5914,6 +5919,8 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     // false, and the analyzer turns them away ahead of here
     const bool comparesDisjointTypes = comparesAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
 
+    const bool testsKnownNull = lhsExpr->getType() == EvaluatedType::Null || isUntypedNullColumn(lhs);
+
     // AND, OR and XOR read a null side as an unknown boolean, which the runtime truth
     // tables answer against the other side's value per row. With both sides null there is
     // no value to answer against and the result is null, whichever of the three it is
@@ -5951,14 +5958,14 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             }
         break;
         case BinaryOperator::IsNull:
-            if (lhsExpr->getType() == EvaluatedType::Null) {
+            if (testsKnownNull) {
                 _part._exprMap[expr] = constantBool(true);
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
             }
         break;
         case BinaryOperator::IsNotNull:
-            if (lhsExpr->getType() == EvaluatedType::Null) {
+            if (testsKnownNull) {
                 _part._exprMap[expr] = constantBool(false);
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
