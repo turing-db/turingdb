@@ -186,6 +186,20 @@ TEST_F(SubqueryUnionBodyTest, writesInEveryBranchForEachRow) {
     expectRows("MATCH (a:Audit) RETURN count(a)", {{"16"}});
 }
 
+TEST_F(SubqueryUnionBodyTest, unionsNodesTheBranchesCreateWithDifferentLabels) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) "
+                    "CALL (p) { CREATE (a:A {k: 1}) RETURN a AS x UNION ALL CREATE (b:B {k: 2}) RETURN b AS x } "
+                    "RETURN x.k, labels(x), x:A, x:B",
+                    {{"1", "[A]", "true", "false"}, {"2", "[B]", "false", "true"}});
+}
+
+TEST_F(SubqueryUnionBodyTest, unionsEdgesTheBranchesCreateWithDifferentTypes) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) "
+                    "CALL (p) { CREATE (p)-[e:E1]->(p) RETURN e AS x UNION ALL CREATE (p)-[f:E2]->(p) RETURN f AS x } "
+                    "RETURN type(x), x:E1",
+                    {{"E1", "true"}, {"E2", "false"}});
+}
+
 TEST_F(SubqueryUnionBodyTest, rejectsBranchesNamingTheirColumnsDifferently) {
     expectError("MATCH (p:Person) "
                 "CALL (p) { MATCH (p)-->(x) RETURN x AS z UNION MATCH (p)-->(y) RETURN y AS w } "
