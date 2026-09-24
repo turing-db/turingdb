@@ -4415,6 +4415,15 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             value._buffer = allocColumnForKind(kind);
             value._fold = fold;
             value._listEmit = listEmit;
+        } else if (const auto nullableElement = mlir::dyn_cast<storage::NullableType>(element);
+                   nullableElement && isOwnedStringElement(nullableElement.getValueType())) {
+            // The lists the drain emits view the strings copied into this buffer, which
+            // lives as long as the list buffer of the same collect state
+            value._buffer = _memory->alloc<ColumnVector<types::String::OwningPrimitive>>();
+            NLExecutor::selectCollectOptOwnedStringHandlers(isDistinct,
+                                                            value._fold,
+                                                            value._unwindCollectEmit,
+                                                            value._listEmit);
         } else if (mlir::isa<storage::NullableType>(element)) {
             const ValueType valueType = nullableChunkValueType(column.getType());
 

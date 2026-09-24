@@ -816,6 +816,13 @@ public:
                                                NLCollectFoldFunction& fold,
                                                NLCollectListEmitFunction& listEmit);
 
+    // The handlers a collect of a column owning its strings reads: the flat buffer keeps a
+    // copy of each present string, which the lists and the unwound rows it emits then read
+    static void selectCollectOptOwnedStringHandlers(bool distinctValues,
+                                                    NLCollectFoldFunction& fold,
+                                                    NLUnwindCollectValueEmitFunction& unwindCollectEmit,
+                                                    NLCollectListEmitFunction& listEmit);
+
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization
     // from the resolved property and stores it as the statement's handler; only

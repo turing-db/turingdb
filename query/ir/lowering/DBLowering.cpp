@@ -3710,6 +3710,12 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
             listElement = nullable.getValueType();
         }
 
+        // A list holds a view of each string, whether its column owned it or not, as
+        // nl.make_list's element type says too
+        if (mlir::isa<storage::OwnedStringType>(listElement)) {
+            listElement = storage::StringType::get(context);
+        }
+
         chunkTypes.push_back(nl::ChunkType::get(context, storage::ListType::get(context, listElement)));
     }
 

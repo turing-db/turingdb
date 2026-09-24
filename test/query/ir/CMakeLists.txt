@@ -3676,3 +3676,6 @@ target_link_libraries(test_query_ir_deep_expression PRIVATE turing_db_parser_s)
 
 # range() over the full Int64 span, whose integer count does not fit 64 bits.
 add_call_v3_test(test_query_ir_range_span_overflow RangeSpanOverflowTest.cpp)
+
+# collect() over toString() results.
+add_call_v3_test(test_query_ir_collect_computed_string CollectComputedStringTest.cpp)
