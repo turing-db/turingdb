@@ -101,7 +101,7 @@ keyword, function and procedure sections come from `query/parser/CypherLexer.l`,
 
 ## Seed Corpus
 
-- `fuzz/corpus/cypher/` — Cypher queries from the query test suite and the regression tests
+- `fuzz/corpus/cypher/` — Cypher queries from the query test suite, the regression tests and the C++ unit tests
 - `fuzz/corpus/http/` — 272 HTTP inputs (AFL++-generated corpus covering all parser edges)
 - `fuzz/corpus/csv/` — 3 CSV files (basic, quoted, no headers)
 
