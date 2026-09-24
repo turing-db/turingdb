@@ -451,6 +451,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
                 || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)) {
                 // Valid pair
                 break;
