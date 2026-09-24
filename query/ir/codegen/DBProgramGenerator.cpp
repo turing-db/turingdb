@@ -86,6 +86,7 @@
 #include "expr/IndexExpr.h"
 #include "expr/ListComprehensionExpr.h"
 #include "expr/ListExpr.h"
+#include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
@@ -5441,6 +5442,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::LIST_SLICE: {
+            const ListSliceExpr* slice = static_cast<const ListSliceExpr*>(expr);
+            translateListSliceExpr(expr, slice);
+        }
+        break;
+
         case Expr::Kind::ENTITY_TYPES: {
             const EntityTypeExpr* typeExpr = static_cast<const EntityTypeExpr*>(expr);
             _part._exprMap[expr] = translateEntityTypeExpr(typeExpr);
@@ -6149,6 +6156,23 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         case BinaryOperator::_SIZE:
         break;
     }
+}
+
+void DBProgramGenerator::translateListSliceExpr(const Expr* expr, const ListSliceExpr* slice) {
+    const mlir::Value list = getOrTranslateExprColumn(slice->getBase());
+
+    // A bound the query left out is no operand: the slice then runs from the start, or to
+    // the end
+    const Expr* const fromExpr = slice->getFrom();
+    const Expr* const toExpr = slice->getTo();
+
+    const mlir::Value from = fromExpr ? getOrTranslateExprColumn(fromExpr) : mlir::Value {};
+    const mlir::Value to = toExpr ? getOrTranslateExprColumn(toExpr) : mlir::Value {};
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    _part._exprMap[expr] = _opBuilder.create<mlir::db::ListSlice>(loc, noneType, list, from, to).getResult();
 }
 
 void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr) {

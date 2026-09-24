@@ -52,6 +52,7 @@ class Literal;
 class ListLiteral;
 class ListComprehensionExpr;
 class ExistsExpr;
+class ListSliceExpr;
 class LoadCSVStmt;
 class MapLiteral;
 class MatchStmt;
@@ -857,6 +858,10 @@ private:
     mlir::Value translateCaseTest(mlir::Value subject, const CaseExpr::Test& test);
 
     void translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr);
+
+    // Emits the db.list_slice of `xs[1..3]`: the list column and the bounds the query
+    // gave, each an operand of its own
+    void translateListSliceExpr(const Expr* expr, const ListSliceExpr* slice);
 
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
 

@@ -31,6 +31,10 @@ public:
     /// Returns this list without its first element; an empty list has none to drop.
     ListView tail() const { return empty() ? *this : ListView {_elements.data() + 1, _elements.size() - 1}; }
 
+    /// Returns the run of @param count elements starting at @param from, which the caller
+    /// has clamped to this list: the elements are the ones this list already holds.
+    ListView slice(size_t from, size_t count) const { return ListView {_elements.data() + from, count}; }
+
     explicit operator bool() { return _elements.data() != nullptr; }
 
 private:

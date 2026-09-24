@@ -78,6 +78,7 @@ set(ast_sources
     InstallExtensionQuery.cpp
     stmt/VectorSearchStmt.cpp
     expr/ListExpr.cpp
+    expr/ListSliceExpr.cpp
     expr/ListComprehensionExpr.cpp
     expr/PatternComprehensionExpr.cpp
     expr/CaseExpr.cpp

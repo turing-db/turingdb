@@ -39,6 +39,7 @@ class EdgePattern;
 class ListExpr;
 class ListComprehensionExpr;
 class ExistsExpr;
+class ListSliceExpr;
 class MapLiteral;
 class PatternComprehensionExpr;
 class ReadStmtAnalyzer;
@@ -84,6 +85,7 @@ public:
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
     void analyzePathExpr(PathExpr* expr);
     void analyzeIndexExpr(IndexExpr* expr);
+    void analyzeListSliceExpr(ListSliceExpr* expr);
 
     ValueType analyzePropertyExpr(PropertyExpr* expr,
                                   bool allowCreate = false,

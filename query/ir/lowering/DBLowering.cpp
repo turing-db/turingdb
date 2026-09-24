@@ -1022,6 +1022,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerMakeList(makeList);
     } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
         lowerRange(range);
+    } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
+        lowerListSlice(listSlice);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
         lowerListComprehension(listComprehension);
     } else if (mlir::db::PatternComprehension patternComprehension = mlir::dyn_cast<mlir::db::PatternComprehension>(operation)) {
@@ -1722,6 +1724,73 @@ void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
 
     nl::MakeList lists = _builder.create<nl::MakeList>(_builder.getUnknownLoc(), resultType, chunks);
     _valueMap[makeList.getResult()] = lists.getResult();
+}
+
+void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    mlir::Value listChunk = mapValue(slice.getList());
+
+    llvm::SmallVector<mlir::Value, 3> operands {listChunk};
+
+    mlir::Value fromChunk = slice.getFrom() ? mapValue(slice.getFrom()) : mlir::Value {};
+    mlir::Value toChunk = slice.getTo() ? mapValue(slice.getTo()) : mlir::Value {};
+
+    if (fromChunk) {
+        operands.push_back(fromChunk);
+    }
+
+    if (toChunk) {
+        operands.push_back(toChunk);
+    }
+
+    // A list or a bound holding one value for every row rather than one per row is laid
+    // out over the rows the others carry, as lowerRange lays its bounds out
+    const mlir::Value cardinality = cardinalityDriver(operands);
+
+    listChunk = rowAlignedChunk(listChunk, cardinality);
+
+    if (fromChunk) {
+        fromChunk = nullableValueChunk(rowAlignedChunk(fromChunk, cardinality));
+    }
+
+    if (toChunk) {
+        toChunk = nullableValueChunk(rowAlignedChunk(toChunk, cardinality));
+    }
+
+    // The slice holds the elements the sliced value holds, and is read as nullable: a row
+    // whose list or whose bound is null gets no slice. Slicing a type-erased cell answers
+    // the list its tag says it holds, whose elements are cells in their turn
+    const mlir::Type listElement = mlir::cast<nl::ChunkType>(listChunk.getType()).getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(listElement);
+    const mlir::Type value = nullable ? nullable.getValueType() : listElement;
+
+    const mlir::Type sliced =
+        mlir::isa<storage::ListElementType>(value)
+            ? storage::ListType::get(context, storage::ListElementType::get(context))
+            : value;
+
+    const nl::ChunkType resultType = nl::ChunkType::get(context,
+                                                        storage::NullableType::get(context, sliced));
+
+    // The op goes where the chunks it reads stand, which are the laid-out ones
+    operands.clear();
+    operands.push_back(listChunk);
+
+    if (fromChunk) {
+        operands.push_back(fromChunk);
+    }
+
+    if (toChunk) {
+        operands.push_back(toChunk);
+    }
+
+    setInsertionForNaryOp(operands);
+
+    nl::ListSlice run = _builder.create<nl::ListSlice>(loc, resultType, listChunk, fromChunk, toChunk);
+
+    _valueMap[slice.getResult()] = run.getResult();
 }
 
 void DBLowering::lowerRange(mlir::db::Range range) {

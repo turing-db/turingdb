@@ -759,6 +759,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCase(caseOp, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
             translateMakeList(makeList, body);
+        } else if (nl::ListSlice listSlice = mlir::dyn_cast<nl::ListSlice>(operation)) {
+            translateListSlice(listSlice, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
             translateRange(range, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
@@ -2578,6 +2580,34 @@ NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType
     }
 
     return NLExecutor::selectRangeBoundRead(valueTypeFromElementType(nullableType.getValueType()));
+}
+
+void NLTranslator::translateListSlice(nl::ListSlice slice, NLStmtContainer* body) {
+    const mlir::Value resultValue = slice.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const auto bound = [this](mlir::Value chunk) {
+        if (!chunk) {
+            return NLListSliceData::Bound {};
+        }
+
+        return NLListSliceData::Bound {
+            ._column = getColumn(chunk),
+            ._read = selectRangeBoundRead(chunk.getType()),
+        };
+    };
+
+    const Column* const list = getColumn(slice.getList());
+
+    NLListSliceData* data = _program->allocFunctionData<NLListSliceData>(list,
+                                                                         NLExecutor::selectListRead(list),
+                                                                         bound(slice.getFrom()),
+                                                                         bound(slice.getTo()),
+                                                                         result);
+
+    body->emplaceStmt(&NLExecutor::runListSlice, data);
 }
 
 void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {

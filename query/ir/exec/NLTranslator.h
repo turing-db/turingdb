@@ -886,6 +886,10 @@ private:
     // is taken through
     void translateRange(mlir::nl::Range range, NLStmtContainer* body);
 
+    // Translate an nl.list_slice: allocate the column of views the step fills, and bind
+    // the reads its list and its bounds are taken through
+    void translateListSlice(mlir::nl::ListSlice slice, NLStmtContainer* body);
+
     // The read one element column of an nl.make_list contributes its cell through, chosen
     // by what the chunk holds
     static NLListItemReadFunction selectListItemRead(mlir::Type chunkType);

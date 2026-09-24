@@ -1309,6 +1309,18 @@ atomicExpr
     | atomicExpr OBRACK expr CBRACK {
         $$ = IndexExpr::create(ast, $1, $3); LOC($$, @$);
       }
+    | atomicExpr OBRACK expr RANGE expr CBRACK {
+        $$ = ListSliceExpr::create(ast, $1, $3, $5); LOC($$, @$);
+      }
+    | atomicExpr OBRACK expr RANGE CBRACK {
+        $$ = ListSliceExpr::create(ast, $1, $3, nullptr); LOC($$, @$);
+      }
+    | atomicExpr OBRACK RANGE expr CBRACK {
+        $$ = ListSliceExpr::create(ast, $1, nullptr, $4); LOC($$, @$);
+      }
+    | atomicExpr OBRACK RANGE CBRACK {
+        $$ = ListSliceExpr::create(ast, $1, nullptr, nullptr); LOC($$, @$);
+      }
     ;
 
 propertyOrLabelExpr

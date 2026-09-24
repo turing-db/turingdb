@@ -3493,6 +3493,61 @@ constexpr uint64_t rangeLengthLimit = 100000;
 
 // Read one cell of a nullable integer column as a bound of a range: the number it holds,
 // or nothing where the row has none.
+std::optional<ListView> plainListRead(const Column* input, size_t row) {
+    return (*static_cast<const ColumnVector<ListView>*>(input))[row];
+}
+
+std::optional<ListView> optListRead(const Column* input, size_t row) {
+    return (*static_cast<const ColumnOptVector<ListView>*>(input))[row];
+}
+
+std::optional<ListView> constListRead(const Column* input, size_t) {
+    return static_cast<const ColumnConst<ListView>*>(input)->getRaw();
+}
+
+std::optional<ListView> optConstListRead(const Column* input, size_t) {
+    return static_cast<const ColumnConst<std::optional<ListView>>*>(input)->getRaw();
+}
+
+// The list a type-erased cell holds, absent where the cell holds anything else
+std::optional<ListView> cellListRead(const ListElementView cell) {
+    if (cell.getTag() != ListBufferTypeTag::ListView) {
+        return std::nullopt;
+    }
+
+    return cell.getAs<ListView>();
+}
+
+std::optional<ListView> taggedListRead(const Column* input, size_t row) {
+    return cellListRead((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
+}
+
+std::optional<ListView> optTaggedListRead(const Column* input, size_t row) {
+    const std::optional<ListElementView>& cell =
+        (*static_cast<const ColumnOptVector<ListElementView>*>(input))[row];
+
+    if (!cell) {
+        return std::nullopt;
+    }
+
+    return cellListRead(*cell);
+}
+
+std::optional<ListView> constTaggedListRead(const Column* input, size_t) {
+    return cellListRead(static_cast<const ColumnConst<ListElementView>*>(input)->getRaw());
+}
+
+std::optional<ListView> optConstTaggedListRead(const Column* input, size_t) {
+    const std::optional<ListElementView>& cell =
+        static_cast<const ColumnConst<std::optional<ListElementView>>*>(input)->getRaw();
+
+    if (!cell) {
+        return std::nullopt;
+    }
+
+    return cellListRead(*cell);
+}
+
 template <typename Primitive>
 std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t row) {
     const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
@@ -5639,6 +5694,50 @@ void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
+    const NLListSliceData* slice = static_cast<NLListSliceData*>(data);
+
+    const Column* const list = slice->getList();
+    const NLListReadFunction listRead = slice->getListRead();
+    const NLListSliceData::Bound& from = slice->getFrom();
+    const NLListSliceData::Bound& to = slice->getTo();
+
+    const size_t rowCount = list->size();
+
+    std::vector<std::optional<ListView>>& outputRaw =
+        static_cast<ColumnOptVector<ListView>*>(slice->getResult())->getRaw();
+    outputRaw.clear();
+    outputRaw.reserve(rowCount);
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<ListView> elements = listRead(list, rowIndex);
+
+        const std::optional<types::Int64::Primitive> lower =
+            from._column ? from._read(from._column, rowIndex) : std::optional<types::Int64::Primitive> {0};
+
+        const std::optional<types::Int64::Primitive> upper =
+            to._column ? to._read(to._column, rowIndex) : std::optional<types::Int64::Primitive> {};
+
+        const bool boundsPresent = lower.has_value() && (!to._column || upper.has_value());
+        if (!elements || !boundsPresent) {
+            outputRaw.push_back(std::nullopt);
+            continue;
+        }
+
+        const int64_t size = static_cast<int64_t>(elements->size());
+        const int64_t last = to._column ? *upper : size;
+
+        // A bound counts from the end where it is negative, and is clamped to the list
+        // where it runs past either end, so no row errors on a bound of its own
+        const int64_t first = std::clamp(*lower < 0 ? size + *lower : *lower, int64_t {0}, size);
+        const int64_t end = std::clamp(last < 0 ? size + last : last, int64_t {0}, size);
+
+        const size_t count = end > first ? static_cast<size_t>(end - first) : 0;
+
+        outputRaw.push_back(elements->slice(static_cast<size_t>(first), count));
+    }
+}
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 
@@ -5869,6 +5968,30 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
     ValueTypeDispatcher(valueType).execute(select);
 
     return selected;
+}
+
+NLListReadFunction NLExecutor::selectListRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<ListView>::staticKind()) {
+        return &plainListRead;
+    } else if (kind == ColumnOptVector<ListView>::staticKind()) {
+        return &optListRead;
+    } else if (kind == ColumnConst<ListView>::staticKind()) {
+        return &constListRead;
+    } else if (kind == ColumnConst<std::optional<ListView>>::staticKind()) {
+        return &optConstListRead;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        return &taggedListRead;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        return &optTaggedListRead;
+    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+        return &constTaggedListRead;
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        return &optConstTaggedListRead;
+    }
+
+    throw IRException("a list slice reads a list column");
 }
 
 NLRangeBoundReadFunction NLExecutor::selectRangeBoundRead(ValueType valueType) {

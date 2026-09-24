@@ -13,6 +13,7 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/IndexExpr.h"
 #include "expr/ListExpr.h"
+#include "expr/ListSliceExpr.h"
 #include "expr/ListComprehensionExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/CaseExpr.h"
