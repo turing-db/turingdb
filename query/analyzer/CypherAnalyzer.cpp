@@ -861,6 +861,7 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         projection->setHasGroupingKeys(hasGroupingKeys);
 
         analyzeNestedAggregates(projection);
+        analyzeAggregateItems(projection);
         analyzeAggregateOrderBy(projection);
     }
 }
@@ -991,6 +992,56 @@ void CypherAnalyzer::analyzeAggregateOrderBy(const Projection* projection) const
             throwError("ORDER BY with an aggregate may only order by expressions over the "
                        "returned columns.",
                        keyExpr);
+        }
+    }
+}
+
+void CypherAnalyzer::analyzeAggregateItems(const Projection* projection) const {
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
+        if (!exprPtr || !(*exprPtr)->isAggregate()) {
+            continue;
+        }
+
+        DeclSet elements;
+        throwOnImplicitGroupingKey(*exprPtr, projection, elements);
+    }
+}
+
+void CypherAnalyzer::throwOnImplicitGroupingKey(const Expr* expr,
+                                                const Projection* projection,
+                                                DeclSet& elements) const {
+    if (aggregateSignatureOf(expr)) {
+        return;
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return;
+    }
+
+    const ListComprehensionExpr* comprehension = nullptr;
+    if (expr->getKind() == Expr::Kind::LIST_COMPREHENSION) {
+        comprehension = static_cast<const ListComprehensionExpr*>(expr);
+    }
+
+    for (const Expr* child : children) {
+        const bool readsTheElement = comprehension && child != comprehension->getSource();
+        const VarDecl* elementDecl = readsTheElement ? comprehension->getDecl() : nullptr;
+        if (readsTheElement) {
+            elements.insert(elementDecl);
+        }
+
+        if (child->isAggregate()) {
+            throwOnImplicitGroupingKey(child, projection, elements);
+        } else if (!isGroupWise(child, projection, elements)) {
+            throwError("An expression beside an aggregate may only read the grouping keys: "
+                       "return this one as a key of its own, or aggregate it.",
+                       child);
+        }
+
+        if (readsTheElement) {
+            elements.erase(elementDecl);
         }
     }
 }

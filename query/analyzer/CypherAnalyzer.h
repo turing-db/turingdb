@@ -145,6 +145,10 @@ private:
     void analyzeAggregateArguments(const Expr* expr, const Projection* projection) const;
     bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;
     void analyzeAggregateOrderBy(const Projection* projection) const;
+    void analyzeAggregateItems(const Projection* projection) const;
+    void throwOnImplicitGroupingKey(const Expr* expr,
+                                    const Projection* projection,
+                                    DeclSet& elements) const;
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
     bool isGroupWise(const Expr* expr, const Projection* projection, DeclSet& elements) const;
     bool isGroupWise(std::span<const Expr* const> exprs,
