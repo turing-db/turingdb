@@ -6804,6 +6804,11 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
+    if (expr->getType() == EvaluatedType::Null) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
     const bool isEntityMetadata = funcName == "labels" || funcName == "type";
     if (isEntityMetadata && args && args->size() == 1) {
         const mlir::Value createdMetadata = translateCreatedMetadata(funcName, args->front());

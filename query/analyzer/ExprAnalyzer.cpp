@@ -1180,11 +1180,16 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             continue;
         }
 
+        // A scalar function answers null over a null argument, so a null stands in for
+        // whichever type the signature declares. An aggregate declares its own null overload
+        const bool answersNullOverNull = !unifiesArguments && !signature->isAggregate();
+
         if (!unifiesArguments) {
             const bool matchingArgs = std::equal(
                 expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
-                providedArgs.begin(), [](const FunctionArgumentType& expected, const Expr* arg) {
-                    return arg->getType() == expected.getType();
+                providedArgs.begin(), [answersNullOverNull](const FunctionArgumentType& expected, const Expr* arg) {
+                    const EvaluatedType argType = arg->getType();
+                    return argType == expected.getType() || (answersNullOverNull && argType == EvaluatedType::Null);
                 });
 
             if (!matchingArgs) {
@@ -1238,8 +1243,14 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             arg->setExprVarDecl(decl);
         }
 
+        const bool readsANull = std::any_of(providedArgs.begin(), providedArgs.end(), [](const Expr* arg) {
+            return arg->getType() == EvaluatedType::Null;
+        });
+
         // Found a valid signature
-        if (unifiesArguments) {
+        if (answersNullOverNull && readsANull) {
+            expr->setType(EvaluatedType::Null);
+        } else if (unifiesArguments) {
             expr->setType(unifiedArgumentType(name, providedArgs));
         } else if (signature->returnTypes().size() == 1) {
             expr->setType(signature->returnTypes().front().getType());
@@ -1261,7 +1272,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         }
 
         const ListShape& returnedShape = signature->returnedListShape();
-        if (returnedShape.isList()) {
+        if (returnedShape.isList() && expr->getType() == EvaluatedType::List) {
             expr->setListShape(returnedShape);
         }
 
