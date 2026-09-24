@@ -2234,6 +2234,9 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
 
     markDefined(root);
 
+    std::vector<const VariableDependency*> hopReachedMergeTargets;
+    std::unordered_set<const VariableDependency*> aliasedCopies;
+
     std::vector<Frame> stack;
 
     // DFS from this root
@@ -2247,11 +2250,6 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
         };
         const bool canTraverse = std::ranges::all_of(var->incoming(), seenOrMeta);
 
-        // If we cannot traverse now, we will find another path to this node
-        if (!canTraverse) {
-            continue;
-        }
-
         // A merge edge joins two dataflows instead of traversing the graph, so it never
         // is half of a (source, edge, target) triple: it closes the chain it lands on,
         // and whatever leaves its target opens a new one.
@@ -2259,6 +2257,22 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
 
         // Have we found a (source, edge, target) triple yet on this traversal?
         const bool haveTriple = predTraverses && predPred;
+
+        const bool reachedOverMerge = pred && pred->isMetaEdge();
+        const bool reachedFromMergeTarget = reachedOverMerge && pred->src() == var;
+
+        if (reachedOverMerge && defined.contains(var)) {
+            continue;
+        } else if (reachedFromMergeTarget) {
+            // A hop reached the merge target before this copy of it, so the copy is the
+            // target's own column, and the cycle through it closes on a filter below
+            registerValue(var, findVarOrThrow(_part._varMap, pred->tgt()));
+            aliasedCopies.insert(var);
+            carriedSet.push_back(var);
+        } else if (!canTraverse && !haveTriple) {
+            // If we cannot traverse now, we will find another path to this node
+            continue;
+        }
 
         for (const DependencyEdge* e : var->edges()) {
             const VariableDependency* other = e->src() == var ? e->tgt() : e->src();
@@ -2280,7 +2294,7 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
 
         // Only translate when we have a full triple
         if (!haveTriple) {
-            if (pred && pred->isMetaEdge()) {
+            if (reachedOverMerge && !reachedFromMergeTarget) {
                 addMergeFilter(var, carriedSet);
                 applyConstraints(var);
             }
@@ -2363,6 +2377,28 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
         carriedSet.push_back(src);
         carriedSet.push_back(edge);
         carriedSet.push_back(tgt);
+
+        if (!canTraverse) {
+            hopReachedMergeTargets.push_back(tgt);
+        }
+    }
+
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+
+    for (const VariableDependency* mergeTarget : hopReachedMergeTargets) {
+        for (const DependencyEdge* inEdge : mergeTarget->incoming()) {
+            const bool closesACycle = inEdge->isMetaEdge() && !aliasedCopies.contains(inEdge->src());
+            if (!closesACycle) {
+                continue;
+            }
+
+            const mlir::Value copy = findVarOrThrow(_part._varMap, inEdge->src());
+            const mlir::Value target = findVarOrThrow(_part._varMap, mergeTarget);
+
+            auto eq = _opBuilder.create<mlir::db::EqOp>(uloc, boolType, copy, target);
+            filterAllColumns(eq.getResult());
+        }
     }
 }
 
