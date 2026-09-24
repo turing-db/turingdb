@@ -151,7 +151,7 @@ ExistsExpr* ParserUtils::createPatternPredicate(CypherAST* ast,
 
     SinglePartQuery* body = createPatternBody(ast, pattern, location);
 
-    ExistsExpr* predicate = ExistsExpr::create(ast, body);
+    ExistsExpr* predicate = ExistsExpr::create(ast, {body});
     predicate->setPredicatePattern(pattern);
     ast->getSourceManager()->setLocation(predicate, location);
 

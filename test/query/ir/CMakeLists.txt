@@ -3128,6 +3128,10 @@ add_call_v3_test(test_query_ir_union_standalone_call UnionStandaloneCallTest.cpp
 add_turing_test(test_query_ir_subquery_union_body SubqueryUnionBodyTest.cpp)
 target_link_libraries(test_query_ir_subquery_union_body PRIVATE turing_ir_test_write_query_s)
 
+# UNION inside an EXISTS body.
+add_turing_test(test_query_ir_exists_union_body ExistsUnionBodyTest.cpp)
+target_link_libraries(test_query_ir_exists_union_body PRIVATE turing_ir_test_write_query_s)
+
 # OPTIONAL CALL over a body yielding a nullable ID column.
 add_ir_tests(test_query_ir_optional_subquery_nullable_yield OptionalSubqueryNullableYieldTest.cpp)
 target_link_libraries(test_query_ir_optional_subquery_nullable_yield PRIVATE

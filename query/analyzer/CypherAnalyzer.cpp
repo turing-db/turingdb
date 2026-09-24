@@ -1,5 +1,6 @@
 #include "CypherAnalyzer.h"
 
+#include <algorithm>
 #include <spdlog/fmt/bundled/core.h>
 #include <string_view>
 
@@ -541,20 +542,39 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
 }
 
 void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
-    const SinglePartQuery* body = exists->getBody();
+    const ExistsExpr::Branches& branches = exists->branches();
 
-    if (body->writesToTheGraph()) {
-        throwError("An EXISTS subquery is read-only: its body cannot write to the graph", exists);
+    for (const SinglePartQuery* branch : branches) {
+        if (branch->writesToTheGraph()) {
+            throwError("An EXISTS subquery is read-only: its body cannot write to the graph", exists);
+        }
     }
 
+    if (const Pattern* predicatePattern = exists->getPredicatePattern()) {
+        throwOnPatternPredicateVariable(predicatePattern, _ctxt);
+    }
+
+    for (const SinglePartQuery* branch : branches) {
+        analyzeExistsBranch(branch);
+    }
+
+    // A branch needs no RETURN here, but one that has it names the union's columns
+    const auto hasReturn = [](const SinglePartQuery* branch) {
+        return branch->getReturnStmt() != nullptr;
+    };
+
+    const bool namesColumns = std::ranges::any_of(branches, hasReturn);
+    if (branches.size() > 1 && namesColumns) {
+        const std::vector<const SinglePartQuery*> branchQueries(branches.begin(), branches.end());
+        analyzeUnionColumns(branchQueries);
+    }
+}
+
+void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     // EXISTS is correlated: the body reads every variable in flight, through declarations
     // of its own, so the variables it binds stay inside it
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = body->getDeclContext();
-
-    if (const Pattern* predicatePattern = exists->getPredicatePattern()) {
-        throwOnPatternPredicateVariable(predicatePattern, outer);
-    }
 
     // Each one stays readable through the whole body, as what a CALL's scope clause names
     // does: a WITH inside it carries them past the barrier rather than descoping them,
