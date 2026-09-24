@@ -2234,16 +2234,24 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
 
     markDefined(root);
 
-    std::vector<const VariableDependency*> hopReachedMergeTargets;
-    std::unordered_set<const VariableDependency*> aliasedCopies;
+    // A merge target is defined by whatever reaches it first, and holds a column before
+    // the rest of its merge does: each merge edge left open closes on a filter at the end
+    std::vector<const VariableDependency*> earlyMergeTargets;
+    std::unordered_set<const DependencyEdge*> mergesTaken;
 
     std::vector<Frame> stack;
+    std::vector<Frame> deferred;
 
     // DFS from this root
     stack.emplace_back(root, nullptr);
-    while (!stack.empty()) {
-        const auto [var, pred, predPred] = stack.back();
-        stack.pop_back();
+    while (!stack.empty() || !deferred.empty()) {
+        // A merge is taken early only once no other path is left to its other sources: a
+        // hop still on the stack may be the one that gives them their column
+        const bool forcesAMerge = stack.empty();
+        std::vector<Frame>& frames = forcesAMerge ? deferred : stack;
+
+        const auto [var, pred, predPred] = frames.back();
+        frames.pop_back();
 
         const auto seenOrMeta = [&defined](const DependencyEdge* e) {
             return !e->isMetaEdge() || defined.contains(e->src());
@@ -2261,17 +2269,20 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
         const bool reachedOverMerge = pred && pred->isMetaEdge();
         const bool reachedFromMergeTarget = reachedOverMerge && pred->src() == var;
 
+        const bool takesMergeEarly = reachedOverMerge && (reachedFromMergeTarget || !canTraverse);
+
         if (reachedOverMerge && defined.contains(var)) {
             continue;
-        } else if (reachedFromMergeTarget) {
-            // A hop reached the merge target before this copy of it, so the copy is the
-            // target's own column, and the cycle through it closes on a filter below
-            registerValue(var, findVarOrThrow(_part._varMap, pred->tgt()));
-            aliasedCopies.insert(var);
-            carriedSet.push_back(var);
-        } else if (!canTraverse && !haveTriple) {
-            // If we cannot traverse now, we will find another path to this node
+        } else if (takesMergeEarly && !forcesAMerge) {
+            deferred.emplace_back(var, pred, predPred);
             continue;
+        } else if (takesMergeEarly) {
+            const VariableDependency* definedEnd = reachedFromMergeTarget ? pred->tgt() : pred->src();
+
+            registerValue(var, findVarOrThrow(_part._varMap, definedEnd));
+            mergesTaken.insert(pred);
+            earlyMergeTargets.push_back(var);
+            carriedSet.push_back(var);
         }
 
         for (const DependencyEdge* e : var->edges()) {
@@ -2295,7 +2306,10 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
         // Only translate when we have a full triple
         if (!haveTriple) {
             if (reachedOverMerge && !reachedFromMergeTarget) {
-                addMergeFilter(var, carriedSet);
+                if (!takesMergeEarly) {
+                    addMergeFilter(var, carriedSet);
+                }
+
                 applyConstraints(var);
             }
 
@@ -2379,16 +2393,16 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
         carriedSet.push_back(tgt);
 
         if (!canTraverse) {
-            hopReachedMergeTargets.push_back(tgt);
+            earlyMergeTargets.push_back(tgt);
         }
     }
 
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
-    for (const VariableDependency* mergeTarget : hopReachedMergeTargets) {
+    for (const VariableDependency* mergeTarget : earlyMergeTargets) {
         for (const DependencyEdge* inEdge : mergeTarget->incoming()) {
-            const bool closesACycle = inEdge->isMetaEdge() && !aliasedCopies.contains(inEdge->src());
+            const bool closesACycle = inEdge->isMetaEdge() && !mergesTaken.contains(inEdge);
             if (!closesACycle) {
                 continue;
             }
