@@ -3066,14 +3066,18 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
         mlir::db::Output branchOutput = mlir::cast<mlir::db::Output>(branch.front().back());
 
         for (mlir::Operation& operation : branch.front()) {
-            convertUnionResultChunks(operation, branchOutput.getColumns());
+            llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 4> replacedMappings;
+            convertUnionResultChunks(operation, branchOutput.getColumns(), replacedMappings);
 
             if (&operation == branchOutput.getOperation()) {
                 branchOutputs.push_back(lowerOutput(branchOutput));
-                continue;
+            } else {
+                lowerOperation(operation);
             }
 
-            lowerOperation(operation);
+            for (const auto& [column, chunk] : replacedMappings) {
+                _valueMap[column] = chunk;
+            }
         }
     }
 
@@ -3112,24 +3116,28 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
         mlir::db::Yield branchYield = mlir::cast<mlir::db::Yield>(branch.front().back());
 
         for (mlir::Operation& operation : branch.front()) {
-            convertUnionResultChunks(operation, branchYield.getColumns());
+            llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 4> replacedMappings;
+            convertUnionResultChunks(operation, branchYield.getColumns(), replacedMappings);
 
             if (&operation != branchYield.getOperation()) {
                 lowerOperation(operation);
-                continue;
+            } else {
+                llvm::SmallVector<mlir::Value, 4> chunks;
+                for (const mlir::Value column : branchYield.getColumns()) {
+                    chunks.push_back(mapValue(column));
+                }
+
+                rowAlignBufferedChunks(chunks);
+
+                // A branch of constants alone lays them out where they are bound, above the
+                // root, which the collect must still run once per step of
+                setInsertionInto(deepestOwnerBlock(chunks, root));
+                collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
             }
 
-            llvm::SmallVector<mlir::Value, 4> chunks;
-            for (const mlir::Value column : branchYield.getColumns()) {
-                chunks.push_back(mapValue(column));
+            for (const auto& [column, chunk] : replacedMappings) {
+                _valueMap[column] = chunk;
             }
-
-            rowAlignBufferedChunks(chunks);
-
-            // A branch of constants alone lays them out where they are bound, above the
-            // root, which the collect must still run once per step of
-            setInsertionInto(deepestOwnerBlock(chunks, root));
-            collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
         }
     }
 
@@ -3154,7 +3162,9 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
 // are converted on their way into it rather than on their way out: a count keyed as a
 // plain ui64 and a property keyed as a nullable i64 spell the same number two different
 // ways, and the duplicate the union exists to drop survives.
-void DBLowering::convertUnionResultChunks(mlir::Operation& operation, mlir::OperandRange resultColumns) {
+void DBLowering::convertUnionResultChunks(mlir::Operation& operation,
+                                          mlir::OperandRange resultColumns,
+                                          llvm::SmallVectorImpl<std::pair<mlir::Value, mlir::Value>>& replacedMappings) {
     llvm::SmallVector<mlir::Value, 4> columns;
 
     if (mlir::isa<mlir::db::Output, mlir::db::Yield>(operation)) {
@@ -3184,7 +3194,9 @@ void DBLowering::convertUnionResultChunks(mlir::Operation& operation, mlir::Oper
     rowAlignBufferedChunks(chunks);
 
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
-        _valueMap[columns[columnIndex]] = unionColumnChunk(chunks[columnIndex]);
+        const mlir::Value column = columns[columnIndex];
+        replacedMappings.emplace_back(column, mapValue(column));
+        _valueMap[column] = unionColumnChunk(chunks[columnIndex]);
     }
 }
 
