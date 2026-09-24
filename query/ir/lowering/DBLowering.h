@@ -113,6 +113,11 @@ public:
     mlir::func::FuncOp lower(mlir::func::FuncOp dbFunction, mlir::ModuleOp module);
 
 private:
+    struct ProducerWalkVisit {
+        bool _reachedALoop {false};
+        bool _rowsDroppedBeforeTheCut {false};
+    };
+
     mlir::OpBuilder _builder;
 
     // Graph schema, used to resolve a property name to its value type
@@ -177,6 +182,10 @@ private:
     // program-order) limit to claim a shared producer wins, so a loop never needs
     // two handles. Absent (null on lookup) for a consumer loop, which fans out.
     llvm::DenseMap<mlir::Operation*, mlir::Value> _loopLimitHandle;  // db producer -> handle
+
+    // The columns one limit's walk has reached, so a column reached along many paths of
+    // the dataflow is walked once rather than once per path
+    llvm::DenseMap<mlir::Value, ProducerWalkVisit> _producerWalkVisits;
 
     // A db.sort whose result is capped by an adjacent terminal db.limit fuses into
     // a bounded top-K: the count is baked into the nl.sort_buffer and the db.limit
@@ -497,6 +506,11 @@ private:
                              mlir::Value handle,
                              bool rowsDroppedBeforeTheCut,
                              mlir::Operation* holder);
+
+    bool walkProducerLoops(mlir::Value column,
+                           mlir::Value handle,
+                           bool rowsDroppedBeforeTheCut,
+                           mlir::Operation* holder);
 
     // Records that the loops producing the relation which drives @param limit's projection
     // carry its handle, so a cut charged to constants alone stops its nest as any other
