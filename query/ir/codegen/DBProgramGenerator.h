@@ -852,11 +852,14 @@ private:
     void translateStringExpr(const Expr* expr);
     void translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr);
 
-    // Emits the db.exists_subquery of `EXISTS { ... }`: the columns in flight become the
-    // inputs its body reads through block arguments, the body is generated into the op's
-    // region as a correlated query of its own, and the op's one result is the boolean the
-    // expression stands for
+    // Emits the boolean `EXISTS { ... }` stands for: one db.exists_subquery per query of
+    // its body, ORed together
     void translateExistsExpr(const Expr* expr, const ExistsExpr* existsExpr);
+
+    // Emits the db.exists_subquery of one query of an EXISTS body: the columns in flight
+    // become the inputs it reads through block arguments, the query is generated into the
+    // op's region as a correlated query of its own, and the op's one result is returned
+    mlir::Value generateExistsBranch(const SinglePartQuery* body);
 
     // Emits the db.list_comprehension of `[x IN xs WHERE p(x) | f(x)]`: the source column,
     // the columns in flight as its carry set, and a body region binding the element to

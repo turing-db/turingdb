@@ -5770,8 +5770,27 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     _part._exprMap[expr] = comprehensionOp.getResult();
 }
 
+// A union holds a row exactly when one of its branches does, so each branch is an EXISTS
+// of its own and the answer is their OR
 void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr* existsExpr) {
-    const SinglePartQuery* body = existsExpr->getBody();
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    mlir::Value exists;
+    for (const SinglePartQuery* branch : existsExpr->branches()) {
+        const mlir::Value branchExists = generateExistsBranch(branch);
+
+        if (exists) {
+            exists = _opBuilder.create<mlir::db::OrOp>(loc, boolType, exists, branchExists).getResult();
+        } else {
+            exists = branchExists;
+        }
+    }
+
+    _part._exprMap[expr] = exists;
+}
+
+mlir::Value DBProgramGenerator::generateExistsBranch(const SinglePartQuery* body) {
     const bool carriesScope = subqueryCarriesRows(body);
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
@@ -5892,7 +5911,7 @@ void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr*
     _part = std::move(outerPart);
     _vdg = std::move(outerGraph);
 
-    _part._exprMap[expr] = existsOp.getResult();
+    return existsOp.getResult();
 }
 
 void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr) {

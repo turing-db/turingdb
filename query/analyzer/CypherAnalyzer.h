@@ -127,6 +127,9 @@ private:
     // Analyzes one query of a CALL body under its own scope, seeded with what it imports
     void analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause);
 
+    // Analyzes one query of an EXISTS body, correlated with the variables in flight
+    void analyzeExistsBranch(const SinglePartQuery* body);
+
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds
     void publishSubqueryReturn(const CallSubqueryStmt* subquery);

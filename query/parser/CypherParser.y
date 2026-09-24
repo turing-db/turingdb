@@ -401,7 +401,7 @@
 %type<db::CallStmt*> callSt
 %type<db::CallSubqueryStmt*> callSubquerySt
 %type<db::CallSubqueryStmt::Branches> callSubqueryBody
-%type<db::SinglePartQuery*> subqueryBody
+%type<db::ExistsExpr::Branches> existsBody
 %type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
 %type<db::MergeStmt*> mergeSt
@@ -1098,9 +1098,14 @@ callSubqueryBody
       }
     ;
 
-subqueryBody
-    : singlePartQuery { $$ = $1; }
-    | singlePartQuery unionList { scanner.notImplemented(@$, "UNION in an EXISTS subquery"); }
+existsBody
+    : singlePartQuery { $$.push_back($1); }
+    | singlePartQuery unionList {
+        $$.push_back($1);
+        for (const UnionQuery::Branch& branch : $2) {
+            $$.push_back(branch._query);
+        }
+      }
     ;
 
 callScope
@@ -1490,7 +1495,7 @@ unionSt
     ;
 
 subqueryExist
-    : EXISTS OBRACE subqueryBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
+    : EXISTS OBRACE existsBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
     | EXISTS OBRACE patternWhere CBRACE {
         MatchStmt* match = MatchStmt::create(ast, $3);
         LOC(match, @3);
@@ -1503,7 +1508,7 @@ subqueryExist
         body->setStmts(stmts);
         LOC(body, @3);
 
-        $$ = ExistsExpr::create(ast, body);
+        $$ = ExistsExpr::create(ast, {body});
         LOC($$, @$);
       }
     ;
