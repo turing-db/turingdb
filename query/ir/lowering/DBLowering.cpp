@@ -226,6 +226,18 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, &dateTimeFunctionElement,   ResultNullability::AlwaysNullable}},
+
+    // A calendar field of an instant is always readable, so the field is null exactly
+    // where the instant it was read off is
+    {"db.datetime_year",        {&emitNLUnaryFunction<nl::DateTimeYear>,        &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_month",       {&emitNLUnaryFunction<nl::DateTimeMonth>,       &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_day",         {&emitNLUnaryFunction<nl::DateTimeDay>,         &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_hour",        {&emitNLUnaryFunction<nl::DateTimeHour>,        &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_minute",      {&emitNLUnaryFunction<nl::DateTimeMinute>,      &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_second",      {&emitNLUnaryFunction<nl::DateTimeSecond>,      &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_millisecond", {&emitNLUnaryFunction<nl::DateTimeMillisecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_microsecond", {&emitNLUnaryFunction<nl::DateTimeMicrosecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
+
     {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>,  &ownedStringFunctionElement, ResultNullability::FollowsInput}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
@@ -1135,6 +1147,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg, avg.getDistinct());
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
+    } else if (mlir::db::CurrentDateTime currentDateTime = mlir::dyn_cast<mlir::db::CurrentDateTime>(operation)) {
+        lowerCurrentDateTime(currentDateTime);
     } else if (mlir::db::BroadcastConstant broadcast = mlir::dyn_cast<mlir::db::BroadcastConstant>(operation)) {
         lowerBroadcastConstant(broadcast);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
@@ -4551,6 +4565,19 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
     nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
     _lastHoistedConstant = nlConstant.getOperation();
+}
+
+void DBLowering::lowerCurrentDateTime(mlir::db::CurrentDateTime currentDateTime) {
+    setInsertionAfterHoistedConstants();
+
+    const nl::ChunkType resultType
+        = nl::ChunkType::get(_builder.getContext(), storage::DateTimeType::get(_builder.getContext()));
+
+    nl::CurrentDateTime lowered
+        = _builder.create<nl::CurrentDateTime>(_builder.getUnknownLoc(), resultType);
+
+    _valueMap[currentDateTime.getResult()] = lowered.getResult();
+    _lastHoistedConstant = lowered.getOperation();
 }
 
 void DBLowering::setInsertionAfterHoistedConstants() {

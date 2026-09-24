@@ -418,6 +418,10 @@ private:
     // Hoists an nl.constant to the top of the entry block
     void lowerConstant(mlir::db::ConstantOp constant);
 
+    // Hoists an nl.current_datetime beside the constants, whose shape it shares: one
+    // instant standing for every row
+    void lowerCurrentDateTime(mlir::db::CurrentDateTime currentDateTime);
+
     // Hoists an nl.const_list to the top of the entry block, the way a scalar constant is
     // hoisted; its chunk keeps the db column's list element type
 

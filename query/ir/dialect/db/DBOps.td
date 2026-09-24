@@ -2010,6 +2010,35 @@ def ToBoolean : UnaryFunctionOp<"to_boolean">;
 def ToDateTime : UnaryFunctionOp<"to_datetime">;
 def ToString : UnaryFunctionOp<"to_string">;
 
+// The calendar fields of an instant, as integer columns. The sub-second pair reads the
+// fraction of the second truncated to its own precision, so .123456 of a second in is a
+// db.datetime_millisecond of 123 and a db.datetime_microsecond of 123456.
+def DateTimeYear : UnaryFunctionOp<"datetime_year">;
+def DateTimeMonth : UnaryFunctionOp<"datetime_month">;
+def DateTimeDay : UnaryFunctionOp<"datetime_day">;
+def DateTimeHour : UnaryFunctionOp<"datetime_hour">;
+def DateTimeMinute : UnaryFunctionOp<"datetime_minute">;
+def DateTimeSecond : UnaryFunctionOp<"datetime_second">;
+def DateTimeMillisecond : UnaryFunctionOp<"datetime_millisecond">;
+def DateTimeMicrosecond : UnaryFunctionOp<"datetime_microsecond">;
+
+def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperands]> {
+  let summary = "The instant the query runs, as a constant column";
+  let description = [{
+      What datetime() emits. The instant is read when the program is translated rather
+      than carried in an attribute, so the same query prints the same IR on every run.
+      Reading no operand makes it constant through them, which is what lays one instant
+      over every row instead of one per row.
+
+        %now = db.current_datetime() : !db.column<!storage.datetime>
+  }];
+
+  let arguments = (ins);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "`(` `)` attr-dict `:` type($result)";
+}
+
 // The list family. Each reads a whole !storage.list cell and answers per row: db.size the
 // element count as an integer, db.tail the same list one element shorter - a subspan of
 // the cell, so the row still costs O(1) - and db.head and db.last the list's first and

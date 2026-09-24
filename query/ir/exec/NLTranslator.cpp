@@ -106,7 +106,17 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_float",   &NLExecutor::selectConversion<toFloatFunction>},
     {"nl.to_string",  &NLExecutor::selectToString},
     {"nl.to_boolean", &NLExecutor::selectFunction<toBoolFunction>},
-    {"nl.to_datetime", &NLExecutor::selectFunction<toDateTimeFunction>},
+    {"nl.to_datetime", &NLExecutor::selectDateTimeConversion},
+
+    {"nl.datetime_year",        &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Year>>},
+    {"nl.datetime_month",       &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Month>>},
+    {"nl.datetime_day",         &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Day>>},
+    {"nl.datetime_hour",        &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Hour>>},
+    {"nl.datetime_minute",      &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Minute>>},
+    {"nl.datetime_second",      &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Second>>},
+    {"nl.datetime_millisecond", &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Millisecond>>},
+    {"nl.datetime_microsecond", &NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Microsecond>>},
+
     {"nl.element_id", &NLExecutor::selectId},
     {"nl.size",       &NLExecutor::selectSize},
     {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
@@ -714,6 +724,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             // The handle carries only names; a fetch/hop resolves them on consumption
         } else if (nl::Constant constant = mlir::dyn_cast<nl::Constant>(operation)) {
             translateConstant(constant);
+        } else if (nl::CurrentDateTime currentDateTime = mlir::dyn_cast<nl::CurrentDateTime>(operation)) {
+            translateCurrentDateTime(currentDateTime);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
@@ -2362,6 +2374,18 @@ void NLTranslator::translateConstant(nl::Constant constant) {
     bioassert(column, "Failed to allocate column.");
 
     _valueSlots[res] = column;
+}
+
+void NLTranslator::translateCurrentDateTime(nl::CurrentDateTime currentDateTime) {
+    if (!_queryInstant.has_value()) {
+        _queryInstant = DateTime::now();
+    }
+
+    ColumnConst<types::DateTime::Primitive>* instant
+        = _memory->alloc<ColumnConst<types::DateTime::Primitive>>();
+    instant->set(*_queryInstant);
+
+    _valueSlots[currentDateTime.getResult()] = instant;
 }
 
 void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, NLStmtContainer* body) {

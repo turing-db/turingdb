@@ -418,6 +418,11 @@ public:
     // one the graph holds.
     static NLUnaryFunctionKernel selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    // datetime() reads text or a count of seconds since the epoch, so it picks its functor
+    // from the argument column as a conversion does. It is not selectConversion itself
+    // because no numeric form of the conversion is named by the string one.
+    static NLUnaryFunctionKernel selectDateTimeConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
     // size() counts the elements of a list or the characters of a string, so it picks
     // its functor from the argument column as a conversion does.
     static NLUnaryFunctionKernel selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

@@ -12,3 +12,8 @@ PropertyExpr* PropertyExpr::create(CypherAST* ast, QualifiedName* name) {
     ast->addExpr(expr);
     return expr;
 }
+
+void PropertyExpr::setDateTimePart(DateTimePart part) {
+    _dateTimePart = part;
+    _readsADateTimeComponent = true;
+}

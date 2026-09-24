@@ -81,7 +81,14 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const bool sameEntity = lhsProperty->getEntityVarDecl() == rhsProperty->getEntityVarDecl();
             const bool sameProperty = lhsProperty->getPropName() == rhsProperty->getPropName();
 
-            return sameEntity && sameProperty;
+            // Two calendar fields of one instant are two values, so the field is part of
+            // what the access reads: n.at.year and n.at.day name the same property
+            const bool sameComponent
+                = lhsProperty->readsADateTimeComponent() == rhsProperty->readsADateTimeComponent()
+                  && (!lhsProperty->readsADateTimeComponent()
+                      || lhsProperty->getDateTimePart() == rhsProperty->getDateTimePart());
+
+            return sameEntity && sameProperty && sameComponent;
         }
         break;
 

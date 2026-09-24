@@ -14,7 +14,56 @@ constexpr int64_t SECONDS_PER_MINUTE = 60;
 constexpr int64_t SECONDS_PER_HOUR = 3600;
 constexpr int64_t SECONDS_PER_DAY = 86400;
 
+constexpr int64_t MICROSECONDS_PER_MILLISECOND = 1000;
+
 constexpr size_t FRACTION_DIGITS = 6;
+
+// 0000-01-01T00:00:00Z and 9999-12-31T23:59:59.999999Z, the ends of the four-digit
+// years format writes and parse reads
+constexpr int64_t FIRST_RENDERABLE = -62167219200000000;
+constexpr int64_t LAST_RENDERABLE = 253402300799999999;
+
+struct DateTimeFields {
+    int64_t _year {0};
+    int64_t _month {0};
+    int64_t _day {0};
+    int64_t _hour {0};
+    int64_t _minute {0};
+    int64_t _second {0};
+    int64_t _microsecond {0};
+};
+
+void decompose(DateTimeFields& fields, DateTime value) {
+    const int64_t microseconds = value.getMicroseconds();
+
+    // An instant before the epoch counts down, but its time of day counts up, so both
+    // divisions floor rather than truncate towards zero
+    int64_t seconds = microseconds / MICROSECONDS_PER_SECOND;
+    int64_t fraction = microseconds % MICROSECONDS_PER_SECOND;
+    if (fraction < 0) {
+        fraction += MICROSECONDS_PER_SECOND;
+        seconds--;
+    }
+
+    int64_t epochDay = seconds / SECONDS_PER_DAY;
+    int64_t secondOfDay = seconds % SECONDS_PER_DAY;
+    if (secondOfDay < 0) {
+        secondOfDay += SECONDS_PER_DAY;
+        epochDay--;
+    }
+
+    const std::chrono::year_month_day date {
+        std::chrono::sys_days {std::chrono::days {epochDay}}};
+
+    fields._year = static_cast<int>(date.year());
+    fields._month = static_cast<unsigned>(date.month());
+    fields._day = static_cast<unsigned>(date.day());
+
+    fields._hour = secondOfDay / SECONDS_PER_HOUR;
+    fields._minute = (secondOfDay % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE;
+    fields._second = secondOfDay % SECONDS_PER_MINUTE;
+    fields._microsecond = fraction;
+}
 
 bool isDigit(char c) {
     return c >= '0' && c <= '9';
@@ -200,52 +249,86 @@ std::optional<DateTime> DateTime::parse(std::string_view text) {
 }
 
 bool DateTime::isRenderable(DateTime value) {
-    // 0000-01-01T00:00:00Z and 9999-12-31T23:59:59.999999Z, the ends of the four-digit
-    // years format writes and parse reads
-    constexpr int64_t firstRenderable = -62167219200000000;
-    constexpr int64_t lastRenderable = 253402300799999999;
-
     const int64_t microseconds = value.getMicroseconds();
 
-    return microseconds >= firstRenderable && microseconds <= lastRenderable;
+    return microseconds >= FIRST_RENDERABLE && microseconds <= LAST_RENDERABLE;
+}
+
+DateTime DateTime::now() {
+    const std::chrono::system_clock::duration since
+        = std::chrono::system_clock::now().time_since_epoch();
+
+    return DateTime {std::chrono::duration_cast<std::chrono::microseconds>(since).count()};
+}
+
+bool DateTime::fromEpochSeconds(int64_t seconds, DateTime& value) {
+    constexpr int64_t firstSecond = FIRST_RENDERABLE / MICROSECONDS_PER_SECOND;
+    constexpr int64_t lastSecond = LAST_RENDERABLE / MICROSECONDS_PER_SECOND;
+
+    if (seconds < firstSecond || seconds > lastSecond) {
+        return false;
+    }
+
+    value = DateTime {seconds * MICROSECONDS_PER_SECOND};
+
+    return true;
+}
+
+int64_t DateTime::component(DateTime value, DateTimePart part) {
+    DateTimeFields fields;
+    decompose(fields, value);
+
+    switch (part) {
+        case DateTimePart::Year:
+            return fields._year;
+        break;
+
+        case DateTimePart::Month:
+            return fields._month;
+        break;
+
+        case DateTimePart::Day:
+            return fields._day;
+        break;
+
+        case DateTimePart::Hour:
+            return fields._hour;
+        break;
+
+        case DateTimePart::Minute:
+            return fields._minute;
+        break;
+
+        case DateTimePart::Second:
+            return fields._second;
+        break;
+
+        case DateTimePart::Millisecond:
+            return fields._microsecond / MICROSECONDS_PER_MILLISECOND;
+        break;
+
+        case DateTimePart::Microsecond:
+            return fields._microsecond;
+        break;
+    }
+
+    return 0;
 }
 
 void DateTime::format(std::string& out, DateTime value) {
-    const int64_t microseconds = value.getMicroseconds();
-
-    // An instant before the epoch counts down, but its time of day counts up, so both
-    // divisions floor rather than truncate towards zero
-    int64_t seconds = microseconds / MICROSECONDS_PER_SECOND;
-    int64_t fraction = microseconds % MICROSECONDS_PER_SECOND;
-    if (fraction < 0) {
-        fraction += MICROSECONDS_PER_SECOND;
-        seconds--;
-    }
-
-    int64_t epochDay = seconds / SECONDS_PER_DAY;
-    int64_t secondOfDay = seconds % SECONDS_PER_DAY;
-    if (secondOfDay < 0) {
-        secondOfDay += SECONDS_PER_DAY;
-        epochDay--;
-    }
-
-    const std::chrono::year_month_day date {
-        std::chrono::sys_days {std::chrono::days {epochDay}}};
-
-    const int64_t hour = secondOfDay / SECONDS_PER_HOUR;
-    const int64_t minute = (secondOfDay % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE;
-    const int64_t second = secondOfDay % SECONDS_PER_MINUTE;
+    DateTimeFields fields;
+    decompose(fields, value);
 
     out += fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
-                       static_cast<int>(date.year()),
-                       static_cast<unsigned>(date.month()),
-                       static_cast<unsigned>(date.day()),
-                       hour,
-                       minute,
-                       second);
+                       fields._year,
+                       fields._month,
+                       fields._day,
+                       fields._hour,
+                       fields._minute,
+                       fields._second);
 
-    if (fraction != 0) {
-        out += fmt::format(".{:06}", fraction);
+    if (fields._microsecond != 0) {
+        out += fmt::format(".{:06}", fields._microsecond);
     }
 
     out += 'Z';

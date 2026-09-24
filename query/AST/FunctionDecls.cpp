@@ -464,9 +464,21 @@ void FunctionDecls::initDefault() {
     toBoolean->setArguments({EvaluatedType::String});
     toBoolean->setReturnTypes({{EvaluatedType::Bool}});
 
-    FunctionSignature* dateTime = createFunction("datetime");
-    dateTime->setArguments({EvaluatedType::String});
-    dateTime->setReturnTypes({{EvaluatedType::DateTime}});
+    // An argument is required on the two overloads that take one, so that datetime() picks
+    // the nullary overload rather than matching these with nothing to convert.
+    FunctionSignature* dateTimeOfString = createFunction("datetime");
+    dateTimeOfString->setArguments({EvaluatedType::String});
+    dateTimeOfString->setReturnTypes({{EvaluatedType::DateTime}});
+    dateTimeOfString->setRequiredArgCount(1);
+
+    FunctionSignature* dateTimeOfEpochSeconds = createFunction("datetime");
+    dateTimeOfEpochSeconds->setArguments({EvaluatedType::Integer});
+    dateTimeOfEpochSeconds->setReturnTypes({{EvaluatedType::DateTime}});
+    dateTimeOfEpochSeconds->setRequiredArgCount(1);
+
+    FunctionSignature* currentDateTime = createFunction("datetime");
+    currentDateTime->setArguments({});
+    currentDateTime->setReturnTypes({{EvaluatedType::DateTime}});
 
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they

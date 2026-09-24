@@ -35,6 +35,12 @@ public:
         _stringTableHeaderAccess = csvHeaderAccess;
     }
 
+    // A calendar field read off an instant - d.year, or n.createdAt.year, whose property
+    // name is still createdAt. The part is meaningless unless this says so.
+    bool readsADateTimeComponent() const { return _readsADateTimeComponent; }
+    DateTimePart getDateTimePart() const { return _dateTimePart; }
+    void setDateTimePart(DateTimePart part);
+
     // The field of the loaded row a header access reads, under the declaration the load
     // publishes its column with. Null on a property access, and on a header access whose
     // row no load bound. Kept apart from the expression's own declaration, since an alias
@@ -48,7 +54,9 @@ private:
     VarDecl* _csvFieldDecl {nullptr};
     std::string_view _propName;
     ValueType _createdValueType {ValueType::Invalid};
+    DateTimePart _dateTimePart {DateTimePart::Year};
     bool _stringTableHeaderAccess {false};
+    bool _readsADateTimeComponent {false};
 
     PropertyExpr(QualifiedName* name)
         : Expr(Kind::PROPERTY),

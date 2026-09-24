@@ -6660,9 +6660,77 @@ mlir::Type DBProgramGenerator::propertyValueType(const PropertyExpr* propExpr) {
 }
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
+    const mlir::Value value = translatePropertyRead(propExpr);
+
+    // A component of a name no property in the graph carries is the null that read is,
+    // with no instant for the field op to read off
+    const bool readsNull = propExpr->getType() == EvaluatedType::Null;
+
+    if (!propExpr->readsADateTimeComponent() || readsNull) {
+        return value;
+    }
+
+    return emitDateTimeComponent(propExpr, value);
+}
+
+mlir::Value DBProgramGenerator::emitDateTimeComponent(const PropertyExpr* propExpr, mlir::Value instant) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    switch (propExpr->getDateTimePart()) {
+        case DateTimePart::Year:
+            return _opBuilder.create<mlir::db::DateTimeYear>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Month:
+            return _opBuilder.create<mlir::db::DateTimeMonth>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Day:
+            return _opBuilder.create<mlir::db::DateTimeDay>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Hour:
+            return _opBuilder.create<mlir::db::DateTimeHour>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Minute:
+            return _opBuilder.create<mlir::db::DateTimeMinute>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Second:
+            return _opBuilder.create<mlir::db::DateTimeSecond>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Millisecond:
+            return _opBuilder.create<mlir::db::DateTimeMillisecond>(loc, noneType, instant).getResult();
+        break;
+
+        case DateTimePart::Microsecond:
+            return _opBuilder.create<mlir::db::DateTimeMicrosecond>(loc, noneType, instant).getResult();
+        break;
+    }
+
+    return mlir::Value();
+}
+
+mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propExpr) {
     const VarDecl* entityDecl = propExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
+
+    // d.year names no property: the instant its component is read off is the column the
+    // variable itself was bound to
+    if (entityDecl->getType() == EvaluatedType::DateTime) {
+        const auto projectedIt = _part._projectedColumns.find(entityDecl);
+        const mlir::Value boundColumn = projectedIt != end(_part._projectedColumns)
+                                      ? projectedIt->second
+                                      : resolveEntityColumn(entityDecl);
+
+        bioassert(boundColumn, "Datetime component read on unknown variable: {}", varName);
+
+        return boundColumn;
+    }
 
     // A header access reads a field of a loaded record rather than a property of an
     // entity: the load published its column under the declaration the access carries
@@ -6910,6 +6978,16 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
 
         const mlir::Value input = translateArg(args->front());
         _part._exprMap[expr] = _opBuilder.create<mlir::db::ElementID>(loc, noneType, input).getResult();
+        return;
+    }
+
+    // datetime() reads the clock rather than converting an argument, so it is the one
+    // name whose call with no argument is a different op from its call with one.
+    const bool namesTheClock = funcName == "datetime" && (!args || args->empty());
+    if (namesTheClock) {
+        const mlir::db::ColumnType dateTimeType = allocColumnType(mlir::storage::DateTimeType::get(_mlirCtxt));
+
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::CurrentDateTime>(loc, dateTimeType).getResult();
         return;
     }
 
