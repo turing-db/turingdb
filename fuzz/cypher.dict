@@ -70,6 +70,7 @@
 "EMBEDDINGS"
 "AVAILABLE"
 "MERGE_DATAPARTS"
+"DATETIMES"
 
 # --- Boolean and null ---
 "TRUE"
@@ -146,6 +147,8 @@
 "coalesce"
 "cosine_similarity"
 "euclidean_distance"
+"datetime"
+"toString"
 
 # --- Procedures (from procedures/) ---
 "db.labels()"
@@ -161,6 +164,7 @@
 "db.showIndexes()"
 "db.hierarchicalLabelCounts"
 "gnn.neighbourhoodSample"
+"gnn.graphSAGE"
 
 # --- Multi-char operators (from CypherParser.y) ---
 "--"
