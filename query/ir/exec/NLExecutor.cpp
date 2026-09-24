@@ -475,12 +475,24 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = dynamic_cast<const ColumnConst<Arg>*>(input);
-    bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnConst<Res>*>(result);
-
     Functor functor = makeFunctor<Functor>(context, memory);
-    output->set(functor(typedInput->getRaw()));
+
+    if (const auto* typedInput = dynamic_cast<const ColumnConst<Arg>*>(input)) {
+        output->set(functor(typedInput->getRaw()));
+        return;
+    }
+
+    // The same fallback functionVectorKernel keeps: a function taking a string may be
+    // handed a constant std::string rather than a view
+    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
+        if (const auto* ownedInput = dynamic_cast<const ColumnConst<types::String::OwningPrimitive>*>(input)) {
+            output->set(functor(ownedInput->getRaw()));
+            return;
+        }
+    }
+
+    bioassert(false, "Function operand has an unexpected column type.");
 }
 
 // The constant whose single cell can be absent: the functor is handed the optional and
@@ -496,6 +508,58 @@ void functionOptConstKernel(NLExecutionContext* context, Column* result, const C
 
     Functor functor = makeFunctor<Functor>(context, memory);
     output->set(functor(typedInput->getRaw()));
+}
+
+template <typename Functor, typename Element>
+void applyFunctionOverNullableConst(Functor& functor,
+                                    const ColumnConst<std::optional<Element>>* input,
+                                    ColumnConst<std::optional<TypeUtils::unwrap_optional_t<typename Functor::ResultType>>>* output) {
+    const std::optional<Element>& value = input->getRaw();
+    if (!value.has_value()) {
+        output->set(std::nullopt);
+        return;
+    }
+
+    output->set(functor(*value));
+}
+
+// The same constant for a function that does not read its own nulls: an absent cell
+// answers null, as functionOptKernel answers one per row.
+template <typename Functor>
+void functionNullableConstKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
+    using Arg = typename Functor::ArgType;
+    using JustRes = TypeUtils::unwrap_optional_t<typename Functor::ResultType>;
+
+    auto* output = static_cast<ColumnConst<std::optional<JustRes>>*>(result);
+    Functor functor = makeFunctor<Functor>(context, memory);
+
+    if (const auto* typedInput = dynamic_cast<const ColumnConst<std::optional<Arg>>*>(input)) {
+        applyFunctionOverNullableConst(functor, typedInput, output);
+        return;
+    }
+
+    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
+        if (const auto* ownedInput = dynamic_cast<const ColumnConst<std::optional<types::String::OwningPrimitive>>*>(input)) {
+            applyFunctionOverNullableConst(functor, ownedInput, output);
+            return;
+        }
+    }
+
+    bioassert(false, "Function operand has an unexpected column type.");
+}
+
+// Whether a column is a constant that can be null, of the function's argument or - for a
+// function taking a string - of the owned strings a conversion answers
+template <typename Arg>
+bool isNullableConstantOf(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
+        return kind == ColumnConst<std::optional<Arg>>::staticKind()
+            || kind == ColumnConst<std::optional<types::String::OwningPrimitive>>::staticKind();
+    } else {
+        return kind == ColumnConst<std::optional<Arg>>::staticKind();
+    }
 }
 
 // A null constant argument converts to a null result whatever the function; the
@@ -6288,6 +6352,7 @@ void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* d
 
 template <typename Functor>
 NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
@@ -6302,6 +6367,24 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     if constexpr (HasTaggedCounterpart<Functor>) {
         if (readsTaggedCells(input)) {
             return selectTaggedCellFunction<typename Functor::TaggedCounterpart>(input, inputNullable, memory, result);
+        }
+    }
+
+    // A constant that can be null - what a conversion of a constant answers - is the one-row
+    // form of a nullable column, and is read the way functionOptKernel reads one
+    constexpr bool hasNullableConstant = InternalKind::Types::contains<std::optional<Arg>>()
+                                         && InternalKind::Types::contains<std::optional<JustRes>>()
+                                         && !TypedInternalID<Res>;
+
+    if constexpr (hasNullableConstant) {
+        if (isNullableConstantOf<Arg>(input)) {
+            if constexpr (ReadsItsNulls<Functor>) {
+                result = memory->alloc<ColumnConst<Res>>();
+                return &functionOptConstKernel<Functor>;
+            } else {
+                result = memory->alloc<ColumnConst<std::optional<JustRes>>>();
+                return &functionNullableConstKernel<Functor>;
+            }
         }
     }
 

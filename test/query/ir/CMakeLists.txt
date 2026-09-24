@@ -3713,3 +3713,13 @@ target_link_libraries(test_query_ir_fuzz_node_id_binary_operation PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_function_of_nullable_constant FuzzFunctionOfNullableConstantTest.cpp)
+target_link_libraries(test_query_ir_fuzz_function_of_nullable_constant PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
