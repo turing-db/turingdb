@@ -28,6 +28,13 @@ using Token = db::YCypherParser::token;
 \n        { locationNewLine(*yylloc); }
 [ \t\r]+  { }
 
+    /* A minus running into a number is arithmetic, not the tail of a pattern: a
+     * relationship never runs into a digit, so `xs[2]-1` and `4 - -1` are read as the
+     * subtractions they are
+     */
+"]"/[ \t\r]*-[ \t\r]*[0-9]  { return Token::CBRACK; }
+"-"/[ \t\r]*-[ \t\r]*[0-9]  { return Token::SUB; }
+
 "-"[ \t\r]*-  { return Token::TAIL_TAIL; }
 "<"[ \t\r]*-[ \t\r]*- { return Token::TIP_TAIL_TAIL; }
 "-"[ \t\r]*-[ \t\r]*> { return Token::TAIL_TAIL_TIP; }
@@ -196,6 +203,13 @@ using Token = db::YCypherParser::token;
 }
 
 -?[0-9]*\.[0-9]+([eE][+-]?[0-9]+)?[fd]? {
+    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
+        retractToSign(*yylloc, yyleng);
+        yyless(1);
+
+        return Token::SUB;
+    }
+
     /* Double pattern */
     const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
@@ -205,6 +219,13 @@ using Token = db::YCypherParser::token;
 
 
 -?[0-9]+[eE][+-]?[0-9]+[fd]? {
+    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
+        retractToSign(*yylloc, yyleng);
+        yyless(1);
+
+        return Token::SUB;
+    }
+
     /* Double pattern */
     const double v = strtod(yytext, nullptr);
     yylval->emplace<double>(v);
@@ -233,6 +254,13 @@ using Token = db::YCypherParser::token;
      * [INT_MIN + 1, INT_MAX] are allowed.
      */
 -?0[xX][0-9a-fA-F]+ {
+    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
+        retractToSign(*yylloc, yyleng);
+        yyless(1);
+
+        return Token::SUB;
+    }
+
     static constexpr int HEX_BASE = 16;
 
     const char* begin = yytext;
@@ -273,6 +301,13 @@ using Token = db::YCypherParser::token;
      * [INT_MIN + 1, INT_MAX] are allowed.
      */
 -?0[oO][0-7]+ {
+    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
+        retractToSign(*yylloc, yyleng);
+        yyless(1);
+
+        return Token::SUB;
+    }
+
     static constexpr int OCT_BASE = 8;
 
     const char* begin = yytext;
@@ -309,6 +344,13 @@ using Token = db::YCypherParser::token;
      * range [INT_MIN, INT_MAX].
      */
 -?[0-9]+ {
+    if (yytext[0] == '-' && subtractsFromTheLastToken()) {
+        retractToSign(*yylloc, yyleng);
+        yyless(1);
+
+        return Token::SUB;
+    }
+
     static constexpr int DEC_BASE = 10;
 
     const char* begin = yytext;
