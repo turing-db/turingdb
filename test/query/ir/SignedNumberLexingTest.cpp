@@ -88,6 +88,24 @@ TEST_F(SignedNumberLexingTest, subtractsFromAnIndexedElement) {
     expectRows("WITH [1, 2, 3] AS xs RETURN xs[2]-1 AS answer", {{"2"}});
 }
 
+TEST_F(SignedNumberLexingTest, subtractsOneIndexedElementFromAnother) {
+    expectRows("WITH [1, 2, 3] AS xs RETURN xs[2] - xs[0] AS answer", {{"2"}});
+}
+
+TEST_F(SignedNumberLexingTest, subtractsAPropertyFromAnIndexedElement) {
+    expectRows("MATCH (n:Person {name: 'Remy'}) WITH n, [1, 2, 3] AS xs "
+               "RETURN xs[2] - n.age AS answer",
+               {{"-29"}});
+}
+
+TEST_F(SignedNumberLexingTest, subtractsANegativeNumberFromAnIndexedElement) {
+    expectRows("WITH [1, 2, 3] AS xs RETURN xs[2] - -1 AS answer", {{"4"}});
+}
+
+TEST_F(SignedNumberLexingTest, subtractsAParenthesisedExpressionFromAnIndexedElement) {
+    expectRows("WITH [1, 2, 3] AS xs RETURN xs[2] - (1 + 2) AS answer", {{"0"}});
+}
+
 TEST_F(SignedNumberLexingTest, subtractsANegativeNumber) {
     expectRows("RETURN 4 - -1 AS answer", {{"5"}});
 }
@@ -102,6 +120,17 @@ TEST_F(SignedNumberLexingTest, walksAnUndirectedPattern) {
 
 TEST_F(SignedNumberLexingTest, walksAnEdgePatternOutOfABracket) {
     expectRows("MATCH (n:Person {name: 'Remy'})-[:KNOWS_WELL]-(m) RETURN count(m) AS known", {{"3"}});
+}
+
+TEST_F(SignedNumberLexingTest, walksAnEdgePatternOntoTheNextLine) {
+    expectRows("MATCH (n:Person {name: 'Remy'})-[:KNOWS_WELL]-\n(m) RETURN count(m) AS known",
+               {{"3"}});
+}
+
+TEST_F(SignedNumberLexingTest, walksAnEdgePatternHoldingAnIndexedElement) {
+    expectRows("MATCH (n:Person {name: 'Remy'})-[e {name: ['Remy -> Adam'][0]}]-(m) "
+               "RETURN count(m) AS known",
+               {{"1"}});
 }
 
 TEST_F(SignedNumberLexingTest, subtractsInsideACall) {
