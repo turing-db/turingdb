@@ -135,14 +135,16 @@ private:
      * not connected
      */
     VariableDependency* subdivideWithMerge(VariableDependency* s, VariableDependency* t);
+    static DependencyEdge* findOutgoingMerge(VariableDependency* var);
 
     void subdivideWithMergeOutImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
     void subdivideWithMergeIncImpl(VariableDependency* s, VariableDependency* mid, VariableDependency* t, DependencyEdge* e);
 
     /**
-    * @brief Get the cycle basis of this graph.
-    */
-    void computeCycleBasis(std::vector<Cycle>& cycles);
+     * @brief Finds one cycle of the graph's non-meta edges, in the order its variables
+     * run around it. Returns false when those edges form a forest.
+     */
+    bool findCycle(Cycle& cycle);
 
     /**
      * @brief Removes a non-meta cycle by detaching the cycle and replacing the critical
