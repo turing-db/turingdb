@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string>
+
 #include "versioning/CommitWriteBuffer.h"
 
 #include "NLMergeWorkingSet.h"
@@ -41,6 +43,11 @@ private:
 
     void buildNodeIndex(NLMergeNodeIndex* index);
     void absorbPendingNodes(NLMergeNodeIndex* index);
+    void rekeyUpdatedNodes(NLMergeNodeIndex* index);
+    void rekeyNode(NLMergeNodeIndex* index, const NLMergeRef& node);
+    void appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef& node, std::string& key);
+    bool holdsTheKey(NLMergeNodeIndex* index, const NLMergeRef& node, const std::string& key);
+    bool isDeletedNode(const NLMergeRef& node) const;
     void absorbPendingEdges();
     bool holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t offset);
     void collectCandidates(size_t row);

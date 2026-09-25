@@ -16,6 +16,7 @@
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
+#include "reader/GraphReader.h"
 
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
@@ -274,6 +275,8 @@ void NLMergeExecutor::buildNodeIndex(NLMergeNodeIndex* index) {
             index->add(key, {._id=(*nodes)[row].getValue(), ._pending=false});
         }
     }
+
+    index->setNextNodeUpdate(_writeBuffer->updatedNodes().size());
 }
 
 void NLMergeExecutor::collectCandidates(size_t row) {
@@ -282,7 +285,9 @@ void NLMergeExecutor::collectCandidates(size_t row) {
     for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
         const NLMergeData::Node& node = nodes[nodeIndex];
         std::vector<NLMergeRef>& candidates = _work->_candidates[nodeIndex];
+        std::unordered_set<uint64_t>& keys = _work->_candidateKeys[nodeIndex];
         candidates.clear();
+        keys.clear();
 
         if (node._boundColumn) {
             const bool pending = node._boundPending && (*node._boundPending)[row];
@@ -290,28 +295,120 @@ void NLMergeExecutor::collectCandidates(size_t row) {
             const uint64_t id = pending ? boundID - _firstPendingNodeID : boundID;
 
             candidates.push_back({._id=id, ._pending=pending});
+            keys.insert(candidates.back().asKey());
         } else {
             NLMergeNodeIndex* index = node._index;
             if (!index->isBuilt()) {
                 buildNodeIndex(index);
             }
 
+            rekeyUpdatedNodes(index);
             absorbPendingNodes(index);
 
             std::string& key = _work->_key;
             key.clear();
             appendMergeKey(node._properties, row, key);
 
-            const std::span<const NLMergeRef> found = index->find(key);
-            candidates.insert(candidates.end(), found.begin(), found.end());
-        }
+            for (const NLMergeRef& candidate : index->find(key)) {
+                const bool holds = !isDeletedNode(candidate)
+                                   && (!index->hasChanged(candidate) || holdsTheKey(index, candidate, key));
 
-        std::unordered_set<uint64_t>& keys = _work->_candidateKeys[nodeIndex];
-        keys.clear();
-        for (const NLMergeRef& candidate : candidates) {
-            keys.insert(candidate.asKey());
+                if (holds && keys.insert(candidate.asKey()).second) {
+                    candidates.push_back(candidate);
+                }
+            }
         }
     }
+}
+
+// The updates since the index last looked, to the graph's nodes and to the ones this query
+// wrote: a node whose key values one of them changed is keyed again under its new values.
+// A node the index has not taken in yet is read as it stands when it is.
+void NLMergeExecutor::rekeyUpdatedNodes(NLMergeNodeIndex* index) {
+    const NLMergeScanProperties& keyProperties = index->writtenProperties();
+    const auto isKeyProperty = [&keyProperties](PropertyTypeID property) {
+        return std::ranges::any_of(keyProperties, [property](const NLMergeScanProperty& keyProperty) {
+            return keyProperty._propertyType._id == property;
+        });
+    };
+
+    const CommitWriteBuffer::UpdatedNodes& updates = _writeBuffer->updatedNodes();
+    for (size_t position = index->getNextNodeUpdate(); position < updates.size(); position++) {
+        const CommitWriteBuffer::NodeUpdate& update = updates[position];
+
+        if (isKeyProperty(update._updatedValue.propertyID)) {
+            rekeyNode(index, {._id=update._idToUpdate.getValue(), ._pending=false});
+        }
+    }
+
+    index->setNextNodeUpdate(updates.size());
+
+    const std::vector<NLWrittenValues::PendingNodeUpdate>& pendingUpdates = _context->getWrittenValues().pendingNodeUpdates();
+    for (size_t position = index->getNextPendingNodeUpdate(); position < pendingUpdates.size(); position++) {
+        const NLWrittenValues::PendingNodeUpdate& update = pendingUpdates[position];
+        const bool takenIn = update._offset < index->getNextPendingNode();
+
+        if (takenIn && isKeyProperty(update._property)) {
+            rekeyNode(index, {._id=update._offset, ._pending=true});
+        }
+    }
+
+    index->setNextPendingNodeUpdate(pendingUpdates.size());
+}
+
+void NLMergeExecutor::rekeyNode(NLMergeNodeIndex* index, const NLMergeRef& node) {
+    const LabelSetHandle labelset(index->getWriteLabels());
+
+    const LabelSetHandle nodeLabels = node._pending
+                                      ? _writeBuffer->getPendingNode(node._id).labelsetHandle
+                                      : _view->read().getNodeLabelSet(NodeID(node._id));
+    if (!nodeLabels.hasAtLeastLabels(labelset)) {
+        return;
+    }
+
+    std::string& key = _work->_scanKey;
+    key.clear();
+    appendCurrentKey(index, node, key);
+
+    index->add(key, node);
+    index->markChanged(node);
+}
+
+void NLMergeExecutor::appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef& node, std::string& key) {
+    const NLMergeScanProperties& keyProperties = index->writtenProperties();
+    NLWrittenValues& written = _context->getWrittenValues();
+
+    if (node._pending) {
+        appendPendingKey(written, keyProperties, _writeBuffer->getPendingNode(node._id).properties, key);
+        return;
+    }
+
+    ColumnNodeIDs* nodes = index->getScanNodes();
+    nodes->clear();
+    nodes->push_back(NodeID(node._id));
+
+    written.indexUpdates(_writeBuffer);
+
+    for (const NLMergeScanProperty& property : keyProperties) {
+        fetchMergeNodeProperty(*_view, written, property, nodes);
+        property._keyAppend(property._values, 0, key);
+    }
+}
+
+bool NLMergeExecutor::holdsTheKey(NLMergeNodeIndex* index, const NLMergeRef& node, const std::string& key) {
+    std::string& currentKey = _work->_scanKey;
+    currentKey.clear();
+    appendCurrentKey(index, node, currentKey);
+
+    return currentKey == key;
+}
+
+bool NLMergeExecutor::isDeletedNode(const NLMergeRef& node) const {
+    if (node._pending) {
+        return _writeBuffer->deletedPendingNodes().contains(node._id);
+    }
+
+    return _view->isDeleted(NodeID(node._id));
 }
 
 // A node this query wrote, whichever clause wrote it, is in no graph the index scanned: it
@@ -466,10 +563,11 @@ void NLMergeExecutor::extendHop(size_t hopIndex) {
                     continue;
                 }
 
+                const bool deleted = _writeBuffer->deletedPendingEdges().contains(entry._offset);
                 const bool sameType = entry._edgeType == hop._writeEdgeType;
                 const bool onACandidate = targets.contains(entry._other.asKey());
 
-                if (sameType && onACandidate && holdsTheHopValues(hop, entry._offset)) {
+                if (!deleted && sameType && onACandidate && holdsTheHopValues(hop, entry._offset)) {
                     extendWith({._id=entry._offset, ._pending=true}, entry._other);
                 }
             }

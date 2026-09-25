@@ -4814,6 +4814,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
 
     const size_t firstPendingNodeID = committedNodeCount(context->getView());
     const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
+    NLWrittenValues& written = context->getWrittenValues();
 
     // A node an OPTIONAL MATCH did not match is an invalid ID, which Cypher writes nothing
     // for: staging it would have the commit look the ID up among the nodes this change
@@ -4825,9 +4826,10 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
         }
 
         if (pendingRows.has(row, raw[row].getValue())) {
-            CommitWriteBuffer::PendingNode& node =
-                writeBuffer->getPendingNode(raw[row].getValue() - firstPendingNodeID);
+            const size_t offset = raw[row].getValue() - firstPendingNodeID;
+            CommitWriteBuffer::PendingNode& node = writeBuffer->getPendingNode(offset);
             setPendingProperty(node.properties, propsBuffer[row]);
+            written.addPendingNodeUpdate(offset, propID);
         } else {
             writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
         }

@@ -70,6 +70,10 @@ const NLWrittenValues::Value* NLWrittenValues::findEdgeUpdate(EdgeID edge, Prope
     return &_writeBuffer->updatedEdges()[findIt->second]._updatedValue.value;
 }
 
+void NLWrittenValues::addPendingNodeUpdate(size_t offset, PropertyTypeID property) {
+    _pendingNodeUpdates.push_back({._offset=offset, ._property=property});
+}
+
 template <TypedInternalID IDT>
 const NLWrittenValues::Value* NLWrittenValues::findUpdate(IDT entity, PropertyTypeID property) const {
     if constexpr (std::is_same_v<IDT, NodeID>) {
