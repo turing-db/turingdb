@@ -469,6 +469,7 @@ struct PairRestrictions<Op> {
         TaggedMembershipKindPairs<types::String::Primitive>::Pairs,
         TaggedMembershipKindPairs<types::String::OwningPrimitive>::Pairs,
         TaggedMembershipKindPairs<types::Bool::Primitive>::Pairs,
+        TaggedMembershipKindPairs<ListElementView>::Pairs,
 
         std::tuple<
             KindPair<PropertyNull, ListView>,
