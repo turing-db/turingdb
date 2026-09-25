@@ -19,7 +19,7 @@ TEST_F(RemoveOutsideChangeTest, namesRemoveInTheErrorForARemoveOutsideAChange) {
 
     const std::string& error = status.getError();
 
-    EXPECT_NE(error.find("Cannot perform REMOVE outside of a write transaction."), std::string::npos)
+    EXPECT_NE(error.find("Cannot perform SET or REMOVE outside of a write transaction."), std::string::npos)
         << "error: " << error;
 }
 
