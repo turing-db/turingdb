@@ -6,6 +6,7 @@
 #include <deque>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #include "ID.h"
 #include "list/ListContainer.h"
@@ -22,6 +23,11 @@ namespace db {
 class NLWrittenValues {
 public:
     using Value = CommitWriteBuffer::SupportedTypeVariant;
+
+    struct PendingNodeUpdate {
+        size_t _offset {0};
+        PropertyTypeID _property;
+    };
 
     NLWrittenValues();
     ~NLWrittenValues();
@@ -43,6 +49,11 @@ public:
     // schema holds the property as - which is the column's element type.
     template <SupportedType T>
     std::optional<typename T::Primitive> read(const Value& value);
+
+    // A node this query wrote is updated in place in the write buffer, which keeps no
+    // trace of it: a reader that took the node in before finds here what changed since
+    void addPendingNodeUpdate(size_t offset, PropertyTypeID property);
+    const std::vector<PendingNodeUpdate>& pendingNodeUpdates() const { return _pendingNodeUpdates; }
 
     // A copy of a value a fetch is about to hand to a column that only borrows it - a
     // string or an embedding. The change rewrites its own values as the query runs, so
@@ -81,6 +92,8 @@ private:
 
     size_t _indexedNodeUpdates {0};
     size_t _indexedEdgeUpdates {0};
+
+    std::vector<PendingNodeUpdate> _pendingNodeUpdates;
 
     std::deque<Value> _retained;
     ListContainer _decodedLists;

@@ -2963,6 +2963,19 @@ public:
     size_t getNextPendingNode() const { return _nextPendingNode; }
     void setNextPendingNode(size_t offset) { _nextPendingNode = offset; }
 
+    // How far the index has read the updates to the graph's nodes and to the ones this
+    // query wrote. A node an update reached after the index took it in is keyed again
+    // under what it holds now, and its entries under earlier values stay behind: a lookup
+    // checks such a node against its current values.
+    size_t getNextNodeUpdate() const { return _nextNodeUpdate; }
+    void setNextNodeUpdate(size_t position) { _nextNodeUpdate = position; }
+
+    size_t getNextPendingNodeUpdate() const { return _nextPendingNodeUpdate; }
+    void setNextPendingNodeUpdate(size_t position) { _nextPendingNodeUpdate = position; }
+
+    bool hasChanged(const NLMergeRef& ref) const { return _changedNodes.contains(ref.asKey()); }
+    void markChanged(const NLMergeRef& ref) { _changedNodes.insert(ref.asKey()); }
+
     void add(const std::string& key, const NLMergeRef& ref) { _byKey[key].push_back(ref); }
 
     std::span<const NLMergeRef> find(const std::string& key) const;
@@ -2973,8 +2986,11 @@ private:
     std::vector<NLMergeScanProperty> _scanProperties;
     NLMergeScanProperties _writtenProperties;
     std::unordered_map<std::string, std::vector<NLMergeRef>> _byKey;
+    std::unordered_set<uint64_t> _changedNodes;
     ColumnNodeIDs* _scanNodes {nullptr};
     size_t _nextPendingNode {0};
+    size_t _nextNodeUpdate {0};
+    size_t _nextPendingNodeUpdate {0};
     bool _matchable {false};
     bool _built {false};
 };
