@@ -16,6 +16,7 @@ class MapLiteral;
 class NodePattern;
 class Pattern;
 class PatternElement;
+class PropertyExpr;
 class SetStmt;
 class SinglePartQuery;
 class Symbol;
@@ -62,6 +63,10 @@ public:
     static ExistsExpr* createPatternPredicate(CypherAST* ast,
                                               PatternElement* element,
                                               const SourceLocation& location);
+
+    static PropertyExpr* createParenthesizedPropertyAccess(CypherAST* ast,
+                                                           Expr* base,
+                                                           Symbol* propertyName);
 
     // `-1` stays the literal it spells: an embedding list or a procedure's constant argument
     // takes literals only

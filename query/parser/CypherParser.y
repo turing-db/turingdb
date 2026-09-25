@@ -1369,6 +1369,16 @@ entityTypeExpr
 
 propertyExpr
     : qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
+    | parenthesizedExpr DOT name {
+        // check whether the parenthesised expr is a valid thing for a property access
+        $$ = ParserUtils::createParenthesizedPropertyAccess(ast, $1, $3);
+
+        if (!$$) {
+            scanner.syntaxError(@1, "Invalid property access. Only a variable can be parenthesized on the left of '.'");
+        }
+
+        LOC($$, @$);
+      }
     ;
 
 atomExpr

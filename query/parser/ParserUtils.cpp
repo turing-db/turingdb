@@ -13,6 +13,7 @@
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PatternComprehensionExpr.h"
+#include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CallStmt.h"
@@ -25,6 +26,7 @@
 #include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "QualifiedName.h"
 #include "SinglePartQuery.h"
 #include "SourceManager.h"
 #include "WhereClause.h"
@@ -239,6 +241,21 @@ ExistsExpr* ParserUtils::createPatternPredicate(CypherAST* ast,
     ast->getSourceManager()->setLocation(predicate, location);
 
     return predicate;
+}
+
+PropertyExpr* ParserUtils::createParenthesizedPropertyAccess(CypherAST* ast, Expr* base, Symbol* propertyName) {
+    if (base->getKind() != Expr::Kind::SYMBOL) {
+        return nullptr;
+    }
+
+    const SymbolExpr* variable = static_cast<const SymbolExpr*>(base);
+
+    QualifiedName* fullName = QualifiedName::create(ast);
+    Symbol* variableSym = variable->getSymbol();
+    fullName->addName(variableSym);
+    fullName->addName(propertyName);
+
+    return PropertyExpr::create(ast, fullName);
 }
 
 Expr* ParserUtils::createNegation(CypherAST* ast, Expr* operand) {
