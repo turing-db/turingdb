@@ -656,6 +656,7 @@ private:
 
     // Builds the path of a walk out of its seeds and its handles, at the point it is read
     mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
+    mlir::Value makePathColumn(llvm::ArrayRef<mlir::Value> entities);
 
     // The entities a walk stands for, for an aggregate that reads its input's values rather
     // than counting the rows the handles are

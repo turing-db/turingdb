@@ -584,6 +584,11 @@ bool isPathColumn(mlir::Value column) {
     return columnType && mlir::isa<mlir::storage::PathRefType>(columnType.getType());
 }
 
+bool isListColumn(mlir::Value column) {
+    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
+    return columnType && mlir::isa<mlir::storage::ListType>(columnType.getType());
+}
+
 const VarDecl* declOfReturnItem(const Projection::ReturnItem& item) {
     const auto declOf = [](auto&& projected) -> const VarDecl* {
         using Type = std::remove_cvref_t<decltype(projected)>;
@@ -3285,10 +3290,13 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
         bioassert(entity, "A named path over an entity the traversal left unbound");
     }
 
+    _part._namedPaths[pathDecl] = makePathColumn(entities);
+}
+
+mlir::Value DBProgramGenerator::makePathColumn(llvm::ArrayRef<mlir::Value> entities) {
     const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::EntityListType::get(_mlirCtxt));
 
-    auto op = _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities);
-    _part._namedPaths[pathDecl] = op.getResult();
+    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities).getResult();
 }
 
 const EdgePattern* DBProgramGenerator::singleQuantifiedRelationship(const PatternElement* element) {
@@ -4090,17 +4098,33 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
         resultIndex += 2;
     }
 
+    llvm::SmallVector<mlir::Value> hopColumns;
     for (const MergeEntity& hop : pattern._hops) {
         if (hop._decl) {
             publishMergedEntity(hop._decl, results[resultIndex], results[resultIndex + 1]);
         }
 
+        hopColumns.push_back(results[resultIndex]);
         resultIndex += 2;
     }
 
     const mlir::Value created = results[resultIndex];
 
     rebindCarrySet(results, results.size() - carrySet._columns.size(), carrySet);
+
+    const PatternElement* element = mergeStmt->getPattern()->elements().front();
+    if (const VarDecl* pathDecl = element->getPathDecl()) {
+        llvm::SmallVector<mlir::Value> pathEntities;
+        for (size_t nodeIndex = 0; nodeIndex < pattern._nodes.size(); nodeIndex++) {
+            pathEntities.push_back(resolveEntityColumn(pattern._nodes[nodeIndex]._decl));
+
+            if (nodeIndex < hopColumns.size()) {
+                pathEntities.push_back(hopColumns[nodeIndex]);
+            }
+        }
+
+        _part._namedPaths[pathDecl] = makePathColumn(pathEntities);
+    }
 
     generateMergeActions(mergeStmt, created);
 }
@@ -4468,6 +4492,8 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         const NodePattern* lhsNode = nodePtn;
         mlir::Value lhsValue = resolveOrCreateNode(nodePtn);
 
+        llvm::SmallVector<mlir::Value> pathEntities {lhsValue};
+
         for (auto [edge, targetNode] : element->getElementChain()) {
             const mlir::Value rhsValue = resolveOrCreateNode(targetNode);
 
@@ -4516,8 +4542,15 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                                      propValues);
             }
 
+            pathEntities.push_back(createEdge.getResult());
+            pathEntities.push_back(rhsValue);
+
             lhsNode = targetNode;
             lhsValue = rhsValue;
+        }
+
+        if (const VarDecl* pathDecl = element->getPathDecl()) {
+            _part._namedPaths[pathDecl] = makePathColumn(pathEntities);
         }
     }
 }
@@ -5508,12 +5541,16 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
         yielded.push_back(*findMatched(input._name));
     }
 
+    // A handle into the path trie holds for the chunk that emitted it, and the accumulator
+    // keeps rows across chunks, so a walk's column goes in as the list or path it stands for
     for (const PublishedColumn& column : matched) {
         if (column._name == optionalTagName || boundOutside(column._name)) {
             continue;
         }
 
-        yielded.push_back(column);
+        PublishedColumn padded = column;
+        padded._column = listColumnOf(column._decl, column._column);
+        yielded.push_back(padded);
     }
 
     llvm::SmallVector<mlir::Value> yieldedColumns;
@@ -7628,8 +7665,14 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
 
         const Expr* argExpr = args->front();
         if (argExpr->getType() == EvaluatedType::EdgePattern) {
-            _part._exprMap[expr] = pathLengthColumn(argExpr, translateArg(argExpr));
-            return;
+            const mlir::Value column = translateArg(argExpr);
+
+            // An OPTIONAL MATCH hands a walk on as the list of its edges, which size() reads
+            // as it reads any other list
+            if (!isListColumn(column)) {
+                _part._exprMap[expr] = pathLengthColumn(argExpr, column);
+                return;
+            }
         }
     }
 

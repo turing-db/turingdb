@@ -381,6 +381,11 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 const auto& src = static_cast<const db::ColumnVector<db::EntityList>*>(col)->getRaw();
                 nb::list lst;
                 for (const db::EntityList& entityList : src) {
+                    if (entityList.empty()) {
+                        lst.append(nb::none());
+                        continue;
+                    }
+
                     nb::list rowList;
                     for (const db::EntityList::Entry& entry : entityList.getEntries()) {
                         nb::dict d;

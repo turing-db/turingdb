@@ -195,7 +195,7 @@ private:
 
     void encodeValue(const EntityList& value) {
         if (value.empty()) {
-            _writer.write("[]");
+            _writer.write("null");
             return;
         }
 

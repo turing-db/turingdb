@@ -353,6 +353,10 @@ public:
     // selectToNullable, which reads a scalar value column.
     static NLUnaryFn selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
 
+    // Read a path column as a nullable column of its entry counts, the empty path an
+    // OPTIONAL MATCH leaves reading as the null
+    static NLUnaryFn selectPathToNullable(LocalMemory* memory, Column*& result);
+
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
     // Read a string column - borrowing its characters or owning them, nullable or not - as
@@ -700,6 +704,10 @@ public:
     // group.
     static NLCountFunction selectIDCountFunction(NLChunkKind kind);
     static NLGroupAggregateFoldFunction selectGroupCountValidIDFold(NLChunkKind kind);
+
+    // The same tallies over a path column, whose null is the empty path
+    static NLCountFunction selectPathCountFunction();
+    static NLGroupAggregateFoldFunction selectGroupCountPresentPathFold();
 
     // The reset / fold / emit handlers for one aggregate, selected from the
     // reduction and a value type (the accumulator's for reset/result, the input's

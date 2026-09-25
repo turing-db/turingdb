@@ -123,7 +123,7 @@ void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const Pattern* pattern) {
-    for (const PatternElement* element : pattern->elements()) {
+    for (PatternElement* element : pattern->elements()) {
         analyze(element);
     }
 }
@@ -138,14 +138,7 @@ void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_v
     }
 }
 
-void WriteStmtAnalyzer::analyze(const PatternElement* element) {
-    if (const Symbol* pathSymbol = element->getPathSymbol()) {
-        throwError(fmt::format("Variable '{}' names the path of a written pattern, "
-                               "which is not supported yet",
-                               pathSymbol->getName()),
-                   element);
-    }
-
+void WriteStmtAnalyzer::analyze(PatternElement* element) {
     const auto& entities = element->getEntities();
 
     for (EntityPattern* entity : entities) {
@@ -157,6 +150,25 @@ void WriteStmtAnalyzer::analyze(const PatternElement* element) {
             throwError(fmt::format("Unsupported pattern entity type"), entity);
         }
     }
+
+    analyzeNamedPath(element);
+}
+
+void WriteStmtAnalyzer::analyzeNamedPath(PatternElement* element) {
+    Symbol* symbol = element->getPathSymbol();
+    if (!symbol) {
+        return;
+    }
+
+    const std::string_view name = symbol->getName();
+
+    if (_ctxt->getDecl(name)) {
+        throwError(fmt::format("Variable '{}' is already bound: a named path takes a name of its own", name),
+                   element);
+    }
+
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, name);
+    element->setPathDecl(decl);
 }
 
 void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {

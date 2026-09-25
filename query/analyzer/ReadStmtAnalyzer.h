@@ -95,8 +95,6 @@ private:
     // entities are bound
     void analyzeNamedPath(PatternElement* element);
 
-    void throwOnNamedPath(const Pattern* pattern);
-
     void enterScope(DeclContext* scope);
 
     // The predicate a YIELD ... WHERE filters the rows its statement produced with. Shared

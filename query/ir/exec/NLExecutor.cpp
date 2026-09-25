@@ -1571,6 +1571,22 @@ void entityToNullableColumn(Column* result, const Column* operand) {
     }
 }
 
+// A path an OPTIONAL MATCH did not match is empty, where any other holds at least the node
+// it starts on, so the empty path is the null and every other reads as its entry count
+void pathToNullableColumn(Column* result, const Column* operand) {
+    const std::vector<EntityList>& paths = static_cast<const ColumnVector<EntityList>*>(operand)->getRaw();
+    auto& nullables = static_cast<ColumnOptVector<types::UInt64::Primitive>*>(result)->getRaw();
+
+    nullables.resize(paths.size());
+    for (size_t row = 0; row < paths.size(); row++) {
+        if (paths[row].empty()) {
+            nullables[row] = std::nullopt;
+        } else {
+            nullables[row] = paths[row].size();
+        }
+    }
+}
+
 template <typename Primitive>
 void toNullableConst(Column* result, const Column* operand) {
     const auto* constant = static_cast<const ColumnConst<Primitive>*>(operand);
@@ -2423,6 +2439,12 @@ size_t countValidIDs(const Column* column) {
     return std::ranges::count_if(raw, [](const ID id) { return id.isValid(); });
 }
 
+size_t countPresentPaths(const Column* column) {
+    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(column)->getRaw();
+
+    return std::ranges::count_if(raw, [](const EntityList& path) { return !path.empty(); });
+}
+
 // Count the present (non-null) values of a nullable value column - a
 // ColumnVector<std::optional<Primitive>> - so Cypher count(x) charges only the
 // rows in which x is not null.
@@ -3054,6 +3076,20 @@ void groupFoldCountValidID(Column* accumulator,
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         if (inputRaw[row].isValid()) {
+            counts[groups[row]]++;
+        }
+    }
+}
+
+void groupFoldCountPresentPath(Column* accumulator,
+                               std::vector<uint64_t>& counts,
+                               const Column* input,
+                               const std::vector<size_t>& groups,
+                               NLGroupDistinctTally& distinct) {
+    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (!inputRaw[row].empty()) {
             counts[groups[row]]++;
         }
     }
@@ -6899,6 +6935,12 @@ NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memo
     return &entityToNullableColumn<EdgeID>;
 }
 
+NLUnaryFn NLExecutor::selectPathToNullable(LocalMemory* memory, Column*& result) {
+    result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
+
+    return &pathToNullableColumn;
+}
+
 NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
     switch (valueType) {
         case ValueType::Int64:
@@ -9334,6 +9376,14 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountValidIDFold(NLChunkKind
     }
 
     return nullptr;
+}
+
+NLCountFunction NLExecutor::selectPathCountFunction() {
+    return &countPresentPaths;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountPresentPathFold() {
+    return &groupFoldCountPresentPath;
 }
 
 // Selected per column from its value type, so count(x) tallies only the rows in
