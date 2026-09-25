@@ -116,3 +116,5 @@ add_ir_tests(test_query_ir_map_min_max MapMinMaxTest.cpp)
 add_ir_tests(test_query_ir_unwound_map_property UnwoundMapPropertyTest.cpp)
 
 add_ir_tests(test_query_ir_properties_function PropertiesFunctionTest.cpp)
+
+add_ir_tests(test_query_ir_map_keyword_key MapKeywordKeyTest.cpp)
