@@ -98,6 +98,18 @@ TEST_F(SetPropertyNullMultiPartTest, theValueTheWriteRemovedIsGoneOnceTheChangeI
     expectRows("MATCH (q:Person {age: 32}) RETURN q.name", {{"Adam"}});
 }
 
+TEST_F(SetPropertyNullMultiPartTest, setsThePropertyToNullInACallSubquery) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) CALL { WITH p SET p.age = null } RETURN p.age", {{"null"}});
+
+    expectRows("MATCH (p:Person) WHERE p.age IS NOT NULL RETURN p.name", {{"Adam"}});
+}
+
+TEST_F(SetPropertyNullMultiPartTest, setsThePropertyToNullOnTheNodesUnwoundFromACollectedList) {
+    applyWrite("MATCH (p:Person) WITH collect(p) AS people UNWIND people AS q SET q.dob = null");
+
+    expectRows("MATCH (p:Person) WHERE p.dob IS NOT NULL RETURN p.name", {});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
