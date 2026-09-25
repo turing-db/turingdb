@@ -77,7 +77,7 @@ void ScanNodesIterator::nextValid() {
 
 ScanNodesChunkWriter::ScanNodesChunkWriter(const GraphView& view)
     : ScanNodesIterator(view),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -108,7 +108,7 @@ void ScanNodesChunkWriter::fill(size_t maxCount) {
         nextValid();
     }
 
-    if (_view.tombstones().hasNodes()) {
+    if (_view.hasDeletedNodes()) {
         filterTombstones();
     }
 }

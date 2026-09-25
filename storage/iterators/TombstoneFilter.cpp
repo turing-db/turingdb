@@ -3,7 +3,6 @@
 #include <memory>
 #include <string.h>
 
-#include "versioning/Tombstones.h"
 #include "columns/ColumnVector.h"
 #include "ID.h"
 
@@ -18,8 +17,8 @@ template void TombstoneFilter::populateRanges<EdgeID>(const ColumnVector<EdgeID>
 
 }
 
-TombstoneFilter::TombstoneFilter(const Tombstones& tombstones)
-    : _tombstones(tombstones)
+TombstoneFilter::TombstoneFilter(const GraphView& view)
+    : _view(view)
 {
 }
 
@@ -45,7 +44,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
     size_t i = 0;
     while (i < col.size()) { // Scan each element in the base column
         // Skip until we find a non-deleted entry
-        const bool deleted = _tombstones.contains(col[i]);
+        const bool deleted = _view.isDeleted(col[i]);
         if (deleted) {
             i++;
             continue;
@@ -56,7 +55,7 @@ void TombstoneFilter::populateRanges(const ColumnVector<IDT>* baseCol) {
         const size_t start = i;
         size_t size = 1;
         i++; // Pre-increment i: we scan the next entry after the non-deleted just found
-        while (i < col.size() && !_tombstones.contains(col[i])) {
+        while (i < col.size() && !_view.isDeleted(col[i])) {
             i++;
             size++;
         }

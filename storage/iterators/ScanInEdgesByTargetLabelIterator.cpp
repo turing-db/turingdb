@@ -75,7 +75,7 @@ void ScanInEdgesByTargetLabelIterator::nextValid() {
 ScanInEdgesByTargetLabelChunkWriter::ScanInEdgesByTargetLabelChunkWriter(const GraphView& view,
                                                                          const LabelSetHandle& labelset)
     : ScanInEdgesByTargetLabelIterator(view, labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -212,7 +212,7 @@ void ScanInEdgesByTargetLabelChunkWriter::fill(size_t maxCount) {
     }
 
     // Base column is _edgeIDs, so only need to check if there are edge tombstones
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

@@ -103,7 +103,7 @@ void GetInEdgesIterator::nextValid() {
 GetInEdgesChunkWriter::GetInEdgesChunkWriter(const GraphView& view,
                                              const ColumnNodeIDs* inputNodeIDs)
     : GetInEdgesIterator(view, inputNodeIDs),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -204,7 +204,7 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
         CASE(7);
     }
 
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

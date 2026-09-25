@@ -58,7 +58,7 @@ void executeImpl(ProcedureState* proc) {
     const PropertyTypeMap& propTypes = metadata.propTypes();
     ListBuffer<4096>* listBuffer = ctxt->getListBuffer();
 
-    const bool hasTombstones = view.tombstones().hasNodes();
+    const bool hasTombstones = view.hasDeletedNodes();
 
     std::vector<int64_t> nodeIDs;
     const auto& nodeIDList = ProcUtils::constArg<ListView>(inputNodeIDs, nodeIDsErr);

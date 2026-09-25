@@ -1640,7 +1640,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumnIfUsed(loopBody.getArgument(3)));
 
     // Allocate for edge IDs even if they aren't read if we have to check tombstones
-    if (!edgeIDs && _view->tombstones().hasEdges()) {
+    if (!edgeIDs && (_view->hasDeletedEdges() || _view->followsChangeDeletions())) {
         edgeIDs = _memory->alloc<ColumnEdgeIDs>();
         edgeIDs->reserve(_program->getChunkSize());
     }

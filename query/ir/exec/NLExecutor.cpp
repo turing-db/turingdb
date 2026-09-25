@@ -4241,52 +4241,6 @@ bool writeTouchesRow(const ColumnMask* rows, size_t row) {
     return !rows || (*rows)[row];
 }
 
-// A column of strings or embeddings borrows what it holds, and the change rewrites its
-// own values as the query runs, so those are copied where the column can outlive them
-template <typename T>
-const CommitWriteBuffer::SupportedTypeVariant& retainIfBorrowed(NLWrittenValues& written,
-                                                                const CommitWriteBuffer::SupportedTypeVariant& value) {
-    if constexpr (std::is_same_v<T, types::String> || std::is_same_v<T, types::Embedding>) {
-        return written.retain(value);
-    } else {
-        return value;
-    }
-}
-
-// One value this change wrote, as the column the fetch is filling holds it. The value is
-// held as whatever type the row's own column carried, so it is converted to the type the
-// schema holds the property as - which is the column's element type.
-template <typename T>
-std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
-                                                      const CommitWriteBuffer::SupportedTypeVariant& value) {
-    using Primitive = typename T::Primitive;
-
-    const auto convert = [&written](const auto& held) -> std::optional<Primitive> {
-        using Inner = typename std::decay_t<decltype(held)>::value_type;
-
-        constexpr bool isEncodedList = std::is_same_v<T, types::List> && std::is_same_v<Inner, EncodedList>;
-        constexpr bool isEncodedMap = std::is_same_v<T, types::Map> && std::is_same_v<Inner, EncodedMap>;
-
-        if constexpr (isEncodedList || isEncodedMap) {
-            if (!held) {
-                return std::nullopt;
-            }
-
-            return written.decode(*held);
-        } else if constexpr (std::is_convertible_v<const Inner&, Primitive>) {
-            if (!held) {
-                return std::nullopt;
-            }
-
-            return Primitive(*held);
-        } else {
-            return std::nullopt;
-        }
-    };
-
-    return std::visit(convert, retainIfBorrowed<T>(written, value));
-}
-
 // The searched value as the write buffer holds one, so a scan can compare it against what
 // a pending node was written with. A string the scan borrows is copied: the buffer's own
 // values are owning.
@@ -4305,7 +4259,7 @@ std::optional<typename T::Primitive> readPendingProperty(NLWrittenValues& writte
                                                          PropertyTypeID propertyTypeID) {
     for (const CommitWriteBuffer::UntypedProperty& property : properties) {
         if (property.propertyID == propertyTypeID) {
-            return readWrittenValue<T>(written, property.value);
+            return written.read<T>(property.value);
         }
     }
 
@@ -4329,17 +4283,6 @@ std::optional<typename T::Primitive> readPendingEntityProperty(CommitWriteBuffer
     }
 }
 
-template <typename ID>
-const CommitWriteBuffer::SupportedTypeVariant* findEntityUpdate(const NLWrittenValues& written,
-                                                                ID id,
-                                                                PropertyTypeID propertyTypeID) {
-    if constexpr (std::is_same_v<ID, NodeID>) {
-        return written.findNodeUpdate(id, propertyTypeID);
-    } else {
-        return written.findEdgeUpdate(id, propertyTypeID);
-    }
-}
-
 // A node an OPTIONAL MATCH did not match is an invalid ID, and no edge can hang off one.
 // The whole column is read before anything is staged, so a CREATE naming a null endpoint
 // writes none of its edges rather than leaving the commit one it cannot resolve. A pending
@@ -4358,18 +4301,16 @@ void throwIfAnyNodeIsNull(const ColumnNodeIDs* column, bool isPending, std::stri
 }
 
 void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
-    const Tombstones& tombstones = view.tombstones();
-
     const GetOutEdgesRange outEdges(view, nodes);
     for (const EdgeRecord& record : outEdges) {
-        if (!tombstones.containsEdge(record._edgeID)) {
+        if (!view.isDeleted(record._edgeID)) {
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
     }
 
     const GetInEdgesRange inEdges(view, nodes);
     for (const EdgeRecord& record : inEdges) {
-        if (!tombstones.containsEdge(record._edgeID)) {
+        if (!view.isDeleted(record._edgeID)) {
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
     }
@@ -5131,6 +5072,7 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
     const std::span<const NodeID> constNodeIDs = loopData->getConstNodeIDs();
     const size_t chunkSize = context->getChunkSize();
     const size_t totalCount = constNodeIDs.size();
+    const GraphView* view = context->getView();
 
     // A null limit leaves the loop unbounded, exactly as in runScanNodesLoop.
     const NLLimitState* limit = loopData->getLimit();
@@ -5150,6 +5092,16 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
         raw.assign(constNodeIDs.begin() + cursor, constNodeIDs.begin() + cursor + rows);
 
         cursor += rows;
+
+        // The translator dropped the IDs the graph had deleted, before any DELETE of this
+        // query ran
+        if (view->hasDeletedNodes()) {
+            std::erase_if(raw, [view](NodeID node) { return view->isDeleted(node); });
+        }
+
+        if (raw.empty()) {
+            return;
+        }
 
         runBody(context, loopBody);
     };
@@ -9752,10 +9704,9 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
             continue;
         }
 
-        const CommitWriteBuffer::SupportedTypeVariant* update =
-            findEntityUpdate<ID>(written, inputRaw[row], propertyTypeID);
+        const CommitWriteBuffer::SupportedTypeVariant* update = written.findUpdate(inputRaw[row], propertyTypeID);
         if (update) {
-            raw[row] = readWrittenValue<T>(written, *update);
+            raw[row] = written.read<T>(*update);
         }
     }
 }

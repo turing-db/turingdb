@@ -30,7 +30,7 @@ NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
 }
 
 bool NeighbourhoodSampleIterator::deleted(const EdgeRecord& e) const {
-    return _view.tombstones().containsEdge(e._edgeID);
+    return _view.isDeleted(e._edgeID);
 }
 
 void NeighbourhoodSampleIterator::initFrom(size_t index) {

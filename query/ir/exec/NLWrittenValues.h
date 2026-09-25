@@ -4,12 +4,14 @@
 #include <stdint.h>
 
 #include <deque>
+#include <optional>
 #include <unordered_map>
 
 #include "ID.h"
 #include "list/ListContainer.h"
 #include "map/MapContainer.h"
 #include "metadata/PropertyType.h"
+#include "metadata/SupportedType.h"
 #include "versioning/CommitWriteBuffer.h"
 
 namespace db {
@@ -32,6 +34,15 @@ public:
 
     const Value* findNodeUpdate(NodeID node, PropertyTypeID property) const;
     const Value* findEdgeUpdate(EdgeID edge, PropertyTypeID property) const;
+
+    template <TypedInternalID IDT>
+    const Value* findUpdate(IDT entity, PropertyTypeID property) const;
+
+    // One value this change wrote, as a column of the property holds it. The value is held
+    // as whatever type the row's own column carried, so it is converted to the type the
+    // schema holds the property as - which is the column's element type.
+    template <SupportedType T>
+    std::optional<typename T::Primitive> read(const Value& value);
 
     // A copy of a value a fetch is about to hand to a column that only borrows it - a
     // string or an embedding. The change rewrites its own values as the query runs, so

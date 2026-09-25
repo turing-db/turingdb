@@ -13,7 +13,7 @@ GetInEdgesByTypeChunkWriter::GetInEdgesByTypeChunkWriter(const GraphView& view,
                                                          std::span<const EdgeTypeID> edgeTypes)
     : GetInEdgesIterator(view, inputNodeIDs),
     _edgeTypes(edgeTypes),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -114,7 +114,7 @@ void GetInEdgesByTypeChunkWriter::fill(size_t maxCount) {
         CASE(7);
     }
 
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

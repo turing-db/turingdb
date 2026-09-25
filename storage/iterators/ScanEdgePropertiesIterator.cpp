@@ -127,7 +127,7 @@ EdgeID ScanEdgePropertiesIterator<T>::getCurrentEdgeID() const {
 template <SupportedType T>
 ScanEdgePropertiesChunkWriter<T>::ScanEdgePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID)
     : ScanEdgePropertiesIterator<T>(view, propTypeID),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -216,7 +216,7 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
         CASE(3);
     }
 
-    if (this->_view.tombstones().hasEdges()) {
+    if (this->_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

@@ -13,7 +13,7 @@ GetOutEdgesByTypeChunkWriter::GetOutEdgesByTypeChunkWriter(const GraphView& view
                                                            std::span<const EdgeTypeID> edgeTypes)
     : GetOutEdgesIterator(view, inputNodeIDs),
     _edgeTypes(edgeTypes),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -117,7 +117,7 @@ void GetOutEdgesByTypeChunkWriter::fill(size_t maxCount) {
     }
 
     // Base column is _edgeIDs: only need to check if there are edge tombstones
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

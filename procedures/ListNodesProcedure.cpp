@@ -135,7 +135,7 @@ void executeImpl(ProcedureState* proc) {
     const PropertyTypeMap& propTypes = metadata.propTypes();
     ListBuffer<4096>* listBuffer = ctxt->getListBuffer();
 
-    const bool hasTombstones = view.tombstones().hasNodes();
+    const bool hasTombstones = view.hasDeletedNodes();
 
     // --- Arguments -------------------------------------------------
     std::vector<std::string> labelNames;
