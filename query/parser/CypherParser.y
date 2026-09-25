@@ -1570,7 +1570,11 @@ invocationName
     ;
 
 functionInvocation
-    : invocationName OPAREN CPAREN { $$ = FunctionInvocation::create(ast, $1); LOC($$, @$); }
+    : invocationName OPAREN CPAREN {
+        $$ = FunctionInvocation::create(ast, $1);
+        $$->setArguments(ExprChain::create(ast));
+        LOC($$, @$);
+    }
     | invocationName OPAREN DISTINCT CPAREN { scanner.syntaxError(@$, "DISTINCT requires an argument"); }
     | invocationName OPAREN exprChain CPAREN { $$ = FunctionInvocation::create(ast, $1); $$->setArguments($3); LOC($$, @$); }
     | invocationName OPAREN DISTINCT exprChain CPAREN {
