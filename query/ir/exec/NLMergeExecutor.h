@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "versioning/CommitWriteBuffer.h"
 
@@ -39,6 +40,9 @@ private:
     void clearResults();
 
     void buildNodeIndex(NLMergeNodeIndex* index);
+    void absorbPendingNodes(NLMergeNodeIndex* index);
+    void absorbPendingEdges();
+    bool holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t offset);
     void collectCandidates(size_t row);
     void matchRow(size_t row);
     void buildHopKeys(const NLMergeData::Hop& hop, size_t row);
@@ -60,6 +64,7 @@ private:
                          const NLMergeRef& target);
 
     static CommitWriteBuffer::ExistingOrPendingNode asWriteBufferNode(const NLMergeRef& ref);
+    static NLMergeRef asMergeRef(const CommitWriteBuffer::ExistingOrPendingNode& node);
 
     void gatherCarriedColumns();
 };

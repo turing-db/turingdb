@@ -64,12 +64,10 @@ struct NLMergeWorkingSet {
     // node scan its edges once
     std::unordered_set<uint64_t> _scanSourceKeys;
 
-    // A chain node's lookup key, a hop's, that same key behind the hop's signature -
-    // which is what the pending log is keyed by - and the key a candidate edge's own
-    // values serialize into
+    // A chain node's lookup key, a hop's, and the key a candidate edge's own values
+    // serialize into
     std::string _key;
     std::string _hopKey;
-    std::string _pendingHopKey;
     std::string _scanKey;
 };
 

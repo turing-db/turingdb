@@ -864,6 +864,11 @@ private:
                                 std::vector<NLMergeScanProperty>& scanProperties,
                                 bool& matchable);
 
+    // The scratch column a pending entity's value is read back into for each property of
+    // a merge pattern, in the type the property is written with
+    void collectWrittenMergeProperties(const std::vector<NLMergeProperty>& properties,
+                                       NLMergeScanProperties& writtenProperties);
+
     // The property a set writes to. A write of a null carries no type on its value chunk,
     // so the property's own type is what it stages, and a name no property in the graph
     // carries has nothing to remove - answered by an invalid property rather than by
