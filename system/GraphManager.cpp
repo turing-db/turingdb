@@ -450,6 +450,10 @@ void GraphManager::listChanges(std::vector<const Change*>& changes, const Graph*
     _changes.listChanges(changes, graph);
 }
 
+bool GraphManager::hasChanges() const {
+    return _changes.hasChanges();
+}
+
 DataPartMergeResult<void> GraphManager::mergeDataParts(Graph* graph, JobSystem& jobSystem) {
     return _changes.mergeDataParts(graph, jobSystem);
 }

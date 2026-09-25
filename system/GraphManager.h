@@ -61,6 +61,7 @@ public:
     ChangeResult<void> submitChange(ChangeAccessor& accessor, JobSystem& jobSystem);
     ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
     void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
+    bool hasChanges() const;
     DataPartMergeResult<void> mergeDataParts(Graph* graph, JobSystem& jobSystem);
 
 private:
