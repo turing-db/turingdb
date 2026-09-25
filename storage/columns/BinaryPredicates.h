@@ -747,6 +747,10 @@ struct TuringIn {
             if (scalar.getTag() == ListBufferTypeTag::Null) {
                 return std::nullopt;
             }
+        } else if constexpr (TypedInternalID<Scalar>) {
+            if (!scalar.isValid()) {
+                return std::nullopt;
+            }
         }
 
         bool unknown = false;

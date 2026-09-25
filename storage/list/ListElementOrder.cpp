@@ -466,6 +466,21 @@ bool db::operator==(const ListElementView element, const types::Bool::Primitive 
         && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
 
+bool db::operator==(const ListElementView element, const types::Embedding::Primitive value) {
+    return element.getTag() == ListBufferTypeTag::Embedding
+        && EmbeddingEqual {}(element.getAs<types::Embedding::Primitive>(), value);
+}
+
+bool db::operator==(const ListElementView element, const NodeID value) {
+    return element.getTag() == ListBufferTypeTag::NodeID
+        && element.getAs<NodeID>() == value;
+}
+
+bool db::operator==(const ListElementView element, const EdgeID value) {
+    return element.getTag() == ListBufferTypeTag::EdgeID
+        && element.getAs<EdgeID>() == value;
+}
+
 bool db::operator==(const ListElementView element, const ListView value) {
     return element.getTag() == ListBufferTypeTag::ListView
         && element.getAs<ListView>() == value;
