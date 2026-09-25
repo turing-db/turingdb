@@ -23,6 +23,12 @@ constexpr size_t frontierLookahead = 16;
 
 constexpr size_t initialKeySetSlots = 1024;
 
+constexpr size_t initialPathEdgeSlots = 128;
+
+// A path of up to this many edges is scanned for an edge its 64-bit signature does not rule
+// out; past it the signature saturates and the scan costs more than keeping the table
+constexpr size_t scannedPathEdges = 32;
+
 uint64_t scatter(uint64_t key) {
     return (key * 0x9E3779B97F4A7C15ull) >> 32;
 }
@@ -31,6 +37,87 @@ uint64_t signatureBit(EdgeID edge) {
     return 1ull << ((edge.getValue() * 0x9E3779B97F4A7C15ull) >> 58);
 }
 
+}
+
+void PathExplorator::PathEdgeTable::push(std::span<const EdgeID> path) {
+    if (!_active || path.size() * 2 > _slots.size()) {
+        rebuild(path);
+        return;
+    }
+
+    place(path.back(), path.size() - 1);
+}
+
+void PathExplorator::PathEdgeTable::pop(std::span<const EdgeID> path) {
+    if (path.size() == scannedPathEdges + 1) {
+        clear();
+        return;
+    }
+
+    const size_t mask = _slots.size() - 1;
+    const EdgeID edge = path.back();
+    size_t slot = scatter(edge.getValue()) & mask;
+
+    while (_slots[slot]._edge != edge || _slots[slot]._stamp != _generation) {
+        slot = (slot + 1) & mask;
+    }
+
+    _slots[slot]._stamp = 0;
+}
+
+void PathExplorator::PathEdgeTable::clear() {
+    _active = false;
+}
+
+size_t PathExplorator::PathEdgeTable::find(std::span<const EdgeID> path, EdgeID edge) const {
+    if (!_active) {
+        const auto found = std::find(path.begin(), path.end(), edge);
+
+        return found == path.end() ? NO_TAINT : static_cast<size_t>(found - path.begin());
+    }
+
+    const size_t mask = _slots.size() - 1;
+    size_t slot = scatter(edge.getValue()) & mask;
+
+    while (_slots[slot]._stamp == _generation) {
+        if (_slots[slot]._edge == edge) {
+            return _slots[slot]._position;
+        }
+
+        slot = (slot + 1) & mask;
+    }
+
+    return NO_TAINT;
+}
+
+void PathExplorator::PathEdgeTable::rebuild(std::span<const EdgeID> path) {
+    const size_t slotCount = std::max(initialPathEdgeSlots, std::bit_ceil(path.size() * 2));
+    if (slotCount != _slots.size()) {
+        _slots.assign(slotCount, Slot {});
+        _generation = 1;
+    } else {
+        _generation++;
+        if (_generation == 0) {
+            std::fill(_slots.begin(), _slots.end(), Slot {});
+            _generation = 1;
+        }
+    }
+
+    _active = true;
+    for (size_t position = 0; position < path.size(); position++) {
+        place(path[position], position);
+    }
+}
+
+void PathExplorator::PathEdgeTable::place(EdgeID edge, size_t position) {
+    const size_t mask = _slots.size() - 1;
+    size_t slot = scatter(edge.getValue()) & mask;
+
+    while (_slots[slot]._stamp == _generation) {
+        slot = (slot + 1) & mask;
+    }
+
+    _slots[slot] = Slot {._edge = edge, ._position = position, ._stamp = _generation};
 }
 
 void PathExplorator::KeySet::clear() {
@@ -249,6 +336,16 @@ void PathExplorator::setPaths(ColumnVector<PathRef>* paths, PathTrie* trie) {
 void PathExplorator::setEdgeTypeFilter(std::span<const EdgeTypeID> edgeTypes) {
     _filterByType = true;
     _edgeTypes = edgeTypes;
+
+    _edgeTypeWords.clear();
+    for (const EdgeTypeID edgeType : edgeTypes) {
+        const size_t word = edgeType.getValue() >> 6;
+        if (word >= _edgeTypeWords.size()) {
+            _edgeTypeWords.resize(word + 1, 0);
+        }
+
+        _edgeTypeWords[word] |= 1ull << (edgeType.getValue() & 63);
+    }
 }
 
 void PathExplorator::setEndLabels(const LabelSet* labels) {
@@ -380,6 +477,7 @@ void PathExplorator::reset() {
     _seedRow = 0;
     _pinned = 0;
     _target = PathTargetHandle {};
+    _pathEdgeTable.clear();
     _pathEdges.clear();
     _pathEntries.clear();
     _pathSignatures.clear();
@@ -454,6 +552,7 @@ void PathExplorator::startSeed(size_t row) {
     }
 
     _seedRow = row;
+    _pathEdgeTable.clear();
     _pathEdges.clear();
     _pathSignatures.clear();
     _pathSignatures.push_back(0);
@@ -540,6 +639,9 @@ void PathExplorator::step() {
     }
 
     _pathEdges.push_back(edge);
+    if (_pathEdges.size() > scannedPathEdges) {
+        _pathEdgeTable.push(_pathEdges);
+    }
     _pathSignatures.push_back(_pathSignatures.back() | signatureBit(edge));
     if (_paths) {
         _pathEntries.push_back(entry);
@@ -579,6 +681,9 @@ void PathExplorator::popFrame() {
         return;
     }
 
+    if (_pathEdgeTable._active) {
+        _pathEdgeTable.pop(_pathEdges);
+    }
     _pathEdges.pop_back();
     _pathSignatures.pop_back();
     if (_paths) {
@@ -690,6 +795,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
     const uint64_t remainingHops = _maxHops - candidateDepth;
 
     const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+    const std::span<const uint64_t> edgeTypeWords = _edgeTypeWords;
     const bool checksTarget = _target.isValid() || (_filtersByEndNodeSet && _targetIndex);
 
     _candidateChecks += edges.size();
@@ -698,7 +804,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const EdgeID edge = record._edgeID;
 
         const bool backtracks = hasPathEdges && edge == lastEdge;
-        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, record._edgeTypeID);
+        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
         const size_t heldAt = backtracks ? _pathEdges.size() - 1
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
@@ -725,9 +831,7 @@ size_t PathExplorator::positionOnPath(EdgeID edge) const {
         return NO_TAINT;
     }
 
-    const auto found = std::find(_pathEdges.begin(), _pathEdges.end(), edge);
-
-    return found == _pathEdges.end() ? NO_TAINT : static_cast<size_t>(found - _pathEdges.begin());
+    return _pathEdgeTable.find(_pathEdges, edge);
 }
 
 bool PathExplorator::holdsDependencies(const DependencyList& dependencies, EdgeID arrival) const {
@@ -1022,11 +1126,12 @@ void PathExplorator::appendPendingReachCandidates(NodeID node) {
 
 void PathExplorator::appendReachCandidates(std::span<const EdgeRecord> edges) {
     const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+    const std::span<const uint64_t> edgeTypeWords = _edgeTypeWords;
 
     _candidateChecks += edges.size();
 
     for (const EdgeRecord& record : edges) {
-        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, record._edgeTypeID);
+        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(record._edgeID);
         if (wrongType || deleted) {
             continue;

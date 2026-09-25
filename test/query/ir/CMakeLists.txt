@@ -85,6 +85,8 @@ target_link_libraries(test_query_ir_explore_end_property PRIVATE
         turing_db_system_s)
 add_ir_tests(test_query_ir_explore_distinct_ends ExploreDistinctEndsTest.cpp)
 target_link_libraries(test_query_ir_explore_distinct_ends PRIVATE turing_ir_test_rows_s turing_db_examples_s)
+add_ir_tests(test_query_ir_explore_hop_labels ExploreHopLabelsTest.cpp)
+target_link_libraries(test_query_ir_explore_hop_labels PRIVATE turing_ir_test_rows_s turing_db_examples_s)
 # The nested cross product execution tests run against the shared SimpleGraph fixture.
 target_link_libraries(test_query_ir_dblowering PRIVATE turing_db_examples_s)
 add_ir_tests(test_query_ir_shortest_path ShortestPathLoweringTest.cpp)

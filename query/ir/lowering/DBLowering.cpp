@@ -5252,6 +5252,7 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      explorePaths.getMinHops(),
                                                                      explorePaths.getMaxHopsAttr(),
                                                                      explorePaths.getEndLabelsAttr(),
+                                                                     explorePaths.getHopLabelsAttr(),
                                                                      explorePaths.getEndColumnAttr(),
                                                                      explorePaths.getEndsOnSeed(),
                                                                      explorePaths.getDistinct());

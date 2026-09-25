@@ -681,6 +681,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                     config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
                 }
             }
+            if (const std::optional<mlir::ArrayAttr> hopLabels = explorePaths.getHopLabels()) {
+                for (const mlir::Attribute label : *hopLabels) {
+                    config._hopLabels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+                }
+            }
             config._endColumn = explorePaths.getEndColumn();
             config._endsOnSeed = explorePaths.getEndsOnSeed();
             if (const mlir::Value endNodes = explorePaths.getEndNodes()) {
@@ -1856,6 +1861,12 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
         LabelSet endLabels;
         const bool endMatchable = resolveLabelSet(config._labels, endLabels);
         loopData->setEndLabels(endLabels, endMatchable);
+    }
+
+    if (!config._hopLabels.empty()) {
+        LabelSet hopLabels;
+        const bool hopLabelsMatchable = resolveLabelSet(config._hopLabels, hopLabels);
+        loopData->setHopLabels(hopLabels, hopLabelsMatchable);
     }
 
     bindCarriedColumns(config, loopBody, 3, loopData);

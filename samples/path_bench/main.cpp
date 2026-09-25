@@ -509,9 +509,12 @@ int main(int argc, char** argv) {
             appendFixed(prunedRow, indexMilliseconds, 2);
             appendRunCells(prunedRow, prunedRun);
 
+            const PartDirectory parts(view);
             PathDistanceIndex::SeedExpansion expansion;
-            PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds.getRaw(), expansion);
-            const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, expansion, seeds.size(), maxHops);
+            PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, {}, seeds.getRaw(), expansion);
+            const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seeds.size(), maxHops);
+            PathDistanceIndex gated;
+            const bool worthBuilding = gated.buildWithin(view, bench._endLabels, PathExplorationDir::FORWARD, {}, maxHops, walkChecks);
 
             std::cout << "==== End labels: filter against the reverse-distance index ====\n";
             printAsciiTable(headers, rows);

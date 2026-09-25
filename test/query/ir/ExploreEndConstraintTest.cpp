@@ -418,6 +418,7 @@ protected:
         const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
         const LabelSet end = LabelSet::fromList({metadata.getOrCreateLabel("T")});
         const EdgeTypeID type = metadata.getOrCreateEdgeType("A");
+        _endLabels = end;
 
         std::vector<NodeID> nodes;
         for (size_t node = 0; node < nodeCount; node++) {
@@ -442,6 +443,7 @@ protected:
 
     JobSystem _jobSystem;
     std::unique_ptr<Graph> _graph;
+    LabelSet _endLabels;
 };
 
 }
@@ -665,9 +667,13 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, pruningIndexKeepsTheFilteredRows)
         seeds.push_back(NodeID(node));
     }
 
+    const PartDirectory parts(view);
     PathDistanceIndex::SeedExpansion expansion;
-    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, expansion, nodeCount, 4));
+    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, {}, seeds, expansion);
+
+    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, nodeCount, 4);
+    PathDistanceIndex index;
+    EXPECT_TRUE(index.buildWithin(view, _endLabels, PathExplorationDir::FORWARD, {}, 4, walkChecks));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);
@@ -696,9 +702,13 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, distinctWalkWithThePruningIndexKe
         seeds.push_back(NodeID(node));
     }
 
+    const PartDirectory parts(view);
     PathDistanceIndex::SeedExpansion expansion;
-    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, expansion, nodeCount, 4));
+    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, {}, seeds, expansion);
+
+    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, nodeCount, 4);
+    PathDistanceIndex index;
+    EXPECT_TRUE(index.buildWithin(view, _endLabels, PathExplorationDir::FORWARD, {}, 4, walkChecks));
 
     RowSink filtered;
     runProgram(generatedWalkedFilterProgram, view, filtered);

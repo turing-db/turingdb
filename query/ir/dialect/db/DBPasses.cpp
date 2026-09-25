@@ -48,6 +48,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
+#define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
 #define GEN_PASS_DEF_FUSEEXPLOREENDFACTOR
 #define GEN_PASS_DEF_FUSEEXPLOREENDSET
@@ -1905,6 +1906,55 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     }
 };
 
+// The labels a hop region asks of the hop's end node, when that is all it asks: a yield of
+// one label check over the end's label set, and nothing else in the block
+bool matchHopLabels(ExplorePaths exploration, ArrayAttr& labels) {
+    Region& hop = exploration.getHop();
+    if (hop.empty() || !exploration.getHopImports().empty()) {
+        return false;
+    }
+
+    Block& block = hop.front();
+    if (block.getOperations().size() != 3) {
+        return false;
+    }
+
+    Yield yield = dyn_cast<Yield>(block.getTerminator());
+    if (!yield || yield->getNumOperands() != 1) {
+        return false;
+    }
+
+    CheckLabelConstraint check = yield->getOperand(0).getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet || labelSet.getInputNodes() != block.getArgument(2)) {
+        return false;
+    }
+
+    labels = check.getLabels();
+
+    return true;
+}
+
+struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreHopLabels> {
+    void runOnOperation() override {
+        getOperation()->walk([](ExplorePaths exploration) {
+            ArrayAttr labels;
+            if (!matchHopLabels(exploration, labels)) {
+                return;
+            }
+
+            Region& hop = exploration.getHop();
+            exploration.setHopLabelsAttr(labels);
+            hop.dropAllReferences();
+            hop.getBlocks().clear();
+        });
+    }
+};
+
 // A path exploration whose rows are then cut down to those ending on the node a carried
 // column already holds, or on the seed the walk left: the bound end spelled the long way,
 // since the walk itself can head for that node and never build the rows the filter goes on
@@ -2202,6 +2252,7 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     exploration.getMaxHopsAttr(),
                                                     exploration.getEdgeTypesAttr(),
                                                     exploration.getEndLabelsAttr(),
+                                                    exploration.getHopLabelsAttr(),
                                                     IntegerAttr(),
                                                     false,
                                                     exploration.getDistinct());

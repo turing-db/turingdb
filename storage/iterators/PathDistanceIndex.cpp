@@ -1,6 +1,7 @@
 #include "PathDistanceIndex.h"
 
 #include <algorithm>
+#include <limits>
 #include <math.h>
 
 #include "EdgeTypeMatch.h"
@@ -33,11 +34,17 @@ constexpr size_t fanOutSampleTarget = 4096;
 // reaction whose own cost is known: three levels read it five times under, since most seeds
 // die at once and the levels past them are where the survivors show, and six read it within
 // a tenth. 16 seeds read a broad set half of what 64 does, and 256 cost four times 64 to read
-// it lower still, a wider base spending the budget earlier. The budget only binds on an
-// untyped walk, where quadrupling it costs 2.5x and moves the reading by 1%.
+// it lower still, a wider base spending the budget earlier.
 constexpr size_t seedSampleTarget = 64;
 constexpr size_t seedSampleLevels = 6;
 constexpr size_t seedSampleBudget = 4096;
+
+// The ends whose adjacency prices the first level of a budgeted search
+constexpr size_t endSampleTarget = 256;
+
+// A prime past any frontier the budget allows: stepping by it modulo the frontier's size
+// visits every node once, in an order unrelated to the one they were reached in
+constexpr size_t scatterStride = 2654435761;
 
 // Fewer than the fan-out sample takes: every node of this one costs an evaluation of the
 // query's hop predicate rather than a count of its adjacency
@@ -73,6 +80,93 @@ size_t appendMatchingNodes(std::span<const EdgeRecord> edges,
     return appended;
 }
 
+double nodeTouch(const PartDirectory& parts, NodeID node, bool walksIns, bool walksOuts) {
+    const size_t owner = parts.ownerIndex(node);
+    if (owner == parts.size()) {
+        return 1.0;
+    }
+
+    double touched = 1.0;
+    const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
+    if (walksIns) {
+        touched += static_cast<double>(ownerIndexer.getNodeInEdges(node).size());
+    }
+    if (walksOuts) {
+        touched += static_cast<double>(ownerIndexer.getNodeOutEdges(node).size());
+    }
+
+    for (const size_t patchIndex : parts.patchPartsAfter(owner)) {
+        const EdgeIndexer& patchIndexer = *parts.get(patchIndex)._indexer;
+        if (walksIns) {
+            touched += static_cast<double>(patchIndexer.getNodeInEdges(node).size());
+        }
+        if (walksOuts) {
+            touched += static_cast<double>(patchIndexer.getNodeOutEdges(node).size());
+        }
+    }
+
+    return touched;
+}
+
+double sampledFirstLevelTouch(const PartDirectory& parts, const LabelSet& endLabels, bool walksIns, bool walksOuts) {
+    const LabelSetHandle required(endLabels);
+
+    size_t endCount = 0;
+    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
+        const LabelSetIndexer<NodeRange>& ranges = parts.get(partIndex)._nodes->getLabelSetIndexer();
+        for (auto match = ranges.matchIterate(required); match.isValid(); match.next()) {
+            endCount += match.getValue()._count;
+        }
+    }
+
+    if (endCount == 0) {
+        return 0.0;
+    }
+
+    const size_t stride = std::max<size_t>(1, endCount / endSampleTarget);
+    size_t position = 0;
+    size_t sampled = 0;
+    double touched = 0.0;
+
+    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
+        const LabelSetIndexer<NodeRange>& ranges = parts.get(partIndex)._nodes->getLabelSetIndexer();
+        for (auto match = ranges.matchIterate(required); match.isValid(); match.next()) {
+            const NodeRange& range = match.getValue();
+            for (size_t offset = (stride - position % stride) % stride; offset < range._count; offset += stride) {
+                touched += nodeTouch(parts, range._first + offset, walksIns, walksOuts);
+                sampled++;
+            }
+            position += range._count;
+        }
+    }
+
+    return touched / static_cast<double>(sampled) * static_cast<double>(endCount);
+}
+
+void gatherEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {
+    const LabelSetHandle required(endLabels);
+
+    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
+        const NodeContainer& nodes = *parts.get(partIndex)._nodes;
+        const LabelSetIndexer<NodeRange>& ranges = nodes.getLabelSetIndexer();
+
+        for (auto match = ranges.matchIterate(required); match.isValid(); match.next()) {
+            for (const NodeID node : match.getValue()) {
+                ends.push_back(node);
+            }
+        }
+    }
+}
+
+double levelTouch(const PartDirectory& parts, std::span<const NodeID> frontier, bool walksIns, bool walksOuts) {
+    double touched = 0.0;
+    for (const NodeID node : frontier) {
+        touched += nodeTouch(parts, node, walksIns, walksOuts);
+    }
+
+    return touched;
+}
+
 size_t countMatching(std::span<const EdgeRecord> edges, std::span<const EdgeTypeID> edgeTypes) {
     if (edgeTypes.empty()) {
         return edges.size();
@@ -100,6 +194,8 @@ void PathDistanceIndex::clear() {
     _distances.clear();
     _reached = 0;
     _built = false;
+    _overrunBudget = 0.0;
+    _leastBuildChecks = 0.0;
 }
 
 void PathDistanceIndex::build(const GraphView& view,
@@ -113,10 +209,64 @@ void PathDistanceIndex::build(const GraphView& view,
     _reached = 0;
 
     std::vector<NodeID> frontier;
-    collectEnds(parts, endLabels, frontier);
+    gatherEnds(parts, endLabels, frontier);
+    markEnds(frontier);
 
-    search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops);
+    search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops, std::numeric_limits<double>::infinity());
     _built = true;
+}
+
+bool PathDistanceIndex::buildWithin(const GraphView& view,
+                                    const LabelSet& endLabels,
+                                    PathExplorationDir direction,
+                                    std::span<const EdgeTypeID> edgeTypes,
+                                    uint64_t maxHops,
+                                    double budgetChecks) {
+    const bool overranBefore = _overrunBudget > 0.0;
+    if (overranBefore && budgetChecks < 2.0 * _overrunBudget) {
+        return false;
+    } else if (budgetChecks < _leastBuildChecks) {
+        return false;
+    }
+
+    const PartDirectory parts(view);
+    const bool walksIns = direction != PathExplorationDir::BACKWARD;
+    const bool walksOuts = direction != PathExplorationDir::FORWARD;
+
+    // The first level is paid whatever lies beyond it: a budget short of it is refused before
+    // the ends are gathered, and every later one short of it without pricing it again
+    const double filledChecks = filledByteCostInChecks * static_cast<double>(parts.getAllocatedNodeCount());
+    const double firstLevelTouch = sampledFirstLevelTouch(parts, endLabels, walksIns, walksOuts);
+    _leastBuildChecks = filledChecks + indexUnitCostInChecks * firstLevelTouch;
+    if (budgetChecks < _leastBuildChecks) {
+        return false;
+    }
+
+    std::vector<NodeID> frontier;
+    gatherEnds(parts, endLabels, frontier);
+
+    _distances.assign(parts.getAllocatedNodeCount(), unreachable);
+    _reached = 0;
+    markEnds(frontier);
+
+    // No search touches more than every node and, per direction it walks, every edge
+    const double directionCount = (walksIns ? 1.0 : 0.0) + (walksOuts ? 1.0 : 0.0);
+    const double graphTouch = static_cast<double>(parts.getAllocatedNodeCount())
+                            + directionCount * static_cast<double>(parts.getAllocatedEdgeCount());
+    const double touchBudget = (budgetChecks - filledChecks) / indexUnitCostInChecks;
+    const double searchBudget = touchBudget >= graphTouch ? std::numeric_limits<double>::infinity() : touchBudget;
+    const bool finished = search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops, searchBudget);
+
+    if (!finished) {
+        _distances.clear();
+        _reached = 0;
+        _overrunBudget = budgetChecks;
+        return false;
+    }
+
+    _built = true;
+
+    return true;
 }
 
 void PathDistanceIndex::build(const GraphView& view,
@@ -141,16 +291,17 @@ void PathDistanceIndex::build(const GraphView& view,
         frontier.push_back(end);
     }
 
-    search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops);
+    search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops, std::numeric_limits<double>::infinity());
     _built = true;
 }
 
-void PathDistanceIndex::search(const PartDirectory& parts,
+bool PathDistanceIndex::search(const PartDirectory& parts,
                                const Tombstones& tombstones,
                                std::vector<NodeID>& frontier,
                                PathExplorationDir direction,
                                std::span<const EdgeTypeID> edgeTypes,
-                               uint64_t maxHops) {
+                               uint64_t maxHops,
+                               double touchBudget) {
     // A hop the exploration takes forward is walked back here: the distances of the nodes
     // an out-edge leaves grow along in-edges
     const bool walksIns = direction != PathExplorationDir::BACKWARD;
@@ -160,12 +311,24 @@ void PathDistanceIndex::search(const PartDirectory& parts,
 
     std::vector<NodeID> next;
 
+    // A level's cost is its frontier and the edges it reads, known before one is read: a
+    // level that cannot finish within the budget is never started
+    const bool budgeted = touchBudget < std::numeric_limits<double>::infinity();
+    double touched = 0.0;
+
     // A distance saturates at the farthest a byte can hold, so past that one reads "at least
     // that many hops". canReachEndWithin then keeps a node a deeper bound may not be able to
     // use, which costs a walk that never completes; capping the search instead would drop it.
     for (uint64_t level = 1; level <= maxHops && !frontier.empty(); level++) {
         const uint8_t distance = static_cast<uint8_t>(std::min<uint64_t>(level, farthest));
         next.clear();
+
+        if (budgeted) {
+            touched += levelTouch(parts, frontier, walksIns, walksOuts);
+            if (touched > touchBudget) {
+                return false;
+            }
+        }
 
         for (const NodeID node : frontier) {
             const size_t owner = parts.ownerIndex(node);
@@ -194,6 +357,8 @@ void PathDistanceIndex::search(const PartDirectory& parts,
 
         std::swap(frontier, next);
     }
+
+    return true;
 }
 
 uint8_t PathDistanceIndex::getDistance(NodeID node) const {
@@ -317,11 +482,16 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
         double arrivals = 0.0;
         double continuations = 0.0;
 
-        for (const NodeID node : frontier) {
+        // A level lists its nodes parent by parent, so the part the budget lets through has to
+        // be taken across the whole frontier, not from its front: its first parents need not
+        // branch like the rest
+        const size_t frontierSize = frontier.size();
+        for (size_t visit = 0; visit < frontierSize; visit++) {
             if (next.size() >= seedSampleBudget) {
                 break;
             }
 
+            const NodeID node = frontier[(visit * scatterStride) % frontierSize];
             const size_t owner = parts.ownerIndex(node);
             if (owner == parts.size()) {
                 continue;
@@ -504,31 +674,10 @@ double PathDistanceIndex::estimatedBuildChecks(const PartDirectory& parts,
     return indexUnitCostInChecks * touched + filledByteCostInChecks * nodeCount;
 }
 
-bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
-                                        const SeedExpansion& expansion,
-                                        size_t seedCount,
-                                        uint64_t maxHops,
-                                        double hopPassRate) {
-    const PartDirectory parts(view);
-    const double indexCost = indexUnitCostInChecks * static_cast<double>(parts.getAllocatedNodeCount() + parts.getAllocatedEdgeCount());
-
-    return estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > indexCost;
-}
-
-void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {
-    const LabelSetHandle required(endLabels);
-
-    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
-        const NodeContainer& nodes = *parts.get(partIndex)._nodes;
-        const LabelSetIndexer<NodeRange>& ranges = nodes.getLabelSetIndexer();
-
-        for (auto match = ranges.matchIterate(required); match.isValid(); match.next()) {
-            for (const NodeID node : match.getValue()) {
-                _distances[node.getValue()] = 0;
-                _reached++;
-                ends.push_back(node);
-            }
-        }
+void PathDistanceIndex::markEnds(std::span<const NodeID> ends) {
+    for (const NodeID end : ends) {
+        _distances[end.getValue()] = 0;
+        _reached++;
     }
 }
 

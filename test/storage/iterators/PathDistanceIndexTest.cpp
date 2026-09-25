@@ -350,11 +350,20 @@ TEST_F(PathDistanceIndexTest, costGateNeedsEnoughSeeds) {
     PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, {}, seeds, forward);
     PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::BOTH, {}, seeds, both);
 
-    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, forward, 1, 4));
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, forward, 100000, 4));
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, both, 100000, unbounded));
-    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, forward, 100000, 0));
-    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, forward, 0, 4));
+    const auto builds = [&](const PathDistanceIndex::SeedExpansion& expansion,
+                            PathExplorationDir direction,
+                            size_t seedCount,
+                            uint64_t maxHops) {
+        const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops);
+
+        PathDistanceIndex index;
+        return index.buildWithin(view, _endLabels, direction, {}, maxHops, walkChecks);
+    };
+
+    EXPECT_TRUE(builds(forward, PathExplorationDir::FORWARD, 100000, 4));
+    EXPECT_TRUE(builds(both, PathExplorationDir::BOTH, 100000, unbounded));
+    EXPECT_FALSE(builds(forward, PathExplorationDir::FORWARD, 100000, 0));
+    EXPECT_FALSE(builds(forward, PathExplorationDir::FORWARD, 0, 4));
 }
 
 TEST_F(PathDistanceIndexTest, estimatesAnUnboundedWalkFinitely) {

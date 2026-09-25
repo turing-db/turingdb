@@ -135,6 +135,29 @@ private:
         void grow();
     };
 
+    // The position of every edge on a path long enough to saturate the signature, one probe
+    // away; a shorter path is scanned. Edges leave in the order they came, so a pop only ever
+    // empties the last slot of its probe chain, and a slot counts only while its stamp is the
+    // table's generation, which dropping back to a scanned path bumps.
+    struct PathEdgeTable {
+        struct Slot {
+            EdgeID _edge;
+            size_t _position {0};
+            uint32_t _stamp {0};
+        };
+
+        std::vector<Slot> _slots;
+        uint32_t _generation {1};
+        bool _active {false};
+
+        void push(std::span<const EdgeID> path);
+        void pop(std::span<const EdgeID> path);
+        void clear();
+        size_t find(std::span<const EdgeID> path, EdgeID edge) const;
+        void rebuild(std::span<const EdgeID> path);
+        void place(EdgeID edge, size_t position);
+    };
+
     // The multi-source search of the distinct mode: one bit per seed of the current batch in
     // the words of every node it reaches, the rows a level gained emitted before the next
     // level is expanded
@@ -164,6 +187,7 @@ private:
     PathHopFilter* _hopFilter {nullptr};
     bool _filterByType {false};
     std::span<const EdgeTypeID> _edgeTypes;
+    std::vector<uint64_t> _edgeTypeWords;
     LabelSetHandle _endLabels;
     const ColumnNodeIDs* _endNodes {nullptr};
     std::span<const NodeID> _endNodeSet;
@@ -191,6 +215,7 @@ private:
     NodeID _targetNode;
     PathTargetHandle _target;
     std::vector<EdgeID> _pathEdges;
+    PathEdgeTable _pathEdgeTable;
     std::vector<PathRef> _pathEntries;
     std::vector<uint64_t> _pathSignatures;
     std::vector<Frame> _frames;

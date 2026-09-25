@@ -397,6 +397,22 @@ LogicalResult ExplorePaths::verify() {
         }
     }
 
+    if (const std::optional<ArrayAttr> hopLabels = getHopLabels()) {
+        if (hopLabels->empty()) {
+            return emitOpError("hop_labels must name at least one label");
+        }
+
+        for (const Attribute label : *hopLabels) {
+            if (cast<StringAttr>(label).getValue().empty()) {
+                return emitOpError("hop_labels must name labels");
+            }
+        }
+
+        if (!getHop().empty()) {
+            return emitOpError("hop_labels is the hop predicate, so there is no hop region beside it");
+        }
+    }
+
     if (const std::optional<uint64_t> endColumn = getEndColumn()) {
         if (*endColumn >= carried.size()) {
             return emitOpError("end_column ") << *endColumn << " is not a carried column";
