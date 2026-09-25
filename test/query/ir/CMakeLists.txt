@@ -3994,3 +3994,23 @@ target_link_libraries(test_query_ir_tagged_cell_arithmetic_equality PRIVATE
 
 # Arithmetic on an element of a list that holds a property the graph does not have.
 add_call_v3_test(test_query_ir_missing_property_list_element MissingPropertyListElementTest.cpp)
+
+add_turing_test(test_query_ir_fuzz_embedding_in_list FuzzEmbeddingInListTest.cpp)
+target_link_libraries(test_query_ir_fuzz_embedding_in_list PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_fuzz_entity_in_list FuzzEntityInListTest.cpp)
+target_link_libraries(test_query_ir_fuzz_entity_in_list PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
