@@ -292,6 +292,7 @@ add_call_v3_test(test_query_ir_explore_bound_and_distinct_cypher ExploreBoundAnd
 add_call_v3_test(test_query_ir_explore_edge_type_disjunction ExploreEdgeTypeDisjunctionTest.cpp)
 add_call_v3_test(test_query_ir_self_referencing_pattern SelfReferencingPatternTest.cpp)
 add_call_v3_test(test_query_ir_named_path NamedPathTest.cpp)
+add_call_v3_test(test_query_ir_several_walks SeveralWalksTest.cpp)
 add_call_v3_test(test_query_ir_count_path_rows CountPathRowsTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
