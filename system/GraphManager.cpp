@@ -281,6 +281,7 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
     const auto importRes = JsonlParser::parse(changeAccessor, file, embeddingSpecs, dateTimeSpecs);
 
     if (!importRes) {
+        _changes.deleteChange(changeAccessor, change->id());
         _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(importRes.error().fmtMessage());
         return nullptr;
@@ -289,6 +290,7 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
     const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
 
     if (!submitRes) {
+        _changes.deleteChange(changeAccessor, change->id());
         _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(submitRes.error().fmtMessage());
         return nullptr;
@@ -396,6 +398,7 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     try {
         importer.import();
     } catch (...) {
+        _changes.deleteChange(changeAccessor, change->id());
         _graphLoadStatus.removeLoadingGraph(graphName);
         throw;
     }
@@ -403,6 +406,7 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
 
     if (!submitRes) {
+        _changes.deleteChange(changeAccessor, change->id());
         _graphLoadStatus.removeLoadingGraph(graphName);
         spdlog::error(submitRes.error().fmtMessage());
         return nullptr;
