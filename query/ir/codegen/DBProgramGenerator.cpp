@@ -4080,6 +4080,12 @@ void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
     bioassert(entityColumn, "Property write on unknown variable: {}", varName);
 
+    // if there was a previous write to this property within this query, erase it
+    const auto createdIt = _part._createdEntities.find(entityDecl);
+    if (createdIt != end(_part._createdEntities)) {
+        createdIt->second._properties.erase(propName);
+    }
+
     // A merge's rows mix entities it wrote with entities it bound, and the two are
     // written to differently: the mask says which is which
     const mlir::Value pending = findPendingMask(entityDecl);

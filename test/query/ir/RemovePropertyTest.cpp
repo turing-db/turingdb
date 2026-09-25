@@ -115,6 +115,11 @@ TEST_F(RemovePropertyTest, removesThePropertyAPendingNodeWasCreatedWith) {
     expectWriteRows("CREATE (t:Tag {name: 'x'}) WITH t REMOVE t.name RETURN t.name", {{"null"}});
 }
 
+TEST_F(RemovePropertyTest, readsNullForThePropertyRemovedInThePartThatCreatedTheNode) {
+    expectWriteRows("CREATE (t:Tag {name: 'x', dob: '01/01'}) REMOVE t.name RETURN t.name, t.dob",
+                    {{"null", "01/01"}});
+}
+
 // The same removal, in the part that created the node rather than behind a WITH
 TEST_F(RemovePropertyTest, removesThePropertyInThePartThatCreatedTheNode) {
     applyWrite("CREATE (t:Tag {name: 'x', dob: '01/01'}) REMOVE t.name");
