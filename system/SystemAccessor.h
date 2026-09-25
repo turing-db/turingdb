@@ -86,6 +86,7 @@ public:
     CommitResult<void> commitChange(ChangeAccessor& accessor);
     ChangeResult<void> deleteChange(ChangeAccessor& accessor, ChangeID changeID);
     void listChanges(std::vector<const Change*>& changes, const Graph* graph) const;
+    bool hasChanges() const;
 
     // DataPart merge
     DataPartMergeResult<void> mergeDataParts(Graph* graph);
