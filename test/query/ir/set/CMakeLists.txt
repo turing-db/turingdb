@@ -48,3 +48,5 @@ add_turing_test(test_query_ir_set_property_common_type PropertyCommonTypeTest.cp
 add_turing_test(test_query_ir_set_reads_property_it_creates SetReadsPropertyItCreatesTest.cpp)
 
 add_ir_tests(test_query_ir_set_mutate_properties SetMutatePropertiesTest.cpp)
+
+add_ir_tests(test_query_ir_set_replace_properties SetReplacePropertiesTest.cpp)
