@@ -112,3 +112,5 @@ add_ir_tests(test_query_ir_map_predicate_operand MapPredicateOperandTest.cpp)
 add_ir_tests(test_query_ir_map_in_list MapInListTest.cpp)
 
 add_ir_tests(test_query_ir_map_min_max MapMinMaxTest.cpp)
+
+add_ir_tests(test_query_ir_unwound_map_property UnwoundMapPropertyTest.cpp)
