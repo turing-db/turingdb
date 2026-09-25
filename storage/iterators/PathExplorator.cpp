@@ -408,7 +408,7 @@ void PathExplorator::fill(size_t maxCount) {
         return;
     }
 
-    _prunes = _distinctEnds && _hopFilter == nullptr;
+    _prunes = _distinctEnds;
 
     if (_prunes) {
         // A trail spends each edge once, so a maximum past the edge count never binds the
@@ -753,6 +753,15 @@ const PathExplorator::DependencyList* PathExplorator::findReusableExpansion(Node
 }
 
 void PathExplorator::dependOnBlockedEdge(EdgeID edge, NodeID node, uint64_t depth, size_t position) {
+    const uint64_t remainingHops = _maxHops - depth;
+    const bool checksTarget = _target.isValid() || (_filtersByEndNodeSet && _targetIndex);
+    const bool beyondLabels = _distances && !_distances->canReachEndWithin(node, remainingHops);
+    const bool beyondTarget = checksTarget && !canReachTargetWithin(node, remainingHops);
+
+    if (beyondLabels || beyondTarget) {
+        return;
+    }
+
     const bool emitsThere = depth >= _minHops && isEnd(_seedRow, node);
     const bool emitted = !emitsThere || _emittedEnds.contains(node.getValue());
     const bool expandsThere = depth < _maxHops;

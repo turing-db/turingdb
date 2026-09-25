@@ -249,6 +249,31 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)-[e]->{2,4}(m:T) RETURN DISTINCT n, m over the generated graph: past a minimum of
+// one hop the distinct form walks, and takes the pruning index
+const char* const generatedWalkedFilterProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 2 to 4 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %ls = db.get_node_label_set(%0#1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %ok = db.check_label_constraint(%ls, ["T"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %1:3 = db.filter(%ok, {%0#0, %0#1, %0#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %d:2 = db.remove_duplicates(%1#0, %1#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+const char* const generatedWalkedDistinctProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 2 to 4 end_labels ["T"] distinct : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 class ExploreEndConstraintTest : public ::testing::Test {
 protected:
     ExploreEndConstraintTest() {
@@ -655,6 +680,37 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, pruningIndexKeepsTheFilteredRows)
 
     Rows actual;
     fused.sortedRows(actual);
+
+    EXPECT_FALSE(expected.empty());
+    EXPECT_EQ(actual, expected);
+}
+
+TEST_F(ExploreEndConstraintGeneratedGraphTest, distinctWalkWithThePruningIndexKeepsTheDeduplicatedRows) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+    ASSERT_EQ(reader.getNodeCount(), nodeCount);
+
+    std::vector<NodeID> seeds;
+    for (size_t node = 0; node < nodeCount; node++) {
+        seeds.push_back(NodeID(node));
+    }
+
+    PathDistanceIndex::SeedExpansion expansion;
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
+    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, expansion, nodeCount, 4));
+
+    RowSink filtered;
+    runProgram(generatedWalkedFilterProgram, view, filtered);
+
+    RowSink distinct;
+    runProgram(generatedWalkedDistinctProgram, view, distinct);
+
+    Rows expected;
+    filtered.sortedRows(expected);
+
+    Rows actual;
+    distinct.sortedRows(actual);
 
     EXPECT_FALSE(expected.empty());
     EXPECT_EQ(actual, expected);

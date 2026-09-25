@@ -5972,8 +5972,8 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         explorator.setHopFilter(&*hopFilter);
     }
 
-    // The distinct mode is a breadth-first search already, so it prunes by no index
-    const bool prunes = !distinctEnds && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes() || endNodeSet);
+    // The level search of the distinct mode prunes by no index
+    const bool prunes = !explorator.searchesLevels() && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes() || endNodeSet);
 
     const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr) : 1.0;
 
