@@ -68,6 +68,8 @@ public:
     void fill(size_t maxCount);
     bool isValid() const { return _valid; }
 
+    bool searchesLevels() const;
+
     // How many edge records the walk has examined since the last reset
     size_t getCandidateCheckCount() const { return _candidateChecks; }
 
@@ -223,7 +225,6 @@ private:
     bool canReachTargetWithin(NodeID node, uint64_t hops) const;
     void resizeOutputs(size_t count);
 
-    bool searchesLevels() const;
     uint64_t expansionKey(NodeID node, uint64_t budget) const;
 
     void startSeed(size_t row);
@@ -242,7 +243,8 @@ private:
     // by the arrival edge, holds every one of them, or null when a walk there has to be redone
     const DependencyList* findReusableExpansion(NodeID node, uint64_t depth, EdgeID arrival) const;
     // Records that the subtree could not take the held edge to the node at that depth, unless
-    // the ends beyond it are all emitted or remembered under edges the path holds
+    // the ends beyond it are all emitted or remembered under edges the path holds, or an index
+    // rules the node out
     void dependOnBlockedEdge(EdgeID edge, NodeID node, uint64_t depth, size_t position);
     void dependOn(const DependencyList& dependencies, EdgeID arrival);
     void emit(size_t seedRow, NodeID target, PathRef path);

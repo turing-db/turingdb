@@ -213,6 +213,38 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)((a)-[e]->(b:Person)){2,4}(m) RETURN DISTINCT n, m in both forms: past a minimum
+// of one hop the distinct form walks rather than searches
+const char* const walkedHopEnumeratedProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 2 to 4 {
+  ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
+    %ls = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %ok = db.check_label_constraint(%ls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    db.yield %ok : !db.column<!storage.bool>
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+const char* const walkedHopDistinctProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 2 to 4 distinct {
+  ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
+    %ls = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %ok = db.check_label_constraint(%ls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    db.yield %ok : !db.column<!storage.bool>
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // MATCH (n)-->(m) RETURN DISTINCT n, m over the generated graph as an exploration of one
 // hop, in both forms: a batch's balls hardly overlap there, so the executor walks it
 const char* const generatedOneHopEnumeratedProgram = R"mlir(
@@ -431,6 +463,7 @@ TEST_F(ExploreDistinctEndsSimpleGraphTest, distinctFormsEmitTheDeduplicatedRows)
 
     expectSameRows(bothEnumeratedProgram, bothDistinctProgram, view);
     expectSameRows(hopEnumeratedProgram, hopDistinctProgram, view);
+    expectSameRows(walkedHopEnumeratedProgram, walkedHopDistinctProgram, view);
 }
 
 TEST_F(ExploreDistinctEndsSimpleGraphTest, passedProgramsEmitTheDeduplicatedRows) {

@@ -232,6 +232,32 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)-->(b), (n)-[e]->{2,3}(b) RETURN DISTINCT n, b over the generated graph: past a
+// minimum of one hop the distinct form walks, and takes the target index
+const char* const generatedWalkedFilterProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %h:4 = db.get_out_edges(%n, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %0:4 = db.explore_paths(%h#0, {%h#3}) forward hops 2 to 3 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<!storage.node_id>)
+  %m = db.eq %0#1, %0#3 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  %1:4 = db.filter(%m, {%0#0, %0#1, %0#2, %0#3}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<!storage.node_id>)
+  %d:2 = db.remove_duplicates(%1#0, %1#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+const char* const generatedWalkedDistinctProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %h:4 = db.get_out_edges(%n, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %0:4 = db.explore_paths(%h#0, {%h#3}) forward hops 2 to 3 end_column 0 distinct : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<!storage.node_id>)
+  %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 class ExploreBoundEndsTest : public ::testing::Test {
 protected:
     ExploreBoundEndsTest() {
@@ -566,6 +592,37 @@ TEST_F(ExploreBoundEndsGeneratedGraphTest, targetIndexKeepsTheFilteredRows) {
 
     Rows actual;
     fused.sortedRows(actual);
+
+    EXPECT_FALSE(expected.empty());
+    EXPECT_EQ(actual, expected);
+}
+
+TEST_F(ExploreBoundEndsGeneratedGraphTest, distinctWalkWithTheTargetIndexKeepsTheDeduplicatedRows) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+    ASSERT_EQ(reader.getNodeCount(), nodeCount);
+
+    std::vector<NodeID> seeds;
+    for (size_t node = 0; node < nodeCount; node++) {
+        seeds.push_back(NodeID(node));
+    }
+
+    PathDistanceIndex::SeedExpansion expansion;
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, nodeCount * outDegree, nodeCount, 3));
+
+    RowSink filtered;
+    runProgram(generatedWalkedFilterProgram, view, filtered);
+
+    RowSink distinct;
+    runProgram(generatedWalkedDistinctProgram, view, distinct);
+
+    Rows expected;
+    filtered.sortedRows(expected);
+
+    Rows actual;
+    distinct.sortedRows(actual);
 
     EXPECT_FALSE(expected.empty());
     EXPECT_EQ(actual, expected);
