@@ -182,6 +182,51 @@ TEST_F(SetPropertyNullTest, setsThePropertyToNullOnTheEdgesOfTheTypeMatchedAlone
                {{"Ghosts -> Remy"}});
 }
 
+TEST_F(SetPropertyNullTest, writesTheValueSetAfterTheNullInTheSameClause) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) SET p.age = null, p.age = 40 RETURN p.age", {{"40"}});
+
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.age", {{"40"}});
+}
+
+TEST_F(SetPropertyNullTest, removesTheValueSetBeforeTheNullInTheSameClause) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) SET p.age = 40, p.age = null RETURN p.age", {{"null"}});
+
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.age", {{"null"}});
+}
+
+TEST_F(SetPropertyNullTest, setsToNullTheValueANewerDatapartWrote) {
+    applyWrite("MATCH (p:Person {name: 'Remy'}) SET p.age = 40");
+    applyWrite("MATCH (p:Person {name: 'Remy'}) SET p.age = null");
+
+    expectRows("MATCH (p:Person {age: 40}) RETURN p.name", {});
+    expectRows("MATCH (p:Person) RETURN count(p.age), sum(p.age)", {{"1", "32"}});
+}
+
+TEST_F(SetPropertyNullTest, readsNullForTheDateTimePropertySetToNull) {
+    applyWrite("CREATE (t:Tag {name: 'x', at: datetime('2026-09-23T14:05:00Z')})");
+
+    expectWriteRows("MATCH (t:Tag {name: 'x'}) SET t.at = null RETURN t.at", {{"null"}});
+
+    expectRows("MATCH (t:Tag) WHERE t.at IS NULL RETURN t.name", {{"x"}});
+}
+
+// The undirected pattern walks each of the 3 KNOWS_WELL edges from both ends
+TEST_F(SetPropertyNullTest, setsThePropertyToNullOnEachEdgeTheUndirectedPatternWalksTwice) {
+    expectWriteRowCount("MATCH ()-[e:KNOWS_WELL]-() SET e.duration = null RETURN e", 6);
+
+    expectRows("MATCH ()-[e:KNOWS_WELL]->() RETURN e.name, e.duration",
+               {{"Remy -> Adam", "null"},
+                {"Adam -> Remy", "null"},
+                {"Ghosts -> Remy", "null"}});
+}
+
+TEST_F(SetPropertyNullTest, setsThePropertyToNullBesideADeleteInTheSameQuery) {
+    applyWrite("MATCH (r:Person {name: 'Remy'}), (a:Person {name: 'Adam'}) DETACH DELETE r SET a.age = null");
+
+    expectRows("MATCH (p:Person) WHERE p.age IS NOT NULL RETURN p.name", {});
+    expectCounts("MATCH (p:Person) RETURN count(p)", {7});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

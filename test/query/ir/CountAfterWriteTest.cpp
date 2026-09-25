@@ -17,6 +17,10 @@ TEST_F(CountAfterWriteTest, countsEveryHolderOfThePropertySetOnEveryScannedNode)
     expectWriteRows("MATCH (p:Person) SET p.age = 1 RETURN count(p.age)", {{"8"}});
 }
 
+TEST_F(CountAfterWriteTest, countsNoHolderOfThePropertySetToNullOnEveryScannedNode) {
+    expectWriteRows("MATCH (p:Person) SET p.age = null RETURN count(p.age)", {{"0"}});
+}
+
 TEST_F(CountAfterWriteTest, countsNoHolderOfThePropertyRemovedFromEveryNodeOfAnUnlabelledScan) {
     expectWriteRows("MATCH (n) REMOVE n.name RETURN count(n.name)", {{"0"}});
 }
