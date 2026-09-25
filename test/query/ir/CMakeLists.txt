@@ -4027,3 +4027,14 @@ target_link_libraries(test_query_ir_set_mutate_properties PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_set_mutate_properties PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_set_replace_properties SetReplacePropertiesTest.cpp)
+target_sources(test_query_ir_set_replace_properties PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_set_replace_properties PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_set_replace_properties PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
