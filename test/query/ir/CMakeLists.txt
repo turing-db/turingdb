@@ -4070,3 +4070,7 @@ add_call_v3_test(test_query_ir_set_list_element_property SetListElementPropertyT
 # SET in the same query part as a CREATE.
 add_turing_test(test_query_ir_set_after_create SetAfterCreateTest.cpp)
 target_link_libraries(test_query_ir_set_after_create PRIVATE turing_ir_test_write_query_s)
+
+# SET of a property from an element of a list that mixes types.
+add_turing_test(test_query_ir_set_from_list_element SetFromListElementTest.cpp)
+target_link_libraries(test_query_ir_set_from_list_element PRIVATE turing_ir_test_write_query_s)
