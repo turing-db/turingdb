@@ -16,12 +16,140 @@
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
+#include "writers/MetadataBuilder.h"
+
+#include "IRException.h"
 
 #include "IRException.h"
 
 using namespace db;
 
 namespace {
+
+template <SupportedType T>
+struct StagedPropertyValue {
+    using Type = std::optional<typename T::Primitive>;
+};
+
+template <SupportedType T>
+    requires (!TrivialSupportedType<T>)
+struct StagedPropertyValue<T> {
+    using Type = std::optional<typename T::OwningPrimitive>;
+};
+
+// The value one tagged cell stages for a property holding T. The analyzer lets an integer
+// set a double or unsigned property, so an integer cell is converted as that integer is.
+template <SupportedType T>
+class TaggedCellStager {
+public:
+    template <typename Cell>
+    CommitWriteBuffer::SupportedTypeVariant operator()(const ListElementView cell) const {
+        using Primitive = typename T::Primitive;
+        using Staged = typename StagedPropertyValue<T>::Type;
+
+        constexpr bool readsAnInteger = std::same_as<Cell, types::Int64::Primitive>
+                                     || std::same_as<Cell, types::UInt64::Primitive>;
+        constexpr bool writesANumber = std::same_as<T, types::Int64>
+                                    || std::same_as<T, types::UInt64>
+                                    || std::same_as<T, types::Double>;
+
+        if constexpr (std::same_as<Cell, PropertyNull>) {
+            return Staged {};
+        } else if constexpr (std::same_as<T, types::Embedding> && std::same_as<Cell, Primitive>) {
+            const Primitive embedding = cell.getAs<Primitive>();
+            return Staged {std::in_place, embedding.begin(), embedding.end()};
+        } else if constexpr (std::same_as<Cell, Primitive>) {
+            return Staged {std::in_place, cell.getAs<Primitive>()};
+        } else if constexpr (readsAnInteger && writesANumber) {
+            return Staged {static_cast<Primitive>(cell.getAs<Cell>())};
+        } else {
+            throw IRException(fmt::format("Cannot write a value of another type to a property of type '{}'",
+                                          ValueTypeName::value(T::_valueType)));
+        }
+    }
+};
+
+template <SupportedType T>
+CommitWriteBuffer::SupportedTypeVariant stageTaggedCell(const ListElementView cell) {
+    const ListTagDispatcher dispatcher {cell.getTag()};
+
+    return dispatcher.execute(TaggedCellStager<T> {}, cell);
+}
+
+// The type of property a tagged cell's value makes, Invalid for a null. Cypher has one
+// integer type, and it is signed.
+ValueType taggedCellValueType(const ListElementView cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Int:
+        case ListBufferTypeTag::UInt:
+            return ValueType::Int64;
+        break;
+        case ListBufferTypeTag::Double:
+            return ValueType::Double;
+        break;
+        case ListBufferTypeTag::Bool:
+            return ValueType::Bool;
+        break;
+        case ListBufferTypeTag::String:
+            return ValueType::String;
+        break;
+        case ListBufferTypeTag::Embedding:
+            return ValueType::Embedding;
+        break;
+        case ListBufferTypeTag::ListView:
+            return ValueType::List;
+        break;
+        case ListBufferTypeTag::DateTime:
+            return ValueType::DateTime;
+        break;
+        case ListBufferTypeTag::MapView:
+            return ValueType::Map;
+        break;
+        case ListBufferTypeTag::Null:
+            return ValueType::Invalid;
+        break;
+        case ListBufferTypeTag::NodeID:
+        case ListBufferTypeTag::EdgeID:
+            throw IRException("A node or an edge cannot be the value of a property");
+        break;
+        case ListBufferTypeTag::INVALID:
+        break;
+    }
+
+    throw IRException("Unknown tag in a tagged cell");
+}
+
+ValueType firstTaggedCellValueType(const Column* column) {
+    const ColumnKind::Code kind = column->getKind();
+    const ListElementView nullCell = ListElementView::nullElement();
+
+    if (kind == ColumnConst<ListElementView>::staticKind()) {
+        return taggedCellValueType(static_cast<const ColumnConst<ListElementView>*>(column)->getRaw());
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        const std::optional<ListElementView>& cell =
+            static_cast<const ColumnConst<std::optional<ListElementView>>*>(column)->getRaw();
+        return taggedCellValueType(cell.value_or(nullCell));
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        for (const ListElementView cell : static_cast<const ColumnVector<ListElementView>*>(column)->getRaw()) {
+            const ValueType valueType = taggedCellValueType(cell);
+            if (valueType != ValueType::Invalid) {
+                return valueType;
+            }
+        }
+    } else {
+        const std::vector<std::optional<ListElementView>>& cells =
+            static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+
+        for (const std::optional<ListElementView>& cell : cells) {
+            const ValueType valueType = taggedCellValueType(cell.value_or(nullCell));
+            if (valueType != ValueType::Invalid) {
+                return valueType;
+            }
+        }
+    }
+
+    return ValueType::Invalid;
+}
 
 class ConstPropertyExtractor {
 public:
@@ -422,35 +550,54 @@ void db::extractColumnProperties(const Column* column,
     }
 }
 
-void db::extractListElementProperties(const Column* column,
-                                      size_t rowCount,
-                                      PropertyTypeID propID,
-                                      ValueType valueType,
-                                      CommitWriteBuffer::UntypedProperties& buf) {
+void db::extractTaggedCellProperties(const Column* column,
+                                     size_t rowCount,
+                                     PropertyTypeID propID,
+                                     ValueType valueType,
+                                     CommitWriteBuffer::UntypedProperties& buf) {
     const ColumnKind::Code kind = column->getKind();
+    const ListElementView nullCell = ListElementView::nullElement();
 
-    if (kind == ColumnConst<ListElementView>::staticKind()) {
-        const ListElementView element = static_cast<const ColumnConst<ListElementView>*>(column)->getRaw();
-        stageListElementRows(element, rowCount, propID, valueType, buf);
-    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
-        const std::optional<ListElementView>& element =
-            static_cast<const ColumnConst<std::optional<ListElementView>>*>(column)->getRaw();
-        stageListElementRows(element.value_or(ListElementView::nullElement()), rowCount, propID, valueType, buf);
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
-        const auto& elements = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
-        buf.assign(elements.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
+    const auto extract = [&]<SupportedType T>() {
+        buf.clear();
 
-        for (size_t row = 0; row < elements.size(); row++) {
-            stageListElement(elements[row], valueType, buf[row].value);
+        if (kind == ColumnConst<ListElementView>::staticKind()) {
+            const ListElementView cell = static_cast<const ColumnConst<ListElementView>*>(column)->getRaw();
+            buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, stageTaggedCell<T>(cell)});
+        } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+            const std::optional<ListElementView>& cell =
+                static_cast<const ColumnConst<std::optional<ListElementView>>*>(column)->getRaw();
+            buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, stageTaggedCell<T>(cell.value_or(nullCell))});
+        } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+            const std::vector<ListElementView>& cells = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+
+            buf.reserve(cells.size());
+            for (const ListElementView cell : cells) {
+                buf.emplace_back(propID, stageTaggedCell<T>(cell));
+            }
+        } else {
+            const std::vector<std::optional<ListElementView>>& cells =
+                static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+
+            buf.reserve(cells.size());
+            for (const std::optional<ListElementView>& cell : cells) {
+                buf.emplace_back(propID, stageTaggedCell<T>(cell.value_or(nullCell)));
+            }
         }
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
-        const auto& elements = static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
-        buf.assign(elements.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
+    };
 
-        for (size_t row = 0; row < elements.size(); row++) {
-            stageListElement(elements[row].value_or(ListElementView::nullElement()), valueType, buf[row].value);
-        }
-    } else {
-        throw IRException("A property write of list elements reads a column of list elements");
+    ValueTypeDispatcher(valueType).execute(extract);
+}
+
+PropertyType db::createTaggedCellProperty(MetadataBuilder* metadataBuilder,
+                                          std::string_view name,
+                                          const Column* column) {
+    const std::optional<PropertyType> registered = metadataBuilder->findPropertyType(name);
+    if (registered) {
+        return *registered;
     }
+
+    const ValueType valueType = firstTaggedCellValueType(column);
+
+    return valueType == ValueType::Invalid ? PropertyType {} : metadataBuilder->getOrCreatePropertyType(name, valueType);
 }

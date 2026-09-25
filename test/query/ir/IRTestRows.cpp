@@ -310,6 +310,15 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (const auto* constElement = dynamic_cast<const ColumnConst<ListElementView>*>(column)) {
         out.clear();
         renderListElement(constElement->at(0), out);
+    } else if (const auto* constOptElement = dynamic_cast<const ColumnConst<std::optional<ListElementView>>*>(column)) {
+        const std::optional<ListElementView>& element = constOptElement->at(0);
+
+        out.clear();
+        if (element) {
+            renderListElement(*element, out);
+        } else {
+            out = "null";
+        }
     } else if (const auto* optLists = dynamic_cast<const ColumnOptVector<ListView>*>(column)) {
         const std::optional<ListView>& list = (*optLists)[row];
         out.clear();

@@ -44,6 +44,7 @@ class CypherAST;
 class DeleteStmt;
 class EdgePattern;
 class EmbeddingLiteral;
+struct EntityPropertyConstraint;
 class EntityTypeExpr;
 class Expr;
 class ExprChain;
@@ -189,6 +190,10 @@ private:
             mlir::Value _pending;
 
             std::unordered_map<std::string_view, mlir::Value> _properties;
+
+            // The properties written from tagged cells: a read typed as the property's own
+            // type fetches what the cells were converted to rather than reading the cells
+            std::unordered_set<std::string_view> _taggedProperties;
         };
 
         using CreatedEntityMap = std::unordered_map<const VarDecl*, CreatedEntity>;
@@ -495,8 +500,7 @@ private:
                               mlir::Value column,
                               llvm::ArrayRef<llvm::StringRef> labelNames,
                               llvm::StringRef edgeType,
-                              llvm::ArrayRef<llvm::StringRef> propNames,
-                              llvm::ArrayRef<mlir::Value> propValues);
+                              std::span<const EntityPropertyConstraint> properties);
 
     // The chain of one MERGE pattern, as db.merge carries it: one entry per node and
     // one per hop, with the attribute lists and operand groups they fill

@@ -39,6 +39,7 @@
 
 namespace db {
 
+class MetadataBuilder;
 class NLExecutionContext;
 class NLFunctionData;
 struct NLMergeWorkingSet;
@@ -3134,12 +3135,19 @@ private:
     NLStmtContainer _stmts;
 };
 
+struct NLCreateProperty {
+    PropertyTypeID _propertyTypeID;
+    const Column* _values {nullptr};
+    ValueType _taggedValueType {ValueType::Invalid};
+
+    // Set instead of the ID for tagged cells writing a property the graph does not have
+    // yet: the first cell holding a value types it, registered here when the create runs
+    std::string _createdName;
+    MetadataBuilder* _metadataBuilder {nullptr};
+};
+
 class NLCreateNodeData : public NLFunctionData {
 public:
-    struct Property {
-        PropertyTypeID _propertyTypeID;
-        const Column* _values {nullptr};
-    };
 
     NLCreateNodeData(LabelSetHandle labelsetHandle, ColumnNodeIDs* result)
         : _result(result),
@@ -3149,11 +3157,11 @@ public:
 
     LabelSetHandle getLabelSetHandle() const { return _labelsetHandle; }
     ColumnNodeIDs* getResult() const { return _result; }
-    const std::vector<Property>& properties() const { return _properties; }
+    const std::vector<NLCreateProperty>& properties() const { return _properties; }
 
     size_t getRowCount() const { return _cardinality ? _cardinality->size() : 1; }
 
-    void addProperty(const Property& property) {
+    void addProperty(const NLCreateProperty& property) {
         _properties.push_back(property);
     }
 
@@ -3162,7 +3170,7 @@ public:
     }
 
 private:
-    std::vector<Property> _properties;
+    std::vector<NLCreateProperty> _properties;
     ColumnNodeIDs* _result {nullptr};
     const Column* _cardinality {nullptr};
     LabelSetHandle _labelsetHandle;
@@ -3170,11 +3178,6 @@ private:
 
 class NLCreateEdgeData : public NLFunctionData {
 public:
-    struct Property {
-        PropertyTypeID _propertyTypeID;
-        const Column* _values {nullptr};
-    };
-
     NLCreateEdgeData(EdgeTypeID edgeTypeID,
                      const ColumnNodeIDs* src,
                      bool srcIsPending,
@@ -3211,14 +3214,14 @@ public:
 
     ColumnEdgeIDs* getResult() const { return _result; }
 
-    const std::vector<Property>& properties() const { return _properties; }
+    const std::vector<NLCreateProperty>& properties() const { return _properties; }
 
-    void addProperty(const Property& property) {
+    void addProperty(const NLCreateProperty& property) {
         _properties.push_back(property);
     }
 
 private:
-    std::vector<Property> _properties;
+    std::vector<NLCreateProperty> _properties;
     EdgeTypeID _edgeTypeID;
     const ColumnNodeIDs* _src {nullptr};
     const ColumnNodeIDs* _tgt {nullptr};
@@ -3490,10 +3493,10 @@ public:
     ValueType getNullValueType() const { return _nullValueType; }
     void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
 
-    // A column of list elements carries each row's type in its cell, so the property's own
-    // type is what every cell is checked against and staged as. Invalid for any other column.
-    ValueType getListElementValueType() const { return _listElementValueType; }
-    void setListElementValueType(ValueType valueType) { _listElementValueType = valueType; }
+    // A column of tagged cells carries its type per row rather than in its own, so each
+    // cell is staged as this type, the property's. Invalid for any other value column.
+    ValueType getTaggedValueType() const { return _taggedValueType; }
+    void setTaggedValueType(ValueType valueType) { _taggedValueType = valueType; }
 
 private:
     const ColumnNodeIDs* _input {nullptr};
@@ -3502,7 +3505,7 @@ private:
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
     ValueType _nullValueType {ValueType::Invalid};
-    ValueType _listElementValueType {ValueType::Invalid};
+    ValueType _taggedValueType {ValueType::Invalid};
     bool _allPending {false};
 };
 
@@ -3536,10 +3539,8 @@ public:
     ValueType getNullValueType() const { return _nullValueType; }
     void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
 
-    // A column of list elements carries each row's type in its cell, so the property's own
-    // type is what every cell is checked against and staged as. Invalid for any other column.
-    ValueType getListElementValueType() const { return _listElementValueType; }
-    void setListElementValueType(ValueType valueType) { _listElementValueType = valueType; }
+    ValueType getTaggedValueType() const { return _taggedValueType; }
+    void setTaggedValueType(ValueType valueType) { _taggedValueType = valueType; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
@@ -3548,7 +3549,7 @@ private:
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
     ValueType _nullValueType {ValueType::Invalid};
-    ValueType _listElementValueType {ValueType::Invalid};
+    ValueType _taggedValueType {ValueType::Invalid};
     bool _allPending {false};
 };
 

@@ -3941,10 +3941,7 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
                                               mlir::Value column,
                                               llvm::ArrayRef<llvm::StringRef> labelNames,
                                               llvm::StringRef edgeType,
-                                              llvm::ArrayRef<llvm::StringRef> propNames,
-                                              llvm::ArrayRef<mlir::Value> propValues) {
-    bioassert(propNames.size() == propValues.size(), "One value per created property expected");
-
+                                              std::span<const EntityPropertyConstraint> properties) {
     PartScope::CreatedEntity& created = _part._createdEntities[decl];
     created._column = column;
 
@@ -3958,9 +3955,12 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
 
     written._edgeType.assign(edgeType.begin(), edgeType.end());
 
-    for (size_t index = 0; index < propNames.size(); index++) {
-        const llvm::StringRef propName = propNames[index];
-        created._properties[std::string_view {propName.data(), propName.size()}] = propValues[index];
+    for (const EntityPropertyConstraint& property : properties) {
+        created._properties[property._propTypeName] = _part._exprMap.at(property._expr);
+
+        if (property._expr->getType() == EvaluatedType::ListItem) {
+            created._taggedProperties.insert(property._propTypeName);
+        }
     }
 }
 
@@ -4226,6 +4226,11 @@ void DBProgramGenerator::collectMergeHop(const EdgePattern* edgePattern, MergePa
 
 void DBProgramGenerator::collectMergeProperties(const PatternData* data, MergeEntity& entity) {
     for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+        if (constraint._expr->getType() == EvaluatedType::ListItem) {
+            throwError("MERGE cannot yet match a property against an element of a list that mixes types",
+                       constraint._expr);
+        }
+
         translateExpr(constraint._expr);
 
         const std::string_view propName = constraint._propTypeName;
@@ -4450,9 +4455,11 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
 
         llvm::SmallVector<llvm::StringRef> propNames;
         llvm::SmallVector<mlir::Value> propValues;
+        std::span<const EntityPropertyConstraint> properties;
         const NodePatternData* data = node->getData();
         if (data) {
-            for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+            properties = data->exprConstraints();
+            for (const EntityPropertyConstraint& constraint : properties) {
                 translateExpr(constraint._expr);
                 const std::string_view propName = constraint._propTypeName;
                 propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
@@ -4473,7 +4480,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
 
         if (decl) {
             knownVars[decl] = nodeValue;
-            publishCreatedEntity(decl, nodeValue, labelNames, {}, propNames, propValues);
+            publishCreatedEntity(decl, nodeValue, labelNames, {}, properties);
         }
 
         return nodeValue;
@@ -4538,8 +4545,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                                      createEdge.getResult(),
                                      {},
                                      llvm::StringRef {edgeType.data(), edgeType.size()},
-                                     propNames,
-                                     propValues);
+                                     edgeData->exprConstraints());
             }
 
             pathEntities.push_back(createEdge.getResult());
@@ -4781,6 +4787,7 @@ void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
     const auto createdIt = _part._createdEntities.find(entityDecl);
     if (createdIt != end(_part._createdEntities)) {
         createdIt->second._properties.erase(propName);
+        createdIt->second._taggedProperties.erase(propName);
     }
 
     // A merge's rows mix entities it wrote with entities it bound, and the two are
@@ -7443,13 +7450,27 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     // entity lives.
     const auto createdIt = _part._createdEntities.find(entityDecl);
     const bool writtenByACreate = createdIt != end(_part._createdEntities) && !createdIt->second._pending;
+    const bool readsTaggedCells = propExpr->getType() == EvaluatedType::ListItem;
+
     if (writtenByACreate) {
         const auto& properties = createdIt->second._properties;
         const auto propertyIt = properties.find(propName);
 
-        if (propertyIt != end(properties)) {
+        const bool writtenFromTaggedCells = createdIt->second._taggedProperties.contains(propName);
+        const bool readsWhatWasWritten = readsTaggedCells == writtenFromTaggedCells;
+
+        if (propertyIt != end(properties) && readsWhatWasWritten) {
             return propertyIt->second;
         }
+    }
+
+    // The property takes its type when the write runs, which leaves nothing to fetch it by
+    if (readsTaggedCells) {
+        throwError(fmt::format("Cannot read {}.{} yet: a property created from an element of a mixed "
+                               "list can only be read before the next WITH, through the variable its CREATE bound",
+                               varName,
+                               propName),
+                   propExpr);
     }
 
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);

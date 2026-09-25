@@ -4074,3 +4074,7 @@ target_link_libraries(test_query_ir_set_after_create PRIVATE turing_ir_test_writ
 # SET of a property from an element of a list that mixes types.
 add_turing_test(test_query_ir_set_from_list_element SetFromListElementTest.cpp)
 target_link_libraries(test_query_ir_set_from_list_element PRIVATE turing_ir_test_write_query_s)
+
+# CREATE of properties from the elements of a list that mixes types.
+add_turing_test(test_query_ir_create_from_list_element CreateFromListElementTest.cpp)
+target_link_libraries(test_query_ir_create_from_list_element PRIVATE turing_ir_test_write_query_s)

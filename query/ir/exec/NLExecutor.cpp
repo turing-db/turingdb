@@ -4363,6 +4363,33 @@ void throwIfAnyNodeIsNull(const ColumnNodeIDs* column, bool isPending, std::stri
     }
 }
 
+// A property no cell has typed yet has nothing to stage, which leaves its list empty
+void extractCreatedProperties(std::span<const NLCreateProperty> properties,
+                              size_t rowCount,
+                              std::vector<CommitWriteBuffer::UntypedProperties>& propertyValues) {
+    propertyValues.resize(properties.size());
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLCreateProperty& property = properties[index];
+        CommitWriteBuffer::UntypedProperties& values = propertyValues[index];
+
+        const bool typedByItsCells = !property._createdName.empty();
+
+        if (typedByItsCells) {
+            const PropertyType created = createTaggedCellProperty(property._metadataBuilder,
+                                                                  property._createdName,
+                                                                  property._values);
+            if (created.isValid()) {
+                extractTaggedCellProperties(property._values, rowCount, created._id, created._valueType, values);
+            }
+        } else if (property._taggedValueType != ValueType::Invalid) {
+            extractTaggedCellProperties(property._values, rowCount, property._propertyTypeID, property._taggedValueType, values);
+        } else {
+            extractColumnProperties(property._values, rowCount, property._propertyTypeID, values);
+        }
+    }
+}
+
 void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
     const GetOutEdgesRange outEdges(view, nodes);
     for (const EdgeRecord& record : outEdges) {
@@ -4761,24 +4788,20 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = createData->getRowCount();
     const LabelSetHandle labelsetHandle = createData->getLabelSetHandle();
 
+    std::vector<CommitWriteBuffer::UntypedProperties> propertyValues;
+    extractCreatedProperties(createData->properties(), rowCount, propertyValues);
+
     // Must extract this value before adding in the loop
     const size_t numPendingNodes = writeBuffer->numPendingNodes();
 
     for (size_t row = 0; row < rowCount; row++) {
         CommitWriteBuffer::PendingNode& node = writeBuffer->newPendingNode();
         node.labelsetHandle = labelsetHandle;
-    }
 
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    for (const NLCreateNodeData::Property& prop : createData->properties()) {
-        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
-
-        for (size_t row = 0; row < rowCount; row++) {
-            CommitWriteBuffer::PendingNode& pendingNode =
-                writeBuffer->getPendingNode(numPendingNodes + row);
-            CommitWriteBuffer::UntypedProperties& properties = pendingNode.properties;
-            properties.push_back(propsBuffer[row]);
+        for (const CommitWriteBuffer::UntypedProperties& values : propertyValues) {
+            if (!values.empty()) {
+                node.properties.push_back(values[row]);
+            }
         }
     }
 
@@ -4816,6 +4839,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     throwIfAnyNodeIsNull(src, srcIsPending, "Cannot create an edge from a null node");
     throwIfAnyNodeIsNull(tgt, tgtIsPending, "Cannot create an edge to a null node");
 
+    std::vector<CommitWriteBuffer::UntypedProperties> propertyValues;
+    extractCreatedProperties(createData->properties(), rowCount, propertyValues);
+
     const GraphView* view = context->getView();
     const size_t firstPendingNodeID = committedNodeCount(view);
     const size_t numPendingNodes = writeBuffer->numPendingNodes();
@@ -4832,15 +4858,11 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
-    }
 
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    for (const NLCreateEdgeData::Property& prop : createData->properties()) {
-        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
-
-        for (size_t row = 0; row < rowCount; row++) {
-            writeBuffer->getPendingEdge(numPendingEdges + row).properties.push_back(propsBuffer[row]);
+        for (const CommitWriteBuffer::UntypedProperties& values : propertyValues) {
+            if (!values.empty()) {
+                edge.properties.push_back(values[row]);
+            }
         }
     }
 
@@ -4864,12 +4886,12 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     const PropertyTypeID propID = setData->getPropertyTypeID();
     const ValueType nullValueType = setData->getNullValueType();
-    const ValueType listElementValueType = setData->getListElementValueType();
+    const ValueType taggedValueType = setData->getTaggedValueType();
 
     if (nullValueType != ValueType::Invalid) {
         fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (listElementValueType != ValueType::Invalid) {
-        extractListElementProperties(setData->getValue(), rowCount, propID, listElementValueType, propsBuffer);
+    } else if (taggedValueType != ValueType::Invalid) {
+        extractTaggedCellProperties(setData->getValue(), rowCount, propID, taggedValueType, propsBuffer);
     } else {
         extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
     }
@@ -4911,14 +4933,14 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     const size_t rowCount = edges->size();
     const PropertyTypeID propID = setData->getPropertyTypeID();
     const ValueType nullValueType = setData->getNullValueType();
-    const ValueType listElementValueType = setData->getListElementValueType();
+    const ValueType taggedValueType = setData->getTaggedValueType();
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
 
     if (nullValueType != ValueType::Invalid) {
         fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (listElementValueType != ValueType::Invalid) {
-        extractListElementProperties(setData->getValue(), rowCount, propID, listElementValueType, propsBuffer);
+    } else if (taggedValueType != ValueType::Invalid) {
+        extractTaggedCellProperties(setData->getValue(), rowCount, propID, taggedValueType, propsBuffer);
     } else {
         extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
     }

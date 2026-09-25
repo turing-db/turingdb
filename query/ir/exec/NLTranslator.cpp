@@ -444,6 +444,17 @@ bool isNullableList(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListType>(nullableType.getValueType());
 }
 
+bool holdsTaggedCells(mlir::Type chunkType) {
+    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type elementType = chunk.getElementType();
+
+    return mlir::isa<storage::ListElementType>(elementType) || isNullableListElement(elementType);
+}
+
 // The property value type a chunk writes, which is not quite the shape it holds: a
 // column that owns its strings - a loaded CSV field - writes a String property like a
 // borrowed one, so it is recognised here and not in valueTypeFromElementType, which
@@ -2187,13 +2198,10 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
 
     for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
         const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
-        const mlir::Value propValue = propValues[propIndex];
-        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
 
-        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-        const Column* propColumn = getColumn(propValue);
-
-        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+        NLCreateProperty property;
+        translateCreateProperty(propName, propValues[propIndex], property);
+        data->addProperty(property);
     }
 
     if (const mlir::Value cardinality = createNode.getCardinality()) {
@@ -2239,13 +2247,10 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
     for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
         const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
-        const mlir::Value propValue = propValues[propIndex];
-        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
 
-        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-        const Column* propColumn = getColumn(propValue);
-
-        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+        NLCreateProperty property;
+        translateCreateProperty(propName, propValues[propIndex], property);
+        data->addProperty(property);
     }
 
     body->emplaceStmt(&NLExecutor::runCreateEdge, data);
@@ -2485,12 +2490,29 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                               ._keyAppend=NLExecutor::selectOptKeyAppendFunction(graphType->_valueType)});
 }
 
-PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
-                                           mlir::Type valueChunkType,
-                                           bool writesNull) const {
-    const bool writesListElements = isListElementChunk(valueChunkType);
+void NLTranslator::translateCreateProperty(llvm::StringRef propName,
+                                           mlir::Value propValue,
+                                           NLCreateProperty& property) const {
+    const bool writesTaggedCells = holdsTaggedCells(propValue.getType());
+    const PropertyType propType = writtenPropertyType(propName, propValue.getType(), writesTaggedCells);
 
-    if (!writesNull && !writesListElements) {
+    property._values = getColumn(propValue);
+
+    if (!propType.isValid()) {
+        property._createdName = propName.str();
+        property._metadataBuilder = _metadataBuilder;
+    } else if (writesTaggedCells) {
+        property._propertyTypeID = propType._id;
+        property._taggedValueType = propType._valueType;
+    } else {
+        property._propertyTypeID = propType._id;
+    }
+}
+
+PropertyType NLTranslator::writtenPropertyType(llvm::StringRef propName,
+                                               mlir::Type valueChunkType,
+                                               bool untypedValue) const {
+    if (!untypedValue) {
         const ValueType valueType = valueTypeFromChunkType(valueChunkType);
 
         return _metadataBuilder->getOrCreatePropertyType(propName, valueType);
@@ -2515,8 +2537,9 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
     const mlir::Value propValue = setNodeProperty.getValue();
     const mlir::Type valueChunkType = propValue.getType();
     const bool writesNull = isUntypedNullChunk(valueChunkType);
+    const bool writesTaggedCells = holdsTaggedCells(valueChunkType);
 
-    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
+    const PropertyType propType = writtenPropertyType(propName, valueChunkType, writesNull || writesTaggedCells);
     if (!propType.isValid()) {
         return;
     }
@@ -2531,8 +2554,8 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
 
     if (writesNull) {
         data->setNullValueType(propType._valueType);
-    } else if (isListElementChunk(valueChunkType)) {
-        data->setListElementValueType(propType._valueType);
+    } else if (writesTaggedCells) {
+        data->setTaggedValueType(propType._valueType);
     }
 
     data->setPending(getMaskColumn(setNodeProperty.getPending()));
@@ -2552,8 +2575,9 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     const mlir::Value propValue = setEdgeProperty.getValue();
     const mlir::Type valueChunkType = propValue.getType();
     const bool writesNull = isUntypedNullChunk(valueChunkType);
+    const bool writesTaggedCells = holdsTaggedCells(valueChunkType);
 
-    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
+    const PropertyType propType = writtenPropertyType(propName, valueChunkType, writesNull || writesTaggedCells);
     if (!propType.isValid()) {
         return;
     }
@@ -2568,8 +2592,8 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
 
     if (writesNull) {
         data->setNullValueType(propType._valueType);
-    } else if (isListElementChunk(valueChunkType)) {
-        data->setListElementValueType(propType._valueType);
+    } else if (writesTaggedCells) {
+        data->setTaggedValueType(propType._valueType);
     }
 
     data->setPending(getMaskColumn(setEdgeProperty.getPending()));

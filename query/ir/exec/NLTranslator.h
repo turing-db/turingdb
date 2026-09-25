@@ -927,13 +927,19 @@ private:
     void collectWrittenMergeProperties(const std::vector<NLMergeProperty>& properties,
                                        NLMergeScanProperties& writtenProperties);
 
-    // The property a set writes to. A write of a null or of list elements carries no single
-    // type on its value chunk, so the property's own type is what it stages, and a name no
-    // property in the graph carries has nothing to remove - answered by an invalid property
-    // rather than by interning the name.
-    PropertyType setPropertyType(llvm::StringRef propName,
-                                 mlir::Type valueChunkType,
-                                 bool writesNull) const;
+    // A property a create writes. Tagged cells the graph has no property for yet are named
+    // rather than given one: the first cell holding a value types it when the create runs.
+    void translateCreateProperty(llvm::StringRef propName,
+                                 mlir::Value propValue,
+                                 NLCreateProperty& property) const;
+
+    // The property a create or a set writes to. A write of a null or of tagged cells carries
+    // no type on its value chunk, so the property's own type is what it stages. A name no
+    // property carries yet answers an invalid property rather than being interned: a null
+    // has nothing to remove, and tagged cells type it when the create runs.
+    PropertyType writtenPropertyType(llvm::StringRef propName,
+                                     mlir::Type valueChunkType,
+                                     bool untypedValue) const;
 
     void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
 

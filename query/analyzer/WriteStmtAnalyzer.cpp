@@ -32,6 +32,20 @@
 
 using namespace db;
 
+namespace {
+
+// A tagged cell carries its type per row, so the write checks each cell against the
+// property's type as it stages it. A property with no type yet has none to check against.
+bool writeTypeCompatible(ValueType propertyType, EvaluatedType valueType) {
+    if (valueType == EvaluatedType::ListItem) {
+        return propertyType != ValueType::Invalid;
+    }
+
+    return ExprAnalyzer::propTypeCompatible(propertyType, valueType);
+}
+
+}
+
 WriteStmtAnalyzer::WriteStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
     _graphView(graphView),
@@ -233,13 +247,16 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
                 // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
+                if (!writeTypeCompatible(propType->_valueType, expr->getType())) {
                     throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
                                            EvaluatedTypeName::value(expr->getType())),
                                nodePattern);
                 }
                 data->addExprConstraint(propName->getName(), propType->_valueType, expr);
+            } else if (expr->getType() == EvaluatedType::ListItem) {
+                data->addExprConstraint(propName->getName(), ValueType::Invalid, expr);
+                _exprAnalyzer->addToBeCreatedFromTaggedCells(propName->getName());
             } else {
                 // Property type needs to be created
                 const ValueType valueType = evaluatedToValueType(expr->getType());
@@ -307,13 +324,16 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
                 // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
+                if (!writeTypeCompatible(propType->_valueType, expr->getType())) {
                     throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
                                            EvaluatedTypeName::value(expr->getType())),
                                edgePattern);
                 }
                 data->addExprConstraint(propName->getName(), propType->_valueType, expr);
+            } else if (expr->getType() == EvaluatedType::ListItem) {
+                data->addExprConstraint(propName->getName(), ValueType::Invalid, expr);
+                _exprAnalyzer->addToBeCreatedFromTaggedCells(propName->getName());
             } else {
                 // Property type needs to be created
                 const ValueType valueType = evaluatedToValueType(expr->getType());
@@ -366,7 +386,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
                 return;
             }
 
-            if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
+            if (!writeTypeCompatible(lhsEvaluatedVt, rhsType)) {
                 throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(lhsEvaluatedVt),
                                        EvaluatedTypeName::value(rhsType)),
