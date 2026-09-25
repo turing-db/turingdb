@@ -231,7 +231,6 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
                 returnMandatory = returnRequired;
 
                 analyze(static_cast<const WithStmt*>(stmt));
-                _writeAnalyzer->startPart();
             } else {
                 if (kind == Stmt::Kind::CALL && static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;
@@ -258,16 +257,14 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
 void CypherAnalyzer::analyze(const UnionQuery* query) {
     const UnionQuery::Branches& branches = query->branches();
 
-    // Each branch is a query body of its own: it declares its own variables and writes
-    // its own clauses, so the scope and the part the write analyzer is tracking are both
-    // opened fresh for it, exactly as a WITH opens them
+    // Each branch is a query body of its own: it declares its own variables, so the scope
+    // is opened fresh for it, exactly as a WITH opens one
     for (const UnionQuery::Branch& branch : branches) {
         _ctxt = branch._query->getDeclContext();
 
         _exprAnalyzer->setDeclContext(_ctxt);
         _readAnalyzer->setDeclContext(_ctxt);
         _writeAnalyzer->setDeclContext(_ctxt);
-        _writeAnalyzer->startPart();
 
         analyze(branch._query);
     }
@@ -468,8 +465,6 @@ void CypherAnalyzer::setScope(DeclContext* scope) {
 }
 
 void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
-    const bool outerHasCreate = _writeAnalyzer->hasCreate();
-
     CallSubqueryStmt::Branches& branches = subquery->branches();
 
     for (CallSubqueryStmt::Branch& branch : branches) {
@@ -479,8 +474,6 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
 
         analyzeSubqueryBranch(branch, subquery->hasScopeClause());
     }
-
-    _writeAnalyzer->setHasCreate(outerHasCreate);
 
     for (size_t index = 1; index < branches.size(); index++) {
         analyzeUnionColumns(branches.front()._query, branches[index]._query);
@@ -523,7 +516,6 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
     std::swap(_subqueryImports, outerImports);
 
     setScope(inner);
-    _writeAnalyzer->startPart();
 
     analyze(body);
 
@@ -591,12 +583,9 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
         correlated.push_back(name);
     }
 
-    const bool outerHasCreate = _writeAnalyzer->hasCreate();
-
     std::swap(_subqueryImports, correlated);
 
     setScope(inner);
-    _writeAnalyzer->startPart();
 
     analyzeQueryBody(body, /*returnRequired=*/false);
 
@@ -609,7 +598,6 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     }
 
     setScope(outer);
-    _writeAnalyzer->setHasCreate(outerHasCreate);
 }
 
 void CypherAnalyzer::throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const {
