@@ -3368,8 +3368,26 @@ void countFromMetadata(Count count, const ScanTally& tally, mlir::OpBuilder& bui
     }
 }
 
+// Whether the query writes to the graph. The graph's counts leave out the query's own
+// writes, so none of its counts can be read off them.
+bool writesTheGraph(Operation* root) {
+    const WalkResult walked = root->walk([](Operation* op) {
+        if (isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op)) {
+            return WalkResult::interrupt();
+        }
+
+        return WalkResult::advance();
+    });
+
+    return walked.wasInterrupted();
+}
+
 struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
     void runOnOperation() override {
+        if (writesTheGraph(getOperation())) {
+            return;
+        }
+
         // Collect the counts first, since rewriting erases ops and would invalidate the walk.
         llvm::SmallVector<Count> counts;
         getOperation()->walk([&](Count count) {
