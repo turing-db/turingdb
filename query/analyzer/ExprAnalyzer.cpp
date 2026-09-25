@@ -615,7 +615,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             const std::string error = fmt::format(
-                "Operands are not valid and compatible numeric types: '{} ' and '{}'",
+                "Operands are not valid and compatible numeric types: '{}' and '{}'",
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 
