@@ -106,3 +106,5 @@ add_ir_tests(test_query_ir_map_keys_function MapKeysFunctionTest.cpp)
 add_ir_tests(test_query_ir_map_case_branch MapCaseBranchTest.cpp)
 
 add_ir_tests(test_query_ir_map_ordering MapOrderingTest.cpp)
+
+add_ir_tests(test_query_ir_map_predicate_operand MapPredicateOperandTest.cpp)
