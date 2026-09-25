@@ -98,3 +98,5 @@ add_turing_test(test_query_ir_pattern_repeated_key PatternRepeatedKeyTest.cpp)
 add_turing_test(test_query_ir_map_literal_runtime_key MapLiteralRuntimeKeyTest.cpp)
 
 add_ir_tests(test_query_ir_map_null_entry_equality MapNullEntryEqualityTest.cpp)
+
+add_ir_tests(test_query_ir_map_key_lookup MapKeyLookupTest.cpp)
