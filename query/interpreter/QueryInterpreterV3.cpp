@@ -177,7 +177,12 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
     mlir::ModuleOp module = owningModule.get();
 
-    const mlir::db::DBPassContext passContext {&view};
+    const bool hasPendingWrites = writeBuffer
+                                  && (writeBuffer->containsCreates()
+                                      || writeBuffer->containsDeletes()
+                                      || writeBuffer->containsUpdates());
+
+    const mlir::db::DBPassContext passContext {._view = &view, ._hasPendingWrites = hasPendingWrites};
 
     DBProgramGenerator generator(&module, explain, passContext);
     try {

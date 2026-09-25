@@ -3383,8 +3383,15 @@ bool writesTheGraph(Operation* root) {
 }
 
 struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
+    CountFromMetadata() {}
+
+    CountFromMetadata(const DBPassContext& context)
+        : _context(context)
+    {
+    }
+
     void runOnOperation() override {
-        if (writesTheGraph(getOperation())) {
+        if (_context._hasPendingWrites || writesTheGraph(getOperation())) {
             return;
         }
 
@@ -3404,12 +3411,19 @@ struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata>
             countFromMetadata(count, tally, builder);
         }
     }
+
+private:
+    DBPassContext _context;
 };
 
 }
 
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext& context) {
     return std::make_unique<FuseHashJoin>(context);
+}
+
+std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext& context) {
+    return std::make_unique<CountFromMetadata>(context);
 }
 
 }
