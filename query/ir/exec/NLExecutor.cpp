@@ -4801,9 +4801,12 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     const PropertyTypeID propID = setData->getPropertyTypeID();
     const ValueType nullValueType = setData->getNullValueType();
+    const ValueType listElementValueType = setData->getListElementValueType();
 
     if (nullValueType != ValueType::Invalid) {
         fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
+    } else if (listElementValueType != ValueType::Invalid) {
+        extractListElementProperties(setData->getValue(), rowCount, propID, listElementValueType, propsBuffer);
     } else {
         extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
     }
@@ -4845,11 +4848,14 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     const size_t rowCount = edges->size();
     const PropertyTypeID propID = setData->getPropertyTypeID();
     const ValueType nullValueType = setData->getNullValueType();
+    const ValueType listElementValueType = setData->getListElementValueType();
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
 
     if (nullValueType != ValueType::Invalid) {
         fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
+    } else if (listElementValueType != ValueType::Invalid) {
+        extractListElementProperties(setData->getValue(), rowCount, propID, listElementValueType, propsBuffer);
     } else {
         extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
     }

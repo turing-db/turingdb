@@ -24,6 +24,14 @@ void extractColumnProperties(const Column* column,
                              PropertyTypeID propID,
                              CommitWriteBuffer::UntypedProperties& buf);
 
+// The values a column of list elements holds, as a property of @param valueType takes
+// them. Each cell carries its own type, so a cell holding another type throws on its row.
+void extractListElementProperties(const Column* column,
+                                  size_t rowCount,
+                                  PropertyTypeID propID,
+                                  ValueType valueType,
+                                  CommitWriteBuffer::UntypedProperties& buf);
+
 // The disengaged value of one property, repeated over every row. A write of a null has no
 // value column to read a type off, so the property's own type picks the variant it stages.
 void fillNullProperties(size_t rowCount,
