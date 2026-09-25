@@ -58,7 +58,7 @@ void ScanEdgesIterator::nextValid() {
 
 ScanEdgesChunkWriter::ScanEdgesChunkWriter(const GraphView& view)
     : ScanEdgesIterator(view),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -180,7 +180,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
         CASE(15);
     }
 
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

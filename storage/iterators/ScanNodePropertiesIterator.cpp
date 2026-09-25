@@ -131,7 +131,7 @@ bool ScanNodePropertiesIterator<T>::isOverridden(EntityID entityID) const {
 template <SupportedType T>
 ScanNodePropertiesChunkWriter<T>::ScanNodePropertiesChunkWriter(const GraphView& view, PropertyTypeID propTypeID)
     : ScanNodePropertiesIterator<T>(view, propTypeID),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -214,7 +214,7 @@ void ScanNodePropertiesChunkWriter<T>::fill(size_t maxCount) {
         CASE(3);
     }
 
-    if (this->_view.tombstones().hasNodes()) {
+    if (this->_view.hasDeletedNodes()) {
         filterTombstones();
     }
 }

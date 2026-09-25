@@ -50,7 +50,7 @@ void executeImpl(ProcedureState* proc) {
     const GraphReader reader(view);
     const PropertyTypeMap& propTypes = reader.getMetadata().propTypes();
 
-    const bool hasEdgeTombstones = view.tombstones().hasEdges();
+    const bool hasEdgeTombstones = view.hasDeletedEdges();
 
     std::vector<int64_t> edgeIDs;
     const auto& edgeIDsList = ProcUtils::constArg<ListView>(inputEdgeIDs, edgeIDsErr);

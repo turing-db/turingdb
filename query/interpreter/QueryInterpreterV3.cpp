@@ -96,7 +96,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         }
     }
 
-    const GraphView view = txRes->viewGraph();
+    GraphView view = txRes->viewGraph();
 
     CommitWriteBuffer* writeBuffer = nullptr;
     MetadataBuilder* metadataBuilder = nullptr;
@@ -105,6 +105,8 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         commitBuilder = txRes->get<PendingCommitWriteTx>().commitBuilder();
         writeBuffer = &commitBuilder->writeBuffer();
         metadataBuilder = &commitBuilder->metadata();
+
+        view.setChangeDeletions(&writeBuffer->deletedNodes(), &writeBuffer->deletedEdges());
     }
 
     // Filled for every query, since which statement this one is only becomes known

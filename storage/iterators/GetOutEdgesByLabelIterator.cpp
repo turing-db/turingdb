@@ -13,7 +13,7 @@ GetOutEdgesByLabelChunkWriter::GetOutEdgesByLabelChunkWriter(const GraphView& vi
                                                              const LabelSetHandle& labelset)
     : GetOutEdgesIterator(view, inputNodeIDs),
     _labelset(labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -112,7 +112,7 @@ void GetOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
     }
 
     // Base column is _edgeIDs: only need to check if there are edge tombstones
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

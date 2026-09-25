@@ -100,7 +100,7 @@ ScanNodesByPropertyValueChunkWriter<T>::ScanNodesByPropertyValueChunkWriter(cons
     _propTypeID(propTypeID),
     _value(value),
     _labelset(labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
     collectPartContainers();
     seekSliceAcrossParts();
@@ -315,7 +315,7 @@ void ScanNodesByPropertyValueChunkWriter<T>::fill(size_t maxCount) {
 
     hits.resize(count);
 
-    if (_view.tombstones().hasNodes()) {
+    if (_view.hasDeletedNodes()) {
         filterTombstones();
     }
 }

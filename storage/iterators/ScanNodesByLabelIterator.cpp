@@ -74,7 +74,7 @@ void ScanNodesByLabelIterator::nextValid() {
 
 ScanNodesByLabelChunkWriter::ScanNodesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
     : ScanNodesByLabelIterator(view, labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -104,7 +104,7 @@ void ScanNodesByLabelChunkWriter::fill(size_t maxCount) {
         nextValid();
     }
 
-    if (_view.tombstones().hasNodes()) {
+    if (_view.hasDeletedNodes()) {
         filterTombstones();
     }
 }

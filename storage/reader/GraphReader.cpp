@@ -380,22 +380,22 @@ bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
 
 bool GraphReader::graphHasNode(NodeID nodeID) const {
     const bool exists = nodeID < getTotalNodesAllocated();
-    const bool isDeleted = _view.tombstones().contains(nodeID);
+    const bool isDeleted = _view.isDeleted(nodeID);
     return exists && !isDeleted;
 }
 
 bool GraphReader::graphHasEdge(EdgeID edgeID) const {
     const bool exists = edgeID < getTotalEdgesAllocated();
-    const bool isDeleted = _view.tombstones().contains(edgeID);
+    const bool isDeleted = _view.isDeleted(edgeID);
     return exists && !isDeleted;
 }
 
 bool GraphReader::nodeIsDeleted(NodeID nodeID) const {
-    return _view.tombstones().containsNode(nodeID);
+    return _view.isDeleted(nodeID);
 }
 
 bool GraphReader::edgeIsDeleted(EdgeID edgeID) const {
-    return _view.tombstones().containsEdge(edgeID);
+    return _view.isDeleted(edgeID);
 }
 
 template <SupportedType T>

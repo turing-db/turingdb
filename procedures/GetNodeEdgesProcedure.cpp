@@ -110,8 +110,8 @@ void executeImpl(ProcedureState* proc) {
     const GraphReader reader(view);
     ListBuffer<>* listBuffer = ctxt->getListBuffer();
 
-    const bool hasNodeTombstones = view.tombstones().hasNodes();
-    const bool hasEdgeTombstones = view.tombstones().hasEdges();
+    const bool hasNodeTombstones = view.hasDeletedNodes();
+    const bool hasEdgeTombstones = view.hasDeletedEdges();
 
     std::vector<int64_t> nodeIDs;
     const auto& nodeIDList = ProcUtils::constArg<ListView>(inputNodeIDs, nodeIDsErr);

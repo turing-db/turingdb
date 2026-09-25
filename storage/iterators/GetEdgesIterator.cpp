@@ -134,7 +134,7 @@ void GetEdgesIterator::nextValid() {
 GetEdgesChunkWriter::GetEdgesChunkWriter(const GraphView& view,
                                          const ColumnNodeIDs* inputNodeIDs)
     : GetEdgesIterator(view, inputNodeIDs),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -241,7 +241,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
     }
 
     // Base column is _edgeIDs: only need to check if there are edge tombstones
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

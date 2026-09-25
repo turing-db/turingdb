@@ -76,7 +76,7 @@ void ScanOutEdgesBySourceLabelIterator::nextValid() {
 ScanOutEdgesBySourceLabelChunkWriter::ScanOutEdgesBySourceLabelChunkWriter(const GraphView& view,
                                                                            const LabelSetHandle& labelset)
     : ScanOutEdgesBySourceLabelIterator(view, labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -212,7 +212,7 @@ void ScanOutEdgesBySourceLabelChunkWriter::fill(size_t maxCount) {
         CASE(15);
     }
 
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

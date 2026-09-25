@@ -1,7 +1,11 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "datapart/DataPartSpan.h"
 #include "versioning/CommitData.h"
+
+#include "ID.h"
 
 namespace db {
 
@@ -10,6 +14,9 @@ class Graph;
 
 class GraphView {
 public:
+    using DeletedNodes = std::unordered_set<NodeID>;
+    using DeletedEdges = std::unordered_set<EdgeID>;
+
     GraphView() = default;
 
     explicit GraphView(const CommitData* data)
@@ -18,6 +25,17 @@ public:
     }
 
     bool isValid() const { return _data; }
+
+    // The nodes and edges a change has deleted and not committed. A read in that change
+    // skips them as it skips the commit's tombstones, and they grow as the change deletes.
+    void setChangeDeletions(const DeletedNodes* nodes, const DeletedEdges* edges);
+
+    template <TypedInternalID IDT>
+    [[nodiscard]] bool isDeleted(IDT id) const;
+
+    [[nodiscard]] bool hasDeletedNodes() const;
+    [[nodiscard]] bool hasDeletedEdges() const;
+    [[nodiscard]] bool followsChangeDeletions() const { return _changeDeletedEdges != nullptr; }
 
     [[nodiscard]] GraphReader read() const;
     [[nodiscard]] DataPartSpan dataparts() const { return _data->allDataparts(); }
@@ -31,6 +49,8 @@ public:
 private:
     friend GraphReader;
     const CommitData* _data {nullptr};
+    const DeletedNodes* _changeDeletedNodes {nullptr};
+    const DeletedEdges* _changeDeletedEdges {nullptr};
 };
 
 }

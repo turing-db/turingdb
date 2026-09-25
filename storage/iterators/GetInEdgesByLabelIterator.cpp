@@ -13,7 +13,7 @@ GetInEdgesByLabelChunkWriter::GetInEdgesByLabelChunkWriter(const GraphView& view
                                                            const LabelSetHandle& labelset)
     : GetInEdgesIterator(view, inputNodeIDs),
     _labelset(labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -110,7 +110,7 @@ void GetInEdgesByLabelChunkWriter::fill(size_t maxCount) {
         CASE(7);
     }
 
-    if (_view.tombstones().hasEdges()) {
+    if (_view.hasDeletedEdges()) {
         filterTombstones();
     }
 }

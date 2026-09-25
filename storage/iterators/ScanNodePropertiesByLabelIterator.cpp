@@ -157,7 +157,7 @@ ScanNodePropertiesByLabelChunkWriter<T>::ScanNodePropertiesByLabelChunkWriter(co
                                                                               PropertyTypeID propTypeID,
                                                                               const LabelSetHandle& labelset)
     : ScanNodePropertiesByLabelIterator<T>(view, propTypeID, labelset),
-    _filter(view.tombstones())
+    _filter(view)
 {
 }
 
@@ -255,7 +255,7 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
         CASE(3);
     }
 
-    if (this->_view.tombstones().hasNodes()) {
+    if (this->_view.hasDeletedNodes()) {
         filterTombstones();
     }
 }

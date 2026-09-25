@@ -20,6 +20,7 @@
 
 #include "NLExecutionContext.h"
 #include "NLWriteProperties.h"
+#include "NLWrittenValues.h"
 
 #include "IRException.h"
 #include "BioAssert.h"
@@ -35,8 +36,11 @@ void appendMergeKey(const std::vector<Property>& properties, size_t row, std::st
     }
 }
 
+// The graph holds the values from before the change, so an entity the change updated is
+// keyed by the value it wrote rather than by the one the graph holds
 template <typename ID, typename T>
 void fetchMergeProperty(const GraphView& view,
+                        NLWrittenValues& written,
                         PropertyTypeID propertyTypeID,
                         const ColumnVector<ID>* ids,
                         Column* output) {
@@ -45,23 +49,38 @@ void fetchMergeProperty(const GraphView& view,
     GetPropertiesWithNullChunkWriter<ID, T> writer(view, propertyTypeID, ids);
     writer.setOutput(typed);
     writer.fill(ids->size());
+
+    if (!written.hasUpdates()) {
+        return;
+    }
+
+    auto& values = typed->getRaw();
+    const auto& entities = ids->getRaw();
+    for (size_t row = 0; row < entities.size(); row++) {
+        const NLWrittenValues::Value* update = written.findUpdate(entities[row], propertyTypeID);
+        if (update) {
+            values[row] = written.read<T>(*update);
+        }
+    }
 }
 
 void fetchMergeNodeProperty(const GraphView& view,
+                            NLWrittenValues& written,
                             const NLMergeScanProperty& property,
                             const ColumnNodeIDs* nodes) {
     const auto fetch = [&]<SupportedType T>() {
-        fetchMergeProperty<NodeID, T>(view, property._propertyType._id, nodes, property._values);
+        fetchMergeProperty<NodeID, T>(view, written, property._propertyType._id, nodes, property._values);
     };
 
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
 }
 
 void fetchMergeEdgeProperty(const GraphView& view,
+                            NLWrittenValues& written,
                             const NLMergeScanProperty& property,
                             const ColumnEdgeIDs* edges) {
     const auto fetch = [&]<SupportedType T>() {
-        fetchMergeProperty<EdgeID, T>(view, property._propertyType._id, edges, property._values);
+        fetchMergeProperty<EdgeID, T>(view, written, property._propertyType._id, edges, property._values);
     };
 
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
@@ -196,6 +215,9 @@ void NLMergeExecutor::buildNodeIndex(NLMergeNodeIndex* index) {
     ScanNodesByLabelChunkWriter scan(*_view, labelset);
     scan.setNodeIDs(nodes);
 
+    NLWrittenValues& written = _context->getWrittenValues();
+    written.indexUpdates(_writeBuffer);
+
     std::string key;
     while (scan.isValid()) {
         scan.fill(_context->getChunkSize());
@@ -206,7 +228,7 @@ void NLMergeExecutor::buildNodeIndex(NLMergeNodeIndex* index) {
         }
 
         for (const NLMergeScanProperty& property : scanProperties) {
-            fetchMergeNodeProperty(*_view, property, nodes);
+            fetchMergeNodeProperty(*_view, written, property, nodes);
         }
 
         for (size_t row = 0; row < rowCount; row++) {
@@ -423,7 +445,6 @@ void NLMergeExecutor::collectGraphExtensions(const NLMergeData::Hop& hop, size_t
 
 void NLMergeExecutor::collectDirectedExtensions(const NLMergeData::Hop& hop, size_t hopIndex, bool outgoing) {
     const std::unordered_set<uint64_t>& targets = _work->_candidateKeys[hopIndex + 1];
-    const Tombstones& tombstones = _view->tombstones();
     const ColumnNodeIDs* sources = hop._scanSources;
 
     // An undirected hop scans both ways round, and a self-loop is an out-edge and an
@@ -432,7 +453,7 @@ void NLMergeExecutor::collectDirectedExtensions(const NLMergeData::Hop& hop, siz
     const bool skipSelfLoops = undirected && !outgoing;
 
     const auto collect = [&](const EdgeRecord& record) {
-        if (record._edgeTypeID != hop._matchEdgeType || tombstones.containsEdge(record._edgeID)) {
+        if (record._edgeTypeID != hop._matchEdgeType || _view->isDeleted(record._edgeID)) {
             return;
         }
 
@@ -476,8 +497,11 @@ void NLMergeExecutor::dropExtensionsWithOtherProperties(const NLMergeData::Hop& 
         edges->push_back(EdgeID(extension._edge._id));
     }
 
+    NLWrittenValues& written = _context->getWrittenValues();
+    written.indexUpdates(_writeBuffer);
+
     for (const NLMergeScanProperty& property : scanProperties) {
-        fetchMergeEdgeProperty(*_view, property, edges);
+        fetchMergeEdgeProperty(*_view, written, property, edges);
     }
 
     std::vector<NLMergeExtension>& kept = _work->_keptExtensions;

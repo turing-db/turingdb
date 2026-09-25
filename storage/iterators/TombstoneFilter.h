@@ -1,15 +1,13 @@
 #pragma once
 
-#include "versioning/Tombstones.h"
 #include "versioning/NonDeletedRanges.h"
 #include "columns/ColumnVector.h"
+#include "views/GraphView.h"
 #include "ID.h"
 
 #include "BioAssert.h"
 
 namespace db {
-
-class Tombstones;
 
 template <typename T>
 class ColumnVector;
@@ -26,7 +24,7 @@ class ColumnVector;
  */
 class TombstoneFilter {
 public:
-    TombstoneFilter(const Tombstones& tombstones);
+    TombstoneFilter(const GraphView& view);
     ~TombstoneFilter() = default;
 
     TombstoneFilter(const TombstoneFilter&) = delete;
@@ -60,7 +58,7 @@ public:
     }
 
 private:
-    const Tombstones& _tombstones;
+    GraphView _view;
 
     // Pointer indirection to vector: only allocate vector if the owning ChunkWriter needs
     // to be filter
