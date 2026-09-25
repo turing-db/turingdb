@@ -583,8 +583,11 @@ the graph out before running:
 ```
 mkdir -p ~/.turing-bench/graphs
 cp -r ~/.turing/graphs/reactome ~/.turing-bench/graphs/
-scripts/bench_paths.py -reps 5 -verify
+bench/vlp/bench_vlp.py reactome-paths -clients turingdb -reps 5
 ```
+
+The 71 queries are the `reactome-paths` workload in `bench/vlp/workloads.py`. The v2 column
+was measured by `scripts/bench_paths.py` before v2 was removed.
 
 Run it on an idle box. v3's times are sensitive to competing load in a way v2's are not:
 repeating groups B and C during a parallel build on the same machine left v2 unchanged
@@ -592,9 +595,8 @@ repeating groups B and C during a parallel build on the same machine left v2 unc
 row from 8.6× down to 4.7×.
 
 `-groups` selects a subset of the five tables, `-only` a comma-separated list of query
-ids. `-verify` re-runs the counting queries with output on so their values are compared
-and not just their row counts — the disagreement above is invisible without it, since
-both engines return one row either way.
+ids. Every client reports the value of a one-cell result, so counts are compared across
+engines and not just row counts.
 
 The storage-level harness for the same work is `samples/path_bench`, which times the
 explorator directly (candidate lookahead, the two index gates, the distinct search)
@@ -605,12 +607,12 @@ of it and run the same 71 queries against it:
 
 ```
 scripts/ladybug_load_reactome.py -dump ~/reactome-parquet-dump -db ~/.ladybug-bench/reactome
-scripts/bench_ladybug.py -reps 5
+bench/vlp/bench_vlp.py reactome-paths -clients ladybug -ladybug-db ~/.ladybug-bench/reactome -reps 5 -timeout 180
 ```
 
-`-report` re-renders a finished results file without measuring anything, `-resume` skips
-the query ids already in it, and `-timeout` bounds a query that will not finish — leaving
-it at 180 s is what produced the six above.
+`-timeout` bounds a query that will not finish; 180 s is what produced the six above. The
+`lb (pk)` column re-seeded each query on the primary key; `bench_vlp.py` asks the queries
+as written only.
 
 For the memgraph column, run the server in its container with the import directory mounted,
 convert the same parquet dump into the CSVs `LOAD CSV` reads, and run the 71 queries over
@@ -624,10 +626,9 @@ docker run -d --name memgraph-bench -p 7687:7687 \
 
 pip install neo4j
 scripts/memgraph_load_reactome_vlp.py -dump ~/reactome-parquet-dump -import ~/.memgraph-bench/import
-scripts/bench_memgraph_vlp.py -reps 5
+bench/vlp/bench_vlp.py reactome-paths -clients memgraph -reps 5 -timeout 180
 ```
 
-`bench_memgraph_vlp.py` takes the same `-groups` / `-only` / `-reps` / `-timeout` / `-resume` /
-`-report` as the ladybug harness. It times every row-returning query a second time with its
-projection wrapped in `count()`, which is the `mg count` column, and every distinct query a
-second time as a `*BFS` expansion, which is the `mg BFS` one; `-no-bfs` drops the latter.
+The `mg count` column timed every row-returning query with its projection wrapped in
+`count()`, and the `mg BFS` column timed every distinct query as a `*BFS` expansion;
+`bench_vlp.py` asks the queries as written only.
