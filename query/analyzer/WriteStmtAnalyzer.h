@@ -4,6 +4,7 @@
 #include <unordered_set>
 
 #include "decl/EvaluatedType.h"
+#include "stmt/SetItem.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -16,7 +17,8 @@ class Stmt;
 class CreateStmt;
 class MergeStmt;
 class SetStmt;
-class SetItem;
+class PropertyExpr;
+class Expr;
 class RemoveStmt;
 class DeleteStmt;
 class Pattern;
@@ -64,8 +66,13 @@ private:
     void analyze(NodePattern* node);
     void analyze(EdgePattern* edge);
     void analyze(SetItem* item);
+    void analyzePropertyAssign(const SetItem* item, PropertyExpr* lhs, Expr* rhs);
+    void analyzeMapAssign(const SetItem* item, SetItem::SymbolMapAssign& assign);
 
     void throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const;
+    void throwOnUndirectedEdge(const Pattern* pattern) const;
+
+    [[noreturn]] void throwOnMapAssignValue(const SetItem* item, Expr* value);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 

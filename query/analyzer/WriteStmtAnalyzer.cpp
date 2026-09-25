@@ -22,6 +22,7 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
+#include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
 #include "stmt/DeleteStmt.h"
 #include "stmt/SetItem.h"
@@ -34,6 +35,19 @@
 using namespace db;
 
 namespace {
+
+const MapLiteral* mapLiteralOf(const Expr* expr) {
+    if (expr->getKind() != Expr::Kind::LITERAL) {
+        return nullptr;
+    }
+
+    const Literal* literal = static_cast<const LiteralExpr*>(expr)->getLiteral();
+    if (literal->getKind() != Literal::Kind::MAP) {
+        return nullptr;
+    }
+
+    return static_cast<const MapLiteral*>(literal);
+}
 
 // A tagged cell carries its type per row, so the write checks each cell against the
 // property's type as it stages it, and gives a property with no type yet the first one's
@@ -86,6 +100,7 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     if (const Pattern* pattern = createStmt->getPattern()) {
         throwOnEntityWhere(pattern, "CREATE");
+        throwOnUndirectedEdge(pattern);
         analyze(pattern);
     }
 }
@@ -149,8 +164,26 @@ void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_v
     }
 }
 
+void WriteStmtAnalyzer::throwOnUndirectedEdge(const Pattern* pattern) const {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const EdgePattern* edge = dynamic_cast<const EdgePattern*>(entity);
+
+            if (edge && edge->getDirection() == EdgePattern::Direction::Undirected) {
+                throwError("Only directed relationships are supported in CREATE", entity);
+            }
+        }
+    }
+}
+
 void WriteStmtAnalyzer::analyze(PatternElement* element) {
     const auto& entities = element->getEntities();
+
+    const NodePattern* soleNode = entities.size() == 1 ? dynamic_cast<const NodePattern*>(entities.front()) : nullptr;
+    const bool isBareNode = soleNode && soleNode->getSymbol() && !soleNode->labels() && !soleNode->getProperties();
+    if (isBareNode && _ctxt->getDecl(soleNode->getSymbol()->getName())) {
+        throwError(fmt::format("Variable '{}' already declared", soleNode->getSymbol()->getName()), soleNode);
+    }
 
     for (EntityPattern* entity : entities) {
         if (NodePattern* node = dynamic_cast<NodePattern*>(entity)) {
@@ -242,7 +275,9 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
             }
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
-            if (propType) {
+            if (expr->getType() == EvaluatedType::Null) {
+                data->addExprConstraint(propName->getName(), ValueType::Invalid, expr);
+            } else if (propType) {
                 // Property type already exists
                 if (!writeTypeCompatible(propType->_valueType, expr->getType())) {
                     throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
@@ -319,7 +354,9 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             }
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
-            if (propType) {
+            if (expr->getType() == EvaluatedType::Null) {
+                data->addExprConstraint(propName->getName(), ValueType::Invalid, expr);
+            } else if (propType) {
                 // Property type already exists
                 if (!writeTypeCompatible(propType->_valueType, expr->getType())) {
                     throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
@@ -351,54 +388,14 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
         // MATCH (n) SET n.age = 10
         // MATCH (n), (m) SET n.age = m.age
         [this, item](const SetItem::PropertyExprAssign& v) {
-            PropertyExpr* lhs = v._propTypeExpr;
-            Expr* rhs = v._propValueExpr;
-
-            _exprAnalyzer->analyzeExpr(rhs);
-            const EvaluatedType rhsType = rhs->getType();
-
-            // writing null cannot create a new property
-            const bool writesNull = rhsType == EvaluatedType::Null;
-            const bool allowCreates = !writesNull;
-
-            if (rhsType == EvaluatedType::ListItem) {
-                const QualifiedName* propertyName = lhs->getFullName();
-                _exprAnalyzer->addToBeCreatedFromTaggedCells(propertyName->back()->getName());
-            }
-
-            const ValueType valType = evaluatedToValueType(rhsType);
-            const ValueType lhsEvaluatedVt =
-                _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
-
-            _exprAnalyzer->throwIfReadsADateTimeComponent(lhs);
-
-            _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
-
-            if (rhs->isAggregate()) {
-                throwError("Invalid use of aggregate expression in this context", item);
-            }
-
-            // An element of a mixed list carries its type per row, so the write checks it
-            // against the property's type
-            const bool writesAListElement = rhsType == EvaluatedType::ListItem;
-            const bool propertyHasAType = lhsEvaluatedVt != ValueType::Invalid;
-            const bool checksTheTypePerRow = writesAListElement && propertyHasAType;
-
-            if (writesNull || checksTheTypePerRow) {
-                return;
-            }
-
-            if (!writeTypeCompatible(lhsEvaluatedVt, rhsType)) {
-                throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
-                                       ValueTypeName::value(lhsEvaluatedVt),
-                                       EvaluatedTypeName::value(rhsType)),
-                           item);
-            }
+            analyzePropertyAssign(item, v._propTypeExpr, v._propValueExpr);
         },
 
-        // SymbolAddAssign case
-        [this, item](const SetItem::SymbolAddAssign& v) {
-            throwError("SET cannot dynamically mutate properties yet", item);
+        // SymbolMapAssign case, e.g;
+        // MATCH (n) SET n += {age: 10}
+        // MATCH (n) SET n = {name: 'x'}
+        [this, item](SetItem::SymbolMapAssign& v) {
+            analyzeMapAssign(item, v);
         },
 
         // SymbolEntityTypes case
@@ -407,6 +404,117 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
         }};
 
     std::visit(visitor, item->item());
+}
+
+void WriteStmtAnalyzer::analyzePropertyAssign(const SetItem* item, PropertyExpr* lhs, Expr* rhs) {
+    _exprAnalyzer->analyzeExpr(rhs);
+    const EvaluatedType rhsType = rhs->getType();
+
+    // writing null cannot create a new property
+    const bool writesNull = rhsType == EvaluatedType::Null;
+    const bool allowCreates = !writesNull;
+
+    if (rhsType == EvaluatedType::ListItem) {
+        const QualifiedName* propertyName = lhs->getFullName();
+        _exprAnalyzer->addToBeCreatedFromTaggedCells(propertyName->back()->getName());
+    }
+
+    const ValueType valType = evaluatedToValueType(rhsType);
+    const ValueType lhsEvaluatedVt =
+        _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
+
+    _exprAnalyzer->throwIfReadsADateTimeComponent(lhs);
+
+    _exprAnalyzer->analyzeRootExpr(rhs);
+
+    if (rhs->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", item);
+    }
+
+    if (writesNull) {
+        return;
+    }
+
+    if (!writeTypeCompatible(lhsEvaluatedVt, rhsType)) {
+        throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
+                               ValueTypeName::value(lhsEvaluatedVt),
+                               EvaluatedTypeName::value(rhsType)),
+                   item);
+    }
+}
+
+void WriteStmtAnalyzer::analyzeMapAssign(const SetItem* item, SetItem::SymbolMapAssign& assign) {
+    const std::string_view varName = assign._symbol->getName();
+
+    VarDecl* decl = _ctxt->getDecl(varName);
+    if (!decl) {
+        throwError(fmt::format("Variable '{}' not found", varName), item);
+    }
+
+    const EvaluatedType varType = decl->getType();
+    const bool writesAnEntity = varType == EvaluatedType::NodePattern || varType == EvaluatedType::EdgePattern;
+    if (!writesAnEntity) {
+        throwError(fmt::format("Variable '{}' is '{}', and SET writes the properties of a node or an edge",
+                               varName,
+                               EvaluatedTypeName::value(varType)),
+                   item);
+    }
+
+    const MapLiteral* map = mapLiteralOf(assign._value);
+    if (!map) {
+        throwOnMapAssignValue(item, assign._value);
+    }
+
+    assign._decl = decl;
+
+    std::unordered_set<std::string_view> keys;
+    for (const auto& [key, value] : *map) {
+        QualifiedName* propertyName = QualifiedName::create(_ast);
+        propertyName->addName(assign._symbol);
+        propertyName->addName(key);
+
+        PropertyExpr* propertyExpr = PropertyExpr::create(_ast, propertyName);
+        assign._entries.push_back({propertyExpr, value});
+        keys.insert(key->getName());
+
+        analyzePropertyAssign(item, propertyExpr, value);
+    }
+
+    if (!assign._replaces) {
+        return;
+    }
+
+    const auto removeUnlessAKey = [&assign, &keys](std::string_view name) {
+        if (!keys.contains(name)) {
+            assign._removedProperties.push_back(name);
+        }
+    };
+
+    for (const PropertyTypeMap::Pair& property : _graphMetadata.propTypes()) {
+        removeUnlessAKey(*property._name);
+    }
+
+    for (const auto& [name, valueType] : _exprAnalyzer->getToBeCreatedTypes()) {
+        removeUnlessAKey(name);
+    }
+
+    for (const std::string_view name : _exprAnalyzer->getToBeCreatedFromTaggedCells()) {
+        removeUnlessAKey(name);
+    }
+}
+
+void WriteStmtAnalyzer::throwOnMapAssignValue(const SetItem* item, Expr* value) {
+    _exprAnalyzer->analyzeExpr(value);
+
+    const EvaluatedType valueType = value->getType();
+
+    if (valueType == EvaluatedType::Map) {
+        throwError("SET of a map computed at run time is not supported yet: write the map out as a literal", item);
+    } else if (valueType == EvaluatedType::NodePattern || valueType == EvaluatedType::EdgePattern) {
+        throwError("SET copying the properties of a node or an edge is not supported yet", item);
+    } else {
+        throwError(fmt::format("SET writes a map of properties, not '{}'", EvaluatedTypeName::value(valueType)), item);
+    }
 }
 
 void WriteStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

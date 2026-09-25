@@ -6,9 +6,12 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <variant>
 #include <vector>
+
+#include <spdlog/fmt/bundled/format.h>
 
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
@@ -123,6 +126,20 @@ void appendPendingKey(NLWrittenValues& written,
     }
 }
 
+// A MERGE matches on every property its pattern names, and a null is equal to nothing: a
+// row asking for one has neither an entity to match nor a value to write
+void throwIfAnyValueIsNull(const CommitWriteBuffer::UntypedProperties& values,
+                           std::string_view propertyName,
+                           std::string_view entityKind) {
+    for (const CommitWriteBuffer::UntypedProperty& value : values) {
+        const bool isNull = std::visit([](const auto& held) { return !held.has_value(); }, value.value);
+
+        if (isNull) {
+            throw IRException(fmt::format("Cannot merge {} whose property '{}' is null", entityKind, propertyName));
+        }
+    }
+}
+
 // A row an OPTIONAL MATCH did not match holds an invalid ID, which names no node of the
 // graph and none of the write buffer either: there is nothing to match the pattern against
 // and nothing to hang what it would write off
@@ -214,10 +231,10 @@ void NLMergeExecutor::extractProperties(size_t rowCount) {
         extracted.resize(properties.size());
 
         for (size_t index = 0; index < properties.size(); index++) {
-            extractColumnProperties(properties[index]._values,
-                                                rowCount,
-                                                properties[index]._propertyType._id,
-                                                extracted[index]);
+            const NLMergeProperty& property = properties[index];
+
+            extractColumnProperties(property._values, rowCount, property._propertyType, extracted[index]);
+            throwIfAnyValueIsNull(extracted[index], property._name, "a node");
         }
     }
 
@@ -228,10 +245,10 @@ void NLMergeExecutor::extractProperties(size_t rowCount) {
         extracted.resize(properties.size());
 
         for (size_t index = 0; index < properties.size(); index++) {
-            extractColumnProperties(properties[index]._values,
-                                                rowCount,
-                                                properties[index]._propertyType._id,
-                                                extracted[index]);
+            const NLMergeProperty& property = properties[index];
+
+            extractColumnProperties(property._values, rowCount, property._propertyType, extracted[index]);
+            throwIfAnyValueIsNull(extracted[index], property._name, "an edge");
         }
     }
 }
@@ -290,8 +307,11 @@ void NLMergeExecutor::collectCandidates(size_t row) {
         keys.clear();
 
         if (node._boundColumn) {
-            const bool pending = node._boundPending && (*node._boundPending)[row];
             const uint64_t boundID = (*node._boundColumn)[row].getValue();
+            const bool marked = node._boundPending && (*node._boundPending)[row];
+            const bool namesWritten = boundID >= _firstPendingNodeID
+                                      && boundID - _firstPendingNodeID < _writeBuffer->numPendingNodes();
+            const bool pending = marked || namesWritten;
             const uint64_t id = pending ? boundID - _firstPendingNodeID : boundID;
 
             candidates.push_back({._id=id, ._pending=pending});

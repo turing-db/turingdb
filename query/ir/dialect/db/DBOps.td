@@ -1911,6 +1911,38 @@ def Sort : TuringOp<"sort", [Pure]> {
 }
 
 /**
+* RowBarrier
+*/
+// NOT Pure: it fixes the point every row has to reach before the ops below it run, which
+// a pass must neither move nor fold away.
+def RowBarrier : TuringOp<"row_barrier", []> {
+  let summary = "Hold every row of a column set before emitting any of them";
+  let description = [{
+    Takes the whole set of columns in flight and emits them unchanged, rows in the order
+    they came, once every row has arrived. A write below it then runs after every read
+    above it has finished: a read that runs again for a later chunk cannot see what the
+    write did for an earlier one.
+
+      %n = db.scan_nodes() : !db.column<!storage.node_id>
+      %bn = db.row_barrier(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+
+    A pipeline breaker like db.sort: it lowers to an nl.row_buffer hoisted above the
+    loops, an nl.row_collect in the producing loop body, and an nl.row_drain source
+    iterator after the loop whose nl.for emits the rows.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns);
+  let results   = (outs Variadic<Column>:$results);
+
+  let assemblyFormat = [{
+    `(` $columns `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  // results arity and types must equal the columns.
+  let hasVerifier = 1;
+}
+
+/**
 * RemoveDuplicates
 */
 // NOT Pure: it records each row it emits in a seen-set, so it must run where it sits and

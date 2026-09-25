@@ -286,7 +286,7 @@ private:
     void lowerUnion(mlir::db::Union unionOp);
 
     // Lowers a union with results - the body of a CALL - into branches that collect their
-    // rows into one nl.union_buffer, drained by the loop the rest of the body lowers into
+    // rows into one nl.row_buffer, drained by the loop the rest of the body lowers into
     void lowerUnionResults(mlir::db::Union unionOp);
 
     // Brings a union branch's result columns to the value type the whole result carries,
@@ -389,6 +389,7 @@ private:
     // yields the sorted rows. db.sort's results map to that emit loop's
     // variables, so the db.output that follows lowers into the emit loop body.
     void lowerSort(mlir::db::Sort sort);
+    void lowerRowBarrier(mlir::db::RowBarrier barrier);
 
     // Lower a db.remove_duplicates: hoist an nl.distinct seen-set handle to the
     // top of the entry block, then place an nl.distinct_filter in the innermost

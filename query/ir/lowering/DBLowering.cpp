@@ -851,6 +851,7 @@ bool opensRowLoop(mlir::Operation* operation) {
         || mlir::isa<mlir::db::CrossProduct,
                      mlir::db::HashJoin,
                      mlir::db::Sort,
+                     mlir::db::RowBarrier,
                      mlir::db::GroupAggregate,
                      mlir::db::OptionalMatch>(operation);
 }
@@ -1140,6 +1141,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSkip(skip);
     } else if (mlir::db::Sort sort = mlir::dyn_cast<mlir::db::Sort>(operation)) {
         lowerSort(sort);
+    } else if (mlir::db::RowBarrier barrier = mlir::dyn_cast<mlir::db::RowBarrier>(operation)) {
+        lowerRowBarrier(barrier);
     } else if (mlir::db::RemoveDuplicates distinct = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation)) {
         lowerRemoveDuplicates(distinct);
     } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
@@ -3097,6 +3100,35 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
     buildLoopForSource(sortOp.getResult(), sort.getOperation());
 }
 
+void DBLowering::lowerRowBarrier(mlir::db::RowBarrier barrier) {
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : barrier.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    rowAlignBufferedChunks(chunks);
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    _builder.setInsertionPointToStart(_rootBlock);
+    const mlir::Value state = _builder.create<nl::RowBuffer>(loc).getState();
+
+    setInsertionInto(deepestOwnerBlock(chunks, _rootBlock));
+    _builder.create<nl::RowCollect>(loc, state, chunks);
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (const mlir::Value chunk : chunks) {
+        chunkTypes.push_back(chunk.getType());
+    }
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
+
+    setInsertionInto(_rootBlock);
+    nl::RowDrain drain = _builder.create<nl::RowDrain>(loc, iteratorType, state);
+
+    buildLoopForSource(drain.getResult(), barrier.getOperation());
+}
+
 // Each branch is lowered as a program of its own rooted in the entry block, so its loops
 // are appended after the ones the branch before it opened and the sink sees one branch's
 // rows and then the next. What a branch binds is unreachable from the next, so the
@@ -3162,9 +3194,9 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
     mlir::Block* const root = _rootBlock;
 
     _builder.setInsertionPointToStart(root);
-    const mlir::Value state = _builder.create<nl::UnionBuffer>(loc).getState();
+    const mlir::Value state = _builder.create<nl::RowBuffer>(loc).getState();
 
-    llvm::SmallVector<nl::UnionCollect, 4> collects;
+    llvm::SmallVector<nl::RowCollect, 4> collects;
 
     for (mlir::Region& branch : unionOp.getBranches()) {
         _innermostLoopBody = nullptr;
@@ -3189,7 +3221,7 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
                 // A branch of constants alone lays them out where they are bound, above the
                 // root, which the collect must still run once per step of
                 setInsertionInto(deepestOwnerBlock(chunks, root));
-                collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
+                collects.push_back(_builder.create<nl::RowCollect>(loc, state, chunks));
             }
 
             for (const auto& [column, chunk] : replacedMappings) {
@@ -3199,18 +3231,18 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
     }
 
     llvm::SmallVector<mlir::MutableOperandRange, 4> branchColumns;
-    for (nl::UnionCollect collect : collects) {
+    for (nl::RowCollect collect : collects) {
         branchColumns.push_back(collect.getColumnsMutable());
     }
 
     reconcileBranchResultTypes(branchColumns, mlir::ArrayAttr());
 
-    nl::UnionCollect firstCollect = collects.front();
+    nl::RowCollect firstCollect = collects.front();
     const llvm::SmallVector<mlir::Type, 4> chunkTypes(firstCollect.getColumns().getTypes());
     const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
 
     setInsertionInto(root);
-    nl::UnionDrain drain = _builder.create<nl::UnionDrain>(loc, iteratorType, state);
+    nl::RowDrain drain = _builder.create<nl::RowDrain>(loc, iteratorType, state);
 
     buildLoopForSource(drain.getResult(), unionOp.getOperation());
 }
@@ -4089,6 +4121,7 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
 
     const bool emitsThroughLoop = isSubquery
                                   || mlir::isa<mlir::db::Sort,
+                                               mlir::db::RowBarrier,
                                                mlir::db::GroupAggregate,
                                                mlir::db::OptionalMatch>(definingOp);
 
@@ -4098,7 +4131,7 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
     // joins onto rather than the relation, and emits them in input order, so once the
     // budget is spent no later step can contribute a row - the walk carries on and bounds
     // the loops feeding it too.
-    const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
+    const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort, mlir::db::RowBarrier, mlir::db::GroupAggregate>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
     bool reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop;

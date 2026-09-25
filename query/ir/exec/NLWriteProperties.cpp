@@ -1,6 +1,7 @@
 #include "NLWriteProperties.h"
 
 #include <optional>
+#include <type_traits>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -311,6 +312,24 @@ private:
     PropertyTypeID _propID;
 };
 
+// The analyzer lets an integer be written to a double property, and a column can carry an
+// integer unsigned, so a number is staged as the property's own type: the commit files a
+// value under the type its variant holds.
+template <typename Target>
+void convertNumbers(CommitWriteBuffer::UntypedProperties& buf) {
+    for (CommitWriteBuffer::UntypedProperty& property : buf) {
+        const auto convert = [&property](const auto& held) {
+            using Held = typename std::decay_t<decltype(held)>::value_type;
+
+            if constexpr (std::is_arithmetic_v<Held> && !std::same_as<Held, Target>) {
+                property.value = held ? std::optional<Target> {static_cast<Target>(*held)} : std::optional<Target> {};
+            }
+        };
+
+        std::visit(convert, property.value);
+    }
+}
+
 void extractMaskProperties(const ColumnMask* mask,
                            PropertyTypeID propID,
                            CommitWriteBuffer::UntypedProperties& buf) {
@@ -453,9 +472,11 @@ void db::fillNullProperties(size_t rowCount,
 
 void db::extractColumnProperties(const Column* column,
                                  size_t rowCount,
-                                 PropertyTypeID propID,
+                                 PropertyType property,
                                  CommitWriteBuffer::UntypedProperties& buf) {
     using Types = WriteProcessorPropertyTypes;
+
+    const PropertyTypeID propID = property._id;
 
     const ContainerKind::Code containerKind = ColumnKind::extractContainerKind(column->getKind());
 
@@ -471,6 +492,20 @@ void db::extractColumnProperties(const Column* column,
         ColumnSingleDispatcher<Types::AllowedVector,
                                VectorPropertyExtractor,
                                Types::ExcludedVector>::dispatch(column, extractor);
+    }
+
+    switch (property._valueType) {
+        case ValueType::Int64:
+            convertNumbers<types::Int64::Primitive>(buf);
+        break;
+        case ValueType::UInt64:
+            convertNumbers<types::UInt64::Primitive>(buf);
+        break;
+        case ValueType::Double:
+            convertNumbers<types::Double::Primitive>(buf);
+        break;
+        default:
+        break;
     }
 }
 

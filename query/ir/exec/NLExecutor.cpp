@@ -4405,6 +4405,23 @@ PropertyType resolveTaggedCellProperty(MetadataBuilder* metadataBuilder,
     return PropertyType {};
 }
 
+// The property a set writes. One the graph did not have at translation is named instead:
+// tagged cells type it as they write it, and a null finds it or has nothing to remove.
+template <typename SetData, typename StagesRow>
+PropertyType resolveSetProperty(const SetData* setData, size_t rowCount, const StagesRow& stagesRow) {
+    const std::string& propertyName = setData->getPropertyName();
+    const Column* values = setData->getValue();
+    MetadataBuilder* metadataBuilder = setData->getMetadataBuilder();
+
+    if (propertyName.empty()) {
+        return setData->getPropertyType();
+    } else if (readsTaggedCells(values)) {
+        return resolveTaggedCellProperty(metadataBuilder, propertyName, values, rowCount, stagesRow);
+    } else {
+        return metadataBuilder->findPropertyType(propertyName).value_or(PropertyType {});
+    }
+}
+
 // The values a set stages, one per row, under the property it resolved them to. False
 // when there is nothing to stage: a property no staged cell has typed, or none to remove.
 template <typename SetData, typename StagesRow>
@@ -4414,39 +4431,121 @@ bool extractSetProperties(const SetData* setData,
                           PropertyTypeID& propID,
                           CommitWriteBuffer::UntypedProperties& buf) {
     const Column* values = setData->getValue();
-    const std::string& propertyName = setData->getPropertyName();
-    const ValueType nullValueType = setData->getNullValueType();
-    const ValueType taggedValueType = setData->getTaggedValueType();
-    const bool writesTaggedCells = readsTaggedCells(values);
+    const PropertyType property = resolveSetProperty(setData, rowCount, stagesRow);
 
-    propID = setData->getPropertyTypeID();
+    if (!property.isValid()) {
+        return false;
+    }
 
-    if (!propertyName.empty()) {
-        MetadataBuilder* metadataBuilder = setData->getMetadataBuilder();
-        const PropertyType property = writesTaggedCells
-            ? resolveTaggedCellProperty(metadataBuilder, propertyName, values, rowCount, stagesRow)
-            : metadataBuilder->findPropertyType(propertyName).value_or(PropertyType {});
+    propID = property._id;
 
-        if (!property.isValid()) {
-            return false;
-        }
-
-        propID = property._id;
-
-        if (writesTaggedCells) {
-            stageTaggedCells(values, rowCount, property, stagesRow, buf);
-        } else {
-            fillNullProperties(rowCount, propID, property._valueType, buf);
-        }
-    } else if (nullValueType != ValueType::Invalid) {
-        fillNullProperties(rowCount, propID, nullValueType, buf);
-    } else if (taggedValueType != ValueType::Invalid) {
-        stageTaggedCells(values, rowCount, PropertyType {propID, taggedValueType}, stagesRow, buf);
+    if (setData->isNullWrite()) {
+        fillNullProperties(rowCount, propID, property._valueType, buf);
+    } else if (readsTaggedCells(values)) {
+        stageTaggedCells(values, rowCount, property, stagesRow, buf);
     } else {
-        extractColumnProperties(values, rowCount, propID, buf);
+        extractColumnProperties(values, rowCount, property, buf);
     }
 
     return true;
+}
+
+void rerunStatements(NLExecutionContext* context, const std::vector<NLFunctionDescriptor>& statements) {
+    for (const NLFunctionDescriptor& statement : statements) {
+        statement.getFunction()(context, statement.getData());
+    }
+}
+
+// Rows reading only their own entity: each entity's first row, then its second, with the
+// value computed again between waves
+template <typename ID, typename StagesRow, typename Extract, typename StageRow>
+void stageSetRowsInWaves(NLExecutionContext* context,
+                         const NLSetRereads& rereads,
+                         const std::vector<ID>& entities,
+                         const StagesRow& stagesRow,
+                         const Extract& extract,
+                         const StageRow& stageRow) {
+    const size_t rowCount = entities.size();
+
+    std::unordered_map<uint64_t, size_t> occurrences;
+    std::vector<size_t> waves(rowCount, 0);
+    size_t waveCount = 0;
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (stagesRow(row)) {
+            const size_t wave = occurrences[entities[row].getValue()]++;
+            waves[row] = wave;
+            waveCount = std::max(waveCount, wave + 1);
+        }
+    }
+
+    for (size_t wave = 0; wave < waveCount; wave++) {
+        if (wave > 0) {
+            rerunStatements(context, rereads._statements);
+            extract();
+        }
+
+        for (size_t row = 0; row < rowCount; row++) {
+            if (stagesRow(row) && waves[row] == wave) {
+                stageRow(row);
+            }
+        }
+    }
+}
+
+// Rows reading other entities: a row reading one an earlier row wrote since the value was
+// last computed has it computed again first
+template <typename ID, typename StagesRow, typename Extract, typename StageRow>
+void stageSetRowsInOrder(NLExecutionContext* context,
+                         const NLSetRereads& rereads,
+                         const std::vector<ID>& entities,
+                         const StagesRow& stagesRow,
+                         const Extract& extract,
+                         const StageRow& stageRow) {
+    std::unordered_set<uint64_t> written;
+
+    const auto readsAWrite = [&rereads, &written](size_t row) {
+        return std::ranges::any_of(rereads._readEntities, [&written, row](const Column* column) {
+            const ID read = static_cast<const ColumnVector<ID>*>(column)->getRaw()[row];
+            return read.isValid() && written.contains(read.getValue());
+        });
+    };
+
+    for (size_t row = 0; row < entities.size(); row++) {
+        if (readsAWrite(row)) {
+            rerunStatements(context, rereads._statements);
+            extract();
+            written.clear();
+        }
+
+        if (stagesRow(row)) {
+            stageRow(row);
+            written.insert(entities[row].getValue());
+        }
+    }
+}
+
+// A set applies row by row: a row reaching an entity an earlier row of the chunk wrote
+// reads what that row wrote. A set whose value reads no property it writes stages its
+// rows at once.
+template <typename ID, typename StagesRow, typename Extract, typename StageRow>
+void stageSetRows(NLExecutionContext* context,
+                  const NLSetRereads& rereads,
+                  const std::vector<ID>& entities,
+                  const StagesRow& stagesRow,
+                  const Extract& extract,
+                  const StageRow& stageRow) {
+    if (rereads._statements.empty()) {
+        for (size_t row = 0; row < entities.size(); row++) {
+            if (stagesRow(row)) {
+                stageRow(row);
+            }
+        }
+    } else if (rereads._readsItsOwnEntities) {
+        stageSetRowsInWaves(context, rereads, entities, stagesRow, extract, stageRow);
+    } else {
+        stageSetRowsInOrder(context, rereads, entities, stagesRow, extract, stageRow);
+    }
 }
 
 // A property no cell has typed yet has nothing to stage, which leaves its list empty
@@ -4472,11 +4571,10 @@ void extractCreatedProperties(std::span<const NLCreateProperty> properties,
             if (created.isValid()) {
                 stageTaggedCells(property._values, rowCount, created, stagesEveryRow, values);
             }
-        } else if (property._taggedValueType != ValueType::Invalid) {
-            const PropertyType typed {property._propertyTypeID, property._taggedValueType};
-            stageTaggedCells(property._values, rowCount, typed, stagesEveryRow, values);
+        } else if (readsTaggedCells(property._values)) {
+            stageTaggedCells(property._values, rowCount, property._propertyType, stagesEveryRow, values);
         } else {
-            extractColumnProperties(property._values, rowCount, property._propertyTypeID, values);
+            extractColumnProperties(property._values, rowCount, property._propertyType, values);
         }
     }
 }
@@ -4512,6 +4610,15 @@ template <typename ElementType>
 void mergeKeyAppendConstColumn(const Column* column, size_t row, std::string& key) {
     key.push_back('\1');
     distinctAppendValueBytes(key, (*static_cast<const ColumnConst<ElementType>*>(column))[row]);
+}
+
+// A list or a map keys as the graph side keys the one it reads back: its elements alone
+void mergeKeyAppendConstList(const Column* column, size_t row, std::string& key) {
+    distinctAppendListBytes(key, static_cast<const ColumnConst<ListView>*>(column)->getRaw());
+}
+
+void mergeKeyAppendConstMap(const Column* column, size_t row, std::string& key) {
+    distinctAppendMapBytes(key, static_cast<const ColumnConst<MapView>*>(column)->getRaw());
 }
 
 // The numeric siblings of the three above, keying the row's value in KeyType - the type
@@ -4996,11 +5103,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
     NLWrittenValues& written = context->getWrittenValues();
 
-    for (size_t row = 0; row < rowCount; row++) {
-        if (!stagesRow(row)) {
-            continue;
-        }
-
+    const auto stageRow = [&](size_t row) {
         if (pendingRows.has(row, raw[row].getValue())) {
             const size_t offset = raw[row].getValue() - firstPendingNodeID;
             CommitWriteBuffer::PendingNode& node = writeBuffer->getPendingNode(offset);
@@ -5009,7 +5112,13 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
         } else {
             writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
         }
-    }
+    };
+
+    const auto extract = [&]() {
+        extractSetProperties(setData, rowCount, stagesRow, propID, propsBuffer);
+    };
+
+    stageSetRows(context, setData->getRereads(), raw, stagesRow, extract, stageRow);
 }
 
 void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data) {
@@ -5038,11 +5147,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
     const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
 
-    for (size_t row = 0; row < rowCount; row++) {
-        if (!stagesRow(row)) {
-            continue;
-        }
-
+    const auto stageRow = [&](size_t row) {
         if (pendingRows.has(row, raw[row].getValue())) {
             CommitWriteBuffer::PendingEdge& edge =
                 writeBuffer->getPendingEdge(raw[row].getValue() - firstPendingEdgeID);
@@ -5050,7 +5155,13 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
         } else {
             writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
         }
-    }
+    };
+
+    const auto extract = [&]() {
+        extractSetProperties(setData, rowCount, stagesRow, propID, propsBuffer);
+    };
+
+    stageSetRows(context, setData->getRereads(), raw, stagesRow, extract, stageRow);
 }
 
 void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data) {
@@ -7409,13 +7520,13 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
     }
 }
 
-void NLExecutor::runUnionReset(NLExecutionContext* context, NLFunctionData* data) {
-    const NLUnionResetData* reset = static_cast<NLUnionResetData*>(data);
+void NLExecutor::runRowReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLRowResetData* reset = static_cast<NLRowResetData*>(data);
     reset->getState()->reset();
 }
 
-void NLExecutor::runUnionCollect(NLExecutionContext* context, NLFunctionData* data) {
-    const NLUnionCollectData* collect = static_cast<NLUnionCollectData*>(data);
+void NLExecutor::runRowCollect(NLExecutionContext* context, NLFunctionData* data) {
+    const NLRowCollectData* collect = static_cast<NLRowCollectData*>(data);
 
     for (const NLSortCollectData::Append& append : collect->appends()) {
         if (append._appendLists) {
@@ -7427,8 +7538,8 @@ void NLExecutor::runUnionCollect(NLExecutionContext* context, NLFunctionData* da
     }
 }
 
-void NLExecutor::runUnionLoop(NLExecutionContext* context, NLFunctionData* data) {
-    NLUnionLoopData* loopData = static_cast<NLUnionLoopData*>(data);
+void NLExecutor::runRowLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLRowLoopData* loopData = static_cast<NLRowLoopData*>(data);
     const size_t totalRows = loopData->getState()->getRowCount();
 
     const NLStmtContainer* loopBody = loopData->getStmts();
@@ -10015,14 +10126,22 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
             return &mergeKeyAppendPlainColumn<std::string>;
         break;
 
+        case NLChunkKind::List:
+            throwUnlessKeyedAsItsOwnType(ValueType::List, keyType);
+            return &distinctKeyAppendListColumn;
+        break;
+
+        case NLChunkKind::Map:
+            throwUnlessKeyedAsItsOwnType(ValueType::Map, keyType);
+            return &distinctKeyAppendMapColumn;
+        break;
+
         case NLChunkKind::NodeID:
         case NLChunkKind::EdgeID:
         case NLChunkKind::EdgeTypeID:
         case NLChunkKind::LabelID:
         case NLChunkKind::PropertyTypeID:
         case NLChunkKind::ValueTypeCode:
-        case NLChunkKind::List:
-        case NLChunkKind::Map:
         case NLChunkKind::Path:
         case NLChunkKind::PathRef:
         case NLChunkKind::EntityList:
@@ -10068,7 +10187,8 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
         break;
 
         case ValueType::List:
-            throw IRException("a MERGE pattern cannot constrain a property to a list");
+            throwUnlessKeyedAsItsOwnType(ValueType::List, keyType);
+            return &mergeKeyAppendConstList;
         break;
 
         case ValueType::DateTime:
@@ -10077,7 +10197,8 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
         break;
 
         case ValueType::Map:
-            throw IRException("a MERGE pattern cannot constrain a property to a map");
+            throwUnlessKeyedAsItsOwnType(ValueType::Map, keyType);
+            return &mergeKeyAppendConstMap;
         break;
 
         case ValueType::Invalid:

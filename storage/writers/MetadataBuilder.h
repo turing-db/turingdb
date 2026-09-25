@@ -43,11 +43,20 @@ public:
 
     [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const GraphMetadata& prevMetadata, GraphMetadata* metadata);
 
+    // What a statement interns - labels, label sets, edge types, property types - is taken
+    // back when it fails, so a failed write leaves the change's schema as it found it
+    void beginStatement();
+    void rollbackStatement();
+
 private:
     friend class MetadataRebaser;
 
     mutable RWSpinLock _spinLock;
     GraphMetadata* _metadata {nullptr};
+    size_t _statementLabels {0};
+    size_t _statementLabelSets {0};
+    size_t _statementEdgeTypes {0};
+    size_t _statementPropertyTypes {0};
 
     MetadataBuilder() = default;
 };

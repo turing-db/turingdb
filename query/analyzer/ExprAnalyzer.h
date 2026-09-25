@@ -106,6 +106,9 @@ public:
     // reads tagged cells
     void addToBeCreatedFromTaggedCells(std::string_view name);
 
+    const std::unordered_map<std::string_view, ValueType>& getToBeCreatedTypes() const { return _toBeCreatedTypes; }
+    const std::unordered_set<std::string_view>& getToBeCreatedFromTaggedCells() const { return _toBeCreatedFromTaggedCells; }
+
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
     /// Adds an empty declaration for the given NodePattern

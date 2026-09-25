@@ -3181,11 +3181,10 @@ private:
 };
 
 struct NLCreateProperty {
-    PropertyTypeID _propertyTypeID;
+    PropertyType _propertyType;
     const Column* _values {nullptr};
-    ValueType _taggedValueType {ValueType::Invalid};
 
-    // Set instead of the ID for tagged cells writing a property the graph does not have
+    // Set instead of the type for tagged cells writing a property the graph does not have
     // yet: the first cell holding a value types it, registered here when the create runs
     std::string _createdName;
     MetadataBuilder* _metadataBuilder {nullptr};
@@ -3308,6 +3307,7 @@ struct NLMergeProperty {
     PropertyType _propertyType;
     const Column* _values {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
+    std::string _name;
 };
 
 // The graph side of that key: the same property, read out of the graph into a scratch
@@ -3503,18 +3503,27 @@ private:
     ColumnVector<size_t> _indices;
 };
 
+// What a set whose value reads the property it writes needs to apply row by row: the
+// statements computing its value from that read, which it runs again once a row it staged
+// is read by a later one, and the entity columns the read goes through
+struct NLSetRereads {
+    std::vector<NLFunctionDescriptor> _statements;
+    std::vector<const Column*> _readEntities;
+    bool _readsItsOwnEntities {true};
+};
+
 class NLSetNodePropertyData : public NLFunctionData {
 public:
-    NLSetNodePropertyData(PropertyTypeID propertyTypeID,
+    NLSetNodePropertyData(PropertyType propertyType,
                           const ColumnNodeIDs* input,
                           const Column* value)
         : _input(input),
         _value(value),
-        _propertyTypeID(propertyTypeID)
+        _propertyType(propertyType)
     {
     }
 
-    PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
+    PropertyType getPropertyType() const { return _propertyType; }
     const ColumnNodeIDs* getInput() const { return _input; }
     const Column* getValue() const { return _value; }
 
@@ -3532,16 +3541,10 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
-    // A removal stages a null of the property's own type. Its value column carries no
-    // type to dispatch on, so this is where the type comes from. Invalid when the write
-    // reads its values off the column.
-    ValueType getNullValueType() const { return _nullValueType; }
-    void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
-
-    // A column of tagged cells carries its type per row rather than in its own, so each
-    // cell is staged as this type, the property's. Invalid for any other value column.
-    ValueType getTaggedValueType() const { return _taggedValueType; }
-    void setTaggedValueType(ValueType valueType) { _taggedValueType = valueType; }
+    // A removal stages a null of the property's own type: its value column carries no
+    // type to dispatch on
+    bool isNullWrite() const { return _nullWrite; }
+    void setNullWrite(bool nullWrite) { _nullWrite = nullWrite; }
 
     // Set instead of the ID for a property the graph did not have at translation. Tagged
     // cells type it when the set runs, registered here, and a null finds it there or has
@@ -3554,31 +3557,34 @@ public:
         _metadataBuilder = metadataBuilder;
     }
 
+    const NLSetRereads& getRereads() const { return _rereads; }
+    NLSetRereads& getRereads() { return _rereads; }
+
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
-    PropertyTypeID _propertyTypeID;
-    ValueType _nullValueType {ValueType::Invalid};
-    ValueType _taggedValueType {ValueType::Invalid};
+    PropertyType _propertyType;
     std::string _propertyName;
     MetadataBuilder* _metadataBuilder {nullptr};
+    NLSetRereads _rereads;
+    bool _nullWrite {false};
     bool _allPending {false};
 };
 
 class NLSetEdgePropertyData : public NLFunctionData {
 public:
-    NLSetEdgePropertyData(PropertyTypeID propertyTypeID,
+    NLSetEdgePropertyData(PropertyType propertyType,
                           const ColumnEdgeIDs* input,
                           const Column* value)
         : _input(input),
         _value(value),
-        _propertyTypeID(propertyTypeID)
+        _propertyType(propertyType)
     {
     }
 
-    PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
+    PropertyType getPropertyType() const { return _propertyType; }
     const ColumnEdgeIDs* getInput() const { return _input; }
     const Column* getValue() const { return _value; }
 
@@ -3591,14 +3597,8 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
-    // A removal stages a null of the property's own type. Its value column carries no
-    // type to dispatch on, so this is where the type comes from. Invalid when the write
-    // reads its values off the column.
-    ValueType getNullValueType() const { return _nullValueType; }
-    void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
-
-    ValueType getTaggedValueType() const { return _taggedValueType; }
-    void setTaggedValueType(ValueType valueType) { _taggedValueType = valueType; }
+    bool isNullWrite() const { return _nullWrite; }
+    void setNullWrite(bool nullWrite) { _nullWrite = nullWrite; }
 
     const std::string& getPropertyName() const { return _propertyName; }
     MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
@@ -3608,16 +3608,19 @@ public:
         _metadataBuilder = metadataBuilder;
     }
 
+    const NLSetRereads& getRereads() const { return _rereads; }
+    NLSetRereads& getRereads() { return _rereads; }
+
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
-    PropertyTypeID _propertyTypeID;
-    ValueType _nullValueType {ValueType::Invalid};
-    ValueType _taggedValueType {ValueType::Invalid};
+    PropertyType _propertyType;
     std::string _propertyName;
     MetadataBuilder* _metadataBuilder {nullptr};
+    NLSetRereads _rereads;
+    bool _nullWrite {false};
     bool _allPending {false};
 };
 
@@ -4519,11 +4522,11 @@ private:
     ColumnMask* _result {nullptr};
 };
 
-// Runtime state of one UNION inside a CALL body: one growing buffer per column, which
-// the nl.union_collect of every branch appends to and the nl.for over nl.union_drain reads
-// back in collected order. The buffer columns are borrowed: the translator pool-allocates
+// Runtime state of one nl.row_buffer: one growing buffer per column, which every
+// nl.row_collect on it appends to and the nl.for over nl.row_drain reads back in
+// collected order. The buffer columns are borrowed: the translator pool-allocates
 // them in the same arena as the loop columns.
-class NLUnionState {
+class NLRowState {
 public:
     void addBuffer(Column* buffer) { _buffers.push_back(buffer); }
 
@@ -4532,7 +4535,7 @@ public:
 
     size_t getRowCount() const;
 
-    // Clear every buffer; runs each time nl.union_buffer's block runs
+    // Clear every buffer; runs each time nl.row_buffer's block runs
     void reset();
 
     // The lists the buffers hold, copied in as NLSortState::listBuffer's are
@@ -4543,30 +4546,30 @@ private:
     QueryListBuffer _listBuffer;
 };
 
-// nl.union_buffer data: resets an accumulator to empty each time its block runs
-class NLUnionResetData : public NLFunctionData {
+// nl.row_buffer data: resets an accumulator to empty each time its block runs
+class NLRowResetData : public NLFunctionData {
 public:
-    NLUnionResetData(NLUnionState* state)
+    NLRowResetData(NLRowState* state)
         : _state(state)
     {
     }
 
-    NLUnionState* getState() const { return _state; }
+    NLRowState* getState() const { return _state; }
 
 private:
-    NLUnionState* _state {nullptr};
+    NLRowState* _state {nullptr};
 };
 
-// nl.union_collect data: appends the current chunk of every column one branch yields to
+// nl.row_collect data: appends the current chunk of every column its producer yields to
 // the matching buffer of the accumulator, in NLSortCollectData's append shape
-class NLUnionCollectData : public NLFunctionData {
+class NLRowCollectData : public NLFunctionData {
 public:
-    NLUnionCollectData(NLUnionState* state)
+    NLRowCollectData(NLRowState* state)
         : _state(state)
     {
     }
 
-    NLUnionState* getState() const { return _state; }
+    NLRowState* getState() const { return _state; }
 
     const std::vector<NLSortCollectData::Append>& appends() const { return _appends; }
 
@@ -4575,20 +4578,20 @@ public:
     }
 
 private:
-    NLUnionState* _state {nullptr};
+    NLRowState* _state {nullptr};
     std::vector<NLSortCollectData::Append> _appends;
 };
 
-// nl.for over nl.union_drain data: the emit phase of a UNION inside a CALL body, which
-// gathers the collected rows chunk by chunk into the loop variables
-class NLUnionLoopData : public NLFunctionData {
+// nl.for over nl.row_drain data: the emit phase of an nl.row_buffer, which gathers the
+// collected rows chunk by chunk into the loop variables
+class NLRowLoopData : public NLFunctionData {
 public:
-    NLUnionLoopData(NLUnionState* state)
+    NLRowLoopData(NLRowState* state)
         : _state(state)
     {
     }
 
-    NLUnionState* getState() const { return _state; }
+    NLRowState* getState() const { return _state; }
 
     const std::vector<NLCarriedColumn>& columns() const { return _columns; }
 
@@ -4605,7 +4608,7 @@ public:
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
-    NLUnionState* _state {nullptr};
+    NLRowState* _state {nullptr};
     NLLimitState* _limit {nullptr};
     std::vector<NLCarriedColumn> _columns;
     ColumnVector<size_t> _indices;
@@ -4772,10 +4775,10 @@ public:
         return statePtr;
     }
 
-    NLUnionState* allocUnionState() {
-        auto state = std::make_unique<NLUnionState>();
-        NLUnionState* statePtr = state.get();
-        _unionStates.push_back(std::move(state));
+    NLRowState* allocRowState() {
+        auto state = std::make_unique<NLRowState>();
+        NLRowState* statePtr = state.get();
+        _rowStates.push_back(std::move(state));
         return statePtr;
     }
 
@@ -4836,7 +4839,7 @@ private:
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;
     std::vector<std::unique_ptr<NLPatternComprehensionState>> _patternComprehensionStates;
-    std::vector<std::unique_ptr<NLUnionState>> _unionStates;
+    std::vector<std::unique_ptr<NLRowState>> _rowStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;

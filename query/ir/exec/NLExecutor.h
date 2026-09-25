@@ -157,15 +157,15 @@ public:
     // variables and running the body (the nl.output) per chunk.
     static void runSortLoop(NLExecutionContext* context, NLFunctionData* data);
 
-    // Empty the buffers of a UNION accumulator; runs each time its block runs
-    static void runUnionReset(NLExecutionContext* context, NLFunctionData* data);
+    // Empty the buffers of a row accumulator; runs each time its block runs
+    static void runRowReset(NLExecutionContext* context, NLFunctionData* data);
 
-    // Append the current chunk of every column one UNION branch yields to its buffer
-    static void runUnionCollect(NLExecutionContext* context, NLFunctionData* data);
+    // Append the current chunk of every column its producer yields to its buffer
+    static void runRowCollect(NLExecutionContext* context, NLFunctionData* data);
 
-    // The emit phase of a UNION inside a CALL body: re-chunk the collected rows in the
-    // order they were collected, running the body per chunk
-    static void runUnionLoop(NLExecutionContext* context, NLFunctionData* data);
+    // The emit phase of a row accumulator: re-chunk the collected rows in the order they
+    // were collected, running the body per chunk
+    static void runRowLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // Empty the buffers and matched flags of an OPTIONAL MATCH accumulator and lay its row
     // tag out over this step's input rows; runs each time its block runs.

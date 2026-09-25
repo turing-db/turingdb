@@ -18,11 +18,11 @@ size_t committedNodeCount(const GraphView* view);
 size_t committedEdgeCount(const GraphView* view);
 
 // The values one property column holds, as the write buffer takes them: one entry per
-// row, owning whatever the column only borrows. What a create, a set and a merge all
-// turn a row's asked-for value into before writing it.
+// row, owning whatever the column only borrows, and of the property's own type. What a
+// create, a set and a merge all turn a row's asked-for value into before writing it.
 void extractColumnProperties(const Column* column,
                              size_t rowCount,
-                             PropertyTypeID propID,
+                             PropertyType property,
                              CommitWriteBuffer::UntypedProperties& buf);
 
 // The tagged cell one row of a column of them holds: a null cell where the row holds none

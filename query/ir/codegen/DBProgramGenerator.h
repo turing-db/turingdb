@@ -19,6 +19,7 @@
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
 #include "stmt/CallSubqueryStmt.h"
+#include "stmt/SetItem.h"
 
 #include "ExplainRequest.h"
 
@@ -488,12 +489,6 @@ private:
                               llvm::ArrayRef<PublishedColumn> published,
                               CarriedEntities& carried) const;
 
-    void throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const;
-
-    // Rejects a pattern of @param matchStmt that names an entity a CREATE of the same
-    // query wrote, which the clause named by @param clause cannot read
-    void throwOnMatchOverWrittenEntity(const MatchStmt* matchStmt, std::string_view clause) const;
-
     // Records what a CREATE wrote for one named entity of its pattern, so the projection
     // reads that back rather than fetching an ID the graph does not hold yet
     void publishCreatedEntity(const VarDecl* decl,
@@ -557,7 +552,7 @@ private:
     void collectMergePattern(const MergeStmt* mergeStmt, MergePattern& pattern);
     void collectMergeNode(const NodePattern* nodePattern, MergePattern& pattern);
     void collectMergeHop(const EdgePattern* edgePattern, MergePattern& pattern);
-    void collectMergeProperties(const PatternData* data, MergeEntity& entity);
+    void collectMergeProperties(const PatternData* data, std::string_view entityKind, MergeEntity& entity);
 
     void collectCarrySet(CarrySet& carrySet);
 
@@ -585,6 +580,10 @@ private:
     // lives, off the graph or out of the write buffer.
     void publishMergedEntity(const VarDecl* decl, mlir::Value column, mlir::Value pending);
 
+    // A grouped entity keeps no column its write recorded, as those hold the rows before
+    // the grouping: its reads go to the write buffer, which a pending ID is told apart by
+    void rebindGroupedEntity(const VarDecl* decl, mlir::Value grouped);
+
     // The mask saying which of a variable's rows hold a provisional ID, or a null Value
     // for a variable no write bound and for one a CREATE bound - whose every row does
     mlir::Value findPendingMask(const VarDecl* decl) const;
@@ -593,7 +592,21 @@ private:
                                mlir::Value valueColumn,
                                mlir::Value rows);
 
+    void generatePropertyWrite(const VarDecl* entityDecl,
+                               std::string_view propName,
+                               mlir::Value valueColumn,
+                               mlir::Value rows);
+
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
+
+    // Every entry is read before any is written, as the map is one value
+    void generateMapAssign(const SetItem::SymbolMapAssign& assign, mlir::Value rows);
+
+    // An update whose writes an op already built reads is fenced off from that op: every
+    // row is held first, so a read run again for a later chunk misses what the update did
+    // for an earlier one
+    void generateRowBarrier(const Stmt* updateStmt);
+    bool anyOpBuiltBefore(llvm::function_ref<bool(mlir::Operation*)> matches) const;
 
     void generateRemoveProperties(const RemoveStmt* removeStmt);
     void generateDeleteStmt(const DeleteStmt* deleteStmt);

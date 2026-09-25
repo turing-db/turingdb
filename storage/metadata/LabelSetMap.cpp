@@ -70,6 +70,16 @@ size_t LabelSetMap::getCount() const {
     return _valueMap.size();
 }
 
+void LabelSetMap::truncate(size_t count) {
+    for (size_t index = count; index < _container.size(); index++) {
+        const Pair& pair = _container[index];
+        _valueMap.erase(LabelSetHandle(pair._id, *pair._value));
+        _idMap.erase(pair._id);
+    }
+
+    _container.erase(_container.begin() + count, _container.end());
+}
+
 LabelSetHandle LabelSetMap::getOrCreate(const LabelSet& labelset) {
     auto it = _valueMap.find(labelset);
     if (it != _valueMap.end()) {

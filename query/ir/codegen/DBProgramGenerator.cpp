@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "NodePattern.h"
 #include "expr/Operators.h"
@@ -850,6 +851,181 @@ void collectDistinctValueIndices(llvm::ArrayRef<const FunctionInvocationExpr*> c
         if (invocation->isDistinct()) {
             distinctValues.push_back(static_cast<int64_t>(collectIndex));
         }
+    }
+}
+
+// What an update clause writes that a read of the graph could see: the properties it
+// sets, whether it deletes, and the labels and edge types of what it creates, which a
+// MERGE looks its pattern up among
+struct UpdateWrites {
+    std::unordered_set<std::string_view> _nodeProperties;
+    std::unordered_set<std::string_view> _edgeProperties;
+    std::vector<std::span<const std::string_view>> _createdLabels;
+    std::unordered_set<std::string_view> _createdEdgeTypes;
+    bool _deletes {false};
+};
+
+void addWrittenProperty(const VarDecl* entity, std::string_view property, UpdateWrites& writes) {
+    const EvaluatedType entityType = entity->getType();
+
+    if (entityType == EvaluatedType::NodePattern) {
+        writes._nodeProperties.insert(property);
+    } else if (entityType == EvaluatedType::EdgePattern) {
+        writes._edgeProperties.insert(property);
+    }
+}
+
+void collectSetWrites(const SetStmt* setStmt, UpdateWrites& writes) {
+    for (const SetItem* item : setStmt->getItems()) {
+        const SetItem::Variant& variant = item->item();
+
+        if (const auto* assign = std::get_if<SetItem::PropertyExprAssign>(&variant)) {
+            const PropertyExpr* property = assign->_propTypeExpr;
+            addWrittenProperty(property->getEntityVarDecl(), property->getPropName(), writes);
+        } else if (const auto* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
+            for (const SetItem::PropertyExprAssign& entry : mapAssign->_entries) {
+                addWrittenProperty(mapAssign->_decl, entry._propTypeExpr->getPropName(), writes);
+            }
+
+            for (const std::string_view removed : mapAssign->_removedProperties) {
+                addWrittenProperty(mapAssign->_decl, removed, writes);
+            }
+        }
+    }
+}
+
+void collectCreateWrites(const CreateStmt* createStmt, UpdateWrites& writes) {
+    for (const PatternElement* element : createStmt->getPattern()->elements()) {
+        const std::vector<EntityPattern*>& entities = element->getEntities();
+
+        for (size_t index = 0; index < entities.size(); index++) {
+            const bool isNode = index % 2 == 0;
+
+            if (isNode) {
+                const NodePatternData* data = static_cast<const NodePattern*>(entities[index])->getData();
+                if (data) {
+                    writes._createdLabels.push_back(data->labelConstraints());
+                }
+            } else {
+                const EdgePatternData* data = static_cast<const EdgePattern*>(entities[index])->getData();
+                writes._createdEdgeTypes.insert(data->edgeTypeConstraints().begin(), data->edgeTypeConstraints().end());
+            }
+        }
+    }
+}
+
+void collectMergeWrites(const MergeStmt* mergeStmt, UpdateWrites& writes) {
+    for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
+        if (actions) {
+            collectSetWrites(actions, writes);
+        }
+    }
+}
+
+// What a MERGE creates is left out: an earlier merge finding it in a later chunk binds
+// the node it would otherwise have created itself
+void collectUpdateWrites(const Stmt* stmt, UpdateWrites& writes) {
+    switch (stmt->getKind()) {
+        case Stmt::Kind::SET:
+            collectSetWrites(static_cast<const SetStmt*>(stmt), writes);
+        break;
+
+        case Stmt::Kind::REMOVE:
+            for (const PropertyExpr* property : static_cast<const RemoveStmt*>(stmt)->getProperties()) {
+                addWrittenProperty(property->getEntityVarDecl(), property->getPropName(), writes);
+            }
+        break;
+
+        case Stmt::Kind::DELETE:
+            writes._deletes = true;
+        break;
+
+        case Stmt::Kind::CREATE:
+            collectCreateWrites(static_cast<const CreateStmt*>(stmt), writes);
+        break;
+
+        case Stmt::Kind::MERGE:
+            collectMergeWrites(static_cast<const MergeStmt*>(stmt), writes);
+        break;
+
+        default:
+        break;
+    }
+}
+
+bool containsAnyName(mlir::ArrayAttr names, const std::unordered_set<std::string_view>& written) {
+    return llvm::any_of(names, [&written](mlir::Attribute name) {
+        return written.contains(toStringView(mlir::cast<mlir::StringAttr>(name).getValue()));
+    });
+}
+
+bool mergeReadsWhatIsWritten(mlir::db::Merge merge, const UpdateWrites& writes) {
+    for (const mlir::Attribute names : merge.getNodePropNames()) {
+        if (containsAnyName(mlir::cast<mlir::ArrayAttr>(names), writes._nodeProperties)) {
+            return true;
+        }
+    }
+
+    for (const mlir::Attribute names : merge.getEdgePropNames()) {
+        if (containsAnyName(mlir::cast<mlir::ArrayAttr>(names), writes._edgeProperties)) {
+            return true;
+        }
+    }
+
+    if (containsAnyName(merge.getEdgeTypes(), writes._createdEdgeTypes)) {
+        return true;
+    }
+
+    for (const mlir::Attribute labels : merge.getNodeLabels()) {
+        const mlir::ArrayAttr lookedUp = mlir::cast<mlir::ArrayAttr>(labels);
+        if (lookedUp.empty()) {
+            continue;
+        }
+
+        for (const std::span<const std::string_view> created : writes._createdLabels) {
+            const bool findsTheCreatedNode = llvm::all_of(lookedUp, [created](mlir::Attribute label) {
+                return llvm::is_contained(created, toStringView(mlir::cast<mlir::StringAttr>(label).getValue()));
+            });
+
+            if (findsTheCreatedNode) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool walksTheGraph(mlir::Operation* op) {
+    return mlir::isa<mlir::db::ScanNodes,
+                     mlir::db::ScanNodesByLabel,
+                     mlir::db::ConstScanNodes,
+                     mlir::db::ScanNodesByPropertyValue,
+                     mlir::db::ScanEdges,
+                     mlir::db::ScanEdgesByType,
+                     mlir::db::ScanOutEdgesByLabelSrc,
+                     mlir::db::ScanInEdgesByLabelTgt,
+                     mlir::db::ScanOutEdgesByLabelTgt,
+                     mlir::db::ScanInEdgesByLabelSrc,
+                     mlir::db::GetOutEdges,
+                     mlir::db::GetInEdges,
+                     mlir::db::GetEdges,
+                     mlir::db::GetOutEdgesByType,
+                     mlir::db::GetInEdgesByType,
+                     mlir::db::GetOutEdgesByLabel,
+                     mlir::db::GetInEdgesByLabel,
+                     mlir::db::ShortestPath>(op);
+}
+
+bool readsWhatIsWritten(mlir::Operation* op, const UpdateWrites& writes) {
+    if (mlir::db::GetNodeProperties fetch = mlir::dyn_cast<mlir::db::GetNodeProperties>(op)) {
+        return writes._nodeProperties.contains(toStringView(fetch.getProperty()));
+    } else if (mlir::db::GetEdgeProperties fetch = mlir::dyn_cast<mlir::db::GetEdgeProperties>(op)) {
+        return writes._edgeProperties.contains(toStringView(fetch.getProperty()));
+    } else if (mlir::db::Merge merge = mlir::dyn_cast<mlir::db::Merge>(op)) {
+        return writes._deletes || mergeReadsWhatIsWritten(merge, writes);
+    } else {
+        return writes._deletes && walksTheGraph(op);
     }
 }
 
@@ -3956,9 +4132,15 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
     written._edgeType.assign(edgeType.begin(), edgeType.end());
 
     for (const EntityPropertyConstraint& property : properties) {
+        const EvaluatedType valueType = property._expr->getType();
+
+        if (valueType == EvaluatedType::Null) {
+            continue;
+        }
+
         created._properties[property._propTypeName] = _part._exprMap.at(property._expr);
 
-        if (property._expr->getType() == EvaluatedType::ListItem) {
+        if (valueType == EvaluatedType::ListItem) {
             created._taggedProperties.insert(property._propTypeName);
         }
     }
@@ -3971,6 +4153,19 @@ void DBProgramGenerator::publishMergedEntity(const VarDecl* decl,
 
     merged._column = column;
     merged._pending = pending;
+}
+
+void DBProgramGenerator::rebindGroupedEntity(const VarDecl* decl, mlir::Value grouped) {
+    const auto createdIt = _part._createdEntities.find(decl);
+    if (createdIt == end(_part._createdEntities)) {
+        return;
+    }
+
+    PartScope::CreatedEntity& created = createdIt->second;
+    created._column = grouped;
+    created._pending = mlir::Value {};
+    created._properties.clear();
+    created._taggedProperties.clear();
 }
 
 const DBProgramGenerator::PartScope::WrittenEntity* DBProgramGenerator::findWrittenEntity(const VarDecl* decl) const {
@@ -4001,6 +4196,8 @@ mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
 
 void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
     for (const Stmt* stmt : stmts) {
+        generateRowBarrier(stmt);
+
         switch (stmt->getKind()) {
             case Stmt::Kind::MERGE:
                 generateMergeStmt(static_cast<const MergeStmt*>(stmt));
@@ -4166,18 +4363,6 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
         }
 
         const mlir::Value pending = findPendingMask(node._decl);
-
-        // A CREATE's entities are provisional and in no graph a merge reads, so binding
-        // one would leave the merge matching against whichever committed node the
-        // provisional ID collides with
-        const bool writtenByACreate = !pending && isPendingThroughout(node._decl);
-        if (writtenByACreate) {
-            throw TuringException(fmt::format("MERGE cannot bind '{}': a CREATE in the same query "
-                                              "writes it, and what a CREATE writes is not visible "
-                                              "to a MERGE",
-                                              node._decl->getName()));
-        }
-
         if (pending) {
             pattern._pendingNodes.push_back(static_cast<int64_t>(pattern._nodes.size()));
             pattern._boundPending.push_back(pending);
@@ -4195,7 +4380,7 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
         labelNames.push_back(llvm::StringRef(label.data(), label.size()));
     }
 
-    collectMergeProperties(data, node);
+    collectMergeProperties(data, "a node", node);
 
     pattern._nodeLabels.push_back(_opBuilder.getStrArrayAttr(labelNames));
     pattern._nodePropNames.push_back(_opBuilder.getStrArrayAttr(node._propNames));
@@ -4213,7 +4398,7 @@ void DBProgramGenerator::collectMergeHop(const EdgePattern* edgePattern, MergePa
         hop._decl = decl;
     }
 
-    collectMergeProperties(data, hop);
+    collectMergeProperties(data, "an edge", hop);
 
     const std::string_view edgeType = data->edgeTypeConstraints().front();
 
@@ -4224,9 +4409,16 @@ void DBProgramGenerator::collectMergeHop(const EdgePattern* edgePattern, MergePa
     pattern._hops.push_back(hop);
 }
 
-void DBProgramGenerator::collectMergeProperties(const PatternData* data, MergeEntity& entity) {
+void DBProgramGenerator::collectMergeProperties(const PatternData* data,
+                                                std::string_view entityKind,
+                                                MergeEntity& entity) {
     for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
-        if (constraint._expr->getType() == EvaluatedType::ListItem) {
+        const EvaluatedType valueType = constraint._expr->getType();
+
+        if (valueType == EvaluatedType::Null) {
+            throwError(fmt::format("Cannot merge {} whose property '{}' is null", entityKind, constraint._propTypeName),
+                       constraint._expr);
+        } else if (valueType == EvaluatedType::ListItem) {
             throwError("MERGE cannot yet match a property against an element of a list that mixes types",
                        constraint._expr);
         }
@@ -4460,6 +4652,10 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         if (data) {
             properties = data->exprConstraints();
             for (const EntityPropertyConstraint& constraint : properties) {
+                if (constraint._expr->getType() == EvaluatedType::Null) {
+                    continue;
+                }
+
                 translateExpr(constraint._expr);
                 const std::string_view propName = constraint._propTypeName;
                 propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
@@ -4509,6 +4705,10 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
             const EdgePatternData* edgeData = edge->getData();
             if (edgeData) {
                 for (const EntityPropertyConstraint& constraint : edgeData->exprConstraints()) {
+                    if (constraint._expr->getType() == EvaluatedType::Null) {
+                        continue;
+                    }
+
                     translateExpr(constraint._expr);
                     const std::string_view propName = constraint._propTypeName;
                     propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
@@ -4774,11 +4974,16 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
 void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
                                                mlir::Value valueColumn,
                                                mlir::Value rows) {
+    generatePropertyWrite(propertyExpr->getEntityVarDecl(), propertyExpr->getPropName(), valueColumn, rows);
+}
+
+void DBProgramGenerator::generatePropertyWrite(const VarDecl* entityDecl,
+                                               std::string_view propName,
+                                               mlir::Value valueColumn,
+                                               mlir::Value rows) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-    const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
-    const std::string_view propName = propertyExpr->getPropName();
 
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
     bioassert(entityColumn, "Property write on unknown variable: {}", varName);
@@ -4822,16 +5027,91 @@ void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
 
 void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value rows) {
     for (const SetItem* item : setStmt->getItems()) {
-        const SetItem::PropertyExprAssign* assign =
-            std::get_if<SetItem::PropertyExprAssign>(&item->item());
-        bioassert(assign, "Only property-assignment SET items are supported");
+        const SetItem::Variant& variant = item->item();
 
-        translateExpr(assign->_propValueExpr);
+        if (const SetItem::PropertyExprAssign* assign = std::get_if<SetItem::PropertyExprAssign>(&variant)) {
+            translateExpr(assign->_propValueExpr);
 
-        generatePropertyWrite(assign->_propTypeExpr,
-                              _part._exprMap.at(assign->_propValueExpr),
-                              rows);
+            generatePropertyWrite(assign->_propTypeExpr,
+                                  _part._exprMap.at(assign->_propValueExpr),
+                                  rows);
+        } else if (const SetItem::SymbolMapAssign* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
+            generateMapAssign(*mapAssign, rows);
+        } else {
+            bioassert(false, "SET of entity types reached code generation");
+        }
     }
+}
+
+void DBProgramGenerator::generateMapAssign(const SetItem::SymbolMapAssign& assign, mlir::Value rows) {
+    for (const SetItem::PropertyExprAssign& entry : assign._entries) {
+        translateExpr(entry._propValueExpr);
+    }
+
+    for (const std::string_view propName : assign._removedProperties) {
+        generatePropertyWrite(assign._decl, propName, nullConstantColumn(), rows);
+    }
+
+    for (const SetItem::PropertyExprAssign& entry : assign._entries) {
+        generatePropertyWrite(entry._propTypeExpr, _part._exprMap.at(entry._propValueExpr), rows);
+    }
+}
+
+void DBProgramGenerator::generateRowBarrier(const Stmt* updateStmt) {
+    UpdateWrites writes;
+    collectUpdateWrites(updateStmt, writes);
+
+    const bool readsTheWrites = anyOpBuiltBefore([&writes](mlir::Operation* op) {
+        return readsWhatIsWritten(op, writes);
+    });
+
+    if (!readsTheWrites) {
+        return;
+    }
+
+    CarrySet carrySet;
+    collectCarrySet(carrySet);
+
+    if (carrySet._columns.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : carrySet._columns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::db::RowBarrier barrier = _opBuilder.create<mlir::db::RowBarrier>(loc, resultTypes, carrySet._columns);
+
+    rebindCarrySet(barrier.getResults(), 0, carrySet);
+}
+
+bool DBProgramGenerator::anyOpBuiltBefore(llvm::function_ref<bool(mlir::Operation*)> matches) const {
+    mlir::Block* block = _opBuilder.getInsertionBlock();
+    mlir::Block::iterator end = _opBuilder.getInsertionPoint();
+
+    while (block) {
+        for (mlir::Operation& operation : llvm::make_range(block->begin(), end)) {
+            const mlir::WalkResult walked = operation.walk([&matches](mlir::Operation* op) {
+                return matches(op) ? mlir::WalkResult::interrupt() : mlir::WalkResult::advance();
+            });
+
+            if (walked.wasInterrupted()) {
+                return true;
+            }
+        }
+
+        mlir::Operation* const parent = block->getParentOp();
+        if (!parent || mlir::isa<mlir::func::FuncOp>(parent)) {
+            return false;
+        }
+
+        block = parent->getBlock();
+        end = mlir::Block::iterator(parent);
+    }
+
+    return false;
 }
 
 void DBProgramGenerator::generateRemoveProperties(const RemoveStmt* removeStmt) {
@@ -5468,8 +5748,6 @@ void DBProgramGenerator::appendHiddenColumns(llvm::SmallVectorImpl<PublishedColu
 void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
     const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt.front());
 
-    throwOnMatchOverWrittenEntity(matchStmt, "An OPTIONAL MATCH");
-
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
 
@@ -5647,55 +5925,12 @@ void DBProgramGenerator::carryWrittenEntities(const Projection* projection,
     for (const Projection::ReturnItem& item : projection->items()) {
         const VarDecl* decl = projectedVariable(item);
 
-        throwOnPublishedMerge(projection, decl);
-
         const PartScope::WrittenEntity* written = findWrittenEntity(decl);
         if (written) {
             carried.emplace_back(published[index]._decl, *written);
         }
 
         index++;
-    }
-}
-
-// A MERGE's rows mix the entities it wrote with the ones it bound, and only the mask beside
-// them says which is which. That mask is no item of the projection, so the cut leaves it
-// behind, and the part below would read every row off the graph - right for the rows the
-// merge matched, wrong for the ones it wrote
-void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const {
-    if (!decl) {
-        return;
-    }
-
-    const auto findIt = _part._createdEntities.find(decl);
-    if (findIt == end(_part._createdEntities) || !findIt->second._pending) {
-        return;
-    }
-
-    throwError(fmt::format("A WITH cannot publish '{}': a MERGE in the same query writes it, and "
-                           "what a MERGE writes is not carried past a WITH",
-                           decl->getName()),
-               projection);
-}
-
-// An optional pattern reads the graph, which holds nothing this change wrote until the
-// commit. A pattern naming such an entity is turned away; one that only carries it past the
-// join is not, because the join hands its input columns back unchanged
-void DBProgramGenerator::throwOnMatchOverWrittenEntity(const MatchStmt* matchStmt,
-                                                       std::string_view clause) const {
-    const Pattern* pattern = matchStmt->getPattern();
-
-    for (const PatternElement* element : pattern->elements()) {
-        for (const EntityPattern* entity : element->getEntities()) {
-            const VarDecl* decl = entity->getDecl();
-
-            if (isPendingThroughout(decl)) {
-                throwError(fmt::format("{} cannot read what a CREATE in the same query wrote: '{}'",
-                                       clause,
-                                       decl->getName()),
-                           matchStmt);
-            }
-        }
     }
 }
 
@@ -6565,8 +6800,6 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
 void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
                                                            const PatternComprehensionExpr* comprehension) {
     MatchStmt* const match = comprehension->getMatch();
-
-    throwOnMatchOverWrittenEntity(match, "A pattern comprehension");
 
     // The lists stand beside the rows in flight, so every column of those rows is handed
     // to the op: the pattern joins onto the ones it names and carries the rest along
@@ -8203,6 +8436,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             // A YIELD can bind onto a variable a pattern already carries, which leaves the
             // one declaration on both a variable and a yielded column, so both are rebound.
             rebindYieldedColumn(keyVarDeclAtPos[i], results[i]);
+            rebindGroupedEntity(keyVarDeclAtPos[i], results[i]);
             continue;
         }
 
@@ -8222,6 +8456,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const VarDecl* symDecl = sym->getDecl();
 
         rebindYieldedColumn(symDecl, results[i]);
+        rebindGroupedEntity(symDecl, results[i]);
 
         const auto identityIt = edgeIdentityVars.find(symDecl);
 

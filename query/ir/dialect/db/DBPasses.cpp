@@ -66,6 +66,38 @@ struct LabelScanChain {
     CheckLabelConstraint check;
 };
 
+bool isWriteOp(Operation* op) {
+    return isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op);
+}
+
+// Whether a write stands between @param from and @param to in program order. A filter moved
+// above it, or folded into a scan standing before it, would change the rows the write
+// reaches, or stop reading what it wrote.
+bool writesBetween(Operation* from, Operation* to) {
+    bool afterFrom = false;
+    bool crossesAWrite = false;
+
+    Operation* root = to;
+    while (Operation* const parent = root->getParentOp()) {
+        root = parent;
+    }
+
+    root->walk<mlir::WalkOrder::PreOrder>([&](Operation* op) {
+        if (op == to) {
+            return WalkResult::interrupt();
+        } else if (afterFrom && isWriteOp(op)) {
+            crossesAWrite = true;
+            return WalkResult::interrupt();
+        } else if (op == from) {
+            afterFrom = true;
+        }
+
+        return WalkResult::advance();
+    });
+
+    return crossesAWrite;
+}
+
 bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
     const Operation::operand_range columns = filter.getColumnsToFilter();
     if (columns.size() != 1) {
@@ -89,7 +121,7 @@ bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
         return false;
     }
 
-    return true;
+    return !writesBetween(chain.scan, filter.getOperation());
 }
 
 void eraseIfUnused(Operation* op) {
@@ -449,6 +481,11 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
         crossedProducer = true;
     }
 
+    Operation* const anchorProducer = pushable._anchor.getDefiningOp();
+    if (!anchorProducer || writesBetween(anchorProducer, filter.getOperation())) {
+        return false;
+    }
+
     // Crossing only filters leaves the predicate over the rows the anchor produced already:
     // moving it would swap two filters over the same rows, or step between a constraint
     // filter and the op that is about to absorb it.
@@ -543,7 +580,7 @@ bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
         source._labels = scanByLabel.getLabels();
     }
 
-    return true;
+    return !writesBetween(source._op, filter.getOperation());
 }
 
 Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
@@ -2567,7 +2604,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     } else if (isa<Unwind>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
         return true;
-    } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
+    } else if (isa<Limit, Skip, Sort, RowBarrier, GroupAggregate, Collect>(op)) {
         layout = CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
         return true;
     } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
@@ -4199,7 +4236,7 @@ void countFromMetadata(Count count, const ScanTally& tally, mlir::OpBuilder& bui
 // writes, so none of its counts can be read off them.
 bool writesTheGraph(Operation* root) {
     const WalkResult walked = root->walk([](Operation* op) {
-        if (isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op)) {
+        if (isWriteOp(op)) {
             return WalkResult::interrupt();
         }
 

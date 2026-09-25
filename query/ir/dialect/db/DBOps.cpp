@@ -1124,6 +1124,10 @@ LogicalResult Sort::verify() {
     return success();
 }
 
+LogicalResult RowBarrier::verify() {
+    return verifyPassThrough(getOperation(), getColumns(), getResults());
+}
+
 // db.remove_duplicates passes its columns straight through (minus duplicate rows),
 // so the results must be exactly the input columns - same count, same types, same
 // order - the shared pass-through check db.limit and db.skip use. The dedup key is
