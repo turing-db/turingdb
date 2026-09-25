@@ -3979,3 +3979,15 @@ target_link_libraries(test_query_ir_failed_graph_load PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_failed_graph_load PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Equality over the double a type-erased list cell computes its arithmetic in, which the
+# analyzer types as the integer the list's null element leaves it.
+add_turing_test(test_query_ir_tagged_cell_arithmetic_equality TaggedCellArithmeticEqualityTest.cpp)
+target_link_libraries(test_query_ir_tagged_cell_arithmetic_equality PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
