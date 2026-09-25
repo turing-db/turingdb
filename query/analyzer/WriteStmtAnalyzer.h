@@ -42,13 +42,6 @@ public:
         _exprAnalyzer = exprAnalyzer;
     }
 
-    // A WITH ends the part the CREATE was written in, so what follows it writes to
-    // entities the query has already bound rather than to ones it is still spelling out
-    void startPart() { _hasCreate = false; }
-
-    bool hasCreate() const { return _hasCreate; }
-    void setHasCreate(bool hasCreate) { _hasCreate = hasCreate; }
-
     // Statements
     void analyze(const Stmt* stmt);
 
@@ -59,7 +52,6 @@ private:
     ExprAnalyzer* _exprAnalyzer {nullptr};
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
-    bool _hasCreate {false};
 
     void analyze(const CreateStmt* createStmt);
     void analyze(const MergeStmt* mergeStmt);

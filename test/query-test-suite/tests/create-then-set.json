@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "CREATE (n:Person) SET n.age = 32 RETURN n, n.age",
   "expect": {
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                   ^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\\n       |                   ^^^^^^^^^^^^^^\\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.\"}"
+    "result": "n,n.age\n18,32",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.age\"],\"column_types\":[\"UInt64\",\"Int64\"]},\"data\":[[[18],[32]]]}"
   },
   "tags": [
     "create",

@@ -73,7 +73,6 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
-    _hasCreate = true;
     if (const Pattern* pattern = createStmt->getPattern()) {
         throwOnEntityWhere(pattern, "CREATE");
         analyze(pattern);
@@ -98,9 +97,6 @@ void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
-    if (_hasCreate) {
-        throwError("CREATE ... SET is not yet supported. Please use brace initialisation.", setStmt);
-    }
     for (SetItem* item : setStmt->getItems()) {
         analyze(item);
     }

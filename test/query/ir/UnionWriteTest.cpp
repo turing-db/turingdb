@@ -10,9 +10,6 @@ using namespace turing::test;
 class UnionWriteTest : public WriteQueryTest {
 };
 
-// The write clauses a branch may use are decided by that branch alone: a CREATE in the
-// first does not turn the second's SET into the CREATE ... SET the engine has yet to
-// support.
 TEST_F(UnionWriteTest, letsOneBranchCreateAndAnotherSet) {
     expectWriteRows("CREATE (n:Recruit {name: 'Nina'}) RETURN n.name AS name UNION ALL "
                     "MATCH (m:Founder) SET m.dob = '01/01' RETURN m.name AS name",

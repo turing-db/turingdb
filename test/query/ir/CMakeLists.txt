@@ -3518,6 +3518,8 @@ add_turing_test(test_query_ir_parenthesised_property ParenthesisedPropertyTest.c
 target_link_libraries(test_query_ir_parenthesised_property PRIVATE turing_ir_test_write_query_s)
 add_turing_test(test_query_ir_set_property_null SetPropertyNullTest.cpp)
 target_link_libraries(test_query_ir_set_property_null PRIVATE turing_ir_test_write_query_s)
+add_turing_test(test_query_ir_create_set CreateSetTest.cpp)
+target_link_libraries(test_query_ir_create_set PRIVATE turing_ir_test_write_query_s)
 
 # The embedding SET-to-null tests need a graph carrying embeddings, which simpledb does
 # not, so they build their own.

@@ -92,8 +92,8 @@ statements after a WITH resolve nothing the projection dropped. A subquery scope
 same mechanism seeded with the imported declarations.
 
 `CypherAnalyzer::analyze(const SinglePartQuery*)` at line 193 holds the per-query rules
-the body needs again: `throwOnReadAfterUpdate`, the RETURN being mandatory unless the
-query writes, `WriteStmtAnalyzer::startPart` (`query/analyzer/WriteStmtAnalyzer.h:48`).
+the body needs again: `throwOnReadAfterUpdate` and the RETURN being mandatory unless the
+query writes.
 `ReadStmtAnalyzer::analyze(const CallStmt*)` at `query/analyzer/ReadStmtAnalyzer.cpp:151`
 rejects `OPTIONAL CALL` for procedures. WITH is v3 only and is rejected under v2 at
 `CypherAnalyzer.cpp:263`; subqueries follow the same rule.
@@ -184,7 +184,7 @@ in place and the analyzer reads it as the import list.
 The analyzer, for one subquery: check each imported name resolves in the current context;
 create a `DeclContext` and declare one variable per import with the outer declaration's
 type and list shape; save `_ctxt`, point the three analyzers at the new context, run the
-body through `analyze(SinglePartQuery)` with `startPart`, restore `_ctxt`; for a returning
+body through `analyze(SinglePartQuery)`, restore `_ctxt`; for a returning
 body, declare each published name of the inner projection in the outer context and reject
 a name already declared there; reject an importing WITH carrying WHERE, DISTINCT, ORDER
 BY, SKIP, LIMIT or an alias; reject under v2.
