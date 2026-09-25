@@ -812,7 +812,8 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     handle instead: the loop binding it fills the set through nl.node_set_collect, and the
     walk reads the set once that loop has run to its end. The optional `hop` region is the
     db op's hop predicate lowered: a block over the source node, edge and end node chunks of one hop,
-    yielding a boolean mask chunk. The input chunk type and the three fixed result chunks
+    yielding a boolean mask chunk; `hop_labels` is the db op's label-only hop predicate,
+    carried as it is. The input chunk type and the three fixed result chunks
     are inferred; only the carried chunk types are spelled out, after the colon.
   }];
 
@@ -825,6 +826,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
                        OptionalAttr<StrArrayAttr>:$end_labels,
+                       OptionalAttr<StrArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
@@ -835,7 +837,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
-    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
+    (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
     (`hop_imports` `{` $hop_imports^ `:` qualified(type($hop_imports)) `}`)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?

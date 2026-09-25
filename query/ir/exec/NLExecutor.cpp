@@ -33,6 +33,7 @@
 #include "iterators/PathExplorator.h"
 #include "iterators/PathTargetIndex.h"
 #include "iterators/PathHopFilter.h"
+#include "iterators/PathLabelHopFilter.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanInEdgesByTargetLabelIterator.h"
@@ -5826,14 +5827,11 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, expansion, loopData->getSeedsSeen(), maxHops, hopPassRate);
-    if (!worthBuilding) {
-        return nullptr;
-    }
+    const PartDirectory parts(view);
+    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, loopData->getSeedsSeen(), maxHops, hopPassRate);
+    const bool built = index->buildWithin(view, loopData->getEndLabels(), direction, edgeTypes, maxHops, walkChecks);
 
-    index->build(view, loopData->getEndLabels(), direction, edgeTypes, maxHops);
-
-    return index;
+    return built ? index : nullptr;
 }
 
 // The target index of an end set is the whole walk's: one search from every node of the set,
@@ -5972,16 +5970,24 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     // hold, so only a pending edge puts the two pruning indexes below out of date.
     const bool walksPendingEdges = writeBuffer && writeBuffer->numPendingEdges() > context->getFirstQueryEdge();
 
-    std::optional<NLHopFilter> hopFilter;
+    std::optional<NLHopFilter> hopRegionFilter;
+    std::optional<PathLabelHopFilter> hopLabelFilter;
+    PathHopFilter* hopFilter = nullptr;
     if (loopData->hasHopFilter()) {
-        hopFilter.emplace(context, loopData);
-        explorator.setHopFilter(&*hopFilter);
+        hopFilter = &hopRegionFilter.emplace(context, loopData);
+    } else if (loopData->filtersByHopLabels()) {
+        const PendingAdjacency* pendingAdjacency = writeBuffer ? &context->getPendingAdjacency() : nullptr;
+        hopFilter = &hopLabelFilter.emplace(view, loopData->getHopLabels(), loopData->areHopLabelsMatchable(), pendingAdjacency);
+    }
+
+    if (hopFilter) {
+        explorator.setHopFilter(hopFilter);
     }
 
     // The level search of the distinct mode prunes by no index
     const bool prunes = !explorator.searchesLevels() && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes() || endNodeSet);
 
-    const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr) : 1.0;
+    const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter) : 1.0;
 
     PathDistanceIndex::SeedExpansion expansion;
     if (prunes) {

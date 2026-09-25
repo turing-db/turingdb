@@ -93,6 +93,11 @@ def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
+    let summary = "Replace the hop region of a path exploration that only asks each hop's end node for labels with those labels";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreEndNodes : Pass<"fuse_explore_end_nodes"> {
     let summary = "Fuse a path exploration and the equality filter binding its end nodes to a carried column into an exploration ending on that column";
     let dependentDialects = ["mlir::db::DB"];

@@ -835,7 +835,8 @@ private:
 // the exploration's direction, hop bounds and resolved edge type. _matchable is false when
 // the type name was absent from the schema, so no hop can match: only the zero-length rows
 // of a min of zero are emitted. The hop predicate, when there is one, is the translated
-// body of the op's hop region over three loop-owned columns, ending in the mask chunk.
+// body of the op's hop region over three loop-owned columns, ending in the mask chunk, or
+// the op's hop labels, resolved like the end labels.
 // The end labels, when the op carries them, are resolved here too; _endMatchable is false
 // when one was absent from the schema, so no path can end and nothing is emitted. The
 // distance index that prunes the walk is owned here so every chunk of the loop shares it;
@@ -928,6 +929,16 @@ public:
     const LabelSet& getEndLabels() const { return _endLabels; }
     bool isEndMatchable() const { return _endMatchable; }
 
+    void setHopLabels(const LabelSet& hopLabels, bool matchable) {
+        _hopLabels = hopLabels;
+        _filtersByHopLabels = true;
+        _hopLabelsMatchable = matchable;
+    }
+
+    bool filtersByHopLabels() const { return _filtersByHopLabels; }
+    const LabelSet& getHopLabels() const { return _hopLabels; }
+    bool areHopLabelsMatchable() const { return _hopLabelsMatchable; }
+
     PathDistanceIndex* getDistanceIndex() { return &_distanceIndex; }
 
     void addSeedsSeen(size_t count) { _seedsSeen += count; }
@@ -962,6 +973,9 @@ private:
     LabelSet _endLabels;
     bool _filtersByEndLabels {false};
     bool _endMatchable {true};
+    LabelSet _hopLabels;
+    bool _filtersByHopLabels {false};
+    bool _hopLabelsMatchable {true};
     PathDistanceIndex _distanceIndex;
     size_t _seedsSeen {0};
     std::optional<double> _hopPassRate;

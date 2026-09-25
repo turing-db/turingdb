@@ -1181,6 +1181,13 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `tgtids`. A path ending elsewhere is walked through but never emitted, and a prefix
     that cannot reach such a node within the hops it has left is not walked at all.
 
+    `hop_labels` is a hop predicate that asks only for labels on the hop's end node, the way
+    `(b:Event)` constrains every hop of `MATCH (n)((a)-[e]->(b:Event)){1,3}(m)`: a hop whose end
+    lacks one of them is neither emitted nor expanded. The fuse_explore_hop_labels pass sets it
+    from a `hop` region that asks nothing else, which it replaces, so the two never come together.
+
+      %s, %t, %p = db.explore_paths(%n, {}) forward hops 1 to 3 hop_labels ["Event"]
+
     `end_column` names, by its index in `columns_to_filter`, the carried node column
     holding each seed row's own end: the way `(a)-->(b)` binds the end of
     `MATCH (a)-[e]->+(b), (a)-->(b)` before the exploration runs. The
@@ -1228,6 +1235,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                        OptionalAttr<UI64Attr>:$max_hops,
                        OptionalAttr<StrArrayAttr>:$edge_types,
                        OptionalAttr<StrArrayAttr>:$end_labels,
+                       OptionalAttr<StrArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
@@ -1242,7 +1250,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
-    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
+    (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
     (`hop_imports` `{` $hop_imports^ `}`)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)

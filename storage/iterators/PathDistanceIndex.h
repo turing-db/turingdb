@@ -46,6 +46,17 @@ public:
                std::span<const EdgeTypeID> edgeTypes,
                uint64_t maxHops);
 
+    // The same search as the first build, when it costs no more than budgetChecks candidate
+    // checks; otherwise it stops there and leaves the index unbuilt. After an overrun it is
+    // attempted again only for twice that budget, so the attempts waste less than twice the
+    // last budget offered.
+    bool buildWithin(const GraphView& view,
+                     const LabelSet& endLabels,
+                     PathExplorationDir direction,
+                     std::span<const EdgeTypeID> edgeTypes,
+                     uint64_t maxHops,
+                     double budgetChecks);
+
     bool isBuilt() const { return _built; }
 
     // Forgets the search, so an index reused for another shape does not answer from it
@@ -128,25 +139,22 @@ public:
                                        size_t sourceCount,
                                        uint64_t maxHops);
 
-    // Whether the enumeration the seeds imply is expected to cost more than the index
-    static bool isWorthBuilding(const GraphView& view,
-                                const SeedExpansion& expansion,
-                                size_t seedCount,
-                                uint64_t maxHops,
-                                double hopPassRate = 1.0);
-
 private:
     std::vector<uint8_t> _distances;
     size_t _reached {0};
     bool _built {false};
+    double _overrunBudget {0.0};
+    double _leastBuildChecks {0.0};
 
-    void collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends);
-    void search(const PartDirectory& parts,
+    void markEnds(std::span<const NodeID> ends);
+    // Whether the search finished within touchBudget nodes and edges touched
+    bool search(const PartDirectory& parts,
                 const Tombstones& tombstones,
                 std::vector<NodeID>& frontier,
                 PathExplorationDir direction,
                 std::span<const EdgeTypeID> edgeTypes,
-                uint64_t maxHops);
+                uint64_t maxHops,
+                double touchBudget);
     void relax(std::span<const EdgeRecord> edges,
                uint8_t level,
                std::span<const EdgeTypeID> edgeTypes,

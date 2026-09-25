@@ -142,6 +142,10 @@ private:
         mlir::Region* _hopRegion {nullptr};
         llvm::SmallVector<mlir::Value, 2> _hopImports;
 
+        // The labels every hop's end must carry, when the op asks only that of a hop; views
+        // into the op's interned StringAttr storage like _labels
+        llvm::SmallVector<llvm::StringRef, 4> _hopLabels;
+
         // The carried column holding each seed's own end, when the exploration is bound,
         // and whether it reports each (seed, end) pair once instead of every path
         std::optional<uint64_t> _endColumn;

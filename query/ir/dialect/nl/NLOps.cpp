@@ -334,6 +334,15 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("end_labels must name at least one label");
     }
 
+    const std::optional<ArrayAttr> hopLabels = getHopLabels();
+    if (hopLabels && hopLabels->empty()) {
+        return emitOpError("hop_labels must name at least one label");
+    }
+
+    if (hopLabels && !getHop().empty()) {
+        return emitOpError("hop_labels is the hop predicate, so there is no hop region beside it");
+    }
+
     const std::optional<uint64_t> endColumn = getEndColumn();
     if (endColumn && *endColumn >= getColumnsToFilter().size()) {
         return emitOpError("end_column ") << *endColumn << " is not a carried column";

@@ -228,7 +228,7 @@ using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassCont
 // pipeline it reports on and the pipeline that runs the same one. Every factory is handed
 // the context; only the join's cost model and the metadata count read it, the rewrites
 // beside them answering off the IR alone.
-const std::array<DBPassFactory, 27> dbPassPipeline = {
+const std::array<DBPassFactory, 28> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createPushDownFilters(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
@@ -245,6 +245,7 @@ const std::array<DBPassFactory, 27> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndConstraint(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreHopLabels(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndNodes(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndFactor(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndSet(); },
@@ -1361,6 +1362,7 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         metadata.getMinHops(),
                                                         maxHopsAttr,
                                                         edgeTypesAttr,
+                                                        mlir::ArrayAttr(),
                                                         mlir::ArrayAttr(),
                                                         mlir::IntegerAttr(),
                                                         false);
