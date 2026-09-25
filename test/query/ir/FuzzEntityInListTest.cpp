@@ -113,3 +113,11 @@ TEST_F(FuzzEntityInListTest, ReturnEdgeInEmptyList) {
 TEST_F(FuzzEntityInListTest, ReturnEdgeInListOfItself) {
     expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->(:Person {name: 'Adam'}) RETURN e IN [e]", {{"true"}});
 }
+
+TEST_F(FuzzEntityInListTest, ReturnUnmatchedNodeInList) {
+    expectRows("MATCH (m:Person {name: 'Adam'}) OPTIONAL MATCH (m)-[:NOPE]->(n) RETURN n IN [m], n IN []", {{"null", "false"}});
+}
+
+TEST_F(FuzzEntityInListTest, ReturnUnmatchedEdgeInList) {
+    expectRows("MATCH (n:Person {name: 'Remy'}) OPTIONAL MATCH (n)-[e:NOPE]->() RETURN e IN [1], e IN []", {{"null", "false"}});
+}
