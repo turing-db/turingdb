@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "columns/ColumnConst.h"
+#include "columns/ColumnVector.h"
 #include "list/ListBuffer.h"
 #include "ID.h"
 #include "map/MapBuffer.h"
@@ -154,10 +155,12 @@ template <ColumnOperator Op>
 requires (Op == OP_EQUAL) || (Op == OP_NOT_EQUAL)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        // Standard equality of property types - except doubles
+        // Standard equality of property types
         OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::Double::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
