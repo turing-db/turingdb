@@ -3928,3 +3928,14 @@ target_link_libraries(test_query_ir_map_key_lookup PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_map_key_lookup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_keys_function MapKeysFunctionTest.cpp)
+target_sources(test_query_ir_map_keys_function PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_keys_function PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_keys_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
