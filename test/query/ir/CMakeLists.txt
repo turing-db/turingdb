@@ -3682,7 +3682,7 @@ add_call_v3_test(test_query_ir_range_span_overflow RangeSpanOverflowTest.cpp)
 # collect() over toString() results.
 add_call_v3_test(test_query_ir_collect_computed_string CollectComputedStringTest.cpp)
 
-# A graph load that fails after opening its change, followed by a data part merge.
+# A graph load that fails after opening the change it imports into.
 add_turing_test(test_query_ir_failed_graph_load FailedGraphLoadTest.cpp)
 target_sources(test_query_ir_failed_graph_load PRIVATE StringRowSink.cpp)
 target_link_libraries(test_query_ir_failed_graph_load PRIVATE
