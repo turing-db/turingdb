@@ -2,6 +2,7 @@
 
 #include <compare>
 
+#include "ID.h"
 #include "ListElementView.h"
 #include "ListView.h"
 
@@ -54,6 +55,9 @@ bool operator==(ListElementView element, types::UInt64::Primitive value);
 bool operator==(ListElementView element, types::Double::Primitive value);
 bool operator==(ListElementView element, types::String::Primitive value);
 bool operator==(ListElementView element, types::Bool::Primitive value);
+bool operator==(ListElementView element, types::Embedding::Primitive value);
+bool operator==(ListElementView element, NodeID value);
+bool operator==(ListElementView element, EdgeID value);
 bool operator==(ListElementView element, ListView value);
 bool operator==(ListElementView element, MapView value);
 
