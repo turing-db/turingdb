@@ -876,6 +876,9 @@ public:
     template <typename ID, typename T>
     static void runPropertyFetch(NLExecutionContext* context, NLFunctionData* data);
 
+    template <typename ID>
+    static void runTaggedPropertyFetch(NLExecutionContext* context, NLFunctionData* data);
+
 private:
     NLExecutionContext _ctxt;
     const NLProgram* _prog {nullptr};

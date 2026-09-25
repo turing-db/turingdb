@@ -61,6 +61,7 @@
 #include "versioning/CommitWriteBuffer.h"
 #include "versioning/PendingAdjacency.h"
 #include "views/GraphView.h"
+#include "writers/MetadataBuilder.h"
 
 #include "CSVParser.h"
 
@@ -4363,10 +4364,97 @@ void throwIfAnyNodeIsNull(const ColumnNodeIDs* column, bool isPending, std::stri
     }
 }
 
+// A write stages only some rows - a SET skips a row OPTIONAL MATCH found no entity for -
+// and the cell of a row it skips is neither checked nor read.
+template <typename StagesRow>
+void stageTaggedCells(const Column* column,
+                      size_t rowCount,
+                      PropertyType property,
+                      const StagesRow& stagesRow,
+                      CommitWriteBuffer::UntypedProperties& buf) {
+    buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {property._id, {}});
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (stagesRow(row)) {
+            stageTaggedCell(taggedCellAt(column, row), property._valueType, buf[row].value);
+        }
+    }
+}
+
+// The property tagged cells write under a name the graph did not have at translation: the
+// one a write registered under it since, else a new one typed by the first cell holding a
+// value. Invalid while no cell the write stages holds one, as there is nothing to type it by.
+template <typename StagesRow>
+PropertyType resolveTaggedCellProperty(MetadataBuilder* metadataBuilder,
+                                       std::string_view name,
+                                       const Column* column,
+                                       size_t rowCount,
+                                       const StagesRow& stagesRow) {
+    const std::optional<PropertyType> registered = metadataBuilder->findPropertyType(name);
+    if (registered) {
+        return *registered;
+    }
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const ValueType valueType = stagesRow(row) ? taggedCellValueType(taggedCellAt(column, row)) : ValueType::Invalid;
+        if (valueType != ValueType::Invalid) {
+            return metadataBuilder->getOrCreatePropertyType(name, valueType);
+        }
+    }
+
+    return PropertyType {};
+}
+
+// The values a set stages, one per row, under the property it resolved them to. False
+// when there is nothing to stage: a property no staged cell has typed, or none to remove.
+template <typename SetData, typename StagesRow>
+bool extractSetProperties(const SetData* setData,
+                          size_t rowCount,
+                          const StagesRow& stagesRow,
+                          PropertyTypeID& propID,
+                          CommitWriteBuffer::UntypedProperties& buf) {
+    const Column* values = setData->getValue();
+    const std::string& propertyName = setData->getPropertyName();
+    const ValueType nullValueType = setData->getNullValueType();
+    const ValueType taggedValueType = setData->getTaggedValueType();
+    const bool writesTaggedCells = readsTaggedCells(values);
+
+    propID = setData->getPropertyTypeID();
+
+    if (!propertyName.empty()) {
+        MetadataBuilder* metadataBuilder = setData->getMetadataBuilder();
+        const PropertyType property = writesTaggedCells
+            ? resolveTaggedCellProperty(metadataBuilder, propertyName, values, rowCount, stagesRow)
+            : metadataBuilder->findPropertyType(propertyName).value_or(PropertyType {});
+
+        if (!property.isValid()) {
+            return false;
+        }
+
+        propID = property._id;
+
+        if (writesTaggedCells) {
+            stageTaggedCells(values, rowCount, property, stagesRow, buf);
+        } else {
+            fillNullProperties(rowCount, propID, property._valueType, buf);
+        }
+    } else if (nullValueType != ValueType::Invalid) {
+        fillNullProperties(rowCount, propID, nullValueType, buf);
+    } else if (taggedValueType != ValueType::Invalid) {
+        stageTaggedCells(values, rowCount, PropertyType {propID, taggedValueType}, stagesRow, buf);
+    } else {
+        extractColumnProperties(values, rowCount, propID, buf);
+    }
+
+    return true;
+}
+
 // A property no cell has typed yet has nothing to stage, which leaves its list empty
 void extractCreatedProperties(std::span<const NLCreateProperty> properties,
                               size_t rowCount,
                               std::vector<CommitWriteBuffer::UntypedProperties>& propertyValues) {
+    const auto stagesEveryRow = [](size_t) { return true; };
+
     propertyValues.resize(properties.size());
 
     for (size_t index = 0; index < properties.size(); index++) {
@@ -4376,14 +4464,17 @@ void extractCreatedProperties(std::span<const NLCreateProperty> properties,
         const bool typedByItsCells = !property._createdName.empty();
 
         if (typedByItsCells) {
-            const PropertyType created = createTaggedCellProperty(property._metadataBuilder,
-                                                                  property._createdName,
-                                                                  property._values);
+            const PropertyType created = resolveTaggedCellProperty(property._metadataBuilder,
+                                                                   property._createdName,
+                                                                   property._values,
+                                                                   rowCount,
+                                                                   stagesEveryRow);
             if (created.isValid()) {
-                extractTaggedCellProperties(property._values, rowCount, created._id, created._valueType, values);
+                stageTaggedCells(property._values, rowCount, created, stagesEveryRow, values);
             }
         } else if (property._taggedValueType != ValueType::Invalid) {
-            extractTaggedCellProperties(property._values, rowCount, property._propertyTypeID, property._taggedValueType, values);
+            const PropertyType typed {property._propertyTypeID, property._taggedValueType};
+            stageTaggedCells(property._values, rowCount, typed, stagesEveryRow, values);
         } else {
             extractColumnProperties(property._values, rowCount, property._propertyTypeID, values);
         }
@@ -4882,34 +4973,31 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
 
     const ColumnNodeIDs* nodes = setData->getInput();
     const size_t rowCount = nodes->size();
-
-    CommitWriteBuffer::UntypedProperties propsBuffer;
-    const PropertyTypeID propID = setData->getPropertyTypeID();
-    const ValueType nullValueType = setData->getNullValueType();
-    const ValueType taggedValueType = setData->getTaggedValueType();
-
-    if (nullValueType != ValueType::Invalid) {
-        fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (taggedValueType != ValueType::Invalid) {
-        extractTaggedCellProperties(setData->getValue(), rowCount, propID, taggedValueType, propsBuffer);
-    } else {
-        extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
-    }
-
-    const ColumnMask* pending = setData->getPending();
-    const bool allPending = setData->isAllPending();
     const ColumnMask* rows = setData->getRows();
-
-    const size_t firstPendingNodeID = committedNodeCount(context->getView());
-    const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
-    NLWrittenValues& written = context->getWrittenValues();
 
     // A node an OPTIONAL MATCH did not match is an invalid ID, which Cypher writes nothing
     // for: staging it would have the commit look the ID up among the nodes this change
     // wrote, where it is not.
     const auto& raw = nodes->getRaw();
+    const auto stagesRow = [rows, &raw](size_t row) {
+        return writeTouchesRow(rows, row) && raw[row].isValid();
+    };
+
+    PropertyTypeID propID;
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+    if (!extractSetProperties(setData, rowCount, stagesRow, propID, propsBuffer)) {
+        return;
+    }
+
+    const ColumnMask* pending = setData->getPending();
+    const bool allPending = setData->isAllPending();
+
+    const size_t firstPendingNodeID = committedNodeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
+    NLWrittenValues& written = context->getWrittenValues();
+
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+        if (!stagesRow(row)) {
             continue;
         }
 
@@ -4931,30 +5019,27 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
 
     const ColumnEdgeIDs* edges = setData->getInput();
     const size_t rowCount = edges->size();
-    const PropertyTypeID propID = setData->getPropertyTypeID();
-    const ValueType nullValueType = setData->getNullValueType();
-    const ValueType taggedValueType = setData->getTaggedValueType();
+    const ColumnMask* rows = setData->getRows();
 
+    const auto& raw = edges->getRaw();
+    const auto stagesRow = [rows, &raw](size_t row) {
+        return writeTouchesRow(rows, row) && raw[row].isValid();
+    };
+
+    PropertyTypeID propID;
     CommitWriteBuffer::UntypedProperties propsBuffer;
-
-    if (nullValueType != ValueType::Invalid) {
-        fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (taggedValueType != ValueType::Invalid) {
-        extractTaggedCellProperties(setData->getValue(), rowCount, propID, taggedValueType, propsBuffer);
-    } else {
-        extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
+    if (!extractSetProperties(setData, rowCount, stagesRow, propID, propsBuffer)) {
+        return;
     }
 
     const ColumnMask* pending = setData->getPending();
     const bool allPending = setData->isAllPending();
-    const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
     const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
 
-    const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
+        if (!stagesRow(row)) {
             continue;
         }
 
@@ -10307,6 +10392,81 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
         }
     }
 }
+
+// No entity of the graph can hold a property the graph had no type for, so the values are
+// the ones this change wrote. A row whose entity holds none, or is null, reads null.
+template <typename ID>
+void NLExecutor::runTaggedPropertyFetch(NLExecutionContext* context, NLFunctionData* data) {
+    NLTaggedPropertyFetchData* fetchData = static_cast<NLTaggedPropertyFetchData*>(data);
+
+    const auto& inputRaw = static_cast<const ColumnVector<ID>*>(fetchData->getInput())->getRaw();
+    auto& raw = static_cast<ColumnOptVector<ListElementView>*>(fetchData->getOutput())->getRaw();
+    raw.assign(inputRaw.size(), std::nullopt);
+
+    MetadataBuilder* metadataBuilder = fetchData->getMetadataBuilder();
+    const std::optional<PropertyType> property = metadataBuilder->findPropertyType(fetchData->getPropertyName());
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+
+    if (!property || !writeBuffer) {
+        return;
+    }
+
+    const GraphView* view = context->getView();
+    NLWrittenValues& written = context->getWrittenValues();
+    written.indexUpdates(writeBuffer);
+
+    const bool isNode = std::is_same_v<ID, NodeID>;
+    const size_t committedCount = isNode ? committedNodeCount(view) : committedEdgeCount(view);
+    const size_t pendingCount = isNode ? writeBuffer->numPendingNodes() : writeBuffer->numPendingEdges();
+    const PendingRows pendingRows(fetchData->getPending(), fetchData->isAllPending(), committedCount, pendingCount);
+
+    std::vector<ListBuffer<>::ListItemVariant>& values = fetchData->valuesScratch();
+    std::vector<size_t>& rows = fetchData->rowsScratch();
+    values.clear();
+    rows.clear();
+
+    const PropertyTypeID propertyTypeID = property->_id;
+
+    const auto collect = [&]<SupportedType T>() {
+        for (size_t row = 0; row < inputRaw.size(); row++) {
+            const ID entity = inputRaw[row];
+            if (!entity.isValid()) {
+                continue;
+            }
+
+            std::optional<typename T::Primitive> value;
+            if (pendingRows.has(row, entity.getValue())) {
+                value = readPendingEntityProperty<ID, T>(writeBuffer, written, view, entity.getValue(), propertyTypeID);
+            } else {
+                const NLWrittenValues::Value* update = written.findUpdate(entity, propertyTypeID);
+                if (update) {
+                    value = written.read<T>(*update);
+                }
+            }
+
+            if (value) {
+                values.push_back(*value);
+                rows.push_back(row);
+            }
+        }
+    };
+
+    ValueTypeDispatcher(property->_valueType).execute(collect);
+
+    if (values.empty()) {
+        return;
+    }
+
+    const ListView cells = fetchData->getMemory()->listBuffer().insert(values);
+    const std::span<const ListElementView> elements = cells.elements();
+
+    for (size_t index = 0; index < rows.size(); index++) {
+        raw[rows[index]] = elements[index];
+    }
+}
+
+template void NLExecutor::runTaggedPropertyFetch<NodeID>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runTaggedPropertyFetch<EdgeID>(NLExecutionContext*, NLFunctionData*);
 
 // The translator selects among these by the value type the property resolves
 // to, on the node or edge side; only these (ID, T) pairs are available as

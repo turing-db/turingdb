@@ -122,21 +122,37 @@ TEST_F(CreateFromListElementTest, createsAnEdgePropertyTheGraphDoesNotHaveFromAn
     expectRows("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL {closeness: 'close'}]->(b) RETURN b.name", {{"Adam"}});
 }
 
-TEST_F(CreateFromListElementTest, rejectsAReadOfTheCreatedPropertyPastAWith) {
-    const std::string_view query = "WITH ['Zoe', 5] AS pair "
-                                   "CREATE (p:Person {name: pair[0], level: pair[1]}) "
-                                   "WITH p RETURN p.level";
+TEST_F(CreateFromListElementTest, readsTheCreatedPropertyBackPastAWith) {
+    expectWriteRows("WITH ['Zoe', 5] AS pair CREATE (p:Person {name: pair[0], level: pair[1]}) WITH p RETURN p.level",
+                    {{"5"}});
+}
 
-    ChangeID changeID;
-    openChange(changeID);
+TEST_F(CreateFromListElementTest, readsTheCreatedPropertyBackThroughAnAlias) {
+    expectWriteRows("WITH ['Zoe', 5] AS pair CREATE (p:Person {name: pair[0], level: pair[1]}) WITH p AS q RETURN q.level",
+                    {{"5"}});
+}
 
-    const QueryStatus status = runWrite(query, changeID);
-    EXPECT_FALSE(status.isOk()) << "query: " << query;
-    EXPECT_NE(status.getError().find("Cannot read p.level yet"), std::string::npos) << status.getError();
+TEST_F(CreateFromListElementTest, readsTheCreatedPropertyAsNullOnANodeTheCreateDidNotWrite) {
+    expectWriteRows("MATCH (r:Person {name: 'Remy'}) "
+                    "WITH r, ['Zoe', 5] AS pair "
+                    "CREATE (p:Person {name: pair[0], level: pair[1]}) "
+                    "RETURN r.level, p.level",
+                    {{"null", "5"}});
+}
 
-    submit(changeID);
+TEST_F(CreateFromListElementTest, readsTheCreatedEdgePropertyBackPastAWith) {
+    expectWriteRows("MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) "
+                    "WITH a, b, [1, 'close'] AS pair "
+                    "CREATE (a)-[e:KNOWS_WELL {closeness: pair[1]}]->(b) "
+                    "WITH e RETURN e.closeness",
+                    {{"close"}});
+}
 
-    expectRows("MATCH (p:Person {name: 'Zoe'}) RETURN count(p)", {{"0"}});
+TEST_F(CreateFromListElementTest, removesThePropertyTheCreateTypedFromAnElement) {
+    expectWriteRows("WITH ['Zoe', 5] AS pair CREATE (p:Person {name: pair[0], level: pair[1]}) REMOVE p.level RETURN p.level",
+                    {{"null"}});
+
+    expectRows("MATCH (p:Person {name: 'Zoe'}) RETURN p.level", {{"null"}});
 }
 
 int main(int argc, char** argv) {

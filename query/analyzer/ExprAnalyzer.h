@@ -101,9 +101,9 @@ public:
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
-    // A property a CREATE writes from tagged cells and no write gives a type: it takes the
-    // type of the first cell holding a value when the write runs, so a read of it reads the
-    // cells as they were written
+    // A property a CREATE or a SET writes from tagged cells and no write gives a type: it
+    // takes the type of the first cell holding a value when the write runs, so a read of it
+    // reads tagged cells
     void addToBeCreatedFromTaggedCells(std::string_view name);
 
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);

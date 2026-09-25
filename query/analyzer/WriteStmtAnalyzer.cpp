@@ -13,6 +13,7 @@
 #include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "QualifiedName.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 #include "decl/DeclContext.h"
@@ -35,13 +36,9 @@ using namespace db;
 namespace {
 
 // A tagged cell carries its type per row, so the write checks each cell against the
-// property's type as it stages it. A property with no type yet has none to check against.
+// property's type as it stages it, and gives a property with no type yet the first one's
 bool writeTypeCompatible(ValueType propertyType, EvaluatedType valueType) {
-    if (valueType == EvaluatedType::ListItem) {
-        return propertyType != ValueType::Invalid;
-    }
-
-    return ExprAnalyzer::propTypeCompatible(propertyType, valueType);
+    return valueType == EvaluatedType::ListItem || ExprAnalyzer::propTypeCompatible(propertyType, valueType);
 }
 
 }
@@ -363,6 +360,11 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             // writing null cannot create a new property
             const bool writesNull = rhsType == EvaluatedType::Null;
             const bool allowCreates = !writesNull;
+
+            if (rhsType == EvaluatedType::ListItem) {
+                const QualifiedName* propertyName = lhs->getFullName();
+                _exprAnalyzer->addToBeCreatedFromTaggedCells(propertyName->back()->getName());
+            }
 
             const ValueType valType = evaluatedToValueType(rhsType);
             const ValueType lhsEvaluatedVt =

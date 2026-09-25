@@ -1194,6 +1194,51 @@ private:
     bool _allPending {false};
 };
 
+// A fetch of a property that tagged cells type when their write runs. There is no type to
+// fetch it by at translation, so the name is resolved each time the fetch runs, and the
+// values come out as tagged cells.
+class NLTaggedPropertyFetchData : public NLFunctionData {
+public:
+    NLTaggedPropertyFetchData(const Column* input,
+                              Column* output,
+                              std::string_view propertyName,
+                              MetadataBuilder* metadataBuilder,
+                              LocalMemory* memory)
+        : _input(input),
+        _output(output),
+        _propertyName(propertyName),
+        _metadataBuilder(metadataBuilder),
+        _memory(memory)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getOutput() const { return _output; }
+    const std::string& getPropertyName() const { return _propertyName; }
+    MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    std::vector<ListBuffer<>::ListItemVariant>& valuesScratch() { return _values; }
+    std::vector<size_t>& rowsScratch() { return _rows; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _output {nullptr};
+    const ColumnMask* _pending {nullptr};
+    std::string _propertyName;
+    MetadataBuilder* _metadataBuilder {nullptr};
+    LocalMemory* _memory {nullptr};
+    std::vector<ListBuffer<>::ListItemVariant> _values;
+    std::vector<size_t> _rows;
+    bool _allPending {false};
+};
+
 class NLGetNodeLabelSetData : public NLFunctionData {
 public:
     NLGetNodeLabelSetData(const ColumnNodeIDs* input, ColumnLabelSetIDs* output)
@@ -3498,6 +3543,17 @@ public:
     ValueType getTaggedValueType() const { return _taggedValueType; }
     void setTaggedValueType(ValueType valueType) { _taggedValueType = valueType; }
 
+    // Set instead of the ID for a property the graph did not have at translation. Tagged
+    // cells type it when the set runs, registered here, and a null finds it there or has
+    // nothing to remove.
+    const std::string& getPropertyName() const { return _propertyName; }
+    MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
+
+    void setPropertyByName(std::string_view name, MetadataBuilder* metadataBuilder) {
+        _propertyName = name;
+        _metadataBuilder = metadataBuilder;
+    }
+
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
@@ -3506,6 +3562,8 @@ private:
     PropertyTypeID _propertyTypeID;
     ValueType _nullValueType {ValueType::Invalid};
     ValueType _taggedValueType {ValueType::Invalid};
+    std::string _propertyName;
+    MetadataBuilder* _metadataBuilder {nullptr};
     bool _allPending {false};
 };
 
@@ -3542,6 +3600,14 @@ public:
     ValueType getTaggedValueType() const { return _taggedValueType; }
     void setTaggedValueType(ValueType valueType) { _taggedValueType = valueType; }
 
+    const std::string& getPropertyName() const { return _propertyName; }
+    MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
+
+    void setPropertyByName(std::string_view name, MetadataBuilder* metadataBuilder) {
+        _propertyName = name;
+        _metadataBuilder = metadataBuilder;
+    }
+
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
@@ -3550,6 +3616,8 @@ private:
     PropertyTypeID _propertyTypeID;
     ValueType _nullValueType {ValueType::Invalid};
     ValueType _taggedValueType {ValueType::Invalid};
+    std::string _propertyName;
+    MetadataBuilder* _metadataBuilder {nullptr};
     bool _allPending {false};
 };
 

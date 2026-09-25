@@ -2054,6 +2054,11 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 
     const llvm::StringRef name = handleOp.getName();
 
+    if (holdsTaggedCells(resultValue.getType())) {
+        translateTaggedPropertyFetch(name, inputValue, pendingValue, allPending, resultValue, isNode, body);
+        return;
+    }
+
     // Resolve the name against the schema once, here, so execution works from a
     // PropertyTypeID and value type and never sees the name again. A CREATE earlier in the
     // program may have introduced the name, which puts it in the change's own schema and
@@ -2076,6 +2081,32 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
     fetchData->setAllPending(allPending || isPendingValue(inputValue, isNode));
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
+    body->emplaceStmt(handler, fetchData);
+}
+
+void NLTranslator::translateTaggedPropertyFetch(llvm::StringRef name,
+                                                mlir::Value inputValue,
+                                                mlir::Value pendingValue,
+                                                bool allPending,
+                                                mlir::Value resultValue,
+                                                bool isNode,
+                                                NLStmtContainer* body) {
+    bioassert(_metadataBuilder, "A property tagged cells type is only read by the write that types it");
+
+    Column* output = _memory->alloc<ColumnOptVector<ListElementView>>();
+    _valueSlots[resultValue] = output;
+
+    NLTaggedPropertyFetchData* fetchData = _program->allocFunctionData<NLTaggedPropertyFetchData>(
+        getColumn(inputValue),
+        output,
+        std::string_view {name.data(), name.size()},
+        _metadataBuilder,
+        _memory);
+    fetchData->setPending(getMaskColumn(pendingValue));
+    fetchData->setAllPending(allPending || isPendingValue(inputValue, isNode));
+
+    const NLHandlerFunction handler = isNode ? &NLExecutor::runTaggedPropertyFetch<NodeID>
+                                             : &NLExecutor::runTaggedPropertyFetch<EdgeID>;
     body->emplaceStmt(handler, fetchData);
 }
 
@@ -2540,9 +2571,6 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
     const bool writesTaggedCells = holdsTaggedCells(valueChunkType);
 
     const PropertyType propType = writtenPropertyType(propName, valueChunkType, writesNull || writesTaggedCells);
-    if (!propType.isValid()) {
-        return;
-    }
 
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
@@ -2552,7 +2580,9 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         inputColumn,
         valueColumn);
 
-    if (writesNull) {
+    if (!propType.isValid()) {
+        data->setPropertyByName(std::string_view {propName.data(), propName.size()}, _metadataBuilder);
+    } else if (writesNull) {
         data->setNullValueType(propType._valueType);
     } else if (writesTaggedCells) {
         data->setTaggedValueType(propType._valueType);
@@ -2578,9 +2608,6 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     const bool writesTaggedCells = holdsTaggedCells(valueChunkType);
 
     const PropertyType propType = writtenPropertyType(propName, valueChunkType, writesNull || writesTaggedCells);
-    if (!propType.isValid()) {
-        return;
-    }
 
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
@@ -2590,7 +2617,9 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         inputColumn,
         valueColumn);
 
-    if (writesNull) {
+    if (!propType.isValid()) {
+        data->setPropertyByName(std::string_view {propName.data(), propName.size()}, _metadataBuilder);
+    } else if (writesNull) {
         data->setNullValueType(propType._valueType);
     } else if (writesTaggedCells) {
         data->setTaggedValueType(propType._valueType);

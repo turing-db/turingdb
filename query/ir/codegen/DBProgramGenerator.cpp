@@ -7349,7 +7349,10 @@ mlir::Value DBProgramGenerator::constantLabelList(llvm::ArrayRef<std::string> la
 // no schema the lowering can consult, so the type the analyzer gave it rides on the op
 mlir::Type DBProgramGenerator::propertyValueType(const PropertyExpr* propExpr) {
     const ValueType created = propExpr->getCreatedValueType();
-    if (created == ValueType::Invalid) {
+
+    if (propExpr->getType() == EvaluatedType::ListItem) {
+        return mlir::storage::NullableType::get(_mlirCtxt, mlir::storage::ListElementType::get(_mlirCtxt));
+    } else if (created == ValueType::Invalid) {
         return mlir::NoneType::get(_mlirCtxt);
     }
 
@@ -7462,15 +7465,6 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
         if (propertyIt != end(properties) && readsWhatWasWritten) {
             return propertyIt->second;
         }
-    }
-
-    // The property takes its type when the write runs, which leaves nothing to fetch it by
-    if (readsTaggedCells) {
-        throwError(fmt::format("Cannot read {}.{} yet: a property created from an element of a mixed "
-                               "list can only be read before the next WITH, through the variable its CREATE bound",
-                               varName,
-                               propName),
-                   propExpr);
     }
 
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);

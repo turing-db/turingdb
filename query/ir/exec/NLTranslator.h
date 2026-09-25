@@ -887,6 +887,14 @@ private:
                                 bool isNode,
                                 NLStmtContainer* body);
 
+    void translateTaggedPropertyFetch(llvm::StringRef name,
+                                      mlir::Value inputValue,
+                                      mlir::Value pendingValue,
+                                      bool allPending,
+                                      mlir::Value resultValue,
+                                      bool isNode,
+                                      NLStmtContainer* body);
+
     // Whether a chunk holds nothing but entities this change wrote and has not committed.
     // The op says so when a query part cut stands between the create and the read; within
     // one part the chunk is the create's own result, which is what the sets hold
@@ -935,8 +943,8 @@ private:
 
     // The property a create or a set writes to. A write of a null or of tagged cells carries
     // no type on its value chunk, so the property's own type is what it stages. A name no
-    // property carries yet answers an invalid property rather than being interned: a null
-    // has nothing to remove, and tagged cells type it when the create runs.
+    // property carries yet answers an invalid property rather than being interned: the write
+    // looks it up when it runs, where tagged cells type it and a null may find it.
     PropertyType writtenPropertyType(llvm::StringRef propName,
                                      mlir::Type valueChunkType,
                                      bool untypedValue) const;
