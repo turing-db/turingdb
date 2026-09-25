@@ -3991,3 +3991,6 @@ target_link_libraries(test_query_ir_tagged_cell_arithmetic_equality PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
+
+# Arithmetic on an element of a list that holds a property the graph does not have.
+add_call_v3_test(test_query_ir_missing_property_list_element MissingPropertyListElementTest.cpp)
