@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <stddef.h>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -109,6 +111,64 @@ TEST_F(ParenthesizedPropertyAccessTest, nestedParenthesesReachTheSameAccess) {
     ASSERT_EQ(accesses.size(), 2u);
     EXPECT_EQ(accesses[0], "p.age");
     EXPECT_EQ(accesses[1], "p.age");
+}
+
+// Each pair unwraps to the variable the next one holds, so no depth of nesting reaches
+// the access and every one of these spells `n.age`
+TEST_F(ParenthesizedPropertyAccessTest, anyDepthOfParenthesesReachesTheSameAccess) {
+    const std::vector<std::string_view> queries = {
+        "MATCH (n) RETURN (n).age",
+        "MATCH (n) RETURN ((n)).age",
+        "MATCH (n) RETURN (((n))).age",
+        "MATCH (n) RETURN ((((n)))).age",
+        "MATCH (n) RETURN (((((n))))).age",
+    };
+
+    for (const std::string_view query : queries) {
+        ASSERT_NO_THROW(parseQuery(query)) << query;
+
+        std::vector<std::string> accesses;
+        collectPropertyAccesses(accesses);
+
+        ASSERT_EQ(accesses.size(), 1u) << query;
+        EXPECT_EQ(accesses[0], "n.age") << query;
+    }
+}
+
+// A pair of parentheses builds no expression of its own, so nesting costs nothing against
+// the limit the parser puts on how deep an expression may nest
+TEST_F(ParenthesizedPropertyAccessTest, deepNestingDoesNotReachTheExpressionDepthLimit) {
+    const size_t depth = CypherParser::MAX_EXPRESSION_DEPTH * 2;
+
+    std::string query = "MATCH (n) RETURN ";
+    query.append(depth, '(');
+    query += "n";
+    query.append(depth, ')');
+    query += ".age";
+
+    ASSERT_NO_THROW(parseQuery(query));
+
+    std::vector<std::string> accesses;
+    collectPropertyAccesses(accesses);
+
+    ASSERT_EQ(accesses.size(), 1u);
+    EXPECT_EQ(accesses[0], "n.age");
+}
+
+// The parentheses of the pattern are not the parentheses of the access, so the two nest
+// independently
+TEST_F(ParenthesizedPropertyAccessTest, nestedParenthesesReachTheSameAccessInEveryClause) {
+    ASSERT_NO_THROW(parseQuery("MATCH (n) WHERE (((n))).age = 32 SET (((n))).age = 1 "
+                               "REMOVE (((n))).name RETURN (((n))).age"));
+
+    std::vector<std::string> accesses;
+    collectPropertyAccesses(accesses);
+
+    ASSERT_EQ(accesses.size(), 4u);
+    EXPECT_EQ(accesses[0], "n.age");
+    EXPECT_EQ(accesses[1], "n.age");
+    EXPECT_EQ(accesses[2], "n.name");
+    EXPECT_EQ(accesses[3], "n.age");
 }
 
 TEST_F(ParenthesizedPropertyAccessTest, theTwoSpellingsBuildTheSameName) {
