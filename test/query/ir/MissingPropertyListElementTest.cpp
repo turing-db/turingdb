@@ -34,9 +34,57 @@ TEST_F(MissingPropertyListElementTest, comparesAnElementBesideAMissingPropertyTo
     EXPECT_EQ(sink.getRows(), expected);
 }
 
+TEST_F(MissingPropertyListElementTest, comparesAnIntegerToAnElementBesideAMissingProperty) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person {name: 'Remy'}) RETURN 3 = [0, n.missing][0] - 0", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"false"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(MissingPropertyListElementTest, comparesAListElementToAnElementBesideAMissingProperty) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person {name: 'Remy'}) RETURN [2][0] = [0, n.missing][0] - 0", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"false"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(MissingPropertyListElementTest, comparesTwoElementsBesideAMissingProperty) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person {name: 'Remy'}) RETURN [0, n.missing][0] - 0 = [0, n.missing][0] - 0", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"true"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(MissingPropertyListElementTest, comparesANodeToAnElementBesideAMissingProperty) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person {name: 'Adam'}) RETURN n = [0, n.missing][0] + 0", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"false"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(MissingPropertyListElementTest, comparesAnElementBesideAMissingPropertyToANode) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person {name: 'Adam'}) RETURN [0, n.missing][0] + 0 = n", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"false"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
 TEST_F(MissingPropertyListElementTest, indexesAListByAnElementBesideAMissingProperty) {
     StringRowSink sink;
     runQuery("MATCH (n:Person {name: 'Remy'}) RETURN [0][[0, n.missing][0] + 0]", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"0"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(MissingPropertyListElementTest, indexesAListHoldingAMissingPropertyByAnElementBesideIt) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person {name: 'Remy'}) RETURN [0, n.missing][[0, n.missing][0] + 0]", sink);
 
     const std::vector<StringRowSink::Row> expected {{"0"}};
     EXPECT_EQ(sink.getRows(), expected);
