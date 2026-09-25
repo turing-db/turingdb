@@ -22,9 +22,6 @@
 using namespace db;
 using namespace turing::test;
 
-// A load that fails after opening the change it imports into drops that change with the
-// graph it was building. MERGE_DATAPARTS refuses to run while any change is open, so it is
-// the query that sees a change left behind.
 class FailedGraphLoadTest : public TuringTest {
 public:
     void initialize() override {
@@ -46,8 +43,9 @@ protected:
         ASSERT_TRUE(FileUtils::writeFile(path, content)) << path;
     }
 
-    void runQuery(std::string_view query, QueryStatus& status) {
+    void expectError(std::string_view query, std::string_view reason) {
         StringRowSink sink;
+        QueryStatus status;
         _interpreter->execute(status,
                               query,
                               _sessionGraph,
@@ -55,21 +53,15 @@ protected:
                               ChangeID::head(),
                               &_env->getMem(),
                               &sink);
-    }
-
-    void expectError(std::string_view query, std::string_view reason) {
-        QueryStatus status;
-        runQuery(query, status);
         ASSERT_FALSE(status.isOk()) << "accepted: " << query;
 
         const std::string error = status.getError();
         EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
     }
 
-    void expectSuccess(std::string_view query) {
-        QueryStatus status;
-        runQuery(query, status);
-        ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
+    void expectNoChangeOpen() {
+        const SystemAccessor system = _env->getSystemManager().accessShared();
+        EXPECT_FALSE(system.hasChanges());
     }
 
     const std::string _sessionGraph = "simpledb";
@@ -77,22 +69,22 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-TEST_F(FailedGraphLoadTest, mergesDataPartsAfterAParquetImportFails) {
+TEST_F(FailedGraphLoadTest, leavesNoChangeOpenAfterAParquetImportFails) {
     writeDataFile("broken/nodes.parquet", "not parquet");
     writeDataFile("broken/edges.parquet", "not parquet");
 
     expectError("LOAD PARQUET 'broken' AS broken", "Parquet magic bytes not found");
-    expectSuccess("MERGE_DATAPARTS");
+    expectNoChangeOpen();
 }
 
-TEST_F(FailedGraphLoadTest, mergesDataPartsAfterAJsonlImportFails) {
+TEST_F(FailedGraphLoadTest, leavesNoChangeOpenAfterAJsonlImportFails) {
     writeDataFile("broken.jsonl", "not json\n");
 
     expectError("LOAD JSONL 'broken.jsonl' AS broken", "LOAD JSONL: failed to import graph 'broken'");
-    expectSuccess("MERGE_DATAPARTS");
+    expectNoChangeOpen();
 }
 
-TEST_F(FailedGraphLoadTest, mergesDataPartsAfterAnImportOfAFileThatIsNotThere) {
+TEST_F(FailedGraphLoadTest, leavesNoChangeOpenAfterAnImportOfAFileThatIsNotThere) {
     expectError("LOAD JSONL 'absent.jsonl' AS absent", "LOAD JSONL: failed to import graph 'absent'");
-    expectSuccess("MERGE_DATAPARTS");
+    expectNoChangeOpen();
 }
