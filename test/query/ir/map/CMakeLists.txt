@@ -100,3 +100,5 @@ add_turing_test(test_query_ir_map_literal_runtime_key MapLiteralRuntimeKeyTest.c
 add_ir_tests(test_query_ir_map_null_entry_equality MapNullEntryEqualityTest.cpp)
 
 add_ir_tests(test_query_ir_map_key_lookup MapKeyLookupTest.cpp)
+
+add_ir_tests(test_query_ir_map_keys_function MapKeysFunctionTest.cpp)
