@@ -40,3 +40,5 @@ add_turing_test(test_query_ir_merge_call_subquery MergeCallSubqueryTest.cpp)
 add_turing_test(test_query_ir_merge_group_by_written_entity GroupByWrittenEntityTest.cpp)
 
 add_turing_test(test_query_ir_merge_from_created_node MergeFromCreatedNodeTest.cpp)
+
+add_ir_tests(test_query_ir_merge_map_property MergeMapPropertyTest.cpp)
