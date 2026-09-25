@@ -35,7 +35,6 @@
 #include "iterators/ScanOutEdgesBySourceLabelIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
-#include "iterators/ScanNodesByPropertyValueIterator.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnConst.h"
@@ -72,6 +71,7 @@
 #include "NLMergeExecutor.h"
 #include "NLPendingEdges.h"
 #include "NLPendingNodes.h"
+#include "NLPropertyValueScan.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 #include "NLMergeWorkingSet.h"
@@ -5077,7 +5077,6 @@ void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, 
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
     const NLLimitState* limit = loopData->getLimit();
-    const GraphView& view = *context->getView();
 
     // The literal and the label set are owned by the loop data, which lives for the whole
     // program, so a string view of the one and a handle on the other stay valid for
@@ -5085,8 +5084,7 @@ void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, 
     const typename T::Primitive value = propertyScanLiteralAs<T>(loopData->getLiteral());
     const LabelSetHandle labelset = loopData->isByLabel() ? LabelSetHandle(loopData->getLabelSet()) : LabelSetHandle();
 
-    ScanNodesByPropertyValueChunkWriter<T> chunkWriter(view, loopData->getPropertyTypeID(), value, labelset);
-    chunkWriter.setNodeIDs(nodeIDs);
+    NLPropertyValueScan<T> graphNodes(context, nodeIDs, loopData->getPropertyTypeID(), value, labelset);
 
     NLPendingNodeScan pendingNodes(context, nodeIDs);
     pendingNodes.setProperty(loopData->getPropertyTypeID(), pendingValueOf<T>(value));
@@ -5095,7 +5093,7 @@ void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, 
         pendingNodes.setLabelSet(loopData->getLabelSet());
     }
 
-    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
+    runScanLoopSteps(context, &graphNodes, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 void NLExecutor::runScanNodesByPropertyValueLoop(NLExecutionContext* context, NLFunctionData* data) {

@@ -10,6 +10,7 @@ set(exec_sources
     NLMergeWorkingSet.cpp
     NLPendingEdges.cpp
     NLPendingNodes.cpp
+    NLPropertyValueScan.cpp
     NLTranslator.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp

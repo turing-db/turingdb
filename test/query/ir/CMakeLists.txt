@@ -3546,6 +3546,8 @@ add_turing_test(test_query_ir_set_property_null_expression SetPropertyNullExpres
 target_link_libraries(test_query_ir_set_property_null_expression PRIVATE turing_ir_test_write_query_s)
 add_turing_test(test_query_ir_set_property_null_pending SetPropertyNullPendingTest.cpp)
 target_link_libraries(test_query_ir_set_property_null_pending PRIVATE turing_ir_test_write_query_s)
+add_turing_test(test_query_ir_property_scan_after_set PropertyScanAfterSetTest.cpp)
+target_link_libraries(test_query_ir_property_scan_after_set PRIVATE turing_ir_test_write_query_s)
 
 # A comparison chain's middle operand is one expression both of its sides point at, read
 # off the codegen dump.
