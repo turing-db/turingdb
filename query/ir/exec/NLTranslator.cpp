@@ -2197,7 +2197,7 @@ PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
 
 void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty, NLStmtContainer* body) {
     if (!_metadataBuilder) {
-        throw IRException("Cannot perform SET outside of a write transaction.");
+        throw IRException("Cannot perform SET or REMOVE outside of a write transaction.");
     }
 
     const llvm::StringRef propName = setNodeProperty.getProperty();

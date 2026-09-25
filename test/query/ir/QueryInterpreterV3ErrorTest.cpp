@@ -103,7 +103,7 @@ TEST_F(QueryInterpreterV3ErrorTest, setOutsideWrite) {
     runQuery("MATCH (n) SET n.age = 0", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
-    EXPECT_EQ(status.getError(), "Cannot perform SET outside of a write transaction.");
+    EXPECT_EQ(status.getError(), "Cannot perform SET or REMOVE outside of a write transaction.");
 }
 
 TEST_F(QueryInterpreterV3ErrorTest, createOutsideWrite) {
