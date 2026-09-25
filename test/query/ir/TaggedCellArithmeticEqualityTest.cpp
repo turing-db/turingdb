@@ -21,10 +21,6 @@
 using namespace db;
 using namespace turing::test;
 
-// A list built out of columns with a null among them hands its elements back as type-erased
-// cells, and arithmetic over a cell computes in the f64 its mixed numeric tags land on. The
-// analyzer reads that same list as the integers its other elements name, so an equality it
-// accepts as Integer = Integer meets a double against an integer column at run time.
 class TaggedCellArithmeticEqualityTest : public TuringTest {
 protected:
     void initialize() override {
@@ -107,7 +103,6 @@ TEST_F(TaggedCellArithmeticEqualityTest, comparesAgainstANullableIntegerProperty
     expectRows("MATCH (n:Person {name: 'Remy'}) RETURN [n.age, null][0] - 0 = n.age", {{"true"}});
 }
 
-// A count is unsigned, which is the other integer width a cell's double is compared against.
 TEST_F(TaggedCellArithmeticEqualityTest, comparesAgainstAnUnsignedCount) {
     expectRows("MATCH (n:Person) WITH count(n) AS personCount "
                "MATCH (m:Person {name: 'Remy'}) RETURN [m.age, null][0] - 0 = personCount",
@@ -125,14 +120,10 @@ TEST_F(TaggedCellArithmeticEqualityTest, comparesAnUnwoundCell) {
                {{"true"}, {"null"}});
 }
 
-// The subtraction answers a double, which is the operand the comparisons above hand the
-// equality: were the cell read as an integer instead, none of them would reach it.
-TEST_F(TaggedCellArithmeticEqualityTest, computesTheCellArithmeticInADouble) {
-    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN [n.age, null][0] - 0", {{"32.000000"}});
+TEST_F(TaggedCellArithmeticEqualityTest, computesTheElementArithmeticInAnInteger) {
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN [n.age, null][0] - 0", {{"32"}});
 }
 
-// The kernels these comparisons reach are new; the rule that turns away the double
-// equalities the rounding concern is about is not, and both sides of it still hold.
 TEST_F(TaggedCellArithmeticEqualityTest, stillRejectsTheEqualityOfTwoDoubles) {
     expectRejected("RETURN 1.0 = 1.0", "not encouraged due to potential rounding");
 }

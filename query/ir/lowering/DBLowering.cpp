@@ -1700,6 +1700,10 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
             element = nullable.getValueType();
         }
 
+        if (mlir::isa<mlir::NoneType>(element)) {
+            continue;
+        }
+
         // A column owning its characters puts a view of them in the list, the same string
         // a borrowed column puts there, so the two agree
         if (mlir::isa<storage::OwnedStringType>(element)) {
@@ -1711,6 +1715,10 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
         } else if (shared != element) {
             return storage::ListElementType::get(context);
         }
+    }
+
+    if (!shared) {
+        return mlir::NoneType::get(context);
     }
 
     return shared;
