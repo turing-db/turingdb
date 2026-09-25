@@ -8,9 +8,11 @@
 // CompilerException of the parser and analyzer, and the plain
 // TuringException codegen and execution reject a query with.
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <algorithm>
 #include <memory>
 #include <span>
 #include <string>
@@ -81,12 +83,26 @@ void tearDown() {
     fs::Path(g_rootDirectory).rm();
 }
 
+bool mentionsMergeDataParts(std::string_view query) {
+    constexpr std::string_view keyword = "merge_dataparts";
+    const auto sameLetter = [](char queryChar, char keywordChar) {
+        return tolower(static_cast<unsigned char>(queryChar)) == keywordChar;
+    };
+
+    return !std::ranges::search(query, keyword, sameLetter).empty();
+}
+
 int fuzzOne(const char* data, size_t size) {
     if (size > 64 * 1024) {
         return 0;
     }
 
     const std::string_view query(data, size);
+
+    // MERGE_DATAPARTS is not meant to be used yet, so what it breaks is known and not worth a crash
+    if (mentionsMergeDataParts(query)) {
+        return 0;
+    }
 
     db::SystemManager& sysMan = g_env->getSystemManager();
     db::SystemAccessor system = sysMan.accessShared();

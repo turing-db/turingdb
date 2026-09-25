@@ -98,6 +98,8 @@ Token dictionaries improve AFL's mutation quality for structured inputs:
 These are automatically loaded by `run_afl.sh` for the corresponding harness. The
 keyword, function and procedure sections come from `query/parser/CypherLexer.l`,
 `query/AST/FunctionDecls.cpp` and `procedures/`; refresh them when the language grows.
+`MERGE_DATAPARTS` is left out on purpose: the command is not meant to be used yet, so
+`fuzz_query_engine` skips any query that names it and `make_corpus.py` seeds none.
 
 ## Seed Corpus
 

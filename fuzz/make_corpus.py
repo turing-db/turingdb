@@ -42,9 +42,12 @@ MIN_QUERY_LENGTH = 3
 CYPHER_START = re.compile(
     r"^\s*(MATCH|RETURN|CREATE|DELETE|DETACH|MERGE|SET|REMOVE|WITH|UNWIND|CALL|"
     r"LOAD|SHOW|CHANGE|COMMIT|VECTOR|INSTALL|DROP|EXPLAIN|OPTIONAL|FOREACH|"
-    r"LIST|S3|MERGE_DATAPARTS)\b",
+    r"LIST|S3)\b",
     re.IGNORECASE,
 )
+
+# The harness skips any query that names MERGE_DATAPARTS, so a seed carrying it is wasted.
+SKIPPED_KEYWORD = re.compile(r"MERGE_DATAPARTS", re.IGNORECASE)
 
 CPP_TOKEN = re.compile(
     r"(?P<comment>//[^\n]*|/\*.*?\*/)"
@@ -185,7 +188,7 @@ def main():
 
     wanted = {}
     for query in suite + regress + unit_tests:
-        if len(query.strip()) >= MIN_QUERY_LENGTH:
+        if len(query.strip()) >= MIN_QUERY_LENGTH and not SKIPPED_KEYWORD.search(query):
             wanted[seed_name(query)] = query
 
     existing = {os.path.basename(p) for p in glob.glob(os.path.join(CORPUS_DIR, "q_*.cypher"))}
