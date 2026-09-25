@@ -3763,3 +3763,15 @@ target_link_libraries(test_query_ir_fuzz_case_comparison PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
+
+# A graph load that fails after opening its change, followed by a data part merge.
+add_turing_test(test_query_ir_failed_graph_load FailedGraphLoadTest.cpp)
+target_sources(test_query_ir_failed_graph_load PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_failed_graph_load PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_failed_graph_load PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
