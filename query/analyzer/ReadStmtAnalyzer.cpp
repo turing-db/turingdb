@@ -141,10 +141,6 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 
     analyze(pattern);
 
-    if (matchSt->isOptional()) {
-        throwOnNamedPath(pattern);
-    }
-
     if (matchSt->hasOrderBy()) {
         analyze(matchSt->getOrderBy());
     }
@@ -371,20 +367,6 @@ void ReadStmtAnalyzer::analyze(PatternElement* element) {
     }
 
     analyzeNamedPath(element);
-}
-
-// A row an OPTIONAL MATCH missed carries a null for every variable the pattern binds, and
-// a path column holds no null: there is no nullable entity sequence to send back
-void ReadStmtAnalyzer::throwOnNamedPath(const Pattern* pattern) {
-    for (const PatternElement* element : pattern->elements()) {
-        if (const Symbol* pathSymbol = element->getPathSymbol()) {
-            throwError(fmt::format("Variable '{}' names the path of an OPTIONAL MATCH, "
-                                   "which is not supported yet: a path has no null to "
-                                   "stand for the rows nothing matched",
-                                   pathSymbol->getName()),
-                       element);
-        }
-    }
 }
 
 void ReadStmtAnalyzer::analyzeNamedPath(PatternElement* element) {

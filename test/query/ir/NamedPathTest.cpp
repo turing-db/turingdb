@@ -172,14 +172,131 @@ TEST_F(NamedPathTest, readsNoLabelOffAPath) {
                            "Invalid arguments for function 'labels'");
 }
 
-TEST_F(NamedPathTest, refusesToNameThePathOfAnOptionalMatch) {
-    runQueryExpectingError("MATCH (n:Person) OPTIONAL MATCH p = (n)-[e]->(m:Interest) RETURN n.name, p",
-                           "Variable 'p' names the path of an OPTIONAL MATCH, which is not supported yet");
+TEST_F(NamedPathTest, bindsNullWhereAnOptionalMatchMissed) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person) OPTIONAL MATCH p = (n)-[e]->(m:Person) RETURN n.name, p", sink);
+
+    Rows rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, sorted(Rows {
+        {"Remy", "(0), [0], (1)"},
+        {"Adam", "(1), [4], (0)"},
+        {"Maxime", "null"},
+        {"Luc", "null"},
+        {"Martina", "null"},
+        {"Suhas", "null"},
+        {"Cyrus", "null"},
+        {"Doruk", "null"},
+    }));
 }
 
-TEST_F(NamedPathTest, refusesToNameThePathOfAWrittenPattern) {
-    runWriteExpectingError("CREATE p = (n:Person {name: 'Zoe'})-[:KNOWS]->(m:Person {name: 'Yann'}) RETURN p",
-                           "Variable 'p' names the path of a written pattern, which is not supported yet");
+TEST_F(NamedPathTest, bindsNullWhereAnOptionalWalkMissed) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person) OPTIONAL MATCH p = (n)-[e]->+(m:Person) RETURN n.name, p", sink);
+
+    Rows rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, sorted(Rows {
+        {"Remy", "(0), [0], (1)"},
+        {"Remy", "(0), [0], (1), [4], (0)"},
+        {"Remy", "(0), [1], (6), [7], (0)"},
+        {"Remy", "(0), [1], (6), [7], (0), [0], (1)"},
+        {"Remy", "(0), [0], (1), [4], (0), [1], (6), [7], (0)"},
+        {"Remy", "(0), [1], (6), [7], (0), [0], (1), [4], (0)"},
+        {"Adam", "(1), [4], (0)"},
+        {"Adam", "(1), [4], (0), [0], (1)"},
+        {"Adam", "(1), [4], (0), [1], (6), [7], (0)"},
+        {"Adam", "(1), [4], (0), [1], (6), [7], (0), [0], (1)"},
+        {"Maxime", "null"},
+        {"Luc", "null"},
+        {"Martina", "null"},
+        {"Suhas", "null"},
+        {"Cyrus", "null"},
+        {"Doruk", "null"},
+    }));
+}
+
+TEST_F(NamedPathTest, countsOnlyThePathsAnOptionalMatchFound) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person) OPTIONAL MATCH p = (n)-[e]->(m:Person) RETURN count(p)", sink);
+
+    EXPECT_EQ(sink.getRows(), Rows {{"2"}});
+}
+
+TEST_F(NamedPathTest, countsThePathsAnOptionalMatchFoundForEachRow) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person) OPTIONAL MATCH p = (n)-[e]->(m:Person) RETURN n.name, count(p)", sink);
+
+    Rows rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, sorted(Rows {
+        {"Remy", "1"},
+        {"Adam", "1"},
+        {"Maxime", "0"},
+        {"Luc", "0"},
+        {"Martina", "0"},
+        {"Suhas", "0"},
+        {"Cyrus", "0"},
+        {"Doruk", "0"},
+    }));
+}
+
+TEST_F(NamedPathTest, readsThePathAnOptionalMatchMissedAsNull) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person) OPTIONAL MATCH p = (n)-[e]->(m:Person) RETURN n.name, p IS NULL", sink);
+
+    Rows rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, sorted(Rows {
+        {"Remy", "false"},
+        {"Adam", "false"},
+        {"Maxime", "true"},
+        {"Luc", "true"},
+        {"Martina", "true"},
+        {"Suhas", "true"},
+        {"Cyrus", "true"},
+        {"Doruk", "true"},
+    }));
+}
+
+TEST_F(NamedPathTest, bindsThePathACreateWrote) {
+    StringRowSink sink;
+    runWrite("CREATE p = (n:Person {name: 'Zoe'})-[:KNOWS]->(m:Person {name: 'Yann'}) RETURN p", sink);
+
+    EXPECT_EQ(sink.getRows(), Rows {{"(18), [18], (19)"}});
+}
+
+TEST_F(NamedPathTest, bindsACreatedPathThroughAMatchedNode) {
+    StringRowSink sink;
+    runWrite("MATCH (n:Person {name: 'Remy'}) CREATE p = (n)-[:KNOWS]->(m:Person {name: 'Yann'}) RETURN p", sink);
+
+    EXPECT_EQ(sink.getRows(), Rows {{"(0), [18], (18)"}});
+}
+
+TEST_F(NamedPathTest, bindsACreatedPathInTheOrderItIsWritten) {
+    StringRowSink sink;
+    runWrite("CREATE p = (n:Person {name: 'Zoe'})<-[:KNOWS]-(m:Person {name: 'Yann'}) RETURN p", sink);
+
+    EXPECT_EQ(sink.getRows(), Rows {{"(18), [18], (19)"}});
+}
+
+TEST_F(NamedPathTest, bindsThePathAMergeMatched) {
+    StringRowSink sink;
+    runWrite("MERGE p = (n:Person {name: 'Remy'})-[:KNOWS_WELL]->(m:Person {name: 'Adam'}) RETURN p", sink);
+
+    EXPECT_EQ(sink.getRows(), Rows {{"(0), [0], (1)"}});
+}
+
+TEST_F(NamedPathTest, bindsThePathAMergeWrote) {
+    StringRowSink sink;
+    runWrite("MERGE p = (n:Person {name: 'Zoe'})-[r:KNOWS]->(m:Person {name: 'Yann'}) RETURN p, n, r, m", sink);
+
+    const Rows expected {{"(18), [18], (19)", "18", "18", "19"}};
+    EXPECT_EQ(sink.getRows(), expected);
 }
 
 TEST_F(NamedPathTest, refusesANameAnEntityAlreadyBinds) {

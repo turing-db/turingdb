@@ -1720,11 +1720,14 @@ LogicalResult OptionalMatch::verify() {
     for (size_t columnIndex = inputCount; columnIndex < yieldedColumns.size(); columnIndex++) {
         const auto column = llvm::dyn_cast<ColumnType>(yieldedColumns[columnIndex].getType());
         const mlir::Type elementType = column ? column.getType() : mlir::Type();
-        const bool isEntityColumn = llvm::isa_and_present<storage::NodeIDType, storage::EdgeIDType>(elementType);
+        const bool isPaddable = llvm::isa_and_present<storage::NodeIDType,
+                                                      storage::EdgeIDType,
+                                                      storage::ListType,
+                                                      storage::EntityListType>(elementType);
 
-        if (!isEntityColumn) {
+        if (!isPaddable) {
             return emitOpError("pattern variable column ")
-                   << columnIndex << " must be a node or edge ID column, so a missed match can be null";
+                   << columnIndex << " must be a node or edge ID, list or path column, so a missed match can be null";
         }
     }
 

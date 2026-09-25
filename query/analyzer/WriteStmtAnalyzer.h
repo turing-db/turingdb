@@ -59,7 +59,8 @@ private:
     void analyze(const RemoveStmt* removeStmt);
     void analyze(const DeleteStmt* deleteStmt);
     void analyze(const Pattern* pattern);
-    void analyze(const PatternElement* element);
+    void analyze(PatternElement* element);
+    void analyzeNamedPath(PatternElement* element);
     void analyze(NodePattern* node);
     void analyze(EdgePattern* edge);
     void analyze(SetItem* item);

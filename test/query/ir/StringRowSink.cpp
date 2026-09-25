@@ -325,8 +325,14 @@ bool textOfEntityList(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
+    const EntityList& path = column->getRaw()[rowIndex];
+    if (path.empty()) {
+        text = "null";
+        return true;
+    }
+
     text.clear();
-    for (const EntityList::Entry& entry : column->getRaw()[rowIndex]) {
+    for (const EntityList::Entry& entry : path) {
         if (!text.empty()) {
             text += ", ";
         }

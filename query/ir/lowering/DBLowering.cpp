@@ -2277,6 +2277,10 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         }
     }
 
+    for (size_t chunkIndex = inputChunks.size(); chunkIndex < matchedChunks.size(); chunkIndex++) {
+        matchedChunks[chunkIndex] = paddedColumnChunk(matchedChunks[chunkIndex]);
+    }
+
     setInsertionInto(deepestOwnerBlock(matchedChunks, stepBlock));
     _builder.create<nl::OptionalCollect>(loc, state, matchedTag, matchedChunks);
 
@@ -4759,9 +4763,9 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
 
     // x IS NULL over a plain scalar column meets kernels reading a nullable value column
     if (nullAgainstRhs) {
-        lhsChunk = nullableValueChunk(lhsChunk);
+        lhsChunk = nullTestedChunk(lhsChunk);
     } else if (nullAgainstLhs) {
-        rhsChunk = nullableValueChunk(rhsChunk);
+        rhsChunk = nullTestedChunk(rhsChunk);
     } else if (comparesTwoEntities) {
         // Two entities are compared as the IDs they are, and an ID column carries its null
         // in the ID: read raw, the invalid ID two missed matches hold compares equal to
@@ -5563,6 +5567,17 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     }
 
     return toNullableChunk(chunk, valueElement);
+}
+
+// A path's null is the empty path, and no value of a path is read here: tested against null
+// it reads as its entry count, absent where the path is empty
+mlir::Value DBLowering::nullTestedChunk(mlir::Value chunk) {
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+    if (mlir::isa<storage::EntityListType>(chunkType.getElementType())) {
+        return toNullableChunk(chunk, _builder.getIntegerType(64, /*isSigned=*/false));
+    }
+
+    return nullableValueChunk(chunk);
 }
 
 // The nullable column a list rides where a row of it can be absent - the drain padding the

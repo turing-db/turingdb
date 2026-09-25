@@ -2835,12 +2835,15 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     const auto operandChunk = mlir::cast<nl::ChunkType>(operandValue.getType());
     const mlir::Type operandElement = operandChunk.getElementType();
     const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(operandElement);
+    const bool readsAPath = mlir::isa<storage::EntityListType>(operandElement);
     const bool readsAMask = isMaskElementType(operandElement);
 
     Column* result = nullptr;
     NLUnaryFn fn = nullptr;
     if (readsAnEntity) {
         fn = NLExecutor::selectEntityToNullable(chunkKindFromElementType(operandElement), _memory, result);
+    } else if (readsAPath) {
+        fn = NLExecutor::selectPathToNullable(_memory, result);
     } else if (readsAMask) {
         fn = NLExecutor::selectMaskToNullable(_memory, result);
     } else {
@@ -4491,6 +4494,8 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 // its valid rows alone.
                 const NLChunkKind countKind = chunkKindFromElementType(countElementType);
                 aggregate._fold = NLExecutor::selectGroupCountValidIDFold(countKind);
+            } else if (mlir::isa<storage::EntityListType>(countElementType)) {
+                aggregate._fold = NLExecutor::selectGroupCountPresentPathFold();
             } else {
                 // Every other non-nullable chunk holds no null to skip - a column a CALL
                 // yielded - so every row of the group is charged.
@@ -5816,11 +5821,14 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectListElementCountFunction();
     }
 
-    // An entity an OPTIONAL MATCH did not match is an invalid ID, so an ID chunk counts
-    // its valid rows; every other plain chunk holds no null and counts them all, whether
-    // or not it is one chunkKindFromElementType has a kind for.
+    // An entity an OPTIONAL MATCH did not match is an invalid ID and a path it did not match
+    // is empty, so those chunks count their other rows; every other plain chunk holds no
+    // null and counts them all, whether or not it is one chunkKindFromElementType has a
+    // kind for.
     if (isEntityIDElement(elementType)) {
         return NLExecutor::selectIDCountFunction(chunkKindFromElementType(elementType));
+    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+        return NLExecutor::selectPathCountFunction();
     }
 
     return &NLExecutor::countAllRows;

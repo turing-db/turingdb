@@ -520,6 +520,7 @@ void asString(std::string& out, const db::Path& path) {
 
 void asString(std::string& out, const db::EntityList& list) {
     if (list.empty()) {
+        out += "null";
         return;
     }
 
