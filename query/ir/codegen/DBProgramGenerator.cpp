@@ -223,12 +223,14 @@ mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::stri
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext&);
 
+constexpr size_t dbPassCount = 28;
+
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
 // pipeline it reports on and the pipeline that runs the same one. Every factory is handed
 // the context; only the join's cost model and the metadata count read it, the rewrites
 // beside them answering off the IR alone.
-const std::array<DBPassFactory, 28> dbPassPipeline = {
+const std::array<DBPassFactory, dbPassCount> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createPushDownFilters(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
