@@ -52,6 +52,7 @@ public:
     DataPartMergeResult<void> mergeDataParts(Graph* grapph, JobSystem& jobSystem);
 
     void listChanges(std::vector<const Change*>& list, const Graph* graph) const;
+    bool hasChanges() const;
 
     bool isEmpty() { return _changes.empty(); };
 

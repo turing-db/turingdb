@@ -103,6 +103,10 @@ void SystemAccessor::listChanges(std::vector<const Change*>& changes, const Grap
     _sysMan->listChanges(changes, graph);
 }
 
+bool SystemAccessor::hasChanges() const {
+    return _sysMan->hasChanges();
+}
+
 DataPartMergeResult<void> SystemAccessor::mergeDataParts(Graph* graph) {
     return _sysMan->mergeDataParts(graph);
 }

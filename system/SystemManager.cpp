@@ -249,6 +249,10 @@ void SystemManager::listChanges(std::vector<const Change*>& changes, const Graph
     _graphManager.listChanges(changes, graph);
 }
 
+bool SystemManager::hasChanges() const {
+    return _graphManager.hasChanges();
+}
+
 DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph) {
     return _graphManager.mergeDataParts(graph, _jobSystem);
 }

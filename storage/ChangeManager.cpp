@@ -89,3 +89,9 @@ void ChangeManager::listChanges(std::vector<const Change*>& list, const Graph* g
         }
     }
 }
+
+bool ChangeManager::hasChanges() const {
+    std::shared_lock guard(_changesLock);
+
+    return !_changes.empty();
+}
