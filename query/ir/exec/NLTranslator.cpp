@@ -414,6 +414,12 @@ bool isNullableListElement(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListElementType>(nullableType.getValueType());
 }
 
+bool isListElementChunk(mlir::Type chunkType) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    return mlir::isa<storage::ListElementType>(elementType) || isNullableListElement(elementType);
+}
+
 bool isNullableList(mlir::Type elementType) {
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
@@ -2211,7 +2217,9 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
 PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
                                            mlir::Type valueChunkType,
                                            bool writesNull) const {
-    if (!writesNull) {
+    const bool writesListElements = isListElementChunk(valueChunkType);
+
+    if (!writesNull && !writesListElements) {
         const ValueType valueType = valueTypeFromChunkType(valueChunkType);
 
         return _metadataBuilder->getOrCreatePropertyType(propName, valueType);
@@ -2219,6 +2227,7 @@ PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
 
     const std::optional<PropertyType> existing = findPropertyType(propName);
     if (!existing) {
+        bioassert(!writesListElements, "List elements written to property '{}', which the graph does not hold", propName.str());
         return PropertyType {};
     }
 
@@ -2251,6 +2260,8 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
 
     if (writesNull) {
         data->setNullValueType(propType._valueType);
+    } else if (isListElementChunk(valueChunkType)) {
+        data->setListElementValueType(propType._valueType);
     }
 
     data->setPending(getMaskColumn(setNodeProperty.getPending()));
@@ -2286,6 +2297,8 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
 
     if (writesNull) {
         data->setNullValueType(propType._valueType);
+    } else if (isListElementChunk(valueChunkType)) {
+        data->setListElementValueType(propType._valueType);
     }
 
     data->setPending(getMaskColumn(setEdgeProperty.getPending()));

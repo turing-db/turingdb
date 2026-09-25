@@ -4014,3 +4014,6 @@ target_link_libraries(test_query_ir_fuzz_entity_in_list PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
+
+# A SET writing an element of a list that holds more than one type to a typed property.
+add_call_v3_test(test_query_ir_set_list_element_property SetListElementPropertyTest.cpp)

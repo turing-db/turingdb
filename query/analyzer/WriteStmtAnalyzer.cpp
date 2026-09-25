@@ -329,7 +329,13 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
                 throwError("Invalid use of aggregate expression in this context", item);
             }
 
-            if (writesNull) {
+            // An element of a mixed list carries its type per row, so the write checks it
+            // against the property's type
+            const bool writesAListElement = rhsType == EvaluatedType::ListItem;
+            const bool propertyHasAType = lhsEvaluatedVt != ValueType::Invalid;
+            const bool checksTheTypePerRow = writesAListElement && propertyHasAType;
+
+            if (writesNull || checksTheTypePerRow) {
                 return;
             }
 

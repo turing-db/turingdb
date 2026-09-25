@@ -2,15 +2,22 @@
 
 #include <optional>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
+#include "list/ListElementView.h"
+#include "list/ListUtils.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
+
+#include "IRException.h"
 
 using namespace db;
 
@@ -263,6 +270,105 @@ void extractMaskProperties(const ColumnMask* mask,
     }
 }
 
+void disengagedValue(ValueType valueType, CommitWriteBuffer::SupportedTypeVariant& value) {
+    const auto disengage = [&]<SupportedType T>() {
+        if constexpr (TrivialSupportedType<T>) {
+            value = std::optional<typename T::Primitive> {};
+        } else {
+            value = std::optional<typename T::OwningPrimitive> {};
+        }
+    };
+
+    ValueTypeDispatcher(valueType).execute(disengage);
+}
+
+ListBufferTypeTag listBufferTag(ValueType valueType) {
+    ListBufferTypeTag tag {ListBufferTypeTag::INVALID};
+
+    const auto tagOf = [&]<SupportedType T>() {
+        tag = TypeToListBufferTag<typename T::Primitive>::Tag;
+    };
+
+    ValueTypeDispatcher(valueType).execute(tagOf);
+
+    return tag;
+}
+
+void stageListElementAsItsType(const ListElementView element,
+                               ValueType valueType,
+                               CommitWriteBuffer::SupportedTypeVariant& value) {
+    switch (valueType) {
+        case ValueType::Int64:
+            value = std::optional {element.getAs<types::Int64::Primitive>()};
+        break;
+        case ValueType::UInt64:
+            value = std::optional {element.getAs<types::UInt64::Primitive>()};
+        break;
+        case ValueType::Double:
+            value = std::optional {element.getAs<types::Double::Primitive>()};
+        break;
+        case ValueType::Bool:
+            value = std::optional {element.getAs<types::Bool::Primitive>()};
+        break;
+        case ValueType::DateTime:
+            value = std::optional {element.getAs<types::DateTime::Primitive>()};
+        break;
+        case ValueType::String:
+            value = std::optional<types::String::OwningPrimitive> {std::in_place, element.getAs<types::String::Primitive>()};
+        break;
+        case ValueType::Embedding: {
+            const types::Embedding::Primitive embedding = element.getAs<types::Embedding::Primitive>();
+            value = std::optional<types::Embedding::OwningPrimitive> {std::in_place, embedding.begin(), embedding.end()};
+        }
+        break;
+        case ValueType::List:
+            value = std::optional<types::List::OwningPrimitive> {std::in_place, element.getAs<types::List::Primitive>()};
+        break;
+        case ValueType::Map:
+            value = std::optional<types::Map::OwningPrimitive> {std::in_place, element.getAs<types::Map::Primitive>()};
+        break;
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("Cannot write a list element to a property of invalid type");
+        break;
+    }
+}
+
+// An integer widens to the other numeric types an integer literal can be written to
+void stageListElement(const ListElementView element,
+                      ValueType valueType,
+                      CommitWriteBuffer::SupportedTypeVariant& value) {
+    const ListBufferTypeTag tag = element.getTag();
+
+    const bool holdsAnInteger = tag == ListBufferTypeTag::Int;
+    const bool widensToDouble = holdsAnInteger && valueType == ValueType::Double;
+    const bool widensToUnsigned = holdsAnInteger && valueType == ValueType::UInt64;
+
+    if (tag == ListBufferTypeTag::Null) {
+        disengagedValue(valueType, value);
+    } else if (widensToDouble) {
+        value = std::optional {static_cast<types::Double::Primitive>(element.getAs<types::Int64::Primitive>())};
+    } else if (widensToUnsigned) {
+        value = std::optional {static_cast<types::UInt64::Primitive>(element.getAs<types::Int64::Primitive>())};
+    } else if (tag == listBufferTag(valueType)) {
+        stageListElementAsItsType(element, valueType, value);
+    } else {
+        throw IRException(fmt::format("Cannot set a property of type '{}' to a list element of another type",
+                                      ValueTypeName::value(valueType)));
+    }
+}
+
+void stageListElementRows(const ListElementView element,
+                          size_t rowCount,
+                          PropertyTypeID propID,
+                          ValueType valueType,
+                          CommitWriteBuffer::UntypedProperties& buf) {
+    CommitWriteBuffer::UntypedProperty property {propID, {}};
+    stageListElement(element, valueType, property.value);
+
+    buf.assign(rowCount, property);
+}
+
 }
 
 size_t db::committedNodeCount(const GraphView* view) {
@@ -287,17 +393,10 @@ void db::fillNullProperties(size_t rowCount,
                             PropertyTypeID propID,
                             ValueType valueType,
                             CommitWriteBuffer::UntypedProperties& buf) {
-    const auto fill = [&]<SupportedType T>() {
-        if constexpr (TrivialSupportedType<T>) {
-            using Disengaged = std::optional<typename T::Primitive>;
-            buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, Disengaged {}});
-        } else {
-            using Disengaged = std::optional<typename T::OwningPrimitive>;
-            buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, Disengaged {}});
-        }
-    };
+    CommitWriteBuffer::UntypedProperty null {propID, {}};
+    disengagedValue(valueType, null.value);
 
-    ValueTypeDispatcher(valueType).execute(fill);
+    buf.assign(rowCount, null);
 }
 
 void db::extractColumnProperties(const Column* column,
@@ -320,5 +419,38 @@ void db::extractColumnProperties(const Column* column,
         ColumnSingleDispatcher<Types::AllowedVector,
                                VectorPropertyExtractor,
                                Types::ExcludedVector>::dispatch(column, extractor);
+    }
+}
+
+void db::extractListElementProperties(const Column* column,
+                                      size_t rowCount,
+                                      PropertyTypeID propID,
+                                      ValueType valueType,
+                                      CommitWriteBuffer::UntypedProperties& buf) {
+    const ColumnKind::Code kind = column->getKind();
+
+    if (kind == ColumnConst<ListElementView>::staticKind()) {
+        const ListElementView element = static_cast<const ColumnConst<ListElementView>*>(column)->getRaw();
+        stageListElementRows(element, rowCount, propID, valueType, buf);
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        const std::optional<ListElementView>& element =
+            static_cast<const ColumnConst<std::optional<ListElementView>>*>(column)->getRaw();
+        stageListElementRows(element.value_or(ListElementView::nullElement()), rowCount, propID, valueType, buf);
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        const auto& elements = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+        buf.assign(elements.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
+
+        for (size_t row = 0; row < elements.size(); row++) {
+            stageListElement(elements[row], valueType, buf[row].value);
+        }
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        const auto& elements = static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+        buf.assign(elements.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
+
+        for (size_t row = 0; row < elements.size(); row++) {
+            stageListElement(elements[row].value_or(ListElementView::nullElement()), valueType, buf[row].value);
+        }
+    } else {
+        throw IRException("A property write of list elements reads a column of list elements");
     }
 }
