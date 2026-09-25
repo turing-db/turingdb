@@ -3906,3 +3906,168 @@ target_link_libraries(test_query_ir_failed_graph_load PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_failed_graph_load PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_null_entry_equality MapNullEntryEqualityTest.cpp)
+target_sources(test_query_ir_map_null_entry_equality PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_null_entry_equality PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_null_entry_equality PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_key_lookup MapKeyLookupTest.cpp)
+target_sources(test_query_ir_map_key_lookup PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_key_lookup PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_key_lookup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_keys_function MapKeysFunctionTest.cpp)
+target_sources(test_query_ir_map_keys_function PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_keys_function PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_keys_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_case_branch MapCaseBranchTest.cpp)
+target_sources(test_query_ir_map_case_branch PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_case_branch PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_case_branch PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_ordering MapOrderingTest.cpp)
+target_sources(test_query_ir_map_ordering PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_ordering PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_predicate_operand MapPredicateOperandTest.cpp)
+target_sources(test_query_ir_map_predicate_operand PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_predicate_operand PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_predicate_operand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_in_list MapInListTest.cpp)
+target_sources(test_query_ir_map_in_list PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_in_list PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_in_list PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_min_max MapMinMaxTest.cpp)
+target_sources(test_query_ir_map_min_max PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_min_max PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_min_max PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_unwound_map_property UnwoundMapPropertyTest.cpp)
+target_sources(test_query_ir_unwound_map_property PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_unwound_map_property PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_unwound_map_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_merge_map_property MergeMapPropertyTest.cpp)
+target_sources(test_query_ir_merge_map_property PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_merge_map_property PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_merge_map_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_set_mutate_properties SetMutatePropertiesTest.cpp)
+target_sources(test_query_ir_set_mutate_properties PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_set_mutate_properties PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_set_mutate_properties PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_set_replace_properties SetReplacePropertiesTest.cpp)
+target_sources(test_query_ir_set_replace_properties PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_set_replace_properties PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_set_replace_properties PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_properties_function PropertiesFunctionTest.cpp)
+target_sources(test_query_ir_properties_function PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_properties_function PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_properties_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_map_keyword_key MapKeywordKeyTest.cpp)
+target_sources(test_query_ir_map_keyword_key PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_map_keyword_key PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_map_keyword_key PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_negated_list_equality NegatedListEqualityTest.cpp)
+target_sources(test_query_ir_negated_list_equality PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_negated_list_equality PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_negated_list_equality PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
