@@ -3,7 +3,7 @@
 Time this directory's variable-length path queries on memgraph.
 
 Mirrors bench_fraud_paths.py: the same queries in five groups, five runs each with the
-first discarded, and reports the median of the rest against the v2 and v3 times
+first discarded. It reports the median of the rest and checks each count against the one
 the README records. Load the graph first with memgraph_load_fraud.py.
 
 Every query below is the v3 query with the quantifier rewritten and nothing else:
@@ -40,7 +40,7 @@ GROUPS = {
     "A": "Seeded fan-out - the published benchmark's shape, hops against a quantifier",
     "B": "Whole-graph fraud chains - the published benchmark's queries, and past them",
     "C": "Laundering rings - the typology the generator injects",
-    "D": "Untyped variable-length - the only path shapes v2 will run",
+    "D": "Variable-length balls around the accounts",
     "E": "Search against walk, by hop bound - count(DISTINCT) searches, count() walks",
 }
 
@@ -162,8 +162,67 @@ QUERIES += sweep("ring", "Downstream of the 550 ring accounts",
                  [2, 3, 4, 5, 6])
 
 
-# id -> (v2 ms, v3 ms, expected count) from the README; None where v2 refused
-REFERENCE = {}
+# id -> the count the README records for it
+EXPECTED_COUNTS = {
+    "seed": 1,
+    "fanout_hops_1": 9,
+    "fanout_exact_1": 9,
+    "fanout_hops_2": 91,
+    "fanout_exact_2": 91,
+    "fanout_upto_2": 100,
+    "fanout_hops_3": 844,
+    "fanout_exact_3": 844,
+    "fanout_hops_4": 7554,
+    "fanout_exact_4": 7554,
+    "fanout_upto_4": 8498,
+
+    "fraud_hops_2": 550,
+    "fraud_exact_2": 550,
+    "fraud_hops_3": 550,
+    "fraud_exact_3": 550,
+    "fraud_hops_4": 550,
+    "fraud_exact_4": 550,
+    "fraud_upto_4": 2200,
+    "fraud_closure": 3166,
+    "fraud_closure_ends": 550,
+    "high_amount_2": 62,
+
+    "ring_seed": 1,
+    "ring_all": 550,
+    "ring_all_unbounded": 550,
+    "ring_untyped": 827,
+    "ring_seed_depth": 5,
+    "ring_depths": 4,
+
+    "ball_2": 90019597,
+    "ball_3": 500111,
+    "ball_seed_5": 76009,
+    "ball_seed_6_ends": 480764,
+
+    "seed_walk_2": 100,
+    "seed_walk_4": 8498,
+    "seed_walk_6": 683167,
+    "seed_walk_7": 6151203,
+    "seed_walk_8": 55375613,
+    "seed_search_2": 100,
+    "seed_search_4": 8465,
+    "seed_search_6": 480764,
+    "seed_search_7": 986834,
+    "seed_search_8": 999871,
+    "seed_search_10": 999888,
+    "seed_search_14": 999888,
+    "seed_search_inf": 999888,
+
+    "ring_walk_2": 55001,
+    "ring_walk_3": 500111,
+    "ring_walk_4": 4506417,
+    "ring_walk_5": 40573269,
+    "ring_search_2": 48142,
+    "ring_search_3": 351083,
+    "ring_search_4": 957553,
+    "ring_search_5": 999836,
+    "ring_search_6": 999888,
+}
 
 
 def breadthFirst(query):
@@ -297,39 +356,37 @@ def report(results):
             continue
 
         print(f"\n{group}. {title}")
-        print("-" * 137)
-        print(f"  {'question':52} {'v2':>10} {'v3':>10} {'memgraph':>10} {'mg count':>10} "
-              f"{'mg BFS':>10} {'mg/v3':>8} {'count':>13} {'match':>6}")
+        print("-" * 118)
+        print(f"  {'question':52} {'memgraph':>10} {'mg count':>10} {'mg BFS':>10} "
+              f"{'count':>13} {'expected':>13} {'match':>6}")
 
         for record in inGroup:
-            v2Time, v3Time, expected = REFERENCE.get(record["id"], (None, None, None))
+            expected = EXPECTED_COUNTS.get(record["id"])
             asWritten, withBFS = median(record, "written"), median(record, "bfs")
             counted = median(record, "counted")
             observed = resultCount(record)
 
-            ratio = asWritten / v3Time if asWritten is not None and v3Time else None
             agrees = "" if expected is None or observed is None else ("yes" if expected == observed else "NO")
             error = (record.get("written") or {}).get("error")
 
-            print(f"  {record['question'][:52]:52} {formatTime(v2Time)} {formatTime(v3Time)} "
-                  f"{formatTime(asWritten)} {formatTime(counted)} {formatTime(withBFS)} {formatTime(ratio, 8, 1)} "
-                  f"{observed if observed is not None else '-':>13} {agrees:>6}"
+            print(f"  {record['question'][:52]:52} {formatTime(asWritten)} {formatTime(counted)} {formatTime(withBFS)} "
+                  f"{observed if observed is not None else '-':>13} {expected if expected is not None else '-':>13} {agrees:>6}"
                   f"{'' if not error else '  [' + error.split(':')[0][:44] + ']'}")
 
-    disagreements = [(record["id"], REFERENCE[record["id"]][2], resultCount(record))
+    disagreements = [(record["id"], EXPECTED_COUNTS[record["id"]], resultCount(record))
                      for record in records
-                     if record["id"] in REFERENCE and REFERENCE[record["id"]][2] is not None
+                     if record["id"] in EXPECTED_COUNTS
                      and resultCount(record) is not None
-                     and REFERENCE[record["id"]][2] != resultCount(record)]
+                     and EXPECTED_COUNTS[record["id"]] != resultCount(record)]
 
     print()
     if not disagreements:
-        print("Every count memgraph produced matches the value the README records for v3.")
+        print("Every count memgraph produced matches the value the README records.")
         return
 
     print("COUNT DISAGREEMENTS with the README")
     for queryID, expected, observed in disagreements:
-        print(f"  {queryID}: v3={expected} memgraph={observed}")
+        print(f"  {queryID}: README={expected} memgraph={observed}")
 
 
 def main():

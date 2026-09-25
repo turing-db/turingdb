@@ -11,9 +11,10 @@ variable-length paths and adds the shapes no fixed-hop query can express: a frau
 of unbounded length, and a ring found by walking back to the account the walk started
 from.
 
-Measured with `bench_fraud_paths.py`, which runs 55 Cypher queries in five groups
+Measured with `bench_fraud_paths.py`, which then ran 55 Cypher queries in five groups
 through both engines in the turingdb shell - v2 directly, v3 behind the `#v3` prefix - and
-reports the median of five runs per query, the first discarded as a warmup.
+reported the median of five runs per query, the first discarded as a warmup. v2 has since
+been removed, and the script now runs the v3 queries alone.
 
 Provenance: `086c4b6cf`, whose engine sources are those of `9e9704046` (the sparse reach
 table, no distinct gate), default `-O3` build, 20-core Linux box, quiet machine.
