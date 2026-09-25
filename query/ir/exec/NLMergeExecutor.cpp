@@ -3,9 +3,11 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 #include "iterators/GetInEdgesIterator.h"
@@ -84,6 +86,40 @@ void fetchMergeEdgeProperty(const GraphView& view,
     };
 
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
+}
+
+// The value a pending entity was written with for one property, as the single row of the
+// property's scratch column: null when it was written without one
+void readPendingValue(NLWrittenValues& written,
+                      const CommitWriteBuffer::UntypedProperties& values,
+                      const NLMergeScanProperty& property) {
+    const auto read = [&]<SupportedType T>() {
+        auto* column = static_cast<ColumnOptVector<typename T::Primitive>*>(property._values);
+        column->clear();
+
+        for (const CommitWriteBuffer::UntypedProperty& value : values) {
+            if (value.propertyID == property._propertyType._id) {
+                column->push_back(written.read<T>(value.value));
+                return;
+            }
+        }
+
+        column->push_back(std::nullopt);
+    };
+
+    ValueTypeDispatcher(property._propertyType._valueType).execute(read);
+}
+
+// The key a pending entity's own values serialize into, which a row's asked-for values are
+// compared against
+void appendPendingKey(NLWrittenValues& written,
+                      const NLMergeScanProperties& properties,
+                      const CommitWriteBuffer::UntypedProperties& values,
+                      std::string& key) {
+    for (const NLMergeScanProperty& property : properties) {
+        readPendingValue(written, values, property);
+        property._keyAppend(property._values, 0, key);
+    }
 }
 
 // A row an OPTIONAL MATCH did not match holds an invalid ID, which names no node of the
@@ -260,16 +296,14 @@ void NLMergeExecutor::collectCandidates(size_t row) {
                 buildNodeIndex(index);
             }
 
+            absorbPendingNodes(index);
+
             std::string& key = _work->_key;
             key.clear();
             appendMergeKey(node._properties, row, key);
 
-            const std::span<const NLMergeRef> committed = index->find(key);
-            candidates.insert(candidates.end(), committed.begin(), committed.end());
-
-            key.insert(0, node._signature);
-            const std::span<const NLMergeRef> pending = _data->getPendingNodes()->find(key);
-            candidates.insert(candidates.end(), pending.begin(), pending.end());
+            const std::span<const NLMergeRef> found = index->find(key);
+            candidates.insert(candidates.end(), found.begin(), found.end());
         }
 
         std::unordered_set<uint64_t>& keys = _work->_candidateKeys[nodeIndex];
@@ -278,6 +312,69 @@ void NLMergeExecutor::collectCandidates(size_t row) {
             keys.insert(candidate.asKey());
         }
     }
+}
+
+// A node this query wrote, whichever clause wrote it, is in no graph the index scanned: it
+// is taken in once the write is done, so a later row or merge binds it rather than
+// writing a second copy
+void NLMergeExecutor::absorbPendingNodes(NLMergeNodeIndex* index) {
+    const size_t pendingCount = _writeBuffer->numPendingNodes();
+    const size_t firstOffset = std::max(index->getNextPendingNode(), _context->getFirstQueryNode());
+    if (firstOffset >= pendingCount) {
+        return;
+    }
+
+    const LabelSetHandle labelset(index->getWriteLabels());
+    const CommitWriteBuffer::DeletedPendingEntities& deleted = _writeBuffer->deletedPendingNodes();
+    NLWrittenValues& written = _context->getWrittenValues();
+    std::string& key = _work->_scanKey;
+
+    for (size_t offset = firstOffset; offset < pendingCount; offset++) {
+        const CommitWriteBuffer::PendingNode& node = _writeBuffer->getPendingNode(offset);
+        if (deleted.contains(offset) || !node.labelsetHandle.hasAtLeastLabels(labelset)) {
+            continue;
+        }
+
+        key.clear();
+        appendPendingKey(written, index->writtenProperties(), node.properties, key);
+
+        index->add(key, {._id=offset, ._pending=true});
+    }
+
+    index->setNextPendingNode(pendingCount);
+}
+
+void NLMergeExecutor::absorbPendingEdges() {
+    NLMergePendingEdges* pendingEdges = _data->getPendingEdges();
+
+    const size_t pendingCount = _writeBuffer->numPendingEdges();
+    const size_t firstOffset = std::max(pendingEdges->getNextPendingEdge(), _context->getFirstQueryEdge());
+    if (firstOffset >= pendingCount) {
+        return;
+    }
+
+    const CommitWriteBuffer::DeletedPendingEntities& deleted = _writeBuffer->deletedPendingEdges();
+
+    for (size_t offset = firstOffset; offset < pendingCount; offset++) {
+        if (deleted.contains(offset)) {
+            continue;
+        }
+
+        const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
+        pendingEdges->add(asMergeRef(edge.src), asMergeRef(edge.tgt), edge.edgeType, offset);
+    }
+
+    pendingEdges->setNextPendingEdge(pendingCount);
+}
+
+bool NLMergeExecutor::holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t offset) {
+    std::string& key = _work->_scanKey;
+    key.clear();
+
+    const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
+    appendPendingKey(_context->getWrittenValues(), hop._writtenProperties, edge.properties, key);
+
+    return key == _work->_hopKey;
 }
 
 void NLMergeExecutor::matchRow(size_t row) {
@@ -314,20 +411,17 @@ void NLMergeExecutor::matchRow(size_t row) {
     }
 }
 
+// The values the hop asks for, which a candidate edge's own values are compared against
 void NLMergeExecutor::buildHopKeys(const NLMergeData::Hop& hop, size_t row) {
-    // The values the hop asks for, which a candidate edge's own values are compared
-    // against, and those same values behind the hop's signature - what the pending log
-    // is keyed by, since it holds every hop this query wrote under one pair of endpoints
     _work->_hopKey.clear();
     appendMergeKey(hop._properties, row, _work->_hopKey);
-
-    _work->_pendingHopKey.assign(hop._signature);
-    _work->_pendingHopKey.append(_work->_hopKey);
 }
 
 void NLMergeExecutor::extendHop(size_t hopIndex) {
     const NLMergeData::Hop& hop = _data->hops()[hopIndex];
     const std::unordered_set<uint64_t>& targets = _work->_candidateKeys[hopIndex + 1];
+
+    absorbPendingEdges();
     const NLMergePendingEdges* pendingEdges = _data->getPendingEdges();
 
     collectGraphExtensions(hop, hopIndex);
@@ -373,10 +467,9 @@ void NLMergeExecutor::extendHop(size_t hopIndex) {
                 }
 
                 const bool sameType = entry._edgeType == hop._writeEdgeType;
-                const bool sameProperties = entry._propertyKey == _work->_pendingHopKey;
                 const bool onACandidate = targets.contains(entry._other.asKey());
 
-                if (sameType && sameProperties && onACandidate) {
+                if (sameType && onACandidate && holdsTheHopValues(hop, entry._offset)) {
                     extendWith({._id=entry._offset, ._pending=true}, entry._other);
                 }
             }
@@ -612,16 +705,7 @@ NLMergeRef NLMergeExecutor::writeNode(const NLMergeData::Node& node, size_t node
         pending.properties.push_back(values[row]);
     }
 
-    const NLMergeRef ref {._id=offset, ._pending=true};
-
-    // A later row asking for the same values binds this node rather than writing a
-    // second one, which is what makes a merge over many rows idempotent
-    std::string& key = _work->_key;
-    key.assign(node._signature);
-    appendMergeKey(node._properties, row, key);
-    _data->getPendingNodes()->add(key, ref);
-
-    return ref;
+    return {._id=offset, ._pending=true};
 }
 
 NLMergeRef NLMergeExecutor::writeEdge(const NLMergeData::Hop& hop,
@@ -639,12 +723,6 @@ NLMergeRef NLMergeExecutor::writeEdge(const NLMergeData::Hop& hop,
         pending.properties.push_back(values[row]);
     }
 
-    // Keyed by its own hop's values, not by whichever hop the match reached before it
-    // gave up: a later row looks each hop of the chain up under its own key
-    buildHopKeys(hop, row);
-
-    _data->getPendingEdges()->add(source, target, hop._writeEdgeType, offset, _work->_pendingHopKey);
-
     return {._id=offset, ._pending=true};
 }
 
@@ -654,6 +732,14 @@ CommitWriteBuffer::ExistingOrPendingNode NLMergeExecutor::asWriteBufferNode(cons
     }
 
     return NodeID(ref._id);
+}
+
+NLMergeRef NLMergeExecutor::asMergeRef(const CommitWriteBuffer::ExistingOrPendingNode& node) {
+    if (const NodeID* committed = std::get_if<NodeID>(&node)) {
+        return {._id=committed->getValue(), ._pending=false};
+    }
+
+    return {._id=std::get<CommitWriteBuffer::PendingNodeOffset>(node), ._pending=true};
 }
 
 void NLMergeExecutor::gatherCarriedColumns() {

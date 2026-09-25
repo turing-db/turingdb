@@ -3552,6 +3552,8 @@ add_turing_test(test_query_ir_match_after_delete MatchAfterDeleteTest.cpp)
 target_link_libraries(test_query_ir_match_after_delete PRIVATE turing_ir_test_write_query_s)
 add_turing_test(test_query_ir_merge_after_set MergeAfterSetTest.cpp)
 target_link_libraries(test_query_ir_merge_after_set PRIVATE turing_ir_test_write_query_s)
+add_turing_test(test_query_ir_merge_after_create MergeAfterCreateTest.cpp)
+target_link_libraries(test_query_ir_merge_after_create PRIVATE turing_ir_test_write_query_s)
 
 # A comparison chain's middle operand is one expression both of its sides point at, read
 # off the codegen dump.

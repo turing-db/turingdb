@@ -57,9 +57,10 @@ NLMergeNodeIndex* NLProgram::findMergeNodeIndex(const std::string& signature) co
 
 NLMergeNodeIndex* NLProgram::addMergeNodeIndex(const std::string& signature,
                                                const LabelSet& labels,
+                                               const LabelSet& writeLabels,
                                                bool matchable,
                                                ColumnNodeIDs* scanNodes) {
-    auto index = std::make_unique<NLMergeNodeIndex>(labels, matchable, scanNodes);
+    auto index = std::make_unique<NLMergeNodeIndex>(labels, writeLabels, matchable, scanNodes);
     NLMergeNodeIndex* indexPtr = index.get();
     _mergeNodeIndexes.emplace(signature, std::move(index));
 
@@ -484,8 +485,12 @@ void NLSortState::sort() {
     _sorted = true;
 }
 
-NLMergeNodeIndex::NLMergeNodeIndex(const LabelSet& labels, bool matchable, ColumnNodeIDs* scanNodes)
+NLMergeNodeIndex::NLMergeNodeIndex(const LabelSet& labels,
+                                   const LabelSet& writeLabels,
+                                   bool matchable,
+                                   ColumnNodeIDs* scanNodes)
     : _labels(labels),
+    _writeLabels(writeLabels),
     _scanNodes(scanNodes),
     _matchable(matchable)
 {
@@ -503,41 +508,15 @@ std::span<const NLMergeRef> NLMergeNodeIndex::find(const std::string& key) const
     return findIt->second;
 }
 
-NLMergePendingNodes::NLMergePendingNodes() {
-}
-
-NLMergePendingNodes::~NLMergePendingNodes() {
-}
-
-std::span<const NLMergeRef> NLMergePendingNodes::find(const std::string& key) const {
-    const auto findIt = _byKey.find(key);
-    if (findIt == end(_byKey)) {
-        return {};
-    }
-
-    return findIt->second;
-}
-
 NLMergePendingEdges::NLMergePendingEdges() {
 }
 
 NLMergePendingEdges::~NLMergePendingEdges() {
 }
 
-void NLMergePendingEdges::add(const NLMergeRef& source,
-                              const NLMergeRef& target,
-                              EdgeTypeID edgeType,
-                              uint64_t offset,
-                              const std::string& propertyKey) {
-    _outgoing[source.asKey()].push_back({._other=target,
-                                         ._edgeType=edgeType,
-                                         ._offset=offset,
-                                         ._propertyKey=propertyKey});
-
-    _incoming[target.asKey()].push_back({._other=source,
-                                        ._edgeType=edgeType,
-                                        ._offset=offset,
-                                        ._propertyKey=propertyKey});
+void NLMergePendingEdges::add(const NLMergeRef& source, const NLMergeRef& target, EdgeTypeID edgeType, uint64_t offset) {
+    _outgoing[source.asKey()].push_back({._other=target, ._edgeType=edgeType, ._offset=offset});
+    _incoming[target.asKey()].push_back({._other=source, ._edgeType=edgeType, ._offset=offset});
 }
 
 std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::outOf(const NLMergeRef& node) const {
@@ -559,11 +538,8 @@ std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::lookup(
     return findIt->second;
 }
 
-NLMergeData::NLMergeData(NLMergePendingNodes* pendingNodes,
-                         NLMergePendingEdges* pendingEdges,
-                         ColumnMask* created)
-    : _pendingNodes(pendingNodes),
-    _pendingEdges(pendingEdges),
+NLMergeData::NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created)
+    : _pendingEdges(pendingEdges),
     _created(created),
     _workingSet(std::make_unique<NLMergeWorkingSet>())
 {

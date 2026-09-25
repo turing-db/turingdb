@@ -1983,9 +1983,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
     ColumnMask* created = _memory->alloc<ColumnMask>();
     created->reserve(_program->getChunkSize());
 
-    NLMergeData* data = _program->allocFunctionData<NLMergeData>(_program->getMergePendingNodes(),
-                                                                 _program->getMergePendingEdges(),
-                                                                 created);
+    NLMergeData* data = _program->allocFunctionData<NLMergeData>(_program->getMergePendingEdges(), created);
 
     const size_t nodeCount = nodeLabels.size();
     const size_t hopCount = nodeCount - 1;
@@ -2058,7 +2056,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
 
         edgeValueIndex += propNames.size();
 
-        appendMergePropertySignature(hop._properties, hop._signature);
+        collectWrittenMergeProperties(hop._properties, hop._writtenProperties);
 
         hop._scanSources = _memory->alloc<ColumnNodeIDs>();
         hop._scanEdges = _memory->alloc<ColumnEdgeIDs>();
@@ -2132,19 +2130,37 @@ void NLTranslator::translateMergeNodeSpec(mlir::ArrayAttr labels,
         scanProperties.clear();
     }
 
-    appendMergeNodeSignature(writeLabels, node._properties, node._signature);
+    std::string signature;
+    appendMergeNodeSignature(writeLabels, node._properties, signature);
 
     // Every chain node of the same signature looks its candidates up in one index, so
     // the label set is scanned once however many times the query merges the pattern
-    node._index = _program->findMergeNodeIndex(node._signature);
+    node._index = _program->findMergeNodeIndex(signature);
     if (node._index) {
         return;
     }
 
     ColumnNodeIDs* scanNodes = _memory->alloc<ColumnNodeIDs>();
-    node._index = _program->addMergeNodeIndex(node._signature, matchLabels, matchable, scanNodes);
+    node._index = _program->addMergeNodeIndex(signature, matchLabels, writeLabels, matchable, scanNodes);
     for (const NLMergeScanProperty& scanProperty : scanProperties) {
         node._index->addScanProperty(scanProperty);
+    }
+
+    NLMergeScanProperties writtenProperties;
+    collectWrittenMergeProperties(node._properties, writtenProperties);
+    for (const NLMergeScanProperty& writtenProperty : writtenProperties) {
+        node._index->addWrittenProperty(writtenProperty);
+    }
+}
+
+void NLTranslator::collectWrittenMergeProperties(const std::vector<NLMergeProperty>& properties,
+                                                 NLMergeScanProperties& writtenProperties) {
+    for (const NLMergeProperty& property : properties) {
+        const ValueType valueType = property._propertyType._valueType;
+
+        writtenProperties.push_back({._propertyType=property._propertyType,
+                                     ._values=allocOptColumnForValueType(valueType),
+                                     ._keyAppend=NLExecutor::selectOptKeyAppendFunction(valueType)});
     }
 }
 
