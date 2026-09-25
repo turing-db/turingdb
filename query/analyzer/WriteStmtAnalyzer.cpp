@@ -322,6 +322,10 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
 
             _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
+            if (rhs->isAggregate()) {
+                throwError("Invalid use of aggregate expression in this context", item);
+            }
+
             if (writesNull) {
                 return;
             }
