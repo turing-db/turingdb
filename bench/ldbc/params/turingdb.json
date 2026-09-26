@@ -46,7 +46,7 @@
   "bi-9": {"startDate": 1275350400000, "endDate": 1277942400000},
   "bi-10": {"personId": 4398046511333, "country": "'India'", "tagClass": "'Person'", "minPathDistance": 1, "maxPathDistance": 2},
   "bi-11": {"country": "'India'", "startDate": 1267200000000, "endDate": 1290673245079},
-  "bi-12": {"startDate": 1275350400000, "lengthThreshold": 20, "languages": "'en'"},
+  "bi-12": {"startDate": 1275350400000, "lengthThreshold": 20, "languages": "['ar', 'hu']"},
   "bi-13": {"country": "'India'", "endDate": 1290673245079},
   "bi-14": {"country1": "'India'", "country2": "'China'"},
   "bi-15": {"person1Id": 4398046511333, "person2Id": 6597069766660, "startDate": 1267200000000, "endDate": 1290673245079},
