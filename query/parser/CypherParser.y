@@ -318,6 +318,7 @@
 %type<db::Expr*> stringExpr
 %type<db::Expr*> entityTypeExpr
 %type<db::Expr*> propertyOrLabelExpr
+%type<db::Expr*> propertyLookupExpr
 %type<db::Expr*> propertyExpr
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
@@ -1349,6 +1350,7 @@ unaryAddSubExpr
 
 atomicExpr
     : propertyOrLabelExpr { $$ = $1; }
+    | propertyLookupExpr { $$ = $1; }
     | atomExpr { $$ = $1; }
     | atomicExpr OBRACK expr CBRACK {
         $$ = IndexExpr::create(ast, $1, $3); LOC($$, @$);
@@ -1393,6 +1395,16 @@ propertyExpr
 
         LOC($$, @$);
       }
+    ;
+
+propertyLookupExpr
+    : functionInvocation DOT name {
+        Expr* call = FunctionInvocationExpr::create(ast, $1);
+        LOC(call, @1);
+        $$ = PropertyLookupExpr::create(ast, call, $3->getName());
+        LOC($$, @$);
+      }
+    | propertyLookupExpr DOT name { $$ = PropertyLookupExpr::create(ast, $1, $3->getName()); LOC($$, @$); }
     ;
 
 atomExpr

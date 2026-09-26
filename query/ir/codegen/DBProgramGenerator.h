@@ -18,6 +18,7 @@
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
+#include "metadata/DateTime.h"
 #include "stmt/CallSubqueryStmt.h"
 
 #include "ExplainRequest.h"
@@ -63,6 +64,7 @@ class PatternData;
 class PatternElement;
 class Projection;
 class PropertyExpr;
+class PropertyLookupExpr;
 class ReturnStmt;
 class ShortestPathStmt;
 class UnwindStmt;
@@ -980,7 +982,8 @@ private:
     // The instant a dotted access reads, before any component is taken off it: a field of
     // a loaded row, a property of an entity, or the column a value variable was bound to
     mlir::Value translatePropertyRead(const PropertyExpr* propExpr);
-    mlir::Value emitDateTimeComponent(const PropertyExpr* propExpr, mlir::Value instant);
+    mlir::Value translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr);
+    mlir::Value emitDateTimeComponent(DateTimePart part, mlir::Value instant);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
     // labels() / type() of an entity the CREATE wrote, as the constant string it reads:

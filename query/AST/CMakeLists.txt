@@ -18,6 +18,7 @@ set(ast_sources
     expr/LiteralExpr.cpp
     expr/EntityTypeExpr.cpp
     expr/PropertyExpr.cpp
+    expr/PropertyLookupExpr.cpp
     expr/StringExpr.cpp
     expr/SymbolExpr.cpp
     expr/UnaryExpr.cpp

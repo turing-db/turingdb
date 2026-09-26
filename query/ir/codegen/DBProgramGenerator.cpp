@@ -90,6 +90,7 @@
 #include "expr/LiteralExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/PropertyLookupExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/StructuralExpressionComparator.h"
 #include "expr/SymbolExpr.h"
@@ -6281,6 +6282,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::PROPERTY_LOOKUP: {
+            const PropertyLookupExpr* lookupExpr = static_cast<const PropertyLookupExpr*>(expr);
+            _part._exprMap[expr] = translatePropertyLookupExpr(lookupExpr);
+        }
+        break;
+
         case Expr::Kind::LITERAL: {
             const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(expr);
             _part._exprMap[expr] = translateLiteralExpr(litExpr->getLiteral());
@@ -7360,14 +7367,53 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         return value;
     }
 
-    return emitDateTimeComponent(propExpr, value);
+    return emitDateTimeComponent(propExpr->getDateTimePart(), value);
 }
 
-mlir::Value DBProgramGenerator::emitDateTimeComponent(const PropertyExpr* propExpr, mlir::Value instant) {
+mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr) {
+    if (lookupExpr->getType() == EvaluatedType::Null) {
+        return nullConstantColumn();
+    }
+
+    const Expr* base = lookupExpr->getBase();
+    translateExpr(base);
+
+    bioassert(_part._exprMap.contains(base), "Property lookup with unknown base.");
+
+    const mlir::Value baseColumn = _part._exprMap.at(base);
+
+    if (lookupExpr->readsADateTimeComponent()) {
+        return emitDateTimeComponent(lookupExpr->getDateTimePart(), baseColumn);
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType resultType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::StringAttr propAttr = _opBuilder.getStringAttr(lookupExpr->getPropName());
+
+    if (base->getType() == EvaluatedType::NodePattern) {
+        auto op = _opBuilder.create<mlir::db::GetNodeProperties>(loc,
+                                                                 resultType,
+                                                                 baseColumn,
+                                                                 propAttr,
+                                                                 mlir::Value(),
+                                                                 false);
+        return op.getResult();
+    } else {
+        auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc,
+                                                                 resultType,
+                                                                 baseColumn,
+                                                                 propAttr,
+                                                                 mlir::Value(),
+                                                                 false);
+        return op.getResult();
+    }
+}
+
+mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::Value instant) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    switch (propExpr->getDateTimePart()) {
+    switch (part) {
         case DateTimePart::Year:
             return _opBuilder.create<mlir::db::DateTimeYear>(loc, noneType, instant).getResult();
         break;
