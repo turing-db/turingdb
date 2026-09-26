@@ -892,6 +892,11 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::PROPERTY:
             dump(out, dynamic_cast<const PropertyExpr*>(expr));
             break;
+        case Expr::Kind::PROPERTY_LOOKUP:
+            out << "    _" << std::hex << expr << " {\n";
+            out << "        ASTType PropertyLookupExpr\n";
+            out << "    }\n";
+            break;
         case Expr::Kind::SYMBOL:
             dump(out, dynamic_cast<const SymbolExpr*>(expr));
             break;

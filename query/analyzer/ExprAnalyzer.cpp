@@ -262,6 +262,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::PROPERTY:
             analyzePropertyExpr(static_cast<PropertyExpr*>(expr));
         break;
+        case Expr::Kind::PROPERTY_LOOKUP:
+            analyzePropertyLookupExpr(static_cast<PropertyLookupExpr*>(expr));
+        break;
         case Expr::Kind::SYMBOL:
             analyzeSymbolExpr(static_cast<SymbolExpr*>(expr));
         break;
@@ -1045,6 +1048,56 @@ void ExprAnalyzer::throwIfReadsADateTimeComponent(const PropertyExpr* expr) {
     if (expr->readsADateTimeComponent()) {
         throwError("A datetime component cannot name a property.", expr);
     }
+}
+
+void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
+    Expr* base = expr->getBase();
+    analyzeExpr(base);
+
+    const EvaluatedType baseType = base->getType();
+    const std::string_view propName = expr->getPropName();
+
+    const bool readsAnEntity = baseType == EvaluatedType::NodePattern
+                            || baseType == EvaluatedType::EdgePattern;
+
+    EvaluatedType type = EvaluatedType::Null;
+
+    if (baseType == EvaluatedType::DateTime) {
+        DateTimePart part {DateTimePart::Year};
+        if (!dateTimePartNamed(propName, part)) {
+            throwError(fmt::format("'{}' is not a component of a datetime", propName), expr);
+        }
+
+        expr->setDateTimePart(part);
+        type = EvaluatedType::Integer;
+    } else if (readsAnEntity) {
+        const auto propTypeFound = _graphMetadata.propTypes().get(propName);
+
+        if (propTypeFound) {
+            const auto maybeEvalType = toEvaluatedType(propTypeFound.value()._valueType);
+            if (!maybeEvalType.has_value()) {
+                throwError(fmt::format("Property type '{}' is invalid", propName), expr);
+            }
+
+            type = *maybeEvalType;
+        }
+    } else if (baseType != EvaluatedType::Null) {
+        throwError(fmt::format("A value of type '{}' has no property '{}'",
+                               EvaluatedTypeName::value(baseType), propName),
+                   expr);
+    }
+
+    expr->setType(type);
+
+    if (base->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (base->isAggregate()) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, type));
 }
 
 void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {

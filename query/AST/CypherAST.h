@@ -33,6 +33,7 @@ class EntityTypeExpr;
 class ExistsExpr;
 class ParameterExpr;
 class PropertyExpr;
+class PropertyLookupExpr;
 class StringExpr;
 class SymbolExpr;
 class UnaryExpr;
@@ -137,6 +138,7 @@ public:
     friend ExistsExpr;
     friend ParameterExpr;
     friend PropertyExpr;
+    friend PropertyLookupExpr;
     friend StringExpr;
     friend SymbolExpr;
     friend UnaryExpr;

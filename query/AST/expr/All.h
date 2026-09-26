@@ -6,6 +6,7 @@
 #include "expr/BinaryExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/PropertyLookupExpr.h"
 #include "expr/StringExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/ExprChain.h"

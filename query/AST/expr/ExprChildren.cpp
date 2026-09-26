@@ -13,6 +13,7 @@
 #include "ListSliceExpr.h"
 #include "ListExpr.h"
 #include "LiteralExpr.h"
+#include "PropertyLookupExpr.h"
 #include "StringExpr.h"
 #include "UnaryExpr.h"
 
@@ -71,6 +72,15 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             for (const Expr* element : list->getElements()) {
                 children.push_back(element);
             }
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::PROPERTY_LOOKUP: {
+            const PropertyLookupExpr* lookup = static_cast<const PropertyLookupExpr*>(expr);
+
+            children.push_back(lookup->getBase());
 
             return true;
         }

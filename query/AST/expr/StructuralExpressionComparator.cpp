@@ -18,6 +18,7 @@
 #include "ListExpr.h"
 #include "LiteralExpr.h"
 #include "PropertyExpr.h"
+#include "PropertyLookupExpr.h"
 #include "StringExpr.h"
 #include "SymbolExpr.h"
 #include "UnaryExpr.h"
@@ -89,6 +90,16 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
                       || lhsProperty->getDateTimePart() == rhsProperty->getDateTimePart());
 
             return sameEntity && sameProperty && sameComponent;
+        }
+        break;
+
+        case Expr::Kind::PROPERTY_LOOKUP: {
+            const PropertyLookupExpr* lhsLookup = static_cast<const PropertyLookupExpr*>(lhs);
+            const PropertyLookupExpr* rhsLookup = static_cast<const PropertyLookupExpr*>(rhs);
+
+            const bool sameProperty = lhsLookup->getPropName() == rhsLookup->getPropName();
+
+            return sameProperty && equal(lhsLookup->getBase(), rhsLookup->getBase());
         }
         break;
 

@@ -29,6 +29,7 @@ class UnaryExpr;
 class SymbolExpr;
 class LiteralExpr;
 class PropertyExpr;
+class PropertyLookupExpr;
 class StringExpr;
 class EntityTypeExpr;
 class FunctionInvocationExpr;
@@ -90,6 +91,7 @@ public:
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
     void analyzeIndexExpr(IndexExpr* expr);
     void analyzeListSliceExpr(ListSliceExpr* expr);
+    void analyzePropertyLookupExpr(PropertyLookupExpr* expr);
 
     ValueType analyzePropertyExpr(PropertyExpr* expr,
                                   bool allowCreate = false,
