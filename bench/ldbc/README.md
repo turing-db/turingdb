@@ -52,20 +52,29 @@ open change, so the update queries run after `CHANGE NEW` / `checkout change-0`.
 
 ## Results
 
-Run on 2026-09-21 against main at 451e6f8a8, release build.
+Run on 2026-09-26 against main at c651fd852, release build.
 
-**18 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
-BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 18 of 45.
+**33 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
+BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 33 of 45.
 
 | query | rows |
 | --- | --- |
 | interactive-short-1 | 1 |
+| interactive-short-2 | 10 |
 | interactive-short-3 | 48 |
 | interactive-short-4 | 1 |
 | interactive-short-5 | 1 |
+| interactive-short-6 | 1 |
 | interactive-short-7 | 14 |
 | interactive-complex-2 | 20 |
+| interactive-complex-3 | 0 |
+| interactive-complex-4 | 9 |
+| interactive-complex-5 | 20 |
+| interactive-complex-6 | 10 |
 | interactive-complex-8 | 20 |
+| interactive-complex-9 | 20 |
+| interactive-complex-11 | 2 |
+| interactive-complex-12 | 2 |
 | interactive-update-1 | 0 |
 | interactive-update-2 | 0 |
 | interactive-update-3 | 0 |
@@ -74,18 +83,38 @@ BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 18 o
 | interactive-update-6 | 0 |
 | interactive-update-7 | 0 |
 | interactive-update-8 | 0 |
+| bi-3 | 6 |
 | bi-5 | 20 |
 | bi-6 | 20 |
+| bi-7 | 39 |
+| bi-8 | 0 |
+| bi-9 | 44 |
 | bi-11 | 1 |
+| bi-12 | 11 |
+| bi-18 | 0 |
 
-It is the same 18 queries as at 7f2b0883f. One thing moved underneath the count: BI 16 no
-longer stops at `CALL { subquery }`, which main implemented at 0de9efdcc, and stops at the
-map literals it unwinds instead.
+The 15 that run now and did not at 451e6f8a8 are IS 2, 6, IC 3, 4, 5, 6, 9, 11, 12 and
+BI 3, 7, 8, 9, 12, 18. Main implemented what 14 of them stopped at: variable-length paths
+at 166c5f1e0, edge type disjunction at b1cae6bea, chained comparisons at ecc9143e7, pattern
+comprehensions at d4428fe0f and pattern predicates at e8f5e1004. BI 12 stopped at the
+parameter file, which spelled `$languages` as the string `'en'`. It is now `['ar', 'hu']`,
+the query's own default. No post in this data set has the language `en`.
 
-The answers are right, not just the row counts. BI 11 counts 25 friend triangles in India,
-which is what counting them over the CSVs in Python gives. IC 8's top 20 replies match that
-computation row for row, ids, names, dates and order. IS 3 returns 48 friends for person
-4398046511333, its degree in `person_knows_person`.
+The answers are right, not just the row counts. The 15 new ones, BI 11, IC 8 and IS 3 were
+recomputed in Python from the CSVs and match row for row, in order. BI 11 counts 25 friend
+triangles in India. IC 8's top 20 replies match ids, names, dates and order. IS 3 returns
+48 friends for person 4398046511333, its degree in `person_knows_person`.
+
+Three of the new ones return 0 rows, and 0 is the answer on this data. IC 3's window holds
+12 messages, all located in Sweden, so no friend has a message in Kazakhstan. BI 8 and BI 18
+take the tag Carl_Gustaf_Emil_Mannerheim, which no person has an interest in. BI 8's 30
+messages with that tag were created in September 2010, outside its June window. With the tag
+William_Shakespeare, BI 8 returns 24 rows and BI 18 returns 20, both matching the CSVs.
+
+IC 9's image posts have no content, and their text falls back to the file name,
+`photo343597386103.jpg`. IC 11 finds one friend at a Swedish company, Joakim Larsson, and
+returns 2 of his 3 jobs. The third starts in 2006, and the query keeps jobs started before
+2006. BI 12's 11 rows sum to 222 persons, every person in the graph.
 
 IU 1 indexes an element of a nested list, and its write was read back after `COMMIT`.
 Person 999999999 is Bench Mark, its `STUDY_AT` edge carries classYear 2004 to organisation
@@ -93,20 +122,19 @@ Person 999999999 is Bench Mark, its `STUDY_AT` edge carries classYear 2004 to or
 edge reaches tag 1524 and its `IS_LOCATED_IN` edge reaches city 1073. The two years come
 from `s[1]` and `w[1]`, the two organisations from `s[0]` and `w[0]`.
 
-### What stops the other 27
+### What stops the other 12
 
 | queries | blocked on |
 | --- | --- |
-| IC 3, 5, 6, 9, 10, 11, IS 2, 6, BI 3, 4, 9, 12, 17 | variable-length paths, `[:KNOWS*1..2]` |
-| BI 1, 2, 13 | datetime: `duration`, `.year` / `.month` on a date |
 | IC 1, 13 | `shortestPath` |
 | IC 7, BI 14 | `collect` of a map literal, `collect({score: score})` |
-| BI 7, 18 | path expressions |
+| BI 1, 13 | `.year` / `.month` on a date, which this data holds as an epoch-millisecond integer |
 | IC 14 | `allShortestPaths` |
-| IC 12 | edge type alternation, `[:A\|B]` |
-| BI 8 | pattern comprehensions, `size([(a)-[r]-(b) \| r])` |
-| BI 16 | map literals, `UNWIND [{letter: 'A'}] AS param` then `param.letter` |
-| IC 4 | chained comparison, `a <= b < c` |
+| IC 10 | a datetime built from a map, `datetime({epochMillis: friend.birthday})` |
+| BI 2 | `duration` |
+| BI 16 | property access on a map, `UNWIND [{letter: 'A'}] AS param` then `param.letter` |
+| BI 17 | a relationship with both arrowheads, `(forum1)<-[:HAS_MEMBER]->(person2)` |
+| BI 4 | the `WHERE` of a `WITH` reading a variable the `WITH` does not project |
 
 The last one is not a missing feature. It is a query the engine has every piece to run and
 an analyzer rule turns away, so it is written up separately below.
@@ -115,7 +143,8 @@ an analyzer rule turns away, so it is written up separately below.
 
 It was reduced to the smallest query that reproduces it.
 
-**Chained comparison** (blocks IC 4). `1275350400000 <= p.creationDate < 1277856000000` is
-rejected with `Operands are not valid or compatible numeric types: 'Bool' and 'Integer'`.
-The comparison is parsed left-associatively, so the second `<` gets the first one's boolean.
-Spelling the same bound with `AND` runs. Neo4j reads `a <= b < c` as the conjunction.
+**`WHERE` after `WITH`** (blocks BI 4). Inside BI 4's `CALL`, `WITH person, message,
+topForum2 WHERE topForum2 IN topForums` is rejected with `Variable 'topForums' not found`.
+The smallest query that shows it is `WITH 5 AS k MATCH (p:Person) WITH p WHERE p.id > k
+RETURN count(p)`. Projecting `k` as well runs. The Neo4j reference implementation runs BI 4
+as written, so Neo4j lets the `WHERE` of a `WITH` read the variables in scope before it.
