@@ -55,6 +55,11 @@ private:
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
 
+    // The variables the CREATE or MERGE being analyzed introduces, which its property maps
+    // cannot read: none has a value until the clause has run
+    std::unordered_set<std::string_view> _patternNames;
+    std::string_view _patternClause;
+
     void analyze(const CreateStmt* createStmt);
     void analyze(const MergeStmt* mergeStmt);
     void analyze(const SetStmt* setStmt);
@@ -68,11 +73,13 @@ private:
     void analyze(SetItem* item);
     void analyzePropertyAssign(const SetItem* item, PropertyExpr* lhs, Expr* rhs);
     void analyzeMapAssign(const SetItem* item, SetItem::SymbolMapAssign& assign);
+    void analyzeComputedValue(const SetItem* item, SetItem::SymbolMapAssign& assign);
+    void analyzeEntityCopy(const SetItem* item, SetItem::SymbolMapAssign& assign);
 
     void throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const;
     void throwOnUndirectedEdge(const Pattern* pattern) const;
-
-    [[noreturn]] void throwOnMapAssignValue(const SetItem* item, Expr* value);
+    void collectPatternNames(const Pattern* pattern);
+    void throwOnPatternEntityRead(const Expr* expr, const void* obj) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 

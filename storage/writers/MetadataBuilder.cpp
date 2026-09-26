@@ -62,6 +62,14 @@ std::optional<PropertyType> MetadataBuilder::findPropertyType(std::string_view p
     return _metadata->_propTypeMap.get(propTypeName);
 }
 
+void MetadataBuilder::forEachPropertyType(const PropertyTypeVisitor& visit) const {
+    std::shared_lock lock(_spinLock);
+
+    for (const PropertyTypeMap::Pair& pair : _metadata->propTypes()) {
+        visit(pair._pt);
+    }
+}
+
 void MetadataBuilder::beginStatement() {
     std::shared_lock lock(_spinLock);
 

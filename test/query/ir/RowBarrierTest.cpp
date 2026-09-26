@@ -49,6 +49,50 @@ TEST_F(RowBarrierTest, mergesInEveryChunkBeforeTheCreateAddsWhatItWouldFind) {
     expectRows("MATCH (t:Tally) RETURN count(t)", {{"70001"}});
 }
 
+TEST_F(RowBarrierTest, createsFromWhatTheSetWroteForEveryRow) {
+    applyWrite("UNWIND range(1, 65537) AS i MATCH (a:Person {name: 'Remy'}) SET a.x = coalesce(a.x, 0) + 1 CREATE (:Log {v: a.x})");
+
+    expectRows("MATCH (l:Log) RETURN l.v, count(l)", {{"65537", "65537"}});
+}
+
+TEST_F(RowBarrierTest, setsFromWhatAnEarlierSetWroteForEveryRow) {
+    applyWrite("UNWIND range(1, 70000) AS i MATCH (a:Person {name: 'Remy'}) "
+               "SET a.x = coalesce(a.x, 0) + 1 "
+               "SET a.y = coalesce(a.y, 0) + a.x");
+
+    expectRows("MATCH (a:Person {name: 'Remy'}) RETURN a.x, a.y", {{"70000", "4900000000"}});
+}
+
+TEST_F(RowBarrierTest, mergesOnWhatTheSetWroteForEveryRow) {
+    applyWrite("UNWIND range(1, 70000) AS i MATCH (a:Person {name: 'Remy'}) SET a.x = coalesce(a.x, 0) + 1 MERGE (:Log {v: a.x})");
+
+    expectRows("MATCH (l:Log) RETURN l.v, count(l)", {{"70000", "1"}});
+}
+
+TEST_F(RowBarrierTest, filtersOnWhatTheSetWroteForEveryRow) {
+    expectWriteRows("UNWIND range(1, 70000) AS i MATCH (a:Person {name: 'Remy'}) "
+                    "SET a.x = coalesce(a.x, 0) + 1 "
+                    "WITH a WHERE a.x = 70000 RETURN count(*)",
+                    {{"70000"}});
+}
+
+TEST_F(RowBarrierTest, matchesEveryNodeACallCreatedForEveryRow) {
+    expectWriteRows("UNWIND range(1, 70000) AS x CALL () { CREATE (:Y) } WITH x WHERE x = 1 MATCH (y:Y) RETURN count(y)",
+                    {{"70000"}});
+}
+
+TEST_F(RowBarrierTest, matchesEveryNodeACreateWroteForEveryRow) {
+    expectWriteRows("UNWIND range(1, 70000) AS x CREATE (:Y) WITH x WHERE x = 1 MATCH (y:Y) RETURN count(y)",
+                    {{"70000"}});
+}
+
+TEST_F(RowBarrierTest, walksEveryEdgeACallCreatedForEveryRow) {
+    expectWriteRows("UNWIND range(1, 70000) AS x MATCH (r:Person {name: 'Remy'}) "
+                    "CALL (r) { CREATE (r)-[:T]->(:W) } "
+                    "WITH r, x WHERE x = 1 MATCH (r)-[:T]->(w) RETURN count(w)",
+                    {{"70000"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

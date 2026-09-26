@@ -1,6 +1,9 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
+
+#include <optional>
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LogicalResult.h"
@@ -24,6 +27,14 @@ LogicalResult verifyMergePattern(Operation* op,
                                  size_t boundPending,
                                  size_t nodePropValues,
                                  size_t edgePropValues);
+
+// Verifies a merge's repeated nodes: pairs naming a chain node and the earlier, looked up
+// node it stands for - (a) again in (a:A)-[:R]->(a). The repeat carries the labels of the
+// node it repeats and no property of its own.
+LogicalResult verifyMergeRepeatedNodes(Operation* op,
+                                       ArrayAttr nodeLabels,
+                                       ArrayAttr nodePropNames,
+                                       std::optional<ArrayRef<int64_t>> repeatedNodes);
 
 // How many of @param nodeLabels' chain nodes the merge looks up rather than takes a
 // bound column for: the ones carrying a label set.

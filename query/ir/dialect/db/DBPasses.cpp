@@ -26,6 +26,7 @@
 #include "IRConstantColumn.h"
 #include "PropertyScanLiteral.h"
 #include "DBOps.h"
+#include "DBWrites.h"
 
 #include "BioAssert.h"
 
@@ -65,38 +66,6 @@ struct LabelScanChain {
     GetNodeLabelSet labelSet;
     CheckLabelConstraint check;
 };
-
-bool isWriteOp(Operation* op) {
-    return isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op);
-}
-
-// Whether a write stands between @param from and @param to in program order. A filter moved
-// above it, or folded into a scan standing before it, would change the rows the write
-// reaches, or stop reading what it wrote.
-bool writesBetween(Operation* from, Operation* to) {
-    bool afterFrom = false;
-    bool crossesAWrite = false;
-
-    Operation* root = to;
-    while (Operation* const parent = root->getParentOp()) {
-        root = parent;
-    }
-
-    root->walk<mlir::WalkOrder::PreOrder>([&](Operation* op) {
-        if (op == to) {
-            return WalkResult::interrupt();
-        } else if (afterFrom && isWriteOp(op)) {
-            crossesAWrite = true;
-            return WalkResult::interrupt();
-        } else if (op == from) {
-            afterFrom = true;
-        }
-
-        return WalkResult::advance();
-    });
-
-    return crossesAWrite;
-}
 
 bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
     const Operation::operand_range columns = filter.getColumnsToFilter();
@@ -3390,12 +3359,18 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         llvm::SmallVector<Operation*> reads;
         llvm::DenseSet<Attribute> writtenNodeProperties;
         llvm::DenseSet<Attribute> writtenEdgeProperties;
+        bool writesAnyNodeProperty = false;
+        bool writesAnyEdgeProperty = false;
         root->walk([&](Operation* op) {
             StringAttr writtenProperty;
             bool writesNodes = false;
 
             if (isa<GetNodeProperties, GetEdgeProperties>(op)) {
                 reads.push_back(op);
+            } else if (isa<SetNodeProperties>(op)) {
+                writesAnyNodeProperty = true;
+            } else if (isa<SetEdgeProperties>(op)) {
+                writesAnyEdgeProperty = true;
             } else if (matchPropertyWrite(op, writtenProperty, writesNodes)) {
                 if (writesNodes) {
                     writtenNodeProperties.insert(writtenProperty);
@@ -3415,7 +3390,8 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             // A read standing before this one saw what the property held before the write,
             // and a projection behind a SET reads what the statement wrote
             const llvm::DenseSet<Attribute>& written = nodeProperty ? writtenNodeProperties : writtenEdgeProperties;
-            if (written.contains(property)) {
+            const bool writesAny = nodeProperty ? writesAnyNodeProperty : writesAnyEdgeProperty;
+            if (writesAny || written.contains(property)) {
                 continue;
             }
 

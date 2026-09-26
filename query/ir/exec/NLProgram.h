@@ -1401,6 +1401,14 @@ public:
 
     void addColumn(const NLCarriedColumn& column) { _columns.push_back(column); }
 
+    // The entity columns grouping rows into steps: no two rows of a step share an ID of
+    // them. With none, a step is one row.
+    const std::vector<const ColumnNodeIDs*>& nodeKeys() const { return _nodeKeys; }
+    const std::vector<const ColumnEdgeIDs*>& edgeKeys() const { return _edgeKeys; }
+
+    void addNodeKey(const ColumnNodeIDs* key) { _nodeKeys.push_back(key); }
+    void addEdgeKey(const ColumnEdgeIDs* key) { _edgeKeys.push_back(key); }
+
     ColumnVector<size_t>* getIndices() { return &_indices; }
 
     NLLimitState* getLimit() const { return _limit; }
@@ -1411,6 +1419,8 @@ public:
 
 private:
     Columns _columns;
+    std::vector<const ColumnNodeIDs*> _nodeKeys;
+    std::vector<const ColumnEdgeIDs*> _edgeKeys;
     ColumnVector<size_t> _indices;
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
@@ -3308,6 +3318,10 @@ struct NLMergeProperty {
     const Column* _values {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
     std::string _name;
+
+    // Set for tagged cells under a name no write had typed at translation: the merge types
+    // the property, and picks its appender, off the first cell holding a value
+    MetadataBuilder* _metadataBuilder {nullptr};
 };
 
 // The graph side of that key: the same property, read out of the graph into a scratch
@@ -3317,6 +3331,11 @@ struct NLMergeScanProperty {
     PropertyType _propertyType;
     Column* _values {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
+
+    // Set for a property tagged cells type when the merge runs: a pending entity's value is
+    // found under the name once it is registered, and keyed as it was staged
+    std::string _name;
+    MetadataBuilder* _metadataBuilder {nullptr};
 };
 
 using NLMergeScanProperties = std::vector<NLMergeScanProperty>;
@@ -3371,7 +3390,7 @@ public:
     bool hasChanged(const NLMergeRef& ref) const { return _changedNodes.contains(ref.asKey()); }
     void markChanged(const NLMergeRef& ref) { _changedNodes.insert(ref.asKey()); }
 
-    void add(const std::string& key, const NLMergeRef& ref) { _byKey[key].push_back(ref); }
+    void add(const std::string& key, const NLMergeRef& ref);
 
     std::span<const NLMergeRef> find(const std::string& key) const;
 
@@ -3439,6 +3458,10 @@ public:
         LabelSetHandle _labelSetHandle;
         ColumnNodeIDs* _output {nullptr};
         ColumnMask* _outputPending {nullptr};
+
+        // The earlier chain node this one names again, which a match holds it at and a
+        // write writes once
+        std::optional<size_t> _repeatedNode;
     };
 
     // One hop of the chain, joining the node ahead of it to the one behind. The match
@@ -3504,10 +3527,14 @@ private:
 };
 
 // What a set whose value reads the property it writes needs to apply row by row: the
-// statements computing its value from that read, which it runs again once a row it staged
-// is read by a later one, and the entity columns the read goes through
+// statements computing its value again over one batch of its rows, the columns they read
+// gathered for that batch, the value they compute, and the entity columns the read goes
+// through
 struct NLSetRereads {
-    std::vector<NLFunctionDescriptor> _statements;
+    NLStmtContainer _statements;
+    std::vector<NLCarriedColumn> _inputs;
+    const Column* _value {nullptr};
+    ColumnVector<size_t> _rows;
     std::vector<const Column*> _readEntities;
     bool _readsItsOwnEntities {true};
 };
@@ -3546,6 +3573,9 @@ public:
     bool isNullWrite() const { return _nullWrite; }
     void setNullWrite(bool nullWrite) { _nullWrite = nullWrite; }
 
+    bool skipsNulls() const { return _skipsNulls; }
+    void setSkipsNulls(bool skipsNulls) { _skipsNulls = skipsNulls; }
+
     // Set instead of the ID for a property the graph did not have at translation. Tagged
     // cells type it when the set runs, registered here, and a null finds it there or has
     // nothing to remove.
@@ -3570,6 +3600,7 @@ private:
     MetadataBuilder* _metadataBuilder {nullptr};
     NLSetRereads _rereads;
     bool _nullWrite {false};
+    bool _skipsNulls {false};
     bool _allPending {false};
 };
 
@@ -3600,6 +3631,9 @@ public:
     bool isNullWrite() const { return _nullWrite; }
     void setNullWrite(bool nullWrite) { _nullWrite = nullWrite; }
 
+    bool skipsNulls() const { return _skipsNulls; }
+    void setSkipsNulls(bool skipsNulls) { _skipsNulls = skipsNulls; }
+
     const std::string& getPropertyName() const { return _propertyName; }
     MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
 
@@ -3621,8 +3655,59 @@ private:
     MetadataBuilder* _metadataBuilder {nullptr};
     NLSetRereads _rereads;
     bool _nullWrite {false};
+    bool _skipsNulls {false};
     bool _allPending {false};
 };
+
+// SET n = m and SET n += m, m a map computed at run time. The property type of each entry is
+// found or created as its row stages it.
+template <typename IDColumn>
+class NLSetPropertiesData : public NLFunctionData {
+public:
+    NLSetPropertiesData(const IDColumn* input, const Column* value, MetadataBuilder* metadataBuilder)
+        : _input(input),
+        _value(value),
+        _metadataBuilder(metadataBuilder)
+    {
+    }
+
+    const IDColumn* getInput() const { return _input; }
+    const Column* getValue() const { return _value; }
+    MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
+
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    const ColumnMask* getRows() const { return _rows; }
+    void setRows(const ColumnMask* rows) { _rows = rows; }
+
+    bool replaces() const { return _replaces; }
+    void setReplaces(bool replaces) { _replaces = replaces; }
+
+    // The value is the null literal, whose column holds no map to read
+    bool isNullWrite() const { return _nullWrite; }
+    void setNullWrite(bool nullWrite) { _nullWrite = nullWrite; }
+
+    const NLSetRereads& getRereads() const { return _rereads; }
+    NLSetRereads& getRereads() { return _rereads; }
+
+private:
+    const IDColumn* _input {nullptr};
+    const Column* _value {nullptr};
+    const ColumnMask* _pending {nullptr};
+    const ColumnMask* _rows {nullptr};
+    MetadataBuilder* _metadataBuilder {nullptr};
+    NLSetRereads _rereads;
+    bool _allPending {false};
+    bool _replaces {false};
+    bool _nullWrite {false};
+};
+
+using NLSetNodePropertiesData = NLSetPropertiesData<ColumnNodeIDs>;
+using NLSetEdgePropertiesData = NLSetPropertiesData<ColumnEdgeIDs>;
 
 class NLDeleteNodeData : public NLFunctionData {
 public:

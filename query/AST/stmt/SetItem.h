@@ -35,6 +35,18 @@ public:
         VarDecl* _decl {nullptr};
         std::vector<PropertyExprAssign> _entries;
         std::vector<std::string_view> _removedProperties;
+
+        // The value is a node or an edge, read property by property: an addition writes
+        // only the properties it holds
+        bool _copiesEntity {false};
+
+        // What the property reads resolve against when the value is an expression rather
+        // than a variable naming the entity
+        VarDecl* _sourceDecl {nullptr};
+
+        // The value is a map computed at run time, whose keys only its rows know: the entries
+        // are written as each row names them, and there is nothing to spell out
+        bool _writesRowEntries {false};
     };
 
     struct SymbolEntityTypes {

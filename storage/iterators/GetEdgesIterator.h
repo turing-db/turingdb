@@ -63,6 +63,8 @@ protected:
 
     void init();
     void nextValid();
+    bool isIncomingSelfLoop() const;
+    std::span<const EdgeRecord>::iterator rangeEnd() const;
 
     /**
      * @brief Advances @ref _partIt by at least @param n steps, or precisely

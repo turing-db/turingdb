@@ -25,6 +25,19 @@ namespace storage = mlir::storage;
 
 namespace {
 
+LogicalResult verifyMapValue(Operation* operation, Value value) {
+    Type elementType = cast<ChunkType>(value.getType()).getElementType();
+    if (const storage::NullableType nullable = dyn_cast<storage::NullableType>(elementType)) {
+        elementType = nullable.getValueType();
+    }
+
+    if (!isa<storage::MapType, storage::ListElementType, NoneType>(elementType)) {
+        return operation->emitOpError("requires a chunk of maps, but reads ") << value.getType();
+    }
+
+    return success();
+}
+
 Type getNodeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::NodeIDType::get(context));
 }
@@ -1082,6 +1095,14 @@ LogicalResult Merge::verify() {
         return pattern;
     }
 
+    const LogicalResult repeats = verifyMergeRepeatedNodes(getOperation(),
+                                                           getNodeLabels(),
+                                                           getNodePropNames(),
+                                                           getRepeatedNodes());
+    if (failed(repeats)) {
+        return repeats;
+    }
+
     const size_t expectedResults = mergeResultCount(getNodeLabels(), getCarriedColumns().size());
     if (getResults().size() != expectedResults) {
         return emitOpError("must produce one chunk per chain entity, the created mask and one "
@@ -1106,6 +1127,14 @@ LogicalResult SetEdgeProperty::verify() {
     }
 
     return success();
+}
+
+LogicalResult SetNodeProperties::verify() {
+    return verifyMapValue(getOperation(), getValue());
+}
+
+LogicalResult SetEdgeProperties::verify() {
+    return verifyMapValue(getOperation(), getValue());
 }
 
 // A grouped accumulator needs at least one grouping key and one aggregate (with

@@ -948,6 +948,15 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::String;
     }
 
+    if (varType == EvaluatedType::Null) {
+        expr->setEntityVarDecl(varDecl);
+        expr->setPropertyName(propName->getName());
+        expr->setType(EvaluatedType::Null);
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Null));
+
+        return ValueType::Invalid;
+    }
+
     if (varType != EvaluatedType::NodePattern && varType != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
             "Variable '{}' is '{}' it must be a node or edge",

@@ -1,5 +1,6 @@
 #include "NLWriteProperties.h"
 
+#include <algorithm>
 #include <optional>
 #include <type_traits>
 
@@ -14,9 +15,11 @@
 #include "columns/ColumnVector.h"
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
+#include "map/MapUtils.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
+#include "writers/MetadataBuilder.h"
 
 #include "IRException.h"
 
@@ -37,13 +40,24 @@ struct StagedPropertyValue<T> {
     using Type = std::optional<typename T::OwningPrimitive>;
 };
 
-// The value one tagged cell stages for a property holding T. The analyzer lets an integer
-// set a double or unsigned property, so an integer cell is converted as that integer is.
+template <typename T>
+T cellValue(const ListElementView cell) {
+    return cell.getAs<T>();
+}
+
+template <typename T>
+T cellValue(const MapEntryView entry) {
+    return entry.getValueAs<T>();
+}
+
+// The value one tagged cell - a list element or a map entry - stages for a property holding
+// T. The analyzer lets an integer set a double or unsigned property, so an integer cell is
+// converted as that integer is.
 template <SupportedType T>
 class TaggedCellStager {
 public:
-    template <typename Cell>
-    CommitWriteBuffer::SupportedTypeVariant operator()(const ListElementView cell) const {
+    template <typename Cell, typename View>
+    CommitWriteBuffer::SupportedTypeVariant operator()(const View cell) const {
         using Primitive = typename T::Primitive;
         using Staged = typename StagedPropertyValue<T>::Type;
 
@@ -56,12 +70,12 @@ public:
         if constexpr (std::same_as<Cell, PropertyNull>) {
             return Staged {};
         } else if constexpr (std::same_as<T, types::Embedding> && std::same_as<Cell, Primitive>) {
-            const Primitive embedding = cell.getAs<Primitive>();
+            const Primitive embedding = cellValue<Primitive>(cell);
             return Staged {std::in_place, embedding.begin(), embedding.end()};
         } else if constexpr (std::same_as<Cell, Primitive>) {
-            return Staged {std::in_place, cell.getAs<Primitive>()};
+            return Staged {std::in_place, cellValue<Primitive>(cell)};
         } else if constexpr (readsAnInteger && writesANumber) {
-            return Staged {static_cast<Primitive>(cell.getAs<Cell>())};
+            return Staged {static_cast<Primitive>(cellValue<Cell>(cell))};
         } else {
             throw IRException(fmt::format("Cannot write a value of another type to a property of type '{}'",
                                           ValueTypeName::value(T::_valueType)));
@@ -74,6 +88,70 @@ void stageTaggedCellAs(const ListElementView cell, CommitWriteBuffer::SupportedT
     const ListTagDispatcher dispatcher {cell.getTag()};
 
     staged = dispatcher.execute(TaggedCellStager<T> {}, cell);
+}
+
+CommitWriteBuffer::SupportedTypeVariant disengagedValue(ValueType valueType) {
+    CommitWriteBuffer::SupportedTypeVariant disengaged;
+
+    const auto select = [&disengaged]<SupportedType T>() {
+        if constexpr (TrivialSupportedType<T>) {
+            disengaged = std::optional<typename T::Primitive> {};
+        } else {
+            disengaged = std::optional<typename T::OwningPrimitive> {};
+        }
+    };
+
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return disengaged;
+}
+
+bool writesInto(ValueType propertyType, ValueType valueType) {
+    const bool widensAnInteger = valueType == ValueType::Int64
+                              && (propertyType == ValueType::UInt64 || propertyType == ValueType::Double);
+
+    return propertyType == valueType || widensAnInteger;
+}
+
+ValueType mapEntryValueType(const MapEntryView entry) {
+    switch (entry.getValueTag()) {
+        case MapBufferTypeTag::Int:
+        case MapBufferTypeTag::UInt:
+            return ValueType::Int64;
+        break;
+        case MapBufferTypeTag::Double:
+            return ValueType::Double;
+        break;
+        case MapBufferTypeTag::Bool:
+            return ValueType::Bool;
+        break;
+        case MapBufferTypeTag::String:
+            return ValueType::String;
+        break;
+        case MapBufferTypeTag::Embedding:
+            return ValueType::Embedding;
+        break;
+        case MapBufferTypeTag::ListView:
+            return ValueType::List;
+        break;
+        case MapBufferTypeTag::MapView:
+            return ValueType::Map;
+        break;
+        case MapBufferTypeTag::DateTime:
+            return ValueType::DateTime;
+        break;
+        case MapBufferTypeTag::Null:
+            return ValueType::Invalid;
+        break;
+        case MapBufferTypeTag::NodeID:
+        case MapBufferTypeTag::EdgeID:
+            throw IRException("A node or an edge cannot be the value of a property");
+        break;
+        case MapBufferTypeTag::INVALID:
+        break;
+    }
+
+    throw IRException("Unknown tag in a map entry");
 }
 
 class ConstPropertyExtractor {
@@ -464,10 +542,7 @@ void db::fillNullProperties(size_t rowCount,
                             PropertyTypeID propID,
                             ValueType valueType,
                             CommitWriteBuffer::UntypedProperties& buf) {
-    CommitWriteBuffer::UntypedProperty null {propID, {}};
-    disengagedValue(valueType, null.value);
-
-    buf.assign(rowCount, null);
+    buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, disengagedValue(valueType)});
 }
 
 void db::extractColumnProperties(const Column* column,
@@ -507,6 +582,15 @@ void db::extractColumnProperties(const Column* column,
         default:
         break;
     }
+}
+
+bool db::readsTaggedCells(const Column* column) {
+    const ColumnKind::Code kind = column->getKind();
+
+    return kind == ColumnVector<ListElementView>::staticKind()
+        || kind == ColumnConst<ListElementView>::staticKind()
+        || kind == ColumnOptVector<ListElementView>::staticKind()
+        || kind == ColumnConst<std::optional<ListElementView>>::staticKind();
 }
 
 ListElementView db::taggedCellAt(const Column* column, size_t row) {
@@ -573,4 +657,121 @@ void db::stageTaggedCell(const ListElementView cell,
     };
 
     ValueTypeDispatcher(valueType).execute(stage);
+}
+
+void db::stageTaggedCells(const Column* column,
+                          size_t rowCount,
+                          PropertyType property,
+                          llvm::function_ref<bool(size_t)> stagesRow,
+                          CommitWriteBuffer::UntypedProperties& buf) {
+    buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {property._id, {}});
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (stagesRow(row)) {
+            stageTaggedCell(taggedCellAt(column, row), property._valueType, buf[row].value);
+        }
+    }
+}
+
+PropertyType db::resolveTaggedCellProperty(MetadataBuilder* metadataBuilder,
+                                           std::string_view name,
+                                           const Column* column,
+                                           size_t rowCount,
+                                           llvm::function_ref<bool(size_t)> stagesRow) {
+    const std::optional<PropertyType> registered = metadataBuilder->findPropertyType(name);
+    if (registered) {
+        return *registered;
+    }
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const ValueType valueType = stagesRow(row) ? taggedCellValueType(taggedCellAt(column, row)) : ValueType::Invalid;
+        if (valueType != ValueType::Invalid) {
+            return metadataBuilder->getOrCreatePropertyType(name, valueType);
+        }
+    }
+
+    return PropertyType {};
+}
+
+std::optional<MapView> db::mapCellAt(const Column* column, size_t row) {
+    const ColumnKind::Code kind = column->getKind();
+
+    if (readsTaggedCells(column)) {
+        const ListElementView cell = taggedCellAt(column, row);
+        const ListBufferTypeTag tag = cell.getTag();
+
+        if (tag == ListBufferTypeTag::Null) {
+            return std::nullopt;
+        } else if (tag != ListBufferTypeTag::MapView) {
+            throw IRException("SET n = m and SET n += m read a map of properties, and m holds no map");
+        }
+
+        return cell.getAs<MapView>();
+    } else if (kind == ColumnConst<MapView>::staticKind()) {
+        return static_cast<const ColumnConst<MapView>*>(column)->getRaw();
+    } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
+        return static_cast<const ColumnConst<std::optional<MapView>>*>(column)->getRaw();
+    } else if (kind == ColumnVector<MapView>::staticKind()) {
+        return static_cast<const ColumnVector<MapView>*>(column)->getRaw()[row];
+    } else if (kind == ColumnOptVector<MapView>::staticKind()) {
+        return static_cast<const ColumnOptVector<MapView>*>(column)->getRaw()[row];
+    } else {
+        throw IRException("SET reads its map from a column holding no maps");
+    }
+}
+
+void db::stageMapEntries(const MapView map,
+                         MetadataBuilder* metadataBuilder,
+                         std::vector<PropertyType>& created,
+                         CommitWriteBuffer::UntypedProperties& staged) {
+    for (const MapEntryView entry : map) {
+        const std::string_view key = entry.getKey();
+        const ValueType valueType = mapEntryValueType(entry);
+        const std::optional<PropertyType> registered = metadataBuilder->findPropertyType(key);
+
+        if (valueType == ValueType::Invalid) {
+            if (registered) {
+                staged.push_back({registered->_id, disengagedValue(registered->_valueType)});
+            }
+
+            continue;
+        }
+
+        if (registered && !writesInto(registered->_valueType, valueType)) {
+            throw IRException(fmt::format("Cannot write a value of type '{}' to the property '{}' of type '{}'",
+                                          ValueTypeName::value(valueType),
+                                          key,
+                                          ValueTypeName::value(registered->_valueType)));
+        }
+
+        const PropertyType property = registered ? *registered : metadataBuilder->getOrCreatePropertyType(key, valueType);
+        if (!registered) {
+            created.push_back(property);
+        }
+
+        CommitWriteBuffer::SupportedTypeVariant value;
+        const auto stage = [&value, entry]<SupportedType T>() {
+            const MapTagDispatcher dispatcher {entry.getValueTag()};
+            value = dispatcher.execute(TaggedCellStager<T> {}, entry);
+        };
+
+        ValueTypeDispatcher(property._valueType).execute(stage);
+
+        staged.push_back({property._id, std::move(value)});
+    }
+}
+
+void db::stageMapRemovals(std::span<const PropertyType> known, CommitWriteBuffer::UntypedProperties& staged) {
+    const size_t entryCount = staged.size();
+
+    for (const PropertyType property : known) {
+        const auto setsTheProperty = [property](const CommitWriteBuffer::UntypedProperty& entry) {
+            return entry.propertyID == property._id;
+        };
+
+        const bool setByAnEntry = std::any_of(staged.begin(), staged.begin() + entryCount, setsTheProperty);
+        if (!setByAnEntry) {
+            staged.push_back({property._id, disengagedValue(property._valueType)});
+        }
+    }
 }

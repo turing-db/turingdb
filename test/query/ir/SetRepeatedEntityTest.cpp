@@ -55,6 +55,21 @@ TEST_F(SetRepeatedEntityTest, incrementsTheNodeTheQueryCreatedOncePerRow) {
     expectRows("MATCH (c:Counter) RETURN c.n", {{"3"}});
 }
 
+// 70000 rows span two chunks, and every row of a chunk reaches the same node
+TEST_F(SetRepeatedEntityTest, incrementsTheNodeOncePerRowOfManyChunks) {
+    applyWrite("UNWIND range(1, 70000) AS x MATCH (n:Person {name: 'Remy'}) SET n.age = n.age + 1");
+
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN n.age", {{"70032"}});
+}
+
+TEST_F(SetRepeatedEntityTest, readsWhatEachOfManyRowsWroteThroughAnotherVariable) {
+    applyWrite("UNWIND range(1, 70000) AS i "
+               "MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Remy'}) "
+               "SET a.age = b.age + 1");
+
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN n.age", {{"70032"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

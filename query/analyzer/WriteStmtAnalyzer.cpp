@@ -1,5 +1,7 @@
 #include "WriteStmtAnalyzer.h"
 
+#include <unordered_set>
+
 #include <spdlog/fmt/bundled/format.h>
 
 #include "AnalyzeException.h"
@@ -22,9 +24,22 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
+#include "expr/EntityTypeExpr.h"
+#include "expr/ExistsExpr.h"
+#include "expr/ExprChildren.h"
+#include "expr/PatternComprehensionExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/SymbolExpr.h"
+#include "Projection.h"
+#include "SinglePartQuery.h"
+#include "WhereClause.h"
 #include "stmt/DeleteStmt.h"
+#include "stmt/MatchStmt.h"
+#include "stmt/ReturnStmt.h"
+#include "stmt/StmtContainer.h"
+#include "stmt/UnwindStmt.h"
+#include "stmt/WithStmt.h"
 #include "stmt/SetItem.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
@@ -47,6 +62,131 @@ const MapLiteral* mapLiteralOf(const Expr* expr) {
     }
 
     return static_cast<const MapLiteral*>(literal);
+}
+
+using NameSet = std::unordered_set<std::string_view>;
+
+std::string_view findReadName(const Expr* expr, const NameSet& names);
+
+std::string_view findPatternReadName(const Pattern* pattern, const NameSet& names) {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const Symbol* symbol = entity->getSymbol();
+            if (symbol && names.contains(symbol->getName())) {
+                return symbol->getName();
+            }
+
+            if (const MapLiteral* properties = entity->getProperties()) {
+                for (const auto& [key, value] : *properties) {
+                    const std::string_view found = findReadName(value, names);
+                    if (!found.empty()) {
+                        return found;
+                    }
+                }
+            }
+
+            if (const WhereClause* where = entity->getWhere()) {
+                const std::string_view found = findReadName(where->getExpr(), names);
+                if (!found.empty()) {
+                    return found;
+                }
+            }
+        }
+    }
+
+    const WhereClause* where = pattern->getWhere();
+    return where ? findReadName(where->getExpr(), names) : std::string_view {};
+}
+
+std::string_view findProjectionReadName(const Projection* projection, const NameSet& names) {
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const Expr* const* itemExpr = std::get_if<Expr*>(&item);
+        const std::string_view found = itemExpr ? findReadName(*itemExpr, names) : std::string_view {};
+
+        if (!found.empty()) {
+            return found;
+        }
+    }
+
+    return {};
+}
+
+std::string_view findQueryReadName(const SinglePartQuery* query, const NameSet& names) {
+    std::string_view found;
+
+    if (const StmtContainer* stmts = query->getStmts()) {
+        for (const Stmt* stmt : stmts->stmts()) {
+            const Stmt::Kind kind = stmt->getKind();
+
+            if (kind == Stmt::Kind::MATCH) {
+                found = findPatternReadName(static_cast<const MatchStmt*>(stmt)->getPattern(), names);
+            } else if (kind == Stmt::Kind::UNWIND) {
+                found = findReadName(static_cast<const UnwindStmt*>(stmt)->arg(), names);
+            } else if (kind == Stmt::Kind::WITH) {
+                const WithStmt* with = static_cast<const WithStmt*>(stmt);
+                found = findProjectionReadName(with->getProjection(), names);
+
+                const WhereClause* where = with->getWhere();
+                if (found.empty() && where) {
+                    found = findReadName(where->getExpr(), names);
+                }
+            }
+
+            if (!found.empty()) {
+                return found;
+            }
+        }
+    }
+
+    const ReturnStmt* returnStmt = query->getReturnStmt();
+    return returnStmt ? findProjectionReadName(returnStmt->getProjection(), names) : std::string_view {};
+}
+
+// A name of @param names that @param expr reads, or an empty one. It goes by name: an EXISTS
+// reads the variables around it through declarations of its own.
+std::string_view findReadName(const Expr* expr, const NameSet& names) {
+    const Expr::Kind kind = expr->getKind();
+
+    const VarDecl* read = nullptr;
+    if (kind == Expr::Kind::PROPERTY) {
+        read = static_cast<const PropertyExpr*>(expr)->getEntityVarDecl();
+    } else if (kind == Expr::Kind::SYMBOL) {
+        read = static_cast<const SymbolExpr*>(expr)->getDecl();
+    } else if (kind == Expr::Kind::ENTITY_TYPES) {
+        read = static_cast<const EntityTypeExpr*>(expr)->getEntityVarDecl();
+    } else if (kind == Expr::Kind::EXISTS) {
+        const ExistsExpr* exists = static_cast<const ExistsExpr*>(expr);
+
+        for (const SinglePartQuery* branch : exists->branches()) {
+            const std::string_view found = findQueryReadName(branch, names);
+            if (!found.empty()) {
+                return found;
+            }
+        }
+
+        return {};
+    } else if (kind == Expr::Kind::PATTERN_COMPREHENSION) {
+        const PatternComprehensionExpr* comprehension = static_cast<const PatternComprehensionExpr*>(expr);
+
+        const std::string_view found = findPatternReadName(comprehension->getPattern(), names);
+        return found.empty() ? findReadName(comprehension->getProjection(), names) : found;
+    }
+
+    if (read && names.contains(read->getName())) {
+        return read->getName();
+    }
+
+    std::vector<const Expr*> children;
+    ExprChildren::collect(expr, children);
+
+    for (const Expr* child : children) {
+        const std::string_view found = findReadName(child, names);
+        if (!found.empty()) {
+            return found;
+        }
+    }
+
+    return {};
 }
 
 // A tagged cell carries its type per row, so the write checks each cell against the
@@ -101,6 +241,9 @@ void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     if (const Pattern* pattern = createStmt->getPattern()) {
         throwOnEntityWhere(pattern, "CREATE");
         throwOnUndirectedEdge(pattern);
+
+        _patternClause = "CREATE";
+        collectPatternNames(pattern);
         analyze(pattern);
     }
 }
@@ -109,6 +252,9 @@ void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
     const Pattern* pattern = mergeStmt->getPattern();
 
     throwOnEntityWhere(pattern, "MERGE");
+
+    _patternClause = "MERGE";
+    collectPatternNames(pattern);
     analyze(pattern);
 
     for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
@@ -162,6 +308,33 @@ void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_v
             }
         }
     }
+}
+
+void WriteStmtAnalyzer::collectPatternNames(const Pattern* pattern) {
+    _patternNames.clear();
+
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const Symbol* symbol = entity->getSymbol();
+            if (symbol && !_ctxt->getDecl(symbol->getName())) {
+                _patternNames.insert(symbol->getName());
+            }
+        }
+    }
+}
+
+void WriteStmtAnalyzer::throwOnPatternEntityRead(const Expr* expr, const void* obj) const {
+    const std::string_view read = findReadName(expr, _patternNames);
+    if (read.empty()) {
+        return;
+    }
+
+    throwError(fmt::format("A property of this {} reads '{}', which the same {} introduces: it has no value "
+                           "until the clause has run, so only variables bound by an earlier clause can be read here",
+                           _patternClause,
+                           read,
+                           _patternClause),
+               obj);
 }
 
 void WriteStmtAnalyzer::throwOnUndirectedEdge(const Pattern* pattern) const {
@@ -235,7 +408,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
             const auto& labels = nodePattern->labels();
 
             // Already existing vars cannot have constraints
-            if (nodePattern->getData() != nullptr || labels != nullptr) {
+            if (nodePattern->getData() != nullptr || labels != nullptr || nodePattern->getProperties() != nullptr) {
                 throwError("Variable already defined", nodePattern);
             }
 
@@ -269,6 +442,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
         for (const auto& [propName, expr] : *properties) {
             _exprAnalyzer->analyzeRootExpr(expr);
+            throwOnPatternEntityRead(expr, nodePattern);
 
             if (expr->isAggregate()) {
                 throwError("Invalid use of aggregate expression in this context", nodePattern);
@@ -312,7 +486,12 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
         decl = _ctxt->getDecl(symbol->getName());
-        if (decl) {
+        if (decl && _patternNames.contains(symbol->getName())) {
+            throwError(fmt::format("Relationship variable '{}' appears twice in this pattern, and each "
+                                   "relationship of a pattern is an edge of its own",
+                                   symbol->getName()),
+                       edgePattern);
+        } else if (decl) {
             throwError("Edges cannot be inputs to write queries", edgePattern);
         }
 
@@ -348,6 +527,7 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
         for (const auto& [propName, expr] : *properties) {
             _exprAnalyzer->analyzeRootExpr(expr);
+            throwOnPatternEntityRead(expr, edgePattern);
 
             if (expr->isAggregate()) {
                 throwError("Invalid use of aggregate expression in this context", edgePattern);
@@ -431,7 +611,8 @@ void WriteStmtAnalyzer::analyzePropertyAssign(const SetItem* item, PropertyExpr*
         throwError("Invalid use of aggregate expression in this context", item);
     }
 
-    if (writesNull) {
+    const bool writesThroughNull = lhs->getEntityVarDecl()->getType() == EvaluatedType::Null;
+    if (writesNull || writesThroughNull) {
         return;
     }
 
@@ -453,19 +634,20 @@ void WriteStmtAnalyzer::analyzeMapAssign(const SetItem* item, SetItem::SymbolMap
 
     const EvaluatedType varType = decl->getType();
     const bool writesAnEntity = varType == EvaluatedType::NodePattern || varType == EvaluatedType::EdgePattern;
-    if (!writesAnEntity) {
+    if (!writesAnEntity && varType != EvaluatedType::Null) {
         throwError(fmt::format("Variable '{}' is '{}', and SET writes the properties of a node or an edge",
                                varName,
                                EvaluatedTypeName::value(varType)),
                    item);
     }
 
+    assign._decl = decl;
+
     const MapLiteral* map = mapLiteralOf(assign._value);
     if (!map) {
-        throwOnMapAssignValue(item, assign._value);
+        analyzeComputedValue(item, assign);
+        return;
     }
-
-    assign._decl = decl;
 
     std::unordered_set<std::string_view> keys;
     for (const auto& [key, value] : *map) {
@@ -503,17 +685,81 @@ void WriteStmtAnalyzer::analyzeMapAssign(const SetItem* item, SetItem::SymbolMap
     }
 }
 
-void WriteStmtAnalyzer::throwOnMapAssignValue(const SetItem* item, Expr* value) {
+// SET n = m and SET n += m, m a node or an edge: every property the query knows of, read
+// off m and written to n
+void WriteStmtAnalyzer::analyzeComputedValue(const SetItem* item, SetItem::SymbolMapAssign& assign) {
+    Expr* value = assign._value;
     _exprAnalyzer->analyzeExpr(value);
+    _exprAnalyzer->analyzeRootExpr(value);
+
+    if (value->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", item);
+    }
 
     const EvaluatedType valueType = value->getType();
+    const bool readsAnEntity = valueType == EvaluatedType::NodePattern || valueType == EvaluatedType::EdgePattern;
 
-    if (valueType == EvaluatedType::Map) {
-        throwError("SET of a map computed at run time is not supported yet: write the map out as a literal", item);
-    } else if (valueType == EvaluatedType::NodePattern || valueType == EvaluatedType::EdgePattern) {
-        throwError("SET copying the properties of a node or an edge is not supported yet", item);
+    const bool readsAMap = valueType == EvaluatedType::Map
+                        || valueType == EvaluatedType::Null
+                        || valueType == EvaluatedType::ListItem;
+
+    if (readsAMap) {
+        assign._writesRowEntries = true;
+    } else if (readsAnEntity) {
+        analyzeEntityCopy(item, assign);
     } else {
         throwError(fmt::format("SET writes a map of properties, not '{}'", EvaluatedTypeName::value(valueType)), item);
+    }
+}
+
+void WriteStmtAnalyzer::analyzeEntityCopy(const SetItem* item, SetItem::SymbolMapAssign& assign) {
+    Expr* value = assign._value;
+    const EvaluatedType valueType = value->getType();
+
+    assign._copiesEntity = true;
+
+    Symbol* source = nullptr;
+    if (value->getKind() == Expr::Kind::SYMBOL) {
+        source = static_cast<SymbolExpr*>(value)->getSymbol();
+    } else {
+        assign._sourceDecl = _ctxt->createUnnamedVariable(_ast, valueType);
+        source = Symbol::create(_ast, assign._sourceDecl->getName());
+    }
+    std::unordered_set<std::string_view> copied;
+
+    const auto copy = [&](std::string_view name) {
+        if (!copied.insert(name).second) {
+            return;
+        }
+
+        Symbol* property = Symbol::create(_ast, name);
+
+        QualifiedName* targetName = QualifiedName::create(_ast);
+        targetName->addName(assign._symbol);
+        targetName->addName(property);
+
+        QualifiedName* sourceName = QualifiedName::create(_ast);
+        sourceName->addName(source);
+        sourceName->addName(property);
+
+        PropertyExpr* target = PropertyExpr::create(_ast, targetName);
+        PropertyExpr* read = PropertyExpr::create(_ast, sourceName);
+        read->setEntityVarDecl(assign._sourceDecl);
+        assign._entries.push_back({target, read});
+
+        analyzePropertyAssign(item, target, read);
+    };
+
+    for (const PropertyTypeMap::Pair& property : _graphMetadata.propTypes()) {
+        copy(*property._name);
+    }
+
+    for (const auto& [name, createdType] : _exprAnalyzer->getToBeCreatedTypes()) {
+        copy(name);
+    }
+
+    for (const std::string_view name : _exprAnalyzer->getToBeCreatedFromTaggedCells()) {
+        copy(name);
     }
 }
 

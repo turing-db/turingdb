@@ -1942,6 +1942,34 @@ def RowBarrier : TuringOp<"row_barrier", []> {
   let hasVerifier = 1;
 }
 
+def EachRow : TuringOp<"each_row", []> {
+  let summary = "Hand the rows of a column set on in steps that run one row after another";
+  let description = [{
+    Takes the whole set of columns in flight and emits them unchanged. Every op reading
+    its results runs over one step at a time, in row order, so a row sees what the rows
+    before it wrote. This is how the items of one SET clause apply row by row.
+
+      %n2, %m2 = db.each_row(%n, %m) keys [0] : (...) -> (...)
+
+    `keys` names entity columns by position. A step then holds rows no two of which share
+    an entity of those columns, and a row comes in a later step than every earlier row
+    sharing one: rows touching different entities run together. With no keys a step is
+    one row.
+
+    It lowers to an nl.each_row driven by an nl.for, whose body the ops reading the
+    results are lowered into.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns, DenseI64ArrayAttr:$keys);
+  let results   = (outs Variadic<Column>:$results);
+
+  let assemblyFormat = [{
+    `(` $columns `)` `keys` $keys attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
 /**
 * RemoveDuplicates
 */
@@ -2712,6 +2740,13 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
     `carried_columns` mirrors db.get_out_edges': the columns in flight, handed back
     re-indexed onto the rows the merge emitted, so a row the op emitted twice repeats
     them and one it emitted nothing for drops them.
+
+    `repeated_nodes` pairs a chain node with the earlier one it names again - the second `a`
+    of `MERGE (a:A)-[:R]->(a)`. The match holds both at one node, and a write writes it once.
+
+    `row_by_row` marks a merge whose ON CREATE or ON MATCH writes a property it looks its
+    pattern up by. It runs one input row at a time, with everything below it, so a row
+    looks up what the actions of the rows before it left.
   }];
 
   let arguments = (ins StrArrayArrayAttr:$node_labels,
@@ -2720,6 +2755,8 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
                        StrArrayArrayAttr:$edge_prop_names,
                        DenseI64ArrayAttr:$edge_directions,
                        DenseI64ArrayAttr:$pending_nodes,
+                       OptionalAttr<DenseI64ArrayAttr>:$repeated_nodes,
+                       UnitAttr:$row_by_row,
                        Variadic<Column>:$bound_nodes,
                        Variadic<Column>:$bound_pending,
                        Variadic<Column>:$node_prop_values,
@@ -2737,6 +2774,7 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{
     `nodes` $node_labels `props` $node_prop_names
     `edges` $edge_types `props` $edge_prop_names `dirs` custom<EdgeDirections>($edge_directions)
+    (`repeats` $repeated_nodes^)?
     `bound` `{` $bound_nodes `}` `pending` custom<ColumnIndices>($pending_nodes) `{` $bound_pending `}`
     `values` `{` $node_prop_values `}` `{` $edge_prop_values `}`
     `carrying` `{` $carried_columns `}`
@@ -2761,16 +2799,18 @@ def SetNodeProperty : TuringOp<"set_node_property", [AttrSizedOperandSegments]> 
                        Column:$value,
                        Optional<Column>:$pending,
                        Optional<Column>:$rows,
-                       UnitAttr:$all_pending);
+                       UnitAttr:$all_pending,
+                       UnitAttr:$skips_nulls);
 
   // `pending` says, row by row, which entities this change wrote and has not committed -
   // those are written in the write buffer rather than recorded as an update to a
   // committed entity, and `all_pending` says it of every row without a mask. `rows`
   // narrows which rows are written at all: Cypher's ON CREATE passes the merge's created
-  // mask, ON MATCH its negation, and a plain SET passes none.
+  // mask, ON MATCH its negation, and a plain SET passes none. `skips_nulls` leaves the
+  // property as it is on a row whose value is null, which is how SET n += m reads m.
   let assemblyFormat = [{
     `(` $input_nodes `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
+    (`all_pending` $all_pending^)? (`skips_nulls` $skips_nulls^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
@@ -2791,11 +2831,62 @@ def SetEdgeProperty : TuringOp<"set_edge_property", [AttrSizedOperandSegments]> 
                        Column:$value,
                        Optional<Column>:$pending,
                        Optional<Column>:$rows,
-                       UnitAttr:$all_pending);
+                       UnitAttr:$all_pending,
+                       UnitAttr:$skips_nulls);
 
   let assemblyFormat = [{
     `(` $input_edges `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
+    (`all_pending` $all_pending^)? (`skips_nulls` $skips_nulls^)? attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetNodeProperties : TuringOp<"set_node_properties", [AttrSizedOperandSegments]> {
+  let summary = "Set the entries of a row-aligned map as properties of each input node";
+
+  let description = [{
+      db.set_node_properties(%n, %map) replaces
+        : (!db.column<!storage.node_id>, !db.column<!storage.map>) -> ()
+
+    SET n = m and SET n += m, m a map computed at run time: its keys name the properties
+    row by row. A null entry removes its property. `replaces` removes every other property
+    the node holds, and a null map is an empty one.
+  }];
+
+  let arguments = (ins Column:$input_nodes,
+                       Column:$value,
+                       Optional<Column>:$pending,
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending,
+                       UnitAttr:$replaces);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperties : TuringOp<"set_edge_properties", [AttrSizedOperandSegments]> {
+  let summary = "Set the entries of a row-aligned map as properties of each input edge";
+
+  let description = [{
+      db.set_edge_properties(%e, %map)
+        : (!db.column<!storage.edge_id>, !db.column<!storage.map>) -> ()
+  }];
+
+  let arguments = (ins Column:$input_edges,
+                       Column:$value,
+                       Optional<Column>:$pending,
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending,
+                       UnitAttr:$replaces);
+
+  let assemblyFormat = [{
+    `(` $input_edges `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;

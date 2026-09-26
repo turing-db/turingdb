@@ -4,6 +4,7 @@
 
 #include "columns/ColumnOperator.h"
 #include "metadata/PropertyType.h"
+#include "versioning/CommitWriteBuffer.h"
 
 #include "NLExecutionContext.h"
 #include "NLProgram.h"
@@ -308,6 +309,8 @@ public:
     static void runMerge(NLExecutionContext* context, NLFunctionData* data);
 
     static void runSetNodeProperty(NLExecutionContext* context, NLFunctionData* data);
+    static void runSetNodeProperties(NLExecutionContext* context, NLFunctionData* data);
+    static void runSetEdgeProperties(NLExecutionContext* context, NLFunctionData* data);
 
     static void runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data);
 
@@ -560,6 +563,10 @@ public:
     static NLKeyAppendFunction selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
     static NLKeyAppendFunction selectOptOwnedStringMergeKeyAppend(ValueType keyType);
     static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
+    static NLKeyAppendFunction selectTaggedCellMergeKeyAppend(ValueType keyType);
+
+    // The key bytes of one staged value, which a column of its type keys alike
+    static void appendStagedValueKey(const CommitWriteBuffer::SupportedTypeVariant& staged, std::string& key);
     static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 
     // Block-repeat for an ID chunk of this kind (outer column).

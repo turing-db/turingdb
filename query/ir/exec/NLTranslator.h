@@ -109,9 +109,10 @@ private:
         llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
         llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
 
-        // The step's chunks an EachRow iterator walks one row at a time; empty for the
-        // other kinds.
+        // The step's chunks an EachRow iterator walks one row at a time, and the positions
+        // of the entity chunks that group rows into steps; empty for the other kinds.
         llvm::SmallVector<mlir::Value, 4> _eachRowColumns;
+        llvm::SmallVector<int64_t, 2> _eachRowKeys;
 
         // The build side a HashJoinProbe iterator matches against and the probe columns it
         // walks, in db.yield order; null and empty for the other kinds.
@@ -208,9 +209,6 @@ private:
     // than once answers one instant rather than one per call
     std::optional<DateTime> _queryInstant;
 
-    // The statements each translated op emitted into its block's container, by position
-    llvm::DenseMap<mlir::Operation*, std::pair<size_t, size_t>> _emittedStatements;
-
     std::unique_ptr<NLSystemTranslator> _systemTranslator;
 
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
@@ -283,7 +281,10 @@ private:
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
     llvm::DenseMap<mlir::Value, NLProcedureState*> _procedureStates;
 
-    void translateBlock(mlir::Block& block, NLStmtContainer* body);
+    // Translates the ops of @param block in order, or only those of @param only
+    void translateBlock(mlir::Block& block,
+                        NLStmtContainer* body,
+                        const llvm::DenseSet<mlir::Operation*>* only = nullptr);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
 
@@ -958,17 +959,23 @@ private:
                                      bool untypedValue) const;
 
     void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
+    void translateSetNodeProperties(mlir::nl::SetNodeProperties setNodeProperties, NLStmtContainer* body);
+    void translateSetEdgeProperties(mlir::nl::SetEdgeProperties setEdgeProperties, NLStmtContainer* body);
 
-    // A set whose value reads the property it writes applies row by row, so it runs the
-    // statements of its block that compute its value from that read again once a row
-    // reads what an earlier row wrote. The ops selecting its entities are not among them.
+    // A set whose value reads the property it writes applies row by row, so it computes
+    // its value again, from that read on, for the rows reading what an earlier row wrote.
+    // The ops selecting its entities are not among the ones it reruns.
     void collectSetRereads(mlir::Operation* setOp,
                            mlir::Value entities,
                            mlir::Value value,
                            llvm::StringRef property,
                            bool isNode,
-                           const NLStmtContainer* body,
                            NLSetRereads& rereads);
+
+    void translateRereads(mlir::Block& block,
+                          const llvm::DenseSet<mlir::Operation*>& rerun,
+                          mlir::Value value,
+                          NLSetRereads& rereads);
 
     void translateSetEdgeProperty(mlir::nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body);
 

@@ -525,6 +525,15 @@ NLMergeNodeIndex::NLMergeNodeIndex(const LabelSet& labels,
 NLMergeNodeIndex::~NLMergeNodeIndex() {
 }
 
+// A node keyed again under a key it is filed under already keeps the one entry
+void NLMergeNodeIndex::add(const std::string& key, const NLMergeRef& ref) {
+    std::vector<NLMergeRef>& refs = _byKey[key];
+
+    if (!std::ranges::contains(refs, ref)) {
+        refs.push_back(ref);
+    }
+}
+
 std::span<const NLMergeRef> NLMergeNodeIndex::find(const std::string& key) const {
     const auto findIt = _byKey.find(key);
     if (findIt == end(_byKey)) {

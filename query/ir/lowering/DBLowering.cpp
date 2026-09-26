@@ -16,6 +16,7 @@
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Verifier.h"
 
+#include "DBWrites.h"
 #include "NLOps.h"
 
 #include "IRConstantColumn.h"
@@ -852,6 +853,7 @@ bool opensRowLoop(mlir::Operation* operation) {
                      mlir::db::HashJoin,
                      mlir::db::Sort,
                      mlir::db::RowBarrier,
+                     mlir::db::EachRow,
                      mlir::db::GroupAggregate,
                      mlir::db::OptionalMatch>(operation);
 }
@@ -1016,6 +1018,7 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
     for (mlir::db::Limit limit : limits) {
         const mlir::Value handle = _limitHandles[limit.getOperation()];
         _producerWalkVisits.clear();
+        _walkedLimit = limit.getOperation();
 
         bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
@@ -1117,6 +1120,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSetNodeProperty(setNodeProperty);
     } else if (mlir::db::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<mlir::db::SetEdgeProperty>(operation)) {
         lowerSetEdgeProperty(setEdgeProperty);
+    } else if (mlir::db::SetNodeProperties setNodeProperties = mlir::dyn_cast<mlir::db::SetNodeProperties>(operation)) {
+        lowerSetNodeProperties(setNodeProperties);
+    } else if (mlir::db::SetEdgeProperties setEdgeProperties = mlir::dyn_cast<mlir::db::SetEdgeProperties>(operation)) {
+        lowerSetEdgeProperties(setEdgeProperties);
     } else if (mlir::db::DeleteNode deleteNode = mlir::dyn_cast<mlir::db::DeleteNode>(operation)) {
         lowerDeleteNode(deleteNode);
     } else if (mlir::db::DeleteEdge deleteEdge = mlir::dyn_cast<mlir::db::DeleteEdge>(operation)) {
@@ -1143,6 +1150,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSort(sort);
     } else if (mlir::db::RowBarrier barrier = mlir::dyn_cast<mlir::db::RowBarrier>(operation)) {
         lowerRowBarrier(barrier);
+    } else if (mlir::db::EachRow eachRow = mlir::dyn_cast<mlir::db::EachRow>(operation)) {
+        lowerEachRow(eachRow);
     } else if (mlir::db::RemoveDuplicates distinct = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation)) {
         lowerRemoveDuplicates(distinct);
     } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
@@ -2369,6 +2378,13 @@ void DBLowering::lowerSubqueryBody(mlir::db::CallSubquery call,
     _innermostLoopBody = nullptr;
     _innermostCardinality = mlir::Value();
 
+    // What the body is handed are the rows in flight as it starts, which a constant it
+    // reads is laid out over
+    if (const mlir::Value rows = cardinalityDriver(inputChunks); rows && !yieldsConstantColumn(rows)) {
+        _innermostLoopBody = stepBlock;
+        _innermostCardinality = rows;
+    }
+
     for (mlir::Operation& operation : bodyBlock) {
         mlir::db::SubqueryYield yield = mlir::dyn_cast<mlir::db::SubqueryYield>(operation);
         if (!yield) {
@@ -3127,6 +3143,24 @@ void DBLowering::lowerRowBarrier(mlir::db::RowBarrier barrier) {
     nl::RowDrain drain = _builder.create<nl::RowDrain>(loc, iteratorType, state);
 
     buildLoopForSource(drain.getResult(), barrier.getOperation());
+}
+
+void DBLowering::lowerEachRow(mlir::db::EachRow eachRow) {
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : eachRow.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    rowAlignBufferedChunks(chunks);
+
+    setInsertionInto(deepestOwnerBlock(chunks, _rootBlock));
+
+    const llvm::ArrayRef<int64_t> keys = eachRow.getKeys();
+    const mlir::DenseI64ArrayAttr keysAttr = keys.empty() ? mlir::DenseI64ArrayAttr {} : eachRow.getKeysAttr();
+
+    nl::EachRow rows = _builder.create<nl::EachRow>(_builder.getUnknownLoc(), chunks, keysAttr);
+
+    buildLoopForSource(rows.getResult(), eachRow.getOperation());
 }
 
 // Each branch is lowered as a program of its own rooted in the entry block, so its loops
@@ -4146,7 +4180,11 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
     // producer the walk found, so reachedALoop stands and the cut keeps its nest.
     const bool boundsCrossProduct = isCrossProduct && !rowsDroppedBeforeTheCut;
     const bool boundsHashJoin = isHashJoin && !rowsDroppedBeforeTheCut;
-    const bool takesTheHandle = opensLoop || boundsCrossProduct || boundsHashJoin || emitsThroughLoop;
+
+    // A write past the producer applies to every row, the ones the limit drops too, so a
+    // loop feeding one runs to its end
+    const bool feedsAWrite = mlir::db::writesBetween(definingOp, _walkedLimit);
+    const bool takesTheHandle = (opensLoop || boundsCrossProduct || boundsHashJoin || emitsThroughLoop) && !feedsAWrite;
 
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.
@@ -4377,7 +4415,10 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
     }
 
     if (cardinalityChunk) {
-        setInsertionInto(ownerBlock(cardinalityChunk));
+        llvm::SmallVector<mlir::Value, 8> operandChunks {cardinalityChunk};
+        operandChunks.append(propChunks.begin(), propChunks.end());
+
+        setInsertionInto(ownerBlock(deepestBoundChunk(operandChunks)));
     } else {
         mlir::Block* targetBlock = _rootBlock;
         for (const mlir::OpOperand& use : createNode.getResult().getUses()) {
@@ -4480,14 +4521,14 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     operandChunks.append(edgePropValues.begin(), edgePropValues.end());
     operandChunks.append(carriedColumns.begin(), carriedColumns.end());
 
-    // Inserted into the deepest block, where all the operands are defined. A merge over
-    // literals alone reads no chunk, and so opens where the program does.
-    mlir::Block* targetBlock = _entryBlock;
-    if (const mlir::Value insertionReference = deepestBoundChunk(operandChunks)) {
-        targetBlock = ownerBlock(insertionReference);
-    }
+    // Inserted into the deepest block, where all the operands are defined, and no higher
+    // than where its dataflow is rooted - the step a subquery body runs over, which a merge
+    // over literals alone runs once per
+    setInsertionInto(deepestOwnerBlock(operandChunks, _rootBlock));
 
-    setInsertionInto(targetBlock);
+    if (merge.getRowByRow()) {
+        openMergeRowLoop({&boundNodes, &boundPending, &nodePropValues, &edgePropValues, &carriedColumns});
+    }
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type nodeChunkType = nl::ChunkType::get(context, storage::NodeIDType::get(context));
@@ -4523,6 +4564,7 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
                                                    merge.getEdgePropNamesAttr(),
                                                    merge.getEdgeDirectionsAttr(),
                                                    merge.getPendingNodesAttr(),
+                                                   merge.getRepeatedNodesAttr(),
                                                    boundNodes,
                                                    boundPending,
                                                    nodePropValues,
@@ -4538,6 +4580,40 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     // The merge grows or shrinks the rows in flight, so from here on what sizes a
     // projection of constants alone is its own node chunk
     _innermostCardinality = nlResults.front();
+}
+
+// Opens a loop binding one row of the merge's chunks per step, and rewrites them to the loop
+// variables. A constant stands for every row and is read as it is.
+void DBLowering::openMergeRowLoop(std::initializer_list<llvm::SmallVectorImpl<mlir::Value>*> chunkLists) {
+    llvm::SmallVector<mlir::Value, 8> rowChunks;
+    for (const llvm::SmallVectorImpl<mlir::Value>* chunks : chunkLists) {
+        for (const mlir::Value chunk : *chunks) {
+            if (!yieldsConstantColumn(chunk) && !llvm::is_contained(rowChunks, chunk)) {
+                rowChunks.push_back(chunk);
+            }
+        }
+    }
+
+    if (rowChunks.empty()) {
+        return;
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+    nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
+    nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), mlir::Value {});
+    mlir::Block* const rowBody = rowLoop.getBody();
+
+    for (llvm::SmallVectorImpl<mlir::Value>* chunks : chunkLists) {
+        for (mlir::Value& chunk : *chunks) {
+            const auto rowIt = llvm::find(rowChunks, chunk);
+            if (rowIt != rowChunks.end()) {
+                chunk = rowBody->getArgument(static_cast<unsigned>(rowIt - rowChunks.begin()));
+            }
+        }
+    }
+
+    _innermostLoopBody = rowBody;
+    setInsertionInto(rowBody);
 }
 
 void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty) {
@@ -4559,7 +4635,8 @@ void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty)
         valueChunk,
         mapOptionalMask(setNodeProperty.getPending()),
         mapOptionalMask(setNodeProperty.getRows()),
-        setNodeProperty.getAllPending());
+        setNodeProperty.getAllPending(),
+        setNodeProperty.getSkipsNulls());
 }
 
 void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty) {
@@ -4581,7 +4658,38 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
         valueChunk,
         mapOptionalMask(setEdgeProperty.getPending()),
         mapOptionalMask(setEdgeProperty.getRows()),
-        setEdgeProperty.getAllPending());
+        setEdgeProperty.getAllPending(),
+        setEdgeProperty.getSkipsNulls());
+}
+
+void DBLowering::lowerSetNodeProperties(mlir::db::SetNodeProperties setNodeProperties) {
+    const mlir::Value inputChunk = mapValue(setNodeProperties.getInputNodes());
+    const mlir::Value valueChunk = mapValue(setNodeProperties.getValue());
+
+    setInsertionInto(deeperBlock(inputChunk, valueChunk));
+
+    _builder.create<nl::SetNodeProperties>(_builder.getUnknownLoc(),
+                                           inputChunk,
+                                           valueChunk,
+                                           mapOptionalMask(setNodeProperties.getPending()),
+                                           mapOptionalMask(setNodeProperties.getRows()),
+                                           setNodeProperties.getAllPending(),
+                                           setNodeProperties.getReplaces());
+}
+
+void DBLowering::lowerSetEdgeProperties(mlir::db::SetEdgeProperties setEdgeProperties) {
+    const mlir::Value inputChunk = mapValue(setEdgeProperties.getInputEdges());
+    const mlir::Value valueChunk = mapValue(setEdgeProperties.getValue());
+
+    setInsertionInto(deeperBlock(inputChunk, valueChunk));
+
+    _builder.create<nl::SetEdgeProperties>(_builder.getUnknownLoc(),
+                                           inputChunk,
+                                           valueChunk,
+                                           mapOptionalMask(setEdgeProperties.getPending()),
+                                           mapOptionalMask(setEdgeProperties.getRows()),
+                                           setEdgeProperties.getAllPending(),
+                                           setEdgeProperties.getReplaces());
 }
 
 void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {

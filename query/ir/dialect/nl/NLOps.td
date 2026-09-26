@@ -1274,13 +1274,18 @@ def EachRow : NLOp<"each_row", [Pure, InferTypeOpAdaptor]> {
     must be row-aligned with each other, and there must be at least one - the step's
     row count is read from the first. A `limit` on the enclosing nl.for stops the
     walk over the rows once the budget is spent.
+
+    `keys` names node or edge columns by position. A step then binds every row it can:
+    no two rows of a step share an ID of those columns, and a row comes in a later step
+    than every earlier row sharing one. That keeps what one row after another would do
+    while rows touching different entities run together.
   }];
 
-  let arguments = (ins Variadic<NLChunk>:$columns);
+  let arguments = (ins Variadic<NLChunk>:$columns, OptionalAttr<DenseI64ArrayAttr>:$keys);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+    `{` $columns `}` (`keys` $keys^)? attr-dict `:` `{` qualified(type($columns)) `}`
   }];
 }
 
@@ -2924,6 +2929,7 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
                        StrArrayArrayAttr:$edge_prop_names,
                        DenseI64ArrayAttr:$edge_directions,
                        DenseI64ArrayAttr:$pending_nodes,
+                       OptionalAttr<DenseI64ArrayAttr>:$repeated_nodes,
                        Variadic<NLChunk>:$bound_nodes,
                        Variadic<NLChunk>:$bound_pending,
                        Variadic<NLChunk>:$node_prop_values,
@@ -2937,6 +2943,7 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{
     `nodes` $node_labels `props` $node_prop_names
     `edges` $edge_types `props` $edge_prop_names `dirs` custom<EdgeDirections>($edge_directions)
+    (`repeats` $repeated_nodes^)?
     `bound` `{` $bound_nodes `}` `pending` custom<ColumnIndices>($pending_nodes) `{` $bound_pending `}`
     `values` `{` $node_prop_values `}` `{` $edge_prop_values `}`
     `carrying` `{` $carried_columns `}`
@@ -2957,11 +2964,12 @@ def SetNodeProperty : NLOp<"set_node_property", [AttrSizedOperandSegments]> {
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
                        Optional<NLBoolChunk>:$rows,
-                       UnitAttr:$all_pending);
+                       UnitAttr:$all_pending,
+                       UnitAttr:$skips_nulls);
 
   let assemblyFormat = [{
     $input_nodes `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? (`skips_nulls` $skips_nulls^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -2980,11 +2988,58 @@ def SetEdgeProperty : NLOp<"set_edge_property", [AttrSizedOperandSegments]> {
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
                        Optional<NLBoolChunk>:$rows,
-                       UnitAttr:$all_pending);
+                       UnitAttr:$all_pending,
+                       UnitAttr:$skips_nulls);
 
   let assemblyFormat = [{
     $input_edges `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? (`skips_nulls` $skips_nulls^)? attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetNodeProperties : NLOp<"set_node_properties", [AttrSizedOperandSegments]> {
+  let summary = "Update the properties each input node's map names in the open transaction's write buffer";
+  let description = [{
+      nl.for %nodes in %scan {
+        nl.set_node_properties %nodes, %maps replaces : !nl.chunk<!storage.map>
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes,
+                       NLChunk:$value,
+                       Optional<NLBoolChunk>:$pending,
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending,
+                       UnitAttr:$replaces);
+
+  let assemblyFormat = [{
+    $input_nodes `,` $value (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperties : NLOp<"set_edge_properties", [AttrSizedOperandSegments]> {
+  let summary = "Update the properties each input edge's map names in the open transaction's write buffer";
+  let description = [{
+      nl.for %s, %e, %t in %edges {
+        nl.set_edge_properties %e, %maps : !nl.chunk<!storage.map>
+      }
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges,
+                       NLChunk:$value,
+                       Optional<NLBoolChunk>:$pending,
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending,
+                       UnitAttr:$replaces);
+
+  let assemblyFormat = [{
+    $input_edges `,` $value (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;

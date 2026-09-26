@@ -829,6 +829,28 @@ int64_t evaluateConstantInteger(const DiagnosticsManager* diagnostics, const Exp
     }
 }
 
+// Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x) and takes
+// the plain kind. The others reduce each of a group's distinct values once, which is a kind
+// of its own, spelled as the function's name with the modifier appended. count(*) reads no
+// value, so a null of the column it is anchored on is a row all the same: a kind too.
+std::optional<mlir::storage::GroupAggregateKind> groupAggregateKindOf(const FunctionInvocation* invocation,
+                                                                      const Expr* argExpr) {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+
+    const bool isExtremum = funcName == "min" || funcName == "max";
+    const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
+    const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
+
+    std::string kindName {funcName};
+    if (countsRows) {
+        kindName += "_rows";
+    } else if (reducesDistinctValues) {
+        kindName += "_distinct";
+    }
+
+    return mlir::storage::symbolizeGroupAggregateKind(kindName);
+}
+
 bool isCollectInvocation(const Expr* item) {
     if (item->getKind() != Expr::Kind::FUNCTION_INVOCATION) {
         return false;
@@ -857,40 +879,74 @@ void collectDistinctValueIndices(llvm::ArrayRef<const FunctionInvocationExpr*> c
 // What an update clause writes that a read of the graph could see: the properties it
 // sets, whether it deletes, and the labels and edge types of what it creates, which a
 // MERGE looks its pattern up among
+// A map computed at run time names the properties it writes only as its rows arrive, so
+// a SET from one writes any
+struct WrittenProperties {
+    std::unordered_set<std::string_view> _names;
+    bool _any {false};
+
+    bool contains(std::string_view name) const { return _any || _names.contains(name); }
+};
+
 struct UpdateWrites {
-    std::unordered_set<std::string_view> _nodeProperties;
-    std::unordered_set<std::string_view> _edgeProperties;
+    WrittenProperties _nodeProperties;
+    WrittenProperties _edgeProperties;
     std::vector<std::span<const std::string_view>> _createdLabels;
     std::unordered_set<std::string_view> _createdEdgeTypes;
     bool _deletes {false};
 };
 
-void addWrittenProperty(const VarDecl* entity, std::string_view property, UpdateWrites& writes) {
+void addEntityProperty(const VarDecl* entity,
+                       std::string_view property,
+                       std::unordered_set<std::string_view>& nodeProperties,
+                       std::unordered_set<std::string_view>& edgeProperties) {
     const EvaluatedType entityType = entity->getType();
 
     if (entityType == EvaluatedType::NodePattern) {
-        writes._nodeProperties.insert(property);
+        nodeProperties.insert(property);
     } else if (entityType == EvaluatedType::EdgePattern) {
-        writes._edgeProperties.insert(property);
+        edgeProperties.insert(property);
+    }
+}
+
+void addWrittenProperty(const VarDecl* entity, std::string_view property, UpdateWrites& writes) {
+    addEntityProperty(entity, property, writes._nodeProperties._names, writes._edgeProperties._names);
+}
+
+void addEveryProperty(const VarDecl* entity, UpdateWrites& writes) {
+    const EvaluatedType entityType = entity->getType();
+
+    if (entityType == EvaluatedType::NodePattern) {
+        writes._nodeProperties._any = true;
+    } else if (entityType == EvaluatedType::EdgePattern) {
+        writes._edgeProperties._any = true;
+    }
+}
+
+void collectSetItemWrites(const SetItem* item, UpdateWrites& writes) {
+    const SetItem::Variant& variant = item->item();
+
+    if (const auto* assign = std::get_if<SetItem::PropertyExprAssign>(&variant)) {
+        const PropertyExpr* property = assign->_propTypeExpr;
+        addWrittenProperty(property->getEntityVarDecl(), property->getPropName(), writes);
+    } else if (const auto* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
+        if (mapAssign->_writesRowEntries) {
+            addEveryProperty(mapAssign->_decl, writes);
+        }
+
+        for (const SetItem::PropertyExprAssign& entry : mapAssign->_entries) {
+            addWrittenProperty(mapAssign->_decl, entry._propTypeExpr->getPropName(), writes);
+        }
+
+        for (const std::string_view removed : mapAssign->_removedProperties) {
+            addWrittenProperty(mapAssign->_decl, removed, writes);
+        }
     }
 }
 
 void collectSetWrites(const SetStmt* setStmt, UpdateWrites& writes) {
     for (const SetItem* item : setStmt->getItems()) {
-        const SetItem::Variant& variant = item->item();
-
-        if (const auto* assign = std::get_if<SetItem::PropertyExprAssign>(&variant)) {
-            const PropertyExpr* property = assign->_propTypeExpr;
-            addWrittenProperty(property->getEntityVarDecl(), property->getPropName(), writes);
-        } else if (const auto* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
-            for (const SetItem::PropertyExprAssign& entry : mapAssign->_entries) {
-                addWrittenProperty(mapAssign->_decl, entry._propTypeExpr->getPropName(), writes);
-            }
-
-            for (const std::string_view removed : mapAssign->_removedProperties) {
-                addWrittenProperty(mapAssign->_decl, removed, writes);
-            }
-        }
+        collectSetItemWrites(item, writes);
     }
 }
 
@@ -953,7 +1009,8 @@ void collectUpdateWrites(const Stmt* stmt, UpdateWrites& writes) {
     }
 }
 
-bool containsAnyName(mlir::ArrayAttr names, const std::unordered_set<std::string_view>& written) {
+template <typename WrittenNames>
+bool containsAnyName(mlir::ArrayAttr names, const WrittenNames& written) {
     return llvm::any_of(names, [&written](mlir::Attribute name) {
         return written.contains(toStringView(mlir::cast<mlir::StringAttr>(name).getValue()));
     });
@@ -1027,6 +1084,426 @@ bool readsWhatIsWritten(mlir::Operation* op, const UpdateWrites& writes) {
     } else {
         return writes._deletes && walksTheGraph(op);
     }
+}
+
+// What a clause reads that a write built before it could have changed: the properties its
+// expressions and patterns read, whether it walks the graph, the labels and edge types a
+// MATCH of it scans and walks, and those a MERGE of it looks its pattern up by. A subquery
+// or a procedure reads anything.
+struct ClauseReads {
+    std::unordered_set<std::string_view> _nodeProperties;
+    std::unordered_set<std::string_view> _edgeProperties;
+    std::vector<std::span<const std::string_view>> _scannedLabels;
+    std::unordered_set<std::string_view> _walkedEdgeTypes;
+    std::vector<std::span<const std::string_view>> _lookedUpLabels;
+    std::unordered_set<std::string_view> _lookedUpEdgeTypes;
+    bool _walksAnyEdge {false};
+    bool _walksTheGraph {false};
+    bool _readsEverything {false};
+};
+
+void collectExprReads(const Expr* expr, ClauseReads& reads) {
+    if (!expr) {
+        return;
+    }
+
+    const Expr::Kind kind = expr->getKind();
+
+    if (kind == Expr::Kind::PROPERTY) {
+        const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
+        if (const VarDecl* entity = property->getEntityVarDecl()) {
+            addEntityProperty(entity, property->getPropName(), reads._nodeProperties, reads._edgeProperties);
+        }
+
+        return;
+    } else if (kind == Expr::Kind::PATTERN_COMPREHENSION || kind == Expr::Kind::EXISTS) {
+        reads._readsEverything = true;
+        return;
+    }
+
+    std::vector<const Expr*> children;
+    ExprChildren::collect(expr, children);
+
+    for (const Expr* child : children) {
+        collectExprReads(child, reads);
+    }
+}
+
+void collectWhereReads(const WhereClause* where, ClauseReads& reads) {
+    if (where) {
+        collectExprReads(where->getExpr(), reads);
+    }
+}
+
+void collectOrderByReads(const OrderBy* orderBy, ClauseReads& reads) {
+    if (!orderBy) {
+        return;
+    }
+
+    for (const OrderByItem* item : orderBy->getItems()) {
+        collectExprReads(item->getExpr(), reads);
+    }
+}
+
+// A pattern a MATCH or a MERGE looks up reads the properties it constrains on the entities
+// it walks to, and a MERGE's lookup finds its labels and edge types among what the query
+// created
+void collectPatternReads(const Pattern* pattern, bool looksUp, ClauseReads& reads) {
+    reads._walksTheGraph = true;
+
+    for (const PatternElement* element : pattern->elements()) {
+        const std::vector<EntityPattern*>& entities = element->getEntities();
+
+        for (size_t index = 0; index < entities.size(); index++) {
+            const EntityPattern* entity = entities[index];
+            const bool isNode = index % 2 == 0;
+
+            const PatternData* data = nullptr;
+            if (isNode) {
+                const NodePatternData* nodeData = static_cast<const NodePattern*>(entity)->getData();
+                if (nodeData) {
+                    auto& labels = looksUp ? reads._lookedUpLabels : reads._scannedLabels;
+                    labels.push_back(nodeData->labelConstraints());
+                }
+
+                data = nodeData;
+            } else {
+                const EdgePatternData* edgeData = static_cast<const EdgePattern*>(entity)->getData();
+                if (edgeData) {
+                    const std::span<const std::string_view> types = edgeData->edgeTypeConstraints();
+                    auto& walked = looksUp ? reads._lookedUpEdgeTypes : reads._walkedEdgeTypes;
+                    walked.insert(types.begin(), types.end());
+
+                    reads._walksAnyEdge = reads._walksAnyEdge || (types.empty() && !looksUp);
+                }
+
+                data = edgeData;
+            }
+
+            if (data) {
+                std::unordered_set<std::string_view>& properties = isNode ? reads._nodeProperties : reads._edgeProperties;
+
+                for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+                    properties.insert(constraint._propTypeName);
+                    collectExprReads(constraint._expr, reads);
+                }
+            }
+
+            collectWhereReads(entity->getWhere(), reads);
+        }
+    }
+
+    collectWhereReads(pattern->getWhere(), reads);
+}
+
+// The expressions an item computes its values from
+void collectSetItemValues(const SetItem* item, std::vector<const Expr*>& values) {
+    const SetItem::Variant& variant = item->item();
+
+    if (const auto* assign = std::get_if<SetItem::PropertyExprAssign>(&variant)) {
+        values.push_back(assign->_propValueExpr);
+    } else if (const auto* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
+        values.push_back(mapAssign->_value);
+
+        for (const SetItem::PropertyExprAssign& entry : mapAssign->_entries) {
+            values.push_back(entry._propValueExpr);
+        }
+    }
+}
+
+void collectSetItemReads(const SetItem* item, ClauseReads& reads) {
+    std::vector<const Expr*> values;
+    collectSetItemValues(item, values);
+
+    for (const Expr* value : values) {
+        collectExprReads(value, reads);
+    }
+}
+
+void collectSetReads(const SetStmt* setStmt, ClauseReads& reads) {
+    for (const SetItem* item : setStmt->getItems()) {
+        collectSetItemReads(item, reads);
+    }
+}
+
+bool readsAWrittenProperty(const std::unordered_set<std::string_view>& read, const WrittenProperties& written) {
+    return written._any ? !read.empty() : llvm::any_of(read, [&written](std::string_view name) {
+        return written._names.contains(name);
+    });
+}
+
+// Whether an item of @param setStmt reads a property another item of it writes. The items
+// then apply row by row: a row runs every item before the next row starts.
+bool itemsReadEachOthersWrites(const SetStmt* setStmt) {
+    const SetStmt::SetItems& items = setStmt->getItems();
+
+    for (size_t readIndex = 0; readIndex < items.size(); readIndex++) {
+        ClauseReads reads;
+        collectSetItemReads(items[readIndex], reads);
+
+        for (size_t writeIndex = 0; writeIndex < items.size(); writeIndex++) {
+            if (writeIndex == readIndex) {
+                continue;
+            }
+
+            UpdateWrites writes;
+            collectSetItemWrites(items[writeIndex], writes);
+
+            const bool writesAProperty = writes._nodeProperties._any
+                                      || writes._edgeProperties._any
+                                      || !writes._nodeProperties._names.empty()
+                                      || !writes._edgeProperties._names.empty();
+
+            const bool readsAWrite = (reads._readsEverything && writesAProperty)
+                                  || readsAWrittenProperty(reads._nodeProperties, writes._nodeProperties)
+                                  || readsAWrittenProperty(reads._edgeProperties, writes._edgeProperties);
+
+            if (readsAWrite) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// The entities @param expr reads through, false when it reads beyond them: a subquery reads
+// the graph at large
+bool collectReadEntities(const Expr* expr, std::vector<const VarDecl*>& entities) {
+    const Expr::Kind kind = expr->getKind();
+
+    if (kind == Expr::Kind::PATTERN_COMPREHENSION || kind == Expr::Kind::EXISTS) {
+        return false;
+    } else if (kind == Expr::Kind::PROPERTY) {
+        if (const VarDecl* entity = static_cast<const PropertyExpr*>(expr)->getEntityVarDecl()) {
+            entities.push_back(entity);
+        }
+
+        return true;
+    } else if (kind == Expr::Kind::SYMBOL) {
+        const VarDecl* decl = static_cast<const SymbolExpr*>(expr)->getDecl();
+        const EvaluatedType type = decl ? decl->getType() : EvaluatedType::Invalid;
+
+        if (type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern) {
+            entities.push_back(decl);
+        }
+
+        return true;
+    }
+
+    std::vector<const Expr*> children;
+    ExprChildren::collect(expr, children);
+
+    return llvm::all_of(children, [&entities](const Expr* child) {
+        return collectReadEntities(child, entities);
+    });
+}
+
+void collectCreateReads(const CreateStmt* createStmt, ClauseReads& reads) {
+    for (const PatternElement* element : createStmt->getPattern()->elements()) {
+        const std::vector<EntityPattern*>& entities = element->getEntities();
+
+        for (size_t index = 0; index < entities.size(); index++) {
+            const bool isNode = index % 2 == 0;
+            const PatternData* data = isNode ? static_cast<const PatternData*>(static_cast<const NodePattern*>(entities[index])->getData())
+                                             : static_cast<const PatternData*>(static_cast<const EdgePattern*>(entities[index])->getData());
+
+            if (!data) {
+                continue;
+            }
+
+            for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+                collectExprReads(constraint._expr, reads);
+            }
+        }
+    }
+}
+
+void collectMergeReads(const MergeStmt* mergeStmt, ClauseReads& reads) {
+    collectPatternReads(mergeStmt->getPattern(), true, reads);
+
+    for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
+        if (actions) {
+            collectSetReads(actions, reads);
+        }
+    }
+}
+
+void collectStmtReads(const Stmt* stmt, ClauseReads& reads) {
+    switch (stmt->getKind()) {
+        case Stmt::Kind::MATCH: {
+            const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+            collectPatternReads(matchStmt->getPattern(), false, reads);
+            collectOrderByReads(matchStmt->getOrderBy(), reads);
+        }
+        break;
+
+        case Stmt::Kind::UNWIND:
+            collectExprReads(static_cast<const UnwindStmt*>(stmt)->arg(), reads);
+        break;
+
+        case Stmt::Kind::SET:
+            collectSetReads(static_cast<const SetStmt*>(stmt), reads);
+        break;
+
+        case Stmt::Kind::CREATE:
+            collectCreateReads(static_cast<const CreateStmt*>(stmt), reads);
+        break;
+
+        case Stmt::Kind::MERGE:
+            collectMergeReads(static_cast<const MergeStmt*>(stmt), reads);
+        break;
+
+        case Stmt::Kind::REMOVE:
+        case Stmt::Kind::DELETE:
+        case Stmt::Kind::LOAD_CSV:
+        break;
+
+        default:
+            reads._readsEverything = true;
+        break;
+    }
+}
+
+void collectProjectionReads(const Projection* projection, const WhereClause* where, ClauseReads& reads) {
+    for (const Projection::ReturnItem& item : projection->items()) {
+        if (const Expr* const* expr = std::get_if<Expr*>(&item)) {
+            collectExprReads(*expr, reads);
+        }
+    }
+
+    collectOrderByReads(projection->getOrderBy(), reads);
+    collectWhereReads(where, reads);
+}
+
+// Whether a node created with @param created is one a pattern node of @param patterns finds:
+// it carries every label the pattern node names. An unlabelled node of a MATCH finds any.
+bool findsCreatedNode(const std::vector<std::span<const std::string_view>>& patterns,
+                      mlir::ArrayAttr created,
+                      bool unlabelledFindsAny) {
+    return llvm::any_of(patterns, [created, unlabelledFindsAny](std::span<const std::string_view> labels) {
+        if (labels.empty()) {
+            return unlabelledFindsAny;
+        }
+
+        return llvm::all_of(labels, [created](std::string_view label) {
+            return llvm::any_of(created, [label](mlir::Attribute createdLabel) {
+                return toStringView(mlir::cast<mlir::StringAttr>(createdLabel).getValue()) == label;
+            });
+        });
+    });
+}
+
+bool walksCreatedEdge(const ClauseReads& reads, llvm::StringRef edgeType) {
+    return reads._walksAnyEdge || reads._walkedEdgeTypes.contains(toStringView(edgeType));
+}
+
+// A merge's lookups find what another merge created the way they find what they created
+// themselves, so only what a MATCH scans or walks is weighed against a merge's creations
+bool mergeCreatesWhatIsScanned(mlir::db::Merge merge, const ClauseReads& reads) {
+    for (const mlir::Attribute labels : merge.getNodeLabels()) {
+        const mlir::ArrayAttr created = mlir::cast<mlir::ArrayAttr>(labels);
+        if (!created.empty() && findsCreatedNode(reads._scannedLabels, created, true)) {
+            return true;
+        }
+    }
+
+    return llvm::any_of(merge.getEdgeTypes(), [&reads](mlir::Attribute type) {
+        return walksCreatedEdge(reads, mlir::cast<mlir::StringAttr>(type).getValue());
+    });
+}
+
+bool writesWhatIsRead(mlir::Operation* op, const ClauseReads& reads) {
+    const bool readsEverything = reads._readsEverything;
+
+    if (mlir::db::SetNodeProperty set = mlir::dyn_cast<mlir::db::SetNodeProperty>(op)) {
+        return readsEverything || reads._nodeProperties.contains(toStringView(set.getProperty()));
+    } else if (mlir::db::SetEdgeProperty set = mlir::dyn_cast<mlir::db::SetEdgeProperty>(op)) {
+        return readsEverything || reads._edgeProperties.contains(toStringView(set.getProperty()));
+    } else if (mlir::isa<mlir::db::SetNodeProperties>(op)) {
+        return readsEverything || !reads._nodeProperties.empty();
+    } else if (mlir::isa<mlir::db::SetEdgeProperties>(op)) {
+        return readsEverything || !reads._edgeProperties.empty();
+    } else if (mlir::isa<mlir::db::DeleteNode, mlir::db::DeleteEdge>(op)) {
+        return readsEverything || reads._walksTheGraph;
+    } else if (mlir::db::CreateNode create = mlir::dyn_cast<mlir::db::CreateNode>(op)) {
+        const mlir::ArrayAttr created = create.getLabels();
+
+        return readsEverything
+            || findsCreatedNode(reads._scannedLabels, created, true)
+            || findsCreatedNode(reads._lookedUpLabels, created, false);
+    } else if (mlir::db::CreateEdge create = mlir::dyn_cast<mlir::db::CreateEdge>(op)) {
+        const llvm::StringRef edgeType = create.getEdgeType();
+
+        return readsEverything
+            || walksCreatedEdge(reads, edgeType)
+            || reads._lookedUpEdgeTypes.contains(toStringView(edgeType));
+    } else if (mlir::db::Merge merge = mlir::dyn_cast<mlir::db::Merge>(op)) {
+        return readsEverything || mergeCreatesWhatIsScanned(merge, reads);
+    } else {
+        return false;
+    }
+}
+
+// Every op built before the insertion point, in the block it is in and in the ones
+// enclosing it, down into the regions of each
+bool anyOpBuiltBefore(const mlir::OpBuilder& builder, llvm::function_ref<bool(mlir::Operation*)> matches) {
+    mlir::Block* block = builder.getInsertionBlock();
+    mlir::Block::iterator end = builder.getInsertionPoint();
+
+    while (block) {
+        for (mlir::Operation& operation : llvm::make_range(block->begin(), end)) {
+            const mlir::WalkResult walked = operation.walk([&matches](mlir::Operation* op) {
+                return matches(op) ? mlir::WalkResult::interrupt() : mlir::WalkResult::advance();
+            });
+
+            if (walked.wasInterrupted()) {
+                return true;
+            }
+        }
+
+        mlir::Operation* const parent = block->getParentOp();
+        if (!parent || mlir::isa<mlir::func::FuncOp>(parent)) {
+            return false;
+        }
+
+        block = parent->getBlock();
+        end = mlir::Block::iterator(parent);
+    }
+
+    return false;
+}
+
+bool readsItsOwnWrites(const SinglePartQuery* body) {
+    const StmtContainer* stmts = body->getStmts();
+    if (!stmts) {
+        return false;
+    }
+
+    bool writes = false;
+    ClauseReads reads;
+
+    for (const Stmt* stmt : stmts->stmts()) {
+        writes = writes || Stmt::writesToTheGraph(stmt);
+
+        if (stmt->getKind() == Stmt::Kind::WITH) {
+            const WithStmt* with = static_cast<const WithStmt*>(stmt);
+            collectProjectionReads(with->getProjection(), with->getWhere(), reads);
+        } else {
+            collectStmtReads(stmt, reads);
+        }
+    }
+
+    if (const ReturnStmt* returnStmt = body->getReturnStmt()) {
+        collectProjectionReads(returnStmt->getProjection(), nullptr, reads);
+    }
+
+    const bool readsAnything = reads._readsEverything
+                            || reads._walksTheGraph
+                            || !reads._nodeProperties.empty()
+                            || !reads._edgeProperties.empty();
+
+    return writes && readsAnything;
 }
 
 }
@@ -1921,6 +2398,7 @@ void DBProgramGenerator::generateQuery(const SinglePartQuery* query, const Union
     const Projection* projection = returnStmt ? returnStmt->getProjection() : nullptr;
 
     if (projection) {
+        generateRowBarrierBeforeProjection(projection, nullptr);
         generateGroupAggregate(projection);
         generateOutput(projection, branch);
     } else {
@@ -1973,11 +2451,13 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
     for (size_t index = 0; index < stmts.size(); index++) {
         const Stmt* stmt = stmts[index];
 
+        const std::span<Stmt* const> following = stmts.subspan(index + 1);
+
         if (stmt->getKind() == Stmt::Kind::WITH) {
             generatePartStatements(stmts.subspan(partBegin, index - partBegin));
             generateWith(static_cast<const WithStmt*>(stmt));
             partBegin = index + 1;
-        } else if (closesPartOnItsCut(stmt, stmts.subspan(index + 1))) {
+        } else if (closesPartOnItsCut(stmt, following) || closesPartOnItsWrites(stmt, following)) {
             generatePartStatements(stmts.subspan(partBegin, index + 1 - partBegin));
             publishInFlightColumns();
             partBegin = index + 1;
@@ -2025,7 +2505,8 @@ void DBProgramGenerator::generateOptionalParts(std::span<Stmt* const> stmts) {
             continue;
         }
 
-        generatePart(stmts.subspan(partBegin, index - partBegin));
+        generatePartAfterWrites(stmts.subspan(partBegin, index - partBegin));
+        generateRowBarrierBeforeReads(stmts.subspan(index, 1));
 
         if (stmt->getKind() == Stmt::Kind::MATCH) {
             generateOptionalMatch(stmts.subspan(index, 1));
@@ -2037,8 +2518,26 @@ void DBProgramGenerator::generateOptionalParts(std::span<Stmt* const> stmts) {
     }
 
     if (partBegin < stmts.size()) {
-        generatePart(stmts.subspan(partBegin));
+        generatePartAfterWrites(stmts.subspan(partBegin));
     }
+}
+
+// A CALL whose body writes, read after by a clause the part it ends has no WITH before:
+// what follows it reads the rows as a new part, as it would past a WITH *
+bool DBProgramGenerator::closesPartOnItsWrites(const Stmt* stmt, std::span<Stmt* const> following) {
+    if (!Stmt::isUpdating(stmt) || stmt->getKind() != Stmt::Kind::CALL_SUBQUERY) {
+        return false;
+    }
+
+    for (const Stmt* next : following) {
+        if (next->getKind() == Stmt::Kind::WITH) {
+            return false;
+        } else if (!Stmt::isUpdating(next)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* const> following) const {
@@ -2071,6 +2570,11 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
     }
 
     return false;
+}
+
+void DBProgramGenerator::generatePartAfterWrites(std::span<Stmt* const> stmts) {
+    generateRowBarrierBeforeReads(stmts);
+    generatePart(stmts);
 }
 
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
@@ -4208,7 +4712,7 @@ void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
             break;
 
             case Stmt::Kind::SET:
-                generateSetItems(static_cast<const SetStmt*>(stmt), mlir::Value {});
+                generateSetStmt(static_cast<const SetStmt*>(stmt));
             break;
 
             case Stmt::Kind::REMOVE:
@@ -4265,6 +4769,17 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
         resultTypes.push_back(column.getType());
     }
 
+    const SetStmt* onCreate = mergeStmt->getOnCreate();
+    const SetStmt* onMatch = mergeStmt->getOnMatch();
+    const bool actionsReadEachOthersWrites = (onCreate && itemsReadEachOthersWrites(onCreate))
+                                          || (onMatch && itemsReadEachOthersWrites(onMatch));
+
+    const bool rowByRow = actionsRewriteTheKey(mergeStmt, pattern) || actionsReadEachOthersWrites;
+
+    const mlir::DenseI64ArrayAttr repeatedNodes = pattern._repeatedNodes.empty()
+                                                      ? mlir::DenseI64ArrayAttr {}
+                                                      : _opBuilder.getDenseI64ArrayAttr(pattern._repeatedNodes);
+
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     mlir::db::Merge merge = _opBuilder.create<mlir::db::Merge>(loc,
                                                                resultTypes,
@@ -4274,6 +4789,8 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
                                                                _opBuilder.getArrayAttr(pattern._edgePropNames),
                                                                _opBuilder.getDenseI64ArrayAttr(pattern._directions),
                                                                _opBuilder.getDenseI64ArrayAttr(pattern._pendingNodes),
+                                                               repeatedNodes,
+                                                               rowByRow,
                                                                pattern._boundNodes,
                                                                pattern._boundPending,
                                                                pattern._nodePropValues,
@@ -4291,7 +4808,10 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
             continue;
         }
 
-        publishMergedEntity(node._decl, results[resultIndex], results[resultIndex + 1]);
+        if (!node._repeated) {
+            publishMergedEntity(node._decl, results[resultIndex], results[resultIndex + 1]);
+        }
+
         resultIndex += 2;
     }
 
@@ -4324,6 +4844,27 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
     }
 
     generateMergeActions(mergeStmt, created);
+
+    // The rows of a merge run one at a time come out of it one at a time, and what follows
+    // reads them once every row has merged
+    if (rowByRow) {
+        holdRowsInFlight();
+    }
+}
+
+bool DBProgramGenerator::actionsRewriteTheKey(const MergeStmt* mergeStmt, const MergePattern& pattern) {
+    UpdateWrites writes;
+    collectMergeWrites(mergeStmt, writes);
+
+    const auto writesAKey = [](const llvm::SmallVector<MergeEntity>& entities, const WrittenProperties& written) {
+        return llvm::any_of(entities, [&written](const MergeEntity& entity) {
+            return llvm::any_of(entity._propNames, [&written](llvm::StringRef name) {
+                return written.contains(toStringView(name));
+            });
+        });
+    };
+
+    return writesAKey(pattern._nodes, writes._nodeProperties) || writesAKey(pattern._hops, writes._edgeProperties);
 }
 
 void DBProgramGenerator::collectMergePattern(const MergeStmt* mergeStmt, MergePattern& pattern) {
@@ -4353,6 +4894,24 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
     // The analyzer leaves a node the query already bound without pattern data: its rows
     // come in through a column rather than from labels and property values
     node._bound = data == nullptr;
+
+    const auto repeatedIt = llvm::find_if(pattern._nodes, [&node](const MergeEntity& earlier) {
+        return earlier._decl == node._decl && !earlier._bound;
+    });
+
+    if (node._bound && repeatedIt != pattern._nodes.end()) {
+        const size_t repeatedIndex = static_cast<size_t>(repeatedIt - pattern._nodes.begin());
+
+        node._bound = false;
+        node._repeated = true;
+
+        pattern._repeatedNodes.push_back(static_cast<int64_t>(pattern._nodes.size()));
+        pattern._repeatedNodes.push_back(static_cast<int64_t>(repeatedIndex));
+        pattern._nodeLabels.push_back(pattern._nodeLabels[repeatedIndex]);
+        pattern._nodePropNames.push_back(_opBuilder.getStrArrayAttr({}));
+        pattern._nodes.push_back(node);
+        return;
+    }
 
     if (node._bound) {
         const mlir::Value column = resolveEntityColumn(node._decl);
@@ -4417,9 +4976,6 @@ void DBProgramGenerator::collectMergeProperties(const PatternData* data,
 
         if (valueType == EvaluatedType::Null) {
             throwError(fmt::format("Cannot merge {} whose property '{}' is null", entityKind, constraint._propTypeName),
-                       constraint._expr);
-        } else if (valueType == EvaluatedType::ListItem) {
-            throwError("MERGE cannot yet match a property against an element of a list that mixes types",
                        constraint._expr);
         }
 
@@ -4973,14 +5529,20 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
 
 void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
                                                mlir::Value valueColumn,
-                                               mlir::Value rows) {
-    generatePropertyWrite(propertyExpr->getEntityVarDecl(), propertyExpr->getPropName(), valueColumn, rows);
+                                               mlir::Value rows,
+                                               bool skipsNulls) {
+    generatePropertyWrite(propertyExpr->getEntityVarDecl(), propertyExpr->getPropName(), valueColumn, rows, skipsNulls);
 }
 
 void DBProgramGenerator::generatePropertyWrite(const VarDecl* entityDecl,
                                                std::string_view propName,
                                                mlir::Value valueColumn,
-                                               mlir::Value rows) {
+                                               mlir::Value rows,
+                                               bool skipsNulls) {
+    if (entityDecl->getType() == EvaluatedType::Null) {
+        return;
+    }
+
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
     const std::string_view varName = entityDecl->getName();
@@ -5013,7 +5575,8 @@ void DBProgramGenerator::generatePropertyWrite(const VarDecl* entityDecl,
                                                      valueColumn,
                                                      pending,
                                                      rows,
-                                                     allPending);
+                                                     allPending,
+                                                     skipsNulls);
     } else /* (isEdge) */ {
         _opBuilder.create<mlir::db::SetEdgeProperty>(loc,
                                                      entityColumn,
@@ -5021,7 +5584,87 @@ void DBProgramGenerator::generatePropertyWrite(const VarDecl* entityDecl,
                                                      valueColumn,
                                                      pending,
                                                      rows,
-                                                     allPending);
+                                                     allPending,
+                                                     skipsNulls);
+    }
+}
+
+void DBProgramGenerator::generateSetStmt(const SetStmt* setStmt) {
+    if (!itemsReadEachOthersWrites(setStmt)) {
+        generateSetItems(setStmt, mlir::Value {});
+        return;
+    }
+
+    CarrySet carrySet;
+    collectCarrySet(carrySet);
+
+    if (!carrySet._columns.empty()) {
+        llvm::SmallVector<int64_t> keys;
+        collectSetRowKeys(setStmt, carrySet._columns, keys);
+
+        llvm::SmallVector<mlir::Type> resultTypes;
+        for (const mlir::Value column : carrySet._columns) {
+            resultTypes.push_back(column.getType());
+        }
+
+        mlir::db::EachRow eachRow = _opBuilder.create<mlir::db::EachRow>(_opBuilder.getUnknownLoc(),
+                                                                         resultTypes,
+                                                                         carrySet._columns,
+                                                                         _opBuilder.getDenseI64ArrayAttr(keys));
+
+        rebindCarrySet(eachRow.getResults(), 0, carrySet);
+    }
+
+    generateSetItems(setStmt, mlir::Value {});
+    holdRowsInFlight();
+}
+
+// A row of the items' steps stands apart from the others of its step when it shares no
+// entity the items write or read with them: the positions of those entities' columns. None
+// when an item reads what no column in flight names, which leaves one row per step.
+void DBProgramGenerator::collectSetRowKeys(const SetStmt* setStmt,
+                                           llvm::ArrayRef<mlir::Value> columns,
+                                           llvm::SmallVectorImpl<int64_t>& keys) {
+    std::vector<const VarDecl*> entities;
+
+    for (const SetItem* item : setStmt->getItems()) {
+        const SetItem::Variant& variant = item->item();
+
+        if (const auto* assign = std::get_if<SetItem::PropertyExprAssign>(&variant)) {
+            entities.push_back(assign->_propTypeExpr->getEntityVarDecl());
+        } else if (const auto* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
+            entities.push_back(mapAssign->_decl);
+        }
+
+        std::vector<const Expr*> values;
+        collectSetItemValues(item, values);
+
+        for (const Expr* value : values) {
+            if (!collectReadEntities(value, entities)) {
+                return;
+            }
+        }
+
+        if (const auto* mapAssign = std::get_if<SetItem::SymbolMapAssign>(&variant)) {
+            std::erase(entities, mapAssign->_sourceDecl);
+        }
+    }
+
+    for (const VarDecl* entity : entities) {
+        if (entity->getType() == EvaluatedType::Null) {
+            continue;
+        }
+
+        const auto columnIt = llvm::find(columns, resolveEntityColumn(entity));
+        if (columnIt == columns.end()) {
+            keys.clear();
+            return;
+        }
+
+        const int64_t key = static_cast<int64_t>(columnIt - columns.begin());
+        if (!llvm::is_contained(keys, key)) {
+            keys.push_back(key);
+        }
     }
 }
 
@@ -5044,16 +5687,68 @@ void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value ro
 }
 
 void DBProgramGenerator::generateMapAssign(const SetItem::SymbolMapAssign& assign, mlir::Value rows) {
+    if (assign._writesRowEntries) {
+        generateRowEntriesWrite(assign, rows);
+        return;
+    }
+
+    const VarDecl* sourceDecl = assign._sourceDecl;
+    if (sourceDecl) {
+        translateExpr(assign._value);
+        _part._yieldedColumns.push_back({sourceDecl, sourceDecl->getName(), _part._exprMap.at(assign._value)});
+    }
+
     for (const SetItem::PropertyExprAssign& entry : assign._entries) {
         translateExpr(entry._propValueExpr);
+    }
+
+    if (sourceDecl) {
+        _part._yieldedColumns.pop_back();
     }
 
     for (const std::string_view propName : assign._removedProperties) {
         generatePropertyWrite(assign._decl, propName, nullConstantColumn(), rows);
     }
 
+    const bool skipsNulls = assign._copiesEntity && !assign._replaces;
+
     for (const SetItem::PropertyExprAssign& entry : assign._entries) {
-        generatePropertyWrite(entry._propTypeExpr, _part._exprMap.at(entry._propValueExpr), rows);
+        generatePropertyWrite(entry._propTypeExpr, _part._exprMap.at(entry._propValueExpr), rows, skipsNulls);
+    }
+}
+
+void DBProgramGenerator::generateRowEntriesWrite(const SetItem::SymbolMapAssign& assign, mlir::Value rows) {
+    const VarDecl* entityDecl = assign._decl;
+    const EvaluatedType entityType = entityDecl->getType();
+    if (entityType == EvaluatedType::Null) {
+        return;
+    }
+
+    translateExpr(assign._value);
+    const mlir::Value mapColumn = _part._exprMap.at(assign._value);
+
+    const std::string_view varName = entityDecl->getName();
+    const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
+    bioassert(entityColumn, "Property write on unknown variable: {}", varName);
+
+    const auto createdIt = _part._createdEntities.find(entityDecl);
+    if (createdIt != end(_part._createdEntities)) {
+        createdIt->second._properties.clear();
+        createdIt->second._taggedProperties.clear();
+    }
+
+    const mlir::Value pending = findPendingMask(entityDecl);
+    const bool allPending = isPendingThroughout(entityDecl);
+    const bool replaces = assign._replaces;
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    if (entityType == EvaluatedType::NodePattern) {
+        _opBuilder.create<mlir::db::SetNodeProperties>(loc, entityColumn, mapColumn, pending, rows, allPending, replaces);
+    } else if (entityType == EvaluatedType::EdgePattern) {
+        _opBuilder.create<mlir::db::SetEdgeProperties>(loc, entityColumn, mapColumn, pending, rows, allPending, replaces);
+    } else {
+        bioassert(false, "Property write on non-entity variable: {}", varName);
     }
 }
 
@@ -5061,14 +5756,47 @@ void DBProgramGenerator::generateRowBarrier(const Stmt* updateStmt) {
     UpdateWrites writes;
     collectUpdateWrites(updateStmt, writes);
 
-    const bool readsTheWrites = anyOpBuiltBefore([&writes](mlir::Operation* op) {
-        return readsWhatIsWritten(op, writes);
+    ClauseReads reads;
+    collectStmtReads(updateStmt, reads);
+
+    const bool conflicts = anyOpBuiltBefore(_opBuilder, [&writes, &reads](mlir::Operation* op) {
+        return readsWhatIsWritten(op, writes) || writesWhatIsRead(op, reads);
     });
 
-    if (!readsTheWrites) {
-        return;
+    if (conflicts) {
+        holdRowsInFlight();
+    }
+}
+
+void DBProgramGenerator::generateRowBarrierBeforeReads(std::span<Stmt* const> readingStmts) {
+    ClauseReads reads;
+    for (const Stmt* stmt : readingStmts) {
+        collectStmtReads(stmt, reads);
     }
 
+    const bool conflicts = anyOpBuiltBefore(_opBuilder, [&reads](mlir::Operation* op) {
+        return writesWhatIsRead(op, reads);
+    });
+
+    if (conflicts) {
+        holdRowsInFlight();
+    }
+}
+
+void DBProgramGenerator::generateRowBarrierBeforeProjection(const Projection* projection, const WhereClause* where) {
+    ClauseReads reads;
+    collectProjectionReads(projection, where, reads);
+
+    const bool conflicts = anyOpBuiltBefore(_opBuilder, [&reads](mlir::Operation* op) {
+        return writesWhatIsRead(op, reads);
+    });
+
+    if (conflicts) {
+        holdRowsInFlight();
+    }
+}
+
+void DBProgramGenerator::holdRowsInFlight() {
     CarrySet carrySet;
     collectCarrySet(carrySet);
 
@@ -5085,33 +5813,6 @@ void DBProgramGenerator::generateRowBarrier(const Stmt* updateStmt) {
     mlir::db::RowBarrier barrier = _opBuilder.create<mlir::db::RowBarrier>(loc, resultTypes, carrySet._columns);
 
     rebindCarrySet(barrier.getResults(), 0, carrySet);
-}
-
-bool DBProgramGenerator::anyOpBuiltBefore(llvm::function_ref<bool(mlir::Operation*)> matches) const {
-    mlir::Block* block = _opBuilder.getInsertionBlock();
-    mlir::Block::iterator end = _opBuilder.getInsertionPoint();
-
-    while (block) {
-        for (mlir::Operation& operation : llvm::make_range(block->begin(), end)) {
-            const mlir::WalkResult walked = operation.walk([&matches](mlir::Operation* op) {
-                return matches(op) ? mlir::WalkResult::interrupt() : mlir::WalkResult::advance();
-            });
-
-            if (walked.wasInterrupted()) {
-                return true;
-            }
-        }
-
-        mlir::Operation* const parent = block->getParentOp();
-        if (!parent || mlir::isa<mlir::func::FuncOp>(parent)) {
-            return false;
-        }
-
-        block = parent->getBlock();
-        end = mlir::Block::iterator(parent);
-    }
-
-    return false;
 }
 
 void DBProgramGenerator::generateRemoveProperties(const RemoveStmt* removeStmt) {
@@ -5132,6 +5833,11 @@ void DBProgramGenerator::generateDeleteStmt(const DeleteStmt* deleteStmt) {
         const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
         const VarDecl* decl = symbolExpr->getDecl();
         bioassert(decl, "DELETE target symbol has no declaration");
+
+        if (decl->getType() == EvaluatedType::Null) {
+            continue;
+        }
+
         const std::string_view varName = decl->getName();
 
         const mlir::Value entityColumn = resolveEntityColumn(decl);
@@ -5319,6 +6025,7 @@ void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
 void DBProgramGenerator::generateWith(const WithStmt* with) {
     const Projection* projection = with->getProjection();
 
+    generateRowBarrierBeforeProjection(projection, with->getWhere());
     publishProjection(projection);
 
     const WhereClause* where = with->getWhere();
@@ -5371,8 +6078,12 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     const bool optional = returning && subquery->isOptional();
 
     // A UNION dedups the rows of each input row on their own, so a union body runs one
-    // input row at a time
-    const bool carriesScope = !subquery->isUnion() && subqueryCarriesRows(branches.front()._query);
+    // input row at a time, as does a body reading what it writes: the run for one row
+    // reads what the runs for the rows before it wrote
+    const SinglePartQuery* firstBody = branches.front()._query;
+    const bool carriesScope = !subquery->isUnion()
+                           && subqueryCarriesRows(firstBody)
+                           && !readsItsOwnWrites(firstBody);
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -8107,15 +8818,40 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
     }
 
     llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
+    llvm::SmallVector<const FunctionInvocationExpr*> reductionExprs;
+    llvm::SmallVector<mlir::storage::GroupAggregateKind> reductionKinds;
+    bool reducesEveryKind = true;
+
     for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
         if (isCollectInvocation(aggregateExpr)) {
             collectExprs.push_back(aggregateExpr);
+            continue;
+        }
+
+        const FunctionInvocation* invocation = aggregateExpr->getFunctionInvocation();
+        const ExprChain* args = invocation->getArguments();
+        bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
+
+        const std::optional<mlir::storage::GroupAggregateKind> kind = groupAggregateKindOf(invocation, args->front());
+        if (kind) {
+            reductionExprs.push_back(aggregateExpr);
+            reductionKinds.push_back(*kind);
+        } else {
+            reducesEveryKind = false;
         }
     }
 
-    // A lone collect is built by its own translation, keyless, as any other aggregate is
-    if (collectExprs.size() < 2) {
+    // A lone collect is built by its own translation, keyless, as any other aggregate is.
+    // Beside other aggregates it carries them, so every result comes out of the one row it
+    // emits rather than some from it and some from reductions of their own.
+    const bool carriesReductions = !reductionExprs.empty() && reducesEveryKind;
+    if (collectExprs.empty() || (collectExprs.size() < 2 && !carriesReductions)) {
         return;
+    }
+
+    if (!carriesReductions) {
+        reductionExprs.clear();
+        reductionKinds.clear();
     }
 
     VariableColumnMap variableColumns;
@@ -8131,11 +8867,28 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
         valueColumns.push_back(readWalkEntities(args->front(), translateAggregateInput(args->front(), &variableColumns)));
     }
 
+    llvm::SmallVector<mlir::Value> reductionColumns;
+    for (const FunctionInvocationExpr* reductionExpr : reductionExprs) {
+        const ExprChain* args = reductionExpr->getFunctionInvocation()->getArguments();
+        reductionColumns.push_back(translateAggregateInput(args->front(), &variableColumns));
+    }
+
     llvm::SmallVector<int64_t> distinctValues;
     collectDistinctValueIndices(collectExprs, distinctValues);
 
-    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues);
+    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues, reductionColumns, reductionKinds);
     const mlir::ResultRange results = collectOp.getResults();
+
+    for (size_t reductionIndex = 0; reductionIndex < reductionExprs.size(); reductionIndex++) {
+        const FunctionInvocationExpr* reductionExpr = reductionExprs[reductionIndex];
+        const mlir::Value reducedColumn = results[collectExprs.size() + reductionIndex];
+
+        _part._exprMap[reductionExpr] = reducedColumn;
+
+        if (const VarDecl* reductionDecl = reductionExpr->getExprVarDecl()) {
+            _part._projectedColumns[reductionDecl] = reducedColumn;
+        }
+    }
 
     for (size_t collectIndex = 0; collectIndex < collectExprs.size(); collectIndex++) {
         const FunctionInvocationExpr* collectExpr = collectExprs[collectIndex];
@@ -8337,25 +9090,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             continue;
         }
 
-        // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
-        // and takes the plain kind. The others reduce each of a group's distinct values
-        // once, which is a kind of its own, spelled as the function's name with the
-        // modifier appended
-        const bool isExtremum = funcName == "min" || funcName == "max";
-        const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
-
-        const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
-
-        // count(*) reads no value, so a null of the column it is anchored on is a row
-        // all the same: that is a kind of its own
-        std::string kindName {funcName};
-        if (countsRows) {
-            kindName += "_rows";
-        } else if (reducesDistinctValues) {
-            kindName += "_distinct";
-        }
-
-        const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
+        const std::optional<mlir::storage::GroupAggregateKind> kind = groupAggregateKindOf(invocation, argExpr);
         if (!kind) {
             throwError(fmt::format("Unsupported aggregate function: {}", funcName), argExpr);
         }

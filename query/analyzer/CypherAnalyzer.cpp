@@ -219,9 +219,7 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
                 CallSubqueryStmt* subquery = static_cast<CallSubqueryStmt*>(stmt);
                 analyze(subquery);
 
-                if (!subquery->isReturning()) {
-                    returnMandatory = false;
-                }
+                returnMandatory = subquery->isReturning() && returnRequired;
             } else if (Stmt::isUpdating(kind)) {
                 returnMandatory = false;
                 _writeAnalyzer->analyze(stmt);
@@ -232,6 +230,10 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
 
                 analyze(static_cast<const WithStmt*>(stmt));
             } else {
+                // A reading clause may follow a CALL whose body wrote, and a query ending on
+                // one needs a RETURN
+                returnMandatory = returnRequired;
+
                 if (kind == Stmt::Kind::CALL && static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;
                 }
@@ -345,7 +347,7 @@ void CypherAnalyzer::throwOnReadAfterUpdate(const StmtContainer* stmts) const {
                        stmt);
         }
 
-        if (Stmt::writesToTheGraph(stmt)) {
+        if (Stmt::isUpdating(kind)) {
             hasWritten = true;
         }
     }
