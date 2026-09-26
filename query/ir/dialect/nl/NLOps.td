@@ -1274,13 +1274,18 @@ def EachRow : NLOp<"each_row", [Pure, InferTypeOpAdaptor]> {
     must be row-aligned with each other, and there must be at least one - the step's
     row count is read from the first. A `limit` on the enclosing nl.for stops the
     walk over the rows once the budget is spent.
+
+    `keys` names node or edge columns by position. A step then binds every row it can:
+    no two rows of a step share an ID of those columns, and a row comes in a later step
+    than every earlier row sharing one. That keeps what one row after another would do
+    while rows touching different entities run together.
   }];
 
-  let arguments = (ins Variadic<NLChunk>:$columns);
+  let arguments = (ins Variadic<NLChunk>:$columns, OptionalAttr<DenseI64ArrayAttr>:$keys);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+    `{` $columns `}` (`keys` $keys^)? attr-dict `:` `{` qualified(type($columns)) `}`
   }];
 }
 
@@ -2924,6 +2929,7 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
                        StrArrayArrayAttr:$edge_prop_names,
                        DenseI64ArrayAttr:$edge_directions,
                        DenseI64ArrayAttr:$pending_nodes,
+                       OptionalAttr<DenseI64ArrayAttr>:$repeated_nodes,
                        Variadic<NLChunk>:$bound_nodes,
                        Variadic<NLChunk>:$bound_pending,
                        Variadic<NLChunk>:$node_prop_values,
@@ -2937,6 +2943,7 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{
     `nodes` $node_labels `props` $node_prop_names
     `edges` $edge_types `props` $edge_prop_names `dirs` custom<EdgeDirections>($edge_directions)
+    (`repeats` $repeated_nodes^)?
     `bound` `{` $bound_nodes `}` `pending` custom<ColumnIndices>($pending_nodes) `{` $bound_pending `}`
     `values` `{` $node_prop_values `}` `{` $edge_prop_values `}`
     `carrying` `{` $carried_columns `}`
@@ -2957,11 +2964,12 @@ def SetNodeProperty : NLOp<"set_node_property", [AttrSizedOperandSegments]> {
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
                        Optional<NLBoolChunk>:$rows,
-                       UnitAttr:$all_pending);
+                       UnitAttr:$all_pending,
+                       UnitAttr:$skips_nulls);
 
   let assemblyFormat = [{
     $input_nodes `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? (`skips_nulls` $skips_nulls^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -2980,11 +2988,58 @@ def SetEdgeProperty : NLOp<"set_edge_property", [AttrSizedOperandSegments]> {
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
                        Optional<NLBoolChunk>:$rows,
-                       UnitAttr:$all_pending);
+                       UnitAttr:$all_pending,
+                       UnitAttr:$skips_nulls);
 
   let assemblyFormat = [{
     $input_edges `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? (`skips_nulls` $skips_nulls^)? attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetNodeProperties : NLOp<"set_node_properties", [AttrSizedOperandSegments]> {
+  let summary = "Update the properties each input node's map names in the open transaction's write buffer";
+  let description = [{
+      nl.for %nodes in %scan {
+        nl.set_node_properties %nodes, %maps replaces : !nl.chunk<!storage.map>
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes,
+                       NLChunk:$value,
+                       Optional<NLBoolChunk>:$pending,
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending,
+                       UnitAttr:$replaces);
+
+  let assemblyFormat = [{
+    $input_nodes `,` $value (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperties : NLOp<"set_edge_properties", [AttrSizedOperandSegments]> {
+  let summary = "Update the properties each input edge's map names in the open transaction's write buffer";
+  let description = [{
+      nl.for %s, %e, %t in %edges {
+        nl.set_edge_properties %e, %maps : !nl.chunk<!storage.map>
+      }
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges,
+                       NLChunk:$value,
+                       Optional<NLBoolChunk>:$pending,
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending,
+                       UnitAttr:$replaces);
+
+  let assemblyFormat = [{
+    $input_edges `,` $value (`pending` $pending^)? (`rows` $rows^)?
+    (`all_pending` $all_pending^)? (`replaces` $replaces^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -3394,43 +3449,44 @@ def PatternComprehension : NLOp<"pattern_comprehension", [Pure, RowAlignedThroug
 }
 
 /**
-* UnionBuffer
+* RowBuffer
 */
-// NOT Pure: each nl.union_buffer is a distinct accumulator, and resetting its buffers
+// NOT Pure: each nl.row_buffer is a distinct accumulator, and resetting its buffers
 // is a side effect (like nl.sort_buffer).
-def UnionBuffer : NLOp<"union_buffer", []> {
-  let summary = "Create (and reset) the accumulator the branches of one UNION collect into";
+def RowBuffer : NLOp<"row_buffer", []> {
+  let summary = "Create (and reset) an accumulator that holds rows as they came";
   let description = [{
-    Sits at the top of the block whose step it covers - the block the branches of a
-    UNION inside a CALL body are rooted in - so the accumulator is empty again at every
-    step. The buffers' column types are recovered from the nl.union_collect ops that
-    feed the handle.
+    Sits at the top of the block whose step it covers, so the accumulator is empty
+    again every time that block runs. The branches of a UNION inside a CALL body
+    collect into one rooted in the body's block; a db.row_barrier collects into one
+    rooted above every loop, so it holds the whole relation. The buffers' column types
+    are recovered from the nl.row_collect ops that feed the handle.
 
-      %state = nl.union_buffer
+      %state = nl.row_buffer
   }];
 
-  let results = (outs NLUnionState:$state);
+  let results = (outs NLRowState:$state);
 
   let assemblyFormat = "attr-dict";
 }
 
 /**
-* UnionCollect
+* RowCollect
 */
 // NOT Pure: it appends the current chunk's rows to the handle's buffers, so it must run
 // exactly where it sits (like nl.sort_collect).
-def UnionCollect : NLOp<"union_collect", []> {
-  let summary = "Append this step's chunk of every column of one UNION branch to its accumulator";
+def RowCollect : NLOp<"row_collect", []> {
+  let summary = "Append this step's chunk of every column to an accumulator";
   let description = [{
-    Runs in the innermost loop body of one branch, once per step, and appends the
-    current chunk of each column that branch yields to the matching buffer. Every
-    branch has its own nl.union_collect on the same handle, with the same column
-    types, so the buffers hold the rows of one branch and then of the next.
+    Runs in the innermost loop body of its producer, once per step, and appends the
+    current chunk of each column to the matching buffer. Several producers may collect
+    into one handle with the same column types - one per branch of a UNION - and the
+    buffers then hold the rows of one and then of the next.
 
-      nl.union_collect %state, (%name) : !nl.chunk<!storage.nullable<!storage.owned_string>>
+      nl.row_collect %state, (%name) : !nl.chunk<!storage.nullable<!storage.owned_string>>
   }];
 
-  let arguments = (ins NLUnionStateHandle:$state, Variadic<NLChunk>:$columns);
+  let arguments = (ins NLRowStateHandle:$state, Variadic<NLChunk>:$columns);
 
   let assemblyFormat = [{
     $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
@@ -3439,26 +3495,26 @@ def UnionCollect : NLOp<"union_collect", []> {
 }
 
 /**
-* UnionDrain
+* RowDrain
 */
 // Pure: given a filled accumulator it deterministically yields the same rows, and
 // produces no side effect of its own - the emission happens in the driving nl.for.
 // Mirrors nl.sort: a source op whose loop does the work.
-def UnionDrain : NLOp<"union_drain", [Pure]> {
-  let summary = "Create a database iterator over the rows the branches of a UNION collected";
+def RowDrain : NLOp<"row_drain", [Pure]> {
+  let summary = "Create a database iterator over the rows an accumulator collected";
   let description = [{
-    The emit phase of a UNION inside a CALL body. Consumes a filled nl.union_state and
-    produces an iterator whose steps yield its rows in the order they were collected,
-    one chunk per column per step:
+    The emit phase of an nl.row_buffer. Consumes a filled nl.row_state and produces an
+    iterator whose steps yield its rows in the order they were collected, one chunk
+    per column per step:
 
-      %rows = nl.union_drain(%state) : !nl.iter<!nl.chunk<!storage.node_id>>
+      %rows = nl.row_drain(%state) : !nl.iter<!nl.chunk<!storage.node_id>>
       nl.for %z in %rows : !nl.iter<!nl.chunk<!storage.node_id>> { ... }
 
-    Its first step must find every branch's rows already collected, so place it after
-    the branches' loop nests, in the block holding the nl.union_buffer.
+    Its first step must find every producer's rows already collected, so place it after
+    their loop nests, in the block holding the nl.row_buffer.
   }];
 
-  let arguments = (ins NLUnionStateHandle:$state);
+  let arguments = (ins NLRowStateHandle:$state);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";

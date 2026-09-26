@@ -13,9 +13,8 @@
 using namespace db;
 using namespace turing::test;
 
-// A body that writes has written whatever it ends on, so the clause after it reads a graph
-// mid-write: the read-after-update rule holds it off exactly as it holds off the read after
-// a bare CREATE
+// A body that writes has written whatever it ends on, and the clause after it reads what
+// every run of it wrote. A bare CREATE still needs a WITH before a read.
 class CallSubqueryWritingReturnTest : public WriteQueryTest {
 protected:
     void expectRejected(std::string_view query, std::string_view message) {
@@ -30,13 +29,13 @@ protected:
     }
 };
 
-TEST_F(CallSubqueryWritingReturnTest, rejectsAReadAfterABodyThatWroteAndReturned) {
-    expectRejected("MATCH (p:Person) CALL (p) { CREATE (a:Audit) RETURN a } "
-                   "MATCH (m:Audit) RETURN count(m)",
-                   "A reading clause cannot follow an updating clause");
+TEST_F(CallSubqueryWritingReturnTest, readsAfterABodyThatWroteAndReturned) {
+    expectWriteRows("MATCH (p:Person) CALL (p) { CREATE (a:Audit) RETURN a } "
+                    "MATCH (m:Audit) RETURN count(m)",
+                    {{"64"}});
 }
 
-// The same query without the subquery, which the rule already rejects
+// The same query without the subquery, which the rule rejects
 TEST_F(CallSubqueryWritingReturnTest, rejectsAReadAfterABareCreate) {
     expectRejected("MATCH (p:Person) CREATE (a:Audit) MATCH (m:Audit) RETURN count(m)",
                    "A reading clause cannot follow an updating clause");

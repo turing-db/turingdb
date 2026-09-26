@@ -4,6 +4,7 @@
 
 #include "columns/ColumnOperator.h"
 #include "metadata/PropertyType.h"
+#include "versioning/CommitWriteBuffer.h"
 
 #include "NLExecutionContext.h"
 #include "NLProgram.h"
@@ -157,15 +158,15 @@ public:
     // variables and running the body (the nl.output) per chunk.
     static void runSortLoop(NLExecutionContext* context, NLFunctionData* data);
 
-    // Empty the buffers of a UNION accumulator; runs each time its block runs
-    static void runUnionReset(NLExecutionContext* context, NLFunctionData* data);
+    // Empty the buffers of a row accumulator; runs each time its block runs
+    static void runRowReset(NLExecutionContext* context, NLFunctionData* data);
 
-    // Append the current chunk of every column one UNION branch yields to its buffer
-    static void runUnionCollect(NLExecutionContext* context, NLFunctionData* data);
+    // Append the current chunk of every column its producer yields to its buffer
+    static void runRowCollect(NLExecutionContext* context, NLFunctionData* data);
 
-    // The emit phase of a UNION inside a CALL body: re-chunk the collected rows in the
-    // order they were collected, running the body per chunk
-    static void runUnionLoop(NLExecutionContext* context, NLFunctionData* data);
+    // The emit phase of a row accumulator: re-chunk the collected rows in the order they
+    // were collected, running the body per chunk
+    static void runRowLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // Empty the buffers and matched flags of an OPTIONAL MATCH accumulator and lay its row
     // tag out over this step's input rows; runs each time its block runs.
@@ -308,6 +309,8 @@ public:
     static void runMerge(NLExecutionContext* context, NLFunctionData* data);
 
     static void runSetNodeProperty(NLExecutionContext* context, NLFunctionData* data);
+    static void runSetNodeProperties(NLExecutionContext* context, NLFunctionData* data);
+    static void runSetEdgeProperties(NLExecutionContext* context, NLFunctionData* data);
 
     static void runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data);
 
@@ -560,6 +563,10 @@ public:
     static NLKeyAppendFunction selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
     static NLKeyAppendFunction selectOptOwnedStringMergeKeyAppend(ValueType keyType);
     static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
+    static NLKeyAppendFunction selectTaggedCellMergeKeyAppend(ValueType keyType);
+
+    // The key bytes of one staged value, which a column of its type keys alike
+    static void appendStagedValueKey(const CommitWriteBuffer::SupportedTypeVariant& staged, std::string& key);
     static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 
     // Block-repeat for an ID chunk of this kind (outer column).
@@ -875,6 +882,9 @@ public:
     // the explicitly instantiated (ID, T) pairs in NLExecutor.cpp are available.
     template <typename ID, typename T>
     static void runPropertyFetch(NLExecutionContext* context, NLFunctionData* data);
+
+    template <typename ID>
+    static void runTaggedPropertyFetch(NLExecutionContext* context, NLFunctionData* data);
 
 private:
     NLExecutionContext _ctxt;

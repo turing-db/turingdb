@@ -101,6 +101,14 @@ public:
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
+    // A property a CREATE or a SET writes from tagged cells and no write gives a type: it
+    // takes the type of the first cell holding a value when the write runs, so a read of it
+    // reads tagged cells
+    void addToBeCreatedFromTaggedCells(std::string_view name);
+
+    const std::unordered_map<std::string_view, ValueType>& getToBeCreatedTypes() const { return _toBeCreatedTypes; }
+    const std::unordered_set<std::string_view>& getToBeCreatedFromTaggedCells() const { return _toBeCreatedFromTaggedCells; }
+
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
 
     /// Adds an empty declaration for the given NodePattern
@@ -118,6 +126,7 @@ private:
     const GraphMetadata& _graphMetadata;
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
+    std::unordered_set<std::string_view> _toBeCreatedFromTaggedCells;
 
     // The LOAD CSV each row variable in scope was bound by
     std::unordered_map<const VarDecl*, LoadCSVStmt*> _csvSources;

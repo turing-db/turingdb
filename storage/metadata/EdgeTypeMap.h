@@ -36,6 +36,10 @@ public:
 
     EdgeTypeID getOrCreate(std::string_view edgeTypeName);
 
+    // Drops every entry past the first @param count, the last ones created: a statement that
+    // fails takes back what it interned
+    void truncate(size_t count);
+
 private:
     Container _container;
     NameMap _nameMap;

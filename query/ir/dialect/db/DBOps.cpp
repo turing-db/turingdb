@@ -47,6 +47,19 @@ bool isMaskColumn(Type type) {
     return isa<storage::BoolType>(value) || isa<NoneType>(value);
 }
 
+LogicalResult verifyMapValue(Operation* operation, Value value) {
+    Type elementType = cast<ColumnType>(value.getType()).getType();
+    if (const storage::NullableType nullable = dyn_cast<storage::NullableType>(elementType)) {
+        elementType = nullable.getValueType();
+    }
+
+    if (!isa<storage::MapType, storage::ListElementType, NoneType>(elementType)) {
+        return operation->emitOpError("requires a column of maps, but reads ") << value.getType();
+    }
+
+    return success();
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -893,6 +906,14 @@ LogicalResult Merge::verify() {
         return pattern;
     }
 
+    const LogicalResult repeats = verifyMergeRepeatedNodes(getOperation(),
+                                                           getNodeLabels(),
+                                                           getNodePropNames(),
+                                                           getRepeatedNodes());
+    if (failed(repeats)) {
+        return repeats;
+    }
+
     const size_t expectedResults = mergeResultCount(getNodeLabels(), getCarriedColumns().size());
     if (getResults().size() != expectedResults) {
         return emitOpError("must produce one column per chain entity, the created mask and one "
@@ -917,6 +938,14 @@ LogicalResult SetEdgeProperty::verify() {
     }
 
     return success();
+}
+
+LogicalResult SetNodeProperties::verify() {
+    return verifyMapValue(getOperation(), getValue());
+}
+
+LogicalResult SetEdgeProperties::verify() {
+    return verifyMapValue(getOperation(), getValue());
 }
 
 // A label scan must name at least one label to filter by; a label-free scan of
@@ -1122,6 +1151,27 @@ LogicalResult Sort::verify() {
     }
 
     return success();
+}
+
+LogicalResult RowBarrier::verify() {
+    return verifyPassThrough(getOperation(), getColumns(), getResults());
+}
+
+LogicalResult EachRow::verify() {
+    const OperandRange columns = getColumns();
+
+    for (const int64_t key : getKeys()) {
+        if (key < 0 || static_cast<size_t>(key) >= columns.size()) {
+            return emitOpError("names key column ") << key << " of " << columns.size();
+        }
+
+        const Type keyType = cast<ColumnType>(columns[key].getType()).getType();
+        if (!isa<storage::NodeIDType, storage::EdgeIDType>(keyType)) {
+            return emitOpError("requires its keys to be node or edge columns, but key ") << key << " is " << keyType;
+        }
+    }
+
+    return verifyPassThrough(getOperation(), columns, getResults());
 }
 
 // db.remove_duplicates passes its columns straight through (minus duplicate rows),

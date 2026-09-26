@@ -60,7 +60,8 @@ NLPropertyValueScan<T>::NLPropertyValueScan(NLExecutionContext* context,
         _updatedNodes[update._idToUpdate.getValue()] = holds ? UpdatedNode::HoldsValue : UpdatedNode::LostValue;
     }
 
-    const GraphReader reader = context->getView()->read();
+    const GraphView* view = context->getView();
+    const GraphReader reader = view->read();
 
     for (const auto& [node, state] : _updatedNodes) {
         if (state != UpdatedNode::HoldsValue) {
@@ -69,7 +70,7 @@ NLPropertyValueScan<T>::NLPropertyValueScan(NLExecutionContext* context,
 
         const NodeID nodeID {node};
         const bool carriesTheLabels = !labelset.isValid() || reader.getNodeLabelSet(nodeID).hasAtLeastLabels(labelset);
-        if (carriesTheLabels) {
+        if (carriesTheLabels && !view->isDeleted(nodeID)) {
             _gainedNodes.push_back(nodeID);
         }
     }

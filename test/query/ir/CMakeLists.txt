@@ -4070,3 +4070,132 @@ add_call_v3_test(test_query_ir_set_list_element_property SetListElementPropertyT
 # SET in the same query part as a CREATE.
 add_turing_test(test_query_ir_set_after_create SetAfterCreateTest.cpp)
 target_link_libraries(test_query_ir_set_after_create PRIVATE turing_ir_test_write_query_s)
+
+# SET of a property from an element of a list that mixes types.
+add_turing_test(test_query_ir_set_from_list_element SetFromListElementTest.cpp)
+target_link_libraries(test_query_ir_set_from_list_element PRIVATE turing_ir_test_write_query_s)
+
+# CREATE of properties from the elements of a list that mixes types.
+add_turing_test(test_query_ir_create_from_list_element CreateFromListElementTest.cpp)
+target_link_libraries(test_query_ir_create_from_list_element PRIVATE turing_ir_test_write_query_s)
+
+# A write of an integer into a property that holds doubles.
+add_turing_test(test_query_ir_write_integer_into_double WriteIntegerIntoDoubleTest.cpp)
+target_link_libraries(test_query_ir_write_integer_into_double PRIVATE turing_ir_test_write_query_s)
+
+# A SET whose value reads the property it creates.
+add_turing_test(test_query_ir_set_reads_its_new_property SetReadsItsNewPropertyTest.cpp)
+target_link_libraries(test_query_ir_set_reads_its_new_property PRIVATE turing_ir_test_write_query_s)
+
+# A MERGE whose key property is null on a row.
+add_turing_test(test_query_ir_merge_null_key MergeNullKeyTest.cpp)
+target_link_libraries(test_query_ir_merge_null_key PRIVATE turing_ir_test_write_query_s)
+
+# A write query that fails leaves nothing of itself in its change.
+add_turing_test(test_query_ir_failed_write_rollback FailedWriteRollbackTest.cpp)
+target_link_libraries(test_query_ir_failed_write_rollback PRIVATE turing_ir_test_write_query_s)
+
+# A SET reaching the same entity on several rows.
+add_turing_test(test_query_ir_set_repeated_entity SetRepeatedEntityTest.cpp)
+target_link_libraries(test_query_ir_set_repeated_entity PRIVATE turing_ir_test_write_query_s)
+
+# A null literal in the property map of a CREATE or MERGE pattern.
+add_turing_test(test_query_ir_null_property_literal NullPropertyLiteralTest.cpp)
+target_link_libraries(test_query_ir_null_property_literal PRIVATE turing_ir_test_write_query_s)
+
+# What a MERGE bound, read and written past a WITH.
+add_turing_test(test_query_ir_merge_through_with MergeThroughWithTest.cpp)
+target_link_libraries(test_query_ir_merge_through_with PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_tagged_cell_key MergeTaggedCellKeyTest.cpp)
+target_link_libraries(test_query_ir_merge_tagged_cell_key PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_rewrites_its_key MergeRewritesItsKeyTest.cpp)
+target_link_libraries(test_query_ir_merge_rewrites_its_key PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_from_created_node MergeFromCreatedNodeTest.cpp)
+target_link_libraries(test_query_ir_merge_from_created_node PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_scan_written_value_after_delete ScanWrittenValueAfterDeleteTest.cpp)
+target_link_libraries(test_query_ir_scan_written_value_after_delete PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_create_invalid_pattern CreateInvalidPatternTest.cpp)
+target_link_libraries(test_query_ir_create_invalid_pattern PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_undirected_self_loop UndirectedSelfLoopTest.cpp)
+target_link_libraries(test_query_ir_undirected_self_loop PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_call_subquery_computed_unwind CallSubqueryComputedUnwindTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_computed_unwind PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_read_after_writing_call ReadAfterWritingCallTest.cpp)
+target_link_libraries(test_query_ir_read_after_writing_call PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_limit_after_write LimitAfterWriteTest.cpp)
+target_link_libraries(test_query_ir_limit_after_write PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_call_subquery_reads_its_writes CallSubqueryReadsItsWritesTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_reads_its_writes PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_set_entity_copy SetEntityCopyTest.cpp)
+target_link_libraries(test_query_ir_set_entity_copy PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_set_from_map SetFromMapTest.cpp)
+target_link_libraries(test_query_ir_set_from_map PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_set_items_row_by_row SetItemsRowByRowTest.cpp)
+target_link_libraries(test_query_ir_set_items_row_by_row PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_write_pattern_binding WritePatternBindingTest.cpp)
+target_link_libraries(test_query_ir_write_pattern_binding PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_create_after_global_aggregate CreateAfterGlobalAggregateTest.cpp)
+target_link_libraries(test_query_ir_create_after_global_aggregate PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_repeated_node MergeRepeatedNodeTest.cpp)
+target_link_libraries(test_query_ir_merge_repeated_node PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_null_entity_write NullEntityWriteTest.cpp)
+target_link_libraries(test_query_ir_null_entity_write PRIVATE turing_ir_test_write_query_s)
+
+# A write that runs after an earlier clause read what it writes, over rows spanning chunks.
+add_turing_test(test_query_ir_row_barrier RowBarrierTest.cpp)
+target_link_libraries(test_query_ir_row_barrier PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_row_barrier_codegen RowBarrierCodegenTest.cpp)
+target_link_libraries(test_query_ir_row_barrier_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_row_barrier_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A MERGE keyed on a list or a map.
+add_turing_test(test_query_ir_merge_list_key MergeListKeyTest.cpp)
+target_link_libraries(test_query_ir_merge_list_key PRIVATE turing_ir_test_write_query_s)
+
+# SET n += map and SET n = map.
+add_turing_test(test_query_ir_set_map SetMapTest.cpp)
+target_link_libraries(test_query_ir_set_map PRIVATE turing_ir_test_write_query_s)
+
+# OPTIONAL MATCH and pattern comprehensions walking from what the query created.
+add_turing_test(test_query_ir_optional_match_over_written OptionalMatchOverWrittenTest.cpp)
+target_link_libraries(test_query_ir_optional_match_over_written PRIVATE turing_ir_test_write_query_s)
+
+# A WHERE after SET filters the rows as the SET left them.
+add_turing_test(test_query_ir_filter_after_write FilterAfterWriteTest.cpp)
+target_link_libraries(test_query_ir_filter_after_write PRIVATE turing_ir_test_write_query_s)
+
+# An entity a change creates and deletes again before its commit.
+add_turing_test(test_query_ir_delete_pending_entity DeletePendingEntityTest.cpp)
+target_link_libraries(test_query_ir_delete_pending_entity PRIVATE turing_ir_test_write_query_s)

@@ -159,16 +159,28 @@ TEST_F(CreateWithTest, readsNullForAPropertyTheCreateDidNotWrite) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
-// A MERGE's rows mix what it wrote with what it bound, and only the mask beside them tells
-// the two apart. The cut has no item to carry that mask on, so the entity cannot cross it.
-TEST_F(CreateWithTest, rejectsAWithThatPublishesAMergedEntity) {
-    runWriteExpectingError("MERGE (n:Person {name: 'Nia'}) WITH n RETURN n.name",
-                           "A WITH cannot publish 'n'");
-
-    StringRowSink sink;
-    runWrite("MERGE (n:Person {name: 'Nia'}) WITH n.name AS written RETURN written", sink);
+// A MERGE's rows mix what it wrote with what it bound, and the mask telling the two apart
+// crosses the cut beside the entity
+TEST_F(CreateWithTest, publishesAMergedEntityPastAWith) {
+    StringRowSink entitySink;
+    runWrite("MERGE (n:Person {name: 'Nia'}) WITH n RETURN n.name", entitySink);
 
     const std::vector<StringRowSink::Row> expected {{"Nia"}};
+    EXPECT_EQ(entitySink.getRows(), expected);
+
+    StringRowSink propertySink;
+    runWrite("MERGE (n:Person {name: 'Nia'}) WITH n.name AS written RETURN written", propertySink);
+
+    EXPECT_EQ(propertySink.getRows(), expected);
+}
+
+// Each created node is a group of its own, and the ORDER BY reads their names over the groups
+TEST_F(CreateWithTest, groupsOnTheNodesACreateWrote) {
+    StringRowSink sink;
+    runWrite("UNWIND ['Bo', 'Ada', 'Bo'] AS name CREATE (p:Person {name: name}) WITH p, count(*) AS c ORDER BY p.name RETURN p.name, c",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Ada", "1"}, {"Bo", "1"}, {"Bo", "1"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
 
@@ -179,11 +191,13 @@ TEST_F(CreateWithTest, rejectsAReadingClauseAfterAnUpdatingOne) {
                            "A reading clause cannot follow an updating clause");
 }
 
-// The pattern walks from the created node, and the graph the pattern reads holds it nowhere
-// until the commit.
-TEST_F(CreateWithTest, rejectsAnOptionalMatchOverANodeCreatedAboveTheCut) {
-    runWriteExpectingError("CREATE (n:Person {name: 'Ola'}) WITH n OPTIONAL MATCH (n)-[:KNOWS]->(m) RETURN m.name",
-                           "An OPTIONAL MATCH cannot read what a CREATE in the same query wrote");
+// The pattern walks from the created node, which has no edge: the row comes back padded
+TEST_F(CreateWithTest, readsAnOptionalMatchOverANodeCreatedAboveTheCut) {
+    StringRowSink sink;
+    runWrite("CREATE (n:Person {name: 'Ola'}) WITH n OPTIONAL MATCH (n)-[:KNOWS]->(m) RETURN m.name", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"null"}};
+    EXPECT_EQ(sink.getRows(), expected);
 }
 
 // The optional pattern names none of what the CREATE wrote, so the created node is no part
@@ -216,10 +230,14 @@ TEST_F(CreateWithTest, readsACreatedNodeAcrossAnImplicitCut) {
 }
 
 // A MATCH closing the part on its own cut carries what the CREATE wrote exactly as a WITH
-// does, so the same rule applies over it.
-TEST_F(CreateWithTest, rejectsAnOptionalMatchOverACreatedNodeAcrossAnImplicitCut) {
-    runWriteExpectingError("CREATE (n:Person {name: 'Ola'}) WITH n MATCH (p:Person) ORDER BY p.name LIMIT 1 MATCH (i:Interest {name: 'Cooking'}) OPTIONAL MATCH (n)-[:KNOWS_WELL]->(f) RETURN f.name",
-                           "An OPTIONAL MATCH cannot read what a CREATE in the same query wrote");
+// does, so the optional pattern walks from the created node over it
+TEST_F(CreateWithTest, readsAnOptionalMatchOverACreatedNodeAcrossAnImplicitCut) {
+    StringRowSink sink;
+    runWrite("CREATE (n:Person {name: 'Ola'}) WITH n MATCH (p:Person) ORDER BY p.name LIMIT 1 MATCH (i:Interest {name: 'Cooking'}) OPTIONAL MATCH (n)-[:KNOWS_WELL]->(f) RETURN f.name",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"null"}};
+    EXPECT_EQ(sink.getRows(), expected);
 }
 
 // A cut opens a part like any other, and this one ends on its MATCH. Writing earlier in the

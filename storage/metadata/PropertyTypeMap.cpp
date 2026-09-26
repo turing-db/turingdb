@@ -80,6 +80,16 @@ size_t PropertyTypeMap::getCount() const {
     return _nameMap.size();
 }
 
+void PropertyTypeMap::truncate(size_t count) {
+    for (size_t index = count; index < _container.size(); index++) {
+        const Pair& pair = _container[index];
+        _nameMap.erase(*pair._name);
+        _idMap.erase(pair._pt._id);
+    }
+
+    _container.erase(_container.begin() + count, _container.end());
+}
+
 PropertyType PropertyTypeMap::getOrCreate(std::string_view name, ValueType valueType) {
     auto it = _nameMap.find(name);
     if (it != _nameMap.end()) {

@@ -19,6 +19,7 @@
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
 #include "stmt/CallSubqueryStmt.h"
+#include "stmt/SetItem.h"
 
 #include "ExplainRequest.h"
 
@@ -44,6 +45,7 @@ class CypherAST;
 class DeleteStmt;
 class EdgePattern;
 class EmbeddingLiteral;
+struct EntityPropertyConstraint;
 class EntityTypeExpr;
 class Expr;
 class ExprChain;
@@ -189,6 +191,10 @@ private:
             mlir::Value _pending;
 
             std::unordered_map<std::string_view, mlir::Value> _properties;
+
+            // The properties written from tagged cells: a read typed as the property's own
+            // type fetches what the cells were converted to rather than reading the cells
+            std::unordered_set<std::string_view> _taggedProperties;
         };
 
         using CreatedEntityMap = std::unordered_map<const VarDecl*, CreatedEntity>;
@@ -310,6 +316,7 @@ private:
 
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
+    void generatePartAfterWrites(std::span<Stmt* const> stmts);
 
     // Emits the db.call_subquery of one CALL { ... }: the columns in flight become the
     // inputs its body reads through block arguments, the body is generated into the op's
@@ -332,6 +339,7 @@ private:
     // SKIP or LIMIT reads the rows that MATCH produced, which a later MATCH or UNWIND of
     // the same part would otherwise have crossed into them first
     bool closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* const> following) const;
+    static bool closesPartOnItsWrites(const Stmt* stmt, std::span<Stmt* const> following);
 
     // Emits the db.optional_match of one OPTIONAL MATCH, given as the single-statement
     // @param stmt: the columns in flight become the rows its pattern joins onto, the
@@ -483,20 +491,13 @@ private:
                               llvm::ArrayRef<PublishedColumn> published,
                               CarriedEntities& carried) const;
 
-    void throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const;
-
-    // Rejects a pattern of @param matchStmt that names an entity a CREATE of the same
-    // query wrote, which the clause named by @param clause cannot read
-    void throwOnMatchOverWrittenEntity(const MatchStmt* matchStmt, std::string_view clause) const;
-
     // Records what a CREATE wrote for one named entity of its pattern, so the projection
     // reads that back rather than fetching an ID the graph does not hold yet
     void publishCreatedEntity(const VarDecl* decl,
                               mlir::Value column,
                               llvm::ArrayRef<llvm::StringRef> labelNames,
                               llvm::StringRef edgeType,
-                              llvm::ArrayRef<llvm::StringRef> propNames,
-                              llvm::ArrayRef<mlir::Value> propValues);
+                              std::span<const EntityPropertyConstraint> properties);
 
     // The chain of one MERGE pattern, as db.merge carries it: one entry per node and
     // one per hop, with the attribute lists and operand groups they fill
@@ -508,6 +509,10 @@ private:
         // A node the query already bound, whose rows come in through a column rather
         // than from labels and property values. Never true of a hop.
         bool _bound {false};
+
+        // A node naming again one the pattern introduced ahead of it: the second a of
+        // (a:A)-[:R]->(a)
+        bool _repeated {false};
     };
 
     struct MergePattern {
@@ -520,6 +525,7 @@ private:
         llvm::SmallVector<mlir::Attribute> _edgePropNames;
         llvm::SmallVector<int64_t> _directions;
         llvm::SmallVector<int64_t> _pendingNodes;
+        llvm::SmallVector<int64_t> _repeatedNodes;
 
         llvm::SmallVector<mlir::Value> _boundNodes;
         llvm::SmallVector<mlir::Value> _boundPending;
@@ -550,10 +556,11 @@ private:
     void generateCreateStmt(const CreateStmt* createStmt);
     void generateMergeStmt(const MergeStmt* mergeStmt);
 
+    static bool actionsRewriteTheKey(const MergeStmt* mergeStmt, const MergePattern& pattern);
     void collectMergePattern(const MergeStmt* mergeStmt, MergePattern& pattern);
     void collectMergeNode(const NodePattern* nodePattern, MergePattern& pattern);
     void collectMergeHop(const EdgePattern* edgePattern, MergePattern& pattern);
-    void collectMergeProperties(const PatternData* data, MergeEntity& entity);
+    void collectMergeProperties(const PatternData* data, std::string_view entityKind, MergeEntity& entity);
 
     void collectCarrySet(CarrySet& carrySet);
 
@@ -581,15 +588,46 @@ private:
     // lives, off the graph or out of the write buffer.
     void publishMergedEntity(const VarDecl* decl, mlir::Value column, mlir::Value pending);
 
+    // A grouped entity keeps no column its write recorded, as those hold the rows before
+    // the grouping: its reads go to the write buffer, which a pending ID is told apart by
+    void rebindGroupedEntity(const VarDecl* decl, mlir::Value grouped);
+
     // The mask saying which of a variable's rows hold a provisional ID, or a null Value
     // for a variable no write bound and for one a CREATE bound - whose every row does
     mlir::Value findPendingMask(const VarDecl* decl) const;
 
     void generatePropertyWrite(const PropertyExpr* propertyExpr,
                                mlir::Value valueColumn,
-                               mlir::Value rows);
+                               mlir::Value rows,
+                               bool skipsNulls = false);
 
+    void generatePropertyWrite(const VarDecl* entityDecl,
+                               std::string_view propName,
+                               mlir::Value valueColumn,
+                               mlir::Value rows,
+                               bool skipsNulls = false);
+
+    void generateSetStmt(const SetStmt* setStmt);
+    void collectSetRowKeys(const SetStmt* setStmt,
+                           llvm::ArrayRef<mlir::Value> columns,
+                           llvm::SmallVectorImpl<int64_t>& keys);
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
+
+    // Every entry is read before any is written, as the map is one value
+    void generateMapAssign(const SetItem::SymbolMapAssign& assign, mlir::Value rows);
+    void generateRowEntriesWrite(const SetItem::SymbolMapAssign& assign, mlir::Value rows);
+
+    // An update whose writes an op already built reads is fenced off from that op: every
+    // row is held first, so a read run again for a later chunk misses what the update did
+    // for an earlier one
+    void generateRowBarrier(const Stmt* updateStmt);
+
+    // A clause reading what a write built before it wrote reads it once every row has
+    // written it, not the rows of its own chunk alone
+    void generateRowBarrierBeforeReads(std::span<Stmt* const> readingStmts);
+    void generateRowBarrierBeforeProjection(const Projection* projection, const WhereClause* where);
+
+    void holdRowsInFlight();
 
     void generateRemoveProperties(const RemoveStmt* removeStmt);
     void generateDeleteStmt(const DeleteStmt* deleteStmt);
@@ -919,7 +957,8 @@ private:
                                     llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds = {});
 
     // The collects a keyless projection returns, built as one op so a single drain emits
-    // them all. One collect needs no help: its own translation is that op.
+    // them all, the other aggregates beside them. One collect alone needs no help: its own
+    // translation is that op.
     void generateKeylessCollect(const Projection* projection);
 
     // Reduces every aggregate of a keyless projection before its items are built, so what an

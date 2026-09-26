@@ -97,6 +97,10 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
         tmpToFinalNodeIDs[tmpID] = id;
     }
 
+    for (NodeID& deleted : builder.deletedNodes()) {
+        deleted = tmpToFinalNodeIDs.at(deleted);
+    }
+
     // Converting temp to final source/target IDs
     for (auto& out : outEdges) {
         if (out._nodeID >= firstTmpNodeID) {
@@ -173,6 +177,10 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                                    _firstEdgeID,
                                    std::move(outEdges),
                                    tmpToFinalEdgeIDs);
+
+    for (EdgeID& deleted : builder.deletedEdges()) {
+        deleted = tmpToFinalEdgeIDs.at(deleted);
+    }
 
     // Edge properties: Add index*ers* and note properties to *index*
     _edgeProperties = std::move(edgeProperties);

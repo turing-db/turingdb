@@ -58,12 +58,13 @@ TEST_F(SetPropertyNullOptionalMatchTest, setsTheOptionalEdgesPropertyToNull) {
 }
 
 // The value read off the padded rows is null, so those rows write a null without the
-// clause naming one: Remy takes Adam's dob, Adam takes Remy's, the other six lose theirs
+// clause naming one: Remy takes Adam's dob, Adam then takes the one Remy's row wrote, and
+// the other six lose theirs
 TEST_F(SetPropertyNullOptionalMatchTest, setsThePropertyToNullFromThePaddedRowsOwnRead) {
     applyWrite("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) SET p.dob = f.dob");
 
     expectRows("MATCH (p:Person) WHERE p.dob IS NOT NULL RETURN p.name, p.dob",
-               {{"Remy", "18/08"}, {"Adam", "18/01"}});
+               {{"Remy", "18/08"}, {"Adam", "18/08"}});
 }
 
 // The rows the clause wrote over are the rows it leaves in flight, padded ones included
