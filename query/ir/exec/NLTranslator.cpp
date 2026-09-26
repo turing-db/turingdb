@@ -484,12 +484,6 @@ bool isNullableListElement(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListElementType>(nullableType.getValueType());
 }
 
-bool isListElementChunk(mlir::Type chunkType) {
-    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-
-    return mlir::isa<storage::ListElementType>(elementType) || isNullableListElement(elementType);
-}
-
 bool isNullableList(mlir::Type elementType) {
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
@@ -2649,7 +2643,6 @@ PropertyType NLTranslator::writtenPropertyType(llvm::StringRef propName,
 
     const std::optional<PropertyType> existing = findPropertyType(propName);
     if (!existing) {
-        bioassert(!writesListElements, "List elements written to property '{}', which the graph does not hold", propName.str());
         return PropertyType {};
     }
 

@@ -53,7 +53,7 @@ TEST_F(MergeTaggedCellKeyTest, mergesAnEdgeKeyedOnAnElement) {
 
 TEST_F(MergeTaggedCellKeyTest, rejectsAnElementOfAnotherTypeThanTheProperty) {
     expectRejected("UNWIND [[1, 'a'], ['x', 'b']] AS r MERGE (u:User {uid: r[0]})",
-                   "Cannot write a value of another type");
+                   "to a list element of another type");
 }
 
 TEST_F(MergeTaggedCellKeyTest, rejectsANullElement) {
