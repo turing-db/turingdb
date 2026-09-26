@@ -19,11 +19,17 @@ TuringDB properties are scalars, so Person.email and Person.speaks stay the
 """
 
 import argparse
+import datetime
 import json
 import os
 import sys
 
 SEPARATOR = "|"
+
+# Epoch-millisecond columns, written as ISO-8601 for LOAD JSONL ... WITH DATETIMES
+DATETIME_COLUMNS = {"birthday", "creationDate", "joinDate"}
+
+EPOCH = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
 class NodeIDs:
@@ -78,6 +84,17 @@ def scalar(value):
     """Keeps a CSV field as an int when it reads as one, otherwise as a string."""
     parsed = asInt(value)
     return parsed if parsed is not None else value
+
+
+def isoDateTime(value):
+    """Spells an epoch-millisecond field as the ISO-8601 UTC instant it stands for."""
+    instant = EPOCH + datetime.timedelta(milliseconds=int(value))
+    return instant.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def columnValue(column, value):
+    """Converts one CSV field to the JSONL value its column is imported as."""
+    return isoDateTime(value) if column in DATETIME_COLUMNS else scalar(value)
 
 
 # Node tables: file -> (entity, base labels, label column, property columns)
@@ -164,7 +181,7 @@ def writeNodes(csvDir, out, nodeIDs):
                 if index is None or row[index] == "":
                     continue
                 name = PERSON_RENAMES.get(column, column) if entity == "Person" else column
-                values[name] = scalar(row[index])
+                values[name] = columnValue(column, row[index])
 
             line = {
                 "type": "node",
@@ -204,7 +221,7 @@ def writeEdges(csvDir, out, nodeIDs):
             for offset, column in enumerate(properties):
                 raw = row[2 + offset]
                 if raw != "":
-                    values[column] = scalar(raw)
+                    values[column] = columnValue(column, raw)
 
             line = {
                 "type": "relationship",
