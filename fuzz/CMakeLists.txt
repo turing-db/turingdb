@@ -30,8 +30,13 @@ target_link_libraries(fuzz_csv_parser PRIVATE
 
 add_executable(fuzz_http_parser fuzz_http_parser.cpp)
 target_link_libraries(fuzz_http_parser PRIVATE
+    turing_db_examples_s
+    turing_db_server_s
+    turing_db_tcp_server_s
+    turing_testenv_s
     turing_db_http_common_s
     turing_db_http_parser_s
+    nlohmann_json
     turing_common_s)
 
 endif() # NOT APPLE

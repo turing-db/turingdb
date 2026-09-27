@@ -21,7 +21,7 @@ CLANG_BUILD=1 ./dependencies.sh
 # Fuzz only the query engine, forever
 ./fuzz/run_afl.sh --nostop --cypher
 
-# Fuzz only the HTTP parser, 10 minutes
+# Fuzz only the HTTP server, 10 minutes
 ./fuzz/run_afl.sh --http --time 600
 ```
 
@@ -30,7 +30,7 @@ CLANG_BUILD=1 ./dependencies.sh
 | Flag | Harness | What it tests |
 |------|---------|---------------|
 | `--cypher` | `fuzz_query_engine` | Query engine: parse, analyze, generate the db program, lower and execute against SimpleGraph data |
-| `--http` | `fuzz_http_parser` | Custom HTTP parser: method, URI, headers, Content-Length, payload handling |
+| `--http` | `fuzz_http_parser` | HTTP server: the request path of `TCPConnectionManager` after `recv()`, `DBServerProcessor` running the query against SimpleGraph data, and the chunked JSON response |
 | `--csv` | `fuzz_csv_parser` | CSV parser: `parseCSVLine()` and `peekFileStructure()` |
 
 If no flag is specified, all harnesses are run.
@@ -87,6 +87,11 @@ The harnesses only catch expected user-input errors. For the query engine that i
 - `FatalException` — internal logic errors, rethrown even where a `TuringException` is caught
 - `bioassert` failures — assertion violations (throw `FatalException`)
 - Any other unexpected exception
+
+`fuzz_http_parser` runs the server's own request path, where `QueryInterpreterV3` turns these
+into a JSON error response. The harness reads the response back and aborts when `error_details`
+starts with `Unexpected exception` or is `Unknown exception occurred`, when the body is not valid
+JSON, or when the chunked framing is broken.
 
 ## Dictionaries
 
