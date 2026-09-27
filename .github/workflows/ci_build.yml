@@ -48,7 +48,7 @@ jobs:
         python_version: ${{ fromJson(inputs.python_version_list || '["3.14"]') }}
 
     # Each matrix.os value is the literal runner label it dispatches to: the ubuntu-*-turing
-    # and macos*-turing labels are self-hosted runners; ubuntu-*-arm are GitHub-hosted.
+    # and macos* labels are self-hosted runners; ubuntu-*-arm are GitHub-hosted.
     runs-on: ${{ matrix.os }}
 
     # Cap parallelism at 4 across every step. The shared self-hosted runners
@@ -109,7 +109,7 @@ jobs:
     # The GitHub-hosted ubuntu-*-arm runner images don't ship git-lfs, so the
     # lfs: true checkout below fails with "Unable to locate executable file:
     # git-lfs". Install it before checkout. The self-hosted ubuntu-*-turing and
-    # macos*-turing runners already have git-lfs, so scope this to the ARM labels.
+    # macos* runners already have git-lfs, so scope this to the ARM labels.
     - name: Install git-lfs (GitHub-hosted ARM)
       if: contains(matrix.os, 'arm')
       run: |

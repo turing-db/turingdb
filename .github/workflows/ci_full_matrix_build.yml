@@ -10,10 +10,14 @@ on:
 
 
 jobs:
+  matrix:
+    uses: ./.github/workflows/ci_release_matrix.yml
+
   build:
+    needs: matrix
     uses: ./.github/workflows/ci_build.yml
     with:
-      os_list: '["ubuntu-22.04-turing", "ubuntu-24.04-turing", "macos14-turing", "macos15-turing", "macos26-turing"]'
-      python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+      os_list: ${{ needs.matrix.outputs.os_list }}
+      python_version_list: ${{ needs.matrix.outputs.python_version_list }}
     secrets: inherit
 
