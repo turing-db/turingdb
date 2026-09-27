@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "  --cypher       Fuzz the Cypher parser"
             echo "  --csv          Fuzz the CSV parser"
-            echo "  --http         Fuzz the HTTP parser"
+            echo "  --http         Fuzz the HTTP server"
             echo "  --time SECS    Time per harness (default: 300)"
             echo "  --nostop       Run forever until Ctrl+C (ignores --time)"
             echo "  --build-only   Build but don't run"
