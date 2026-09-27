@@ -1,0 +1,10 @@
+POST /query?graph=default&change=1f HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 389
+
+MATCH (person:Person) OPTIONAL MATCH (person)<-[:HAS_CREATOR]-(message:Message)-[:REPLY_OF*0..]->(post:Post) WHERE message.content IS NOT NULL AND message.length < 20 AND message.creationDate > datetime('2010-06-01') AND post.language IN ['ar', 'hu'] WITH person, count(message) AS messageCount RETURN messageCount, count(person) AS personCount ORDER BY personCount DESC, messageCount DESC

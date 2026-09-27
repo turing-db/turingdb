@@ -1,0 +1,10 @@
+POST /query?graph=default&commit=0123456789abcdef HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 270
+
+MATCH (n:Person {id: 4398046511333 })-[:IS_LOCATED_IN]->(p:City) RETURN n.firstName AS firstName, n.lastName AS lastName, n.birthday AS birthday, n.locationIP AS locationIP, n.browserUsed AS browserUsed, p.id AS cityId, n.gender AS gender, n.creationDate AS creationDate

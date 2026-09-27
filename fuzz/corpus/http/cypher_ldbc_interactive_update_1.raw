@@ -1,0 +1,10 @@
+POST /query?graph=default&change=1f HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 698
+
+MATCH (c:City {id: 1073}) CREATE (p:Person { id: 999999999, firstName: 'Bench', lastName: 'Mark', gender: 'female', birthday: datetime('1987-09-18'), creationDate: datetime('2010-11-25T08:20:45.079Z'), locationIP: '127.0.0.1', browserUsed: 'Firefox', languages: 'en', email: 'bench@turing.bio' })-[:IS_LOCATED_IN]->(c) WITH p, count(*) AS dummy1 UNWIND [1524] AS tagId MATCH (t:Tag {id: tagId}) CREATE (p)-[:HAS_INTEREST]->(t) WITH p, count(*) AS dummy2 UNWIND [[2435, 2004]] AS s MATCH (u:Organisation {id: s[0]}) CREATE (p)-[:STUDY_AT {classYear: s[1]}]->(u) WITH p, count(*) AS dummy3 UNWIND [[296, 2010]] AS w MATCH (comp:Organisation {id: w[0]}) CREATE (p)-[:WORKS_AT {workFrom: w[1]}]->(comp)

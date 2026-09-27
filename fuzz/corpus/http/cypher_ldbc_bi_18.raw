@@ -1,0 +1,10 @@
+POST /query?graph=default&commit=0123456789abcdef HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 407
+
+MATCH (tag:Tag {name: 'Carl_Gustaf_Emil_Mannerheim'})<-[:HAS_INTEREST]-(person1:Person)-[:KNOWS]-(mutualFriend:Person)-[:KNOWS]-(person2:Person)-[:HAS_INTEREST]->(tag) WHERE person1 <> person2 AND NOT (person1)-[:KNOWS]-(person2) RETURN person1.id AS person1Id, person2.id AS person2Id, count(DISTINCT mutualFriend) AS mutualFriendCount ORDER BY mutualFriendCount DESC, person1Id ASC, person2Id ASC LIMIT 20

@@ -1,0 +1,11 @@
+POST /query?graph=default HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer token
+Content-Length: 399
+
+MATCH (:Country {name: 'India'})<-[:IS_PART_OF]-(:City)<-[:IS_LOCATED_IN]- (person:Person)<-[:HAS_MODERATOR]-(forum:Forum)-[:CONTAINER_OF]-> (post:Post)<-[:REPLY_OF*0..]-(message:Message)-[:HAS_TAG]->(:Tag)-[:HAS_TYPE]->(:TagClass {name: 'Person'}) RETURN forum.id, forum.title, forum.creationDate, person.id, count(DISTINCT message) AS messageCount ORDER BY messageCount DESC, forum.id ASC LIMIT 20

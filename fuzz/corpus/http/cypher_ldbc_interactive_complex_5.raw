@@ -1,0 +1,10 @@
+POST /query?graph=default&commit=0123456789abcdef HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 472
+
+MATCH (person:Person { id: 6597069766734 })-[:KNOWS*1..2]-(friend) WHERE NOT person=friend WITH DISTINCT friend MATCH (friend)<-[membership:HAS_MEMBER]-(forum) WHERE membership.joinDate > datetime('2010-11-01') WITH forum, collect(friend) AS friends OPTIONAL MATCH (friend)<-[:HAS_CREATOR]-(post)<-[:CONTAINER_OF]-(forum) WHERE friend IN friends WITH forum, count(post) AS postCount RETURN forum.title AS forumName, postCount ORDER BY postCount DESC, forum.id ASC LIMIT 20

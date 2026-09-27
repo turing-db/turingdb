@@ -1,0 +1,10 @@
+POST /query?graph=default&change=1f HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 134
+
+MATCH (m:Message {id: 206158431892 }) RETURN m.creationDate as messageCreationDate, coalesce(m.content, m.imageFile) as messageContent
