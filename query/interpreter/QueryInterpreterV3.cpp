@@ -45,9 +45,9 @@ namespace {
 
 // Takes back what a statement staged and interned unless it runs to the end, so a query
 // that fails leaves nothing of itself for the commit
-class StatementWrites {
+class WritesRollback {
 public:
-    StatementWrites(CommitWriteBuffer* writeBuffer, MetadataBuilder* metadataBuilder)
+    WritesRollback(CommitWriteBuffer* writeBuffer, MetadataBuilder* metadataBuilder)
         : _writeBuffer(writeBuffer),
         _metadataBuilder(metadataBuilder)
     {
@@ -60,7 +60,7 @@ public:
         }
     }
 
-    ~StatementWrites() {
+    ~WritesRollback() {
         if (_writeBuffer) {
             _writeBuffer->rollbackStatement();
         }
@@ -70,8 +70,8 @@ public:
         }
     }
 
-    StatementWrites(const StatementWrites&) = delete;
-    StatementWrites& operator=(const StatementWrites&) = delete;
+    WritesRollback(const WritesRollback&) = delete;
+    WritesRollback& operator=(const WritesRollback&) = delete;
 
     void keep() {
         if (_writeBuffer) {
@@ -297,9 +297,9 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      metadataBuilder,
                                      &procedureContext,
                                      &systemContext);
-    const bool guardsTheStatement = writesOnlyThroughQueries(ast);
-    StatementWrites statementWrites(guardsTheStatement ? writeBuffer : nullptr,
-                                    guardsTheStatement ? metadataBuilder : nullptr);
+    const bool writeRollbackEnabled = writesOnlyThroughQueries(ast);
+    WritesRollback writesRollback(writeRollbackEnabled ? writeBuffer : nullptr,
+                                  writeRollbackEnabled ? metadataBuilder : nullptr);
 
     try {
         if (explain) {
@@ -309,7 +309,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
             interpreter.run();
         }
 
-        statementWrites.keep();
+        writesRollback.keep();
     } catch (const CompilerException& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(e.what());

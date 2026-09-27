@@ -64,6 +64,10 @@ const MapLiteral* mapLiteralOf(const Expr* expr) {
     return static_cast<const MapLiteral*>(literal);
 }
 
+std::string_view writeClauseKeyword(Stmt::Kind clause) {
+    return clause == Stmt::Kind::MERGE ? "MERGE" : "CREATE";
+}
+
 using NameSet = std::unordered_set<std::string_view>;
 
 std::string_view findReadName(const Expr* expr, const NameSet& names);
@@ -239,10 +243,10 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     if (const Pattern* pattern = createStmt->getPattern()) {
-        throwOnEntityWhere(pattern, "CREATE");
+        throwOnEntityWhere(pattern, Stmt::Kind::CREATE);
         throwOnUndirectedEdge(pattern);
 
-        _patternClause = "CREATE";
+        _patternClause = Stmt::Kind::CREATE;
         collectPatternNames(pattern);
         analyze(pattern);
     }
@@ -251,9 +255,9 @@ void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
 void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
     const Pattern* pattern = mergeStmt->getPattern();
 
-    throwOnEntityWhere(pattern, "MERGE");
+    throwOnEntityWhere(pattern, Stmt::Kind::MERGE);
 
-    _patternClause = "MERGE";
+    _patternClause = Stmt::Kind::MERGE;
     collectPatternNames(pattern);
     analyze(pattern);
 
@@ -300,11 +304,11 @@ void WriteStmtAnalyzer::analyze(const Pattern* pattern) {
     }
 }
 
-void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const {
+void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, Stmt::Kind clause) const {
     for (const PatternElement* element : pattern->elements()) {
         for (const EntityPattern* entity : element->getEntities()) {
             if (entity->getWhere()) {
-                throwError(fmt::format("WHERE is not allowed in a {} pattern", clause), entity);
+                throwError(fmt::format("WHERE is not allowed in a {} pattern", writeClauseKeyword(clause)), entity);
             }
         }
     }
@@ -329,11 +333,13 @@ void WriteStmtAnalyzer::throwOnPatternEntityRead(const Expr* expr, const void* o
         return;
     }
 
+    const std::string_view clause = writeClauseKeyword(_patternClause);
+
     throwError(fmt::format("A property of this {} reads '{}', which the same {} introduces: it has no value "
                            "until the clause has run, so only variables bound by an earlier clause can be read here",
-                           _patternClause,
+                           clause,
                            read,
-                           _patternClause),
+                           clause),
                obj);
 }
 
