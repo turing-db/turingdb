@@ -87,7 +87,7 @@ template <SupportedType T>
 std::optional<typename T::Primitive> NLWrittenValues::read(const Value& value) {
     using Primitive = typename T::Primitive;
 
-    const auto convert = [this](const auto& held) -> std::optional<Primitive> {
+    const auto convert = [&](const auto& held) -> std::optional<Primitive> {
         using Inner = typename std::decay_t<decltype(held)>::value_type;
 
         constexpr bool isEncodedList = std::is_same_v<T, types::List> && std::is_same_v<Inner, EncodedList>;
