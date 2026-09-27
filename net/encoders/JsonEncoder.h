@@ -22,7 +22,7 @@
 #include "OutputWriter.h"
 #include "OutputValues.h"
 
-#include "ControlCharacters.h"
+#include "JsonStringEscaper.h"
 
 #include "BioAssert.h"
 
@@ -151,7 +151,7 @@ private:
     }
 
     void encodeValue(ValueType value) {
-        ControlCharactersEscaper::escapeAndSurroundByQuotes(ValueTypeName::value(value), _sanitized);
+        JsonStringEscaper::escapeAndSurroundByQuotes(ValueTypeName::value(value), _sanitized);
         _writer.write(_sanitized);
     }
 
@@ -159,7 +159,7 @@ private:
         _formatted.clear();
         DateTime::format(_formatted, value);
 
-        ControlCharactersEscaper::escapeAndSurroundByQuotes(_formatted, _sanitized);
+        JsonStringEscaper::escapeAndSurroundByQuotes(_formatted, _sanitized);
         _writer.write(_sanitized);
     }
 
@@ -189,7 +189,7 @@ private:
 
     template <std::convertible_to<std::string_view> T>
     void encodeValue(const T& value) {
-        ControlCharactersEscaper::escapeAndSurroundByQuotes(value, _sanitized);
+        JsonStringEscaper::escapeAndSurroundByQuotes(value, _sanitized);
         _writer.write(_sanitized);
     }
 
@@ -409,7 +409,7 @@ public:
     }
 
     void key(std::string_view k) {
-        ControlCharactersEscaper::escape(k, _sanitized);
+        JsonStringEscaper::escape(k, _sanitized);
         if (_comma) {
             _writer.write(fmt::format(",\"{}\":", _sanitized));
         } else {
@@ -444,7 +444,7 @@ public:
     }
 
     void value(std::string_view v) {
-        ControlCharactersEscaper::escapeAndSurroundByQuotes(v, _sanitized);
+        JsonStringEscaper::escapeAndSurroundByQuotes(v, _sanitized);
         if (_comma) {
             _writer.write(',');
             _writer.write(_sanitized);
