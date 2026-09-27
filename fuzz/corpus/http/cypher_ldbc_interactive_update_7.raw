@@ -1,0 +1,11 @@
+POST /query?graph=default HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer token
+Content-Length: 463
+
+MATCH (author:Person {id: 4398046511333}), (country:Country {id: 0}), (message:Message {id: 343597383680 + -1 + 1}) CREATE (author)<-[:HAS_CREATOR]-(c:Comment:Message { id: 999999998, creationDate: datetime('2010-11-25T08:20:45.079Z'), locationIP: '127.0.0.1', browserUsed: 'Firefox', content: 'bench comment', length: 13 })-[:REPLY_OF]->(message), (c)-[:IS_LOCATED_IN]->(country) WITH c UNWIND [1524] AS tagId MATCH (t:Tag {id: tagId}) CREATE (c)-[:HAS_TAG]->(t)

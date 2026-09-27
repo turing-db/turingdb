@@ -1,0 +1,10 @@
+POST /query?graph=default&change=1f HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 578
+
+MATCH (root:Person {id: 4398046511268 })-[:KNOWS*1..2]-(friend:Person) WHERE NOT friend = root WITH collect(distinct friend) as friends UNWIND friends as friend MATCH (friend)<-[:HAS_CREATOR]-(message:Message) WHERE message.creationDate < datetime('2010-11-16') RETURN friend.id AS personId, friend.firstName AS personFirstName, friend.lastName AS personLastName, message.id AS commentOrPostId, coalesce(message.content,message.imageFile) AS commentOrPostContent, message.creationDate AS commentOrPostCreationDate ORDER BY commentOrPostCreationDate DESC, message.id ASC LIMIT 20

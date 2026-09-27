@@ -1,0 +1,10 @@
+POST /query?graph=default&change=1f HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 374
+
+MATCH (tag:Tag {name: 'Carl_Gustaf_Emil_Mannerheim'})<-[:HAS_TAG]-(message1:Message)-[:HAS_CREATOR]->(person1:Person) OPTIONAL MATCH (message1)<-[:LIKES]-(person2:Person) OPTIONAL MATCH (person2)<-[:HAS_CREATOR]-(message2:Message)<-[like:LIKES]-(person3:Person) RETURN person1.id, count(DISTINCT like) AS authorityScore ORDER BY authorityScore DESC, person1.id ASC LIMIT 100

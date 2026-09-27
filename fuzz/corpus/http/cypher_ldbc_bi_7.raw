@@ -1,0 +1,10 @@
+POST /query?graph=default&commit=0123456789abcdef HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 300
+
+MATCH (tag:Tag {name: 'Carl_Gustaf_Emil_Mannerheim'})<-[:HAS_TAG]-(message:Message), (message)<-[:REPLY_OF]-(comment:Comment)-[:HAS_TAG]->(relatedTag:Tag) WHERE NOT (comment)-[:HAS_TAG]->(tag) RETURN relatedTag.name, count(DISTINCT comment) AS count ORDER BY count DESC, relatedTag.name ASC LIMIT 100

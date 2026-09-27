@@ -104,11 +104,13 @@ keyword, function and procedure sections come from `query/parser/CypherLexer.l`,
 ## Seed Corpus
 
 - `fuzz/corpus/cypher/` — Cypher queries from the query test suite, the regression tests and the C++ unit tests
-- `fuzz/corpus/http/` — 272 HTTP inputs (AFL++-generated corpus covering all parser edges)
+- `fuzz/corpus/http/` — 272 HTTP inputs (AFL++-generated corpus covering all parser edges),
+  and `cypher_*.raw`: each hand-written Cypher seed in the `POST /query` request the Python
+  HTTP client sends, on main, inside a change, on a commit and with a token
 - `fuzz/corpus/csv/` — 3 CSV files (basic, quoted, no headers)
 
 The Cypher seeds go stale as the language grows, so regenerate them from the
-repository's own queries:
+repository's own queries. The same script rewrites the `cypher_*.raw` HTTP seeds:
 
 ```bash
 python3 fuzz/make_corpus.py            # add every query the sources produce

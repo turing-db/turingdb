@@ -1,0 +1,10 @@
+POST /query?graph=default&commit=0123456789abcdef HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 575
+
+MATCH (author:Person {id: 4398046511333}), (country:Country {id: 0}), (forum:Forum {id: 274877906944}) CREATE (author)<-[:HAS_CREATOR]-(p:Post:Message { id: 999999999, creationDate: datetime('2010-11-25T08:20:45.079Z'), locationIP: '127.0.0.1', browserUsed: 'Firefox', language: 'en', content: CASE 'bench post' WHEN '' THEN NULL ELSE 'bench post' END, imageFile: CASE 'bench.jpg' WHEN '' THEN NULL ELSE 'bench.jpg' END, length: 10 })<-[:CONTAINER_OF]-(forum), (p)-[:IS_LOCATED_IN]->(country) WITH p UNWIND [1524] AS tagId MATCH (t:Tag {id: tagId}) CREATE (p)-[:HAS_TAG]->(t)

@@ -1,0 +1,10 @@
+POST /query?graph=default&change=1f HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 145
+
+MATCH (f:Forum {id: 274877906944}), (p:Person {id: 4398046511333}) CREATE (f)-[:HAS_MEMBER {joinDate: datetime('2010-11-25T08:20:45.079Z')}]->(p)

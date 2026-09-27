@@ -1,0 +1,10 @@
+POST /query?graph=default&commit=0123456789abcdef HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 63
+
+CREATE VECTOR INDEX embeddings WITH DIMENSION 128 METRIC EUCLID

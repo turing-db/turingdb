@@ -1,0 +1,10 @@
+POST /query?graph=default HTTP/1.1
+Host: localhost:6666
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+User-Agent: python-httpx/0.28.1
+Accept: application/json
+Content-Type: application/json
+Content-Length: 803
+
+MATCH (a:Person)-[:IS_LOCATED_IN]->(:City)-[:IS_PART_OF]->(country:Country {name: 'India'}), (a)-[k1:KNOWS]-(b:Person) WHERE a.id < b.id AND datetime('2010-02-26T16:00:00Z') <= k1.creationDate AND k1.creationDate <= datetime('2010-11-25T08:20:45.079Z') WITH DISTINCT country, a, b MATCH (b)-[:IS_LOCATED_IN]->(:City)-[:IS_PART_OF]->(country) WITH DISTINCT country, a, b MATCH (b)-[k2:KNOWS]-(c:Person), (c)-[:IS_LOCATED_IN]->(:City)-[:IS_PART_OF]->(country) WHERE b.id < c.id AND datetime('2010-02-26T16:00:00Z') <= k2.creationDate AND k2.creationDate <= datetime('2010-11-25T08:20:45.079Z') WITH DISTINCT a, b, c MATCH (c)-[k3:KNOWS]-(a) WHERE datetime('2010-02-26T16:00:00Z') <= k3.creationDate AND k3.creationDate <= datetime('2010-11-25T08:20:45.079Z') WITH DISTINCT a, b, c RETURN count(*) AS count
