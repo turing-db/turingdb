@@ -12,11 +12,11 @@
 # --- HTTP versions ---
 "HTTP/1.0"
 "HTTP/1.1"
-" HTTP/1.1\r\n"
+" HTTP/1.1\x0d\x0a"
 
 # --- Line endings ---
-"\r\n"
-"\r\n\r\n"
+"\x0d\x0a"
+"\x0d\x0a\x0d\x0a"
 
 # --- Headers ---
 "Host: "
@@ -28,6 +28,8 @@
 "Content-Length: 100"
 "Content-Type: "
 "Content-Type: application/json"
+"Authorization: "
+"Authorization: Bearer "
 
 # --- TuringDB endpoints (from DBURIParser.h) ---
 "/query"
@@ -99,12 +101,12 @@
 "Content-Length: 18446744073709551615"
 
 # --- Partial/malformed requests ---
-"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
-"POST /query/default HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
+"GET / HTTP/1.1\x0d\x0aHost: localhost\x0d\x0a\x0d\x0a"
+"POST /query/default HTTP/1.1\x0d\x0aContent-Length: 0\x0d\x0a\x0d\x0a"
 
 # --- Boundary tokens ---
 " "
-"\r"
-"\n"
-"\t"
-"\0"
+"\x0d"
+"\x0a"
+"\x09"
+"\x00"
