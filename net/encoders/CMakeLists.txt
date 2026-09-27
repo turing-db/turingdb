@@ -1,4 +1,5 @@
 add_library(turing_db_net_encoders STATIC
+    JsonStringEscaper.cpp
     NestedContainerIterator.cpp
     TuringProtoEncoder.cpp
     TuringProtoNestedWriter.cpp)

@@ -12,6 +12,11 @@ target_link_libraries(test_net_turing_proto_roundtrip PRIVATE
     turing_db_net_encoders
     turing_db_proto_client_s)
 
+add_turing_test(test_net_json_encoder JsonEncoderTest.cpp)
+target_link_libraries(test_net_json_encoder PRIVATE
+    turing_db_net_encoders
+    turing_db_memory_s)
+
 add_turing_test(test_net_turing_client TuringClientTest.cpp)
 target_link_libraries(test_net_turing_client PRIVATE
     turing_db_proto_client_s)
