@@ -20,7 +20,6 @@
 
 #include "CypherAST.h"
 #include "CypherASTDumper.h"
-#include "QueryCommand.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 
@@ -29,10 +28,10 @@
 #include "SystemManager.h"
 #include "SystemAccessor.h"
 #include "versioning/CommitBuilder.h"
-#include "versioning/CommitWriteBuffer.h"
-#include "writers/MetadataBuilder.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
+
+#include "WritesRollback.h"
 
 #include "CompilerException.h"
 #include "FatalException.h"
@@ -40,70 +39,6 @@
 #include "TuringTime.h"
 
 using namespace db;
-
-namespace {
-
-// Takes back what a statement staged and interned unless it runs to the end, so a query
-// that fails leaves nothing of itself for the commit
-class WritesRollback {
-public:
-    WritesRollback(CommitWriteBuffer* writeBuffer, MetadataBuilder* metadataBuilder)
-        : _writeBuffer(writeBuffer),
-        _metadataBuilder(metadataBuilder)
-    {
-        if (_writeBuffer) {
-            _writeBuffer->beginStatement();
-        }
-
-        if (_metadataBuilder) {
-            _metadataBuilder->beginStatement();
-        }
-    }
-
-    ~WritesRollback() {
-        if (_writeBuffer) {
-            _writeBuffer->rollbackStatement();
-        }
-
-        if (_metadataBuilder) {
-            _metadataBuilder->rollbackStatement();
-        }
-    }
-
-    WritesRollback(const WritesRollback&) = delete;
-    WritesRollback& operator=(const WritesRollback&) = delete;
-
-    void keep() {
-        if (_writeBuffer) {
-            _writeBuffer->endStatement();
-        }
-
-        _writeBuffer = nullptr;
-        _metadataBuilder = nullptr;
-    }
-
-private:
-    CommitWriteBuffer* _writeBuffer {nullptr};
-    MetadataBuilder* _metadataBuilder {nullptr};
-};
-
-// A command - COMMIT, CHANGE SUBMIT, a load - can replace the change's buffer as it runs,
-// and is no statement whose writes a failure takes back
-bool writesOnlyThroughQueries(const CypherAST& ast) {
-    for (const QueryCommand* query : ast.queries()) {
-        const QueryCommand::Kind kind = query->getKind();
-        const bool isQuery = kind == QueryCommand::Kind::SINGLE_PART_QUERY
-                          || kind == QueryCommand::Kind::UNION_QUERY;
-
-        if (!isQuery) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-}
 
 QueryInterpreterV3::QueryInterpreterV3(SystemManager* sysMan)
     : _sysMan(sysMan)
@@ -297,7 +232,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      metadataBuilder,
                                      &procedureContext,
                                      &systemContext);
-    const bool writeRollbackEnabled = writesOnlyThroughQueries(ast);
+    const bool writeRollbackEnabled = WritesRollback::isEnabledFor(ast);
     WritesRollback writesRollback(writeRollbackEnabled ? writeBuffer : nullptr,
                                   writeRollbackEnabled ? metadataBuilder : nullptr);
 
