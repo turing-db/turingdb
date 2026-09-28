@@ -294,6 +294,45 @@ public:
         _chunk.increment(actualSize);
     }
 
+    void writeAnalyzeError(int32_t error) override {
+        switch (static_cast<HTTP::Error>(error)) {
+            case net::HTTP::Error::REQUEST_TOO_BIG:
+                setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
+            break;
+
+            case net::HTTP::Error::INVALID_CONTENT_LENGTH:
+            case net::HTTP::Error::HEADER_INCOMPLETE:
+                setFirstLine(net::HTTP::Status::BAD_REQUEST);
+            break;
+
+            case net::HTTP::Error::TOO_MANY_PARAMS:
+                setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
+            break;
+
+            case net::HTTP::Error::UNKNOWN_ENDPOINT:
+                setFirstLine(net::HTTP::Status::NOT_FOUND);
+            break;
+
+            case net::HTTP::Error::INVALID_METHOD:
+                setFirstLine(net::HTTP::Status::METHOD_NOT_ALLOWED);
+            break;
+
+            case net::HTTP::Error::NO_METHOD:
+            case net::HTTP::Error::NO_URI:
+            case net::HTTP::Error::UNKNOWN:
+            case net::HTTP::Error::INVALID_URI:
+            case net::HTTP::Error::_SIZE:
+                setFirstLine(net::HTTP::Status::BAD_REQUEST);
+            break;
+        }
+
+        addConnection(net::getConnectionHeader(true));
+        addChunkedTransferEncoding();
+        addContentType(net::ContentType::JSON);
+        flushHeader();
+        flush();
+    }
+
     void reset() override {
         _chunk.reset();
         _header.reset();

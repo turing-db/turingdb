@@ -116,6 +116,18 @@ void TuringProtoWriter::writeProtocolError(std::string_view message) {
     writePacket(MessageTypes::PROTOCOL_ERROR);
 }
 
+void TuringProtoWriter::writeAnalyzeError(int32_t) {
+    // The request failed HTTP framing analysis before dispatch, so no response has been
+    // started yet. Open the 200 OK envelope, send one PROTOCOL_ERROR packet and the chunk
+    // terminator, and swallow a send failure: the connection is closed right after.
+    try {
+        startResponse(net::ConnectionHeader::CLOSE);
+        writeProtocolError("Malformed request rejected before dispatch");
+        flush();
+    } catch (const NetException&) {
+    }
+}
+
 void TuringProtoWriter::writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds) {
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::END);
