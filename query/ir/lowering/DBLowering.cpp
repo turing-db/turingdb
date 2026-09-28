@@ -4330,6 +4330,50 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
     }
 }
 
+mlir::Value DBLowering::propertyWriteChunk(llvm::StringRef propertyName, mlir::Value chunk) {
+    if (!_view || !_view->isValid()) {
+        return chunk;
+    }
+
+    // if the property type is a double in the db, but an integer was provided, convert
+    // that int to double
+    const GraphMetadata& metadata = _view->metadata();
+    const PropertyTypeMap& propTypes = metadata.propTypes();
+    const std::optional<PropertyType> propertyType = propTypes.get(propertyName);
+    if (!propertyType || propertyType->_valueType != ValueType::Double) {
+        return chunk;
+    }
+
+    const mlir::Type element = chunkValueElement(_builder, chunk.getType());
+    const auto integerElement = mlir::dyn_cast<mlir::IntegerType>(element);
+    if (!integerElement || integerElement.getWidth() != 64) {
+        return chunk;
+    }
+
+    return chunkAsElement(chunk, _builder.getF64Type());
+}
+
+void DBLowering::coercePropertyWriteChunks(mlir::ArrayAttr names,
+                                           llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    for (size_t index = 0; index < chunks.size(); index++) {
+        const llvm::StringRef name = mlir::cast<mlir::StringAttr>(names[index]).getValue();
+
+        chunks[index] = propertyWriteChunk(name, chunks[index]);
+    }
+}
+
+void DBLowering::coerceGroupedPropertyWriteChunks(mlir::ArrayAttr groupedNames,
+                                                  llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    size_t index = 0;
+
+    for (const mlir::Attribute group : groupedNames) {
+        for (const mlir::Attribute name : mlir::cast<mlir::ArrayAttr>(group)) {
+            chunks[index] = propertyWriteChunk(mlir::cast<mlir::StringAttr>(name).getValue(), chunks[index]);
+            index++;
+        }
+    }
+}
+
 void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -4337,6 +4381,8 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
     for (const mlir::Value propValue : createNode.getPropValues()) {
         propChunks.push_back(mapValue(propValue));
     }
+
+    coercePropertyWriteChunks(createNode.getPropNames(), propChunks);
 
     mlir::Value cardinalityChunk;
     if (createNode.getCardinality()) {
@@ -4393,6 +4439,8 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         propChunks.push_back(mapValue(propValue));
     }
 
+    coercePropertyWriteChunks(createEdge.getPropNames(), propChunks);
+
     llvm::SmallVector<mlir::Value, 8> operandChunks {srcChunk, tgtChunk};
     operandChunks.append(propChunks.begin(), propChunks.end());
 
@@ -4440,6 +4488,9 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     mapColumns(merge.getNodePropValues(), nodePropValues);
     mapColumns(merge.getEdgePropValues(), edgePropValues);
     mapColumns(merge.getCarriedColumns(), carriedColumns);
+
+    coerceGroupedPropertyWriteChunks(merge.getNodePropNames(), nodePropValues);
+    coerceGroupedPropertyWriteChunks(merge.getEdgePropNames(), edgePropValues);
 
     llvm::SmallVector<mlir::Value, 8> operandChunks(boundNodes);
     operandChunks.append(boundPending.begin(), boundPending.end());
@@ -4510,7 +4561,8 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
 void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty) {
     const mlir::Location loc = _builder.getUnknownLoc();
     const mlir::Value inputChunk = mapValue(setNodeProperty.getInputNodes());
-    const mlir::Value valueChunk = mapValue(setNodeProperty.getValue());
+    const mlir::Value valueChunk = propertyWriteChunk(setNodeProperty.getProperty(),
+                                                      mapValue(setNodeProperty.getValue()));
 
     mlir::Value reference = inputChunk;
     mlir::Block* const block = deeperBlock(reference, valueChunk);
@@ -4532,7 +4584,8 @@ void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty)
 void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty) {
     const mlir::Location loc = _builder.getUnknownLoc();
     const mlir::Value inputChunk = mapValue(setEdgeProperty.getInputEdges());
-    const mlir::Value valueChunk = mapValue(setEdgeProperty.getValue());
+    const mlir::Value valueChunk = propertyWriteChunk(setEdgeProperty.getProperty(),
+                                                      mapValue(setEdgeProperty.getValue()));
 
     mlir::Value reference = inputChunk;
     mlir::Block* const block = deeperBlock(reference, valueChunk);
@@ -4835,7 +4888,7 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
     return unified;
 }
 
-mlir::Value DBLowering::caseBranchChunk(mlir::Value chunk, mlir::Type resultElement) {
+mlir::Value DBLowering::chunkAsElement(mlir::Value chunk, mlir::Type resultElement) {
     const mlir::Type chunkType = chunk.getType();
 
     // A null branch is left as the untyped null it is: the selection writes an absent
@@ -4911,11 +4964,11 @@ void DBLowering::lowerCase(mlir::db::Case caseOp) {
     const mlir::Type resultElement = caseResultElement(valueChunks);
 
     for (mlir::Value& value : values) {
-        value = caseBranchChunk(value, resultElement);
+        value = chunkAsElement(value, resultElement);
     }
 
     if (defaultValue) {
-        defaultValue = caseBranchChunk(defaultValue, resultElement);
+        defaultValue = chunkAsElement(defaultValue, resultElement);
     }
 
     gatherOperands(operands);
