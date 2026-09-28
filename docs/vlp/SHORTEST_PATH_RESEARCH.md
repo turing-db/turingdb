@@ -566,7 +566,7 @@ fit column is *(inference)*.
 | Technique | Reported gain | Pays when | v3 fit | Section |
 |---|---|---|---|---|
 | Bidirectional BFS balanced by frontier degree sum | ≈√m edges instead of m on 2,740 real networks, unless the graph is both local and homogeneous (roads, meshes); Hollywood 7 ms against 1.2 s for plain BFS | bound pairs | the core of `shortestPath` | 5.1, 5.2 |
-| Sparse, epoch-stamped state; dense only when a frontier grows | removes O(n) setup per search, which cost Kùzu 400 of 900 ms | always | `KeySet` and `PathReachTable` already work this way | 5.4 |
+| Sparse, epoch-stamped state; dense only when a frontier grows | removes O(n) setup per search, which cost Kùzu 400 of 900 ms | always | `KeySet` stamps its slots; `PathReachTable` clears through its occupied slots | 5.4 |
 | Stored predecessor DAG, listed depth-first | output-linear listing; no σ(s, v) × deg(v) rescans at hubs | `allShortestPaths` | a listing mode of the explorator | 2.3, 10.2 |
 | Direction-optimising BFS (α ≈ 14-15, β ≈ 18-24) | 2.4-7.8× | wide frontiers: one-to-all, batches, unreachable pairs inside a giant component | later; in-edges are stored | 5.5 |
 | Vertex cover of the pair graph | up to 2.55× | batches | the gate of 10.3 | 6.1 |
@@ -668,8 +668,9 @@ and writing it costs more than the search it serves. Two engines in Section 4 pa
 known pattern:
 
 - hash-based visited and parent tables sized to the ball, reused across rows;
-- epoch stamps instead of clearing, so reuse costs nothing (`PathExplorator::KeySet` and
-  `PathReachTable` already work this way);
+- epoch stamps instead of clearing, so reuse costs nothing (`PathExplorator::KeySet` works this
+  way), or a list of occupied slots, so a clear costs what the last search reached
+  (`PathReachTable`);
 - a dense layout only once a frontier is large: Ligra switches at |E|/20 edges, Kùzu at 1,000
   visited nodes.
 
