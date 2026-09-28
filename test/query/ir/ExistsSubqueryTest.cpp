@@ -314,6 +314,21 @@ TEST_F(ExistsSubqueryTest, carriesOnPastAPerRowBody) {
                {{"Remy", "Adam"}, {"Adam", "Remy"}});
 }
 
+// p.name is read off p ahead of the EXISTS, so the loop over single rows has to take it along
+TEST_F(ExistsSubqueryTest, aPerRowBodyStandsBesideAnotherItem) {
+    expectRows("MATCH (p:Person) "
+               "RETURN p.name, EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) WHERE i.name = 'Gym' RETURN i LIMIT 1 }",
+               {{"Remy", "false"}, {"Adam", "false"}, {"Maxime", "false"}, {"Luc", "false"},
+                {"Martina", "false"}, {"Suhas", "true"}, {"Cyrus", "true"}, {"Doruk", "true"}});
+}
+
+TEST_F(ExistsSubqueryTest, aPerRowBodyStandsInAConjunction) {
+    expectRows("MATCH (p:Person) "
+               "WHERE p.hasPhD = true AND EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i SKIP 1 } "
+               "RETURN p.name",
+               {{"Remy"}, {"Adam"}, {"Luc"}});
+}
+
 // A keyless count yields a row whatever it counted, so the body holds for every person
 TEST_F(ExistsSubqueryTest, anAggregatingBodyHoldsForEveryRow) {
     expectRows("MATCH (p:Person) "

@@ -333,6 +333,13 @@ private:
     // a loop over them, which the rest of the query then goes on inside.
     void lowerExistsSubquery(mlir::db::ExistsSubquery exists);
 
+    // The db values bound over @param stepBlock ahead of @param subquery, and read after it,
+    // that are not its inputs. What follows a body run a row at a time is lowered inside the
+    // loop over the step's rows, so that loop hands these on a row at a time as well.
+    void collectReadPastRowLoop(mlir::Operation* subquery,
+                                mlir::Block* stepBlock,
+                                llvm::SmallVectorImpl<mlir::Value>& readPast) const;
+
     // Lower a db.call_subquery. A body carrying its scope, and a unit body, are lowered in
     // place: the block arguments become the step's chunks, the body's loops nest in the
     // step block, and the yielded chunks are what the results map to. A returning body
