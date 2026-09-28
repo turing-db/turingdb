@@ -41,6 +41,7 @@ class Stmt;
 class StmtContainer;
 class WithStmt;
 class ExistsExpr;
+class CountSubqueryExpr;
 class Pattern;
 class Projection;
 class Pattern;
@@ -86,6 +87,9 @@ public:
     // Analyzes the body of an EXISTS subquery under a scope of its own, seeded with the
     // variables in flight so the body reads them and binds nothing outside itself
     void analyzeExistsBody(ExistsExpr* exists);
+
+    // Analyzes the body of a COUNT subquery, scoped as an EXISTS body is
+    void analyzeCountSubqueryBody(CountSubqueryExpr* count);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt, const Projection* projection);

@@ -810,6 +810,8 @@ bool runsPerRow(mlir::Operation* operation) {
         return !call.getCarriesScope();
     } else if (mlir::db::ExistsSubquery exists = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
         return !exists.getCarriesScope();
+    } else if (mlir::db::CountSubquery count = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
+        return !count.getCarriesScope();
     }
 
     return false;
@@ -822,6 +824,8 @@ mlir::OperandRange subqueryInputColumns(mlir::Operation* operation) {
         return call.getInputColumns();
     } else if (mlir::db::ExistsSubquery exists = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
         return exists.getInputColumns();
+    } else if (mlir::db::CountSubquery count = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
+        return count.getInputColumns();
     }
 
     return mlir::OperandRange(operation->operand_end(), operation->operand_end());
@@ -845,13 +849,15 @@ bool opensRowLoop(mlir::Operation* operation) {
     const bool returningSubquery = mlir::isa<mlir::db::CallSubquery>(operation)
                                    && operation->getNumResults() > 0;
 
-    // An EXISTS answering for the rows in flight opens no loop of its own; one run a row
-    // at a time opens the loop over those rows, which the ops after it are emitted into.
-    const bool perRowExists = mlir::isa<mlir::db::ExistsSubquery>(operation) && runsPerRow(operation);
+    // An EXISTS or a COUNT answering for the rows in flight opens no loop of its own; one
+    // run a row at a time opens the loop over those rows, which the ops after it are
+    // emitted into.
+    const bool perRowExpression = mlir::isa<mlir::db::ExistsSubquery, mlir::db::CountSubquery>(operation)
+                                  && runsPerRow(operation);
 
     return opensSourceLoop(operation)
         || returningSubquery
-        || perRowExists
+        || perRowExpression
         || mlir::isa<mlir::db::CrossProduct,
                      mlir::db::HashJoin,
                      mlir::db::Sort,
@@ -1138,6 +1144,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCallSubquery(callSubquery);
     } else if (mlir::db::ExistsSubquery existsSubquery = mlir::dyn_cast<mlir::db::ExistsSubquery>(operation)) {
         lowerExistsSubquery(existsSubquery);
+    } else if (mlir::db::CountSubquery countSubquery = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
+        lowerCountSubquery(countSubquery);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
@@ -2693,6 +2701,123 @@ void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
     // loop, where every column of the step is bound a row at a time.
     for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
         _valueMap[exists.getInputColumns()[inputIndex]] = stepChunks[inputIndex];
+    }
+
+    for (size_t readIndex = 0; readIndex < readPast.size(); readIndex++) {
+        _valueMap[readPast[readIndex]] = bodyRoot->getArgument(static_cast<unsigned>(inputChunks.size() + readIndex));
+    }
+
+    _innermostLoopBody = bodyRoot;
+    _innermostCardinality = stepChunks.front();
+}
+
+void DBLowering::lowerCountSubquery(mlir::db::CountSubquery count) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks;
+    for (const mlir::Value column : count.getInputColumns()) {
+        inputChunks.push_back(mapValue(column));
+    }
+
+    mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
+    const bool perRow = runsPerRow(count) && !inputChunks.empty();
+
+    mlir::Block* bodyRoot = stepBlock;
+    llvm::SmallVector<mlir::Value, 4> stepChunks(inputChunks.begin(), inputChunks.end());
+
+    llvm::SmallVector<mlir::Value, 4> readPast;
+
+    if (perRow) {
+        const mlir::Value limitHandle = _loopLimitHandle.lookup(count.getOperation());
+
+        collectReadPastRowLoop(count, stepBlock, readPast);
+
+        llvm::SmallVector<mlir::Value, 4> rowChunks(inputChunks.begin(), inputChunks.end());
+        for (const mlir::Value value : readPast) {
+            rowChunks.push_back(mapValue(value));
+        }
+
+        setInsertionInto(stepBlock);
+        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
+        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+        bodyRoot = rowLoop.getBody();
+
+        stepChunks.assign(bodyRoot->args_begin(), bodyRoot->args_begin() + inputChunks.size());
+    }
+
+    setInsertionInto(bodyRoot);
+    nl::CountSubqueryBuffer buffer = _builder.create<nl::CountSubqueryBuffer>(loc, stepChunks);
+    const mlir::Value state = buffer.getState();
+
+    mlir::Block& bodyBlock = count.getBody().front();
+    for (size_t inputIndex = 0; inputIndex < stepChunks.size(); inputIndex++) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputIndex))] = stepChunks[inputIndex];
+    }
+
+    if (bodyBlock.getNumArguments() > inputChunks.size()) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
+    }
+
+    if (perRow) {
+        hoistLimitHandles(count.getBody(), bodyRoot, count);
+    }
+
+    mlir::Block* const previousRoot = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _rootBlock = bodyRoot;
+    _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
+
+    llvm::SmallVector<mlir::Value, 4> heldChunks;
+    mlir::Value heldTag;
+
+    for (mlir::Operation& operation : bodyBlock) {
+        mlir::db::CountSubqueryYield yield = mlir::dyn_cast<mlir::db::CountSubqueryYield>(operation);
+        if (!yield) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        for (const mlir::Value column : yield.getColumns()) {
+            heldChunks.push_back(mapValue(column));
+        }
+
+        if (yield.getTag()) {
+            heldTag = mapValue(yield.getTag());
+        }
+    }
+
+    // A constant holds one cell standing for every row the body produced, so an untagged
+    // body is counted off a chunk that carries those rows, where one does
+    mlir::Value countedRows;
+    if (!heldTag) {
+        countedRows = cardinalityDriver(heldChunks);
+        if (!countedRows) {
+            countedRows = heldChunks.front();
+        }
+    }
+
+    llvm::SmallVector<mlir::Value, 4> tallied = heldChunks;
+    tallied.push_back(heldTag ? heldTag : countedRows);
+
+    setInsertionInto(deepestOwnerBlock(tallied, bodyRoot));
+    _builder.create<nl::CountSubqueryTally>(loc, state, heldTag, countedRows);
+
+    _rootBlock = previousRoot;
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    setInsertionInto(bodyRoot);
+    nl::CountSubqueryResult result = _builder.create<nl::CountSubqueryResult>(loc, state);
+    _valueMap[count.getResult()] = result.getResult();
+
+    if (!perRow) {
+        return;
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
+        _valueMap[count.getInputColumns()[inputIndex]] = stepChunks[inputIndex];
     }
 
     for (size_t readIndex = 0; readIndex < readPast.size(); readIndex++) {

@@ -53,6 +53,7 @@ class Literal;
 class ListLiteral;
 class ListComprehensionExpr;
 class ExistsExpr;
+class CountSubqueryExpr;
 class ListSliceExpr;
 class LoadCSVStmt;
 class MapLiteral;
@@ -488,9 +489,10 @@ private:
                                     llvm::SmallVectorImpl<PublishedColumn>& scope,
                                     CarriedEntities& importedEntities) const;
 
-    // Emits the db.union of a CALL body that is a UNION, and fills @param yielded with its
-    // results under the names and declarations the body returns them as
-    void generateSubqueryUnion(const CallSubqueryStmt* subquery,
+    // Emits the db.union of a CALL or COUNT body that is a UNION, and fills @param yielded
+    // with its results under the names and declarations the body returns them as
+    void generateSubqueryUnion(llvm::ArrayRef<const SinglePartQuery*> branches,
+                               size_t dedupedBranches,
                                std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
                                std::span<CarriedEntities> importedEntities,
                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
@@ -979,6 +981,14 @@ private:
     // become the inputs it reads through block arguments, the query is generated into the
     // op's region as a correlated query of its own, and the op's one result is returned
     mlir::Value generateExistsBranch(const SinglePartQuery* body);
+
+    // Emits the count `COUNT { ... }` stands for: one db.count_subquery per branch of a
+    // UNION ALL, summed, and one over the whole body of a UNION that dedups
+    void translateCountSubqueryExpr(const Expr* expr, const CountSubqueryExpr* countExpr);
+
+    // Emits the db.count_subquery of @param branches: one query generated into its region
+    // as EXISTS generates its body, or the db.union of several
+    mlir::Value generateCountSubquery(llvm::ArrayRef<const SinglePartQuery*> branches, size_t dedupedBranches);
 
     // Emits the db.list_comprehension of `[x IN xs WHERE p(x) | f(x)]`: the source column,
     // the columns in flight as its carry set, and a body region binding the element to

@@ -7464,6 +7464,46 @@ void NLExecutor::runExistsResult(NLExecutionContext* context, NLFunctionData* da
     std::copy(matched.begin(), matched.end(), answer.begin());
 }
 
+void NLExecutor::runCountSubqueryReset(NLExecutionContext* context, NLFunctionData* data) {
+    NLCountSubqueryResetData* reset = static_cast<NLCountSubqueryResetData*>(data);
+    NLCountSubqueryState* state = reset->getState();
+
+    state->reset();
+
+    std::vector<uint64_t>& tagRaw = reset->getTag()->getRaw();
+    tagRaw.resize(state->getRowCount());
+    std::iota(tagRaw.begin(), tagRaw.end(), uint64_t {0});
+}
+
+void NLExecutor::runCountSubqueryTally(NLExecutionContext* context, NLFunctionData* data) {
+    NLCountSubqueryTallyData* tally = static_cast<NLCountSubqueryTallyData*>(data);
+    NLCountSubqueryState* state = tally->getState();
+
+    const ColumnVector<uint64_t>* tag = tally->getTag();
+    if (!tag) {
+        const Column* rows = tally->getRows();
+        state->addRows(0, rows->size());
+
+        return;
+    }
+
+    for (const uint64_t row : tag->getRaw()) {
+        state->addRows(row, 1);
+    }
+}
+
+void NLExecutor::runCountSubqueryResult(NLExecutionContext* context, NLFunctionData* data) {
+    NLCountSubqueryResultData* result = static_cast<NLCountSubqueryResultData*>(data);
+    const NLCountSubqueryState* state = result->getState();
+
+    const std::vector<uint64_t>& counts = state->counts();
+
+    std::vector<uint64_t>& answer = result->getResult()->getRaw();
+    answer.resize(counts.size());
+
+    std::copy(counts.begin(), counts.end(), answer.begin());
+}
+
 void NLExecutor::runDistinctReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLDistinctResetData* reset = static_cast<NLDistinctResetData*>(data);
     reset->getState()->reset();

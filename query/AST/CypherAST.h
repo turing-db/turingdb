@@ -31,6 +31,7 @@ class BinaryExpr;
 class LiteralExpr;
 class EntityTypeExpr;
 class ExistsExpr;
+class CountSubqueryExpr;
 class ParameterExpr;
 class PropertyExpr;
 class PropertyLookupExpr;
@@ -136,6 +137,7 @@ public:
     friend LiteralExpr;
     friend EntityTypeExpr;
     friend ExistsExpr;
+    friend CountSubqueryExpr;
     friend ParameterExpr;
     friend PropertyExpr;
     friend PropertyLookupExpr;

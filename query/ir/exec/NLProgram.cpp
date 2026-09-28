@@ -250,6 +250,18 @@ void NLExistsState::reset() {
     _matched.assign(getRowCount(), false);
 }
 
+size_t NLCountSubqueryState::getRowCount() const {
+    if (_inputColumns.empty()) {
+        return 1;
+    }
+
+    return _inputColumns.front()->size();
+}
+
+void NLCountSubqueryState::reset() {
+    _counts.assign(getRowCount(), 0);
+}
+
 void NLPatternComprehensionState::reset(size_t rowCount) {
     _rowCount = rowCount;
     _values.clear();

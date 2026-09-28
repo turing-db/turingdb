@@ -305,6 +305,7 @@
 %type<db::ExprChain*> parenExprChain
 %type<db::Expr*> expr
 %type<db::Expr*> subqueryExist
+%type<db::Expr*> subqueryCount
 %type<db::Expr*> xorExpr
 %type<db::Expr*> andExpr
 %type<db::Expr*> notExpr
@@ -416,6 +417,7 @@
 %type<db::CallSubqueryStmt*> callSubquerySt
 %type<db::CallSubqueryStmt::Branches> callSubqueryBody
 %type<db::ExistsExpr::Branches> existsBody
+%type<db::UnionQuery::Branches> countBody
 %type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
 %type<db::MergeStmt*> mergeSt
@@ -1134,6 +1136,16 @@ existsBody
       }
     ;
 
+countBody
+    : singlePartQuery { $$.push_back({$1, false}); }
+    | singlePartQuery unionList {
+        $$.push_back({$1, false});
+        for (const UnionQuery::Branch& branch : $2) {
+            $$.push_back(branch);
+        }
+      }
+    ;
+
 callScope
     : symbol { $$.push_back($1); }
     | callScope COMMA symbol { $$ = std::move($1); $$.push_back($3); }
@@ -1424,6 +1436,7 @@ atomExpr
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
+    | subqueryCount { $$ = $1; }
     | collectExpr
     ;
 
@@ -1626,6 +1639,15 @@ subqueryExist
       }
     ;
 
+subqueryCount
+    : COUNT OBRACE countBody CBRACE { $$ = CountSubqueryExpr::create(ast, $3); LOC($$, @$); }
+    | COUNT OBRACE patternWhere CBRACE {
+        SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
+        $$ = CountSubqueryExpr::create(ast, {{body, false}});
+        LOC($$, @$);
+      }
+    ;
+
 qualifiedName
     : symbol { $$ = QualifiedName::create(ast); $$->addName($1); }
     | qualifiedName DOT name { $$ = $1; $$->addName($3); }
@@ -1790,10 +1812,6 @@ countFunc
         $$->setDistinct(true);
         LOC($$, @$);
       }
-    | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "count(pattern WHERE)"); }
-
-    // Here, returnSt is mandatory for MATCH subqueries, as opposed to Neo4j's Cypher parser
-    | COUNT OBRACE query CBRACE { scanner.notImplemented(@$, "count {...}"); }
     ;
 
 caseExpr

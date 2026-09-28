@@ -3224,4 +3224,65 @@ def ExistsYield : TuringOp<"exists_yield", [Pure, Terminator, AttrSizedOperandSe
   }];
 }
 
+/**
+* CountSubquery
+*/
+def CountSubquery : TuringOp<"count_subquery", [Pure]> {
+  let summary = "Answer, per row in flight, how many rows a body produces for it";
+
+  let description = [{
+    Models Cypher's `COUNT { ... }`. The result is one count per input row - the number
+    of rows the body produced for it, 0 where it produced none - so the op changes no row
+    count, which is what lets it stand in an expression.
+
+    Its operands, body and paths are db.exists_subquery's: the body reads the scope around
+    it through one block argument per input column, and a body carrying the scope takes a
+    trailing `!db.column<ui64>` row tag and is run over a whole chunk of input rows at
+    once, each row it yields counted toward the input row its tag names. A body that
+    aggregates, sorts, cuts, dedups or is a UNION is run one input row at a time instead,
+    and the rows it yields are counted toward that row.
+
+      %n = db.count_subquery(%p) carries_scope ({
+        ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
+          %s, %e, %et, %k, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
+          db.count_subquery_yield %tag2, {%s, %e, %k} : {...}
+      }) : (!db.column<!storage.node_id>) -> !db.column<ui64>
+
+    Reading the graph is deterministic and a COUNT body writes nothing, so it is Pure.
+  }];
+
+  let arguments = (ins Variadic<Column>:$input_columns, UnitAttr:$carries_scope);
+
+  let results = (outs ColumnCounts:$result);
+
+  // Exactly one block, ending in a db.count_subquery_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` (`carries_scope` $carries_scope^)? $body attr-dict
+    `:` functional-type($input_columns, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* CountSubqueryYield
+*/
+def CountSubqueryYield : TuringOp<"count_subquery_yield", [Pure, Terminator, AttrSizedOperandSegments, HasParent<"CountSubquery">]> {
+  let summary = "Name the row tag and the columns a db.count_subquery's body holds";
+
+  let description = [{
+    Terminates a db.count_subquery's body region. `tag` is the row tag as the body left
+    it, absent when the body takes none, and `columns` are the columns the body holds
+    there, which a body with no tag counts its rows off.
+  }];
+
+  let arguments = (ins Optional<ColumnRowTags>:$tag, Variadic<Column>:$columns);
+
+  let assemblyFormat = [{
+    ($tag^ `,`)? `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
 #endif //TURINGDB_OPS

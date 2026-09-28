@@ -1792,6 +1792,44 @@ LogicalResult ExistsSubquery::verify() {
     return success();
 }
 
+LogicalResult CountSubquery::verify() {
+    Block& bodyBlock = getBody().front();
+
+    auto yield = dyn_cast_or_null<CountSubqueryYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return emitOpError("body region must end with a db.count_subquery_yield");
+    }
+
+    const OperandRange inputs = getInputColumns();
+    const size_t inputCount = inputs.size();
+    const bool tagsRows = getCarriesScope() && inputCount > 0;
+
+    const size_t expectedArguments = tagsRows ? inputCount + 1 : inputCount;
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes one argument per input column")
+               << (tagsRows ? " plus the row tag" : "") << ", expected " << expectedArguments
+               << " but has " << bodyBlock.getNumArguments();
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (bodyBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
+            return emitOpError("body argument ") << inputIndex << " must have the type of input column "
+                                                 << inputIndex;
+        }
+    }
+
+    const bool yieldsATag = yield.getTag() != nullptr;
+    if (tagsRows != yieldsATag) {
+        return emitOpError("the body yields a row tag exactly when it takes one");
+    }
+
+    if (!tagsRows && yield.getColumns().empty()) {
+        return emitOpError("an untagged body must yield at least one column, to count its rows");
+    }
+
+    return success();
+}
+
 LogicalResult CallSubquery::verify() {
     Block& bodyBlock = getBody().front();
 

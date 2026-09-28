@@ -25,6 +25,7 @@ set(ast_sources
     expr/FunctionInvocationExpr.cpp
     expr/IndexExpr.cpp
     expr/ExistsExpr.cpp
+    expr/CountSubqueryExpr.cpp
     expr/ExprChildren.cpp
     expr/ExprDepth.cpp
     expr/StructuralExpressionComparator.cpp

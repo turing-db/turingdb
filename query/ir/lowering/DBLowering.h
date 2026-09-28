@@ -333,6 +333,10 @@ private:
     // a loop over them, which the rest of the query then goes on inside.
     void lowerExistsSubquery(mlir::db::ExistsSubquery exists);
 
+    // Lower a db.count_subquery as a db.exists_subquery is lowered, through the counting
+    // siblings of its nl ops: nl.count_subquery_buffer, _tally and _result
+    void lowerCountSubquery(mlir::db::CountSubquery count);
+
     // The db values bound over @param stepBlock ahead of @param subquery, and read after it,
     // that are not its inputs. What follows a body run a row at a time is lowered inside the
     // loop over the step's rows, so that loop hands these on a row at a time as well.

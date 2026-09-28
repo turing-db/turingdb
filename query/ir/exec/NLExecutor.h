@@ -192,6 +192,12 @@ public:
     // expression stands for, one per input row of the step.
     static void runExistsResult(NLExecutionContext* context, NLFunctionData* data);
 
+    // The counting siblings of the three EXISTS statements above: zero the counts, count
+    // this step's rows toward the input rows they came from, and lay the counts out
+    static void runCountSubqueryReset(NLExecutionContext* context, NLFunctionData* data);
+    static void runCountSubqueryTally(NLExecutionContext* context, NLFunctionData* data);
+    static void runCountSubqueryResult(NLExecutionContext* context, NLFunctionData* data);
+
     // Empty a pattern comprehension accumulator and lay its row tag out over this step's
     // rows; runs each time its block runs.
     static void runPatternComprehensionReset(NLExecutionContext* context, NLFunctionData* data);

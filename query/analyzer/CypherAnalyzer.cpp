@@ -68,6 +68,7 @@
 #include "CreateEdgePropertyIndexQuery.h"
 
 #include "expr/ExistsExpr.h"
+#include "expr/CountSubqueryExpr.h"
 
 #include "FunctionDecls.h"
 
@@ -523,6 +524,32 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
     if (namesColumns) {
         for (size_t index = 1; index < branches.size(); index++) {
             analyzeUnionColumns(branches.front(), branches[index]);
+        }
+    }
+}
+
+void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
+    const CountSubqueryExpr::Branches& branches = count->branches();
+
+    for (const UnionQuery::Branch& branch : branches) {
+        if (branch._query->writesToTheGraph()) {
+            throwError("A COUNT subquery is read-only: its body cannot write to the graph", count);
+        }
+    }
+
+    for (const UnionQuery::Branch& branch : branches) {
+        analyzeExistsBranch(branch._query);
+    }
+
+    // A UNION dedups the rows it counts on the columns they return, so it needs them named
+    const auto hasReturn = [](const UnionQuery::Branch& branch) {
+        return branch._query->getReturnStmt() != nullptr;
+    };
+
+    const bool namesColumns = count->getDedupedBranchCount() > 0 || std::ranges::any_of(branches, hasReturn);
+    if (namesColumns) {
+        for (size_t index = 1; index < branches.size(); index++) {
+            analyzeUnionColumns(branches.front()._query, branches[index]._query);
         }
     }
 }

@@ -296,6 +296,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::EXISTS:
             analyzeExistsExpr(static_cast<ExistsExpr*>(expr));
         break;
+        case Expr::Kind::COUNT_SUBQUERY:
+            analyzeCountSubqueryExpr(static_cast<CountSubqueryExpr*>(expr));
+        break;
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type in ExprAnalyzer.");
@@ -313,6 +316,15 @@ void ExprAnalyzer::analyzeExistsExpr(ExistsExpr* expr) {
 
     // The body reads the graph over the rows in flight, so the answer is a value per row
     // even where the body names nothing of the scope around it
+    expr->setDynamic();
+}
+
+void ExprAnalyzer::analyzeCountSubqueryExpr(CountSubqueryExpr* expr) {
+    bioassert(_queryAnalyzer, "COUNT analyzed without a query analyzer.");
+
+    _queryAnalyzer->analyzeCountSubqueryBody(expr);
+
+    expr->setType(EvaluatedType::Integer);
     expr->setDynamic();
 }
 

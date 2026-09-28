@@ -507,6 +507,17 @@ LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult CountSubqueryTally::verify() {
+    const bool hasTag = getTag() != nullptr;
+    const bool hasRows = getRows() != nullptr;
+
+    if (hasTag == hasRows) {
+        return emitOpError("counts either the rows of a tag or a row count, exactly one of the two");
+    }
+
+    return success();
+}
+
 // An nl.sort_buffer needs at least one key, and one direction per key: the two
 // arrays describe the same list of sort keys. The buffers' column count is not
 // known here (the types live on the feeding nl.sort_collect), so key indices are

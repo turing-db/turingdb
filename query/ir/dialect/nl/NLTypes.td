@@ -152,6 +152,17 @@ def NLExistsState : NLType<"ExistsState", "exists_state"> {
     }];
 }
 
+def NLCountSubqueryState : NLType<"CountSubqueryState", "count_subquery_state"> {
+    let summary = "A COUNT subquery accumulator handle";
+    let description = [{
+        Stands for one COUNT subquery's state over the current step of the rows it
+        answers for: the input chunks and a count per input row. Produced by
+        nl.count_subquery_buffer, which zeroes the counts once per step, added to by
+        nl.count_subquery_tally as the body walks, and read by
+        nl.count_subquery_result. The counting sibling of !nl.exists_state.
+    }];
+}
+
 def NLPatternComprehensionState : NLType<"PatternComprehensionState", "pattern_comprehension_state"> {
     let summary = "A pattern comprehension accumulator handle";
     let description = [{
@@ -488,6 +499,11 @@ def NLExistsStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::ExistsStateType>($_self)">,
         "exists state handle", "::mlir::nl::ExistsStateType">,
     BuildableType<"::mlir::nl::ExistsStateType::get($_builder.getContext())">;
+
+def NLCountSubqueryStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::CountSubqueryStateType>($_self)">,
+        "count subquery state handle", "::mlir::nl::CountSubqueryStateType">,
+    BuildableType<"::mlir::nl::CountSubqueryStateType::get($_builder.getContext())">;
 
 // Constrains an operand to a chunk of unsigned 64-bit counts, the way
 // NLNodeIDChunk constrains an ID chunk. It is what an OPTIONAL MATCH's row tag
