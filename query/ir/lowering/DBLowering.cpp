@@ -2596,18 +2596,24 @@ void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
     mlir::Block* bodyRoot = stepBlock;
     llvm::SmallVector<mlir::Value, 4> stepChunks(inputChunks.begin(), inputChunks.end());
 
+    llvm::SmallVector<mlir::Value, 4> readPast;
+
     if (perRow) {
         const mlir::Value limitHandle = _loopLimitHandle.lookup(exists.getOperation());
 
+        collectReadPastRowLoop(exists, stepBlock, readPast);
+
+        llvm::SmallVector<mlir::Value, 4> rowChunks(inputChunks.begin(), inputChunks.end());
+        for (const mlir::Value value : readPast) {
+            rowChunks.push_back(mapValue(value));
+        }
+
         setInsertionInto(stepBlock);
-        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
+        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
         nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
         bodyRoot = rowLoop.getBody();
 
-        stepChunks.clear();
-        for (const mlir::BlockArgument rowChunk : bodyRoot->getArguments()) {
-            stepChunks.push_back(rowChunk);
-        }
+        stepChunks.assign(bodyRoot->args_begin(), bodyRoot->args_begin() + inputChunks.size());
     }
 
     setInsertionInto(bodyRoot);
@@ -2689,8 +2695,61 @@ void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
         _valueMap[exists.getInputColumns()[inputIndex]] = stepChunks[inputIndex];
     }
 
+    for (size_t readIndex = 0; readIndex < readPast.size(); readIndex++) {
+        _valueMap[readPast[readIndex]] = bodyRoot->getArgument(static_cast<unsigned>(inputChunks.size() + readIndex));
+    }
+
     _innermostLoopBody = bodyRoot;
     _innermostCardinality = stepChunks.front();
+}
+
+void DBLowering::collectReadPastRowLoop(mlir::Operation* subquery,
+                                        mlir::Block* stepBlock,
+                                        llvm::SmallVectorImpl<mlir::Value>& readPast) const {
+    mlir::Block* const block = subquery->getBlock();
+    const mlir::OperandRange inputs = subqueryInputColumns(subquery);
+
+    const auto readAfterTheOp = [block, subquery](mlir::Value value) {
+        for (mlir::Operation* user : value.getUsers()) {
+            mlir::Operation* const userInBlock = block->findAncestorOpInBlock(*user);
+
+            if (userInBlock && subquery->isBeforeInBlock(userInBlock)) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    const auto collect = [&](mlir::Value value) {
+        const auto chunkIt = _valueMap.find(value);
+        if (chunkIt == _valueMap.end()) {
+            return;
+        }
+
+        const mlir::Value chunk = chunkIt->second;
+        const bool holdsTheStep = mlir::isa<nl::ChunkType>(chunk.getType())
+                                  && !yieldsConstantColumn(chunk)
+                                  && ownerBlock(chunk) == stepBlock;
+
+        if (holdsTheStep && !llvm::is_contained(inputs, value) && readAfterTheOp(value)) {
+            readPast.push_back(value);
+        }
+    };
+
+    for (const mlir::BlockArgument argument : block->getArguments()) {
+        collect(argument);
+    }
+
+    for (mlir::Operation& operation : *block) {
+        if (&operation == subquery) {
+            break;
+        }
+
+        for (const mlir::Value result : operation.getResults()) {
+            collect(result);
+        }
+    }
 }
 
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
