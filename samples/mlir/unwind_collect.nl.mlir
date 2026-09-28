@@ -16,14 +16,14 @@ module {
     %1 = nl.get_property_type("name")
     %2 = nl.get_property_type("age")
     %3 = nl.scan_nodes()
-    nl.for %arg0 in %3 : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %5 = nl.get_node_properties(%arg0, %2) : !nl.chunk<!storage.nullable<i64>>
-      %6 = nl.get_node_properties(%arg0, %1) : !nl.chunk<!storage.nullable<!storage.string>>
-      nl.collect_update %0, (%5, %6) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>
+    nl.for %arg0 in %3 {
+      %5 = nl.get_node_properties(%arg0, %2)
+      %6 = nl.get_node_properties(%arg0, %1)
+      nl.collect_update %0, (%5, %6)
     }
-    %4 = nl.unwind_collect(%0) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>>
-    nl.for %arg0, %arg1 in %4 : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>> {
-      nl.output(%arg0, %arg1) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>
+    %4 = nl.unwind_collect(%0)
+    nl.for %arg0, %arg1 in %4 {
+      nl.output(%arg0, %arg1)
     }
     return
   }

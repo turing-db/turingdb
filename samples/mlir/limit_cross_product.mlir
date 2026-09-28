@@ -8,16 +8,16 @@ module {
     // nl.limit_update charges that post-cross-product row count, and the
     // nl.limit_truncate cuts it to five before nl.output.
     %0:2 = db.cross_product factor {
-      %a = db.scan_nodes() : !db.column<!storage.node_id>
-      db.yield %a : !db.column<!storage.node_id>
+      %a = db.scan_nodes()
+      db.yield %a
     } factor {
-      %b = db.scan_nodes() : !db.column<!storage.node_id>
-      db.yield %b : !db.column<!storage.node_id>
+      %b = db.scan_nodes()
+      db.yield %b
     }
 
-    %la, %lb = db.limit(%0#0, %0#1) count 5 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+    %la, %lb = db.limit(%0#0, %0#1) count 5
 
-    db.output(%la, %lb) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+    db.output(%la, %lb)
 
     return
   }

@@ -10,13 +10,13 @@ module {
     // chunk in the traversal loop) feeding the ordinary nl.count_update, so the tally
     // sees each value once. A null survives the filter but is never charged, since
     // nl.count_update counts only non-null rows.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %src, %edge, %type, %tgt = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+    %src, %edge, %type, %tgt = db.get_out_edges(%a, {})
 
-    %count = db.count(%tgt) distinct : (!db.column<!storage.node_id>) -> !db.column<ui64>
+    %count = db.count(%tgt) distinct
 
-    db.output(%count) : !db.column<ui64>
+    db.output(%count)
 
     return
   }

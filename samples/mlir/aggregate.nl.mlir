@@ -15,15 +15,15 @@
 // !storage.nullable<f64>.
 module {
   func.func @main() {
-    %0 = nl.aggregate sum : !nl.aggregate_state<i64>
+    %0 = nl.aggregate sum
     %1 = nl.get_property_type("score")
     %2 = nl.scan_nodes()
-    nl.for %arg0 in %2 : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %4 = nl.get_node_properties(%arg0, %1) : !nl.chunk<!storage.nullable<i64>>
-      nl.aggregate_update sum %0, %4 : !nl.aggregate_state<i64>, !nl.chunk<!storage.nullable<i64>>
+    nl.for %arg0 in %2 {
+      %4 = nl.get_node_properties(%arg0, %1)
+      nl.aggregate_update sum %0, %4
     }
-    %3 = nl.aggregate_result sum(%0) : !nl.aggregate_state<i64> -> !nl.chunk<!storage.nullable<i64>>
-    nl.output(%3) : !nl.chunk<!storage.nullable<i64>>
+    %3 = nl.aggregate_result sum(%0)
+    nl.output(%3)
     return
   }
 }

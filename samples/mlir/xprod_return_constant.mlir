@@ -1,12 +1,12 @@
 func.func @main() {
   %0:2 = db.cross_product factor {
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
-    db.yield %a : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
+    db.yield %a
   } factor {
-    %b = db.scan_nodes() : !db.column<!storage.node_id>
-    db.yield %b : !db.column<!storage.node_id>
+    %b = db.scan_nodes()
+    db.yield %b
   }
-  %c = db.constant(5 : i64)
-  db.output(%c) : !db.column<i64>
+  %c = db.constant(5)
+  db.output(%c)
   return
 }

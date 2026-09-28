@@ -21,15 +21,15 @@ module {
     %2 = nl.get_property_type("city")
     %3 = nl.get_property_type("team")
     %4 = nl.scan_nodes()
-    nl.for %arg0 in %4 : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %6 = nl.get_node_properties(%arg0, %3) : !nl.chunk<!storage.nullable<!storage.string>>
-      %7 = nl.get_node_properties(%arg0, %2) : !nl.chunk<!storage.nullable<!storage.string>>
-      %8 = nl.get_node_properties(%arg0, %1) : !nl.chunk<!storage.nullable<i64>>
-      nl.group_aggregate_update %0, (%6, %7, %8) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<i64>>
+    nl.for %arg0 in %4 {
+      %6 = nl.get_node_properties(%arg0, %3)
+      %7 = nl.get_node_properties(%arg0, %2)
+      %8 = nl.get_node_properties(%arg0, %1)
+      nl.group_aggregate_update %0, (%6, %7, %8)
     }
-    %5 = nl.group_aggregate(%0) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<i64>>>
-    nl.for %arg0, %arg1, %arg2 in %5 : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<i64>>> {
-      nl.output(%arg0, %arg1, %arg2) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<i64>>
+    %5 = nl.group_aggregate(%0)
+    nl.for %arg0, %arg1, %arg2 in %5 {
+      nl.output(%arg0, %arg1, %arg2)
     }
     return
   }

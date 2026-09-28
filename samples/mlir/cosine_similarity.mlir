@@ -2,13 +2,13 @@
 
 module {
   func.func @main() {
-    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    %n = db.scan_nodes()
 
-    %vec = db.get_node_properties(%n, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %vec = db.get_node_properties(%n, "vec")
 
-    %sim = db.cosine_similarity(%vec, %vec) : (!db.column<none>, !db.column<none>) -> !db.column<none>
+    %sim = db.cosine_similarity(%vec, %vec)
 
-    db.output(%sim) : !db.column<none>
+    db.output(%sim)
 
     return
   }

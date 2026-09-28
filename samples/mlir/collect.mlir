@@ -19,15 +19,15 @@ module {
     // ListView over that group's elements.
     //
     // "age" and "name" are simpledb properties; swap them for properties your graph has.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%a, "age")
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name")
 
-    %gage, %names = db.collect(%age, %name) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
+    %gage, %names = db.collect(%age, %name) keys 1
 
-    db.output(%gage, %names) : !db.column<none>, !db.column<!storage.list<none>>
+    db.output(%gage, %names)
 
     return
   }

@@ -5,13 +5,13 @@ module {
   func.func @main() {
     %0 = nl.limit(5)
     %1 = nl.scan_nodes()
-    nl.for %arg0 in %1 limit %0 : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.for %arg0 in %1 limit %0 {
       %2 = nl.scan_nodes()
-      nl.for %arg1 in %2 limit %0 : !nl.iter<!nl.chunk<!storage.node_id>> {
-        %3 = nl.cross_product{%arg0} {%arg1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
-        nl.for %arg2, %arg3 in %3 limit %0 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
-          nl.limit_update %0, %arg2 : !nl.chunk<!storage.node_id>
-          nl.output(%arg2, %arg3) limit %0 : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+      nl.for %arg1 in %2 limit %0 {
+        %3 = nl.cross_product{%arg0} {%arg1}
+        nl.for %arg2, %arg3 in %3 limit %0 {
+          nl.limit_update %0, %arg2
+          nl.output(%arg2, %arg3) limit %0
         }
       }
     }

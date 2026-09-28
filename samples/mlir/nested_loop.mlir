@@ -6,20 +6,20 @@ module {
     func.func @main() {
         %nodes = nl.scan_nodes()
 
-        nl.for %chunk in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+        nl.for %chunk in %nodes {
             // Forwards: emit each step's target (successor) node IDs
             %out = nl.get_out_edges(%chunk, {})
 
-            nl.for %osrcs, %oeids, %oetypes, %otgts in %out : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
-                nl.output(%otgts) : !nl.chunk<!storage.node_id>
+            nl.for %osrcs, %oeids, %oetypes, %otgts in %out {
+                nl.output(%otgts)
                 nl.yield
             }
 
             // Backwards: same chunk shape, emit the source (predecessor) IDs
             %in = nl.get_in_edges(%chunk, {})
 
-            nl.for %isrcs, %ieids, %ietypes, %itgts in %in : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
-                nl.output(%isrcs) : !nl.chunk<!storage.node_id>
+            nl.for %isrcs, %ieids, %ietypes, %itgts in %in {
+                nl.output(%isrcs)
                 nl.yield
             }
 
@@ -27,15 +27,15 @@ module {
             // First hop a->b with an empty carry set; %hsrcs is `a`, %hb is `b`.
             %h1 = nl.get_out_edges(%chunk, {})
 
-            nl.for %hsrcs, %he0, %het0, %hb in %h1 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+            nl.for %hsrcs, %he0, %het0, %hb in %h1 {
                 // Second hop b->c carrying `a` (%hsrcs). Each second-hop edge
                 // binds its source(=b) %h2srcs and target(=c) %hc, and the
                 // carried `a` comes back filtered as %hafilt - all row-aligned,
                 // so we output the (a, b, c) triple.
-                %h2 = nl.get_out_edges(%hb, {%hsrcs}) : !nl.chunk<!storage.node_id>
+                %h2 = nl.get_out_edges(%hb, {%hsrcs})
 
-                nl.for %h2srcs, %he1, %het1, %hc, %hafilt in %h2 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
-                    nl.output(%hafilt, %h2srcs, %hc) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+                nl.for %h2srcs, %he1, %het1, %hc, %hafilt in %h2 {
+                    nl.output(%hafilt, %h2srcs, %hc)
                     nl.yield
                 }
 

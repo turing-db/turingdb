@@ -2,11 +2,11 @@
 
 module {
   func.func @main() {
-    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    %n = db.scan_nodes()
 
-    %labels = db.labels(%n) : (!db.column<!storage.node_id>) -> !db.column<none>
+    %labels = db.labels(%n)
 
-    db.output(%labels) : !db.column<none>
+    db.output(%labels)
 
     return
   }

@@ -1,7 +1,7 @@
 // MATCH (n:Person:SoftwareEngineering) RETURN  *
 
 func.func @main() {
-  %0 = db.scan_nodes_by_label(["Person", "SoftwareEngineering"]) : !db.column<!storage.node_id>
-  db.output(%0) names ["n"] : !db.column<!storage.node_id>
+  %0 = db.scan_nodes_by_label(["Person", "SoftwareEngineering"])
+  db.output(%0) names ["n"]
   return
 }

@@ -19,17 +19,17 @@ module {
     //
     // "dob", "name" and "age" are simpledb properties; swap them for properties your
     // graph has.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %dob = db.get_node_properties(%a, "dob") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %dob = db.get_node_properties(%a, "dob")
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name")
 
-    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%a, "age")
 
-    %gdob, %names, %n, %low, %high = db.collect(%dob, %name, %age, %age, %age) keys 1 aggregates [count, min, max] : (!db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>, !db.column<ui64>, !db.column<none>, !db.column<none>)
+    %gdob, %names, %n, %low, %high = db.collect(%dob, %name, %age, %age, %age) keys 1 aggregates [count, min, max]
 
-    db.output(%gdob, %names, %n, %low, %high) : !db.column<none>, !db.column<!storage.list<none>>, !db.column<ui64>, !db.column<none>, !db.column<none>
+    db.output(%gdob, %names, %n, %low, %high)
 
     return
   }

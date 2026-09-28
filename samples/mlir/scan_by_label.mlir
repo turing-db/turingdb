@@ -10,9 +10,9 @@ module {
     // each against the loaded graph's schema (-graph). A label no node was ever
     // created with makes the conjunction unsatisfiable, so the scan yields no
     // rows. Swap "Person" for a label your graph actually has.
-    %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+    %a = db.scan_nodes_by_label(["Person"])
 
-    db.output(%a) : !db.column<!storage.node_id>
+    db.output(%a)
 
     return
   }

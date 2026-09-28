@@ -12,19 +12,19 @@ module {
     // (a, b, c) triple over the node set, N^3 rows.
     %0:3 = db.cross_product factor {
       %1:2 = db.cross_product factor {
-        %a = db.scan_nodes() : !db.column<!storage.node_id>
-        db.yield %a : !db.column<!storage.node_id>
+        %a = db.scan_nodes()
+        db.yield %a
       } factor {
-        %b = db.scan_nodes() : !db.column<!storage.node_id>
-        db.yield %b : !db.column<!storage.node_id>
+        %b = db.scan_nodes()
+        db.yield %b
       }
-      db.yield %1#0, %1#1 : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+      db.yield %1#0, %1#1
     } factor {
-      %c = db.scan_nodes() : !db.column<!storage.node_id>
-      db.yield %c : !db.column<!storage.node_id>
+      %c = db.scan_nodes()
+      db.yield %c
     }
 
-    db.output(%0#0, %0#1, %0#2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
+    db.output(%0#0, %0#1, %0#2)
 
     return
   }

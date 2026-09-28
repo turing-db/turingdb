@@ -11,11 +11,11 @@ module {
   func.func @main() {
     %0 = nl.count
     %1 = nl.scan_nodes()
-    nl.for %arg0 in %1 : !nl.iter<!nl.chunk<!storage.node_id>> {
-      nl.count_update %0, %arg0 : !nl.chunk<!storage.node_id>
+    nl.for %arg0 in %1 {
+      nl.count_update %0, %arg0
     }
-    %2 = nl.count_result(%0) : !nl.chunk<ui64>
-    nl.output(%2) : !nl.chunk<ui64>
+    %2 = nl.count_result(%0)
+    nl.output(%2)
     return
   }
 }

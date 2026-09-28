@@ -12,11 +12,11 @@ module {
     // expansion walked and stays row-aligned with the neighbour it belongs to.
     //
     // Needs no -graph: nothing here is resolved against a schema.
-    %ids, %scores = db.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00, 0.000000e+00, 0.000000e+00]) : !db.column<!storage.node_id>, !db.column<f64>
+    %ids, %scores = db.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00, 0.000000e+00, 0.000000e+00])
 
-    %0, %1, %2, %3, %4 = db.get_out_edges(%ids, {%scores}) : (!db.column<!storage.node_id>, !db.column<f64>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<f64>)
+    %0, %1, %2, %3, %4 = db.get_out_edges(%ids, {%scores})
 
-    db.output(%0, %3, %4) names ["ids", "m", "score"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<f64>
+    db.output(%0, %3, %4) names ["ids", "m", "score"]
 
     return
   }

@@ -5,11 +5,11 @@ module {
     // broadcast value. The operand and result element types are spelled in the IR -
     // the db dialect keeps values loosely typed - and the numeric promotion (a float
     // operand would make the result a float) is settled during lowering.
-    %x = db.constant(10 : i64)
-    %y = db.constant(20 : i64)
-    %s = db.add %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<i64>
+    %x = db.constant(10)
+    %y = db.constant(20)
+    %s = db.add %x, %y
 
-    db.output(%s) : !db.column<i64>
+    db.output(%s)
 
     return
   }
