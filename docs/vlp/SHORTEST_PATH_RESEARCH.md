@@ -21,6 +21,9 @@ The synthesis is organised as a sequence of questions:
 9. What do the benchmarks ask for?
 10. What does this mean for TuringDB?
 
+A table before Section 5 lists the performance techniques of Sections 5 to 8 with their reported
+gains.
+
 Neo4j's behaviour was read from the Cypher manual (Cypher 25, 2026.09) and from the source of
 `neo4j/neo4j` at branch `2026.09` (commit `54a7dcf7c`). The central claims were checked
 against both directly: the pre-filter and post-filter wording, the minimum length rule,
@@ -555,6 +558,32 @@ on LDBC1000 Person–Knows (3.2M nodes, 202M edges) went from 56.4 s to 3.33 s o
 
 ---
 
+## Performance techniques at a glance
+
+Sections 5 to 8 take these one at a time. The gains are those the cited sources report; the v3
+fit column is *(inference)*.
+
+| Technique | Reported gain | Pays when | v3 fit | Section |
+|---|---|---|---|---|
+| Bidirectional BFS balanced by frontier degree sum | ≈√m edges instead of m on 2,740 real networks, unless the graph is both local and homogeneous (roads, meshes); Hollywood 7 ms against 1.2 s for plain BFS | bound pairs | the core of `shortestPath` | 5.1, 5.2 |
+| Sparse, epoch-stamped state; dense only when a frontier grows | removes O(n) setup per search, which cost Kùzu 400 of 900 ms | always | `KeySet` and `PathReachTable` already work this way | 5.4 |
+| Stored predecessor DAG, listed depth-first | output-linear listing; no σ(s, v) × deg(v) rescans at hubs | `allShortestPaths` | a listing mode of the explorator | 2.3, 10.2 |
+| Direction-optimising BFS (α ≈ 14-15, β ≈ 18-24) | 2.4-7.8× | wide frontiers: one-to-all, batches, unreachable pairs inside a giant component | later; in-edges are stored | 5.5 |
+| Vertex cover of the pair graph | up to 2.55× | batches | the gate of 10.3 | 6.1 |
+| MS-BFS, 64-512 lanes | 12-88× against independent *full* BFSs | ≥ 32-64 distinct sources and a dense pair set | `PathTargetIndex` has 64 lanes | 6.2 |
+| Component IDs; SCC condensation with a reachability index | O(1) "no path" | unreachable pairs | cheap; sound across deletions | 7.1 |
+| Highway-cover labels (~20 landmarks) | Twitter 1.42 ms against 427 ms, 2.8 GB; ClueWeb09 (8B edges) 0.31 ms; QbS all paths 164 ms against 4.8 s | hub-heavy graphs, millisecond targets | optional index per compacted version | 7.2 |
+| Pruned landmark labelling | Hollywood 15.6 µs, but 15,164 s to build and 12 GB | ≤ 10^8 edges | no | 7.2 |
+| DBG degree reordering | +16.8 % traversal, +6.2 % net of the reordering | skewed degrees | at compaction | 7.4 |
+| Merged CSR, fewer patch parts, O(1) degree | up to k fewer reads per expanded node, k the parts holding its edges | graphs built by many small commits | Tier 4 of `PLAN.md` | 7.4 |
+| Lazy Dijkstra on a 4-ary heap or a bucket queue | Fibonacci heaps about 3× slower | weighted | `SHORTESTPATH` | 8.1 |
+| Bidirectional Dijkstra, stopping at minF + minB ≥ μ | about 2× on roads | weighted pairs | `SHORTESTPATH` | 8.2 |
+| CH, CRP, hub labels | 110 µs, 1.65 ms, 0.56 µs on Western Europe | road-like graphs, static weights | no | 8.3 |
+| Yen with PeeK pruning | 5.1× at K = 8, 28.8× at K = 128 | `SHORTEST k` with large k | later | 8.5 |
+| Duan et al., O(m log^(2/3) n) SSSP | none: Dijkstra 3-4× faster up to 10^7 vertices | nothing measured | no | 8.6 |
+
+---
+
 ## 5. Making one pair fast
 
 ### 5.1 Bidirectional search is sublinear on real graphs
@@ -1075,13 +1104,74 @@ A shortest-path search defines the answer, so it must apply everything a pruning
 - **Start equals end** (GQL): `ends_on_seed` with the same deepening. The shortest closed trail
   is not a BFS question (Section 2.1).
 - **General patterns** (fixed segments with a quantifier, multi-hop bodies, several
-  quantifiers): a product-graph search that validates trails, as PPBFS does. They are valid
-  Cypher, so CLAUDE.md's rule applies: implement them, do not reject them in the analyzer.
+  quantifiers): a search keyed by (node, pattern position), with trail validation (Section
+  10.6). They are valid Cypher, so CLAUDE.md's rule applies: implement them, do not reject them
+  in the analyzer.
 - **Fixed-length patterns.** `ALL SHORTEST` and `GROUPS` become plain matching, as Neo4j
   rewrites them. `SHORTEST k` needs an operator that keeps the first k rows per
   (first node, last node) after ordinary matching.
 
-### 10.6 Traps
+### 10.6 Patterns whose next step depends on the position
+
+*(inference, with the argument)* A hop predicate, a lambda over a hop's source, edge and end
+like v3's `hop` region, is all a search needs while every hop faces the same rule: one
+quantified relationship, a type disjunction, a predicate applied to every hop. That covers
+legacy `shortestPath` and `allShortestPaths`, and GQL selectors over one quantified
+relationship. The search keeps one entry per node.
+
+When the next step depends on where the walk is in the pattern (fixed segments around a
+quantifier, several quantifiers, a multi-hop body, a node predicate at one position), a lambda
+can still say which step is allowed, but a search that keeps one entry per node returns wrong
+answers. Take `SHORTEST 1 (a)-[:K]->(x)-[:W]->+(b)`:
+
+```
+graph    a -K-> x,   x -W-> a,   a -W-> b
+answer   a -K-> x -W-> a -W-> b, length 3: no relationship repeats (under ACYCLIC it is
+         not a path, since a repeats)
+```
+
+Depth 0 is `a` and depth 1 is `x`. At depth 2 the edge `x -W-> a` reaches `a`, which the search
+has already visited, so the arrival is dropped and the search reports no path. The two visits
+are not interchangeable: the first is at the start of the pattern, where only K may follow; the
+second is inside the W loop, where W may follow. Keyed by (node, position), the arrival at depth
+2 is a new entry and `b` is found at depth 3. `(a)-[:A]->+(m)-[:B]->+(b)` fails the same way: a
+node first reached in the B phase cannot continue with A, and a later arrival in the A phase
+could.
+
+The fix is to add the pattern position to the search's key. That key is what the literature
+calls the product graph (Section 2.2) and what Neo4j's `NodeState(nodeId, NFA state)` is
+(Section 3.3); nothing is built beyond it. A lambda that is told its position and returns the
+next one is an automaton's transition function. Compiling the pattern into positions once gives:
+
+- a transition table: from position q, the edge types, direction and hop predicate allowed, and
+  the position reached. A candidate costs a lookup, where a lambda reading the path would
+  re-derive the position from the whole prefix;
+- a small, fixed number of positions: 2 for the example (the start and the W loop), k + 1 for a
+  k-hop prefix before a loop, 2 for `A+ B+`;
+- a bound: the search costs at most (positions) × (nodes + edges), polynomial like the
+  single-position BFS.
+
+Memgraph applies the same principle to hop-bounded weighted paths, keying its queue by
+(vertex, depth) (Section 8.2). With one position the key is the node alone and the search is the
+one of Section 10.2, so the single-position case pays nothing for the generality.
+
+The position key is necessary but not sufficient under TRAIL. "No relationship repeats" depends
+on the whole path, and no finite position captures it: the shortest (node, position) walk can
+reuse a relationship, which the trail-propagation fixture of Section 1.5 exercises. Two ways to
+get the shortest trail:
+
+- the deepening DFS of Section 10.5. Each path carries its own prefix, so a position-aware
+  predicate is always right, and a distance computed without positions still prunes, since it
+  is a lower bound. Correct, but exponential in the worst case;
+- Neo4j's way: validate trails while tracing paths back from the target, and propagate longer
+  lengths when the shortest walk fails (Section 3.3). The extra work stays on nodes known to
+  reach a target.
+
+The order that follows: the single-position search first, which is all of legacy; then the
+position key and a compiled transition table for the other patterns; the deepening DFS for trail
+validation and as the fallback.
+
+### 10.7 Traps
 
 - **Filter placement.** A legacy MATCH-level `WHERE` is a pre-filter: its per-step parts must
   reach the search, and its path predicates select the fallback. A GQL MATCH-level `WHERE` is a
@@ -1095,7 +1185,7 @@ A shortest-path search defines the answer, so it must apply everything a pruning
 - **Rows are independent.** Two input rows with the same (a, b) each get their own result.
 - **The depth bound counts total length**, not length per side.
 
-### 10.7 What to measure
+### 10.8 What to measure
 
 In order: (a) bidirectional against unidirectional search on reactome and the fraud graph, for
 random pairs and for pairs through hubs, and degree-sum against node-count balancing; (b)
@@ -1121,8 +1211,11 @@ highway-cover labels per compacted version.
   step at a time; it selects the exhaustive fallback.
 - **Downward closed**: a pattern that still matches after a cycle is cut out of a walk; shortest
   walks for such patterns are simple.
-- **Product graph**: pairs (graph node, automaton state), with an edge wherever a graph edge and
-  an automaton transition agree; a BFS on it finds shortest matching walks.
+- **Product graph**: the graph searched with (node, pattern position) as the key instead of the
+  node, an edge allowed where the pattern allows its type, direction and predicate from that
+  position. Nothing is built beyond the key; with one position it is the graph itself.
+- **Pattern position**: where a walk stands in the pattern, one state of the pattern's
+  automaton; it decides which step may come next.
 - **Predecessor DAG / PMR**: every node reached at depth d with its edges from depth d − 1;
   holds all shortest paths in space linear in the graph.
 - **Descent**: reading paths out of distances to a target by stepping, at each node, to a
