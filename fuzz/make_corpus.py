@@ -41,6 +41,7 @@ REGRESS_DIR = os.path.join(REPO_ROOT, "regress")
 UNIT_TEST_DIR = os.path.join(REPO_ROOT, "test")
 CORPUS_DIR = os.path.join(REPO_ROOT, "fuzz", "corpus", "cypher")
 HTTP_CORPUS_DIR = os.path.join(REPO_ROOT, "fuzz", "corpus", "http")
+PROTO_CORPUS_DIR = os.path.join(REPO_ROOT, "fuzz", "corpus", "proto")
 
 # A query is only worth a seed if it can plausibly reach the parser.
 MIN_QUERY_LENGTH = 3
@@ -86,7 +87,6 @@ HTTP_CLIENT_STATES = [
     ("graph=default&commit=0123456789abcdef", ""),
     ("graph=default", "Authorization: Bearer token\r\n"),
 ]
-
 
 def queries_from_test_suite():
     """Every "query" field of the query test suite fixtures."""
@@ -204,7 +204,7 @@ def seed_name(query):
     return "q_" + hashlib.md5(query.encode("utf-8")).hexdigest()[:8] + ".cypher"
 
 
-def http_requests_from_seeds():
+def requests_from_seeds(template, states):
     """Every hand-written Cypher seed as a /query request, the client states taken in turn."""
     seeds = sorted(p for p in glob.glob(os.path.join(CORPUS_DIR, "*.cypher"))
                    if not os.path.basename(p).startswith("q_"))
@@ -214,19 +214,33 @@ def http_requests_from_seeds():
         with open(path, "rb") as handle:
             query = handle.read()
 
-        params, authorization = HTTP_CLIENT_STATES[index % len(HTTP_CLIENT_STATES)]
-        header = HTTP_REQUEST.format(params=params, authorization=authorization, length=len(query))
+        params, authorization = states[index % len(states)]
+        header = template.format(params=params, authorization=authorization, length=len(query))
         name = "cypher_" + os.path.splitext(os.path.basename(path))[0] + ".raw"
         found[name] = header.encode("ascii") + query
 
     return found
 
 
-def changed_http_seeds(wanted):
-    """The wanted HTTP seeds that are missing or whose bytes differ from the file on disk."""
+def proto_queries_from_seeds():
+    """Every hand-written Cypher seed as a plain query. The proto harness feeds the query to
+    net::proto::TuringClient, which does the framing, so the seed is the query itself."""
+    seeds = sorted(p for p in glob.glob(os.path.join(CORPUS_DIR, "*.cypher"))
+                   if not os.path.basename(p).startswith("q_"))
+
+    found = {}
+    for path in seeds:
+        with open(path, "rb") as handle:
+            found[os.path.basename(path)] = handle.read()
+
+    return found
+
+
+def changed_seeds(corpus_dir, wanted):
+    """The wanted seeds that are missing or whose bytes differ from the file on disk."""
     changed = []
     for name, request in sorted(wanted.items()):
-        path = os.path.join(HTTP_CORPUS_DIR, name)
+        path = os.path.join(corpus_dir, name)
         if not os.path.exists(path):
             changed.append(name)
             continue
@@ -263,13 +277,21 @@ def main():
     print(f"corpus:     {len(existing)} generated seeds, {len(wanted)} wanted")
     print(f"            {len(added)} to add, {len(stale)} stale")
 
-    http_wanted = http_requests_from_seeds()
+    http_wanted = requests_from_seeds(HTTP_REQUEST, HTTP_CLIENT_STATES)
     http_existing = {os.path.basename(p) for p in glob.glob(os.path.join(HTTP_CORPUS_DIR, "cypher_*.raw"))}
-    http_changed = changed_http_seeds(http_wanted)
+    http_changed = changed_seeds(HTTP_CORPUS_DIR, http_wanted)
     http_stale = sorted(http_existing - set(http_wanted))
 
     print(f"http:       {len(http_existing)} query requests, {len(http_wanted)} wanted")
     print(f"            {len(http_changed)} to write, {len(http_stale)} stale")
+
+    proto_wanted = proto_queries_from_seeds()
+    proto_existing = {os.path.basename(p) for p in glob.glob(os.path.join(PROTO_CORPUS_DIR, "*"))}
+    proto_changed = changed_seeds(PROTO_CORPUS_DIR, proto_wanted)
+    proto_stale = sorted(proto_existing - set(proto_wanted))
+
+    print(f"proto:      {len(proto_existing)} queries, {len(proto_wanted)} wanted")
+    print(f"            {len(proto_changed)} to write, {len(proto_stale)} stale")
 
     if args.dry_run:
         return 0
@@ -294,10 +316,22 @@ def main():
         for name in http_stale:
             os.remove(os.path.join(HTTP_CORPUS_DIR, name))
 
+    os.makedirs(PROTO_CORPUS_DIR, exist_ok=True)
+
+    for name in proto_changed:
+        with open(os.path.join(PROTO_CORPUS_DIR, name), "wb") as handle:
+            handle.write(proto_wanted[name])
+
+    if args.prune:
+        for name in proto_stale:
+            os.remove(os.path.join(PROTO_CORPUS_DIR, name))
+
     total = len(glob.glob(os.path.join(CORPUS_DIR, "*.cypher")))
     http_total = len(os.listdir(HTTP_CORPUS_DIR))
+    proto_total = len(os.listdir(PROTO_CORPUS_DIR))
     print(f"corpus now holds {total} seeds")
     print(f"http corpus now holds {http_total} seeds")
+    print(f"proto corpus now holds {proto_total} seeds")
 
     return 0
 
