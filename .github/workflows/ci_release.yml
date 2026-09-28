@@ -84,6 +84,13 @@ jobs:
           # Tolerate files already on PyPI so a partial upload can be safely re-run.
           skip-existing: true
 
+  docker:
+    needs: publish
+    uses: ./.github/workflows/ci_docker.yaml
+    with:
+      image_tag: ${{ needs.publish.outputs.version }}
+    secrets: inherit
+
   test-published-wheel:
     name: Test published wheel 
     needs: [publish, setup]

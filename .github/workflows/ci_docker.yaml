@@ -1,28 +1,25 @@
-name: Docker Nightly Build
+name: CI Docker
 
 on:
-  schedule:
-    - cron: "0 4 * * *"   # nightly at 04:00 UTC
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      image_tag:
+        required: true
+        type: string
+
+env:
+  IMAGE_TAG: ${{ inputs.image_tag }}
 
 jobs:
-  build-wheel:
-    uses: ./.github/workflows/ci_build.yml
-    with:
-      os_list: '["ubuntu-24.04-turing", "ubuntu-24.04-arm"]'
-      python_version_list: '["3.14"]'
-    secrets: inherit
-
   docker:
-    needs: build-wheel
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04-turing
+          - os: ubuntu-26.04-turing
             arch: amd64
             platform: linux/amd64
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-26.04-arm
             arch: arm64
             platform: linux/arm64
     runs-on: ${{ matrix.os }}
@@ -65,9 +62,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set Docker tag
-        run: echo "IMAGE_TAG=latest" >> $GITHUB_ENV
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -95,7 +89,7 @@ jobs:
           path: turingdb-image-${{ env.IMAGE_TAG }}-${{ matrix.arch }}.tar
 
       # The self-hosted -turing runner is persistent; the saved image tarball
-      # and writable-layer growth would otherwise accumulate between nightlies.
+      # and writable-layer growth would otherwise accumulate between runs.
       - name: Reclaim disk (self-hosted)
         if: always() && contains(matrix.os, 'turing')
         uses: ./.github/actions/clean-self-hosted-runner
@@ -109,9 +103,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set Docker tag
-        run: echo "IMAGE_TAG=latest" >> $GITHUB_ENV
 
       - name: Create and push multi-arch manifest
         run: |

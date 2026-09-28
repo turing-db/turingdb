@@ -12,7 +12,7 @@ RUN git clone --depth 1 https://github.com/turing-db/turingdb-visualizer.git . \
  && npm run build
 
 # Stage 2: runtime image
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
