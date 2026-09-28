@@ -329,13 +329,11 @@ private:
 
     // Lower a db.exists_subquery into an nl.exists_buffer, the body's own loop nest ending
     // in an nl.exists_mark, and the nl.exists_result that reads the flags back as the
-    // boolean the op stands for. A body that cannot carry the rows it was given runs under
-    // a loop over them, which the rest of the query then goes on inside.
-    void lowerExistsSubquery(mlir::db::ExistsSubquery exists);
-
-    // Lower a db.count_subquery as a db.exists_subquery is lowered, through the counting
-    // siblings of its nl ops: nl.count_subquery_buffer, _tally and _result
-    void lowerCountSubquery(mlir::db::CountSubquery count);
+    // boolean the op stands for; a db.count_subquery through the counting siblings of those,
+    // nl.count_subquery_buffer, _tally and _result. A body that cannot carry the rows it was
+    // given runs under a loop over them, which the rest of the query then goes on inside.
+    template <typename SubqueryOp, typename YieldOp>
+    void lowerSubqueryExpression(SubqueryOp subquery);
 
     // The db values bound over @param stepBlock ahead of @param subquery, and read after it,
     // that are not its inputs. What follows a body run a row at a time is lowered inside the

@@ -33,7 +33,7 @@ public:
     // rows a later one would have dropped anyway, so the whole chain collapses to: the
     // branches up to the last distinct operator share one dedup, and the branches after
     // it are appended as they come. Zero for a chain of UNION ALL alone.
-    size_t getDedupedBranchCount() const;
+    static size_t getDedupedBranchCount(const Branches& branches);
 
 private:
     Branches _branches;

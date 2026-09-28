@@ -552,7 +552,7 @@ void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
         return branch._query->getReturnStmt() != nullptr;
     };
 
-    const bool namesColumns = count->getDedupedBranchCount() > 0 || std::ranges::any_of(branches, hasReturn);
+    const bool namesColumns = UnionQuery::getDedupedBranchCount(branches) > 0 || std::ranges::any_of(branches, hasReturn);
     if (namesColumns) {
         for (size_t index = 1; index < branches.size(); index++) {
             analyzeUnionColumns(branches.front()._query, branches[index]._query);

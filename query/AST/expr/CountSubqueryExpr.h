@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stddef.h>
-
 #include "Expr.h"
 #include "UnionQuery.h"
 
@@ -18,9 +16,6 @@ public:
     using Branches = UnionQuery::Branches;
 
     const Branches& getBranches() const { return _branches; }
-
-    // How many leading branches dedup against one another, as UnionQuery counts them
-    size_t getDedupedBranchCount() const;
 
     static CountSubqueryExpr* create(CypherAST* ast, const Branches& branches);
 

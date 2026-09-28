@@ -54,15 +54,15 @@ input rows rather than re-emitting rows, so it buffers none of them and opens no
 `db.exists_subquery` takes every named column in flight and holds the body in a region whose
 block arguments stand for them, plus a trailing row tag - the position of each input row,
 carried through the body as any other column is. Its one result is a `!db.column<!storage.bool>`
-row-aligned with the inputs. `db.exists_yield` names the tag as the body left it and the
-columns the body holds there.
+row-aligned with the inputs. `db.exists_yield` names the tag as the body left it. A body
+with no tag names the columns it holds instead, which it is answered off.
 
 The lowering is an accumulator over one step of the input rows:
 
 ```
 %state, %tag = nl.exists_buffer (%p) : {!nl.chunk<!storage.node_id>}
 nl.for ... {                                  // the body's own nest
-  nl.exists_mark %state, %tag2, (%k) : {...}
+  nl.exists_mark %state, %tag2, ()
 }
 %b = nl.exists_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.bool>
 ```
