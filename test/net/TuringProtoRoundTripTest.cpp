@@ -1225,10 +1225,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantMapColumn) {
     inner.emplace_back("d", Int64 {2});
     const db::MapView innerView = localMem.mapBuffer().insert(inner);
 
-    std::vector<db::MapBuffer<>::MapKeyValuePair> outer;
-    outer.emplace_back("a", Int64 {-7});
-    outer.emplace_back("bb", StringView {"xyz"});
-    outer.emplace_back("c", innerView);
+    const std::vector<db::MapBuffer<>::MapKeyValuePair> outer = {{"a", Int64 {-7}},
+                                                                 {"bb", StringView {"xyz"}},
+                                                                 {"c", innerView}};
 
     auto* mapCol = localMem.alloc<db::ColumnConst<db::MapView>>();
     mapCol->set(localMem.mapBuffer().insert(outer));
@@ -1537,18 +1536,17 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingEveryValueTag) {
     nestedEntries.emplace_back("deep", Bool {false});
     const db::MapView nested = localMem.mapBuffer().insert(nestedEntries);
 
-    std::vector<db::MapBuffer<>::MapKeyValuePair> entries;
-    entries.emplace_back("i", Int64 {-7});
-    entries.emplace_back("u", UInt64 {7});
-    entries.emplace_back("d", db::types::Double::Primitive {2.25});
-    entries.emplace_back("s", StringView {"xyz"});
-    entries.emplace_back("b", Bool {true});
-    entries.emplace_back("e", Embedding {embedding});
-    entries.emplace_back("l", list);
-    entries.emplace_back("m", nested);
-    entries.emplace_back("n", db::PropertyNull {});
-    entries.emplace_back("node", db::NodeID {42});
-    entries.emplace_back("edge", db::EdgeID {43});
+    const std::vector<db::MapBuffer<>::MapKeyValuePair> entries = {{"i", Int64 {-7}},
+                                                                   {"u", UInt64 {7}},
+                                                                   {"d", db::types::Double::Primitive {2.25}},
+                                                                   {"s", StringView {"xyz"}},
+                                                                   {"b", Bool {true}},
+                                                                   {"e", Embedding {embedding}},
+                                                                   {"l", list},
+                                                                   {"m", nested},
+                                                                   {"n", db::PropertyNull {}},
+                                                                   {"node", db::NodeID {42}},
+                                                                   {"edge", db::EdgeID {43}}};
 
     auto* mapCol = localMem.alloc<db::ColumnConst<db::MapView>>();
     mapCol->set(localMem.mapBuffer().insert(entries));
