@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <spdlog/fmt/bundled/core.h>
 #include <string_view>
+#include <vector>
 
 #include "CypherAST.h"
 #include "DiagnosticsManager.h"
@@ -829,6 +830,8 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
 
     const SourceManager* srcMan = _ast->getSourceManager();
 
+    std::vector<Expr*> aliasedItems;
+
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         const auto* exprPtr = std::get_if<Expr*>(&returnItem);
         if (!exprPtr) {
@@ -860,29 +863,25 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
 
         _exprAnalyzer->analyzeRootExpr(item);
 
-        // An item reading the alias of an aggregate is aggregate too: its value exists
-        // once the group is complete, not once per row, so it groups nothing
-        if (readsAnAggregateItem(item, projection)) {
-            item->setAggregate();
-        }
-
         bioassert(!name.empty(), "All declared variable must have a name.");
 
-        // Reported before the alias is declared, so that a duplicate column name is not
-        // masked by the type conflict the second declaration of that name would raise
         if (projection->hasName(name)) {
             throwError(fmt::format("Return items must have unique names; "
                                    "{} was already defined.", name), item);
         }
 
         if (hasExplicitAlias) {
-            declareItemAlias(item, name);
+            aliasedItems.push_back(item);
         }
 
         projection->setName(item, name);
 
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();
+    }
+
+    for (Expr* item : aliasedItems) {
+        declareItemAlias(item, item->getName());
     }
 
     if (projection->hasOrderBy()) {
@@ -946,7 +945,6 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         projection->setAggregate();
         projection->setHasGroupingKeys(hasGroupingKeys);
 
-        analyzeNestedAggregates(projection);
         analyzeAggregateItems(projection);
         analyzeAggregateOrderBy(projection);
     }
@@ -968,12 +966,15 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
     VarDecl* aliasedDecl = symbolExpr->getDecl();
     const VarDecl* declared = _ctxt->getDecl(alias);
 
-    // A declaration the query did not name was generated for an expression and is reached
-    // through it, so an alias spelling that name is no redeclaration and takes it
-    const bool takenByAVariable = declared && !declared->isUnnamed();
+    const bool rebindsAnImport = declared
+                                 && declared != aliasedDecl
+                                 && std::ranges::contains(_subqueryImports, alias);
 
-    if (takenByAVariable && declared != aliasedDecl) {
-        throwError(fmt::format("Variable '{}' is already declared", alias), item);
+    if (rebindsAnImport) {
+        throwError(fmt::format("Variable '{}' is imported by the CALL: a clause of the subquery "
+                               "cannot declare it again",
+                               alias),
+                   item);
     }
 
     _ctxt->declareAlias(alias, aliasedDecl);
@@ -999,69 +1000,6 @@ void CypherAnalyzer::analyzeDistinct(const Projection* projection, bool isAggreg
                        keyExpr);
         }
     }
-}
-
-void CypherAnalyzer::analyzeNestedAggregates(const Projection* projection) const {
-    for (const Projection::ReturnItem& returnItem : projection->items()) {
-        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
-        if (!exprPtr) {
-            continue;
-        }
-
-        analyzeAggregateArguments(*exprPtr, projection);
-    }
-}
-
-void CypherAnalyzer::analyzeAggregateArguments(const Expr* expr, const Projection* projection) const {
-    if (!expr) {
-        return;
-    }
-
-    std::vector<const Expr*> children;
-    if (!ExprChildren::collect(expr, children)) {
-        return;
-    }
-
-    const FunctionSignature* aggregate = aggregateSignatureOf(expr);
-
-    if (aggregate) {
-        for (const Expr* argument : children) {
-            if (readsAnAggregateItem(argument, projection)) {
-                throwError(fmt::format("Aggregate functions may not be nested: the argument of "
-                                       "'{}' names an aggregate of the same projection",
-                                       aggregate->getFullName()),
-                           expr);
-            }
-        }
-    }
-
-    for (const Expr* child : children) {
-        analyzeAggregateArguments(child, projection);
-    }
-}
-
-bool CypherAnalyzer::readsAnAggregateItem(const Expr* expr, const Projection* projection) const {
-    if (!expr) {
-        return false;
-    }
-
-    const Expr* namedItem = projection->findItemExpr(expr);
-    if (namedItem && namedItem->isAggregate()) {
-        return true;
-    }
-
-    std::vector<const Expr*> children;
-    if (!ExprChildren::collect(expr, children)) {
-        return false;
-    }
-
-    for (const Expr* child : children) {
-        if (readsAnAggregateItem(child, projection)) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 void CypherAnalyzer::analyzeAggregateOrderBy(const Projection* projection) const {

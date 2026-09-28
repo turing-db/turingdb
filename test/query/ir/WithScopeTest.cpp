@@ -197,14 +197,13 @@ TEST_F(WithScopeTest, filtersAHopOnAPublishedAlias) {
                {{"Computers"}, {"Eighties"}, {"Ghosts"}});
 }
 
-// Another name for a column the projection already publishes, which is what the same
-// reference inside a wider expression has always been
-TEST_F(WithScopeTest, republishesASiblingAliasUnderASecondName) {
-    expectRows("MATCH (n:Person {name: 'Remy'}) WITH n.name AS name, name AS person "
-               "RETURN name, person",
-               {{"Remy", "Remy"}});
-    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN n.name AS name, name AS person",
-               {{"Remy", "Remy"}});
+// The items of a projection read the scope it ends, where a sibling's alias is not bound
+TEST_F(WithScopeTest, rejectsASiblingAliasOfTheSameProjection) {
+    expectRejected("MATCH (n:Person {name: 'Remy'}) WITH n.name AS name, name AS person "
+                   "RETURN name, person",
+                   QueryStatus::Status::ANALYZE_ERROR);
+    expectRejected("MATCH (n:Person {name: 'Remy'}) RETURN n.name AS name, name AS person",
+                   QueryStatus::Status::ANALYZE_ERROR);
 }
 
 // The ORDER BY of a barrier reads the scope the barrier opens, so a match variable its

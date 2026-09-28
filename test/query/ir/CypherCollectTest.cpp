@@ -1318,19 +1318,19 @@ TEST_F(CypherCollectTest, ungroupedCollectOfAConstantOverAnUnwind) {
     EXPECT_EQ(sink.rows(), expected);
 }
 
-// An alias of a constant names that constant, so it is laid out the same way - grouped,
-// once per row of each group, and ungrouped, once per matched row.
+// A constant published by a WITH is laid out once per row - grouped, once per row of each
+// group, and ungrouped, once per matched row.
 TEST_F(CypherCollectTest, collectOfAConstantAlias) {
     buildTeamGraph();
 
     TrailingInt64ListSink groupedSink;
-    match("MATCH (n:Node) RETURN n.team, 1 AS x, collect(x)", groupedSink);
+    match("MATCH (n:Node) WITH n, 1 AS x RETURN n.team, x, collect(x)", groupedSink);
 
     const std::vector<std::vector<int64_t>> grouped {{1, 1}, {1, 1}};
     EXPECT_EQ(groupedSink.rows(), grouped);
 
     TrailingInt64ListSink ungroupedSink;
-    match("MATCH (n:Node) RETURN 1 AS x, collect(x)", ungroupedSink);
+    match("MATCH (n:Node) WITH 1 AS x RETURN x, collect(x)", ungroupedSink);
 
     const std::vector<std::vector<int64_t>> ungrouped {{1, 1, 1, 1}};
     EXPECT_EQ(ungroupedSink.rows(), ungrouped);
@@ -1342,7 +1342,7 @@ TEST_F(CypherCollectTest, collectOverAPropertyAlias) {
     buildTeamGraph();
 
     KeyedStringListSink sink;
-    match("MATCH (n:Node) RETURN n.name AS nm, collect(nm)", sink);
+    match("MATCH (n:Node) WITH n.name AS nm RETURN nm, collect(nm)", sink);
 
     std::vector<KeyedStringListSink::Row> rows;
     sink.sortedRows(rows);
@@ -1362,7 +1362,7 @@ TEST_F(CypherCollectTest, collectOverANullablePropertyAlias) {
     buildTeamGraph();
 
     Int64KeyedListSink sink;
-    match("MATCH (n:Node) RETURN n.score AS s, collect(s)", sink);
+    match("MATCH (n:Node) WITH n.score AS s RETURN s, collect(s)", sink);
 
     std::vector<Int64KeyedListSink::Row> rows;
     sink.sortedRows(rows);
@@ -1380,7 +1380,7 @@ TEST_F(CypherCollectTest, collectOverAnEntityAlias) {
     buildTeamGraph();
 
     NodeKeyedListSink sink;
-    match("MATCH (n:Node) RETURN n AS m, collect(m)", sink);
+    match("MATCH (n:Node) WITH n AS m RETURN m, collect(m)", sink);
 
     std::vector<NodeKeyedListSink::Row> rows;
     sink.sortedRows(rows);

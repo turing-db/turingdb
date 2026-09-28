@@ -79,17 +79,6 @@ protected:
         EXPECT_EQ(sink.rows(), expected) << "query: " << query << "\ngot:\n" << actualText;
     }
 
-    void expectRejected(std::string_view query, std::string_view reason) {
-        RowSink sink;
-        const QueryStatus status = runQuery(query, &sink);
-        ASSERT_FALSE(status.isOk()) << "query accepted: " << query;
-
-        const std::string& error = status.getError();
-
-        EXPECT_NE(error.find(reason), std::string::npos)
-            << "query: " << query << "\nerror: " << error;
-    }
-
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
@@ -141,13 +130,13 @@ TEST_F(ShadowedAliasTest, groupsASumUnderTheNameItReads) {
                 {"Suhas", "2"}});
 }
 
-// A second item reading the alias of an aggregate is still an aggregate over an aggregate,
-// whether or not that alias shadows a name the barrier published
-TEST_F(ShadowedAliasTest, rejectsAnAggregateOverAnAliasOfTheSameProjection) {
-    expectRejected("MATCH (i:Interest)<-[:INTERESTED_IN]-(p:Person) "
-                   "WITH i.name AS interest, count(p) AS fans "
-                   "RETURN sum(fans) AS fans, count(fans)",
-                   "Aggregate functions may not be nested");
+// The count beside the sum reads the fans the barrier published, not the sum that takes
+// the name: ten interests, reached by fifteen edges
+TEST_F(ShadowedAliasTest, countsThePublishedColumnBesideTheAggregateTakingItsName) {
+    expectRows("MATCH (i:Interest)<-[:INTERESTED_IN]-(p:Person) "
+               "WITH i.name AS interest, count(p) AS fans "
+               "RETURN sum(fans) AS fans, count(fans)",
+               {{"15", "10"}});
 }
 
 int main(int argc, char** argv) {

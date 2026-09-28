@@ -13,17 +13,14 @@ using namespace db;
 
 namespace {
 
-// An aggregate reached through an alias is caught by the projection's own rule, which
-// names the alias; one spelled inside the call is caught where the call is analyzed
-const std::string_view nestedAggregateReason = "Aggregate functions may not be nested";
 const std::string_view nestedCallReason = "Aggregate functions cannot be nested inside other aggregate functions";
 
 }
 
 // An aggregate folds the rows of a group into one value, so it has no rows of its own left
-// to fold: an aggregate over another aggregate has nothing to reduce. Whether the inner one
-// is spelled inside the call or named through its alias, the query is ill-formed, and the
-// analyzer is what says so - before codegen meets an argument it cannot lower.
+// to fold: an aggregate over another aggregate has nothing to reduce. The query is
+// ill-formed, and the analyzer is what says so - before codegen meets an argument it cannot
+// lower.
 class NestedAggregateTest : public turing::test::TuringTest {
 public:
     void initialize() override {
@@ -66,28 +63,6 @@ protected:
     std::unique_ptr<ProcedureManager> _procedures;
 };
 
-// The alias of an aggregate is a second name for one value per group, so counting its
-// distinct values counts nothing: every group holds exactly one
-TEST_F(NestedAggregateTest, rejectsDistinctCountOverAnAggregateAlias) {
-    expectRejected("MATCH (a)-[e]->(b) RETURN a, sum(e.duration) AS s, count(DISTINCT s)",
-                   nestedAggregateReason);
-}
-
-// The same query without the DISTINCT: what the rule turns away is the aggregate under the
-// aggregate, which the DISTINCT neither causes nor excuses
-TEST_F(NestedAggregateTest, rejectsCountOverAnAggregateAlias) {
-    expectRejected("MATCH (a)-[e]->(b) RETURN a, sum(e.duration) AS s, count(s)",
-                   nestedAggregateReason);
-}
-
-// A list around the alias is no screen: the argument still names an aggregate of the same
-// projection, so what collect would fold is one value per group rather than the rows of it
-TEST_F(NestedAggregateTest, rejectsAnAggregateAliasInsideAListArgument) {
-    expectRejected("MATCH (a)-[e]->(b) RETURN a, sum(e.duration) AS s, collect([s])",
-                   nestedAggregateReason);
-}
-
-// The nesting spelled out in the call rather than reached through an alias
 TEST_F(NestedAggregateTest, rejectsAnAggregateSpelledInsideAnAggregate) {
     expectRejected("MATCH (a)-[e]->(b) RETURN a, count(DISTINCT sum(e.duration))",
                    nestedCallReason);
@@ -104,13 +79,6 @@ TEST_F(NestedAggregateTest, acceptsTwoAggregatesSideBySide) {
 // rows of its own
 TEST_F(NestedAggregateTest, acceptsAnExpressionOverTwoAggregates) {
     EXPECT_NO_THROW(analyzeQuery("MATCH (a)-[e]->(b) RETURN count(a) + sum(e.duration)"));
-}
-
-// The alias of a grouping key is not an aggregate, so an aggregate may be taken over it:
-// the rule must reject the aggregate aliases alone
-TEST_F(NestedAggregateTest, acceptsAnAggregateOverAGroupingKeyAlias) {
-    EXPECT_NO_THROW(analyzeQuery("MATCH (a) RETURN 1 AS x, count(x)"));
-    EXPECT_NO_THROW(analyzeQuery("MATCH (a) RETURN a.age AS age, count(DISTINCT age)"));
 }
 
 // A plain aggregate over a column of the match, which is what the argument of an aggregate

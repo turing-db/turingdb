@@ -96,11 +96,11 @@ private:
 
 }
 
-// An expression over the alias of a constant item - the x + 1 of RETURN 1 AS x, x + 1 -
-// computes over constants alone, so it is one value standing for every row and is bound
-// above the loop the row-carrying columns are read in. A symbol is marked dynamic whatever
-// it names, so what a step shaped by rows may be handed has to be read off the emitted
-// column rather than off the expression behind it.
+// An expression over a constant a WITH published - the x + 1 of
+// WITH n, 1 AS x RETURN x, x + 1 - computes over constants alone, so it is one value
+// standing for every row and is bound above the loop the row-carrying columns are read in.
+// A symbol is marked dynamic whatever it names, so what a step shaped by rows may be handed
+// has to be read off the emitted column rather than off the expression behind it.
 class ConstantAliasExprColumnTest : public TuringTest {
 protected:
     void initialize() override {
@@ -184,28 +184,28 @@ protected:
 // No step shaped by rows, so the projection alone: this is the answer every case below has
 // to reproduce, the computed constant standing beside each name
 TEST_F(ConstantAliasExprColumnTest, projectsAnExprOverAConstantAlias) {
-    expectComputedNameRowSet("MATCH (n:Person) RETURN 1 AS x, x + 1, n.name", 2);
+    expectComputedNameRowSet("MATCH (n:Person) WITH n, 1 AS x RETURN x, x + 1, n.name", 2);
 }
 
 // The sort orders the name column, and the two constant columns ride along: keying on
 // either would order nothing, and gathering one would anchor the sort above the loop the
 // names are read in
 TEST_F(ConstantAliasExprColumnTest, sortsPastAnExprOverAConstantAlias) {
-    expectComputedNameRows("MATCH (n:Person) RETURN 1 AS x, x + 1, n.name ORDER BY n.name",
+    expectComputedNameRows("MATCH (n:Person) WITH n, 1 AS x RETURN x, x + 1, n.name ORDER BY n.name",
                            2,
                            personNames);
 }
 
 // The dedup keeps the rows the names distinguish, the constants riding along the same way
 TEST_F(ConstantAliasExprColumnTest, dedupsPastAnExprOverAConstantAlias) {
-    expectComputedNameRowSet("MATCH (n:Person) RETURN DISTINCT 1 AS x, x + 1, n.name", 2);
+    expectComputedNameRowSet("MATCH (n:Person) WITH n, 1 AS x RETURN DISTINCT x, x + 1, n.name", 2);
 }
 
 // The cut is charged to the column that carries the rows, the constants being one row
 // repeated rather than three of them
 TEST_F(ConstantAliasExprColumnTest, cutsPastAnExprOverAConstantAlias) {
     const Names expected = {"Adam", "Cyrus", "Doruk"};
-    expectComputedNameRows("MATCH (n:Person) RETURN 1 AS x, x + 1, n.name ORDER BY n.name LIMIT 3",
+    expectComputedNameRows("MATCH (n:Person) WITH n, 1 AS x RETURN x, x + 1, n.name ORDER BY n.name LIMIT 3",
                            2,
                            expected);
 }
@@ -213,7 +213,7 @@ TEST_F(ConstantAliasExprColumnTest, cutsPastAnExprOverAConstantAlias) {
 // A key of its own, computed over the alias of a constant and carried by no projected
 // column: it is still one value for every row, so it orders nothing
 TEST_F(ConstantAliasExprColumnTest, unprojectedExprOverAConstantAliasOrdersNothing) {
-    expectComputedNameRowSet("MATCH (n:Person) RETURN 1 AS x, x + 1, n.name ORDER BY x * 3", 2);
+    expectComputedNameRowSet("MATCH (n:Person) WITH n, 1 AS x RETURN x, x + 1, n.name ORDER BY x * 3", 2);
 }
 
 // The alias is what makes the column look row-carrying: spelled out, the same arithmetic
