@@ -165,6 +165,10 @@ private:
         // alias of that item shares with it
         ProjectedColumnMap _projectedColumns;
 
+        // Set while the keys of an ORDER BY are translated, the one place that reads the
+        // aliases of the projection before any variable is bound to their columns
+        bool _orderingProjection {false};
+
         // The element column a list comprehension's variable holds while the body of that
         // comprehension is translated: the block argument of the op's region. Nothing
         // outside that body names the variable, so the binding stands only while it is

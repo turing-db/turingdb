@@ -7482,14 +7482,12 @@ void NLExecutor::runCountSubqueryTally(NLExecutionContext* context, NLFunctionDa
     const ColumnVector<uint64_t>* tag = tally->getTag();
     if (!tag) {
         const Column* rows = tally->getRows();
-        state->addRows(0, rows->size());
+        state->addRows(rows->size());
 
         return;
     }
 
-    for (const uint64_t row : tag->getRaw()) {
-        state->addRows(row, 1);
-    }
+    state->addTaggedRows(tag->getRaw());
 }
 
 void NLExecutor::runCountSubqueryResult(NLExecutionContext* context, NLFunctionData* data) {

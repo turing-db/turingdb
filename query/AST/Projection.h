@@ -88,6 +88,7 @@ public:
     const Expr* findItemExpr(const Expr* key) const;
     bool hasItem(const Expr* key) const;
     bool hasVariableItem(const VarDecl* decl) const;
+    bool hasItemDecl(const VarDecl* decl) const;
 
 private:
     Limit* _limit {nullptr};

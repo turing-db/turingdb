@@ -262,6 +262,37 @@ void NLCountSubqueryState::reset() {
     _counts.assign(getRowCount(), 0);
 }
 
+void NLCountSubqueryState::addRows(size_t rowCount) {
+    bioassert(_counts.size() == 1, "An untagged step answers for 1 row, not {}", _counts.size());
+    _counts.front() += rowCount;
+}
+
+void NLCountSubqueryState::addTaggedRows(std::span<const uint64_t> tag) {
+    for (const uint64_t row : tag) {
+        bioassert(row < _counts.size(), "Row tag {} is outside the {} rows of the step", row, _counts.size());
+        _counts[row]++;
+    }
+}
+
+NLCountSubqueryResetData::NLCountSubqueryResetData(NLCountSubqueryState* state, ColumnVector<uint64_t>* tag)
+    : _state(state),
+    _tag(tag)
+{
+}
+
+NLCountSubqueryTallyData::NLCountSubqueryTallyData(NLCountSubqueryState* state, const ColumnVector<uint64_t>* tag, const Column* rows)
+    : _state(state),
+    _tag(tag),
+    _rows(rows)
+{
+}
+
+NLCountSubqueryResultData::NLCountSubqueryResultData(NLCountSubqueryState* state, ColumnVector<uint64_t>* result)
+    : _state(state),
+    _result(result)
+{
+}
+
 void NLPatternComprehensionState::reset(size_t rowCount) {
     _rowCount = rowCount;
     _values.clear();

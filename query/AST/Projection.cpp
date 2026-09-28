@@ -138,3 +138,21 @@ bool Projection::hasVariableItem(const VarDecl* decl) const {
 
     return false;
 }
+
+bool Projection::hasItemDecl(const VarDecl* decl) const {
+    if (!decl) {
+        return false;
+    }
+
+    for (const ReturnItem& item : _items) {
+        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
+            if ((*itemExpr)->getExprVarDecl() == decl) {
+                return true;
+            }
+        } else if (std::get<VarDecl*>(item) == decl) {
+            return true;
+        }
+    }
+
+    return false;
+}
