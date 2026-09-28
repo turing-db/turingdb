@@ -62,6 +62,32 @@ std::optional<PropertyType> MetadataBuilder::findPropertyType(std::string_view p
     return _metadata->_propTypeMap.get(propTypeName);
 }
 
+void MetadataBuilder::forEachPropertyType(const PropertyTypeVisitor& visit) const {
+    std::shared_lock lock(_spinLock);
+
+    for (const PropertyTypeMap::Pair& pair : _metadata->propTypes()) {
+        visit(pair._pt);
+    }
+}
+
+void MetadataBuilder::beginStatement() {
+    std::shared_lock lock(_spinLock);
+
+    _statementLabels = _metadata->_labelMap.getCount();
+    _statementLabelSets = _metadata->_labelsetMap.getCount();
+    _statementEdgeTypes = _metadata->_edgeTypeMap.getCount();
+    _statementPropertyTypes = _metadata->_propTypeMap.getCount();
+}
+
+void MetadataBuilder::rollbackStatement() {
+    std::unique_lock lock(_spinLock);
+
+    _metadata->_labelMap.truncate(_statementLabels);
+    _metadata->_labelsetMap.truncate(_statementLabelSets);
+    _metadata->_edgeTypeMap.truncate(_statementEdgeTypes);
+    _metadata->_propTypeMap.truncate(_statementPropertyTypes);
+}
+
 std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& prevMetadata, GraphMetadata* metadata) {
     Profile profile("MetadataBuilder::create");
 

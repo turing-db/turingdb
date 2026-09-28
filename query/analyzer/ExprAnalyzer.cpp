@@ -951,6 +951,15 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::String;
     }
 
+    if (varType == EvaluatedType::Null) {
+        expr->setEntityVarDecl(varDecl);
+        expr->setPropertyName(propName->getName());
+        expr->setType(EvaluatedType::Null);
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Null));
+
+        return ValueType::Invalid;
+    }
+
     if (varType != EvaluatedType::NodePattern && varType != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
             "Variable '{}' is '{}' it must be a node or edge",
@@ -973,6 +982,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     // A name no property in the graph carries has no value on any row and no type: the
     // read is null.
     bool readsAsNull = false;
+    bool readsTaggedCells = false;
 
     if (!propTypeFound) {
         // Property does not exist yet
@@ -981,7 +991,12 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         auto it = _toBeCreatedTypes.find(name);
 
         if (it == _toBeCreatedTypes.end()) {
-            if (allowCreate) {
+            const bool createdFromTaggedCells = _toBeCreatedFromTaggedCells.contains(name);
+            const bool writesAType = allowCreate && defaultType != ValueType::Invalid;
+
+            if (createdFromTaggedCells && !writesAType) {
+                readsTaggedCells = true;
+            } else if (allowCreate) {
                 // Property does not exist but is created
                 addToBeCreatedType(propName->getName(), defaultType, expr);
                 it = _toBeCreatedTypes.find(name);
@@ -990,7 +1005,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
             }
         }
 
-        if (!readsAsNull) {
+        if (!readsAsNull && !readsTaggedCells) {
             // Property is meant to be created in this query
             vt = it->second;
             expr->setCreatedValueType(vt);
@@ -1003,9 +1018,9 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         expr->setPropertyName(propName->getName());
     }
 
-    EvaluatedType type = EvaluatedType::Null;
+    EvaluatedType type = readsTaggedCells ? EvaluatedType::ListItem : EvaluatedType::Null;
 
-    if (!readsAsNull) {
+    if (!readsAsNull && !readsTaggedCells) {
         const auto maybeEvalType = toEvaluatedType(vt);
         if (!maybeEvalType.has_value()) {
             const std::string_view name = propName->getName();
@@ -1526,6 +1541,10 @@ void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, con
 
     // Register the new type
     _toBeCreatedTypes[name] = type;
+}
+
+void ExprAnalyzer::addToBeCreatedFromTaggedCells(std::string_view name) {
+    _toBeCreatedFromTaggedCells.insert(name);
 }
 
 bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {

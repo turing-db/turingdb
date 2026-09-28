@@ -122,20 +122,97 @@ CommitWriteBuffer::PendingEdge& CommitWriteBuffer::newPendingEdge(ExistingOrPend
 
 // Called when executing a DELETE NODES query
 void CommitWriteBuffer::addDeletedNodes(const std::vector<NodeID>& newDeletedNodes) {
-    _deletedNodes.insert(newDeletedNodes.begin(), newDeletedNodes.end());
+    for (const NodeID node : newDeletedNodes) {
+        recordDeletedNode(node);
+    }
 }
 
 void CommitWriteBuffer::addDeletedNode(const NodeID& newDeletedNode) {
-    _deletedNodes.insert(newDeletedNode);
+    recordDeletedNode(newDeletedNode);
 }
 
 // Called when executing a DELETE EDGES query
 void CommitWriteBuffer::addDeletedEdges(const std::vector<EdgeID>& newDeletedEdges) {
-    _deletedEdges.insert(newDeletedEdges.begin(), newDeletedEdges.end());
+    for (const EdgeID edge : newDeletedEdges) {
+        recordDeletedEdge(edge);
+    }
 }
 
 void CommitWriteBuffer::addDeletedEdge(const EdgeID& newDeletedEdge) {
-    _deletedEdges.insert(newDeletedEdge);
+    recordDeletedEdge(newDeletedEdge);
+}
+
+void CommitWriteBuffer::recordDeletedNode(NodeID node) {
+    const bool inserted = _deletedNodes.insert(node).second;
+    if (inserted && _statementOpen) {
+        _statementDeletedNodes.push_back(node);
+    }
+}
+
+void CommitWriteBuffer::recordDeletedEdge(EdgeID edge) {
+    const bool inserted = _deletedEdges.insert(edge).second;
+    if (inserted && _statementOpen) {
+        _statementDeletedEdges.push_back(edge);
+    }
+}
+
+void CommitWriteBuffer::recordDeletedPendingNode(size_t offset) {
+    const bool inserted = _deletedPendingNodes.insert(offset).second;
+    if (inserted && _statementOpen) {
+        _statementDeletedPendingNodes.push_back(offset);
+    }
+}
+
+void CommitWriteBuffer::recordDeletedPendingEdge(size_t offset) {
+    const bool inserted = _deletedPendingEdges.insert(offset).second;
+    if (inserted && _statementOpen) {
+        _statementDeletedPendingEdges.push_back(offset);
+    }
+}
+
+void CommitWriteBuffer::beginStatement() {
+    _statementOpen = true;
+    _statementPendingNodes = _pendingNodes.size();
+    _statementPendingEdges = _pendingEdges.size();
+    _statementUpdatedNodes = _updatedNodes.size();
+    _statementUpdatedEdges = _updatedEdges.size();
+    _statementPendingIndexes = _pendingIndexes.size();
+    _statementDroppedIndexes = _droppedIndexes.size();
+}
+
+void CommitWriteBuffer::endStatement() {
+    _statementOpen = false;
+    _statementDeletedNodes.clear();
+    _statementDeletedEdges.clear();
+    _statementDeletedPendingNodes.clear();
+    _statementDeletedPendingEdges.clear();
+}
+
+void CommitWriteBuffer::rollbackStatement() {
+    for (const NodeID node : _statementDeletedNodes) {
+        _deletedNodes.erase(node);
+    }
+
+    for (const EdgeID edge : _statementDeletedEdges) {
+        _deletedEdges.erase(edge);
+    }
+
+    for (const size_t offset : _statementDeletedPendingNodes) {
+        _deletedPendingNodes.erase(offset);
+    }
+
+    for (const size_t offset : _statementDeletedPendingEdges) {
+        _deletedPendingEdges.erase(offset);
+    }
+
+    _pendingNodes.erase(_pendingNodes.begin() + _statementPendingNodes, _pendingNodes.end());
+    _pendingEdges.erase(_pendingEdges.begin() + _statementPendingEdges, _pendingEdges.end());
+    _updatedNodes.erase(_updatedNodes.begin() + _statementUpdatedNodes, _updatedNodes.end());
+    _updatedEdges.erase(_updatedEdges.begin() + _statementUpdatedEdges, _updatedEdges.end());
+    _pendingIndexes.erase(_pendingIndexes.begin() + _statementPendingIndexes, _pendingIndexes.end());
+    _droppedIndexes.erase(_droppedIndexes.begin() + _statementDroppedIndexes, _droppedIndexes.end());
+
+    endStatement();
 }
 
 void CommitWriteBuffer::addNodeUpdate(NodeID id, UntypedProperty& updatedProperty) {
@@ -163,7 +240,7 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
         for (const EdgeRecord& record : outEdgesRg) {
             // Only add edges which are not already deleted
             if (!view.tombstones().containsEdge(record._edgeID)) {
-                _deletedEdges.insert(record._edgeID);
+                recordDeletedEdge(record._edgeID);
             }
         }
     }
@@ -173,7 +250,7 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
         for (const EdgeRecord& record : inEdgesRg) {
             // Only add edges which are not already deleted
             if (!view.tombstones().containsEdge(record._edgeID)) {
-                _deletedEdges.insert(record._edgeID);
+                recordDeletedEdge(record._edgeID);
             }
         }
     }
@@ -211,19 +288,15 @@ NodeID CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
     return nodeID;
 }
 
-void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder, Tombstones& tombstones) {
-    std::vector<NodeID> deleted;
-
+void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
     for (size_t offset = 0; offset < _pendingNodes.size(); offset++) {
         const bool isDeleted = _deletedPendingNodes.contains(offset);
         const NodeID nodeID = buildPendingNode(builder, _pendingNodes[offset], isDeleted);
 
         if (isDeleted) {
-            deleted.push_back(nodeID);
+            builder.addDeletedNode(nodeID);
         }
     }
-
-    tombstones.addNodeTombstones(deleted);
 }
 
 EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
@@ -290,38 +363,39 @@ EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
     return newEdgeID;
 }
 
-void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder, Tombstones& tombstones) {
-    std::vector<EdgeID> deleted;
-
+void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
     for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
         const bool isDeleted = _deletedPendingEdges.contains(offset);
         const EdgeID edgeID = buildPendingEdge(builder, _pendingEdges[offset], isDeleted);
 
         if (isDeleted && edgeID.isValid()) {
-            deleted.push_back(edgeID);
+            builder.addDeletedEdge(edgeID);
         }
     }
-
-    tombstones.addEdgeTombstones(deleted);
 }
 
-void CommitWriteBuffer::buildPending(DataPartBuilder& builder, Tombstones& tombstones) {
-    buildPendingNodes(builder, tombstones);
-    buildPendingEdges(builder, tombstones);
+void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
+    buildPendingNodes(builder);
+    buildPendingEdges(builder);
+}
+
+void CommitWriteBuffer::tombstoneDeletedPending(DataPartBuilder& builder, Tombstones& tombstones) {
+    tombstones.addNodeTombstones(builder.deletedNodes());
+    tombstones.addEdgeTombstones(builder.deletedEdges());
 }
 
 void CommitWriteBuffer::addDeletedPendingNode(PendingNodeOffset offset) {
-    _deletedPendingNodes.insert(offset);
+    recordDeletedPendingNode(offset);
 }
 
 void CommitWriteBuffer::addDeletedPendingEdge(size_t offset) {
-    _deletedPendingEdges.insert(offset);
+    recordDeletedPendingEdge(offset);
 }
 
 void CommitWriteBuffer::addHangingPendingEdges() {
     for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
         if (touchesDeletedNode(_pendingEdges[offset])) {
-            _deletedPendingEdges.insert(offset);
+            recordDeletedPendingEdge(offset);
         }
     }
 }

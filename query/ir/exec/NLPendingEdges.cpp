@@ -211,6 +211,13 @@ bool NLPendingEdgeHop::walks(size_t offset, NodeID& other) const {
         return false;
     }
 
+    // Walked either way, a self-loop leaves its node and arrives at it again: the way out
+    // has found it already
+    const bool isSelfLoop = nodeIDOf(edge.src, _firstPendingNodeID) == nodeIDOf(edge.tgt, _firstPendingNodeID);
+    if (_direction == Direction::Either && _incoming && isSelfLoop) {
+        return false;
+    }
+
     const CommitWriteBuffer::ExistingOrPendingNode& otherEnd = walksIn() ? edge.src : edge.tgt;
     if (_endpointLabels.isValid() && !carriesLabels(_writeBuffer, *_view, otherEnd, _endpointLabels)) {
         return false;

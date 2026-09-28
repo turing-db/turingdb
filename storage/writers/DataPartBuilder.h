@@ -79,6 +79,13 @@ public:
     size_t getPartIndex() const { return _partIndex; };
     std::vector<NodeID>& getTmpNodeIDs() { return _tmpNodeIDVector; }
 
+    // A node or an edge the commit creates and deletes again is built, then tombstoned. It is
+    // named here by the ID the builder gave it, which the datapart renumbers as it loads
+    void addDeletedNode(NodeID nodeID) { _deletedNodes.push_back(nodeID); }
+    void addDeletedEdge(EdgeID edgeID) { _deletedEdges.push_back(edgeID); }
+    std::vector<NodeID>& deletedNodes() { return _deletedNodes; }
+    std::vector<EdgeID>& deletedEdges() { return _deletedEdges; }
+
     MetadataBuilder& getMetadata() { return *_metadata; }
 
     /// Checks if the current property container for T contains a property for I at pid
@@ -103,6 +110,8 @@ private:
 
     std::vector<LabelSetHandle> _coreNodeLabelSets;
     std::vector<NodeID> _tmpNodeIDVector;
+    std::vector<NodeID> _deletedNodes;
+    std::vector<EdgeID> _deletedEdges;
     std::vector<EdgeRecord> _edges;
     /**
      * @brief Map from EdgeID to EdgeRecord for edges that do not exist in this datapart.

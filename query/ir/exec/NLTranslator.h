@@ -68,7 +68,7 @@ private:
         Unwind,
         ProcedureInit,
         OptionalDrain,
-        UnionDrain,
+        RowDrain,
         CrossProduct,
         HashJoinProbe,
         EachRow,
@@ -94,8 +94,8 @@ private:
         // The accumulator an OptionalDrain iterator drains; null for the other kinds.
         NLOptionalState* _optionalState {nullptr};
 
-        // The accumulator a UnionDrain iterator drains; null for the other kinds.
-        NLUnionState* _unionState {nullptr};
+        // The accumulator a RowDrain iterator drains; null for the other kinds.
+        NLRowState* _rowState {nullptr};
 
         // The call a ProcedureInit iterator drives; null for the other kinds.
         NLProcedureState* _procedureState {nullptr};
@@ -109,9 +109,10 @@ private:
         llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
         llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
 
-        // The step's chunks an EachRow iterator walks one row at a time; empty for the
-        // other kinds.
+        // The step's chunks an EachRow iterator walks one row at a time, and the positions
+        // of the entity chunks that group rows into steps; empty for the other kinds.
         llvm::SmallVector<mlir::Value, 4> _eachRowColumns;
+        llvm::SmallVector<int64_t, 2> _eachRowKeys;
 
         // The build side a HashJoinProbe iterator matches against and the probe columns it
         // walks, in db.yield order; null and empty for the other kinds.
@@ -269,7 +270,7 @@ private:
     // nl.optional_collect and the nl.for over nl.optional_drain find the same buffers and
     // matched flags
     llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
-    llvm::DenseMap<mlir::Value, NLUnionState*> _unionStates;
+    llvm::DenseMap<mlir::Value, NLRowState*> _rowStates;
     llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
 
     // nl.pattern_comprehension_state handle SSA value -> the accumulator it names, so the
@@ -280,7 +281,10 @@ private:
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
     llvm::DenseMap<mlir::Value, NLProcedureState*> _procedureStates;
 
-    void translateBlock(mlir::Block& block, NLStmtContainer* body);
+    // Translates the ops of @param block in order, or only those of @param only
+    void translateBlock(mlir::Block& block,
+                        NLStmtContainer* body,
+                        const llvm::DenseSet<mlir::Operation*>* only = nullptr);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
 
@@ -435,6 +439,11 @@ private:
                           llvm::SmallVectorImpl<EdgeTypeID>& resolved) const;
     std::optional<LabelID> findLabel(llvm::StringRef name) const;
     std::optional<PropertyType> findPropertyType(llvm::StringRef name) const;
+
+    // A read the analyzer typed from a write of its own query - SET n.c = coalesce(n.c, 0) -
+    // can come before that write, and so before its translation registers the property:
+    // the read registers it, with the type the analyzer gave both
+    std::optional<PropertyType> findFetchedPropertyType(llvm::StringRef name, mlir::Type resultChunkType) const;
 
     // Records on @param data the ID of every label set this change knows that a node must
     // carry at least @param constraint to be in
@@ -690,22 +699,22 @@ private:
     // produced by an nl.optional_buffer translated earlier.
     NLOptionalState* optionalStateFor(mlir::Value handle) const;
 
-    // Translate an nl.union_buffer: allocate the runtime accumulator, map the handle to it
+    // Translate an nl.row_buffer: allocate the runtime accumulator, map the handle to it
     // and record the reset statement. The buffers are allocated by the first collect.
-    void translateUnionBuffer(mlir::nl::UnionBuffer buffer, NLStmtContainer* body);
+    void translateRowBuffer(mlir::nl::RowBuffer buffer, NLStmtContainer* body);
 
-    // Translate the nl.union_collect of one branch: the first allocates the buffers, and
+    // Translate one nl.row_collect: the first on a handle allocates the buffers, and
     // each records the per-step statement appending its columns to them
-    void translateUnionCollect(mlir::nl::UnionCollect collect, NLStmtContainer* body);
+    void translateRowCollect(mlir::nl::RowCollect collect, NLStmtContainer* body);
 
-    // Translate the nl.for over an nl.union_drain iterator: one loop variable per buffer,
+    // Translate the nl.for over an nl.row_drain iterator: one loop variable per buffer,
     // gathered from it chunk by chunk
-    void translateUnionLoop(const IteratorConfig& config,
-                            mlir::Block& loopBody,
-                            NLLimitState* limit,
-                            NLStmtContainer* body);
+    void translateRowLoop(const IteratorConfig& config,
+                          mlir::Block& loopBody,
+                          NLLimitState* limit,
+                          NLStmtContainer* body);
 
-    NLUnionState* unionStateFor(mlir::Value handle) const;
+    NLRowState* rowStateFor(mlir::Value handle) const;
 
     // Translate an nl.exists_buffer: allocate the runtime accumulator, map the handle to
     // it, record this step's input chunks and the row tag column, and record the reset
@@ -887,6 +896,14 @@ private:
                                 bool isNode,
                                 NLStmtContainer* body);
 
+    void translateTaggedPropertyFetch(llvm::StringRef name,
+                                      mlir::Value inputValue,
+                                      mlir::Value pendingValue,
+                                      bool allPending,
+                                      mlir::Value resultValue,
+                                      bool isNode,
+                                      NLStmtContainer* body);
+
     // Whether a chunk holds nothing but entities this change wrote and has not committed.
     // The op says so when a query part cut stands between the create and the read; within
     // one part the chunk is the create's own result, which is what the sets hold
@@ -927,15 +944,38 @@ private:
     void collectWrittenMergeProperties(const std::vector<NLMergeProperty>& properties,
                                        NLMergeScanProperties& writtenProperties);
 
-    // The property a set writes to. A write of a null or of list elements carries no single
-    // type on its value chunk, so the property's own type is what it stages, and a name no
-    // property in the graph carries has nothing to remove - answered by an invalid property
-    // rather than by interning the name.
-    PropertyType setPropertyType(llvm::StringRef propName,
-                                 mlir::Type valueChunkType,
-                                 bool writesNull) const;
+    // A property a create writes. Tagged cells the graph has no property for yet are named
+    // rather than given one: the first cell holding a value types it when the create runs.
+    void translateCreateProperty(llvm::StringRef propName,
+                                 mlir::Value propValue,
+                                 NLCreateProperty& property) const;
+
+    // The property a create or a set writes to. A write of a null or of tagged cells carries
+    // no type on its value chunk, so the property's own type is what it stages. A name no
+    // property carries yet answers an invalid property rather than being interned: the write
+    // looks it up when it runs, where tagged cells type it and a null may find it.
+    PropertyType writtenPropertyType(llvm::StringRef propName,
+                                     mlir::Type valueChunkType,
+                                     bool untypedValue) const;
 
     void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
+    void translateSetNodeProperties(mlir::nl::SetNodeProperties setNodeProperties, NLStmtContainer* body);
+    void translateSetEdgeProperties(mlir::nl::SetEdgeProperties setEdgeProperties, NLStmtContainer* body);
+
+    // A set whose value reads the property it writes applies row by row, so it computes
+    // its value again, from that read on, for the rows reading what an earlier row wrote.
+    // The ops selecting its entities are not among the ones it reruns.
+    void collectSetRereads(mlir::Operation* setOp,
+                           mlir::Value entities,
+                           mlir::Value value,
+                           llvm::StringRef property,
+                           bool isNode,
+                           NLSetRereads& rereads);
+
+    void translateRereads(mlir::Block& block,
+                          const llvm::DenseSet<mlir::Operation*>& rerun,
+                          mlir::Value value,
+                          NLSetRereads& rereads);
 
     void translateSetEdgeProperty(mlir::nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body);
 

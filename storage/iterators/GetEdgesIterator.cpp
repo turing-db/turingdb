@@ -26,6 +26,10 @@ void GetEdgesIterator::reset() {
     Iterator::reset();
     _nodeIt = _inputNodeIDs->cend();
     init();
+
+    if (_partIt.isNotEnd()) {
+        nextValid();
+    }
 }
 
 void GetEdgesIterator::init() {
@@ -90,10 +94,30 @@ void GetEdgesIterator::advancePartIterator(size_t n) {
     }
 }
 
+// A self-loop is among a node's incoming edges as well as its outgoing ones, and the
+// outgoing pass has already emitted it
+bool GetEdgesIterator::isIncomingSelfLoop() const {
+    return _direction == Direction::Incoming && _edgeIt->_otherID == _edgeIt->_nodeID;
+}
+
+std::span<const EdgeRecord>::iterator GetEdgesIterator::rangeEnd() const {
+    if (_direction == Direction::Outgoing) {
+        return _edges.end();
+    }
+
+    return std::find_if(_edgeIt, _edges.end(), [](const EdgeRecord& edge) {
+        return edge._otherID == edge._nodeID;
+    });
+}
+
 void GetEdgesIterator::nextValid() {
     while (true) {
         if (_edgeIt != _edges.end()) {
-            // Valid edge found
+            if (isIncomingSelfLoop()) {
+                _edgeIt++;
+                continue;
+            }
+
             return;
         }
 
@@ -180,7 +204,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
-            const size_t avail = std::distance(_edgeIt, _edges.end());
+            const size_t avail = std::distance(_edgeIt, rangeEnd());
             const size_t rangeSize = std::min(remainingToMax, avail);
             const size_t prevSize = _indices->size();
             const size_t newSize = prevSize + rangeSize;

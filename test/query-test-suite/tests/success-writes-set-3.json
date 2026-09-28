@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) SET n += {name: \"Node\"}",
+  "expect": {
+    "result": "",
+    "resultJson": "{\"header\":{\"column_names\":[],\"column_types\":[]},\"data\":[[]]}"
+  },
+  "tags": [
+    "success",
+    "writes",
+    "set"
+  ],
+  "write-required": true
+}

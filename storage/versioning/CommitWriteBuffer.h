@@ -109,7 +109,13 @@ public:
       * as registering all newly created nodes/edges in the associated @ref WriteSet of
       * @ref _journal
       */
-     void buildPending(DataPartBuilder& builder, Tombstones& tombstones);
+     void buildPending(DataPartBuilder& builder);
+
+     /**
+      * @brief Tombstones the entities @param builder built for this commit to delete again,
+      * under the IDs its datapart gave them once loaded.
+      */
+     static void tombstoneDeletedPending(DataPartBuilder& builder, Tombstones& tombstones);
 
      void applyUpdates(DataPartBuilder& builder);
 
@@ -205,6 +211,16 @@ public:
     void addPendingIndex(const WeakArc<Index>& index);
     void addDroppedIndex(const WeakArc<Index>& index);
 
+    /**
+     * @brief Opens the statement whose writes a failure takes back: a statement that
+     * fails leaves nothing of itself for the commit. It reads no pending entity an
+     * earlier statement staged, so taking it back is dropping what it appended and the
+     * deletions it recorded.
+     */
+    void beginStatement();
+    void endStatement();
+    void rollbackStatement();
+
     void setFlushed() { _flushed = true; }
     void setUnflushed() { _flushed = false; }
     bool isFlushed() const { return _flushed; }
@@ -252,12 +268,24 @@ private:
     PendingIndexes _pendingIndexes;
     DroppedIndexes _droppedIndexes;
 
+    bool _statementOpen {false};
+    size_t _statementPendingNodes {0};
+    size_t _statementPendingEdges {0};
+    size_t _statementUpdatedNodes {0};
+    size_t _statementUpdatedEdges {0};
+    size_t _statementPendingIndexes {0};
+    size_t _statementDroppedIndexes {0};
+    std::vector<NodeID> _statementDeletedNodes;
+    std::vector<EdgeID> _statementDeletedEdges;
+    std::vector<size_t> _statementDeletedPendingNodes;
+    std::vector<size_t> _statementDeletedPendingEdges;
+
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }
 
     // Collection of methods to write the buffer to the provided datapart builder
-    void buildPendingNodes(DataPartBuilder& builder, Tombstones& tombstones);
-    void buildPendingEdges(DataPartBuilder& builder, Tombstones& tombstones);
+    void buildPendingNodes(DataPartBuilder& builder);
+    void buildPendingEdges(DataPartBuilder& builder);
 
     NodeID buildPendingNode(DataPartBuilder& builder, PendingNode& node, bool deleted);
     void addPendingNodeProperties(DataPartBuilder& builder, PendingNode& node);
@@ -265,6 +293,11 @@ private:
     EdgeID buildPendingEdge(DataPartBuilder& builder, PendingEdge& edge, bool deleted);
 
     bool touchesDeletedNode(const PendingEdge& edge) const;
+
+    void recordDeletedNode(NodeID node);
+    void recordDeletedEdge(EdgeID edge);
+    void recordDeletedPendingNode(size_t offset);
+    void recordDeletedPendingEdge(size_t offset);
 
     void applyNodeUpdates(DataPartBuilder& builder);
     void applyEdgeUpdates(DataPartBuilder& builder);

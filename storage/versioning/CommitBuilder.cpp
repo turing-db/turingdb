@@ -105,6 +105,8 @@ CommitResult<void> CommitBuilder::buildAllPending(JobSystem& jobsystem) {
             return res;
         }
 
+        CommitWriteBuffer::tombstoneDeletedPending(*builder, _commitData->_tombstones);
+
         historyBuilder.addDatapart(part);
     }
 
@@ -157,7 +159,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         // We create a single datapart when flushing the buffer,
         // to ensure it is synced with the metadata provided when rebasing main
         DataPartBuilder& dpBuilder = newBuilder();
-        wb.buildPending(dpBuilder, tombstones);
+        wb.buildPending(dpBuilder);
     }
 
     if (wb.containsUpdates()) {

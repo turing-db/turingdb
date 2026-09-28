@@ -1,5 +1,7 @@
 #pragma once
 
+#include <initializer_list>
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -186,6 +188,7 @@ private:
     // The columns one limit's walk has reached, so a column reached along many paths of
     // the dataflow is walked once rather than once per path
     llvm::DenseMap<mlir::Value, ProducerWalkVisit> _producerWalkVisits;
+    mlir::Operation* _walkedLimit {nullptr};
 
     // A db.sort whose result is capped by an adjacent terminal db.limit fuses into
     // a bounded top-K: the count is baked into the nl.sort_buffer and the db.limit
@@ -273,8 +276,11 @@ private:
     void lowerCreateEdge(mlir::db::CreateEdge createEdge);
 
     void lowerMerge(mlir::db::Merge merge);
+    void openMergeRowLoop(std::initializer_list<llvm::SmallVectorImpl<mlir::Value>*> chunkLists);
     void lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty);
     void lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty);
+    void lowerSetNodeProperties(mlir::db::SetNodeProperties setNodeProperties);
+    void lowerSetEdgeProperties(mlir::db::SetEdgeProperties setEdgeProperties);
     void lowerDeleteNode(mlir::db::DeleteNode deleteNode);
     void lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
@@ -286,7 +292,7 @@ private:
     void lowerUnion(mlir::db::Union unionOp);
 
     // Lowers a union with results - the body of a CALL - into branches that collect their
-    // rows into one nl.union_buffer, drained by the loop the rest of the body lowers into
+    // rows into one nl.row_buffer, drained by the loop the rest of the body lowers into
     void lowerUnionResults(mlir::db::Union unionOp);
 
     // Brings a union branch's result columns to the value type the whole result carries,
@@ -389,6 +395,8 @@ private:
     // yields the sorted rows. db.sort's results map to that emit loop's
     // variables, so the db.output that follows lowers into the emit loop body.
     void lowerSort(mlir::db::Sort sort);
+    void lowerRowBarrier(mlir::db::RowBarrier barrier);
+    void lowerEachRow(mlir::db::EachRow eachRow);
 
     // Lower a db.remove_duplicates: hoist an nl.distinct seen-set handle to the
     // top of the entry block, then place an nl.distinct_filter in the innermost

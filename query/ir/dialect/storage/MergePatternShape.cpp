@@ -125,6 +125,43 @@ LogicalResult mlir::verifyMergePattern(Operation* op,
     return success();
 }
 
+LogicalResult mlir::verifyMergeRepeatedNodes(Operation* op,
+                                             ArrayAttr nodeLabels,
+                                             ArrayAttr nodePropNames,
+                                             std::optional<ArrayRef<int64_t>> repeatedNodes) {
+    if (!repeatedNodes) {
+        return success();
+    }
+
+    const ArrayRef<int64_t> pairs = *repeatedNodes;
+    if (pairs.size() % 2 != 0) {
+        return op->emitOpError("repeats must name pairs of chain nodes, but has ") << pairs.size() << " entries";
+    }
+
+    const int64_t nodeCount = static_cast<int64_t>(nodeLabels.size());
+
+    for (size_t index = 0; index < pairs.size(); index += 2) {
+        const int64_t repeat = pairs[index];
+        const int64_t repeated = pairs[index + 1];
+
+        if (repeated < 0 || repeated >= repeat || repeat >= nodeCount) {
+            return op->emitOpError("repeats pairs chain node ") << repeat << " with " << repeated
+                   << ", which is not an earlier one of " << nodeCount;
+        }
+
+        const bool sameLabels = nodeLabels[repeat] == nodeLabels[repeated];
+        const bool looksUp = !cast<ArrayAttr>(nodeLabels[repeated]).empty();
+        const bool holdsNoProperty = cast<ArrayAttr>(nodePropNames[repeat]).empty();
+
+        if (!sameLabels || !looksUp || !holdsNoProperty) {
+            return op->emitOpError("chain node ") << repeat << " repeats " << repeated
+                   << ", so it carries that node's labels and no property of its own";
+        }
+    }
+
+    return success();
+}
+
 size_t mlir::mergeMatchedNodeCount(ArrayAttr nodeLabels) {
     size_t matched = 0;
     for (const Attribute labels : nodeLabels) {

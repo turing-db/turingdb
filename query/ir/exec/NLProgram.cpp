@@ -308,7 +308,7 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
-size_t NLUnionState::getRowCount() const {
+size_t NLRowState::getRowCount() const {
     if (_buffers.empty()) {
         return 0;
     }
@@ -316,7 +316,7 @@ size_t NLUnionState::getRowCount() const {
     return _buffers.front()->size();
 }
 
-void NLUnionState::reset() {
+void NLRowState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();
     }
@@ -523,6 +523,15 @@ NLMergeNodeIndex::NLMergeNodeIndex(const LabelSet& labels,
 }
 
 NLMergeNodeIndex::~NLMergeNodeIndex() {
+}
+
+// A node keyed again under a key it is filed under already keeps the one entry
+void NLMergeNodeIndex::add(const std::string& key, const NLMergeRef& ref) {
+    std::vector<NLMergeRef>& refs = _byKey[key];
+
+    if (!std::ranges::contains(refs, ref)) {
+        refs.push_back(ref);
+    }
 }
 
 std::span<const NLMergeRef> NLMergeNodeIndex::find(const std::string& key) const {

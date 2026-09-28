@@ -47,20 +47,12 @@ TEST_F(CallSubqueryWriteTest, setsAPropertyThroughAnImportedVariable) {
     expectRows("MATCH (p:Person) WHERE p.visited = true RETURN count(p)", {{"8"}});
 }
 
-// A body that writes is an updating clause of its part, so a reading clause after it needs
-// a WITH between them
-TEST_F(CallSubqueryWriteTest, rejectsAReadingClauseAfterAWritingBody) {
-    ChangeID changeID;
-    openChange(changeID);
-
-    const QueryStatus status = runWrite("MATCH (p:Person) CALL (p) { CREATE (:Audit) } "
-                                        "MATCH (q:Person) RETURN count(q)",
-                                        changeID);
-    ASSERT_FALSE(status.isOk());
-
-    EXPECT_NE(status.getError().find("A reading clause cannot follow an updating clause"),
-              std::string::npos)
-        << "error: " << status.getError();
+// A CALL is no updating clause of its part, so a reading clause may follow one whose body
+// writes
+TEST_F(CallSubqueryWriteTest, readsAfterAWritingBody) {
+    expectWriteRows("MATCH (p:Person) CALL (p) { CREATE (:Audit) } "
+                    "MATCH (q:Person) RETURN count(q)",
+                    {{"64"}});
 }
 
 // A body importing nothing still writes once per row in flight

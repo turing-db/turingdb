@@ -69,6 +69,16 @@ size_t LabelMap::getCount() const {
     return _nameMap.size();
 }
 
+void LabelMap::truncate(size_t count) {
+    for (size_t index = count; index < _container.size(); index++) {
+        const Pair& pair = _container[index];
+        _nameMap.erase(*pair._name);
+        _idMap.erase(pair._id);
+    }
+
+    _container.erase(_container.begin() + count, _container.end());
+}
+
 LabelID LabelMap::getOrCreate(std::string_view name) {
     auto it = _nameMap.find(name);
 

@@ -26,6 +26,7 @@
 #include "IRConstantColumn.h"
 #include "PropertyScanLiteral.h"
 #include "DBOps.h"
+#include "DBWrites.h"
 
 #include "BioAssert.h"
 
@@ -89,7 +90,7 @@ bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
         return false;
     }
 
-    return true;
+    return !writesBetween(chain.scan, filter.getOperation());
 }
 
 void eraseIfUnused(Operation* op) {
@@ -449,6 +450,11 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
         crossedProducer = true;
     }
 
+    Operation* const anchorProducer = pushable._anchor.getDefiningOp();
+    if (!anchorProducer || writesBetween(anchorProducer, filter.getOperation())) {
+        return false;
+    }
+
     // Crossing only filters leaves the predicate over the rows the anchor produced already:
     // moving it would swap two filters over the same rows, or step between a constraint
     // filter and the op that is about to absorb it.
@@ -543,7 +549,7 @@ bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
         source._labels = scanByLabel.getLabels();
     }
 
-    return true;
+    return !writesBetween(source._op, filter.getOperation());
 }
 
 Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
@@ -2567,7 +2573,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     } else if (isa<Unwind>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
         return true;
-    } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
+    } else if (isa<Limit, Skip, Sort, RowBarrier, GroupAggregate, Collect>(op)) {
         layout = CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
         return true;
     } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
@@ -3353,12 +3359,18 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         llvm::SmallVector<Operation*> reads;
         llvm::DenseSet<Attribute> writtenNodeProperties;
         llvm::DenseSet<Attribute> writtenEdgeProperties;
+        bool writesAnyNodeProperty = false;
+        bool writesAnyEdgeProperty = false;
         root->walk([&](Operation* op) {
             StringAttr writtenProperty;
             bool writesNodes = false;
 
             if (isa<GetNodeProperties, GetEdgeProperties>(op)) {
                 reads.push_back(op);
+            } else if (isa<SetNodeProperties>(op)) {
+                writesAnyNodeProperty = true;
+            } else if (isa<SetEdgeProperties>(op)) {
+                writesAnyEdgeProperty = true;
             } else if (matchPropertyWrite(op, writtenProperty, writesNodes)) {
                 if (writesNodes) {
                     writtenNodeProperties.insert(writtenProperty);
@@ -3378,7 +3390,8 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             // A read standing before this one saw what the property held before the write,
             // and a projection behind a SET reads what the statement wrote
             const llvm::DenseSet<Attribute>& written = nodeProperty ? writtenNodeProperties : writtenEdgeProperties;
-            if (written.contains(property)) {
+            const bool writesAny = nodeProperty ? writesAnyNodeProperty : writesAnyEdgeProperty;
+            if (writesAny || written.contains(property)) {
                 continue;
             }
 
@@ -4199,7 +4212,7 @@ void countFromMetadata(Count count, const ScanTally& tally, mlir::OpBuilder& bui
 // writes, so none of its counts can be read off them.
 bool writesTheGraph(Operation* root) {
     const WalkResult walked = root->walk([](Operation* op) {
-        if (isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op)) {
+        if (isWriteOp(op)) {
             return WalkResult::interrupt();
         }
 

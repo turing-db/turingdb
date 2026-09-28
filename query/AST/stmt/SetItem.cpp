@@ -22,9 +22,9 @@ SetItem* SetItem::create(CypherAST* ast, EntityTypeExpr* value) {
     return setItem;
 }
 
-SetItem* SetItem::create(CypherAST* ast, Symbol* symbol, Expr* value) {
+SetItem* SetItem::create(CypherAST* ast, Symbol* symbol, Expr* value, bool replaces) {
     auto* setItem = new SetItem();
-    setItem->_item.emplace<SymbolAddAssign>(SymbolAddAssign {symbol, value});
+    setItem->_item.emplace<SymbolMapAssign>(SymbolMapAssign {._symbol=symbol, ._value=value, ._replaces=replaces});
     ast->addSetItem(setItem);
 
     return setItem;

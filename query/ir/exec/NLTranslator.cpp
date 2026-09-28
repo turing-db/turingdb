@@ -193,6 +193,58 @@ llvm::StringRef propertyTypeName(mlir::Value handle) {
     return handleOp.getName();
 }
 
+// The op of @param block that @param value is bound by or inside of, or null for one bound
+// outside the block - one of its own arguments included
+mlir::Operation* ownerInBlock(mlir::Value value, mlir::Block* block) {
+    mlir::Operation* owner = value.getDefiningOp();
+    if (!owner) {
+        owner = value.getParentBlock()->getParentOp();
+    }
+
+    while (owner && owner->getBlock() != block) {
+        owner = owner->getParentOp();
+    }
+
+    return owner;
+}
+
+// The ops of @param block a value is computed from, crossing into no other block and into
+// none of @param excluded
+void collectBlockSlice(mlir::Value value,
+                       mlir::Block* block,
+                       const llvm::DenseSet<mlir::Operation*>& excluded,
+                       llvm::DenseSet<mlir::Operation*>& slice) {
+    mlir::Operation* producer = value.getDefiningOp();
+    const bool inSlice = producer
+                      && producer->getBlock() == block
+                      && !excluded.contains(producer)
+                      && !slice.contains(producer);
+
+    if (!inSlice) {
+        return;
+    }
+
+    slice.insert(producer);
+
+    for (const mlir::Value operand : producer->getOperands()) {
+        collectBlockSlice(operand, block, excluded, slice);
+    }
+}
+
+// The entities a fetch of @param property reads, or no value for any other op
+// An empty @param property stands for any: a set from a map writes whatever its rows name
+mlir::Value fetchedEntities(mlir::Operation& operation, llvm::StringRef property, bool isNode) {
+    if (nl::GetNodeProperties fetch = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
+        const bool fetchesTheProperty = isNode && (property.empty() || propertyTypeName(fetch.getPropertyType()) == property);
+        return fetchesTheProperty ? fetch.getInputNodes() : mlir::Value {};
+    } else if (nl::GetEdgeProperties fetch = mlir::dyn_cast<nl::GetEdgeProperties>(operation)) {
+        const bool fetchesTheProperty = !isNode && (property.empty() || propertyTypeName(fetch.getPropertyType()) == property);
+        return fetchesTheProperty ? fetch.getInputEdges() : mlir::Value {};
+    } else {
+        return mlir::Value {};
+    }
+}
+
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
@@ -432,16 +484,21 @@ bool isNullableListElement(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListElementType>(nullableType.getValueType());
 }
 
-bool isListElementChunk(mlir::Type chunkType) {
-    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-
-    return mlir::isa<storage::ListElementType>(elementType) || isNullableListElement(elementType);
-}
-
 bool isNullableList(mlir::Type elementType) {
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
     return nullableType && mlir::isa<storage::ListType>(nullableType.getValueType());
+}
+
+bool holdsTaggedCells(mlir::Type chunkType) {
+    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type elementType = chunk.getElementType();
+
+    return mlir::isa<storage::ListElementType>(elementType) || isNullableListElement(elementType);
 }
 
 // The property value type a chunk writes, which is not quite the shape it holds: a
@@ -505,6 +562,10 @@ void appendMergePropertySignature(const std::vector<NLMergeProperty>& properties
 
         signature.append(reinterpret_cast<const char*>(&id), sizeof(id));
         signature.append(reinterpret_cast<const char*>(&valueType), sizeof(valueType));
+
+        if (property._metadataBuilder) {
+            signature.append(property._name);
+        }
     }
 }
 
@@ -600,8 +661,14 @@ void NLTranslator::bindGetEdgesByLabel(HopOp hop, IteratorKind kind) {
     _iteratorConfigs[hop.getResult()] = config;
 }
 
-void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
+void NLTranslator::translateBlock(mlir::Block& block,
+                                  NLStmtContainer* body,
+                                  const llvm::DenseSet<mlir::Operation*>* only) {
     for (mlir::Operation& operation : block) {
+        if (only && !only->contains(&operation)) {
+            continue;
+        }
+
         if (nl::ScanNodes scanNodes = mlir::dyn_cast<nl::ScanNodes>(operation)) {
             _iteratorConfigs[scanNodes.getResult()] = IteratorConfig {IteratorKind::ScanNodes, {}, {}};
         } else if (nl::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<nl::ScanNodesByLabel>(operation)) {
@@ -755,11 +822,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::OptionalDrain;
             config._optionalState = optionalStateFor(optionalDrain.getState());
             _iteratorConfigs[optionalDrain.getResult()] = config;
-        } else if (nl::UnionDrain unionDrain = mlir::dyn_cast<nl::UnionDrain>(operation)) {
+        } else if (nl::RowDrain rowDrain = mlir::dyn_cast<nl::RowDrain>(operation)) {
             IteratorConfig config;
-            config._kind = IteratorKind::UnionDrain;
-            config._unionState = unionStateFor(unionDrain.getState());
-            _iteratorConfigs[unionDrain.getResult()] = config;
+            config._kind = IteratorKind::RowDrain;
+            config._rowState = rowStateFor(rowDrain.getState());
+            _iteratorConfigs[rowDrain.getResult()] = config;
         } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::ProcedureInit;
@@ -885,6 +952,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange columns = eachRow.getColumns();
             config._eachRowColumns.assign(columns.begin(), columns.end());
 
+            if (const std::optional<llvm::ArrayRef<int64_t>> keys = eachRow.getKeys()) {
+                config._eachRowKeys.assign(keys->begin(), keys->end());
+            }
+
             _iteratorConfigs[eachRow.getResult()] = config;
         } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
             IteratorConfig config;
@@ -911,10 +982,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSkipTruncate(truncate, body);
         } else if (nl::SortBuffer sortBuffer = mlir::dyn_cast<nl::SortBuffer>(operation)) {
             translateSortBuffer(sortBuffer, body);
-        } else if (nl::UnionBuffer unionBuffer = mlir::dyn_cast<nl::UnionBuffer>(operation)) {
-            translateUnionBuffer(unionBuffer, body);
-        } else if (nl::UnionCollect unionCollect = mlir::dyn_cast<nl::UnionCollect>(operation)) {
-            translateUnionCollect(unionCollect, body);
+        } else if (nl::RowBuffer rowBuffer = mlir::dyn_cast<nl::RowBuffer>(operation)) {
+            translateRowBuffer(rowBuffer, body);
+        } else if (nl::RowCollect rowCollect = mlir::dyn_cast<nl::RowCollect>(operation)) {
+            translateRowCollect(rowCollect, body);
         } else if (nl::SortCollect sortCollect = mlir::dyn_cast<nl::SortCollect>(operation)) {
             translateSortCollect(sortCollect, body);
         } else if (nl::HashJoinBuffer hashJoinBuffer = mlir::dyn_cast<nl::HashJoinBuffer>(operation)) {
@@ -991,6 +1062,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMerge(merge, body);
         } else if (nl::SetNodeProperty setNodeProperty = mlir::dyn_cast<nl::SetNodeProperty>(operation)) {
             translateSetNodeProperty(setNodeProperty, body);
+        } else if (nl::SetNodeProperties setNodeProperties = mlir::dyn_cast<nl::SetNodeProperties>(operation)) {
+            translateSetNodeProperties(setNodeProperties, body);
+        } else if (nl::SetEdgeProperties setEdgeProperties = mlir::dyn_cast<nl::SetEdgeProperties>(operation)) {
+            translateSetEdgeProperties(setEdgeProperties, body);
         } else if (nl::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<nl::SetEdgeProperty>(operation)) {
             translateSetEdgeProperty(setEdgeProperty, body);
         } else if (nl::DeleteNode deleteNode = mlir::dyn_cast<nl::DeleteNode>(operation)) {
@@ -1073,8 +1148,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateUnwindLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::OptionalDrain) {
         translateOptionalDrainLoop(config, loopBody, limit, body);
-    } else if (config._kind == IteratorKind::UnionDrain) {
-        translateUnionLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::RowDrain) {
+        translateRowLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::CrossProduct) {
@@ -1665,6 +1740,17 @@ void NLTranslator::translateScanEdgesByLabelLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
+std::optional<PropertyType> NLTranslator::findFetchedPropertyType(llvm::StringRef name, mlir::Type resultChunkType) const {
+    const std::optional<PropertyType> propertyType = findPropertyType(name);
+
+    if (!propertyType && _metadataBuilder) {
+        const std::string_view propertyName {name.data(), name.size()};
+        return _metadataBuilder->getOrCreatePropertyType(propertyName, valueTypeFromChunkType(resultChunkType));
+    }
+
+    return propertyType;
+}
+
 std::optional<PropertyType> NLTranslator::findPropertyType(llvm::StringRef name) const {
     const std::string_view propertyName(name.data(), name.size());
 
@@ -2043,11 +2129,16 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 
     const llvm::StringRef name = handleOp.getName();
 
+    if (holdsTaggedCells(resultValue.getType())) {
+        translateTaggedPropertyFetch(name, inputValue, pendingValue, allPending, resultValue, isNode, body);
+        return;
+    }
+
     // Resolve the name against the schema once, here, so execution works from a
     // PropertyTypeID and value type and never sees the name again. A CREATE earlier in the
     // program may have introduced the name, which puts it in the change's own schema and
     // nowhere else until the commit
-    const std::optional<PropertyType> propertyType = findPropertyType(name);
+    const std::optional<PropertyType> propertyType = findFetchedPropertyType(name, resultValue.getType());
     if (!propertyType) {
         throw IRException("Unknown property '" + name.str() + "'");
     }
@@ -2065,6 +2156,32 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
     fetchData->setAllPending(allPending || isPendingValue(inputValue, isNode));
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
+    body->emplaceStmt(handler, fetchData);
+}
+
+void NLTranslator::translateTaggedPropertyFetch(llvm::StringRef name,
+                                                mlir::Value inputValue,
+                                                mlir::Value pendingValue,
+                                                bool allPending,
+                                                mlir::Value resultValue,
+                                                bool isNode,
+                                                NLStmtContainer* body) {
+    bioassert(_metadataBuilder, "A property tagged cells type is only read by the write that types it");
+
+    Column* output = _memory->alloc<ColumnOptVector<ListElementView>>();
+    _valueSlots[resultValue] = output;
+
+    NLTaggedPropertyFetchData* fetchData = _program->allocFunctionData<NLTaggedPropertyFetchData>(
+        getColumn(inputValue),
+        output,
+        std::string_view {name.data(), name.size()},
+        _metadataBuilder,
+        _memory);
+    fetchData->setPending(getMaskColumn(pendingValue));
+    fetchData->setAllPending(allPending || isPendingValue(inputValue, isNode));
+
+    const NLHandlerFunction handler = isNode ? &NLExecutor::runTaggedPropertyFetch<NodeID>
+                                             : &NLExecutor::runTaggedPropertyFetch<EdgeID>;
     body->emplaceStmt(handler, fetchData);
 }
 
@@ -2187,13 +2304,10 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
 
     for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
         const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
-        const mlir::Value propValue = propValues[propIndex];
-        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
 
-        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-        const Column* propColumn = getColumn(propValue);
-
-        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+        NLCreateProperty property;
+        translateCreateProperty(propName, propValues[propIndex], property);
+        data->addProperty(property);
     }
 
     if (const mlir::Value cardinality = createNode.getCardinality()) {
@@ -2239,13 +2353,10 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
     for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
         const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
-        const mlir::Value propValue = propValues[propIndex];
-        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
 
-        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-        const Column* propColumn = getColumn(propValue);
-
-        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+        NLCreateProperty property;
+        translateCreateProperty(propName, propValues[propIndex], property);
+        data->addProperty(property);
     }
 
     body->emplaceStmt(&NLExecutor::runCreateEdge, data);
@@ -2309,6 +2420,11 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
     std::vector<NLMergeData::Node>& nodes = data->nodes();
     for (size_t index = 0; index < pendingNodes.size(); index++) {
         nodes[pendingNodes[index]]._boundPending = getMaskColumn(boundPending[index]);
+    }
+
+    const llvm::ArrayRef<int64_t> repeatedNodes = merge.getRepeatedNodes().value_or(llvm::ArrayRef<int64_t> {});
+    for (size_t index = 0; index < repeatedNodes.size(); index += 2) {
+        nodes[repeatedNodes[index]]._repeatedNode = static_cast<size_t>(repeatedNodes[index + 1]);
     }
 
     size_t edgeValueIndex = 0;
@@ -2445,6 +2561,11 @@ void NLTranslator::translateMergeNodeSpec(mlir::ArrayAttr labels,
 void NLTranslator::collectWrittenMergeProperties(const std::vector<NLMergeProperty>& properties,
                                                  NLMergeScanProperties& writtenProperties) {
     for (const NLMergeProperty& property : properties) {
+        if (property._metadataBuilder) {
+            writtenProperties.push_back({._name=property._name, ._metadataBuilder=property._metadataBuilder});
+            continue;
+        }
+
         const ValueType valueType = property._propertyType._valueType;
 
         writtenProperties.push_back({._propertyType=property._propertyType,
@@ -2458,19 +2579,30 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                                           std::vector<NLMergeProperty>& properties,
                                           std::vector<NLMergeScanProperty>& scanProperties,
                                           bool& matchable) {
-    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
     const Column* column = getColumn(propValue);
 
-    // Created where the schema lacks it, since a written pattern carries the property.
-    // Both sides of the key serialize in its registered type: the analyzer lets an
-    // integer constrain a double-typed property, and 5 keys like the 5.0 the graph side
-    // reads back only once converted to it.
-    const PropertyType writeType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
-    properties.push_back({._propertyType=writeType,
-                          ._values=column,
-                          ._keyAppend=selectMergeKeyAppend(propValue.getType(),
-                                                           column,
-                                                           writeType._valueType)});
+    if (holdsTaggedCells(propValue.getType())) {
+        const std::optional<PropertyType> writeType = findPropertyType(propName);
+        properties.push_back({._propertyType=writeType.value_or(PropertyType {}),
+                              ._values=column,
+                              ._keyAppend=writeType ? NLExecutor::selectTaggedCellMergeKeyAppend(writeType->_valueType) : nullptr,
+                              ._name=propName.str(),
+                              ._metadataBuilder=writeType ? nullptr : _metadataBuilder});
+    } else {
+        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
+
+        // Created where the schema lacks it, since a written pattern carries the property.
+        // Both sides of the key serialize in its registered type: the analyzer lets an
+        // integer constrain a double-typed property, and 5 keys like the 5.0 the graph side
+        // reads back only once converted to it.
+        const PropertyType writeType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+        properties.push_back({._propertyType=writeType,
+                              ._values=column,
+                              ._keyAppend=selectMergeKeyAppend(propValue.getType(),
+                                                               column,
+                                                               writeType._valueType),
+                              ._name=propName.str()});
+    }
 
     // The graph's own property, which is what a candidate's value is read back through.
     // Absent means no committed entity carries it, so nothing there can match.
@@ -2485,12 +2617,25 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                               ._keyAppend=NLExecutor::selectOptKeyAppendFunction(graphType->_valueType)});
 }
 
-PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
-                                           mlir::Type valueChunkType,
-                                           bool writesNull) const {
-    const bool writesListElements = isListElementChunk(valueChunkType);
+void NLTranslator::translateCreateProperty(llvm::StringRef propName,
+                                           mlir::Value propValue,
+                                           NLCreateProperty& property) const {
+    const bool writesTaggedCells = holdsTaggedCells(propValue.getType());
+    const PropertyType propType = writtenPropertyType(propName, propValue.getType(), writesTaggedCells);
 
-    if (!writesNull && !writesListElements) {
+    property._values = getColumn(propValue);
+    property._propertyType = propType;
+
+    if (!propType.isValid()) {
+        property._createdName = propName.str();
+        property._metadataBuilder = _metadataBuilder;
+    }
+}
+
+PropertyType NLTranslator::writtenPropertyType(llvm::StringRef propName,
+                                               mlir::Type valueChunkType,
+                                               bool untypedValue) const {
+    if (!untypedValue) {
         const ValueType valueType = valueTypeFromChunkType(valueChunkType);
 
         return _metadataBuilder->getOrCreatePropertyType(propName, valueType);
@@ -2498,7 +2643,6 @@ PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
 
     const std::optional<PropertyType> existing = findPropertyType(propName);
     if (!existing) {
-        bioassert(!writesListElements, "List elements written to property '{}', which the graph does not hold", propName.str());
         return PropertyType {};
     }
 
@@ -2515,31 +2659,135 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
     const mlir::Value propValue = setNodeProperty.getValue();
     const mlir::Type valueChunkType = propValue.getType();
     const bool writesNull = isUntypedNullChunk(valueChunkType);
+    const bool writesTaggedCells = holdsTaggedCells(valueChunkType);
 
-    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
-    if (!propType.isValid()) {
-        return;
-    }
+    const PropertyType propType = writtenPropertyType(propName, valueChunkType, writesNull || writesTaggedCells);
 
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
 
     NLSetNodePropertyData* data = _program->allocFunctionData<NLSetNodePropertyData>(
-        propType._id,
+        propType,
         inputColumn,
         valueColumn);
 
-    if (writesNull) {
-        data->setNullValueType(propType._valueType);
-    } else if (isListElementChunk(valueChunkType)) {
-        data->setListElementValueType(propType._valueType);
+    data->setNullWrite(writesNull);
+
+    if (!propType.isValid()) {
+        data->setPropertyByName(std::string_view {propName.data(), propName.size()}, _metadataBuilder);
     }
 
     data->setPending(getMaskColumn(setNodeProperty.getPending()));
     data->setAllPending(setNodeProperty.getAllPending() || isPendingValue(inputValue, /*isNode=*/true));
     data->setRows(getMaskColumn(setNodeProperty.getRows()));
+    data->setSkipsNulls(setNodeProperty.getSkipsNulls());
+
+    collectSetRereads(setNodeProperty.getOperation(), inputValue, propValue, propName, /*isNode=*/true, data->getRereads());
 
     body->emplaceStmt(&NLExecutor::runSetNodeProperty, data);
+}
+
+void NLTranslator::collectSetRereads(mlir::Operation* setOp,
+                                     mlir::Value entities,
+                                     mlir::Value value,
+                                     llvm::StringRef property,
+                                     bool isNode,
+                                     NLSetRereads& rereads) {
+    mlir::Block* block = setOp->getBlock();
+
+    llvm::DenseSet<mlir::Operation*> entitySlice;
+    collectBlockSlice(entities, block, {}, entitySlice);
+
+    llvm::DenseSet<mlir::Operation*> valueSlice;
+    collectBlockSlice(value, block, entitySlice, valueSlice);
+
+    llvm::DenseSet<mlir::Operation*> rerun;
+
+    const auto readsARerunValue = [&rerun, block](mlir::Operation& operation) {
+        const mlir::WalkResult walked = operation.walk([&rerun, block](mlir::Operation* nested) {
+            const bool reads = llvm::any_of(nested->getOperands(), [&rerun, block](mlir::Value operand) {
+                return rerun.contains(ownerInBlock(operand, block));
+            });
+
+            return reads ? mlir::WalkResult::interrupt() : mlir::WalkResult::advance();
+        });
+
+        return walked.wasInterrupted();
+    };
+
+    llvm::SmallVector<const Column*> readEntities;
+    bool readsItsOwnEntities = true;
+
+    for (mlir::Operation& operation : *block) {
+        if (!valueSlice.contains(&operation)) {
+            continue;
+        }
+
+        const mlir::Value fetched = fetchedEntities(operation, property, isNode);
+        if (!fetched && !readsARerunValue(operation)) {
+            continue;
+        }
+
+        rerun.insert(&operation);
+
+        if (fetched) {
+            readEntities.push_back(getColumn(fetched));
+            readsItsOwnEntities = readsItsOwnEntities && fetched == entities;
+        }
+    }
+
+    if (!rerun.contains(ownerInBlock(value, block))) {
+        return;
+    }
+
+    rereads._readEntities.assign(readEntities.begin(), readEntities.end());
+    rereads._readsItsOwnEntities = readsItsOwnEntities;
+
+    translateRereads(*block, rerun, value, rereads);
+}
+
+// The ops a set reruns translated a second time, over columns of their own: a batch of the
+// set's rows gathers its rows of every column those ops read from outside them, so its
+// value is computed for those rows alone. A constant stands for every row and is read as
+// it is.
+void NLTranslator::translateRereads(mlir::Block& block,
+                                    const llvm::DenseSet<mlir::Operation*>& rerun,
+                                    mlir::Value value,
+                                    NLSetRereads& rereads) {
+    const llvm::DenseMap<mlir::Value, Column*> valueSlots = _valueSlots;
+    llvm::DenseSet<mlir::Value> inputs;
+
+    for (mlir::Operation& operation : block) {
+        if (!rerun.contains(&operation)) {
+            continue;
+        }
+
+        operation.walk([&](mlir::Operation* nested) {
+            for (const mlir::Value operand : nested->getOperands()) {
+                const bool readFromOutside = !rerun.contains(ownerInBlock(operand, &block))
+                                          && mlir::isa<nl::ChunkType>(operand.getType())
+                                          && _valueSlots.contains(operand);
+
+                if (!readFromOutside || !inputs.insert(operand).second) {
+                    continue;
+                }
+
+                const Column* source = getColumn(operand);
+                if (isConstantColumn(source)) {
+                    continue;
+                }
+
+                Column* gathered = allocColumnForChunkType(operand.getType());
+                rereads._inputs.emplace_back(source, gathered, selectGatherForChunkType(operand.getType()));
+                _valueSlots[operand] = gathered;
+            }
+        });
+    }
+
+    translateBlock(block, &rereads._statements, &rerun);
+    rereads._value = getColumn(value);
+
+    _valueSlots = valueSlots;
 }
 
 void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body) {
@@ -2552,31 +2800,80 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     const mlir::Value propValue = setEdgeProperty.getValue();
     const mlir::Type valueChunkType = propValue.getType();
     const bool writesNull = isUntypedNullChunk(valueChunkType);
+    const bool writesTaggedCells = holdsTaggedCells(valueChunkType);
 
-    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
-    if (!propType.isValid()) {
-        return;
-    }
+    const PropertyType propType = writtenPropertyType(propName, valueChunkType, writesNull || writesTaggedCells);
 
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
 
     NLSetEdgePropertyData* data = _program->allocFunctionData<NLSetEdgePropertyData>(
-        propType._id,
+        propType,
         inputColumn,
         valueColumn);
 
-    if (writesNull) {
-        data->setNullValueType(propType._valueType);
-    } else if (isListElementChunk(valueChunkType)) {
-        data->setListElementValueType(propType._valueType);
+    data->setNullWrite(writesNull);
+
+    if (!propType.isValid()) {
+        data->setPropertyByName(std::string_view {propName.data(), propName.size()}, _metadataBuilder);
     }
 
     data->setPending(getMaskColumn(setEdgeProperty.getPending()));
     data->setAllPending(setEdgeProperty.getAllPending() || isPendingValue(inputValue, /*isNode=*/false));
     data->setRows(getMaskColumn(setEdgeProperty.getRows()));
+    data->setSkipsNulls(setEdgeProperty.getSkipsNulls());
+
+    collectSetRereads(setEdgeProperty.getOperation(), inputValue, propValue, propName, /*isNode=*/false, data->getRereads());
 
     body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
+}
+
+void NLTranslator::translateSetNodeProperties(nl::SetNodeProperties setNodeProperties, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("Cannot perform SET outside of a write transaction.");
+    }
+
+    const mlir::Value inputValue = setNodeProperties.getInputNodes();
+    const mlir::Value mapValue = setNodeProperties.getValue();
+
+    NLSetNodePropertiesData* data = _program->allocFunctionData<NLSetNodePropertiesData>(
+        static_cast<const ColumnNodeIDs*>(getColumn(inputValue)),
+        getColumn(mapValue),
+        _metadataBuilder);
+
+    data->setNullWrite(isUntypedNullChunk(mapValue.getType()));
+    data->setPending(getMaskColumn(setNodeProperties.getPending()));
+    data->setAllPending(setNodeProperties.getAllPending() || isPendingValue(inputValue, /*isNode=*/true));
+    data->setRows(getMaskColumn(setNodeProperties.getRows()));
+    data->setReplaces(setNodeProperties.getReplaces());
+
+    collectSetRereads(setNodeProperties.getOperation(), inputValue, mapValue, {}, /*isNode=*/true, data->getRereads());
+
+    body->emplaceStmt(&NLExecutor::runSetNodeProperties, data);
+}
+
+void NLTranslator::translateSetEdgeProperties(nl::SetEdgeProperties setEdgeProperties, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("Cannot perform SET outside of a write transaction.");
+    }
+
+    const mlir::Value inputValue = setEdgeProperties.getInputEdges();
+    const mlir::Value mapValue = setEdgeProperties.getValue();
+
+    NLSetEdgePropertiesData* data = _program->allocFunctionData<NLSetEdgePropertiesData>(
+        static_cast<const ColumnEdgeIDs*>(getColumn(inputValue)),
+        getColumn(mapValue),
+        _metadataBuilder);
+
+    data->setNullWrite(isUntypedNullChunk(mapValue.getType()));
+    data->setPending(getMaskColumn(setEdgeProperties.getPending()));
+    data->setAllPending(setEdgeProperties.getAllPending() || isPendingValue(inputValue, /*isNode=*/false));
+    data->setRows(getMaskColumn(setEdgeProperties.getRows()));
+    data->setReplaces(setEdgeProperties.getReplaces());
+
+    collectSetRereads(setEdgeProperties.getOperation(), inputValue, mapValue, {}, /*isNode=*/false, data->getRereads());
+
+    body->emplaceStmt(&NLExecutor::runSetEdgeProperties, data);
 }
 
 void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContainer* body) {
@@ -3721,16 +4018,16 @@ void NLTranslator::translateSortLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
-void NLTranslator::translateUnionBuffer(nl::UnionBuffer buffer, NLStmtContainer* body) {
-    NLUnionState* state = _program->allocUnionState();
-    _unionStates[buffer.getState()] = state;
+void NLTranslator::translateRowBuffer(nl::RowBuffer buffer, NLStmtContainer* body) {
+    NLRowState* state = _program->allocRowState();
+    _rowStates[buffer.getState()] = state;
 
-    NLUnionResetData* resetData = _program->allocFunctionData<NLUnionResetData>(state);
-    body->emplaceStmt(&NLExecutor::runUnionReset, resetData);
+    NLRowResetData* resetData = _program->allocFunctionData<NLRowResetData>(state);
+    body->emplaceStmt(&NLExecutor::runRowReset, resetData);
 }
 
-void NLTranslator::translateUnionCollect(nl::UnionCollect collect, NLStmtContainer* body) {
-    NLUnionState* state = unionStateFor(collect.getState());
+void NLTranslator::translateRowCollect(nl::RowCollect collect, NLStmtContainer* body) {
+    NLRowState* state = rowStateFor(collect.getState());
     const mlir::OperandRange columns = collect.getColumns();
 
     if (state->buffers().empty()) {
@@ -3738,10 +4035,10 @@ void NLTranslator::translateUnionCollect(nl::UnionCollect collect, NLStmtContain
             state->addBuffer(allocColumnForChunkType(column.getType()));
         }
     } else if (state->buffers().size() != columns.size()) {
-        throw IRException("every nl.union_collect of an accumulator must append the same number of columns");
+        throw IRException("every nl.row_collect of an accumulator must append the same number of columns");
     }
 
-    NLUnionCollectData* data = _program->allocFunctionData<NLUnionCollectData>(state);
+    NLRowCollectData* data = _program->allocFunctionData<NLRowCollectData>(state);
 
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
         const mlir::Value column = columns[columnIndex];
@@ -3756,21 +4053,21 @@ void NLTranslator::translateUnionCollect(nl::UnionCollect collect, NLStmtContain
                                                    appendLists});
     }
 
-    body->emplaceStmt(&NLExecutor::runUnionCollect, data);
+    body->emplaceStmt(&NLExecutor::runRowCollect, data);
 }
 
-void NLTranslator::translateUnionLoop(const IteratorConfig& config,
-                                      mlir::Block& loopBody,
-                                      NLLimitState* limit,
-                                      NLStmtContainer* body) {
-    NLUnionState* state = config._unionState;
+void NLTranslator::translateRowLoop(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    NLLimitState* limit,
+                                    NLStmtContainer* body) {
+    NLRowState* state = config._rowState;
 
     const size_t bufferCount = state->buffers().size();
     if (loopBody.getNumArguments() != bufferCount) {
-        throw IRException("nl.union_drain loop must bind one variable per collected column");
+        throw IRException("nl.row_drain loop must bind one variable per collected column");
     }
 
-    NLUnionLoopData* loopData = _program->allocFunctionData<NLUnionLoopData>(state);
+    NLRowLoopData* loopData = _program->allocFunctionData<NLRowLoopData>(state);
     loopData->setLimit(limit);
     loopData->getIndices()->reserve(_program->getChunkSize());
 
@@ -3786,15 +4083,15 @@ void NLTranslator::translateUnionLoop(const IteratorConfig& config,
         loopData->addColumn(column);
     }
 
-    body->emplaceStmt(&NLExecutor::runUnionLoop, loopData);
+    body->emplaceStmt(&NLExecutor::runRowLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
 
-NLUnionState* NLTranslator::unionStateFor(mlir::Value handle) const {
-    const auto stateIt = _unionStates.find(handle);
-    if (stateIt == _unionStates.end()) {
-        throw IRException("union handle must be produced by an nl.union_buffer");
+NLRowState* NLTranslator::rowStateFor(mlir::Value handle) const {
+    const auto stateIt = _rowStates.find(handle);
+    if (stateIt == _rowStates.end()) {
+        throw IRException("row handle must be produced by an nl.row_buffer");
     }
 
     return stateIt->second;
@@ -5973,6 +6270,24 @@ void NLTranslator::translateEachRowLoop(const IteratorConfig& config,
         loopData->addColumn(NLCarriedColumn {getColumn(columns[columnIndex]),
                                              output,
                                              selectGatherForChunkType(chunkType)});
+    }
+
+    for (const int64_t key : config._eachRowKeys) {
+        const size_t keyIndex = static_cast<size_t>(key);
+        if (keyIndex >= columns.size()) {
+            throw IRException("nl.each_row names a key column it does not walk");
+        }
+
+        const mlir::Value keyColumn = columns[keyIndex];
+        const mlir::Type keyElement = mlir::cast<nl::ChunkType>(keyColumn.getType()).getElementType();
+
+        if (mlir::isa<storage::NodeIDType>(keyElement)) {
+            loopData->addNodeKey(static_cast<const ColumnNodeIDs*>(getColumn(keyColumn)));
+        } else if (mlir::isa<storage::EdgeIDType>(keyElement)) {
+            loopData->addEdgeKey(static_cast<const ColumnEdgeIDs*>(getColumn(keyColumn)));
+        } else {
+            throw IRException("nl.each_row keys its steps by node or edge chunks only");
+        }
     }
 
     body->emplaceStmt(&NLExecutor::runEachRowLoop, loopData);

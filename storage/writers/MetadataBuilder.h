@@ -41,13 +41,27 @@ public:
     // opened, plus what the change has written since. Empty for a name neither holds
     [[nodiscard]] std::optional<PropertyType> findPropertyType(std::string_view propTypeName) const;
 
+    using PropertyTypeVisitor = std::function<void(PropertyType)>;
+
+    // Every property type this change knows, the ones it has created included
+    void forEachPropertyType(const PropertyTypeVisitor& visit) const;
+
     [[nodiscard]] static std::unique_ptr<MetadataBuilder> create(const GraphMetadata& prevMetadata, GraphMetadata* metadata);
+
+    // What a statement interns - labels, label sets, edge types, property types - is taken
+    // back when it fails, so a failed write leaves the change's schema as it found it
+    void beginStatement();
+    void rollbackStatement();
 
 private:
     friend class MetadataRebaser;
 
     mutable RWSpinLock _spinLock;
     GraphMetadata* _metadata {nullptr};
+    size_t _statementLabels {0};
+    size_t _statementLabelSets {0};
+    size_t _statementEdgeTypes {0};
+    size_t _statementPropertyTypes {0};
 
     MetadataBuilder() = default;
 };

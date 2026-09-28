@@ -31,6 +31,8 @@
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
+#include "WritesRollback.h"
+
 #include "CompilerException.h"
 #include "FatalException.h"
 #include "TuringException.h"
@@ -230,6 +232,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      metadataBuilder,
                                      &procedureContext,
                                      &systemContext);
+    const bool writeRollbackEnabled = WritesRollback::isEnabledFor(ast);
+    WritesRollback writesRollback(writeRollbackEnabled ? writeBuffer : nullptr,
+                                  writeRollbackEnabled ? metadataBuilder : nullptr);
+
     try {
         if (explain) {
             interpreter.explain(*explain);
@@ -237,6 +243,8 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         } else {
             interpreter.run();
         }
+
+        writesRollback.keep();
     } catch (const CompilerException& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(e.what());
