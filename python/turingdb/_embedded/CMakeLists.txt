@@ -2,6 +2,7 @@ find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
 
 nanobind_add_module(_turingembedded
     NB_STATIC
+    NB_SUPPRESS_WARNINGS
     Bindings.cpp
     PyTuringEmbedded.cpp)
 
