@@ -1,0 +1,79 @@
+name: Temp macOS Dependencies Cache
+
+on:
+  push:
+    branches: [ "ci-macos-dependencies-cache" ]
+
+
+jobs:
+  dependencies:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["macos15", "macos26"]
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      BUILD_JOBS: 4
+
+    steps:
+    - name: Free disk space (macOS)
+      run: |
+        ACTIVE_XCODE=$(dirname "$(dirname "$(xcode-select -p)")")
+        echo "Keeping $ACTIVE_XCODE"
+        sudo xcrun simctl runtime delete all || true
+        for xcode in /Applications/Xcode*.app; do
+            if [ "$xcode" != "$ACTIVE_XCODE" ]; then
+                sudo rm -rf "$xcode" &
+            fi
+        done
+        sudo rm -rf "$HOME/Library/Android" &
+        sudo rm -rf "$HOME/.dotnet" &
+        sudo rm -rf "$HOME/hostedtoolcache/CodeQL" &
+        wait
+
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Checkout submodules (shallow)
+      run: |
+        attempt=1
+        max_attempts=3
+        until git submodule update --init --depth 1 && \
+              git submodule foreach '
+                if [ "$name" != "external/AFLplusplus" ]; then
+                    git submodule update --init --recursive --depth 1
+                fi
+              '; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Submodule init failed after $attempt attempts"
+                exit 1
+            fi
+            echo "Submodule init attempt $attempt failed; retrying after backoff"
+            sleep $((attempt * 10))
+            attempt=$((attempt + 1))
+        done
+
+    # Same path and key as the macOS cache step in ci_build.yml, so its jobs restore this entry.
+    - name: Cache dependencies (macOS)
+      id: cache-dependencies-macos
+      uses: actions/cache@v4
+      with:
+        path: external/dependencies
+        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
+
+    - name: Install build tools
+      run: ./install_build_tools.sh
+
+    - name: Build dependencies
+      run: ./dependencies.sh
+      env:
+        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-macos.outputs.cache-hit }}
+
+    - name: Disk usage
+      if: always()
+      run: |
+        df -h
+        du -sh external/dependencies
