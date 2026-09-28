@@ -478,10 +478,17 @@ private:
     // null. A branch no value column can hold is rejected here.
     mlir::Type caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks);
 
-    // @param chunk as the selection reads it: itself when it already carries
-    // @param resultElement, and an nl.to_float / nl.to_integer of it when the branches
-    // promoted past its own type. A null branch is left untyped.
-    mlir::Value caseBranchChunk(mlir::Value chunk, mlir::Type resultElement);
+    // @param chunk as a column of @param resultElement: itself when it already carries
+    // that element, and an nl.to_float / nl.to_integer of it otherwise. An untyped null
+    // is left untyped.
+    mlir::Value chunkAsElement(mlir::Value chunk, mlir::Type resultElement);
+
+    mlir::Value propertyWriteChunk(llvm::StringRef propertyName, mlir::Value chunk);
+
+    void coercePropertyWriteChunks(mlir::ArrayAttr names, llvm::SmallVectorImpl<mlir::Value>& chunks);
+
+    void coerceGroupedPropertyWriteChunks(mlir::ArrayAttr groupedNames,
+                                          llvm::SmallVectorImpl<mlir::Value>& chunks);
 
     void lowerUnaryFunction(mlir::Operation* op);
 
