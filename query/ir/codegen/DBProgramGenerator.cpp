@@ -7052,6 +7052,8 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
     llvm::SmallVector<PublishedColumn> inputs;
     llvm::SmallVector<PublishedColumn> constants;
 
+    mlir::Value consumedColumn;
+
     for (const PublishedColumn& column : scopeColumns) {
         const bool consumedByTheAggregate = _part._aggregateOp
                                          && !boundAtOrAfter(column._column, _part._aggregateOp);
@@ -7060,6 +7062,14 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
             constants.push_back(column);
         } else if (!consumedByTheAggregate) {
             inputs.push_back(column);
+        } else {
+            // A group holds no one value of a variable the aggregate consumed, and the analyzer
+            // turns away a body reading one: a WITH or a RETURN * in the body only carries it
+            if (!consumedColumn) {
+                consumedColumn = nullConstantColumn();
+            }
+
+            constants.push_back({column._decl, column._name, consumedColumn});
         }
     }
 
