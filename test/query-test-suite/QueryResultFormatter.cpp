@@ -196,17 +196,20 @@ template <typename T>
     return out;
 }
 
+// The value of one entry, which is what a cell of a map value column is. The key is added
+// by entryToString, for an entry read as a member of its map rather than alone.
 [[maybe_unused]] std::string valueToString(const db::MapEntryView entry) {
     const auto writeTyped = []<typename T>(const db::MapEntryView entry) -> std::string {
         return valueToString(entry.getValueAs<T>());
     };
 
-    const db::MapBufferTypeTag tag = entry.getValueTag();
-    db::MapTagDispatcher writer {._tag = tag};
+    return db::dispatchMapEntry(writeTyped, entry);
+}
 
+[[maybe_unused]] std::string entryToString(const db::MapEntryView entry) {
     std::string out {entry.getKey()};
     out += ": ";
-    out += writer.execute(writeTyped, entry);
+    out += valueToString(entry);
     return out;
 }
 
@@ -222,7 +225,7 @@ template <typename T>
         if (i++ > 0) {
             out += ", ";
         }
-        out += valueToString(entry);
+        out += entryToString(entry);
     }
 
     out += "}";

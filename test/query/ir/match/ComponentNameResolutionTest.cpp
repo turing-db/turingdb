@@ -115,12 +115,12 @@ TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAPropertyTheGraphDoesN
     writeTasks();
 
     expectError("MATCH (n:Task) RETURN n.unheardOf.fortnight",
-                "'fortnight' is not a component of a datetime or a duration");
+                "'fortnight' does not exist for type 'Null'");
 }
 
 TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAPropertyThatHasNoComponents) {
     expectError("MATCH (n:Person) RETURN n.name.fortnight",
-                "Property 'name' is 'String', only a datetime or a duration has components");
+                "Property 'name' is 'String', only a datetime or a duration or a map has components");
 }
 
 TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAField) {

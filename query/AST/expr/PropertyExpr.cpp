@@ -22,3 +22,8 @@ void PropertyExpr::setDurationPart(DurationPart part) {
     _durationPart = part;
     _readsADurationComponent = true;
 }
+
+void PropertyExpr::setMapKey(std::string_view key) {
+    _mapKey = key;
+    _readsAMapKey = true;
+}

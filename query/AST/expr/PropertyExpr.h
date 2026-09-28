@@ -46,6 +46,12 @@ public:
     DurationPart getDurationPart() const { return _durationPart; }
     void setDurationPart(DurationPart part);
 
+    // The key a map value is read under - m.key, or n.attrs.key, whose property name is
+    // still attrs. The key is meaningless unless this says so.
+    bool readsAMapKey() const { return _readsAMapKey; }
+    std::string_view getMapKey() const { return _mapKey; }
+    void setMapKey(std::string_view key);
+
     // The field of the loaded row a header access reads, under the declaration the load
     // publishes its column with. Null on a property access, and on a header access whose
     // row no load bound. Kept apart from the expression's own declaration, since an alias
@@ -58,12 +64,14 @@ private:
     VarDecl* _entityDecl {nullptr};
     VarDecl* _csvFieldDecl {nullptr};
     std::string_view _propName;
+    std::string_view _mapKey;
     ValueType _createdValueType {ValueType::Invalid};
     DateTimePart _dateTimePart {DateTimePart::Year};
     DurationPart _durationPart {DurationPart::Years};
     bool _stringTableHeaderAccess {false};
     bool _readsADateTimeComponent {false};
     bool _readsADurationComponent {false};
+    bool _readsAMapKey {false};
 
     PropertyExpr(QualifiedName* name)
         : Expr(Kind::PROPERTY),

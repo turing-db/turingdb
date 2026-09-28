@@ -121,3 +121,102 @@ target_link_libraries(test_query_ir_map_property_equality PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_map_property_equality PRIVATE ${IR_TEST_DIR})
+add_turing_test(test_query_ir_map_key_absent_property MapKeyAbsentPropertyTest.cpp)
+target_link_libraries(test_query_ir_map_key_absent_property PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_key_absent_property PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_value_unwind MapValueUnwindTest.cpp)
+target_link_libraries(test_query_ir_map_value_unwind PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_value_unwind PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_value_membership MapValueMembershipTest.cpp)
+target_link_libraries(test_query_ir_map_value_membership PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_value_membership PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_value_reversed_comparison MapValueReversedComparisonTest.cpp)
+target_link_libraries(test_query_ir_map_value_reversed_comparison PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_value_reversed_comparison PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_value_pattern_constraint MapValuePatternConstraintTest.cpp)
+target_link_libraries(test_query_ir_map_value_pattern_constraint PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_value_pattern_constraint PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_value_list_null MapValueListNullTest.cpp)
+target_link_libraries(test_query_ir_map_value_list_null PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_value_list_null PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_key_null MapKeyNullTest.cpp)
+target_link_libraries(test_query_ir_map_key_null PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_key_null PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_key_comparison MapKeyComparisonTest.cpp)
+target_link_libraries(test_query_ir_map_key_comparison PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_key_comparison PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_map_key_read MapKeyReadTest.cpp)
+target_link_libraries(test_query_ir_map_key_read PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_map_key_read PRIVATE ${IR_TEST_DIR})
+

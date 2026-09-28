@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) RETURN n.name.year",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) RETURN n.name.year\n       |                         ^^^^^^^^^^^\n-------* Property 'name' is 'String', only a datetime or a map has components"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "fail"
+  ],
+  "write-required": false
+}

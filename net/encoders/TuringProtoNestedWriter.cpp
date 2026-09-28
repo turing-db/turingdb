@@ -64,6 +64,15 @@ void NestedContainerWriter::writeOptionalListElements(std::span<const std::optio
     }
 }
 
+void NestedContainerWriter::writeMapEntries(std::span<const db::MapEntryView> entries) {
+    const WireSize mapByteSize = computeMapByteSize(entries);
+
+    _outBuf->copyFixedLenData(&mapByteSize, sizeof(mapByteSize));
+
+    _stack.emplace(NestedContainerIterator::map(entries));
+    drainNestedValues();
+}
+
 // Drain the stack of nested values. A nested container will push a nested frame onto the stack
 // which will need to be fully drained and popped off the stack before the parent frame continues draining.
 void NestedContainerWriter::drainNestedValues() {
@@ -82,7 +91,7 @@ void NestedContainerWriter::drainNestedValues() {
             const db::MapEntryView entry = frame.getEntry();
 
             writeMapKey(entry.getKey());
-            db::MapTagDispatcher {entry.getValueTag()}.execute(mapVisitor, entry);
+            db::dispatchMapEntry(mapVisitor, entry);
         } else {
             const db::ListElementView element = frame.getElement();
 

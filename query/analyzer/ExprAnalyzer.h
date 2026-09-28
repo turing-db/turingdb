@@ -106,9 +106,9 @@ public:
                                   bool allowCreate = false,
                                   ValueType defaultType = ValueType::Invalid);
 
-    // A write and an index name a property of the graph; a component read off one is an
-    // integer computed from it, which names nothing that can be written or indexed.
-    void throwIfReadsAComponent(const PropertyExpr* expr);
+    // A write and an index name a property of the graph; a component read off one and a key
+    // read out of one are computed from it, and name nothing that can be written or indexed.
+    void throwIfReadsPartOfAProperty(const PropertyExpr* expr);
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 

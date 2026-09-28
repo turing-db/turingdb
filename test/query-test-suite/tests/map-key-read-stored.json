@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Tagged {name: 'a', attrs: {x: 1, s: 'y'}}) WITH n MATCH (t:Tagged) RETURN t.attrs.x, t.attrs.s, t.attrs.nosuch",
+  "expect": {
+    "result": "t.attrs.x,t.attrs.s,t.attrs.nosuch\n1,y,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "return"
+  ],
+  "write-required": true
+}

@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Tagged {name: 'a', attrs: {x: 1}}) WITH n MATCH (t:Tagged) WITH t.attrs AS m REMOVE m.x",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Tagged {name: 'a', attrs: {x: 1}}) WITH n MATCH (t:Tagged) WITH t.attrs AS m REMOVE m.x\n       |                                                                                               ^^^\n-------* A map key is a value inside a property, not a property of its own. Only a property can be set, removed or indexed."
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "fail"
+  ],
+  "write-required": true
+}

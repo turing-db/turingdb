@@ -104,7 +104,11 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
 
             const bool sameComponent = neitherReadsAComponent || sameDateTimeComponent || sameDurationComponent;
 
-            return sameEntity && sameProperty && sameComponent;
+            // And two keys of one map are two values for the same reason. The key is empty
+            // on every read that is not one, so the comparison stands for all of them.
+            const bool sameKey = lhsProperty->getMapKey() == rhsProperty->getMapKey();
+
+            return sameEntity && sameProperty && sameComponent && sameKey;
         }
         break;
 

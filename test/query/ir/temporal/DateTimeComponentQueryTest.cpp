@@ -209,7 +209,7 @@ TEST_F(DateTimeComponentQueryTest, rejectsAnUnknownFieldName) {
 
 TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAPropertyThatIsNoInstant) {
     expectError("MATCH (n:Person) RETURN n.name.year",
-                "Property 'name' is 'String', only a datetime has components");
+                "Property 'name' is 'String', only a datetime or a map has components");
 }
 
 TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAVariableThatIsNoInstant) {
@@ -226,8 +226,8 @@ TEST_F(DateTimeComponentQueryTest, rejectsAFieldOfAField) {
 TEST_F(DateTimeComponentQueryTest, rejectsAWriteToAField) {
     writeEvents();
 
-    expectError("MATCH (n:Event) SET n.at.year = 2030", "A datetime component cannot name a property.");
-    expectError("MATCH (n:Event) SET n.at.year = null", "A datetime component cannot name a property.");
-    expectError("MATCH (n:Event) REMOVE n.at.year", "A datetime component cannot name a property.");
-    expectError("MATCH (n:Event) SET n.unheardOf.year = 2030", "A datetime component cannot name a property.");
+    expectError("MATCH (n:Event) SET n.at.year = 2030", "A datetime component is computed from a property, not stored as one. Only a property can be set, removed or indexed.");
+    expectError("MATCH (n:Event) SET n.at.year = null", "A datetime component is computed from a property, not stored as one. Only a property can be set, removed or indexed.");
+    expectError("MATCH (n:Event) REMOVE n.at.year", "A datetime component is computed from a property, not stored as one. Only a property can be set, removed or indexed.");
+    expectError("MATCH (n:Event) SET n.unheardOf.year = 2030", "A datetime component is computed from a property, not stored as one. Only a property can be set, removed or indexed.");
 }

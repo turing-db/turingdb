@@ -82,8 +82,7 @@ MapView MapContainer::copy(MapView map) {
     };
 
     for (const MapEntryView entry : map) {
-        const MapTagDispatcher dispatcher {entry.getValueTag()};
-        entries.push_back({entry.getKey(), dispatcher.execute(asVariant, entry)});
+        entries.push_back({entry.getKey(), dispatchMapEntry(asVariant, entry)});
     }
 
     return insert(entries);

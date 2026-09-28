@@ -26,6 +26,9 @@ public:
     DurationPart getDurationPart() const { return _durationPart; }
     void setDurationPart(DurationPart part);
 
+    bool readsAMapKey() const { return _readsAMapKey; }
+    void setReadsAMapKey();
+
 private:
     Expr* _base {nullptr};
     std::string_view _propName;
@@ -33,6 +36,7 @@ private:
     DurationPart _durationPart {DurationPart::Years};
     bool _readsADateTimeComponent {false};
     bool _readsADurationComponent {false};
+    bool _readsAMapKey {false};
 
     PropertyLookupExpr(Expr* base, std::string_view propName);
 

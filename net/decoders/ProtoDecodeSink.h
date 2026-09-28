@@ -74,6 +74,7 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
     { sink.writeMapValue(stringValue) };
     { sink.writeMapValue(embeddingValue) };
     { sink.writeMapValueBytes(bytes, count) };
+    { sink.lastMapEntry() } -> std::same_as<typename Sink::MapEntryView>;
     { sink.topMapExpectsValue() } -> std::convertible_to<bool>;
 
     // The open-container stack: one stack for both kinds, since a map can hold a list and
@@ -119,6 +120,9 @@ using SinkListElementView = typename Sink::ListElementView;
 
 template <ProtoDecodeSink Sink>
 using SinkMapView = typename Sink::MapView;
+
+template <ProtoDecodeSink Sink>
+using SinkMapEntryView = typename Sink::MapEntryView;
 
 // Satisfied when Column is one of the sink's const column families for element type T.
 // Sink is unconstrained here because a concept's own parameters cannot carry constraints;

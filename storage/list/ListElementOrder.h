@@ -7,6 +7,7 @@
 #include "ListElementView.h"
 #include "ListView.h"
 
+#include "map/MapEntryView.h"
 #include "map/MapView.h"
 
 #include "metadata/PropertyNull.h"
@@ -72,6 +73,33 @@ bool operator==(ListElementView element, MapView value);
  * PropertyNull.h's fallback, which answers false for any type it knows nothing about.
  */
 bool operator==(ListElementView element, PropertyNull);
+
+/**
+ * @brief Tests the value of a map entry for null, as IS (NOT) NULL does.
+ *
+ * A map entry carries its own null in its value tag, the way a list element does, so a key
+ * a map does not hold and a key whose stored value is null answer alike. Declared here for
+ * the same reason as the element's test: PropertyNull.h's fallback would answer false.
+ */
+bool operator==(MapEntryView entry, PropertyNull);
+
+/**
+ * @brief Compares the value of a map entry against a value of a known type, and against
+ * another entry's value.
+ *
+ * The entry holds its own type, so it is equal only to a value of that type holding the
+ * same thing - a number numerically whatever it is tagged as, a nested list element-wise,
+ * a nested map entry-wise - exactly as a list element compares.
+ */
+bool operator==(MapEntryView lhs, MapEntryView rhs);
+bool operator==(MapEntryView entry, ListElementView element);
+bool operator==(MapEntryView entry, types::Int64::Primitive value);
+bool operator==(MapEntryView entry, types::UInt64::Primitive value);
+bool operator==(MapEntryView entry, types::Double::Primitive value);
+bool operator==(MapEntryView entry, types::String::Primitive value);
+bool operator==(MapEntryView entry, types::Bool::Primitive value);
+bool operator==(MapEntryView entry, ListView value);
+bool operator==(MapEntryView entry, MapView value);
 
 /**
  * @brief Orders an element of a @ref ListByteBuffer against a value of a known type.

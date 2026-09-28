@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: 1} AS m SET m.a = 2",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | WITH {a: 1} AS m SET m.a = 2\n       |                      ^^^\n-------* A map key is a value inside a property, not a property of its own. Only a property can be set, removed or indexed."
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "fail"
+  ],
+  "write-required": false
+}

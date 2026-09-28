@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: 1, b: 1, c: 2} AS m RETURN m.a = m.b, m.a = m.c, m.a = 1, m.a <> 1, m.nosuch = 1",
+  "expect": {
+    "result": "m.a = m.b,m.a = m.c,m.a = 1,m.a <> 1,m.nosuch = 1\ntrue,false,true,false,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "comparison"
+  ],
+  "write-required": false
+}
