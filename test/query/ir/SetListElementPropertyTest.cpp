@@ -102,9 +102,50 @@ TEST_F(SetListElementPropertyTest, setsAListPropertyToAListElementOfAMixedList) 
     EXPECT_EQ(read.getRows(), expectedRead);
 }
 
+TEST_F(SetListElementPropertyTest, setsANodePropertyToAnElementOfAMixedListComputedOn) {
+    StringRowSink written;
+    runWrite("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.age = pair[1] + 1 RETURN p.age",
+             written);
+
+    const std::vector<StringRowSink::Row> expectedWritten {{"6"}};
+    EXPECT_EQ(written.getRows(), expectedWritten);
+
+    StringRowSink read;
+    runQuery("MATCH (p:Person {name: 'Remy'}) RETURN p.age", read);
+
+    const std::vector<StringRowSink::Row> expectedRead {{"6"}};
+    EXPECT_EQ(read.getRows(), expectedRead);
+}
+
+TEST_F(SetListElementPropertyTest, widensAComputedIntegerElementWrittenToADoubleProperty) {
+    runWrite("MATCH (p:Person {name: 'Remy'}) SET p.height = 1.5");
+    runWrite("WITH ['Remy', 2] AS pair MATCH (p:Person {name: pair[0]}) SET p.height = pair[1] * 2");
+
+    StringRowSink read;
+    runQuery("MATCH (p:Person {name: 'Remy'}) RETURN p.height + 0.25", read);
+
+    const std::vector<StringRowSink::Row> expectedRead {{"4.25"}};
+    EXPECT_EQ(read.getRows(), expectedRead);
+}
+
+TEST_F(SetListElementPropertyTest, rejectsAComputedElementWhoseTypeThePropertyDoesNotHold) {
+    runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.age = pair[1] + 0.5",
+                           "Cannot set a property of type 'Int64' to a list element of another type");
+}
+
 TEST_F(SetListElementPropertyTest, rejectsAnElementWhoseTypeThePropertyDoesNotHold) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.age = pair[0]",
                            "Cannot set a property of type 'Int64' to a list element of another type");
+}
+
+TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAnElement) {
+    runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1]",
+                           "Cannot create property 'score' from a list element");
+}
+
+TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAComputedElement) {
+    runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1] + 1",
+                           "Cannot create property 'score' from a list element");
 }
 
 int main(int argc, char** argv) {

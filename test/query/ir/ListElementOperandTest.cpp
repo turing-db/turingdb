@@ -97,7 +97,15 @@ TEST_F(ListElementOperandTest, dividesAnIndexedDoubleElement) {
 }
 
 TEST_F(ListElementOperandTest, dividesAnIndexedCellOfAMixedList) {
-    expectRows("RETURN [7,2.0][0] / 2", {{"3.5"}});
+    expectRows("RETURN [7,2.0][0] / 2", {{"3"}});
+}
+
+TEST_F(ListElementOperandTest, dividesAnIndexedDoubleCellOfAMixedList) {
+    expectRows("RETURN [7,5.0][1] / 2", {{"2.5"}});
+}
+
+TEST_F(ListElementOperandTest, addsADoubleToAnIndexedCellOfAMixedList) {
+    expectRows("RETURN [7,'x'][0] + 0.5", {{"7.5"}});
 }
 
 TEST_F(ListElementOperandTest, concatenatesAnIndexedStringElement) {

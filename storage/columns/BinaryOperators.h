@@ -4,6 +4,7 @@
 #include <concepts>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 
@@ -166,16 +167,26 @@ inline std::optional<double> cellNumber(const ListElementView cell) {
             return cell.getAs<types::Double::Primitive>();
         break;
 
-        default:
+        case ListBufferTypeTag::Bool:
+        case ListBufferTypeTag::String:
+        case ListBufferTypeTag::Embedding:
+        case ListBufferTypeTag::ListView:
+        case ListBufferTypeTag::Null:
+        case ListBufferTypeTag::NodeID:
+        case ListBufferTypeTag::EdgeID:
+        case ListBufferTypeTag::DateTime:
+        case ListBufferTypeTag::MapView:
+        case ListBufferTypeTag::INVALID:
             return std::nullopt;
         break;
     }
+
+    return std::nullopt;
 }
 
 /**
  * @brief An operand of an arithmetic operation one side of which is a type-erased cell,
- * read as the double every side of such an operation computes in: mixed tags name no
- * single integer type, which is why a reduction over cells lands on a double too.
+ * read as a double: the type two operands compute in unless both hold integers.
  */
 template <typename T>
 inline std::optional<double> cellOperand(const T& value) {
@@ -192,27 +203,81 @@ inline std::optional<double> cellOperand(const T& value) {
     }
 }
 
+/// Whether a type-erased cell is tagged as one of the integers.
+inline bool cellHoldsAnInteger(const ListElementView cell) {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    return tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+}
+
+/// The integer a cell holds, read where @ref cellHoldsAnInteger answered for it.
+inline int64_t cellInteger(const ListElementView cell) {
+    if (cell.getTag() == ListBufferTypeTag::UInt) {
+        return static_cast<int64_t>(cell.getAs<types::UInt64::Primitive>());
+    }
+
+    return cell.getAs<types::Int64::Primitive>();
+}
+
+/**
+ * @brief Whether such an operand holds an integer: the tags an integer is stored under,
+ * and the integer columns, which a non-cell operand answers at compile time.
+ */
+template <typename T>
+inline bool holdsAnInteger(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return cellHoldsAnInteger(value);
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return value.has_value() && holdsAnInteger(*value);
+    } else {
+        return std::is_integral_v<Decayed> && !std::is_same_v<Decayed, bool>;
+    }
+}
+
+/**
+ * @brief The integer such an operand holds, read where @ref holdsAnInteger answered for it.
+ */
+template <typename T>
+inline int64_t integerOperand(const T& value) {
+    if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
+        return cellInteger(value);
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return integerOperand(*value);
+    } else {
+        return static_cast<int64_t>(value);
+    }
+}
+
 template <typename T>
 concept TaggedCell = std::same_as<TypeUtils::unwrap_optional_t<T>, ListElementView>;
 
-// The operators that compute a number out of two, as opposed to the index, which reads a
-// cell as the list it may hold rather than as a number
+// The operators whose result carries the type of its operands, as opposed to the index,
+// which reads a cell as the list it may hold rather than as a number
 template <typename F>
 concept ComputesNumbers = std::is_same_v<F, std::plus<>>
                        || std::is_same_v<F, std::minus<>>
                        || std::is_same_v<F, std::multiplies<>>
                        || std::is_same_v<F, SafeDivides>
-                       || std::is_same_v<F, SafeModulo>
-                       || std::is_same_v<F, Power>;
+                       || std::is_same_v<F, SafeModulo>;
+
+// '^' answers a double whatever it is given, so its result carries no tag of its own
+template <typename F>
+concept ComputesReals = std::is_same_v<F, Power>;
 
 template <typename F, typename T, typename U>
 concept ComputesOverTaggedCell = ComputesNumbers<F> && (TaggedCell<T> || TaggedCell<U>);
+
+template <typename F, typename T, typename U>
+concept ComputesRealOverTaggedCell = ComputesReals<F> && (TaggedCell<T> || TaggedCell<U>);
 
 // Every other pair: the operands are computed in a type the column names. Spelled as a
 // concept of its own so the two operators below order against each other - a negation
 // written twice is two constraints, one written once is one
 template <typename F, typename T, typename U>
-concept ComputesOverColumnType = !ComputesOverTaggedCell<F, T, U>;
+concept ComputesOverColumnType = !ComputesOverTaggedCell<F, T, U>
+                              && !ComputesRealOverTaggedCell<F, T, U>;
 
 // The concatenation of two lists, as opposed to the two strings the same operator joins.
 // Either side may be nullable, a stored list being read out of a nullable column.
@@ -235,6 +300,8 @@ concept ConcatenatesNullableText = TypeUtils::is_optional_v<std::decay_t<A>>
  */
 template <typename F, bool NarrowsUnsigned = true>
 struct BinaryOp {
+    QueryListBuffer* _listBuffer {nullptr};
+
     template <typename T>
     static inline decltype(auto) operand(T&& value) {
         if constexpr (NarrowsUnsigned) {
@@ -258,9 +325,31 @@ struct BinaryOp {
     }
 
     // A cell carries its type per row rather than in the column's, so the operands are
-    // read through the tag each row holds instead of computed in a type the column names
+    // read through the tag each row holds instead of computed in a type the column names,
+    // and the result is staged as a cell of its own. Two integers answer an integer there
+    // as they do anywhere else, which is what lets the result be written to an integer
+    // property.
     template <typename T, typename U>
         requires ComputesOverTaggedCell<F, T, U>
+    inline std::optional<ListElementView> operator()(T&& a, U&& b) const {
+        bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
+
+        if (holdsAnInteger(a) && holdsAnInteger(b)) {
+            return stagedCell(F {}(integerOperand(a), integerOperand(b)));
+        }
+
+        const std::optional<double> lhs = cellOperand(a);
+        const std::optional<double> rhs = cellOperand(b);
+
+        if (!lhs.has_value() || !rhs.has_value()) {
+            return std::nullopt;
+        }
+
+        return stagedCell(F {}(*lhs, *rhs));
+    }
+
+    template <typename T, typename U>
+        requires ComputesRealOverTaggedCell<F, T, U>
     inline std::optional<double> operator()(T&& a, U&& b) const {
         const std::optional<double> lhs = cellOperand(a);
         const std::optional<double> rhs = cellOperand(b);
@@ -270,6 +359,13 @@ struct BinaryOp {
         }
 
         return F {}(*lhs, *rhs);
+    }
+
+    template <typename T>
+    inline ListElementView stagedCell(T value) const {
+        const QueryListBuffer::ListItemVariant element {value};
+
+        return _listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&element, 1}).front();
     }
 };
 

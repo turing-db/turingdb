@@ -82,11 +82,15 @@ TEST_F(TaggedCellOperatorTest, concatenatesOntoACell) {
 }
 
 TEST_F(TaggedCellOperatorTest, addsTwoCellsHoldingNumbers) {
-    expectRows("WITH [1, 2, 'x'] AS xs RETURN xs[0] + xs[1] AS sum", {{"3.000000"}});
+    expectRows("WITH [1, 2, 'x'] AS xs RETURN xs[0] + xs[1] AS sum", {{"3"}});
 }
 
 TEST_F(TaggedCellOperatorTest, subtractsTwoCellsHoldingNumbers) {
-    expectRows("WITH [1, 2, 'x'] AS xs RETURN xs[0] - xs[1] AS difference", {{"-1.000000"}});
+    expectRows("WITH [1, 2, 'x'] AS xs RETURN xs[0] - xs[1] AS difference", {{"-1"}});
+}
+
+TEST_F(TaggedCellOperatorTest, addsTwoCellsOneOfWhichHoldsADouble) {
+    expectRows("WITH [1, 2.5, 'x'] AS xs RETURN xs[0] + xs[1] AS sum", {{"3.500000"}});
 }
 
 TEST_F(TaggedCellOperatorTest, findsAValueInTheListACellHolds) {

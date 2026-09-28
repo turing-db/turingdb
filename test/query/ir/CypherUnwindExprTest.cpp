@@ -502,9 +502,9 @@ TEST_F(CypherUnwindExprTest, reducesOverAListLiteralPublishedByAWith) {
 
 TEST_F(CypherUnwindExprTest, computesOverAMixedNumericUnwoundCell) {
     // A list mixing numeric types unwinds into tagged cells, which carry their type per
-    // row rather than in the column's, so the arithmetic over one computes in a double
-    // where the list of integers above stays an integer.
-    expectRows("UNWIND [1, 2.5] AS v RETURN v + 1", {{"2.000000"}, {"3.500000"}});
+    // row rather than in the column's, so the arithmetic settles per row too: the row
+    // holding 1 answers an integer and the row holding 2.5 a double.
+    expectRows("UNWIND [1, 2.5] AS v RETURN v + 1", {{"2"}, {"3.500000"}});
 }
 
 TEST_F(CypherUnwindExprTest, crossesTheUnwoundElementsWithAFollowingMatch) {

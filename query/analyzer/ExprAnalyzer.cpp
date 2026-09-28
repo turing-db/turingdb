@@ -582,7 +582,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             if (computesOverListItem(pair)) {
-                type = EvaluatedType::Double;
+                type = EvaluatedType::ListItem;
                 break;
             }
 
@@ -643,7 +643,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             if (computesOverListItem(pair)) {
-                type = EvaluatedType::Double;
+                type = EvaluatedType::ListItem;
                 break;
             }
 

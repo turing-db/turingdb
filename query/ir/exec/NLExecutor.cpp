@@ -1015,6 +1015,49 @@ struct BinaryOpKernel<OP_CONCAT, ResCol, LhsCol, RhsCol> {
     }
 };
 
+template <typename Op, typename ResCol, typename LhsCol, typename RhsCol>
+void runArithmeticOp(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+    BinaryOperators::exec<Op>(static_cast<ResCol*>(result),
+                              static_cast<const LhsCol*>(lhs),
+                              static_cast<const RhsCol*>(rhs),
+                              Op {&mem->listBuffer()});
+}
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+struct BinaryOpKernel<OP_ADD, ResCol, LhsCol, RhsCol> {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+        runArithmeticOp<Add, ResCol, LhsCol, RhsCol>(result, lhs, rhs, mem);
+    }
+};
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+struct BinaryOpKernel<OP_SUB, ResCol, LhsCol, RhsCol> {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+        runArithmeticOp<Sub, ResCol, LhsCol, RhsCol>(result, lhs, rhs, mem);
+    }
+};
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+struct BinaryOpKernel<OP_MUL, ResCol, LhsCol, RhsCol> {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+        runArithmeticOp<Mul, ResCol, LhsCol, RhsCol>(result, lhs, rhs, mem);
+    }
+};
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+struct BinaryOpKernel<OP_DIV, ResCol, LhsCol, RhsCol> {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+        runArithmeticOp<Div, ResCol, LhsCol, RhsCol>(result, lhs, rhs, mem);
+    }
+};
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+struct BinaryOpKernel<OP_MOD, ResCol, LhsCol, RhsCol> {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+        runArithmeticOp<Mod, ResCol, LhsCol, RhsCol>(result, lhs, rhs, mem);
+    }
+};
+
 template <ColumnOperator Op, typename ResCol, typename LhsCol, typename RhsCol>
 void applyBinaryOp(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
     BinaryOpKernel<Op, ResCol, LhsCol, RhsCol>::run(result, lhs, rhs, mem);
