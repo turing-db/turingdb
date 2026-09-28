@@ -719,7 +719,7 @@ Paths are what make batches expensive. Kùzu's multi-source morsels preallocate 
 per morsel to return paths: 128 GB for two morsels on a 120M-node graph, which ran out of memory,
 against 21 GB for lengths only. The alternative *(inference)*: compute distances bit-parallel,
 mark a lane done when its target is reached, retire the batch when every lane is done, then
-rebuild each requested path from the distances (Section 10.2) or with a bidirectional search
+rebuild each requested path from the distances (Section 10.3) or with a bidirectional search
 bounded by the known length. SAMS (Then et al., VLDB 2017) runs the same lanes over several
 snapshots at once, up to 100× faster than one snapshot at a time, which is the shape of a path
 query asked across commits.
@@ -954,55 +954,95 @@ dropping irrelevant vertices in preprocessing. None of it applies to millisecond
 - The executor runs a query on one thread. Of the techniques above, bit lanes and prefetching
   apply now; threads (Section 6.4) are future work.
 
-### 10.2 An exact distance turns the explorator into a shortest-path enumerator
+### 10.2 One pair: find with a bidirectional BFS, list from its DAG
 
-*(inference, with the argument)* Let d = dist(s, t), and let dist(v) be the exact distance from v
-to t over the pattern's edges. Run the explorator from `s` with `end_column` bound to `t`,
+*(inference)* A shortest-path query has two phases: *finding*, which is the BFS, and *listing*,
+which turns what the BFS found into rows. For one pair the finding is a bidirectional BFS:
+balance by frontier degree sum (Section 5.2), expand one level per step, and keep epoch-stamped
+sparse tables across rows (Section 5.4).
+
+**`shortestPath` (ANY) has no listing phase.** Each side keeps one parent edge per node. At the
+first meeting edge (v, w), the path is v's parent chain back to `s`, reversed, then (v, w), then
+w's parent chain to `t`: O(L) to read off. This is Neo4j's `SinglePathBFS`.
+
+**`allShortestPaths` (ALL) lists from the DAG the BFS leaves.**
+
+- While expanding a level, the BFS scans every frontier node's edges anyway. Each edge that
+  reaches a node at the next depth, new or already found at that depth, is recorded as one of
+  that node's predecessor edges. The recorded edges are the DAG of Section 2.3, one per side,
+  and cost no extra scan. This is Neo4j's `EagerBFS` and the PMR construction.
+- The BFS finishes the level of the first meeting and collects every meeting edge (Section 5.3).
+- One sweep back from the meeting edges, through the forward side's predecessor edges, marks the
+  forward nodes that lie on a shortest path and records each marked node's successor edges
+  within them. Forward nodes that reach no meeting edge drop out here.
+- Listing is a depth-first walk: from `s` along recorded successor edges, across a meeting edge,
+  then along the backward side's recorded edges down to `t`. Every step has a continuation: a
+  marked forward node has a successor toward a meeting edge by construction, and every backward
+  node has a recorded edge one hop closer to `t`, at least its BFS parent. The walk never backs
+  out of a dead end, and each step costs O(1) over edges already recorded.
+
+**Why the listing is depth-first.** There can be 2^n rows, as on the diamond chain of Section
+2.3. A depth-first walk holds one path, O(L) state; it fills a chunk of rows, returns, and
+resumes from the same stack on the next call; and it stops after 10 rows under `LIMIT 10`. A
+breadth-first listing holds every partial path of a level: 2^i of them at level 2i of the
+diamond chain. Neo4j's PPBFS lists the same way: its `PathTracer` "runs a DFS from a given
+target … back towards the source".
+
+**Why store the DAG rather than re-derive it.** The alternative keeps only distances and, at
+each step of the listing, scans the node's whole adjacency for the neighbours one hop closer.
+The walk passes a node v once per shortest prefix ending there, σ(s, v) times, so that costs
+σ(s, v) × deg(v) at v. Shortest paths in small-world graphs run through hubs: a hub with 10^6
+edges on 1,000 prefixes costs 10^9 checks, where the stored DAG costs 1,000 times the hub's DAG
+successors. The DAG's memory is bounded by the edges the BFS scanned.
+
+**Output.** The listing writes rows into the `PathTrie` in walk order, so `make_path`,
+`length(p)`, `nodes(p)`, `relationships(p)`, `UNWIND` and OPTIONAL MATCH work unchanged. It can
+be a mode of the explorator that walks the stored DAG's successor edges instead of a node's
+adjacency, which keeps its chunked output, carry columns and reversed seeding. That reuses the
+explorator's output, not its search. Every listed path is a shortest walk between distinct
+nodes, hence simple (Section 2.1), so the trail check always passes and can be skipped.
+
+This is also the only strategy for an exploration with `hop_imports`, which the explorator
+already walks seed by seed: a predicate reading the seed row cannot be shared across the 64
+lanes of an index.
+
+### 10.3 Many pairs: read paths out of a distance field
+
+*(inference)* When many rows share few targets, a search per row repeats work; Section 6.2
+prices the crossover. `PathTargetIndex` over the chunk's distinct targets gives dist(v, t) for
+every node within reach of each target, 64 targets per multi-source BFS. Read as distances
+rather than bounds, it must apply everything Section 10.4 lists, which it does not today. When
+the distinct sources are fewer, build it from the sources over the forward direction and walk
+from the targets with `reversed_paths`. A batch should stop once every pair it serves is
+resolved, rather than at the pattern's bound, which is often unbounded here.
+
+No search runs from `s`, so there are no parent edges and no DAG. A distance field is read by
+*descent*. Let d = dist(s, t) and run the explorator from `s` with `end_column` bound to `t`,
 minimum and maximum both d, and its existing prune rule: at depth i, extend to v' only if
 dist(v') ≤ d − i − 1.
 
-- Every prefix the walk holds is a prefix of a shortest path. At depth i the walk stands on a
-  node v with dist(v) = d − i. A neighbour v' has dist(v') ≥ d − i − 1, so it passes only with
+- Every prefix is a prefix of a shortest path. At depth i the walk stands on a node v with
+  dist(v) = d − i. A neighbour v' has dist(v') ≥ d − i − 1, so it passes only with
   dist(v') = d − i − 1, and the extended prefix still completes to total length d.
-- Every step has a surviving candidate: the next node of any shortest path from v. The walk
-  never backtracks out of a dead end, and every leaf is an output row. The work per row is one
-  adjacency scan per hop, shared along common prefixes.
-- Every emitted path is a shortest walk between distinct nodes, hence simple (Section 2.1). The
-  trail check always passes and can be skipped.
-- `ALL SHORTEST` is the whole walk. `ANY SHORTEST`, i.e. `shortestPath`, stops each seed after
-  its first row.
+- Every step has a surviving candidate, the next node of any shortest path from v, so the walk
+  never backs out of a dead end and every leaf is an output row.
+- Every emitted path is a shortest walk between distinct nodes, hence simple; the trail check can
+  be skipped.
+- `ANY` takes the first candidate that passes at each step, which reads each adjacency only up
+  to the first neighbour one hop closer. `ALL` takes every passing candidate.
 
-The rows land in the `PathTrie` like any exploration's, so `make_path`, `length(p)`, `nodes(p)`,
-`relationships(p)`, `UNWIND` and OPTIONAL MATCH work unchanged. What is missing is the exact
-distance.
+For `ALL`, descent pays the adjacency scan that 10.2 avoids, σ(s, v) × deg(v) at v. That is the
+price of sharing one BFS across 64 targets: a DAG per target would multiply the index's memory
+by its lanes. When a row asks for all paths and they run through hubs, a bidirectional BFS for
+that row (10.2) is the better plan.
 
-### 10.3 Three ways to get it
+**An unbound end** (GQL's `StatefulShortestPath(All)` shape, or a legacy cartesian product with
+many rows per source). The `distinct` search already reaches each (seed, end) pair first at its
+shortest distance, one level at a time; it reports neither the distance nor a path today.
+Reporting the level gives `length(p)`. Paths need a per-seed distance, the target batch layout
+run forward from the seeds, and descent back from each end.
 
-Which one applies depends on the rows, the way the existing gates choose *(inference)*:
-
-1. **Few rows: a bidirectional BFS per row.** Balance by frontier degree sum, expand one level
-   per step, keep epoch-stamped sparse tables across rows. `ANY` keeps one parent edge per node
-   per side and stops at the first meeting edge; the path is the forward parent chain, the
-   meeting edge and the backward chain. `ALL` finishes the level, marks the forward nodes that
-   lie on a shortest path with one sweep back from the meeting edges, then walks from `s` over
-   marked nodes (forward distance rising), across a meeting edge, and down the backward side
-   (backward distance falling). 10.2's argument applies to each half, so that walk has no dead
-   ends and writes rows into the trie in order. This is also the only strategy for an
-   exploration with `hop_imports`, which the explorator already walks seed by seed: a predicate
-   reading the seed row cannot be shared across the 64 lanes of an index.
-2. **Many rows sharing few targets, or few sources: an exact target index.** `PathTargetIndex`
-   over the chunk's distinct targets gives dist(v, t) for every node within reach, 64 targets
-   per word. When the distinct sources are fewer, build it from the sources over the forward
-   direction and walk from the targets with `reversed_paths`. Then run 10.2 per row. A batch
-   should stop once every pair it serves is resolved, rather than at the pattern's bound, which
-   is often unbounded here.
-3. **An unbound end** (GQL's `StatefulShortestPath(All)` shape, or a legacy cartesian product
-   with many rows per source). The `distinct` search already reaches each (seed, end) pair first
-   at its shortest distance, one level at a time; it reports neither the distance nor a path
-   today. Reporting the level gives `length(p)`. Paths need a per-seed distance, the target
-   batch layout run forward from the seeds, and the guided walk back from each end.
-
-The gate compares the pair set's cost under each strategy: the rows times a sampled
+**The gate** compares the pair set's cost under each strategy: the rows times a sampled
 bidirectional ball, against the distinct targets (or sources) divided by 64 times a sampled
 one-directional ball (Section 6.2). The samplers exist.
 
@@ -1024,10 +1064,11 @@ A shortest-path search defines the answer, so it must apply everything a pruning
 - **Path predicates** (`length(p) > 3`, `any(...)`). Filter the shortest paths lazily by the
   predicate and stop at the first that passes (`shortestPath`), or keep every passing path of
   the first length that has one (`allShortestPaths`). If none pass, deepen: explore trails of
-  length exactly d + 1, then d + 2, up to the bound, with the explorator pruned by the exact
-  distance, which stays a valid lower bound for trails, and stop at the first length with a
-  passing path. That returns the rows of Neo4j's enumerate-then-`Top` plan without enumerating
-  every trail up to the bound.
+  length exactly d + 1, then d + 2, up to the bound, with the explorator bound to `t` and pruned
+  the way it already prunes a bound end, and stop at the first length with a passing path. The
+  `PathTargetIndex` distances it prunes by are lower bounds on the hops a trail still needs, so
+  the pruning never drops a valid trail. That returns the rows of Neo4j's enumerate-then-`Top`
+  plan without enumerating every trail up to the bound.
 - **`SHORTEST k` and `SHORTEST k GROUPS`**, one relationship, TRAIL: the same deepening,
   stopping after k paths or k lengths. Under `REPEATABLE ELEMENTS`, PathFinder's layered BFS
   instead.
@@ -1059,8 +1100,9 @@ A shortest-path search defines the answer, so it must apply everything a pruning
 In order: (a) bidirectional against unidirectional search on reactome and the fraud graph, for
 random pairs and for pairs through hubs, and degree-sum against node-count balancing; (b)
 per-pair search against the 64-lane index as pairs per distinct target grow, to place the gate;
-(c) `ALL SHORTEST` through the guided walk against a stored predecessor DAG, on graphs with many
-shortest paths; (d) the same queries through `bench/vlp` against Neo4j, Memgraph, FalkorDB and
+(c) the stored DAG's memory for `ALL SHORTEST` on graphs with many shortest paths through hubs,
+and a DAG per row against descent through the index when rows share a target and ask for all
+paths; (d) the same queries through `bench/vlp` against Neo4j, Memgraph, FalkorDB and
 Ladybug, which also cross-checks row counts; (e) if hub-heavy graphs need millisecond answers,
 highway-cover labels per compacted version.
 
@@ -1083,6 +1125,8 @@ highway-cover labels per compacted version.
   an automaton transition agree; a BFS on it finds shortest matching walks.
 - **Predecessor DAG / PMR**: every node reached at depth d with its edges from depth d − 1;
   holds all shortest paths in space linear in the graph.
+- **Descent**: reading paths out of distances to a target by stepping, at each node, to a
+  neighbour one hop closer; the only way to list paths when no search ran from the source.
 - **Meeting edge**: in a bidirectional BFS, an edge from one side's frontier to a node the other
   side has reached.
 - **Degree-sum balancing**: expanding the side whose frontier has the smaller sum of degrees.
