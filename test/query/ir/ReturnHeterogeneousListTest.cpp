@@ -286,7 +286,7 @@ TEST_F(ReturnHeterogeneousListTest, repeatsTheListForEveryMatchedNode) {
 // column, so the embedding is laid out per row rather than only projected.
 TEST_F(ReturnHeterogeneousListTest, countsTheRowsOfAnEmbeddingKey) {
     const Rows expected = {{"(1, 2, 3)", "1"}};
-    expectNamedRows("RETURN (1,2,3) AS l, count(l) AS n", {"l", "n"}, expected);
+    expectNamedRows("WITH (1,2,3) AS l RETURN l, count(l) AS n", {"l", "n"}, expected);
 }
 
 // The same query over an embedding whose floats are all equal. MLIR uniques an all-equal
@@ -294,7 +294,7 @@ TEST_F(ReturnHeterogeneousListTest, countsTheRowsOfAnEmbeddingKey) {
 // type carries rather than through the bytes the attribute stored.
 TEST_F(ReturnHeterogeneousListTest, countsTheRowsOfARepeatedEmbeddingKey) {
     const Rows expected = {{"(1, 1, 1)", "1"}};
-    expectNamedRows("RETURN (1,1,1) AS l, count(l) AS n", {"l", "n"}, expected);
+    expectNamedRows("WITH (1,1,1) AS l RETURN l, count(l) AS n", {"l", "n"}, expected);
 }
 
 // The embedding constant stands for every matched row, so its tally is the relation's 18

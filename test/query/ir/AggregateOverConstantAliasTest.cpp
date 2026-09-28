@@ -66,10 +66,10 @@ private:
 
 }
 
-// An aggregate taken over the alias of a constant item - the count(x) of
-// RETURN 1 AS x, count(x). The alias is a second name for a column holding one value
-// standing for every row, so the aggregate folds as many values as the match produced:
-// what the argument names is a constant, but how many times it is folded is not.
+// An aggregate taken over a constant a WITH published - the count(x) of
+// WITH 1 AS x RETURN x, count(x). The column holds one value standing for every row, so
+// the aggregate folds as many values as the match produced: what the argument names is a
+// constant, but how many times it is folded is not.
 class AggregateOverConstantAliasTest : public TuringTest {
 protected:
     void initialize() override {
@@ -125,24 +125,24 @@ protected:
 // The constant is the only grouping key, so every match falls in one group and the count
 // is the whole match: one row holding the number of Person nodes.
 TEST_F(AggregateOverConstantAliasTest, countsOverAConstantAlias) {
-    expectCounts("MATCH (n:Person) RETURN 1 AS x, count(x)", {personCount});
+    expectCounts("MATCH (n:Person) WITH 1 AS x RETURN x, count(x)", {personCount});
 }
 
 // The sum reads the values the count only tallied: eight rows of the constant 1.
 TEST_F(AggregateOverConstantAliasTest, sumsOverAConstantAlias) {
-    expectSums("MATCH (n:Person) RETURN 1 AS x, sum(x)", {personCount});
+    expectSums("MATCH (n:Person) WITH 1 AS x RETURN x, sum(x)", {personCount});
 }
 
 // The same aggregate beside a key that does group the rows: the eight distinct names of
 // simpledb's Person nodes split the match into eight groups of one.
 TEST_F(AggregateOverConstantAliasTest, countsOverAConstantAliasBesideARowKey) {
-    expectCounts("MATCH (n:Person) RETURN n.name, 1 AS x, count(x)", Counts(personCount, 1));
+    expectCounts("MATCH (n:Person) WITH n, 1 AS x RETURN n.name, x, count(x)", Counts(personCount, 1));
 }
 
 // The value reduction of the same shape: each group holds one row of the constant, so
 // each group's sum is the constant itself.
 TEST_F(AggregateOverConstantAliasTest, sumsOverAConstantAliasBesideARowKey) {
-    expectSums("MATCH (n:Person) RETURN n.name, 1 AS x, sum(x)", Sums(personCount, 1));
+    expectSums("MATCH (n:Person) WITH n, 1 AS x RETURN n.name, x, sum(x)", Sums(personCount, 1));
 }
 
 // The alias is what the aggregate is taken over, not what it is grouped by: counting the
@@ -156,7 +156,7 @@ TEST_F(AggregateOverConstantAliasTest, countsATraversalVariableUnderAConstantKey
 // relation the query matched, and a query that matched none is one row of its own - so
 // the count is that one row rather than the graph's.
 TEST_F(AggregateOverConstantAliasTest, countsOverAConstantAliasWithoutAMatch) {
-    expectCounts("RETURN 1 AS x, count(x)", {1});
+    expectCounts("WITH 1 AS x RETURN x, count(x)", {1});
 }
 
 // The alias is only a name for the constant behind it, so the aggregate spelled over the
@@ -179,7 +179,7 @@ TEST_F(AggregateOverConstantAliasTest, countsASpelledOutConstantUnderAFilter) {
 
 // The value reduction of that same one row
 TEST_F(AggregateOverConstantAliasTest, sumsOverAConstantAliasUnderAFilter) {
-    expectSums("MATCH (n) WHERE n.name = 'Remy' RETURN 1 AS x, sum(x)", {1});
+    expectSums("MATCH (n) WHERE n.name = 'Remy' WITH 1 AS x RETURN x, sum(x)", {1});
 }
 
 int main(int argc, char** argv) {

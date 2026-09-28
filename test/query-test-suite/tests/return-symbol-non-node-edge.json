@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "return [1,2,3,4] as embedding, [true, \"i love turingdb\", 20.3, embedding]",
+  "query": "with [1,2,3,4] as embedding return embedding, [true, \"i love turingdb\", 20.3, embedding]",
   "expect": {
     "result": "embedding,\"[true, \"\"i love turingdb\"\", 20.3, embedding]\"\n\"[1, 2, 3, 4]\",\"[true, i love turingdb, 20.3, [1, 2, 3, 4]]\"",
     "resultJson": "{\"header\":{\"column_names\":[\"embedding\",\"[true, \\\"i love turingdb\\\", 20.3, embedding]\"],\"column_types\":[\"List\",\"List\"]},\"data\":[[[[1,2,3,4]],[[true,\"i love turingdb\",20.3,[1,2,3,4]]]]]}"

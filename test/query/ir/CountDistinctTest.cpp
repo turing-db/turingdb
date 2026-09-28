@@ -542,13 +542,13 @@ TEST_F(CountDistinctTest, countsTheDistinctValuesOfTheGroupingKey) {
     expectAgeGroupedCounts("MATCH (a) RETURN a.age, count(DISTINCT a.age)", expected);
 }
 
-// The same key one step up: an expression over two matched nodes, aliased, then counted
-// through that alias. Only Remy and Adam carry an age, so of the 324 pairs of the product
+// The same key one step up: an expression over two matched nodes, published by a WITH,
+// then counted. Only Remy and Adam carry an age, so of the 324 pairs of the product
 // just the four among those two have a difference at all - and all four differ by zero.
 TEST_F(CountDistinctTest, countsTheDistinctValuesOfAnExpressionKey) {
     const AgeCountRows expected {{0, 1}, {std::nullopt, 0}};
 
-    expectAgeGroupedCounts("MATCH (a), (b) RETURN b.age - a.age AS diff, COUNT(DISTINCT diff)", expected);
+    expectAgeGroupedCounts("MATCH (a), (b) WITH b.age - a.age AS diff RETURN diff, COUNT(DISTINCT diff)", expected);
 }
 
 // A value reduction and a distinct count in one grouped projection, over two different

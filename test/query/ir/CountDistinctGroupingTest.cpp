@@ -642,11 +642,11 @@ TEST_F(CountDistinctGroupingTest, groupsByAnAliasedKey) {
                      expected);
 }
 
-// The count reads the key through its alias, one expression up: the group of the two
+// The count reads the key a WITH published, one expression up: the group of the two
 // 32-year-olds carries the one value 33, and the null key group carries none at all
 // since a null plus one is still null.
 TEST_F(CountDistinctGroupingTest, countsDistinctValuesOfAnExpressionOverAKeyAlias) {
-    expectValueCounts("MATCH (a)-->(b) RETURN a.age AS age, count(DISTINCT age + 1)",
+    expectValueCounts("MATCH (a)-->(b) WITH a.age AS age RETURN age, count(DISTINCT age + 1)",
                       ValueCountRows {{32, 1}, {std::nullopt, 0}});
 }
 
