@@ -18,15 +18,15 @@ module {
     // source iterator whose nl.for emits one row per collected element.
     //
     // "age" and "name" are simpledb properties; swap them for properties your graph has.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%a, "age")
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name")
 
-    %gage, %uname = db.unwind_collect(%age, %name) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
+    %gage, %uname = db.unwind_collect(%age, %name) keys 1
 
-    db.output(%gage, %uname) : !db.column<none>, !db.column<none>
+    db.output(%gage, %uname)
 
     return
   }

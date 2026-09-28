@@ -18,9 +18,9 @@ module {
     //
     // The heterogeneous form, whose cells need not share a type:
     //   %x = db.unwind_const([true, "mixed", 10]) : !db.column<!storage.list_element>
-    %x = db.unwind_const([1, 2, 3]) : !db.column<i64>
+    %x = db.unwind_const([1, 2, 3])
 
-    db.output(%x) : !db.column<i64>
+    db.output(%x)
 
     return
   }

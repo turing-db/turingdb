@@ -10,7 +10,7 @@
 module {
   func.func @main() {
     %0 = nl.count_scan_rows([["Person"], ["Interest"]])
-    nl.output(%0) : !nl.chunk<ui64>
+    nl.output(%0)
     return
   }
 }

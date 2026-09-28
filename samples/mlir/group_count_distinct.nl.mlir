@@ -18,16 +18,16 @@ module {
     %0 = nl.group_aggregate_buffer keys 1 aggregates [count_distinct]
     %1 = nl.get_property_type("name")
     %2 = nl.scan_nodes()
-    nl.for %arg0 in %2 : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.for %arg0 in %2 {
       %4 = nl.get_out_edges(%arg0, {})
-      nl.for %arg1, %arg2, %arg3, %arg4 in %4 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
-        %5 = nl.get_node_properties(%arg1, %1) : !nl.chunk<!storage.nullable<!storage.string>>
-        nl.group_aggregate_update %0, (%5, %arg4) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>
+      nl.for %arg1, %arg2, %arg3, %arg4 in %4 {
+        %5 = nl.get_node_properties(%arg1, %1)
+        nl.group_aggregate_update %0, (%5, %arg4)
       }
     }
-    %3 = nl.group_aggregate(%0) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<ui64>>
-    nl.for %arg0, %arg1 in %3 : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<ui64>> {
-      nl.output(%arg0, %arg1) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<ui64>
+    %3 = nl.group_aggregate(%0)
+    nl.for %arg0, %arg1 in %3 {
+      nl.output(%arg0, %arg1)
     }
     return
   }

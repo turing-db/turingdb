@@ -15,13 +15,13 @@ module {
     // elements after the loop.
     //
     // "name" is a simpledb property; swap it for a property your graph has.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name")
 
-    %uname = db.unwind_collect(%name) keys 0 : (!db.column<none>) -> !db.column<none>
+    %uname = db.unwind_collect(%name) keys 0
 
-    db.output(%uname) : !db.column<none>
+    db.output(%uname)
 
     return
   }

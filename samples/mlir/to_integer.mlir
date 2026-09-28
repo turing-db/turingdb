@@ -2,11 +2,11 @@
 
 module {
   func.func @main() {
-    %s = db.constant("42" : !storage.string)
+    %s = db.constant("42")
 
-    %i = db.to_integer(%s) : (!db.column<!storage.string>) -> !db.column<none>
+    %i = db.to_integer(%s)
 
-    db.output(%i) : !db.column<none>
+    db.output(%i)
 
     return
   }

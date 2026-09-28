@@ -10,7 +10,7 @@
 module {
   func.func @main() {
     %0 = nl.constant([1, 2, 3])
-    nl.output(%0) : !nl.chunk<!storage.list<i64>>
+    nl.output(%0)
     return
   }
 }

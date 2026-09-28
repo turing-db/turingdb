@@ -10,11 +10,11 @@ module {
     // collapses it: nl.output carries the skip handle and emits the surviving
     // suffix in place at an offset (skipThisStep), with no copy at all - see the
     // generated lowering in skip.nl.mlir.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %sa = db.skip(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    %sa = db.skip(%a) count 3
 
-    db.output(%sa) : !db.column<!storage.node_id>
+    db.output(%sa)
 
     return
   }

@@ -1,8 +1,8 @@
 module {
   func.func @main() {
-    %c = db.constant(30 : i64)
+    %c = db.constant(30)
 
-    db.output(%c) : !db.column<i64>
+    db.output(%c)
 
     return
   }

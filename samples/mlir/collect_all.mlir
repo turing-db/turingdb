@@ -13,13 +13,13 @@ module {
     // scan loop, and an nl.collect source draining the single group after the loop.
     //
     // "name" is a simpledb property; swap it for a property your graph has.
-    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %a = db.scan_nodes()
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name")
 
-    %names = db.collect(%name) keys 0 : (!db.column<none>) -> !db.column<!storage.list<none>>
+    %names = db.collect(%name) keys 0
 
-    db.output(%names) : !db.column<!storage.list<none>>
+    db.output(%names)
 
     return
   }

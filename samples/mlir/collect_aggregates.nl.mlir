@@ -20,15 +20,15 @@ module {
     %2 = nl.get_property_type("name")
     %3 = nl.get_property_type("dob")
     %4 = nl.scan_nodes()
-    nl.for %arg0 in %4 : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %6 = nl.get_node_properties(%arg0, %3) : !nl.chunk<!storage.nullable<!storage.string>>
-      %7 = nl.get_node_properties(%arg0, %2) : !nl.chunk<!storage.nullable<!storage.string>>
-      %8 = nl.get_node_properties(%arg0, %1) : !nl.chunk<!storage.nullable<i64>>
-      nl.collect_update %0, (%6, %7, %8, %8, %8) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>
+    nl.for %arg0 in %4 {
+      %6 = nl.get_node_properties(%arg0, %3)
+      %7 = nl.get_node_properties(%arg0, %2)
+      %8 = nl.get_node_properties(%arg0, %1)
+      nl.collect_update %0, (%6, %7, %8, %8, %8)
     }
-    %5 = nl.collect(%0) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.list<!storage.string>>, !nl.chunk<ui64>, !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>>
-    nl.for %arg0, %arg1, %arg2, %arg3, %arg4 in %5 : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.list<!storage.string>>, !nl.chunk<ui64>, !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>> {
-      nl.output(%arg0, %arg1, %arg2, %arg3, %arg4) : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.list<!storage.string>>, !nl.chunk<ui64>, !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>
+    %5 = nl.collect(%0)
+    nl.for %arg0, %arg1, %arg2, %arg3, %arg4 in %5 {
+      nl.output(%arg0, %arg1, %arg2, %arg3, %arg4)
     }
     return
   }

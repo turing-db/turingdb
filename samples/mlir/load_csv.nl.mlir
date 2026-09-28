@@ -14,10 +14,10 @@
 // and what a write stores a String property from.
 module {
   func.func @main() {
-    %0 = nl.load_csv("people.csv", ["name", "age"]) with_headers : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>>
-    nl.for %arg0, %arg1 in %0 : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>> {
-      %1 = nl.to_integer %arg1 : (!nl.chunk<!storage.owned_string>) -> !nl.chunk<!storage.nullable<i64>>
-      nl.output(%arg0, %1) names ["row.name", "toInteger(row.age)"] : !nl.chunk<!storage.owned_string>, !nl.chunk<!storage.nullable<i64>>
+    %0 = nl.load_csv("people.csv", ["name", "age"]) with_headers
+    nl.for %arg0, %arg1 in %0 {
+      %1 = nl.to_integer %arg1
+      nl.output(%arg0, %1) names ["row.name", "toInteger(row.age)"]
     }
     return
   }
