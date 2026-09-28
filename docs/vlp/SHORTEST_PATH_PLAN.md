@@ -53,21 +53,40 @@ Design decisions:
   into an exploration (`end_labels`, `end_column`, `end_nodes`, the end factor, the end set)
   restricts which of those partitions exist without changing what is selected inside one. So the
   fusions, the `hop` region, `hop_imports`, the carry set, the trie, OPTIONAL MATCH and reversed
-  seeding all apply. Design Section 3 lists the two sites that rebuild the op and must carry the
-  new attributes.
+  seeding all apply. Design Section 3 lists the three sites that rebuild the op or count its
+  operands.
 - **A separate runtime.** `PathShortestSearch` is a new chunk writer with `PathExplorator`'s
   contract. `runEdgeLoopSteps`, already a template on its chunk writer, drives either one.
   `PathExplorator` stays an enumerator; the search owns one for its deepening fallback.
 - **The executor chooses the search.** A row whose end is bound runs a bidirectional BFS, and so
   does each member of a small end set. A row whose end is open, labelled or a larger set runs a
-  BFS from its seed. The end set matters: `fuse_explore_end_factor` turns the `end_column` of
-  `MATCH (a {..}), (b {..}), p = shortestPath((a)-[*]-(b))` into `end_nodes`, and
-  `fuse_explore_end_set` does the same for `(b {name: 'y'})`. So the commonest legacy query
-  reaches the executor with an end set of one node. Codegen emits the plain form and passes fuse,
-  as CLAUDE.md requires.
+  BFS from its seed. The end set matters. A selective exploration follows the cross product of its
+  part (below), so the `end_column` of `MATCH (a {..}), (b {..}), p = shortestPath((a)-[*]-(b))`
+  is drawn from a factor, which `fuse_explore_end_factor` turns into `end_nodes`;
+  `fuse_explore_end_set` does the same for `shortestPath((a)-[*]-(b {name: 'y'}))`. So the
+  commonest legacy query reaches the executor with an end set of one node. Codegen emits the plain
+  form and passes fuse, as CLAUDE.md requires.
 - **A legacy `WHERE` is a pre-filter.** The conjuncts that read the path or its relationship list
   go into a `path_filter` region inside the op. A pass moves the ones that can be checked hop by
   hop into the `hop` region: the placement is the semantics, the motion is the optimisation.
+- **A selective exploration follows every variable its pre-filters read.** `generateTraversal`
+  generates each connected component of a part in its own block and crosses them afterwards, so
+  a hop predicate that reads another component throws, even when an earlier clause binds the
+  variable and a `WITH` stands between them:
+
+  ```
+  MATCH (c:Person {name: 'Remy'}) WITH c MATCH (n:Person)((a)-[e:KNOWS_WELL]->(b) WHERE e.duration > c.age){1,2}(m) RETURN m
+    -> A predicate on a hop cannot read 'c': it holds no value while the path is walked
+  ```
+
+  A legacy `WHERE` makes that the common case:
+  `MATCH (a {..}), (b {..}), (x {..}), p = shortestPath((a)-[*]-(b)) WHERE none(n IN nodes(p) WHERE n = x)`.
+  Neo4j runs the search once both endpoints are bound, after a cartesian product. Codegen does the
+  same: the traversal leaves a selective relationship out of its component's walk and generates it
+  once every component of the part is crossed, the rows a `WITH` carried in included. A far end
+  another pattern binds is then a carried column, bound by `end_column`; a far end only the
+  selective pattern binds is the exploration's own `tgtids`. GQL's selective patterns follow the
+  same rule.
 - **A GQL MATCH-level `WHERE` is a post-filter.** It stays an ordinary filter after the op.
   `PushDownFilters` already stops path and target predicates at an exploration (`PLAN.md`
   Section 5). The end fusions move in only the conjuncts that read the end node alone, which
@@ -138,19 +157,25 @@ post-filter. A fixed-length pattern under `ALL SHORTEST` or `GROUPS` is a plain 
                path_filter({ ^bb0(%src, %tgt, %path): ... db.yield %mask })
 ```
 
-Verifier: `selector_count` is present exactly for `shortest_k` and `shortest_groups` and is not
-zero; `legacy`, `path_imports` and `path_filter` appear only with a selector; `distinct` never
-appears with one; `legacy` requires `min_hops` of at most 1. `nl.explore_paths` mirrors the
-attributes, the operands and the region.
+Verifier: `selector_count` is present exactly for `shortest_k` and `shortest_groups` and is
+greater than 1, since a count of 1 is `any_shortest` or `all_shortest`; `legacy`, `path_imports`
+and `path_filter` appear only with a selector; `distinct` never appears with one; `legacy`
+requires `min_hops` of at most 1. `nl.explore_paths` mirrors the attributes, the operands and the
+region.
 
 ### 2. Codegen
 
 - A legacy element, `p = shortestPath((a)-[r*..10]-(b))`, is generated like
-  `p = (a)-[r*..10]-(b)` with `selector` and `legacy` set. The far end is bound as today, by an
-  equality or label filter over `tgtids` that the end fusions absorb.
+  `p = (a)-[r*..10]-(b)` with `selector` and `legacy` set, once the part's components are crossed
+  (Decisions). The far end is bound as today, by an equality or label filter over `tgtids` that
+  the end fusions absorb.
 - The MATCH's `WHERE` conjuncts that read `p` or `r` are generated into `path_filter`, over
   `make_path` of the region's seed and handle, the way `generateHopRegion` builds the `hop`
-  region; the other conjuncts go through `applyPredicateFilters` as today.
+  region; the other conjuncts go through `applyPredicateFilters` as today. Inside the region the
+  pattern's two node variables are the region's `srcids` and `tgtids`, swapped when the walk is
+  taken against the pattern. They are not imports: once the end fusions run, the far end is an
+  end set and no per-row column holds it. Every other variable a conjunct reads is a
+  `path_imports` operand.
 - GQL (Phase 3): inline predicates, element-pattern and QPP `WHERE` into the `hop` region as
   today; the parenthesised selective pattern's `WHERE` into `path_filter`; the MATCH-level
   `WHERE` as ordinary filters after the op.
@@ -161,24 +186,32 @@ attributes, the operands and the region.
 - `fuse_shortest_step_predicates`, before `fuse_explore_hop_labels`. From a `path_filter` it
   moves `all(x IN relationships(p) WHERE f)` and `none(...)` (as `NOT f`), the same two over the
   relationship list, and the same two over `nodes(p)`, into the `hop` region, provided `f` reads
-  neither the path nor the list. The `path_imports` that `f` reads become `hop_imports`. The
-  `nodes(p)` forms also become a filter on the seed, since `nodes(p)` includes it. An emptied
-  `path_filter` is removed. It matches `db.list_predicate` over `db.path_elements` of the
-  region's `make_path`, so it runs before `fuse_path_elements` (Phase 0). `dbPassCount` grows by
-  one.
-- `fuse_explore_distinct_ends` skips selective explorations. Selection alone would not change the
-  set of (seed, end) pairs, since every pair with a candidate keeps at least one path. But the
-  level search keeps a seed that reaches itself, which `legacy` drops, and it does not evaluate
-  `path_filter`. The shortest search already expands each node once, so skipping costs little.
+  neither the path, nor the list, nor the region's `tgtids`. The hop region's third argument is
+  the hop's end, not the path's, so an `f` over the far end stays in `path_filter`. An `f` over
+  the seed reads it through a hop import of `input_nodes`, and the `path_imports` that `f` reads
+  become `hop_imports`. The `nodes(p)` forms also become a filter on the seed, since `nodes(p)`
+  includes it. An emptied `path_filter` is removed. It matches `db.list_predicate` over
+  `db.path_elements` of the region's `make_path`, so it runs before `fuse_path_elements`
+  (Phase 0). `dbPassCount` grows by one.
+- `fuse_explore_distinct_ends` sets `any_shortest` on a selective exploration, dropping
+  `selector_count`, where it would set `distinct` on an enumeration. Every selector keeps at least
+  one path for each (seed, end) pair that has a candidate, so the pairs are the same, and
+  `allShortestPaths(...) RETURN DISTINCT b` lists one path per pair instead of all of them. The
+  hop-import condition does not apply, since no level search runs. It never sets `distinct` on a
+  selective exploration: the level search keeps a seed that reaches itself, which `legacy` drops,
+  and it does not evaluate `path_filter`.
 - Every other fusion keeps the selector: `fuse_explore_end_constraint`, `fuse_explore_end_nodes`,
   `fuse_explore_end_factor` and `fuse_explore_end_set` narrow the ends;
   `fuse_explore_hop_labels` rewrites the `hop` region; `trim_unread_columns` and
   `count_path_rows` do not depend on selection. One EXPLAIN test per fusion pins it, and a new
   fusion over explorations must say whether it commutes with per-(seed, end) selection.
-- Two sites rebuild the op and must carry `selector`, `selector_count`, `legacy`, `path_imports`
-  and `path_filter`. `trimExploreSegments` writes four operand segments,
-  `{1, kept, end_nodes, hop_imports}`, and `path_imports` makes it five. `fuseExploreEndFactor`
-  rebuilds the op from positional arguments and moves only the `hop` region.
+- Three sites rebuild the op or count its operands, and must carry `selector`, `selector_count`,
+  `legacy`, `path_imports` and `path_filter`. `matchCarrySetLayout` counts the operands after the
+  carry set as `end_nodes` plus `hop_imports`; without `path_imports` in that count,
+  `trim_unread_columns` reads them as carried columns. `trimExploreSegments` writes four operand
+  segments, `{1, kept, end_nodes, hop_imports}`, and `path_imports` makes it five. `trimCarrySet`
+  itself copies every attribute and moves every region. `fuseExploreEndFactor` rebuilds the op
+  from positional arguments and moves only the `hop` region.
 
 ### 4. Lowering, translation, execution
 
@@ -187,7 +220,9 @@ attributes, the operands and the region.
 - `NLExplorePathsLoopData` gains the selector, its count, `legacy`, and the path filter's
   statements and bound columns; `NLTranslator::translateExplorePathsLoop` translates the region.
 - `NLExecutor::runExplorePathsLoop` builds a `PathShortestSearch` when the loop data carries a
-  selector, sets the inputs it sets on `PathExplorator`, and hands it to `runEdgeLoopSteps`.
+  selector, sets the inputs it sets on `PathExplorator`, and hands it to `runEdgeLoopSteps`. It
+  skips the pruning gates: `sampleSeedsOf` and `hopPassRateFor` price an enumeration the search
+  does not run, and the search builds the index its fallback prunes by (Section 5).
 - `PathFilter` (`storage/iterators/PathFilter.{h,cpp}`) is the interface the search calls, as
   `PathHopFilter` is for a hop: storage cannot include the query engine. `NLPathFilter`, beside
   `NLHopFilter`, implements it: it runs the `path_filter` statements over a chunk of candidate
@@ -234,32 +269,50 @@ enough is one node:
 - a frontier that empties ends the row without a path.
 
 **BFS from the seed**, for a row whose end is open, labelled or a larger set: level by level up to
-`max_hops`, every reached node that passes the end constraints being an end. An end set stops the
-search once all its members are reached.
+`max_hops`, every reached node that passes the end constraints being an end. With an end set, ANY
+stops once every member is reached. ALL finishes the level on which the last member is reached,
+since the edges scanned later in that level are predecessor edges too.
 
 **Listing.**
 
 - ANY without a `path_filter`: the parent chains, appended to the trie in walk order.
-- ALL, and ANY with a `path_filter`: one sweep back from the meeting edges (or from the ends
-  reached) marks the nodes that lie on shortest paths and links their successor edges. A
-  depth-first walk over the marked successors, across a meeting edge and down the backward side's
-  predecessor edges, emits one row per path. Every step has a continuation, so the walk never
-  backs out of a dead end, and it resumes across fills from its stack (research Section 10.2).
+- ALL: one sweep back from the meeting edges (or from the ends reached) marks the nodes that lie
+  on shortest paths and links their successor edges. A depth-first walk over the marked
+  successors, across a meeting edge and down the backward side's predecessor edges, emits one row
+  per path. Every step has a continuation, so the walk never backs out of a dead end, and it
+  resumes across fills from its stack (research Section 10.2).
+- ANY with a `path_filter`, bidirectional: the same walk, stopping at the first path that passes.
+- ANY with a `path_filter`, from the seed: per end, a depth-first walk back from the end along the
+  predecessor lists, stopping at the first path that passes. It needs no sweep, since every
+  predecessor chain reaches the seed. One forward walk would serve every end at once and could not
+  stop for one end without stopping for all: `shortestPath((a:Station)-[*]-(b:Station)) WHERE
+  length(p) > 2` would list every shortest path to every end, 2^n per pair on a chain of n
+  diamonds, where Neo4j stops at the first that passes.
 - The trie's arenas are pinned, truncated and retained per fill exactly as the explorator does.
 
 **Same node.** With `legacy`, a seed is never emitted as its own end unless `min_hops` is 0, which
-emits the zero-length path.
+emits the zero-length path. `fuse_explore_end_nodes` sets `ends_on_seed` for
+`shortestPath((a)-[*]-(a))`. With `legacy` such a row runs no search: it emits the zero-length path
+or nothing. Without `legacy` it asks for the shortest closed trail, which is Phase 3's.
 
 **`path_filter`.** Candidates are appended to the trie, since the filter reads their handles, and
-pass through the `PathFilter` in length order. ANY keeps the first that passes per (row, end),
-among every path of the shortest length: one failing parent chain does not mean no path of that
-length passes. ALL keeps every passing path of the first length that has one. When the shortest
-length has none, the search deepens with its own `PathExplorator`: minimum and maximum L, end
-bound to the row's end, pruned by the target index, for L = d + 1 up to `max_hops`, until a
-length yields a passing path. The index's distances are lower bounds on trail lengths, so the
-pruning drops no valid trail (research Section 10.5). They are lower bounds only over the edges
-the index saw, so the fallback prunes under the explorator's rule: not when the change holds
-pending edges (`walksPendingEdges`).
+pass through the `PathFilter` in length order. A fill is bounded by the rows it emits, not by the
+candidates the filter rejects, so the rejected candidates of each filter batch are truncated from
+the arena (`PathTrie::truncateArena`), keeping the chain the walk still stands on. ANY keeps the
+first that passes per (row, end), among every path of the shortest length: one failing parent
+chain does not mean no path of that length passes. ALL keeps every passing path of the first
+length that has one. When the shortest length has none, the search deepens with its own
+`PathExplorator`: minimum and maximum L, end bound to the row's end, pruned by a target index,
+for L = d + 1 up to `max_hops`, until a length yields a passing path. The index's distances are
+lower bounds on trail lengths, so the pruning drops no valid trail (research Section 10.5). They
+are lower bounds only over the edges the index saw, so the fallback prunes under the
+explorator's rule: not when the change holds pending edges (`walksPendingEdges`).
+
+The executor's index cannot serve the fallback: `targetIndexFor` builds one per chunk behind a
+cost gate and may return null. The fallback builds its own on first use, `PathTargetIndex::build`
+over the row's end: one BFS, against an enumeration. A bidirectional row already holds a bound,
+the backward side's depths: exact within its radius J, and at least J + 1 outside it. Which of
+the two prunes better is measured with the fallback on the `precedingEvent` hub (Risks).
 
 ### 6. Parser and AST
 
@@ -282,9 +335,10 @@ Phase 3:
 - `ANY SHORTEST`, `ALL SHORTEST`, `SHORTEST k [PATH|PATHS]`, `SHORTEST [k] GROUP|GROUPS` and
   `ANY [k]` before a path pattern, after `symbol =` too; k a literal. Query parameters do not
   parse (`CypherParser.y` answers `$` with "Parameters" not implemented), and `selector_count` is
-  an attribute, so a parameter k waits for parameters and then becomes an operand. `ANY` and
-  `ANY k` are `shortest_k`, as Neo4j plans them; `ALL SHORTEST` and `SHORTEST 1 GROUPS` are
-  `all_shortest`;
+  an attribute, so a parameter k waits for parameters and then becomes an operand. `ANY k` is
+  `shortest_k`, as Neo4j plans it. `ANY`, `ANY SHORTEST` and `SHORTEST 1` are `any_shortest`,
+  and `ALL SHORTEST` and `SHORTEST 1 GROUPS` are `all_shortest`, so a count of 1 never reaches
+  the op;
 - the parenthesised selective pattern with its own `WHERE`;
 - `MATCH REPEATABLE ELEMENTS` and `MATCH DIFFERENT RELATIONSHIPS` on `MatchStmt`, and `ACYCLIC`
   after a selector.
@@ -296,9 +350,11 @@ Phase 3:
   predicate is false and one is null).
 - Phase 1, the legacy rules with Neo4j's messages (research Section 1.2): one relationship; a
   minimum of 0 or 1; no property map on the relationship; no QPP inside; no relationship
-  variable bound earlier; not in CREATE or MERGE; not mixed with a selector or a mode. `[r:T]` is
-  rewritten to `{1,1}`, so `r` is a list. Each `WHERE` conjunct is marked as reading the path (or
-  its list) or not.
+  variable bound earlier; not in CREATE or MERGE; not mixed with a selector or a mode. In an
+  expression, both endpoints bound ("A shortestPath(...) requires bound nodes when not part of a
+  MATCH clause."), and the argument a pattern: `pathExpr` also accepts a parenthesised
+  expression, so `shortestPath((1))` parses. `[r:T]` is rewritten to `{1,1}`, so `r` is a list.
+  Each `WHERE` conjunct is marked as reading the path (or its list) or not.
 - Phase 3, the GQL rules: k greater than 0; under `DIFFERENT RELATIONSHIPS` a selective pattern
   is the only path pattern in its MATCH; it references only variables bound by earlier clauses;
   `REPEATABLE ELEMENTS` needs bounded quantifiers under a selector; `ACYCLIC` is used with
@@ -337,9 +393,12 @@ Phases 2 and 3 are independent once Phase 1 has landed.
   `any`, `none` or `single`, whose region is the predicate over one element, as
   `db.list_comprehension`'s is.
 - `fuse_path_elements`: `db.path_elements` over a `make_path` of one node and one path column
-  answers from the path's handles, `db.path_length` for `length` and `db.expand_path` for
-  `relationships` and, after the seed, for `nodes`. Codegen emits the plain form and the pass
-  takes the short one, as CLAUDE.md requires. `dbPassCount` grows by one.
+  answers from the path's handles: `db.path_length` for `length`, `db.expand_path` kind `edges`
+  for `relationships`, and a new kind `nodes` for `nodes`, the seed followed by every hop's end.
+  The existing kinds do not give it: `sources` stops before the last end and `ends` leaves out
+  the seed. `PathExpansionKind` is not persisted. A zero-length path gives `[seed]`. Codegen emits
+  the plain form and the pass takes the short one, as CLAUDE.md requires. `dbPassCount` grows by
+  one.
 - Tests: a new Cypher test file on simpledb covering both path shapes, OPTIONAL MATCH nulls and a
   zero-length path; another for the list predicates, their null results included.
 
@@ -357,7 +416,8 @@ Design Sections 1 to 8 for the legacy forms. Done when:
 - a `shortest` group in `bench/vlp` on reactome and the fraud graph matches Neo4j's row counts and
   path lengths. `bench/vlp` loads Falkor and Ladybug only, so the group comes with a Neo4j loader;
 - on reactome and the fraud graph, over pairs the `shortest` group samples at each distance from 1
-  to 6, a point-to-point query runs within about twice v3's fixed per-query cost of about 0.4 ms.
+  to 6, the median point-to-point query runs within about twice v3's fixed per-query cost of about
+  0.4 ms. The p90 and the maximum are recorded beside it, since reactome's hub pairs set the tail.
   The query binds its ends the Neo4j way, `MATCH (a {..}), (b {..}), p = shortestPath(...)`, so
   the timing goes through `fuse_explore_end_factor` and the end-set dispatch.
 
@@ -423,8 +483,9 @@ Phase 0:
 - Modified: `CypherParser.y`, the list-predicate expression in `query/AST/expr/`,
   `FunctionDecls.cpp`, `ExprAnalyzer.cpp`, `DBProgramGenerator.h/.cpp` (codegen and the pass
   table), `DBOps.td/.cpp` (`db.path_elements`, `db.list_predicate`), `DBPasses.td/.cpp`
-  (`fuse_path_elements`), `NLOps.td/.cpp`, `DBLowering.h/.cpp`, `NLTranslator.h/.cpp`,
-  `NLExecutor.h/.cpp`, `test/query/ir/CMakeLists.txt`.
+  (`fuse_path_elements`), `StorageEnums.td` (`PathExpansionKind::Nodes`), `NLOps.td/.cpp`,
+  `DBLowering.h/.cpp`, `NLTranslator.h/.cpp`, `NLExecutor.h/.cpp`,
+  `test/query/ir/CMakeLists.txt`.
 
 Phase 1:
 
@@ -437,7 +498,8 @@ Phase 1:
   on simpledb.
 - Modified: `CypherLexer.l`, `CypherParser.y`, `PatternElement.h/.cpp`, `ReadStmtAnalyzer.cpp`,
   `ExprAnalyzer.cpp`, `StorageEnums.td`, `DBOps.td/.cpp`, `NLOps.td/.cpp`, `DBPasses.td/.cpp`,
-  `DBProgramGenerator.h/.cpp` (codegen and the pass table), `DBLowering.h/.cpp`, `NLProgram.h`,
+  `DBProgramGenerator.h/.cpp` (the traversal, codegen and the pass table), `DBLowering.h/.cpp`,
+  `NLProgram.h`,
   `NLTranslator.h/.cpp`, `NLExecutor.h/.cpp`, `PathHopFilter.h`, `PathLabelHopFilter.h/.cpp`,
   `PathExplorator.h/.cpp` (the candidate extraction), `storage/CMakeLists.txt`,
   `test/storage/CMakeLists.txt`, `test/query/ir/CMakeLists.txt`, `bench/vlp/workloads.py`.
@@ -457,15 +519,18 @@ Each step is a commit, with its failing test written first.
    of 0; the storage test and the sweep against the reference.
 4. The op: `PathSelector`, the attributes, `path_imports` and `path_filter`, the verifier, the nl
    mirror, lowering, translation, `PathFilter` and `NLPathFilter`, the reversed hop filter and the
-   dispatch in the executor; the new attributes carried through `trimExploreSegments` and
-   `fuseExploreEndFactor`; a dialect test and a hand-written IR test on simpledb.
-5. The deepening fallback behind `path_filter`.
-6. The legacy grammar and AST; the analyzer rules and messages; codegen; the pass and the distinct
-   exclusion; one EXPLAIN test per fusion; the Cypher tests and the Station fixtures.
-7. The expression form.
-8. The Neo4j loader and the `bench/vlp` shortest group; the Neo4j run that confirms the legacy
+   dispatch in the executor; the new attributes carried through `matchCarrySetLayout`,
+   `trimExploreSegments` and `fuseExploreEndFactor`; a dialect test and a hand-written IR test on
+   simpledb.
+5. The deepening fallback behind `path_filter`, with the index it builds.
+6. The legacy grammar and AST; the analyzer rules and messages, with their tests.
+7. Codegen, the traversal generating the selective relationship after the cross product included;
+   the pass and the `any_shortest` rewrite in `fuse_explore_distinct_ends`; one EXPLAIN test per
+   fusion; the Cypher tests and the Station fixtures.
+8. The expression form.
+9. The Neo4j loader and the `bench/vlp` shortest group; the Neo4j run that confirms the legacy
    fixtures; the Phase 1 numbers recorded in this document.
-9. Phases 2 to 5, each a change of its own.
+10. Phases 2 to 5, each a change of its own.
 
 ## Verification
 
@@ -474,7 +539,8 @@ Each step is a commit, with its failing test written first.
   which does not exercise v3.
 - The sweep: random small graphs as in `PathExploratorCyclicTest` (self-loops, parallel edges and
   short cycles arising together), every direction, a minimum of 0 and 1, bounded and unbounded
-  maxima, type and hop filters, tombstones, pending edges, chunk sizes 1, 2 and 65,536. The
+  maxima, type and hop filters, bound, open and labelled ends, end sets of one and several nodes,
+  tombstones, pending edges, chunk sizes 1, 2 and 65,536. The
   reference enumerates every trail with `PathExplorationReference` and keeps the shortest per
   (seed, end): `all_shortest` must equal it as a multiset, and `any_shortest` must return one of
   its paths per (seed, end). With a path filter, the reference keeps the shortest passing trails
@@ -482,10 +548,14 @@ Each step is a commit, with its failing test written first.
   rows it weighed, so two empty results cannot pass.
 - Structural cases with counts derived by hand: a chain of n diamonds (2^n shortest paths), a hub,
   two components, a shortest path through a node with a self-loop, parallel edges on a shortest
-  path, a pair joined only by pending edges, a shortest path cut by a tombstone.
+  path, a pair joined only by pending edges, a shortest path cut by a tombstone, an end set of two
+  nodes at one depth whose last predecessor edge comes after both are first reached.
 - Cypher tests: every error message; OPTIONAL MATCH nulls; each direction; the fallback (research
-  Section 1.5, WSH and BMV bound); `WHERE a <> b`; the Station fixtures, whose graph a change
-  builds before the queries run, since the V3 suite runner builds only simpledb.
+  Section 1.5, WSH and BMV bound); `WHERE a <> b`; a pre-filter reading another pattern part,
+  `none(n IN nodes(p) WHERE n = x)` with `x` its own part, and one reading a variable carried in
+  by `WITH`; a per-step predicate reading the far end; `shortestPath((a)-[*]-(a))` with a minimum
+  of 0 and 1; the Station fixtures, whose graph a change builds before the queries run, since the
+  V3 suite runner builds only simpledb.
 - Ties: `any_shortest` tests compare lengths, counts and sets, never which path came back;
   `all_shortest` tests compare multisets.
 
@@ -493,17 +563,27 @@ Each step is a commit, with its failing test written first.
 
 - Filter placement. A legacy pre-filter applied after the search, or a GQL post-filter moved
   inside it, returns plausible wrong rows. The Station fixtures pin both, 0 rows against 1.
-- A fusion that changes selection, or one of the two rebuild sites dropping the selector: covered
-  by the audit in Design Section 3 and one EXPLAIN test per fusion.
+- Pre-filter scope. A selective exploration generated inside its component cannot read another
+  pattern part, and the query is rejected as if it were invalid. A per-step predicate on the far
+  end moved into the hop region compares against each hop's end instead. The Cypher tests pin
+  both.
+- A fusion that changes selection, or one of the three sites of Design Section 3 dropping the
+  selector or miscounting `path_imports`: covered by the audit there and one EXPLAIN test per
+  fusion.
 - ANY with a `path_filter`. Filtering one parent chain and deepening when it fails returns a
-  longer path while another shortest one passes. The sweep's path filter pins it.
+  longer path while another shortest one passes. The sweep's path filter pins it. From the seed,
+  one forward walk over several ends lists every shortest path to every end; the listing is per
+  end.
+- Rejected candidates. Without the truncation of Design Section 5, a fill holds every candidate
+  the filter rejected.
 - The end-set dispatch. Without it, the commonest legacy query runs the BFS from the seed. The
   Phase 1 timing binds its ends through a cross product, not with hand-written `end_column` IR.
 - New keywords: zero new bison conflicts and a full `ctest` run before landing.
 - Exponential `all_shortest` output is the query's own output; the listing is chunked and the trie
   reclaims its arenas per fill.
 - The deepening fallback is exponential in the worst case, as Neo4j's is. It is measured on the
-  `precedingEvent` hub of reactome (`PLAN.md`, Status) before Phase 1 closes.
+  `precedingEvent` hub of reactome (`PLAN.md`, Status) before Phase 1 closes, under both bounds
+  of Design Section 5.
 - Distances past a byte: the target index saturates at 254 levels, reading "at least 254". That
   keeps pruning safe, but Phase 2's descent needs exact distances, so it uses the index only
   below that.
