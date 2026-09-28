@@ -18,3 +18,8 @@ std::string_view StringBuffer::concatenate(std::string_view a, std::string_view 
 
     return {start, totalSize};
 }
+
+std::string_view StringBuffer::insert(std::string_view str) {
+    return SpanBuffer::insert(std::span<const char> {str.data(), str.size()});
+}
+

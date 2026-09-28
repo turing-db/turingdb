@@ -445,6 +445,8 @@ template <typename Functor>
 Functor makeFunctor(NLExecutionContext* context, LocalMemory* memory) {
     if constexpr (std::is_constructible_v<Functor, GraphView, QueryListBuffer*, const CommitWriteBuffer*>) {
         return Functor(*context->getView(), &memory->listBuffer(), context->getWriteBuffer());
+    } else if constexpr (std::is_constructible_v<Functor, GraphView, StringBuffer*, const CommitWriteBuffer*>) {
+        return Functor(*context->getView(), &memory->stringBuffer(), context->getWriteBuffer());
     } else if constexpr (std::is_constructible_v<Functor, GraphView, const CommitWriteBuffer*>) {
         return Functor(*context->getView(), context->getWriteBuffer());
     } else if constexpr (std::is_constructible_v<Functor, GraphView>) {
@@ -3878,9 +3880,11 @@ Item optTaggedColumnItem(const Column* input, size_t row, LocalMemory*) {
 template <typename Item>
 Item ownedStringItem(const Column* input, size_t row, LocalMemory* memory) {
     const std::string& owned = (*static_cast<const ColumnVector<std::string>*>(input))[row];
-    const std::span<const char> characters {owned.data(), owned.size()};
+    StringBuffer& strBuf = memory->stringBuffer();
 
-    return Item {memory->stringBuffer().insert(characters)};
+    const std::string_view bufferSV = strBuf.insert(owned);
+
+    return Item {bufferSV};
 }
 
 template <typename Item>
@@ -3890,9 +3894,11 @@ Item optOwnedStringItem(const Column* input, size_t row, LocalMemory* memory) {
         return Item {PropertyNull {}};
     }
 
-    const std::span<const char> characters {owned->data(), owned->size()};
+    StringBuffer& strBuf = memory->stringBuffer();
 
-    return Item {memory->stringBuffer().insert(characters)};
+    const std::string_view bufferSV = strBuf.insert(owned.value());
+
+    return Item {bufferSV};
 }
 
 // The fold and the list emit an entity collect of this ID reads. The list emits through

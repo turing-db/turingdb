@@ -175,11 +175,14 @@ struct ColumnFunctions {
     }
 
     template <typename Op, typename ColT>
-    static void exec(ColumnVector<std::string>* res, const ColT* arg, const GraphView view) {
+    static void exec(ColumnVector<std::string_view>* res,
+                     const ColT* arg,
+                     const GraphView view,
+                     StringBuffer* stringBuffer) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
         using InternalT = InnerTypeHelper<DecayColT>::type;
 
-        FunctionExecutor<Op, std::string, InternalT>::apply(res, arg, view);
+        FunctionExecutor<Op, std::string_view, InternalT>::apply(res, arg, view, stringBuffer);
     }
 
     template <typename Op, typename ColW, typename ColT>

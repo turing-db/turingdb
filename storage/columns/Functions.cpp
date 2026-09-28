@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include <algorithm>
+#include <span>
 
 #include <range/v3/view/drop.hpp>
 
@@ -187,13 +188,17 @@ LabelsFunction::ResultType LabelsFunction::operator()(const NodeID node) {
     return _listBuffer->insert(_elements);
 }
 
-EdgeTypesFunction::EdgeTypesFunction(GraphView view)
-    : _view(view)
+EdgeTypesFunction::EdgeTypesFunction(GraphView view, StringBuffer* stringBuffer)
+    : _view(view),
+    _stringBuffer(stringBuffer)
 {
 }
 
-EdgeTypesFunction::EdgeTypesFunction(GraphView view, const CommitWriteBuffer* writeBuffer)
+EdgeTypesFunction::EdgeTypesFunction(GraphView view,
+                                     StringBuffer* stringBuffer,
+                                     const CommitWriteBuffer* writeBuffer)
     : _view(view),
+    _stringBuffer(stringBuffer),
     _writeBuffer(writeBuffer)
 {
     if (_writeBuffer) {
@@ -210,15 +215,18 @@ EdgeTypeID EdgeTypesFunction::readEdgeType(EdgeID edge) const {
     return _view.read().getEdgeTypeID(edge);
 }
 
-void EdgeTypesFunction::getEdgeTypeString(std::string& out, EdgeID edge) {
-    out.clear();
-    const EdgeTypeID et = readEdgeType(edge);
+EdgeTypesFunction::ResultType EdgeTypesFunction::operator()(const EdgeID edge) {
+    bioassert(_stringBuffer, "type() null string buffer.");
 
-    const EdgeTypeMap& etMap = _view.metadata().edgeTypes();
-    const std::optional<std::string_view> name = etMap.getName(et);
-    bioassert(name, "Could not get name of EdgeTypeID {}.", et.getValue());
+    const EdgeTypeID edgeType = readEdgeType(edge);
 
-    out = *name;
+    const EdgeTypeMap& edgeTypeMap = _view.metadata().edgeTypes();
+    const std::optional<std::string_view> name = edgeTypeMap.getName(edgeType);
+    bioassert(name, "Could not get name of EdgeTypeID {}.", edgeType.getValue());
+
+    const std::string_view bufferSV = _stringBuffer->insert(name.value());
+
+    return bufferSV;
 }
 
 EdgeEndsFunction::EdgeEndsFunction(GraphView view)

@@ -103,6 +103,10 @@ mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder, mlir::Type input
     return storage::OwnedStringType::get(builder.getContext());
 }
 
+mlir::Type stringFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    return storage::StringType::get(builder.getContext());
+}
+
 mlir::Type nodeIDFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return storage::NodeIDType::get(builder.getContext());
 }
@@ -215,7 +219,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     // invalid rather than in an optional, so their result is nullable whatever the input
     // chunk's own type says
     {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,      ResultNullability::AlwaysNullable}},
 
     // An end of an edge is a node, and a node column spells its null as an invalid ID, so
     // the result stays a plain node chunk where labels() and type() need a nullable one
