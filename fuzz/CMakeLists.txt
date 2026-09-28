@@ -39,4 +39,12 @@ target_link_libraries(fuzz_http_parser PRIVATE
     nlohmann_json
     turing_common_s)
 
+add_executable(fuzz_proto_parser fuzz_proto_parser.cpp)
+target_link_libraries(fuzz_proto_parser PRIVATE
+    turing_db_examples_s
+    turing_db_server_s
+    turing_db_proto_client_s
+    turing_testenv_s
+    turing_common_s)
+
 endif() # NOT APPLE
