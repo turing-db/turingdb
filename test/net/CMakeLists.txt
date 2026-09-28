@@ -17,6 +17,13 @@ target_link_libraries(test_net_json_encoder PRIVATE
     turing_db_net_encoders
     turing_db_memory_s)
 
+add_turing_test(test_net_proto_analyze_error ProtoAnalyzeErrorTest.cpp)
+target_link_libraries(test_net_proto_analyze_error PRIVATE
+    turing_db_turing_proto_server_s
+    turing_db_http_parser_s
+    turing_db_http_common_s
+    turing_db_proto_common_s)
+
 add_turing_test(test_net_turing_client TuringClientTest.cpp)
 target_link_libraries(test_net_turing_client PRIVATE
     turing_db_proto_client_s)

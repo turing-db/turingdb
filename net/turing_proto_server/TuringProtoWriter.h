@@ -58,6 +58,7 @@ public:
     void writeError(const db::QueryStatus* status);
     void writeProtocolError(std::string_view message);
     void writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds);
+    void writeAnalyzeError(int32_t) override;
 
 private:
     int _socket {-1};

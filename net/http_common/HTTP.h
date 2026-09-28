@@ -8,6 +8,21 @@
 
 namespace net::HTTP {
 
+enum class Error {
+    UNKNOWN = 0,
+    HEADER_INCOMPLETE,
+    REQUEST_TOO_BIG,
+    NO_METHOD,
+    NO_URI,
+    INVALID_METHOD,
+    INVALID_CONTENT_LENGTH,
+    INVALID_URI,
+    UNKNOWN_ENDPOINT,
+    TOO_MANY_PARAMS,
+
+    _SIZE,
+};
+
 enum class Status {
     OK = 0,
     CREATED,
