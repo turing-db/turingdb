@@ -10,12 +10,12 @@ module {
     %0 = nl.distinct
     %1 = nl.limit(2)
     %2 = nl.scan_nodes()
-    nl.for %arg0 in %2 limit %1 {
+    nl.for %arg0 in %2 limit %1 : !nl.iter<!nl.chunk<!storage.node_id>> {
       %3 = nl.get_out_edges(%arg0, {})
-      nl.for %arg1, %arg2, %arg3, %arg4 in %3 limit %1 {
-        %4 = nl.distinct_filter %0, (%arg4)
-        nl.limit_update %1, %4
-        nl.output(%4) limit %1
+      nl.for %arg1, %arg2, %arg3, %arg4 in %3 limit %1 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+        %4 = nl.distinct_filter %0, (%arg4) : !nl.chunk<!storage.node_id>
+        nl.limit_update %1, %4 : !nl.chunk<!storage.node_id>
+        nl.output(%4) limit %1 : !nl.chunk<!storage.node_id>
       }
     }
     return

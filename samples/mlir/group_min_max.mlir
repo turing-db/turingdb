@@ -24,15 +24,15 @@ module {
     //
     // "team" and "score" are placeholders - swap them for properties your graph has;
     // min/max need an orderable column.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %team = db.get_node_properties(%a, "team")
+    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %score = db.get_node_properties(%a, "score")
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %lo, %hi = db.group_aggregate(%team, %score, %score) keys 1 aggregates [min, max]
+    %gteam, %lo, %hi = db.group_aggregate(%team, %score, %score) keys 1 aggregates [min, max] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
 
-    db.output(%gteam, %lo, %hi)
+    db.output(%gteam, %lo, %hi) : !db.column<none>, !db.column<none>, !db.column<none>
 
     return
   }

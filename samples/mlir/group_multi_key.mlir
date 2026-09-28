@@ -24,17 +24,17 @@ module {
     //
     // "team", "city" and "score" are placeholders - swap them for properties your
     // graph has; sum needs a numeric column.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %team = db.get_node_properties(%a, "team")
+    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %city = db.get_node_properties(%a, "city")
+    %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %score = db.get_node_properties(%a, "score")
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %gcity, %total = db.group_aggregate(%team, %city, %score) keys 2 aggregates [sum]
+    %gteam, %gcity, %total = db.group_aggregate(%team, %city, %score) keys 2 aggregates [sum] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
 
-    db.output(%gteam, %gcity, %total)
+    db.output(%gteam, %gcity, %total) : !db.column<none>, !db.column<none>, !db.column<none>
 
     return
   }

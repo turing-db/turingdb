@@ -28,9 +28,9 @@ module {
     //   %count = db.count_scan_rows([["Person"]]) property "name" : !db.column<ui64>
     //   %count = db.count_scan_rows([["Person"], ["Interest"]]) property "name" of scan 1
     //              : !db.column<ui64>
-    %count = db.count_scan_rows([["Person"], ["Interest"]])
+    %count = db.count_scan_rows([["Person"], ["Interest"]]) : !db.column<ui64>
 
-    db.output(%count)
+    db.output(%count) : !db.column<ui64>
 
     return
   }

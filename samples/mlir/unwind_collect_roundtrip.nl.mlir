@@ -15,13 +15,13 @@ module {
     %0 = nl.collect_buffer keys 0
     %1 = nl.get_property_type("name")
     %2 = nl.scan_nodes()
-    nl.for %arg0 in %2 {
-      %4 = nl.get_node_properties(%arg0, %1)
-      nl.collect_update %0, (%4)
+    nl.for %arg0 in %2 : !nl.iter<!nl.chunk<!storage.node_id>> {
+      %4 = nl.get_node_properties(%arg0, %1) : !nl.chunk<!storage.nullable<!storage.string>>
+      nl.collect_update %0, (%4) : !nl.chunk<!storage.nullable<!storage.string>>
     }
-    %3 = nl.unwind_collect(%0)
-    nl.for %arg0 in %3 {
-      nl.output(%arg0)
+    %3 = nl.unwind_collect(%0) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>>
+    nl.for %arg0 in %3 : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>> {
+      nl.output(%arg0) : !nl.chunk<!storage.nullable<!storage.string>>
     }
     return
   }

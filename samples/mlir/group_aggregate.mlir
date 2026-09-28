@@ -20,15 +20,15 @@ module {
     //
     // "team" and "score" are placeholders - swap them for properties your graph has;
     // sum/avg need a numeric column.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %team = db.get_node_properties(%a, "team")
+    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %score = db.get_node_properties(%a, "score")
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %total, %mean = db.group_aggregate(%team, %score, %score) keys 1 aggregates [sum, avg]
+    %gteam, %total, %mean = db.group_aggregate(%team, %score, %score) keys 1 aggregates [sum, avg] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
 
-    db.output(%gteam, %total, %mean)
+    db.output(%gteam, %total, %mean) : !db.column<none>, !db.column<none>, !db.column<none>
 
     return
   }

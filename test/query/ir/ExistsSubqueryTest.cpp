@@ -146,6 +146,15 @@ TEST_F(ExistsSubqueryTest, answersOverNoRowInFlight) {
     expectRows("RETURN EXISTS { (p:Person {name: 'Nobody'}) }", {{"false"}});
 }
 
+TEST_F(ExistsSubqueryTest, budgetsALimitInABodyOverNoRowInFlight) {
+    expectRows("RETURN EXISTS { MATCH (n) RETURN n LIMIT 3 }", {{"true"}});
+    expectRows("RETURN EXISTS { MATCH (n:Person {name: 'Nobody'}) RETURN n LIMIT 3 }", {{"false"}});
+}
+
+TEST_F(ExistsSubqueryTest, answersForABodyReturningOnlyAConstantOfTheScope) {
+    expectRows("WITH 5 AS k RETURN EXISTS { RETURN k }", {{"true"}});
+}
+
 TEST_F(ExistsSubqueryTest, standsBesideOtherPredicates) {
     expectRows("MATCH (p:Person) "
                "WHERE p.hasPhD = true AND EXISTS { (p)-[:KNOWS_WELL]->() } "
@@ -346,6 +355,29 @@ TEST_F(ExistsSubqueryTest, publishesThroughAWith) {
                {{"Remy"}, {"Adam"}});
 }
 
+// Two of Remy's interests are real and none of Adam's
+TEST_F(ExistsSubqueryTest, carriesTheBooleanThroughALaterMatch) {
+    expectRows("MATCH (p:Person) "
+               "WITH p, EXISTS { (p)-[:INTERESTED_IN]->(i) WHERE i.isReal = true } AS real "
+               "MATCH (p)-[:KNOWS_WELL]->(k) "
+               "RETURN p.name, real, k.name",
+               {{"Remy", "true", "Adam"}, {"Adam", "false", "Remy"}});
+
+    expectRows("MATCH (p:Person) "
+               "WITH p, EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } AS interested "
+               "MATCH (p)-[:KNOWS_WELL]->(k) "
+               "RETURN p.name, interested, k.name",
+               {{"Remy", "true", "Adam"}, {"Adam", "true", "Remy"}});
+
+    expectRows("MATCH (p:Person) "
+               "WITH p, EXISTS { (p)-[:KNOWS_WELL]->() } AS knows "
+               "OPTIONAL MATCH (p)-[:KNOWS_WELL]->(k) "
+               "RETURN p.name, knows, k.name",
+               {{"Remy", "true", "Adam"}, {"Adam", "true", "Remy"}, {"Maxime", "false", "null"},
+                {"Luc", "false", "null"}, {"Martina", "false", "null"}, {"Suhas", "false", "null"},
+                {"Cyrus", "false", "null"}, {"Doruk", "false", "null"}});
+}
+
 TEST_F(ExistsSubqueryTest, standsInACaseExpression) {
     expectRows("MATCH (p:Person) "
                "WHERE p.name = 'Remy' OR p.name = 'Luc' "
@@ -366,6 +398,33 @@ TEST_F(ExistsSubqueryTest, readsAPropertyOfTheRowItAnswersFor) {
 TEST_F(ExistsSubqueryTest, answersBesideAnAggregate) {
     expectRows("MATCH (p:Person) WITH count(p) AS people RETURN people, EXISTS { (i:Interest) }",
                {{"8", "true"}});
+}
+
+TEST_F(ExistsSubqueryTest, standsInAnExpressionBesideAnAggregate) {
+    expectRows("MATCH (p:Person) RETURN count(p) > 0 AND EXISTS { (i:Interest) } AS x", {{"true"}});
+
+    expectRows("MATCH (p:Person) "
+               "WITH p, count(*) + CASE WHEN EXISTS { (p)-[:KNOWS_WELL]->() } THEN 1 ELSE 0 END AS x "
+               "RETURN p.name, x",
+               {{"Remy", "2"}, {"Adam", "2"}, {"Maxime", "1"}, {"Luc", "1"},
+                {"Martina", "1"}, {"Suhas", "1"}, {"Cyrus", "1"}, {"Doruk", "1"}});
+}
+
+TEST_F(ExistsSubqueryTest, ordersTheGroupsOnAnExistsOverTheirKey) {
+    expectOrderedRows("MATCH (p:Person) "
+                      "RETURN p, p.name AS name, count(*) AS c "
+                      "ORDER BY EXISTS { (p)-[:KNOWS_WELL]->() } DESC, name",
+                      {{"1", "Adam", "1"}, {"0", "Remy", "1"},
+                       {"15", "Cyrus", "1"}, {"17", "Doruk", "1"}, {"9", "Luc", "1"},
+                       {"11", "Martina", "1"}, {"8", "Maxime", "1"}, {"12", "Suhas", "1"}});
+}
+
+TEST_F(ExistsSubqueryTest, readsOnlyTheGroupingKeysBesideAnAggregate) {
+    expectError("MATCH (p:Person) RETURN p.name, count(*) > 0 AND EXISTS { (p)-[:KNOWS_WELL]->() } AS x",
+                "An expression beside an aggregate may only read the grouping keys");
+
+    expectError("MATCH (p:Person)-[:INTERESTED_IN]->(i) RETURN p, count(*) AS c ORDER BY EXISTS { (i)<-[:INTERESTED_IN]-() }",
+                "ORDER BY with an aggregate may only order by expressions over the returned columns");
 }
 
 TEST_F(ExistsSubqueryTest, answersOverUnwoundRows) {

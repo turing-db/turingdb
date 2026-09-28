@@ -2822,7 +2822,7 @@ def ShortestPath : NLOp<"shortest_path", [Pure]> {
   let assemblyFormat = "`(` $state `,` $edgeProperty `)` attr-dict `:` qualified(type($result))";
 }
 
-def CreateNode : NLOp<"create_node", [AttrSizedOperandSegments]> {
+def CreateNode : NLOp<"create_node", [AttrSizedOperandSegments, RowAlignedThroughOperands]> {
   let summary = "Write one node per input row into the open transaction's write buffer";
   let description = [{
     Adds one pending node per row to the transaction's CommitWriteBuffer.
@@ -2848,7 +2848,7 @@ def CreateNode : NLOp<"create_node", [AttrSizedOperandSegments]> {
   }];
 }
 
-def CreateEdge : NLOp<"create_edge", [AttrSizedOperandSegments]> {
+def CreateEdge : NLOp<"create_edge", [AttrSizedOperandSegments, RowAlignedThroughOperands]> {
   let summary = "Write one edge per input row into the open transaction's write buffer";
   let description = [{
     Adds one pending edge per row to the transaction's CommitWriteBuffer.
@@ -3273,24 +3273,28 @@ def ExistsMark : NLOp<"exists_mark", [AttrSizedOperandSegments]> {
 // Pure: given a filled accumulator it deterministically lays out the same flags and
 // produces no side effect of its own. Mirrors nl.optional_drain, and like it must be
 // placed after the body's loop nest, in the block holding the nl.exists_buffer.
-def ExistsResult : NLOp<"exists_result", [Pure]> {
+def ExistsResult : NLOp<"exists_result", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read an EXISTS accumulator's flags as a boolean chunk";
   let description = [{
     The answer phase of an EXISTS. Consumes a filled nl.exists_state and produces one
     boolean per input row of the step - true for a row the body produced a row for -
     row-aligned with the chunks the accumulator was opened over, which is what lets the
-    result stand beside them in the rows in flight.
+    result stand beside them in the rows in flight. The cardinality operand is one of
+    those chunks; it is absent when the accumulator was opened over none, which is one
+    row of its own.
 
-      %b = nl.exists_result(%state) : !nl.chunk<!storage.bool>
+      %b = nl.exists_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.bool>
 
     Its read must find every mark already made, so place it after the body's loop nest,
     in the block holding the nl.exists_buffer that opened the accumulator.
   }];
 
-  let arguments = (ins NLExistsStateHandle:$state);
+  let arguments = (ins NLExistsStateHandle:$state, Optional<NLChunk>:$cardinality);
   let results   = (outs NLBoolChunk:$result);
 
-  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+  let assemblyFormat = [{
+    `(` $state (`,` $cardinality^)? `)` attr-dict `:` functional-type($cardinality, results)
+  }];
 }
 
 /**
@@ -3354,19 +3358,22 @@ def CountSubqueryTally : NLOp<"count_subquery_tally", [AttrSizedOperandSegments]
 */
 // Pure, as nl.exists_result is, and placed like it: after the body's loop nest, in the
 // block holding the nl.count_subquery_buffer.
-def CountSubqueryResult : NLOp<"count_subquery_result", [Pure]> {
+def CountSubqueryResult : NLOp<"count_subquery_result", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read a COUNT subquery accumulator's counts as a chunk";
   let description = [{
     Produces one count per input row of the step, row-aligned with the chunks the
-    accumulator was opened over.
+    accumulator was opened over. The cardinality operand is one of those chunks; it is
+    absent when the accumulator was opened over none, which is one row of its own.
 
-      %n = nl.count_subquery_result(%state) : !nl.chunk<ui64>
+      %n = nl.count_subquery_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<ui64>
   }];
 
-  let arguments = (ins NLCountSubqueryStateHandle:$state);
+  let arguments = (ins NLCountSubqueryStateHandle:$state, Optional<NLChunk>:$cardinality);
   let results   = (outs NLUInt64Chunk:$result);
 
-  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+  let assemblyFormat = [{
+    `(` $state (`,` $cardinality^)? `)` attr-dict `:` functional-type($cardinality, results)
+  }];
 }
 
 /**

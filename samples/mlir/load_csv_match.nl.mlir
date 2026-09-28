@@ -15,16 +15,16 @@ module {
   func.func @main() {
     %0 = nl.get_property_type("name")
     %1 = nl.scan_nodes()
-    nl.for %arg0 in %1 {
-      %2 = nl.load_csv("people.csv", [0, 2])
-      nl.for %arg1, %arg2 in %2 {
-        %3 = nl.cross_product{%arg0} {%arg1, %arg2}
-        nl.for %arg3, %arg4, %arg5 in %3 {
-          %4 = nl.get_node_properties(%arg3, %0)
-          %5 = nl.eq %4, %arg4
-          %6:3 = nl.filter %5, (%arg3, %arg4, %arg5)
-          %7 = nl.get_node_properties(%6#0, %0)
-          nl.output(%7, %6#2) names ["n.name", "row[2]"]
+    nl.for %arg0 in %1 : !nl.iter<!nl.chunk<!storage.node_id>> {
+      %2 = nl.load_csv("people.csv", [0 : ui64, 2 : ui64]) : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>>
+      nl.for %arg1, %arg2 in %2 : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>> {
+        %3 = nl.cross_product{%arg0} {%arg1, %arg2} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>}
+        nl.for %arg3, %arg4, %arg5 in %3 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>> {
+          %4 = nl.get_node_properties(%arg3, %0) : !nl.chunk<!storage.nullable<!storage.string>>
+          %5 = nl.eq %4, %arg4 : (!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.owned_string>) -> !nl.chunk<!storage.nullable<i1>>
+          %6:3 = nl.filter %5, (%arg3, %arg4, %arg5) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>) -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>)
+          %7 = nl.get_node_properties(%6#0, %0) : !nl.chunk<!storage.nullable<!storage.string>>
+          nl.output(%7, %6#2) names ["n.name", "row[2]"] : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.owned_string>
         }
       }
     }

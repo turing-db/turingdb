@@ -7,14 +7,14 @@ module {
     // the loops' `limit` operand, and an nl.limit_update charges the deduped
     // survivor count so the loops stop after two distinct rows rather than two
     // scanned rows.
-    %a = db.scan_nodes()
-    %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {})
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
 
-    %ub = db.remove_duplicates(%b)
+    %ub = db.remove_duplicates(%b) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
 
-    %lb = db.limit(%ub) count 2
+    %lb = db.limit(%ub) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
 
-    db.output(%lb)
+    db.output(%lb) : !db.column<!storage.node_id>
 
     return
   }

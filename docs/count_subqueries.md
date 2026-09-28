@@ -27,7 +27,8 @@ RETURN naming the same columns, as Neo4j requires. A chain mixing both follows U
 `A UNION ALL B UNION C` counts distinct(A ++ B ++ C), `A UNION B UNION ALL C` counts
 distinct(A ++ B) ++ C.
 
-The result is a `ui64` column, as `count(*)` is.
+The result is a `ui64` column, as `count(*)` is. A `UNION ALL` body adds its branch counts
+together, and that sum is an `i64`, as any arithmetic over a count is.
 
 ## 2. Ops
 
@@ -42,7 +43,7 @@ It lowers to three nl ops, the counting siblings of the EXISTS ones:
 nl.for ... {
   nl.count_subquery_tally %state, %tag2              // tagged: +1 per tag entry
 }
-%n = nl.count_subquery_result(%state) : !nl.chunk<ui64>
+%n = nl.count_subquery_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<ui64>
 ```
 
 A body with no tag - one run per row, or one over the single empty row - is tallied off the

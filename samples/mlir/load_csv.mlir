@@ -29,11 +29,11 @@ module {
     // failing the query:
     //   %r:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) skip_on_error
     //     : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
-    %0:2 = db.load_csv("people.csv", ["name", "age"]) with_headers
+    %0:2 = db.load_csv("people.csv", ["name", "age"]) with_headers : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
 
-    %1 = db.to_integer(%0#1)
+    %1 = db.to_integer(%0#1) : (!db.column<!storage.owned_string>) -> !db.column<none>
 
-    db.output(%0#0, %1) names ["row.name", "toInteger(row.age)"]
+    db.output(%0#0, %1) names ["row.name", "toInteger(row.age)"] : !db.column<!storage.owned_string>, !db.column<none>
 
     return
   }

@@ -13,9 +13,9 @@
 // composable. A heterogeneous list keeps its !storage.list_element chunk instead.
 module {
   func.func @main() {
-    %0 = nl.unwind_const([1, 2, 3])
-    nl.for %arg0 in %0 {
-      nl.output(%arg0)
+    %0 = nl.unwind_const([1, 2, 3]) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
+    nl.for %arg0 in %0 : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
+      nl.output(%arg0) : !nl.chunk<!storage.nullable<i64>>
     }
     return
   }

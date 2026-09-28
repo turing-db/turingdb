@@ -13,9 +13,9 @@
 // dispatches on nullable<T>, so the uniform shape is what makes the column composable.
 module {
   func.func @main() {
-    %0 = nl.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00, 0.000000e+00, 0.000000e+00])
-    nl.for %arg0, %arg1 in %0 {
-      nl.output(%arg0, %arg1) names ["ids", "score"]
+    %0 = nl.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00, 0.000000e+00, 0.000000e+00]) : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
+    nl.for %arg0, %arg1 in %0 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>> {
+      nl.output(%arg0, %arg1) names ["ids", "score"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>
     }
     return
   }

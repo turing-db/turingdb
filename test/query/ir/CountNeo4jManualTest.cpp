@@ -40,16 +40,6 @@ protected:
         buildGraph(system.createGraph(_graphName));
     }
 
-    // The page's CREATE, node for node:
-    //
-    //   CREATE
-    //   (andy:Swedish:Person {name: 'Andy', age: 36}),
-    //   (timothy:Person {name: 'Timothy', nickname: 'Tim', age: 25}),
-    //   (peter:Person {name: 'Peter', nickname: 'Pete', age: 35}),
-    //   (andy)-[:HAS_DOG {since: 2016}]->(:Dog {name:'Andy'}),
-    //   (timothy)-[:HAS_CAT {since: 2019}]->(:Cat {name:'Mittens'}),
-    //   (fido:Dog {name:'Fido'})<-[:HAS_DOG {since: 2010}]-(peter)-[:HAS_DOG {since: 2018}]->(:Dog {name:'Ozzy'}),
-    //   (fido)-[:HAS_TOY]->(:Toy{name:'Banana'})
     void buildGraph(Graph* graph) {
         JobSystem jobSystem;
         jobSystem.init();

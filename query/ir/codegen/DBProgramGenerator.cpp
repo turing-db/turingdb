@@ -6964,9 +6964,12 @@ mlir::Value DBProgramGenerator::generateExistsBranch(const SinglePartQuery* body
     llvm::SmallVector<PublishedColumn> constants;
 
     for (const PublishedColumn& column : scopeColumns) {
+        const bool consumedByTheAggregate = _part._aggregateOp
+                                         && !boundAtOrAfter(column._column, _part._aggregateOp);
+
         if (yieldsConstantColumn(column._column)) {
             constants.push_back(column);
-        } else {
+        } else if (!consumedByTheAggregate) {
             inputs.push_back(column);
         }
     }
@@ -7047,14 +7050,11 @@ mlir::Value DBProgramGenerator::generateExistsBranch(const SinglePartQuery* body
     llvm::SmallVector<PublishedColumn> held;
     collectPublishedColumns(held);
 
-    // The tag is named by the yield itself, and a constant stays bound outside the region
+    // The tag is named by the yield itself
     llvm::SmallVector<mlir::Value> heldColumns;
     for (const PublishedColumn& column : held) {
-        mlir::Value heldColumn = column._column;
-        const bool boundInsideTheBody = heldColumn.getParentRegion() == &existsOp.getBody();
-
-        if (column._name != existsTagName && boundInsideTheBody) {
-            heldColumns.push_back(heldColumn);
+        if (column._name != existsTagName) {
+            heldColumns.push_back(column._column);
         }
     }
 
@@ -7078,7 +7078,7 @@ mlir::Value DBProgramGenerator::generateExistsBranch(const SinglePartQuery* body
 
 void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const CountSubqueryExpr* countExpr) {
     llvm::SmallVector<const SinglePartQuery*> branches;
-    for (const UnionQuery::Branch& branch : countExpr->branches()) {
+    for (const UnionQuery::Branch& branch : countExpr->getBranches()) {
         branches.push_back(branch._query);
     }
 
@@ -7119,9 +7119,12 @@ mlir::Value DBProgramGenerator::generateCountSubquery(llvm::ArrayRef<const Singl
     llvm::SmallVector<PublishedColumn> constants;
 
     for (const PublishedColumn& column : scopeColumns) {
+        const bool consumedByTheAggregate = _part._aggregateOp
+                                         && !boundAtOrAfter(column._column, _part._aggregateOp);
+
         if (yieldsConstantColumn(column._column)) {
             constants.push_back(column);
-        } else {
+        } else if (!consumedByTheAggregate) {
             inputs.push_back(column);
         }
     }
@@ -7211,11 +7214,8 @@ mlir::Value DBProgramGenerator::generateCountSubquery(llvm::ArrayRef<const Singl
 
     llvm::SmallVector<mlir::Value> heldColumns;
     for (const PublishedColumn& column : held) {
-        mlir::Value heldColumn = column._column;
-        const bool boundInsideTheBody = heldColumn.getParentRegion() == &countOp.getBody();
-
-        if (column._name != countTagName && boundInsideTheBody) {
-            heldColumns.push_back(heldColumn);
+        if (column._name != countTagName) {
+            heldColumns.push_back(column._column);
         }
     }
 

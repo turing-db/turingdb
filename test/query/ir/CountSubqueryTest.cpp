@@ -44,6 +44,18 @@ TEST_F(CountSubqueryTest, filtersOnTheCount) {
                {{"Remy"}, {"Adam"}, {"Maxime"}, {"Luc"}, {"Suhas"}, {"Cyrus"}});
 }
 
+TEST_F(CountSubqueryTest, comparesWithANegativeNumber) {
+    const Rows everybody {{"Remy"}, {"Adam"}, {"Maxime"}, {"Luc"},
+                          {"Martina"}, {"Suhas"}, {"Cyrus"}, {"Doruk"}};
+
+    expectRows("MATCH (p:Person) WHERE COUNT { (p)-[:INTERESTED_IN]->() } > -1 RETURN p.name", everybody);
+
+    expectRows("MATCH (p:Person) "
+               "WHERE COUNT { MATCH (p)-[:INTERESTED_IN]->() UNION ALL MATCH (p)-[:KNOWS_WELL]->() } > -1 "
+               "RETURN p.name",
+               everybody);
+}
+
 TEST_F(CountSubqueryTest, matchBodyReadsTheRowItCountsFor) {
     expectRows("MATCH (p:Person) "
                "RETURN p.name, COUNT { MATCH (p)-[:INTERESTED_IN]->(i) WHERE i.isReal = true }",
@@ -78,6 +90,21 @@ TEST_F(CountSubqueryTest, countsOverNoRowInFlight) {
     expectRows("RETURN COUNT { (p:Person) }", {{"8"}});
     expectRows("RETURN COUNT { MATCH (n) }", {{"18"}});
     expectRows("RETURN COUNT { (p:Person {name: 'Nobody'}) }", {{"0"}});
+}
+
+TEST_F(CountSubqueryTest, budgetsALimitInABodyOverNoRowInFlight) {
+    expectRows("RETURN COUNT { MATCH (n) RETURN n LIMIT 3 }", {{"3"}});
+    expectRows("RETURN COUNT { MATCH (n) WITH n LIMIT 3 RETURN n }", {{"3"}});
+    expectRows("WITH 1 AS k RETURN k, COUNT { MATCH (n) RETURN n LIMIT 3 }", {{"1", "3"}});
+
+    expectRows("RETURN COUNT { MATCH (n:Person) RETURN n.name AS x LIMIT 2 "
+               "               UNION MATCH (n:Interest) RETURN n.name AS x }",
+               {{"12"}});
+}
+
+TEST_F(CountSubqueryTest, countsABodyReturningOnlyAConstantOfTheScope) {
+    expectRows("WITH 5 AS k RETURN COUNT { RETURN k }", {{"1"}});
+    expectRows("WITH 5 AS k RETURN COUNT { WITH k RETURN k }", {{"1"}});
 }
 
 // Pairs of an interest and another person sharing it
@@ -261,6 +288,27 @@ TEST_F(CountSubqueryTest, publishesThroughAWith) {
                {{"Martina", "1"}, {"Doruk", "1"}});
 }
 
+TEST_F(CountSubqueryTest, carriesTheCountThroughALaterMatch) {
+    expectRows("MATCH (p:Person) "
+               "WITH p, COUNT { (p)-[:INTERESTED_IN]->() } AS c "
+               "MATCH (p)-[:KNOWS_WELL]->(k) "
+               "RETURN p.name, c, k.name",
+               {{"Remy", "3", "Adam"}, {"Adam", "2", "Remy"}});
+
+    expectRows("MATCH (p:Person) "
+               "WITH p, COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } AS c "
+               "MATCH (p)-[:KNOWS_WELL]->(k) "
+               "RETURN p.name, c, k.name",
+               {{"Remy", "1", "Adam"}, {"Adam", "1", "Remy"}});
+
+    expectRows("MATCH (p:Person) "
+               "WITH p, COUNT { (p)-[:INTERESTED_IN]->() } AS c "
+               "OPTIONAL MATCH (p)-[:KNOWS_WELL]->(k) "
+               "RETURN p.name, c, k.name",
+               {{"Remy", "3", "Adam"}, {"Adam", "2", "Remy"}, {"Maxime", "2", "null"}, {"Luc", "2", "null"},
+                {"Martina", "1", "null"}, {"Suhas", "2", "null"}, {"Cyrus", "2", "null"}, {"Doruk", "1", "null"}});
+}
+
 TEST_F(CountSubqueryTest, standsInACaseExpression) {
     expectRows("MATCH (p:Person) "
                "WHERE p.name = 'Remy' OR p.name = 'Martina' "
@@ -283,6 +331,33 @@ TEST_F(CountSubqueryTest, groupsOnTheCount) {
 TEST_F(CountSubqueryTest, countsBesideAnAggregate) {
     expectRows("MATCH (p:Person) WITH count(p) AS people RETURN people, COUNT { (i:Interest) }",
                {{"8", "10"}});
+}
+
+TEST_F(CountSubqueryTest, standsInAnExpressionBesideAnAggregate) {
+    expectRows("MATCH (p:Person) RETURN count(p) + COUNT { (i:Interest) } AS x", {{"18"}});
+
+    expectRows("MATCH (p:Person) "
+               "WITH p, count(*) + COUNT { (p)-[:INTERESTED_IN]->() } AS x "
+               "RETURN p.name, x",
+               {{"Remy", "4"}, {"Adam", "3"}, {"Maxime", "3"}, {"Luc", "3"},
+                {"Martina", "2"}, {"Suhas", "3"}, {"Cyrus", "3"}, {"Doruk", "2"}});
+}
+
+TEST_F(CountSubqueryTest, ordersTheGroupsOnACountOfTheirKey) {
+    expectRowsInOrder("MATCH (p:Person) "
+                      "RETURN p, p.name AS name, count(*) AS c "
+                      "ORDER BY COUNT { (p)-[:INTERESTED_IN]->() } DESC, name",
+                      {{"0", "Remy", "1"},
+                       {"1", "Adam", "1"}, {"15", "Cyrus", "1"}, {"9", "Luc", "1"}, {"8", "Maxime", "1"}, {"12", "Suhas", "1"},
+                       {"17", "Doruk", "1"}, {"11", "Martina", "1"}});
+}
+
+TEST_F(CountSubqueryTest, readsOnlyTheGroupingKeysBesideAnAggregate) {
+    expectError("MATCH (p:Person) RETURN p.name, count(*) + COUNT { (p)-[:INTERESTED_IN]->() } AS x",
+                "An expression beside an aggregate may only read the grouping keys");
+
+    expectError("MATCH (p:Person)-[:INTERESTED_IN]->(i) RETURN p, count(*) AS c ORDER BY COUNT { (i)<-[:INTERESTED_IN]-() }",
+                "ORDER BY with an aggregate may only order by expressions over the returned columns");
 }
 
 TEST_F(CountSubqueryTest, countsOverUnwoundRows) {
@@ -316,6 +391,36 @@ TEST_F(CountSubqueryTest, setsAPropertyToTheCount) {
                     {{"3"}});
 
     expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.interests", {{"3"}});
+}
+
+TEST_F(CountSubqueryTest, setsAPropertyToACountWithAReturn) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) "
+                    "SET p.interests = COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i } "
+                    "RETURN p.interests",
+                    {{"3"}});
+
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) "
+                    "SET p.interests = COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 2 } "
+                    "RETURN p.interests",
+                    {{"2"}});
+
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) "
+                    "SET p.interests = COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i.name AS n } "
+                    "RETURN p.interests",
+                    {{"3"}});
+}
+
+TEST_F(CountSubqueryTest, countsAnEdgeTheSameQueryWrote) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) "
+                    "CREATE (p)-[:KNOWS_WELL]->(:Person {name: 'Z'}) "
+                    "RETURN COUNT { MATCH (p)-[:KNOWS_WELL]->() }",
+                    {{"2"}});
+
+    expectWriteRows("MATCH (p:Person {name: 'Adam'}) "
+                    "CREATE (p)-[:KNOWS_WELL]->(m:Person {name: 'W'}) "
+                    "WITH p, m "
+                    "RETURN COUNT { MATCH (m)<-[:KNOWS_WELL]-(p) }",
+                    {{"1"}});
 }
 
 TEST_F(CountSubqueryTest, bindsNothingOutsideItself) {

@@ -11,7 +11,7 @@
 module {
   func.func @main() {
     %0 = nl.constant([1, "Hello", [1]])
-    nl.output(%0)
+    nl.output(%0) : !nl.chunk<!storage.list<!storage.list_element>>
     return
   }
 }

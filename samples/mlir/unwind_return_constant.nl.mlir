@@ -6,10 +6,10 @@
 // rather than the node IDs a scan binds. Only its row count is read.
 
 func.func @main() {
-  %0 = nl.constant(5)
-  %1 = nl.unwind_const([1, 2, 3])
-  nl.for %arg0 in %1 {
-    nl.output(%0) names ["5"] cardinality(%arg0)
+  %0 = nl.constant(5 : i64)
+  %1 = nl.unwind_const([1, 2, 3]) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
+  nl.for %arg0 in %1 : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
+    nl.output(%0) names ["5"] cardinality(%arg0 : !nl.chunk<!storage.nullable<i64>>) : !nl.chunk<i64>
   }
   return
 }
