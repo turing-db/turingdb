@@ -454,9 +454,9 @@ NumericOperand numericOperand(mlir::Type chunkType) {
         element = nullableType.getValueType();
     }
 
-    // A type-erased cell is numeric only once read, and its tag names a type per row
-    // rather than one for the column: it computes in the f64 its mixed numeric tags land
-    // on, as a reduction over cells does, and answers null on a row holding no number.
+    // A type-erased cell is numeric only once read. '^' answers a double whatever it
+    // reads, so a cell reaching here computes in f64 and answers null on a row holding no
+    // number; every other operator keeps the cell and never asks.
     if (mlir::isa<storage::ListElementType>(element)) {
         return {.numeric = mlir::Float64Type::get(chunkType.getContext()), .nullable = true};
     }
@@ -4654,6 +4654,10 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Numeric: {
+            if (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType)) {
+                return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+            }
+
             const NumericOperand lhs = numericOperand(lhsType);
             const NumericOperand rhs = numericOperand(rhsType);
             const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);

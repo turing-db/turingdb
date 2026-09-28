@@ -366,6 +366,12 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
                 return;
             }
 
+            if (writesAListElement) {
+                const std::string err = fmt::format(
+                    "Cannot create property '{}' from a list.", lhs->getPropName());
+                throwError(err, item);
+            }
+
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
                 throwError(fmt::format("Cannot evaluate property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(lhsEvaluatedVt),
