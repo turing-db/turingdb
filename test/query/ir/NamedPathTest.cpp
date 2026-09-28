@@ -143,7 +143,7 @@ TEST_F(NamedPathTest, carriesAPathThroughAWith) {
 
 TEST_F(NamedPathTest, sortsAndCutsTheRowsAPathRidesOn) {
     StringRowSink sink;
-    runQuery("MATCH p = (n:Person)-[e]->+(m:Person) RETURN n.name, p ORDER BY n.name LIMIT 3", sink);
+    runQuery("MATCH p = (n:Person)-[e]->+(m:Person) RETURN n.name, p ORDER BY n.name LIMIT 4", sink);
 
     Rows rows;
     sink.sortedRows(rows);
@@ -152,6 +152,7 @@ TEST_F(NamedPathTest, sortsAndCutsTheRowsAPathRidesOn) {
         {"Adam", "(1), [4], (0)"},
         {"Adam", "(1), [4], (0), [0], (1)"},
         {"Adam", "(1), [4], (0), [1], (6), [7], (0)"},
+        {"Adam", "(1), [4], (0), [1], (6), [7], (0), [0], (1)"},
     }));
 }
 
