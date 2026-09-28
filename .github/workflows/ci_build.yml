@@ -148,10 +148,10 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
 
-    # Both the self-hosted Linux runner containers and the macOS minis use a
-    # local on-disk cache instead of the GitHub-hosted cache (no cache egress).
-    # The cache dir is pre-provisioned per runner: /opt/actions-local-cache in
-    # the Linux runner containers, /Users/m1/actions-local-cache on the minis.
+    # The self-hosted Linux runner containers use a local on-disk cache instead
+    # of the GitHub-hosted cache (no cache egress), pre-provisioned at
+    # /opt/actions-local-cache. The macOS runners are GitHub-hosted VMs with no
+    # disk that outlives the job, so they use the GitHub-hosted cache.
     - name: Cache dependencies (Linux)
       id: cache-dependencies-linux
       if: runner.os == 'Linux'
@@ -166,20 +166,13 @@ jobs:
         # (with fail-fast disabled, jobs now run to completion so caches stay clean).
         key: ${{ matrix.os }}-dependencies-v3-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
 
-    # The macOS minis share one cache base across several runner instances, and
-    # corca-ai/local-cache symlinks external/dependencies straight into that
-    # shared base while populating it with a non-atomic mv. A job could thus link
-    # against a half-published tree and fail (e.g. a missing libopenblas.a).
-    # Serialize restore and publish under the same per-host flock the regress
-    # step uses, so a job never symlinks into an in-progress publish.
-    - name: Restore dependency cache (macOS)
+    - name: Cache dependencies (macOS)
       id: cache-dependencies-macos
       if: runner.os == 'macOS'
-      run: |
-        python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
-          bash scripts/dep_cache.sh restore \
-          /Users/m1/actions-local-cache \
-          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'scripts/dep_cache.sh') }}"
+      uses: actions/cache@v4
+      with:
+        path: external/dependencies
+        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
 
     - name: Install build tools
       run: ./install_build_tools.sh
@@ -188,14 +181,6 @@ jobs:
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-linux.outputs.cache-hit || steps.cache-dependencies-macos.outputs.cache-hit }}
-
-    - name: Publish dependency cache (macOS)
-      if: runner.os == 'macOS' && steps.cache-dependencies-macos.outputs.cache-hit != 'true'
-      run: |
-        python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
-          bash scripts/dep_cache.sh publish \
-          /Users/m1/actions-local-cache \
-          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'scripts/dep_cache.sh') }}"
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}

@@ -234,11 +234,12 @@ Key points:
 - **Partitioning** is on the near-term roadmap (as of 2026-05-04). Some customers have specifically asked for **METIS-style structural partitioning** (edge-cut minimization), not hash partitioning. Treat partitioning as a near-term constraint when discussing scale-out, not a future-optional.
 - The **replication / distribution** initiative is motivated by *both* (a) scaling beyond single-node memory (which forces partitioning) and (b) write availability across network partitions / regions (which motivates CRDT-style merge). The realistic landing point is a layered hybrid; evaluate any proposal against both goals.
 
-## CI / self-hosted runners
+## CI runners
 
-- macOS CI runs on a few **self-hosted minis that share one filesystem** (`/Users/m1`) across several runner instances (`actions-runner`, `actions-runner-2`, ...), with **no isolation** beyond each instance's own `_work` checkout. Linux self-hosted runners are containerized.
-- The `external/dependencies` build is cached on local disk and **shared across those instances** (`scripts/dep_cache.sh`, base `/Users/m1/actions-local-cache`). The dependency build bakes **absolute paths into the installed CMake/pkg-config files** (e.g. faiss's `BLAS_LIBRARIES=…/external/dependencies/lib/libopenblas.a`, LLVM/MLIR configs) pointing into the *building* instance's checkout. Each instance `git clean -ffdx`s its own checkout between jobs, so a consumer on a *different* instance imports a path that a concurrent checkout deletes mid-build — surfacing as `make: No rule to make target '…/libopenblas.a'`, and downstream as a misleading `delocate … FileNotFoundError: dist/turingdb-*.whl`. `scripts/dep_cache.sh publish` rewrites those baked paths to the canonical, never-git-cleaned cache location. The bug is non-deterministic (depends on whether a concurrent job on the publishing instance cleans during your build window), so reproductions need overlapping runs. Bump the macOS dependency cache key when changing how deps are built/cached, or stale poisoned entries persist.
-- Per-host serialization (port 6666, host-wide `pkill turingdb`, the shared dep cache) uses a kernel `flock` via `scripts/with_host_lock.py`, which the OS releases on process exit.
+- Linux x86 CI runs on **self-hosted runner containers** (`ubuntu-24.04-turing`, `ubuntu-26.04-turing`), several per host. They cache `external/dependencies` on local disk with `corca-ai/local-cache` under `/opt/actions-local-cache`. Bump the key's salt when changing how deps are built, or stale entries persist.
+- macOS CI runs on **GitHub-hosted larger runners** (`macos15`, `macos26`), one job at a time each. They cache `external/dependencies` with `actions/cache`, whose repo limit is 10 GB. Linux ARM runs on GitHub-hosted `ubuntu-*-arm`; it goes through the Linux local-cache step, but the VM is discarded after the job, so it rebuilds deps every run.
+- The dependency build bakes **absolute paths into its installed CMake/pkg-config files** (e.g. faiss's `BLAS_LIBRARIES=…/external/dependencies/lib/libopenblas.a`, the LLVM/MLIR configs). A cached tree is only valid at the checkout path it was built at.
+- Per-host serialization (port 6666, host-wide `pkill turingdb`) uses a kernel `flock` via `scripts/with_host_lock.py`, which the OS releases on process exit.
 
 ## Commit style
 
