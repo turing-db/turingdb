@@ -231,7 +231,7 @@ void CypherAnalyzer::analyzeQueryBody(const SinglePartQuery* query, bool returnR
                 // reading clause, and a query ending on one needs a RETURN
                 returnMandatory = returnRequired;
 
-                analyze(static_cast<const WithStmt*>(stmt));
+                analyze(static_cast<WithStmt*>(stmt));
             } else {
                 if (kind == Stmt::Kind::CALL && static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;
@@ -356,12 +356,11 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     analyzeProjection(returnSt->getProjection(), returnSt);
 }
 
-void CypherAnalyzer::analyze(const WithStmt* withSt) {
+void CypherAnalyzer::analyze(WithStmt* withSt) {
     Projection* projection = withSt->getProjection();
 
     analyzeWithAliases(projection);
     analyzeProjection(projection, withSt);
-    analyzeWithOrderBy(projection);
 
     openWithScope(projection);
 
@@ -370,8 +369,22 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
         return;
     }
 
+    // An aggregate or a dedup leaves no row of the scope before it for the filter to read
+    const bool readsDroppedVariables = !projection->isAggregate() && !projection->isDistinct();
+    _ctxt->setReadsEnclosingScope(readsDroppedVariables);
+
+    std::vector<const VarDecl*> filterImports;
+    _exprAnalyzer->setImportSink(&filterImports);
+
     Expr* predicate = where->getExpr();
     _exprAnalyzer->analyzeRootExpr(predicate);
+
+    _exprAnalyzer->setImportSink(nullptr);
+    _ctxt->setReadsEnclosingScope(false);
+
+    for (const VarDecl* decl : filterImports) {
+        withSt->addFilterImport(decl);
+    }
 
     if (predicate->isAggregate()) {
         throwError("Invalid use of aggregate expression in this context", predicate);
@@ -379,52 +392,6 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
 
     if (predicate->getType() != EvaluatedType::Bool) {
         throwError("WHERE expression must be a boolean", predicate);
-    }
-}
-
-// The ORDER BY of a WITH sorts the rows the projection publishes, so its keys read the
-// scope that projection opens - a variable the projection dropped is as out of reach here
-// as it is in the WHERE. A RETURN is the other way round: it may order by any expression
-// over the scope it ends, projected or not
-void CypherAnalyzer::analyzeWithOrderBy(const Projection* projection) const {
-    if (!projection->hasOrderBy()) {
-        return;
-    }
-
-    for (const OrderByItem* item : projection->getOrderBy()->getItems()) {
-        throwOnUnpublishedKeyVariable(item->getExpr(), projection);
-    }
-}
-
-void CypherAnalyzer::throwOnUnpublishedKeyVariable(const Expr* keyExpr,
-                                                   const Projection* projection) const {
-    if (!keyExpr) {
-        return;
-    }
-
-    // The name as the key spells it, not the one its declaration carries: an alias is a
-    // second name for one declaration, and it is the alias the projection publishes
-    std::string_view readName;
-    if (keyExpr->getKind() == Expr::Kind::SYMBOL) {
-        readName = static_cast<const SymbolExpr*>(keyExpr)->getSymbol()->getName();
-    } else if (keyExpr->getKind() == Expr::Kind::PROPERTY) {
-        readName = static_cast<const PropertyExpr*>(keyExpr)->getFullName()->front()->getName();
-    }
-
-    if (!readName.empty() && !projection->hasName(readName)) {
-        throwError(fmt::format("Variable '{}' not found: a WITH may only order by the "
-                               "columns it publishes",
-                               readName),
-                   keyExpr);
-    }
-
-    std::vector<const Expr*> children;
-    if (!ExprChildren::collect(keyExpr, children)) {
-        return;
-    }
-
-    for (const Expr* child : children) {
-        throwOnUnpublishedKeyVariable(child, projection);
     }
 }
 
@@ -584,6 +551,34 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
         correlated.push_back(name);
     }
 
+    // So is what the scope reads through to the ones around it - what a WITH dropped, for
+    // its WHERE - which the import sink records for the WITH to carry to the filter
+    std::vector<const VarDecl*>* const importSink = _exprAnalyzer->getImportSink();
+
+    const DeclContext* scope = outer;
+    while (scope->readsEnclosingScope() && scope->getParent()) {
+        scope = scope->getParent();
+
+        for (const VarDecl* decl : scope->decls()) {
+            const std::string_view name = decl->getName();
+
+            const bool boundToName = !decl->isUnnamed() && scope->getDecl(name) == decl;
+            const bool shadowed = inner->hasDecl(name);
+            if (!boundToName || shadowed) {
+                continue;
+            }
+
+            VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
+            imported->setListShape(decl->getListShape());
+
+            correlated.push_back(name);
+
+            if (importSink && !std::ranges::contains(*importSink, decl)) {
+                importSink->push_back(decl);
+            }
+        }
+    }
+
     std::swap(_subqueryImports, correlated);
 
     setScope(inner);
@@ -606,7 +601,7 @@ void CypherAnalyzer::throwOnPatternPredicateVariable(const Pattern* pattern, con
         for (const EntityPattern* entity : element->getEntities()) {
             const Symbol* symbol = entity->getSymbol();
 
-            if (symbol && !outer->hasDecl(symbol->getName())) {
+            if (symbol && !outer->lookup(symbol->getName())) {
                 throwError(fmt::format("A pattern predicate cannot introduce new variables: '{}'",
                                        symbol->getName()),
                            entity);

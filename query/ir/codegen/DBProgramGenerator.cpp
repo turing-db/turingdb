@@ -680,6 +680,21 @@ void collectCutColumns(const Projection* projection,
     }
 }
 
+// The same pick over the columns a WITH carries beside its projection for its WHERE
+void collectFilterRowColumns(llvm::ArrayRef<DBProgramGenerator::PublishedColumn> filterColumns,
+                             llvm::SmallVectorImpl<size_t>& indices,
+                             llvm::SmallVectorImpl<mlir::Value>& columns) {
+    for (size_t index = 0; index < filterColumns.size(); index++) {
+        const mlir::Value column = filterColumns[index]._column;
+        if (yieldsConstantColumn(column)) {
+            continue;
+        }
+
+        indices.push_back(index);
+        columns.push_back(column);
+    }
+}
+
 // The element type of the lists a db.make_list builds: the one type its element columns
 // name, or the type-erased tagged scalar where they name no single one. A column whose own
 // type is resolved during lowering names `none`, and no verdict can be taken against a
@@ -4941,7 +4956,7 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
     buildNamedPathItems(projection, outputted);
     expandPathItems(projection, outputted);
 
-    translateProjectionTail(projection, variableColumns, outputted);
+    translateProjectionTail(projection, variableColumns, outputted, {});
 
     if (branch) {
         broadcastUnionProjection(outputted);
@@ -5032,8 +5047,9 @@ void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
 
 void DBProgramGenerator::generateWith(const WithStmt* with) {
     const Projection* projection = with->getProjection();
+    const std::vector<const VarDecl*>& filterImports = with->filterImports();
 
-    publishProjection(projection);
+    publishProjection(projection, filterImports);
 
     const WhereClause* where = with->getWhere();
     if (!where) {
@@ -5044,9 +5060,12 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
     flattenConjuncts(where->getExpr(), conjuncts);
 
     applyPredicateFilters(conjuncts);
+
+    dropFilterColumns(filterImports);
 }
 
-void DBProgramGenerator::publishProjection(const Projection* projection) {
+void DBProgramGenerator::publishProjection(const Projection* projection,
+                                           std::span<const VarDecl* const> filterImports) {
     generateGroupAggregate(projection);
 
     VariableColumnMap variableColumns;
@@ -5060,9 +5079,64 @@ void DBProgramGenerator::publishProjection(const Projection* projection) {
 
     buildNamedPathItems(projection, projected);
 
-    translateProjectionTail(projection, variableColumns, projected);
+    llvm::SmallVector<PublishedColumn> filterColumns;
+    collectFilterColumns(projection, filterImports, variableColumns, filterColumns);
 
-    publishBoundColumns(projection, names, projected);
+    translateProjectionTail(projection, variableColumns, projected, filterColumns);
+
+    publishBoundColumns(projection, names, projected, filterColumns);
+}
+
+void DBProgramGenerator::collectFilterColumns(const Projection* projection,
+                                              std::span<const VarDecl* const> filterImports,
+                                              const VariableColumnMap& variableColumns,
+                                              llvm::SmallVectorImpl<PublishedColumn>& filterColumns) {
+    for (const VarDecl* decl : filterImports) {
+        const auto createdIt = _part._createdEntities.find(decl);
+        const bool merged = createdIt != end(_part._createdEntities) && createdIt->second._pending;
+
+        if (merged) {
+            throwError(fmt::format("The WHERE of a WITH cannot read '{}': a MERGE in the same query "
+                                   "writes it, and what a MERGE writes is not carried past a WITH",
+                                   decl->getName()),
+                       projection);
+        }
+
+        const auto columnIt = variableColumns.find(decl);
+        bioassert(columnIt != end(variableColumns),
+                  "Variable '{}' read by the WHERE of a WITH is not in scope",
+                  decl->getName());
+
+        const mlir::Value column = listColumnOf(decl, columnIt->second);
+        filterColumns.push_back({decl, std::string(decl->getName()), column});
+    }
+}
+
+void DBProgramGenerator::dropFilterColumns(std::span<const VarDecl* const> filterImports) {
+    if (filterImports.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<PublishedColumn> published;
+    collectPublishedColumns(published);
+
+    llvm::erase_if(published, [filterImports](const PublishedColumn& column) {
+        return std::ranges::contains(filterImports, column._decl);
+    });
+
+    // The rows the filter kept may be carried by the columns it read alone
+    llvm::SmallVector<mlir::Value> columns;
+    for (const PublishedColumn& column : published) {
+        columns.push_back(column._column);
+    }
+
+    broadcastConstantProjection(columns);
+
+    for (size_t index = 0; index < published.size(); index++) {
+        published[index]._column = columns[index];
+    }
+
+    rebindScopeKeepingWrittenEntities(published);
 }
 
 bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
@@ -5607,7 +5681,8 @@ void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir:
 
 void DBProgramGenerator::publishBoundColumns(const Projection* projection,
                                              llvm::ArrayRef<llvm::StringRef> names,
-                                             llvm::ArrayRef<mlir::Value> columns) {
+                                             llvm::ArrayRef<mlir::Value> columns,
+                                             llvm::ArrayRef<PublishedColumn> filterColumns) {
     bioassert(names.size() == columns.size(), "One name per column a WITH publishes expected");
     bioassert(!names.empty(), "A WITH publishes at least one column");
 
@@ -5624,6 +5699,14 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
 
     CarriedEntities carried;
     carryWrittenEntities(projection, published, carried);
+
+    for (const PublishedColumn& filterColumn : filterColumns) {
+        if (const PartScope::WrittenEntity* written = findWrittenEntity(filterColumn._decl)) {
+            carried.emplace_back(filterColumn._decl, *written);
+        }
+    }
+
+    published.append(filterColumns.begin(), filterColumns.end());
 
     appendHiddenColumns(published);
 
@@ -5868,7 +5951,8 @@ void DBProgramGenerator::translateProjection(const Projection* projection,
 
 void DBProgramGenerator::translateProjectionTail(const Projection* projection,
                                                  const VariableColumnMap& variableColumns,
-                                                 llvm::SmallVectorImpl<mlir::Value>& projected) {
+                                                 llvm::SmallVectorImpl<mlir::Value>& projected,
+                                                 llvm::MutableArrayRef<PublishedColumn> filterColumns) {
     // DISTINCT dedups the projection, and everything after it works on the rows that
     // survive: the sort orders the distinct rows, and SKIP and LIMIT cut them
     if (projection->isDistinct()) {
@@ -5878,15 +5962,15 @@ void DBProgramGenerator::translateProjectionTail(const Projection* projection,
     // ORDER BY reorders the whole projection, so it comes before them too: SKIP and
     // LIMIT cut the sorted rows
     if (projection->hasOrderBy()) {
-        translateOrderBy(projection, variableColumns, projected);
+        translateOrderBy(projection, variableColumns, projected, filterColumns);
     }
 
     if (projection->hasSkip()) {
-        translateCut<mlir::db::Skip>(projection, projection->getSkip()->getExpr(), "SKIP", projected);
+        translateCut<mlir::db::Skip>(projection, projection->getSkip()->getExpr(), "SKIP", projected, filterColumns);
     }
 
     if (projection->hasLimit()) {
-        translateCut<mlir::db::Limit>(projection, projection->getLimit()->getExpr(), "LIMIT", projected);
+        translateCut<mlir::db::Limit>(projection, projection->getLimit()->getExpr(), "LIMIT", projected, filterColumns);
     }
 }
 
@@ -5894,7 +5978,8 @@ template <typename CutOp>
 void DBProgramGenerator::translateCut(const Projection* projection,
                                       const Expr* countExpr,
                                       std::string_view clauseName,
-                                      llvm::SmallVectorImpl<mlir::Value>& projected) {
+                                      llvm::SmallVectorImpl<mlir::Value>& projected,
+                                      llvm::MutableArrayRef<PublishedColumn> filterColumns) {
     const int64_t countValue = evaluateConstantInteger(_ast->getDiagnosticsManager(), countExpr);
 
     if (countValue < 0) {
@@ -5903,7 +5988,14 @@ void DBProgramGenerator::translateCut(const Projection* projection,
 
     llvm::SmallVector<size_t> cutItems;
     llvm::SmallVector<mlir::Value> cut;
-    collectCutColumns(projection, projected, cutItems, cut);
+    collectRowColumns(projection, projected, cutItems, cut);
+
+    llvm::SmallVector<size_t> cutFilterColumns;
+    collectFilterRowColumns(filterColumns, cutFilterColumns, cut);
+
+    if (cut.empty()) {
+        collectCutColumns(projection, projected, cutItems, cut);
+    }
 
     llvm::SmallVector<mlir::Type> cutResultTypes;
     for (const mlir::Value column : cut) {
@@ -5918,6 +6010,10 @@ void DBProgramGenerator::translateCut(const Projection* projection,
     const mlir::ResultRange cutResults = cutOp.getResults();
     for (size_t resultIndex = 0; resultIndex < cutItems.size(); resultIndex++) {
         projected[cutItems[resultIndex]] = cutResults[resultIndex];
+    }
+
+    for (size_t index = 0; index < cutFilterColumns.size(); index++) {
+        filterColumns[cutFilterColumns[index]]._column = cutResults[cutItems.size() + index];
     }
 }
 
@@ -6058,7 +6154,8 @@ void DBProgramGenerator::translateDistinctOverConstants(const Projection* projec
 
 void DBProgramGenerator::translateOrderBy(const Projection* projection,
                                           const VariableColumnMap& variableColumns,
-                                          llvm::SmallVectorImpl<mlir::Value>& projected) {
+                                          llvm::SmallVectorImpl<mlir::Value>& projected,
+                                          llvm::MutableArrayRef<PublishedColumn> filterColumns) {
     const OrderBy* orderBy = projection->getOrderBy();
     const OrderBy::ItemVector& items = orderBy->getItems();
     bioassert(!items.empty(), "ORDER BY without a key");
@@ -6075,6 +6172,9 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     llvm::SmallVector<size_t> sortedItems;
     llvm::SmallVector<mlir::Value> sorted;
     collectRowColumns(projection, projected, sortedItems, sorted);
+
+    llvm::SmallVector<size_t> sortedFilterColumns;
+    collectFilterRowColumns(filterColumns, sortedFilterColumns, sorted);
 
     llvm::SmallVector<int64_t> keyColumns;
     llvm::SmallVector<bool> keyAscending;
@@ -6148,6 +6248,10 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     const mlir::ResultRange results = sortOp.getResults();
     for (size_t resultIndex = 0; resultIndex < sortedItems.size(); resultIndex++) {
         projected[sortedItems[resultIndex]] = results[resultIndex];
+    }
+
+    for (size_t index = 0; index < sortedFilterColumns.size(); index++) {
+        filterColumns[sortedFilterColumns[index]]._column = results[sortedItems.size() + index];
     }
 }
 

@@ -604,11 +604,12 @@ TEST_F(WithTest, rejectsAVariableTheBarrierDropped) {
                    QueryStatus::Status::ANALYZE_ERROR);
 }
 
-// A list key is read in the scope the projection opens like any other: what it holds has
-// to be a published column, and n is not one.
-TEST_F(WithTest, rejectsAListKeyOverAVariableTheBarrierDropped) {
-    expectRejected("MATCH (n:Person) WITH n.name AS name ORDER BY [n.age] RETURN name",
-                   QueryStatus::Status::ANALYZE_ERROR);
+// A list key reads the variables before the barrier like any other key: Remy, Adam, Maxime
+// and Luc are the four people with a dob, in dob order.
+TEST_F(WithTest, ordersOnAListKeyOverAVariableTheBarrierDropped) {
+    expectNamesInOrder("MATCH (n:Person) WHERE n.dob IS NOT NULL "
+                       "WITH n.name AS name ORDER BY [n.dob] RETURN name",
+                       {"Remy", "Adam", "Maxime", "Luc"});
 }
 
 // A name the barrier dropped is free again below it, so a pattern spelling it declares a

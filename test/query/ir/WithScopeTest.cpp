@@ -134,12 +134,6 @@ TEST_F(WithScopeTest, filtersOnAPropertyOfABoundEdge) {
                {{"Ghosts -> Remy"}});
 }
 
-// The filter reads the barrier's scope, so the match variable it dropped is out of reach
-TEST_F(WithScopeTest, rejectsAVariableTheBarrierDroppedInItsFilter) {
-    expectRejected("MATCH (n:Person) WITH n.name AS name WHERE n.age > 30 RETURN name",
-                   QueryStatus::Status::ANALYZE_ERROR);
-}
-
 // A wildcard publishes the variables in scope, and a barrier opening the query has none
 TEST_F(WithScopeTest, rejectsAWildcardWithNothingInScope) {
     expectRejected("WITH * RETURN 1", QueryStatus::Status::ANALYZE_ERROR);
@@ -206,17 +200,7 @@ TEST_F(WithScopeTest, rejectsASiblingAliasOfTheSameProjection) {
                    QueryStatus::Status::ANALYZE_ERROR);
 }
 
-// The ORDER BY of a barrier reads the scope the barrier opens, so a match variable its
-// projection dropped is out of reach there just as it is in the filter
-TEST_F(WithScopeTest, rejectsAnOrderByKeyTheBarrierDropped) {
-    expectRejected("MATCH (p:Person) WITH p.name AS name ORDER BY p.age RETURN name",
-                   QueryStatus::Status::ANALYZE_ERROR);
-    expectRejected("MATCH (p:Person) WITH p.name AS name ORDER BY name, p.age RETURN name",
-                   QueryStatus::Status::ANALYZE_ERROR);
-}
-
-// A key over a variable the projection did publish orders on it as before: Adam is the
-// first Person in name order
+// A key over a variable the projection publishes: Adam is the first Person in name order
 TEST_F(WithScopeTest, ordersOnAPropertyOfAPublishedVariable) {
     expectRows("MATCH (p:Person) WITH p.name AS name, p AS person ORDER BY person.name LIMIT 1 "
                "RETURN name",

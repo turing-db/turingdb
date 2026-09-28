@@ -69,6 +69,7 @@ public:
     // current one. A hop of a quantified pattern analyses its predicate in a scope of its
     // own, and what that predicate reaches out of it is what the exploration must hand it
     void setImportSink(std::vector<const VarDecl*>* sink) { _importSink = sink; }
+    std::vector<const VarDecl*>* getImportSink() const { return _importSink; }
 
     // Declares the statement a CSV row variable is loaded by, so `row[2]` and `row.age`
     // resolve to fields of that statement rather than to accesses of their own

@@ -4085,3 +4085,11 @@ add_call_v3_test(test_query_ir_set_list_element_property SetListElementPropertyT
 # SET in the same query part as a CREATE.
 add_turing_test(test_query_ir_set_after_create SetAfterCreateTest.cpp)
 target_link_libraries(test_query_ir_set_after_create PRIVATE turing_ir_test_write_query_s)
+
+# The WHERE of a WITH reading a variable the projection drops.
+add_turing_test(test_query_ir_with_where_dropped_variable WithWhereDroppedVariableTest.cpp)
+target_link_libraries(test_query_ir_with_where_dropped_variable PRIVATE turing_ir_test_write_query_s)
+
+# The ORDER BY of a WITH reading a variable the projection drops.
+add_turing_test(test_query_ir_with_order_by_dropped_variable WithOrderByDroppedVariableTest.cpp)
+target_link_libraries(test_query_ir_with_order_by_dropped_variable PRIVATE turing_ir_test_write_query_s)

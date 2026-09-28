@@ -67,7 +67,7 @@ public:
     void analyze(const SinglePartQuery* query);
     void analyze(const UnionQuery* query);
     void analyze(const ReturnStmt* returnSt);
-    void analyze(const WithStmt* withSt);
+    void analyze(WithStmt* withSt);
     void analyze(CallSubqueryStmt* subquery);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
@@ -149,8 +149,6 @@ private:
                                  std::string_view import,
                                  const VarDecl* decl) const;
     void analyzeWithAliases(const Projection* projection) const;
-    void analyzeWithOrderBy(const Projection* projection) const;
-    void throwOnUnpublishedKeyVariable(const Expr* keyExpr, const Projection* projection) const;
     void declareItemAlias(Expr* item, std::string_view alias);
     void analyzeDistinct(const Projection* projection, bool isAggregate) const;
     void analyzeAggregateOrderBy(const Projection* projection) const;

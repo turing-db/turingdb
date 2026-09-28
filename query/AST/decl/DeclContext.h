@@ -36,8 +36,10 @@ public:
     VarDecl* lookup(std::string_view name) const;
 
     // Whether a name this scope does not declare reads as the enclosing scope's. A WITH
-    // opens a scope that does not: what its projection dropped is gone behind the barrier
+    // opens a scope that does only for its WHERE: what its projection dropped is gone
+    // behind the barrier
     void setReadsEnclosingScope(bool reads) { _readsEnclosing = reads; }
+    bool readsEnclosingScope() const { return _readsEnclosing; }
 
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
 
