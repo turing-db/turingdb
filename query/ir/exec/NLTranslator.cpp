@@ -1507,7 +1507,7 @@ size_t NLTranslator::mapValueBytes(mlir::DictionaryAttr entries) {
 }
 
 std::string_view NLTranslator::ownedCharacters(llvm::StringRef text) {
-    return _memory->stringBuffer().insert(std::span<const char> {text.data(), text.size()});
+    return _memory->stringBuffer().insert(text);
 }
 
 types::Embedding::Primitive NLTranslator::ownedFloats(llvm::ArrayRef<float> embedding) {

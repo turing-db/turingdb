@@ -18,6 +18,8 @@
 
 #include "list/ListBuffer.h"
 
+#include "buffers/StringBuffer.h"
+
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
 
@@ -92,23 +94,24 @@ private:
 class EdgeTypesFunction {
 public:
     using ArgType = EdgeID;
-    using ResultType = std::string;
+    using ResultType = std::string_view;
 
-    explicit EdgeTypesFunction(GraphView view);
-    EdgeTypesFunction(GraphView view, const CommitWriteBuffer* writeBuffer);
+    EdgeTypesFunction(GraphView view, StringBuffer* stringBuffer);
 
-    ResultType operator()(const EdgeID edge) {
-        getEdgeTypeString(_tmp, edge);
-        return _tmp;
-    }
+    // The graph holds none of a change's writes until they commit, so the type of an edge
+    // this one wrote is read out of @param writeBuffer
+    EdgeTypesFunction(GraphView view,
+                      StringBuffer* stringBuffer,
+                      const CommitWriteBuffer* writeBuffer);
+
+    ResultType operator()(EdgeID edge);
 
 private:
     GraphView _view;
+    StringBuffer* _stringBuffer {nullptr};
     const CommitWriteBuffer* _writeBuffer {nullptr};
     size_t _firstPendingEdgeID {0};
-    std::string _tmp;
 
-    void getEdgeTypeString(std::string& out, EdgeID edge);
     EdgeTypeID readEdgeType(EdgeID edge) const;
 };
 
@@ -634,16 +637,17 @@ struct FunctionExecutor<LabelsFunction, Res, Arg> {
 /// Specialisation for type()
 template <typename Res, typename Arg>
 struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
-    static void apply(ColumnVector<std::string>* res,
+    static void apply(ColumnVector<std::string_view>* res,
                       const ColumnEdgeIDs* arg,
-                      GraphView view) {
+                      GraphView view,
+                      StringBuffer* stringBuffer) {
         const size_t size = arg->size();
         res->resize(size);
 
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        EdgeTypesFunction edgeType(view);
+        EdgeTypesFunction edgeType(view, stringBuffer);
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = edgeType(argd[i]);
         }
