@@ -99,7 +99,8 @@ def _run_cmake_build():
     cmake_args.append(str(source_dir))
 
     subprocess.check_call(cmake_args, cwd=str(build_dir))
-    subprocess.check_call(["make", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
+    build_jobs = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL") or str(os.cpu_count() or 4)
+    subprocess.check_call(["make", f"-j{build_jobs}"], cwd=str(build_dir))
     subprocess.check_call(["make", "install"], cwd=str(build_dir))
 
 
