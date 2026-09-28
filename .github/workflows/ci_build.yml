@@ -164,7 +164,7 @@ jobs:
         # per-OS key, which later cache-hit jobs then restored and failed on at
         # find_package. Bump the salt to discard them and re-save a clean tree
         # (with fail-fast disabled, jobs now run to completion so caches stay clean).
-        key: ${{ matrix.os }}-dependencies-v3-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
+        key: ${{ matrix.os }}-dependencies-v4-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
 
     - name: Cache dependencies (macOS)
       id: cache-dependencies-macos
