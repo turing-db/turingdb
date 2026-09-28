@@ -13,7 +13,7 @@ jobs:
   matrix:
     runs-on: ubuntu-24.04-turing
     outputs:
-      os_list: '["ubuntu-26.04-turing", "ubuntu-24.04-turing", "ubuntu-26.04-arm", "ubuntu-24.04-arm", "macos15", "macos26"]'
+      os_list: '["ubuntu-24.04-turing", "ubuntu-24.04-arm", "macos15", "macos26"]'
       python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
     steps:
       - run: echo "Defining matrix"
