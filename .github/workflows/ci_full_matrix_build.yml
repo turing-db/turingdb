@@ -1,11 +1,6 @@
 name: CI Full Matrix Build
 
 on:
-  schedule:
-    - cron: '0 7 * * *'
-    - cron: '0 0 * * *'
-    - cron: '0 16 * * *'
-    - cron: '0 21 * * *'
   workflow_dispatch:
 
 
