@@ -62,6 +62,13 @@ template <typename T>
 concept TaggedListOperand =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
 
+// A map value, which carries its own null in the entry's tag rather than in a nullable
+// column. Comparing one is three-valued for that reason, so it needs an overload of its
+// own; a null of unknown type is excluded, since IS NULL tests the tag rather than
+// answering unknown about it.
+template <typename T>
+concept MapEntryOperand = std::same_as<std::decay_t<T>, MapEntryView>;
+
 // The list a type-erased cell holds, absent where it holds anything else - a number, a
 // string, a null - which is what a membership test over it then answers
 template <typename C>
@@ -89,6 +96,13 @@ concept TaggedCellOperand =
 template <typename T, typename U>
 concept ComparesATaggedCell = (TaggedCellOperand<T> || TaggedCellOperand<U>) && !HoldsPropertyNull<T, U>;
 
+// The same for a map value, on whichever side it is written. A pair meeting a list element
+// is left to ComparesATaggedCell, whose body reads both.
+template <typename T, typename U>
+concept ComparesAMapEntry = (MapEntryOperand<T> || MapEntryOperand<U>)
+                         && !TaggedCellOperand<T> && !TaggedCellOperand<U>
+                         && !HoldsPropertyNull<T, U>;
+
 template <typename T, typename U>
 concept OrdersToANullableBool = ComparesATaggedCell<T, U> || (ListOperand<T> && ListOperand<U>);
 
@@ -98,9 +112,21 @@ inline bool holdsAValue(const T& operand) {
         return operand.has_value() && holdsAValue(*operand);
     } else if constexpr (std::is_same_v<T, ListElementView>) {
         return operand.getTag() != ListBufferTypeTag::Null;
+    } else if constexpr (std::is_same_v<T, MapEntryView>) {
+        return operand.getValueTag() != MapBufferTypeTag::Null;
     } else {
         return true;
     }
+}
+
+// The list a map entry holds, absent where it holds anything else, as taggedList answers
+// for a list element
+inline std::optional<ListView> entryList(const MapEntryView entry) {
+    if (entry.getValueTag() != MapBufferTypeTag::ListView) {
+        return std::nullopt;
+    }
+
+    return entry.getValueAs<ListView>();
 }
 
 template <typename T>
@@ -109,6 +135,8 @@ inline std::optional<ListView> heldList(const T& operand) {
         return operand;
     } else if constexpr (std::is_same_v<T, ListElementView>) {
         return taggedList(operand);
+    } else if constexpr (std::is_same_v<T, MapEntryView>) {
+        return entryList(operand);
     } else {
         return std::nullopt;
     }
@@ -677,6 +705,25 @@ struct TuringEqual {
         return CustomBool {lhs == rhs};
     }
 
+    template <typename T, typename U>
+        requires ComparesAMapEntry<T, U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
+            return std::nullopt;
+        }
+
+        const auto& lhs = TypeUtils::unwrap(a);
+        const auto& rhs = TypeUtils::unwrap(b);
+
+        const std::optional<ListView> lhsList = heldList(lhs);
+        const std::optional<ListView> rhsList = heldList(rhs);
+        if (lhsList && rhsList) {
+            return (*this)(*lhsList, *rhsList);
+        }
+
+        return CustomBool {lhs == rhs};
+    }
+
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
         const bool equal =
             (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());
@@ -714,7 +761,9 @@ struct TuringEqual {
 
     // Generalist fallback for all other types
     template <typename T, typename U>
-        requires (!ListOperand<T> || !ListOperand<U>) && (!ComparesATaggedCell<T, U>)
+        requires (!ListOperand<T> || !ListOperand<U>)
+              && (!ComparesATaggedCell<T, U>)
+              && (!ComparesAMapEntry<T, U>)
     bool operator()(const T& a, const U& b) {
         if constexpr (MixedSignIntegers<T, U>) {
             return std::cmp_equal(a, b);
@@ -737,7 +786,20 @@ struct TuringNotEqual {
     }
 
     template <typename T, typename U>
-        requires (!ListOperand<T> || !ListOperand<U>) && (!ComparesATaggedCell<T, U>)
+        requires ComparesAMapEntry<T, U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) {
+        const std::optional<CustomBool> equal = TuringEqual {}(a, b);
+        if (!equal.has_value()) {
+            return std::nullopt;
+        }
+
+        return CustomBool {!*equal};
+    }
+
+    template <typename T, typename U>
+        requires (!ListOperand<T> || !ListOperand<U>)
+              && (!ComparesATaggedCell<T, U>)
+              && (!ComparesAMapEntry<T, U>)
     bool operator()(T&& a, U&& b) {
         return !TuringEqual {}(std::forward<T>(a), std::forward<U>(b));
     }
@@ -873,6 +935,15 @@ struct TuringIn {
             }
 
             const std::optional<ListView> scalarList = taggedList(scalar);
+            if (scalarList) {
+                return (*this)(*scalarList, elements);
+            }
+        } else if constexpr (std::is_same_v<Scalar, MapEntryView>) {
+            if (scalar.getValueTag() == MapBufferTypeTag::Null) {
+                return std::nullopt;
+            }
+
+            const std::optional<ListView> scalarList = entryList(scalar);
             if (scalarList) {
                 return (*this)(*scalarList, elements);
             }

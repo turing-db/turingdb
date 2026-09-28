@@ -68,6 +68,16 @@ struct ListElementKindPairs {
     using Pairs = typename OptionalKindPairs<ListElementView, T>::Pairs;
 };
 
+// The map entry's sibling of the above: a map value is a tagged cell too, so it compares
+// against the same value types. Only the other side is ever optional - a map entry column
+// carries its null in the entry's own tag, so there is no optional<MapEntryView> kind.
+template <typename T>
+struct MapEntryKindPairs {
+    using Pairs = std::tuple<
+        KindPair<MapEntryView, T>,
+        KindPair<MapEntryView, std::optional<T>>>;
+};
+
 // A number joins a string as the text Cypher writes it with, either way round and whichever
 // side owns its characters
 template <typename T>
@@ -82,6 +92,14 @@ struct TextKindPairs {
 template <typename T>
 struct ListMembershipKindPairs {
     using Pairs = typename OptionalKindPairs<T, ListView>::Pairs;
+};
+
+// The same test with a map value as the needle. Only the list side is ever optional, for the
+// reason MapEntryKindPairs gives.
+struct MapEntryMembershipKindPairs {
+    using Pairs = std::tuple<
+        KindPair<MapEntryView, ListView>,
+        KindPair<MapEntryView, std::optional<ListView>>>;
 };
 
 // The same test against the list a type-erased cell holds, which is what an index of a
@@ -181,6 +199,16 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<ListView>::Pairs,
         ListElementKindPairs<MapView>::Pairs,
 
+        // Equality against a map value, which holds its own type as a list element does
+        MapEntryKindPairs<types::Int64::Primitive>::Pairs,
+        MapEntryKindPairs<types::UInt64::Primitive>::Pairs,
+        MapEntryKindPairs<types::Double::Primitive>::Pairs,
+        MapEntryKindPairs<types::String::Primitive>::Pairs,
+        MapEntryKindPairs<types::Bool::Primitive>::Pairs,
+        MapEntryKindPairs<ListView>::Pairs,
+        MapEntryKindPairs<MapView>::Pairs,
+        std::tuple<KindPair<MapEntryView, MapEntryView>>,
+
         // A loaded CSV field owns its characters, so a comparison against a string
         // property meets a borrowed view on one side and an owned string on the other -
         // either way round, since which side the query writes it on is its choice
@@ -224,6 +252,7 @@ struct PairRestrictions<Op> {
             // A tagged cell carries its null in the tag rather than in a nullable
             // column, so it is tested against null as a cell rather than as an optional
             KindPair<ListElementView, PropertyNull>,
+            KindPair<MapEntryView, PropertyNull>,
 
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
@@ -523,6 +552,7 @@ struct PairRestrictions<Op> {
         ListMembershipKindPairs<EdgeID>::Pairs,
 
         ListMembershipKindPairs<ListElementView>::Pairs,
+        MapEntryMembershipKindPairs::Pairs,
         ListMembershipKindPairs<ListView>::Pairs,
         ListMembershipKindPairs<MapView>::Pairs,
 

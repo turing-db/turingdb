@@ -59,7 +59,7 @@ namespace {
 // test written as a WHERE does. Two types that can never hold equal values settle it too -
 // the constraint is false wherever the property is there.
 bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
-    if (exprType == EvaluatedType::ListItem) {
+    if (exprType == EvaluatedType::ListItem || exprType == EvaluatedType::MapValue) {
         return true;
     }
 
@@ -789,6 +789,15 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
     }
 
     throwOnNonListLiteral(arg);
+
+    // A map value is no list, and unwinding one passed the column through rather than
+    // expanding it, so the query answered with the list as a single row. Turned away as a
+    // list comprehension turns the same source away.
+    if (arg->getType() == EvaluatedType::MapValue) {
+        throwError(fmt::format("UNWIND requires a list, not '{}'",
+                               EvaluatedTypeName::value(arg->getType())),
+                   arg);
+    }
 
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");

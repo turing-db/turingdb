@@ -1056,6 +1056,7 @@ private:
     // a loaded row, a property of an entity, or the column a value variable was bound to
     mlir::Value translatePropertyRead(const PropertyExpr* propExpr);
     mlir::Value translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr);
+    mlir::Value emitMapKey(mlir::Value map, std::string_view key);
     mlir::Value emitDateTimeComponent(DateTimePart part, mlir::Value instant);
     mlir::Value emitDurationComponent(DurationPart part, mlir::Value duration);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);

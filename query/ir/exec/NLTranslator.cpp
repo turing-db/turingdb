@@ -13,6 +13,7 @@
 #include "IRRowAlignment.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
+#include "map/MapWriteCursor.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -871,6 +872,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateListSlice(listSlice, body);
         } else if (nl::MakeMap makeMap = mlir::dyn_cast<nl::MakeMap>(operation)) {
             translateMakeMap(makeMap, body);
+        } else if (nl::MapKey mapKey = mlir::dyn_cast<nl::MapKey>(operation)) {
+            translateMapKey(mapKey, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
             translateRange(range, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
@@ -3033,6 +3036,31 @@ void NLTranslator::translateMakeMap(nl::MakeMap makeMap, NLStmtContainer* body) 
     body->emplaceStmt(&NLExecutor::runMakeMap, data);
 }
 
+void NLTranslator::translateMapKey(nl::MapKey mapKey, NLStmtContainer* body) {
+    const mlir::Value resultValue = mapKey.getResult();
+
+    const Column* input = getColumn(mapKey.getMap());
+    Column* const result = yieldsConstantColumn(resultValue) ? allocConstMapEntryColumn()
+                                                             : allocMapEntryColumn();
+    _valueSlots[resultValue] = result;
+
+    const std::string_view key = ownedCharacters(mapKey.getKey());
+
+    // The single null entry every row missing the key points at. It is the same on every
+    // row and every chunk, so it is written into the query's map buffer once, here.
+    MapWriteCursor absentCursor = _memory->mapBuffer().reserveMap(1, sizeof(PropertyNull));
+    absentCursor.writeKey(key);
+    const MapEntryView absent = absentCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+
+    NLMapKeyData* data = _program->allocFunctionData<NLMapKeyData>(input,
+                                                                   result,
+                                                                   NLExecutor::selectMapRead(input),
+                                                                   key,
+                                                                   absent);
+
+    body->emplaceStmt(&NLExecutor::runMapKey, data);
+}
+
 NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
@@ -3539,6 +3567,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         output = allocListElementColumn();
         copyPrefix = NLExecutor::selectListElementBlockRepeatFunction();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        output = allocMapEntryColumn();
+        copyPrefix = NLExecutor::selectMapEntryBlockRepeatFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -3653,6 +3684,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         output = allocListElementColumn();
         copySuffix = NLExecutor::selectListElementCopyFunction();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        output = allocMapEntryColumn();
+        copySuffix = NLExecutor::selectMapEntryCopyFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -5599,6 +5633,8 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return allocListElementColumn();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        return allocMapEntryColumn();
     } else if (isMaskElementType(elementType)) {
         return allocMaskColumn();
     }
@@ -5631,6 +5667,8 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementAppendFunction();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        return NLExecutor::selectMapEntryAppendFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskAppend();
     }
@@ -5677,6 +5715,8 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptGatherFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementGatherFunction();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        return NLExecutor::selectMapEntryGatherFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskGather();
     }
@@ -5960,6 +6000,8 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptCopyFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCopyFunction();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        return NLExecutor::selectMapEntryCopyFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskCopy();
     }
@@ -5996,6 +6038,8 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return allocListElementColumn();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        return allocMapEntryColumn();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -6128,6 +6172,10 @@ void NLTranslator::allocBroadcastColumn(mlir::Value inputValue,
         output = allocListElementColumn();
         broadcast = isOuter ? NLExecutor::selectListElementBlockRepeatFunction()
                             : NLExecutor::selectListElementTileFunction();
+    } else if (mlir::isa<storage::MapElementType>(elementType)) {
+        output = allocMapEntryColumn();
+        broadcast = isOuter ? NLExecutor::selectMapEntryBlockRepeatFunction()
+                            : NLExecutor::selectMapEntryTileFunction();
     } else if (isPlainValueElementType(elementType)) {
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
@@ -6340,6 +6388,17 @@ Column* NLTranslator::allocEntityListColumn() {
 
 Column* NLTranslator::allocListElementColumn() {
     ColumnVector<ListElementView>* column = _memory->alloc<ColumnVector<ListElementView>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
+Column* NLTranslator::allocConstMapEntryColumn() {
+    return _memory->alloc<ColumnConst<MapEntryView>>();
+}
+
+Column* NLTranslator::allocMapEntryColumn() {
+    ColumnVector<MapEntryView>* column = _memory->alloc<ColumnVector<MapEntryView>>();
     column->reserve(_program->getChunkSize());
 
     return column;

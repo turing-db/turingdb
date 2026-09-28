@@ -228,12 +228,9 @@ std::string valueToString(const MapEntryView entry) {
         return valueToString(entry.getValueAs<T>());
     };
 
-    const MapBufferTypeTag tag = entry.getValueTag();
-    MapTagDispatcher writer {._tag = tag};
-
     std::string result {entry.getKey()};
     result += ": ";
-    result += writer.execute(writeTyped, entry);
+    result += dispatchMapEntry(writeTyped, entry);
 
     return result;
 }

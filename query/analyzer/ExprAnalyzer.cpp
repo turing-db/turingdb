@@ -46,6 +46,16 @@ std::string_view componentOwnerName(bool namesADateTimePart, bool namesADuration
     return "datetime or a duration";
 }
 
+// What a write or an index is turned away with when its target is read out of a property
+// rather than being one. Both name what can be targeted, since neither shape can be.
+constexpr std::string_view datetimeComponentNotAProperty =
+    "A datetime component is computed from a property, not stored as one. "
+    "Only a property can be set, removed or indexed.";
+
+constexpr std::string_view mapKeyNotAProperty =
+    "A map key is a value inside a property, not a property of its own. "
+    "Only a property can be set, removed or indexed.";
+
 // The type a CASE takes when one branch gives @param carried and another gives
 // @param branch: a null branch constrains nothing, an integer beside a double widens,
 // and a one-character string literal reads as the string it is. Invalid when the two
@@ -423,6 +433,19 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map);
 
+            // A map value is a type-erased cell too, so it compares against the types a
+            // map can hold, and against null for IS (NOT) NULL
+            const bool comparesMapValue =
+                pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::MapValue)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Integer)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Double)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::String)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Char)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::List)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Map);
+
             // A stored list compares against another list, and against null for
             // IS (NOT) NULL
             const bool comparesList =
@@ -433,7 +456,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Map)
                 || pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Null);
 
-            if (comparesListItem || comparesList || comparesMap) {
+            if (comparesListItem || comparesMapValue || comparesList || comparesMap) {
                 break;
             }
 
@@ -953,6 +976,8 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     const EvaluatedType varType = varDecl->getType();
 
+    // A third name is a calendar field of an instant or a key of a map, and only the
+    // property's own type tells the two apart, so the verdict waits until it is resolved
     DateTimePart part {DateTimePart::Year};
     DurationPart durationPart {DurationPart::Years};
     bool namesADateTimePart = false;
@@ -967,10 +992,25 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         namesADurationPart = Duration::partNamed(componentName, durationPart);
         componentOwner = componentOwnerName(namesADateTimePart, namesADurationPart);
 
-        // A write naming a property the graph does not carry would introduce it, and a
-        // component names none: turned away here, before the name is read as a new one
+        // A write naming a property the graph does not carry would introduce it, and
+        // neither a component nor a key names one: turned away here, before the name is
+        // read as a new one. Which of the two it is only the property's type says, and an
+        // unknown property names no map, so it is the component this turns away.
         if (allowCreate) {
-            if (!namesADateTimePart && !namesADurationPart) {
+            const auto propTypeFound = _graphMetadata.propTypes().get(propName->getName());
+            const auto toBeCreated = _toBeCreatedTypes.find(propName->getName());
+
+            const bool readsAMapVariable = varType == EvaluatedType::Map;
+            const bool storesAMap = propTypeFound.has_value()
+                                 && propTypeFound.value()._valueType == ValueType::Map;
+            const bool willStoreAMap = toBeCreated != _toBeCreatedTypes.end()
+                                    && toBeCreated->second == ValueType::Map;
+
+            const bool namesAMapKey = readsAMapVariable || storesAMap || willStoreAMap;
+
+            if (namesAMapKey) {
+                throwError(mapKeyNotAProperty, expr);
+            } else if (!namesADateTimePart && !namesADurationPart) {
                 throwError(fmt::format("'{}' is not a component of a {}", componentName, componentOwner), expr);
             }
 
@@ -1058,6 +1098,29 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::Invalid;
     }
 
+    // m.key, where m was bound to a map rather than to an entity
+    if (varType == EvaluatedType::Map) {
+        if (allowCreate) {
+            throwError(mapKeyNotAProperty, expr);
+        }
+
+        if (readsAComponentOfAProperty) {
+            throwError(fmt::format("'{}.{}' reads a key of a map held by another map, "
+                                   "which is not supported",
+                                   varName->getName(), propName->getName()),
+                       expr);
+        }
+
+        expr->setEntityVarDecl(varDecl);
+        expr->setMapKey(propName->getName());
+        expr->setType(EvaluatedType::MapValue);
+        expr->setDynamic();
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
+
+        return ValueType::Invalid;
+    }
+
     if (varType != EvaluatedType::NodePattern && varType != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
             "Variable '{}' is '{}' it must be a node or edge",
@@ -1126,6 +1189,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     if (readsAComponentOfAProperty) {
         const bool readsAnInstant = type == EvaluatedType::DateTime;
         const bool readsADuration = type == EvaluatedType::Duration;
+        const bool readsAMap = type == EvaluatedType::Map;
 
         if (readsAnInstant) {
             if (!namesADateTimePart) {
@@ -1145,18 +1209,27 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
             type = EvaluatedType::Integer;
             vt = ValueType::Int64;
+        } else if (readsAMap) {
+            expr->setMapKey(componentName);
+
+            type = EvaluatedType::MapValue;
+            vt = ValueType::Invalid;
         } else if (readsAsNull) {
-            // A name no property in the graph carries reads null on every row, and a
-            // component of null is null too: there is no value to turn away, only nothing to read
+            // The property is not one the graph carries, so the third name resolves against
+            // null. A component of null is null; a name that is no component names nothing
+            // this read could ever answer.
             if (!namesADateTimePart && !namesADurationPart) {
-                throwError(fmt::format("'{}' is not a component of a {}", componentName, componentOwner), expr);
+                throwError(fmt::format("'{}' does not exist for type '{}'",
+                                       componentName,
+                                       EvaluatedTypeName::value(type)),
+                           expr);
             } else if (namesADateTimePart) {
                 expr->setDateTimePart(part);
             } else {
                 expr->setDurationPart(durationPart);
             }
         } else {
-            throwError(fmt::format("Property '{}' is '{}', only a {} has components",
+            throwError(fmt::format("Property '{}' is '{}', only a {} or a map has components",
                                    propName->getName(),
                                    EvaluatedTypeName::value(type),
                                    componentOwner),
@@ -1173,11 +1246,15 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     return vt;
 }
 
-void ExprAnalyzer::throwIfReadsAComponent(const PropertyExpr* expr) {
+// A datetime or duration component and a map key are all read out of a property rather than
+// being one, so none of them can be the property a write or an index targets.
+void ExprAnalyzer::throwIfReadsPartOfAProperty(const PropertyExpr* expr) {
     if (expr->readsADateTimeComponent()) {
-        throwError("A datetime component cannot name a property.", expr);
+        throwError(datetimeComponentNotAProperty, expr);
     } else if (expr->readsADurationComponent()) {
         throwError("A duration component cannot name a property.", expr);
+    } else if (expr->readsAMapKey()) {
+        throwError(mapKeyNotAProperty, expr);
     }
 }
 
@@ -1220,6 +1297,14 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
             type = *maybeEvalType;
         }
+    } else if (baseType == EvaluatedType::Map) {
+        expr->setReadsAMapKey();
+        type = EvaluatedType::MapValue;
+    } else if (baseType == EvaluatedType::MapValue) {
+        throwError(fmt::format("'{}' reads a key of a map held by another map, which is "
+                               "not supported",
+                               propName),
+                   expr);
     } else if (baseType != EvaluatedType::Null) {
         throwError(fmt::format("A value of type '{}' has no property '{}'",
                                EvaluatedTypeName::value(baseType), propName),
@@ -1709,6 +1794,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::Duration;
         case EvaluatedType::Map:
             return vt == ValueType::Map;
+        case EvaluatedType::MapValue:
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:
         case EvaluatedType::Tuple:

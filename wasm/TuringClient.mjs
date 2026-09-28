@@ -60,7 +60,7 @@ export const ColumnType = Object.freeze({
 });
 
 // The column types whose values the nested reader walks out of the flat nested bytes
-const NESTED_COLUMN_TYPES = [ColumnType.LIST_VIEW, ColumnType.LIST_ELEMENT_VIEW, ColumnType.MAP_VIEW];
+const NESTED_COLUMN_TYPES = [ColumnType.LIST_VIEW, ColumnType.LIST_ELEMENT_VIEW, ColumnType.MAP_VIEW, ColumnType.MAP_ENTRY_VIEW];
 
 export const ColumnEncoding = Object.freeze({
     VECTOR: 0,
@@ -262,6 +262,14 @@ export class NestedReader {
         return this._readMap();
     }
 
+    // One entry of a map, read as the value it holds. A map entry column's rows are the
+    // values a key named, and every row names the same key, so the key is skipped here as
+    // the other renderers skip it.
+    readEntryValueAt(offset) {
+        this._cursor = offset + 4;
+        return this._readElement();
+    }
+
     _readList() {
         const count = this._view.getUint32(this._cursor, true);
         this._cursor += 4;
@@ -382,6 +390,8 @@ function makeItemReader(buffers, nestedReader) {
             return variable((index) => nestedReader.readElementAt(offsets[index]));
         case ColumnType.MAP_VIEW:
             return variable((index) => nestedReader.readMapAt(offsets[index]));
+        case ColumnType.MAP_ENTRY_VIEW:
+            return variable((index) => nestedReader.readEntryValueAt(offsets[index]));
         default:
             throw new TuringQueryError("DECODE_ERROR", `Unsupported column type ${typeCode}`);
     }

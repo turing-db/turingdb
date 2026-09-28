@@ -125,7 +125,7 @@ struct ColumnTypeGenerator {
         } else if constexpr (IsMap<T>) {
             _name = fmt::format("Map");
         } else if constexpr (IsMapEntry<T>) {
-            _name = fmt::format("MapEntry");
+            _name = fmt::format("MapValue");
         } else {
             COMPILE_ERROR("Unknown column type");
         }

@@ -707,6 +707,22 @@ LogicalResult MakeList::verify() {
     return success();
 }
 
+LogicalResult MapKey::verify() {
+    const Type element = llvm::cast<ChunkType>(getMap().getType()).getElementType();
+    const auto nullable = llvm::dyn_cast<storage::NullableType>(element);
+    const Type map = nullable ? nullable.getValueType() : element;
+
+    if (!llvm::isa<storage::MapType>(map)) {
+        return emitOpError("reads a chunk of maps, optionally nullable");
+    }
+
+    if (getKey().empty()) {
+        return emitOpError("reads a key, which cannot be empty");
+    }
+
+    return success();
+}
+
 LogicalResult MakeMap::verify() {
     const size_t valueCount = getValues().size();
     if (valueCount == 0) {

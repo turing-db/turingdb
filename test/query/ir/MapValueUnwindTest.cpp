@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -23,9 +24,10 @@
 using namespace db;
 using namespace turing::test;
 
-// A component name is resolved against the type of what it is read off, once that type is
-// known, so a wrong name is reported against that type and a wrong base is reported first.
-class ComponentNameResolutionTest : public TuringTest {
+// UNWIND over a map value. Expanding the list a key holds is not supported, so what this
+// pins is that the value is turned away rather than passed through as a single row - the
+// engine must not answer a query it cannot evaluate.
+class MapValueUnwindTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -73,6 +75,30 @@ protected:
         submit(changeID);
     }
 
+    void expectRows(std::string_view query, const Rows& expected) {
+        RowSink sink;
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              ChangeID::head(),
+                              &_env->getMem(),
+                              &sink);
+        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
+
+        Rows actual;
+        sink.sortedRows(actual);
+
+        Rows sortedExpected = expected;
+        std::sort(sortedExpected.begin(), sortedExpected.end());
+
+        std::string actualText;
+        describeRows(actual, actualText);
+
+        EXPECT_EQ(actual, sortedExpected) << "query: " << query << "\ngot:\n" << actualText;
+    }
+
     void expectError(std::string_view query, std::string_view expectedError) {
         RowSink sink;
         QueryStatus status;
@@ -89,42 +115,22 @@ protected:
             << "query: " << query << "\nerror: " << status.getError();
     }
 
-    void writeTasks() {
-        write("CREATE (n:Task {name: 'a', took: duration(2000000)})");
-        write("CREATE (n:Task {name: 'b', took: duration(90061000000)})");
-        write("CREATE (n:Task {name: 'c', took: duration(-1500000)})");
-        write("CREATE (n:Task {name: 'd'})");
-    }
-
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
     QueryConfig _queryConfig;
 };
 
-TEST_F(ComponentNameResolutionTest, rejectsAnUnknownUnitOfADurationProperty) {
-    writeTasks();
+TEST_F(MapValueUnwindTest, rejectsUnwindingAMapValue) {
+    write("CREATE (n:Lst {name: 'a', attrs: {l: [1, 2]}})");
 
-    expectError("MATCH (n:Task) RETURN n.took.fortnight", "'fortnight' is not a component of a duration");
+    expectError("MATCH (n:Lst) UNWIND n.attrs.l AS e RETURN e", "UNWIND requires a list, not 'MapValue'");
 }
 
-TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAVariableThatIsNoEntity) {
-    expectError("WITH 1 AS x RETURN x.a.fortnight", "Variable 'x' is 'Integer' it must be a node or edge");
+TEST_F(MapValueUnwindTest, rejectsUnwindingAMapValueOfAMapLiteral) {
+    expectError("WITH {l: [1, 2]} AS m UNWIND m.l AS e RETURN e", "UNWIND requires a list, not 'MapValue'");
 }
 
-TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAPropertyTheGraphDoesNotCarry) {
-    writeTasks();
-
-    expectError("MATCH (n:Task) RETURN n.unheardOf.fortnight",
-                "'fortnight' does not exist for type 'Null'");
-}
-
-TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAPropertyThatHasNoComponents) {
-    expectError("MATCH (n:Person) RETURN n.name.fortnight",
-                "Property 'name' is 'String', only a datetime or a duration or a map has components");
-}
-
-TEST_F(ComponentNameResolutionTest, rejectsAnUnknownNameOnAField) {
-    expectError("LOAD CSV 'tasks.csv' WITH HEADERS AS row RETURN row.took.fortnight",
-                "Field 'took' of 'row' is 'String', only a datetime or a duration has components");
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv);
 }
