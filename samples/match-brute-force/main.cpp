@@ -907,10 +907,6 @@ constexpr ReturnItem countOf(BoundNode node) {
     return {node, nullptr, {}, {}, Aggregate::Count};
 }
 
-constexpr ReturnItem countOfRows() {
-    return {nullptr, nullptr, {}, {}, Aggregate::CountRows};
-}
-
 constexpr ReturnItem averageOf(BoundNode node, std::string_view property) {
     return {node, nullptr, property, {}, Aggregate::Avg};
 }
