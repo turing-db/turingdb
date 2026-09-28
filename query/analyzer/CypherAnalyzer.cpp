@@ -1502,6 +1502,10 @@ void CypherAnalyzer::analyze(const CreateVectorIndexQuery* query) {
         throwError("Vector index dimension must be greater than 0", query);
     }
 
+    if (query->getDimension() > MAX_VECTOR_INDEX_DIMENSION) {
+        throwError(fmt::format("Vector index dimension must not exceed {}", MAX_VECTOR_INDEX_DIMENSION), query);
+    }
+
     const std::string_view indexName = query->getIndexName();
     if (indexName.empty()) {
         throwError("Vector index name cannot be empty", query);
