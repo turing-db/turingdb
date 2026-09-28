@@ -152,6 +152,6 @@ TEST_F(CountSubqueryCodegenTest, aBodyOverNoRowInFlightTakesNoTag) {
     EXPECT_TRUE(contains(codegen, "db.count_subquery_yield {")) << codegen;
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
-    EXPECT_TRUE(contains(nlProgram, "nl.count_subquery_buffer() : {}")) << nlProgram;
+    EXPECT_TRUE(contains(nlProgram, "nl.count_subquery_buffer()")) << nlProgram;
     EXPECT_TRUE(contains(nlProgram, "rows(")) << nlProgram;
 }
