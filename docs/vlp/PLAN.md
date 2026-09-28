@@ -707,7 +707,7 @@ change.
   results and PathFinder's DAG of parent pointers, applied to the result column). Filters,
   SKIP/LIMIT, sorts on other columns then cost O(1) per row instead of O(depth), and the
   list buffer holds each prefix once. Needs a new column kind understood by the sinks.
-- **Per-commit pruning oracles** (opt-in per graph, see PATH_RESEARCH.md Section 5). All
+- **Per-commit pruning oracles** (opt-in per graph, see VLP_RESEARCH.md Section 5). All
   plug into the same DFS rule `prune v if dist(v, T) > remaining budget` and replace the
   per-query bounded BFS when the graph is large and append-mostly:
   - 2-hop distance labels built by pruned landmark labeling (degree-ordered pruned BFSs,
