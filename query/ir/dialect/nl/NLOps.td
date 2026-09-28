@@ -3294,6 +3294,82 @@ def ExistsResult : NLOp<"exists_result", [Pure]> {
 }
 
 /**
+* CountSubqueryBuffer
+*/
+def CountSubqueryBuffer : NLOp<"count_subquery_buffer", [RowAlignedThroughOperands]> {
+  let summary = "Create (and reset) the accumulator for one COUNT subquery over this step's rows";
+  let description = [{
+    nl.exists_buffer's counting sibling: it sits at the top of the block whose step it
+    covers, records this step's input chunks, zeroes the count of each of their rows and
+    produces the row tag the body carries.
+
+      %state, %tag = nl.count_subquery_buffer (%p) : {!nl.chunk<!storage.node_id>}
+
+    With no input columns the accumulator holds one count, for the single empty row
+    Cypher starts from.
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$input_columns);
+
+  let results = (outs NLCountSubqueryState:$state, NLUInt64Chunk:$tag);
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` attr-dict `:` `{` qualified(type($input_columns)) `}`
+  }];
+}
+
+/**
+* CountSubqueryTally
+*/
+// NOT Pure: it adds to the counts of the input rows this step's rows came from, so it
+// must run exactly where it sits.
+def CountSubqueryTally : NLOp<"count_subquery_tally", [AttrSizedOperandSegments]> {
+  let summary = "Count the rows a COUNT body produced toward the input rows they came from";
+  let description = [{
+    Runs in the body's innermost loop body, once per step. Adds one to the count of the
+    input row each entry of the tag names, so once the body is walked every input row
+    holds the number of rows it produced.
+
+      nl.count_subquery_tally %state, %tag
+
+    A body with no tag answers for a single row - the single empty row, or the one row a
+    body run per row is handed - and adds the row count of `rows` to it instead.
+
+      nl.count_subquery_tally %state rows(%k : !nl.chunk<!storage.node_id>)
+  }];
+
+  let arguments = (ins NLCountSubqueryStateHandle:$state,
+                       Optional<NLUInt64Chunk>:$tag,
+                       Optional<NLChunk>:$rows);
+
+  let assemblyFormat = [{
+    $state (`,` $tag^)? (`rows` `(` $rows^ `:` qualified(type($rows)) `)`)? attr-dict
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* CountSubqueryResult
+*/
+// Pure, as nl.exists_result is, and placed like it: after the body's loop nest, in the
+// block holding the nl.count_subquery_buffer.
+def CountSubqueryResult : NLOp<"count_subquery_result", [Pure]> {
+  let summary = "Read a COUNT subquery accumulator's counts as a chunk";
+  let description = [{
+    Produces one count per input row of the step, row-aligned with the chunks the
+    accumulator was opened over.
+
+      %n = nl.count_subquery_result(%state) : !nl.chunk<ui64>
+  }];
+
+  let arguments = (ins NLCountSubqueryStateHandle:$state);
+  let results   = (outs NLUInt64Chunk:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * PatternComprehensionBuffer
 */
 // NOT Pure: it re-initializes the accumulator, so it must run exactly where it sits -

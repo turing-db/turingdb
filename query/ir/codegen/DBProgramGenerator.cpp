@@ -79,6 +79,7 @@
 #include "expr/CaseExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/ExistsExpr.h"
+#include "expr/CountSubqueryExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/ExprChildren.h"
@@ -323,6 +324,8 @@ constexpr std::string_view subqueryTagName {"`hidden_`tag"};
 // The row tag an EXISTS body carries, under a hidden name no clause of the body resolves
 // or drops - a barrier inside it carries the column on as it does a CALL's tag
 constexpr std::string_view existsTagName {"`hidden_`exists_tag"};
+
+constexpr std::string_view countTagName {"`hidden_`count_tag"};
 
 // The mask of an entity a MERGE wrote is bound past a WITH under the entity's name behind
 // this prefix. No hidden name starts with it, so a barrier publishing no entity drops it
@@ -5363,7 +5366,17 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     mlir::Value yieldedTag;
 
     if (subquery->isUnion()) {
-        generateSubqueryUnion(subquery, branchScopes, importedEntities, yielded, returnedEntities);
+        llvm::SmallVector<const SinglePartQuery*> queries;
+        for (const CallSubqueryStmt::Branch& branch : branches) {
+            queries.push_back(branch._query);
+        }
+
+        generateSubqueryUnion(queries,
+                              subquery->getDedupedBranchCount(),
+                              branchScopes,
+                              importedEntities,
+                              yielded,
+                              returnedEntities);
     } else {
         const SinglePartQuery* body = branches.front()._query;
 
@@ -5539,14 +5552,12 @@ void DBProgramGenerator::collectSubqueryBranchScope(const CallSubqueryStmt::Bran
 // Each branch is generated into a region of its own under the imports it names, as the
 // branches of a top-level UNION are. Every branch publishes its columns under the
 // declarations the analyzer gave the first one, so they come out in the same order.
-void DBProgramGenerator::generateSubqueryUnion(const CallSubqueryStmt* subquery,
+void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQuery*> branches,
+                                               size_t dedupedBranches,
                                                std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
                                                std::span<CarriedEntities> importedEntities,
                                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                                CarriedEntities& returnedEntities) {
-    const CallSubqueryStmt::Branches& branches = subquery->branches();
-    const size_t dedupedBranches = subquery->getDedupedBranchCount();
-
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     mlir::Block* const bodyBlock = _opBuilder.getInsertionBlock();
 
@@ -5561,7 +5572,7 @@ void DBProgramGenerator::generateSubqueryUnion(const CallSubqueryStmt* subquery,
     std::vector<std::vector<std::optional<PartScope::WrittenEntity>>> writtenColumns(branches.size());
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        const SinglePartQuery* query = branches[branchIndex]._query;
+        const SinglePartQuery* query = branches[branchIndex];
 
         std::unique_ptr<mlir::Region>& region = branchRegions.emplace_back(std::make_unique<mlir::Region>());
         mlir::Block* const block = new mlir::Block(); // Region destructor frees it
@@ -6664,6 +6675,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::COUNT_SUBQUERY: {
+            const CountSubqueryExpr* countExpr = static_cast<const CountSubqueryExpr*>(expr);
+            translateCountSubqueryExpr(expr, countExpr);
+        }
+        break;
+
         case Expr::Kind::LIST_COMPREHENSION: {
             const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
             translateListComprehensionExpr(expr, comprehension);
@@ -7057,6 +7074,165 @@ mlir::Value DBProgramGenerator::generateExistsBranch(const SinglePartQuery* body
     _vdg = std::move(outerGraph);
 
     return existsOp.getResult();
+}
+
+void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const CountSubqueryExpr* countExpr) {
+    llvm::SmallVector<const SinglePartQuery*> branches;
+    for (const UnionQuery::Branch& branch : countExpr->branches()) {
+        branches.push_back(branch._query);
+    }
+
+    const size_t dedupedBranches = countExpr->getDedupedBranchCount();
+    if (dedupedBranches > 0) {
+        _part._exprMap[expr] = generateCountSubquery(branches, dedupedBranches);
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    mlir::Value count;
+    for (const SinglePartQuery* branch : branches) {
+        const mlir::Value branchCount = generateCountSubquery(llvm::ArrayRef(branch), 0);
+
+        if (count) {
+            count = _opBuilder.create<mlir::db::AddOp>(loc, noneType, count, branchCount).getResult();
+        } else {
+            count = branchCount;
+        }
+    }
+
+    _part._exprMap[expr] = count;
+}
+
+mlir::Value DBProgramGenerator::generateCountSubquery(llvm::ArrayRef<const SinglePartQuery*> branches,
+                                                      size_t dedupedBranches) {
+    // A UNION dedups the rows of each input row on their own, so a union body runs one
+    // input row at a time
+    const bool isUnion = branches.size() > 1;
+    const bool carriesScope = !isUnion && subqueryCarriesRows(branches.front());
+
+    llvm::SmallVector<PublishedColumn> scopeColumns;
+    collectPublishedColumns(scopeColumns);
+
+    llvm::SmallVector<PublishedColumn> inputs;
+    llvm::SmallVector<PublishedColumn> constants;
+
+    for (const PublishedColumn& column : scopeColumns) {
+        if (yieldsConstantColumn(column._column)) {
+            constants.push_back(column);
+        } else {
+            inputs.push_back(column);
+        }
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType countType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
+
+    llvm::SmallVector<mlir::Value> inputColumns;
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    llvm::SmallVector<mlir::Location> argumentLocations;
+
+    for (const PublishedColumn& input : inputs) {
+        inputColumns.push_back(input._column);
+        argumentTypes.push_back(input._column.getType());
+        argumentLocations.push_back(loc);
+    }
+
+    const bool tagsRows = carriesScope && !inputs.empty();
+    if (tagsRows) {
+        argumentTypes.push_back(countType);
+        argumentLocations.push_back(loc);
+    }
+
+    auto countOp = _opBuilder.create<mlir::db::CountSubquery>(loc, countType, inputColumns, carriesScope);
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    mlir::Block* const bodyBlock = _opBuilder.createBlock(&countOp.getBody(),
+                                                         {},
+                                                         argumentTypes,
+                                                         argumentLocations);
+
+    std::vector<llvm::SmallVector<PublishedColumn>> branchScopes(branches.size());
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        const DeclContext* bodyContext = branches[branchIndex]->getDeclContext();
+        llvm::SmallVector<PublishedColumn>& scope = branchScopes[branchIndex];
+
+        for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
+            const PublishedColumn& input = inputs[inputIndex];
+            const mlir::Value argument = bodyBlock->getArgument(static_cast<unsigned>(inputIndex));
+
+            if (const VarDecl* correlated = bodyContext->getDecl(input._name)) {
+                scope.push_back({correlated, input._name, argument});
+            }
+        }
+
+        if (tagsRows) {
+            const mlir::Value tagArgument = bodyBlock->getArgument(static_cast<unsigned>(inputs.size()));
+            scope.push_back({nullptr, std::string(countTagName), tagArgument});
+        }
+
+        for (const PublishedColumn& constant : constants) {
+            if (const VarDecl* correlated = bodyContext->getDecl(constant._name)) {
+                scope.push_back({correlated, constant._name, constant._column});
+            }
+        }
+    }
+
+    PartScope outerPart = std::move(_part);
+    VariableDependencyGraph outerGraph = std::move(_vdg);
+
+    llvm::SmallVector<PublishedColumn> held;
+
+    if (isUnion) {
+        std::vector<CarriedEntities> importedEntities(branches.size());
+        CarriedEntities returnedEntities;
+
+        generateSubqueryUnion(branches,
+                              dedupedBranches,
+                              branchScopes,
+                              importedEntities,
+                              held,
+                              returnedEntities);
+    } else {
+        const SinglePartQuery* body = branches.front();
+
+        rebindScope(branchScopes.front());
+
+        generateQueryParts(body);
+
+        if (const ReturnStmt* returnStmt = body->getReturnStmt()) {
+            publishProjection(returnStmt->getProjection());
+        }
+
+        collectPublishedColumns(held);
+    }
+
+    llvm::SmallVector<mlir::Value> heldColumns;
+    for (const PublishedColumn& column : held) {
+        mlir::Value heldColumn = column._column;
+        const bool boundInsideTheBody = heldColumn.getParentRegion() == &countOp.getBody();
+
+        if (column._name != countTagName && boundInsideTheBody) {
+            heldColumns.push_back(heldColumn);
+        }
+    }
+
+    mlir::Value carriedTag;
+    if (tagsRows) {
+        const auto tagIt = std::ranges::find(held, countTagName, &PublishedColumn::_name);
+        bioassert(tagIt != held.end(), "Row tag lost by a COUNT body");
+
+        carriedTag = tagIt->_column;
+    }
+
+    _opBuilder.create<mlir::db::CountSubqueryYield>(loc, carriedTag, heldColumns);
+
+    _part = std::move(outerPart);
+    _vdg = std::move(outerGraph);
+
+    return countOp.getResult();
 }
 
 void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr) {

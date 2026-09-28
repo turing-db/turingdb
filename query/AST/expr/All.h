@@ -18,4 +18,5 @@
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/CaseExpr.h"
 #include "expr/ExistsExpr.h"
+#include "expr/CountSubqueryExpr.h"
 

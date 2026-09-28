@@ -974,6 +974,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateExistsMark(existsMark, body);
         } else if (nl::ExistsResult existsResult = mlir::dyn_cast<nl::ExistsResult>(operation)) {
             translateExistsResult(existsResult, body);
+        } else if (nl::CountSubqueryBuffer countBuffer = mlir::dyn_cast<nl::CountSubqueryBuffer>(operation)) {
+            translateCountSubqueryBuffer(countBuffer, body);
+        } else if (nl::CountSubqueryTally countTally = mlir::dyn_cast<nl::CountSubqueryTally>(operation)) {
+            translateCountSubqueryTally(countTally, body);
+        } else if (nl::CountSubqueryResult countResult = mlir::dyn_cast<nl::CountSubqueryResult>(operation)) {
+            translateCountSubqueryResult(countResult, body);
         } else if (nl::PatternComprehensionBuffer comprehensionBuffer =
                        mlir::dyn_cast<nl::PatternComprehensionBuffer>(operation)) {
             translatePatternComprehensionBuffer(comprehensionBuffer, body);
@@ -3940,6 +3946,55 @@ NLExistsState* NLTranslator::existsStateFor(mlir::Value handle) const {
     const auto stateIt = _existsStates.find(handle);
     if (stateIt == _existsStates.end()) {
         throw IRException("exists handle must be produced by an nl.exists_buffer");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::translateCountSubqueryBuffer(nl::CountSubqueryBuffer buffer, NLStmtContainer* body) {
+    NLCountSubqueryState* state = _program->allocCountSubqueryState();
+    _countSubqueryStates[buffer.getState()] = state;
+
+    for (const mlir::Value column : buffer.getInputColumns()) {
+        state->addInputColumn(getColumn(column));
+    }
+
+    ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
+
+    NLCountSubqueryResetData* resetData = _program->allocFunctionData<NLCountSubqueryResetData>(state, tag);
+    body->emplaceStmt(&NLExecutor::runCountSubqueryReset, resetData);
+}
+
+void NLTranslator::translateCountSubqueryTally(nl::CountSubqueryTally tally, NLStmtContainer* body) {
+    NLCountSubqueryState* state = countSubqueryStateFor(tally.getState());
+
+    const ColumnVector<uint64_t>* tag = nullptr;
+    if (const mlir::Value tagValue = tally.getTag()) {
+        tag = static_cast<const ColumnVector<uint64_t>*>(getColumn(tagValue));
+    }
+
+    const Column* rows = nullptr;
+    if (const mlir::Value rowsValue = tally.getRows()) {
+        rows = getColumn(rowsValue);
+    }
+
+    NLCountSubqueryTallyData* data = _program->allocFunctionData<NLCountSubqueryTallyData>(state, tag, rows);
+    body->emplaceStmt(&NLExecutor::runCountSubqueryTally, data);
+}
+
+void NLTranslator::translateCountSubqueryResult(nl::CountSubqueryResult result, NLStmtContainer* body) {
+    NLCountSubqueryState* state = countSubqueryStateFor(result.getState());
+
+    ColumnVector<uint64_t>* counts = static_cast<ColumnVector<uint64_t>*>(allocColumn(result.getResult()));
+
+    NLCountSubqueryResultData* data = _program->allocFunctionData<NLCountSubqueryResultData>(state, counts);
+    body->emplaceStmt(&NLExecutor::runCountSubqueryResult, data);
+}
+
+NLCountSubqueryState* NLTranslator::countSubqueryStateFor(mlir::Value handle) const {
+    const auto stateIt = _countSubqueryStates.find(handle);
+    if (stateIt == _countSubqueryStates.end()) {
+        throw IRException("count subquery handle must be produced by an nl.count_subquery_buffer");
     }
 
     return stateIt->second;

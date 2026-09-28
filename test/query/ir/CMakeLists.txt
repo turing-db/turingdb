@@ -3121,6 +3121,35 @@ target_link_libraries(test_query_ir_exists_subquery PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_exists_subquery PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# COUNT { ... }: one count per row in flight, over the pattern shorthand, the MATCH body, a
+# body run one input row at a time, UNION and UNION ALL.
+add_turing_test(test_query_ir_count_subquery CountSubqueryTest.cpp)
+target_link_libraries(test_query_ir_count_subquery PRIVATE turing_ir_test_write_query_s)
+
+# Which path each kind of COUNT body compiles to.
+add_ir_tests(test_query_ir_count_subquery_codegen CountSubqueryCodegenTest.cpp)
+target_sources(test_query_ir_count_subquery_codegen PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_count_subquery_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_count_subquery_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Every example of the Neo4j manual's COUNT subqueries page, over the graph that page
+# builds, answering the rows it documents.
+add_turing_test(test_query_ir_count_neo4j_manual CountNeo4jManualTest.cpp)
+target_link_libraries(test_query_ir_count_neo4j_manual PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_jobs_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_count_neo4j_manual PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # OPTIONAL CALL { ... }: the input rows the body yields nothing for, padded with null.
 add_turing_test(test_query_ir_call_subquery_optional CallSubqueryOptionalTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_optional PRIVATE

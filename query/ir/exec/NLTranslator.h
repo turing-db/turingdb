@@ -271,6 +271,7 @@ private:
     llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
     llvm::DenseMap<mlir::Value, NLUnionState*> _unionStates;
     llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
+    llvm::DenseMap<mlir::Value, NLCountSubqueryState*> _countSubqueryStates;
 
     // nl.pattern_comprehension_state handle SSA value -> the accumulator it names, so the
     // collect staging the matches and the build reading them find the one the buffer opened
@@ -723,6 +724,13 @@ private:
     // The runtime accumulator an exists handle names. Throws if the handle was not
     // produced by an nl.exists_buffer translated earlier.
     NLExistsState* existsStateFor(mlir::Value handle) const;
+
+    // The counting siblings of the three EXISTS translations above
+    void translateCountSubqueryBuffer(mlir::nl::CountSubqueryBuffer buffer, NLStmtContainer* body);
+    void translateCountSubqueryTally(mlir::nl::CountSubqueryTally tally, NLStmtContainer* body);
+    void translateCountSubqueryResult(mlir::nl::CountSubqueryResult result, NLStmtContainer* body);
+
+    NLCountSubqueryState* countSubqueryStateFor(mlir::Value handle) const;
 
     // Translate an nl.pattern_comprehension_buffer: allocate the accumulator this step's
     // matches are staged in and the row tag column the pattern carries

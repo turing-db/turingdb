@@ -4443,6 +4443,82 @@ private:
     ColumnMask* _result {nullptr};
 };
 
+// Runtime state of one COUNT subquery over one step of the rows it answers for: a count
+// per row of that step. The counting sibling of NLExistsState.
+class NLCountSubqueryState {
+public:
+    void addInputColumn(const Column* input) { _inputColumns.push_back(input); }
+
+    // The input chunks' row count, and one - the single empty row - when there are none
+    size_t getRowCount() const;
+
+    void reset();
+
+    void addRows(size_t row, size_t rowCount) {
+        bioassert(row < _counts.size(), "Row tag {} is outside the {} rows of the step", row, _counts.size());
+        _counts[row] += rowCount;
+    }
+
+    const std::vector<uint64_t>& counts() const { return _counts; }
+
+private:
+    std::vector<const Column*> _inputColumns;
+    std::vector<uint64_t> _counts;
+};
+
+class NLCountSubqueryResetData : public NLFunctionData {
+public:
+    NLCountSubqueryResetData(NLCountSubqueryState* state, ColumnVector<uint64_t>* tag)
+        : _state(state),
+        _tag(tag)
+    {
+    }
+
+    NLCountSubqueryState* getState() const { return _state; }
+    ColumnVector<uint64_t>* getTag() const { return _tag; }
+
+private:
+    NLCountSubqueryState* _state {nullptr};
+    ColumnVector<uint64_t>* _tag {nullptr};
+};
+
+// nl.count_subquery_tally data: counts the entries of the tag toward the rows they name,
+// or, with no tag, the rows of @param rows toward the single row the step answers for
+class NLCountSubqueryTallyData : public NLFunctionData {
+public:
+    NLCountSubqueryTallyData(NLCountSubqueryState* state, const ColumnVector<uint64_t>* tag, const Column* rows)
+        : _state(state),
+        _tag(tag),
+        _rows(rows)
+    {
+    }
+
+    NLCountSubqueryState* getState() const { return _state; }
+    const ColumnVector<uint64_t>* getTag() const { return _tag; }
+    const Column* getRows() const { return _rows; }
+
+private:
+    NLCountSubqueryState* _state {nullptr};
+    const ColumnVector<uint64_t>* _tag {nullptr};
+    const Column* _rows {nullptr};
+};
+
+class NLCountSubqueryResultData : public NLFunctionData {
+public:
+    NLCountSubqueryResultData(NLCountSubqueryState* state, ColumnVector<uint64_t>* result)
+        : _state(state),
+        _result(result)
+    {
+    }
+
+    NLCountSubqueryState* getState() const { return _state; }
+    ColumnVector<uint64_t>* getResult() const { return _result; }
+
+private:
+    NLCountSubqueryState* _state {nullptr};
+    ColumnVector<uint64_t>* _result {nullptr};
+};
+
 // Runtime state of one UNION inside a CALL body: one growing buffer per column, which
 // the nl.union_collect of every branch appends to and the nl.for over nl.union_drain reads
 // back in collected order. The buffer columns are borrowed: the translator pool-allocates
@@ -4687,6 +4763,13 @@ public:
         return statePtr;
     }
 
+    NLCountSubqueryState* allocCountSubqueryState() {
+        auto state = std::make_unique<NLCountSubqueryState>();
+        NLCountSubqueryState* statePtr = state.get();
+        _countSubqueryStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     // Allocate one pattern comprehension's runtime accumulator, owned by the program; the
     // reset, collect and build statements that share it hold a borrowed pointer.
     NLPatternComprehensionState* allocPatternComprehensionState() {
@@ -4759,6 +4842,7 @@ private:
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;
+    std::vector<std::unique_ptr<NLCountSubqueryState>> _countSubqueryStates;
     std::vector<std::unique_ptr<NLPatternComprehensionState>> _patternComprehensionStates;
     std::vector<std::unique_ptr<NLUnionState>> _unionStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;

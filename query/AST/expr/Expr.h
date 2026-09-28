@@ -33,6 +33,7 @@ public:
         PATTERN_COMPREHENSION,
         CASE,
         EXISTS,
+        COUNT_SUBQUERY,
 
         _SIZE
     };
@@ -130,7 +131,8 @@ using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::LIST_COMPREHENSION, "LIST_COMPREHENSION">,
     EnumStringPair<Expr::Kind::PATTERN_COMPREHENSION, "PATTERN_COMPREHENSION">,
     EnumStringPair<Expr::Kind::CASE, "CASE">,
-    EnumStringPair<Expr::Kind::EXISTS, "EXISTS">
+    EnumStringPair<Expr::Kind::EXISTS, "EXISTS">,
+    EnumStringPair<Expr::Kind::COUNT_SUBQUERY, "COUNT_SUBQUERY">
 >;
 
 }
