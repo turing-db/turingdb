@@ -238,7 +238,10 @@ const ColumnVector<size_t>& NLOptionalState::missedRows() {
     return _missedRows;
 }
 
-size_t NLExistsState::getRowCount() const {
+NLSubqueryExpressionState::~NLSubqueryExpressionState() {
+}
+
+size_t NLSubqueryExpressionState::getRowCount() const {
     if (_inputColumns.empty()) {
         return 1;
     }
@@ -248,14 +251,6 @@ size_t NLExistsState::getRowCount() const {
 
 void NLExistsState::reset() {
     _matched.assign(getRowCount(), false);
-}
-
-size_t NLCountSubqueryState::getRowCount() const {
-    if (_inputColumns.empty()) {
-        return 1;
-    }
-
-    return _inputColumns.front()->size();
 }
 
 void NLCountSubqueryState::reset() {
@@ -274,7 +269,7 @@ void NLCountSubqueryState::addTaggedRows(std::span<const uint64_t> tag) {
     }
 }
 
-NLCountSubqueryResetData::NLCountSubqueryResetData(NLCountSubqueryState* state, ColumnVector<uint64_t>* tag)
+NLSubqueryExpressionResetData::NLSubqueryExpressionResetData(NLSubqueryExpressionState* state, ColumnVector<uint64_t>* tag)
     : _state(state),
     _tag(tag)
 {

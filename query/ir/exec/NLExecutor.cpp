@@ -7416,9 +7416,9 @@ void NLExecutor::runOptionalDrainLoop(NLExecutionContext* context, NLFunctionDat
     }
 }
 
-void NLExecutor::runExistsReset(NLExecutionContext* context, NLFunctionData* data) {
-    NLExistsResetData* reset = static_cast<NLExistsResetData*>(data);
-    NLExistsState* state = reset->getState();
+void NLExecutor::runSubqueryExpressionReset(NLExecutionContext* context, NLFunctionData* data) {
+    NLSubqueryExpressionResetData* reset = static_cast<NLSubqueryExpressionResetData*>(data);
+    NLSubqueryExpressionState* state = reset->getState();
 
     state->reset();
 
@@ -7462,17 +7462,6 @@ void NLExecutor::runExistsResult(NLExecutionContext* context, NLFunctionData* da
     answer.resize(matched.size());
 
     std::copy(matched.begin(), matched.end(), answer.begin());
-}
-
-void NLExecutor::runCountSubqueryReset(NLExecutionContext* context, NLFunctionData* data) {
-    NLCountSubqueryResetData* reset = static_cast<NLCountSubqueryResetData*>(data);
-    NLCountSubqueryState* state = reset->getState();
-
-    state->reset();
-
-    std::vector<uint64_t>& tagRaw = reset->getTag()->getRaw();
-    tagRaw.resize(state->getRowCount());
-    std::iota(tagRaw.begin(), tagRaw.end(), uint64_t {0});
 }
 
 void NLExecutor::runCountSubqueryTally(NLExecutionContext* context, NLFunctionData* data) {

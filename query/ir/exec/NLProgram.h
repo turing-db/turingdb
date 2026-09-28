@@ -4353,19 +4353,30 @@ private:
 // per row of that step. The lighter sibling of NLOptionalState - EXISTS answers for the
 // input rows rather than re-emitting rows, so it buffers none of them and keeps the input
 // chunks only for the row count they carry.
-class NLExistsState {
+// Runtime state of one EXISTS or COUNT subquery over one step of the rows it answers for
+class NLSubqueryExpressionState {
 public:
-    // One chunk of the step the EXISTS answers for; borrowed, since they are the enclosing
-    // loop's own variables.
+    virtual ~NLSubqueryExpressionState();
+
+    // One chunk of the step the subquery answers for; borrowed, since they are the
+    // enclosing loop's own variables.
     void addInputColumn(const Column* input) { _inputColumns.push_back(input); }
 
     // The rows this step answers for: the input chunks' row count, and one - the single
-    // empty row an EXISTS over nothing in flight joins onto - when there are none.
+    // empty row a subquery over nothing in flight joins onto - when there are none.
     size_t getRowCount() const;
 
-    // Clear every matched flag, so the accumulator covers this step alone. Runs each time
-    // nl.exists_buffer's block runs.
-    void reset();
+    // Clear every answer, so the accumulator covers this step alone. Runs each time the
+    // buffer's block runs.
+    virtual void reset() = 0;
+
+private:
+    std::vector<const Column*> _inputColumns;
+};
+
+class NLExistsState : public NLSubqueryExpressionState {
+public:
+    void reset() override;
 
     void markMatched(size_t row) {
         bioassert(row < _matched.size(), "Row tag {} is outside the {} rows of the step", row, _matched.size());
@@ -4375,28 +4386,22 @@ public:
     const std::vector<bool>& matched() const { return _matched; }
 
 private:
-    std::vector<const Column*> _inputColumns;
-
     // One flag per row of this step's input chunks, cleared by the reset and set by the
     // mark through the row tag.
     std::vector<bool> _matched;
 };
 
-// nl.exists_buffer data: empties an accumulator and lays the row tag out over this step's
-// input rows, each time the block it lives in runs.
-class NLExistsResetData : public NLFunctionData {
+// nl.exists_buffer and nl.count_subquery_buffer data: empties an accumulator and lays the
+// row tag out over this step's input rows, each time the block it lives in runs.
+class NLSubqueryExpressionResetData : public NLFunctionData {
 public:
-    NLExistsResetData(NLExistsState* state, ColumnVector<uint64_t>* tag)
-        : _state(state),
-        _tag(tag)
-    {
-    }
+    NLSubqueryExpressionResetData(NLSubqueryExpressionState* state, ColumnVector<uint64_t>* tag);
 
-    NLExistsState* getState() const { return _state; }
+    NLSubqueryExpressionState* getState() const { return _state; }
     ColumnVector<uint64_t>* getTag() const { return _tag; }
 
 private:
-    NLExistsState* _state {nullptr};
+    NLSubqueryExpressionState* _state {nullptr};
     ColumnVector<uint64_t>* _tag {nullptr};
 };
 
@@ -4443,16 +4448,10 @@ private:
     ColumnMask* _result {nullptr};
 };
 
-// Runtime state of one COUNT subquery over one step of the rows it answers for: a count
-// per row of that step. The counting sibling of NLExistsState.
-class NLCountSubqueryState {
+// A count per row of the step
+class NLCountSubqueryState : public NLSubqueryExpressionState {
 public:
-    void addInputColumn(const Column* input) { _inputColumns.push_back(input); }
-
-    // The input chunks' row count, and one - the single empty row - when there are none
-    size_t getRowCount() const;
-
-    void reset();
+    void reset() override;
 
     void addRows(size_t rowCount);
     void addTaggedRows(std::span<const uint64_t> tag);
@@ -4460,20 +4459,7 @@ public:
     const std::vector<uint64_t>& getCounts() const { return _counts; }
 
 private:
-    std::vector<const Column*> _inputColumns;
     std::vector<uint64_t> _counts;
-};
-
-class NLCountSubqueryResetData : public NLFunctionData {
-public:
-    NLCountSubqueryResetData(NLCountSubqueryState* state, ColumnVector<uint64_t>* tag);
-
-    NLCountSubqueryState* getState() const { return _state; }
-    ColumnVector<uint64_t>* getTag() const { return _tag; }
-
-private:
-    NLCountSubqueryState* _state {nullptr};
-    ColumnVector<uint64_t>* _tag {nullptr};
 };
 
 // nl.count_subquery_tally data: counts the entries of the tag toward the rows they name,
