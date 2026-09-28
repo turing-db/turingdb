@@ -31,6 +31,11 @@ int main() {
             DateTime::format(formatted, value);
 
             spdlog::info("element: {}", formatted);
+        } else if constexpr (std::is_same_v<T, types::Duration::Primitive>) {
+            std::string formatted;
+            Duration::format(formatted, value);
+
+            spdlog::info("element: {}", formatted);
         } else {
             spdlog::info("element: {}", value);
         }

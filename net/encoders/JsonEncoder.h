@@ -163,6 +163,14 @@ private:
         _writer.write(_sanitized);
     }
 
+    void encodeValue(types::Duration::Primitive value) {
+        _formatted.clear();
+        Duration::format(_formatted, value);
+
+        JsonStringEscaper::escapeAndSurroundByQuotes(_formatted, _sanitized);
+        _writer.write(_sanitized);
+    }
+
     void encodeValue(PropertyNull) {
         _writer.write("null");
     }

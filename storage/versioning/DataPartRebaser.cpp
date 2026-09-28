@@ -127,6 +127,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
         std::unordered_map<PropertyTypeID, PropertyContainer*> lists;
         std::unordered_map<PropertyTypeID, PropertyContainer*> dateTimes;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> durations;
         std::unordered_map<PropertyTypeID, PropertyContainer*> maps;
 
         for (auto& [ptID, container] : nodeProperties->_containers) {
@@ -175,6 +176,11 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             dateTimes[newPT._id] = container;
         }
 
+        for (const auto& [ptID, container] : nodeProperties->_durations) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            durations[newPT._id] = container;
+        }
+
         for (const auto& [ptID, container] : nodeProperties->_maps) {
             const auto newPT = metadata.getPropertyTypeMapping(ptID);
             maps[newPT._id] = container;
@@ -189,8 +195,9 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         nodeProperties->_embeddings = std::move(embeddings);
         nodeProperties->_lists = std::move(lists);
         nodeProperties->_dateTimes = std::move(dateTimes);
+        nodeProperties->_durations = std::move(durations);
         nodeProperties->_maps = std::move(maps);
-        static_assert((size_t)ValueType::_SIZE == 10 && "A value type was added");
+        static_assert((size_t)ValueType::_SIZE == 11 && "A value type was added");
 
         {
             PropertyIndexer newIndexers;
@@ -229,6 +236,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         std::unordered_map<PropertyTypeID, PropertyContainer*> embeddings;
         std::unordered_map<PropertyTypeID, PropertyContainer*> lists;
         std::unordered_map<PropertyTypeID, PropertyContainer*> dateTimes;
+        std::unordered_map<PropertyTypeID, PropertyContainer*> durations;
         std::unordered_map<PropertyTypeID, PropertyContainer*> maps;
 
         for (auto& [ptID, container] : edgeProperties->_containers) {
@@ -277,6 +285,11 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
             dateTimes[newPT._id] = container;
         }
 
+        for (const auto& [ptID, container] : edgeProperties->_durations) {
+            const auto newPT = metadata.getPropertyTypeMapping(ptID);
+            durations[newPT._id] = container;
+        }
+
         for (const auto& [ptID, container] : edgeProperties->_maps) {
             const auto newPT = metadata.getPropertyTypeMapping(ptID);
             maps[newPT._id] = container;
@@ -291,8 +304,9 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         edgeProperties->_embeddings = std::move(embeddings);
         edgeProperties->_lists = std::move(lists);
         edgeProperties->_dateTimes = std::move(dateTimes);
+        edgeProperties->_durations = std::move(durations);
         edgeProperties->_maps = std::move(maps);
-        static_assert((size_t)ValueType::_SIZE == 10 && "A value type was added");
+        static_assert((size_t)ValueType::_SIZE == 11 && "A value type was added");
 
         { // Update property indexers based on our new LabelSetMapping
             PropertyIndexer newIndexers;

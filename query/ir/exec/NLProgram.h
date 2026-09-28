@@ -73,6 +73,7 @@ enum class NLChunkKind {
     Map,
     Path,
     DateTime,
+    Duration,
     PathRef,
     EntityList,
 };
@@ -149,6 +150,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::DateTime:
             return handler.template operator()<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::Duration:
+            return handler.template operator()<types::Duration::Primitive>();
         break;
 
         case NLChunkKind::PathRef:

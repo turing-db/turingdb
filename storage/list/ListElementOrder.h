@@ -17,8 +17,8 @@ namespace db {
 /**
  * @brief Orders two elements of a @ref ListByteBuffer, which need not share a type.
  *
- * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < STRING < BOOLEAN <
- * NUMBER < NULL - so a null sorts after every value and two elements of one type compare
+ * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < DATETIME < DURATION <
+ * STRING < BOOLEAN < NUMBER < NULL - so a null sorts after every value and two elements of one type compare
  * by their own order: entities by their ID, numbers numerically whatever they are tagged
  * as, strings lexicographically, lists element-wise. An embedding has no order, so <=>
  * throws on one; == still compares embeddings element-wise, at any depth.
@@ -56,6 +56,8 @@ bool operator==(ListElementView element, types::UInt64::Primitive value);
 bool operator==(ListElementView element, types::Double::Primitive value);
 bool operator==(ListElementView element, types::String::Primitive value);
 bool operator==(ListElementView element, types::Bool::Primitive value);
+bool operator==(ListElementView element, types::DateTime::Primitive value);
+bool operator==(ListElementView element, types::Duration::Primitive value);
 bool operator==(ListElementView element, types::Embedding::Primitive value);
 bool operator==(ListElementView element, NodeID value);
 bool operator==(ListElementView element, EdgeID value);
@@ -83,6 +85,8 @@ std::strong_ordering operator<=>(ListElementView element, types::UInt64::Primiti
 std::strong_ordering operator<=>(ListElementView element, types::Double::Primitive value);
 std::strong_ordering operator<=>(ListElementView element, types::String::Primitive value);
 std::strong_ordering operator<=>(ListElementView element, types::Bool::Primitive value);
+std::strong_ordering operator<=>(ListElementView element, types::DateTime::Primitive value);
+std::strong_ordering operator<=>(ListElementView element, types::Duration::Primitive value);
 
 /**
  * @brief Compares an element of a @ref ListByteBuffer as <, <=, > and >= do. Unlike the
@@ -97,5 +101,7 @@ std::optional<std::partial_ordering> comparisonOrder(ListElementView element, ty
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Double::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::String::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Bool::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::DateTime::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Duration::Primitive value);
 
 }

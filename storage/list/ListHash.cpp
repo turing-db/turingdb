@@ -64,6 +64,9 @@ size_t db::hashListElement(ListElementView element) {
         case ListBufferTypeTag::DateTime:
             return combine(seed, hashValue(element.getAs<types::DateTime::Primitive>()));
         break;
+        case ListBufferTypeTag::Duration:
+            return combine(seed, hashValue(element.getAs<types::Duration::Primitive>()));
+        break;
         case ListBufferTypeTag::Embedding: {
             size_t hash = seed;
             for (const float value : element.getAs<types::Embedding::Primitive>()) {

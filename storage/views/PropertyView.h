@@ -15,6 +15,7 @@ using PropertyVariant = std::variant<const types::Int64::Primitive*,
                                      const types::Embedding::Primitive*,
                                      const types::List::Primitive*,
                                      const types::DateTime::Primitive*,
+                                     const types::Duration::Primitive*,
                                      const types::Map::Primitive*>;
 
 struct PropertyView {

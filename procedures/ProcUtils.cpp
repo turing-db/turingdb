@@ -85,6 +85,13 @@ void appendListElement(std::string& out, ListElementView element) {
             ProcUtils::appendJsonString(out, formatted);
         }
         break;
+        case ListBufferTypeTag::Duration: {
+            std::string formatted;
+            Duration::format(formatted, element.getAs<types::Duration::Primitive>());
+
+            ProcUtils::appendJsonString(out, formatted);
+        }
+        break;
         case ListBufferTypeTag::MapView:
             appendMapValue(out, element.getAs<MapView>());
         break;
@@ -161,6 +168,13 @@ void appendMapEntryValue(std::string& out, MapEntryView entry) {
             ProcUtils::appendJsonString(out, formatted);
         }
         break;
+        case MapBufferTypeTag::Duration: {
+            std::string formatted;
+            Duration::format(formatted, entry.getValueAs<types::Duration::Primitive>());
+
+            ProcUtils::appendJsonString(out, formatted);
+        }
+        break;
         case MapBufferTypeTag::Null:
         case MapBufferTypeTag::INVALID:
             out += "null";
@@ -202,6 +216,11 @@ void appendPropertyValue(std::string& out, const PropertyVariant& value) {
             } else if constexpr (std::is_same_v<V, DateTime>) {
                 std::string formatted;
                 DateTime::format(formatted, *ptr);
+
+                ProcUtils::appendJsonString(out, formatted);
+            } else if constexpr (std::is_same_v<V, Duration>) {
+                std::string formatted;
+                Duration::format(formatted, *ptr);
 
                 ProcUtils::appendJsonString(out, formatted);
             } else if constexpr (std::is_same_v<V, MapView>) {

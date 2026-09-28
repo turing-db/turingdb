@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <span>
@@ -40,6 +41,7 @@ using StringView = db::types::String::Primitive;
 using Bool = db::types::Bool::Primitive;
 using Embedding = db::types::Embedding::Primitive;
 using DateTime = db::types::DateTime::Primitive;
+using Duration = db::types::Duration::Primitive;
 
 struct FramedPacket {
     net::proto::MessageTypes _type;
@@ -313,6 +315,67 @@ TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
                   (std::vector<OptionalDateTime> {DateTime {microsecondsPerHour},
                                                   std::nullopt,
                                                   DateTime {2 * microsecondsPerHour},
+                                                  std::nullopt}));
+    }
+}
+
+// A duration is eight bytes on the wire like a datetime and an integer, under a type code
+// of its own
+TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {
+    using OptionalDuration = std::optional<Duration>;
+
+    constexpr int64_t microsecondsPerMinute = 60LL * 1000000;
+
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        auto* took = localMem.alloc<db::ColumnVector<Duration>>();
+        took->push_back(Duration {0});
+        took->push_back(Duration {microsecondsPerMinute});
+        took->push_back(Duration {-microsecondsPerMinute});
+        took->push_back(Duration {std::numeric_limits<int64_t>::max()});
+        addColumn(&dfMan, &source, "took", took);
+
+        auto* waited = localMem.alloc<db::ColumnOptVector<Duration>>();
+        waited->push_back(Duration {microsecondsPerMinute});
+        waited->push_back(std::nullopt);
+        waited->push_back(Duration {2 * microsecondsPerMinute});
+        waited->push_back(std::nullopt);
+        addColumn(&dfMan, &source, "waited", waited);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::MapBuffer<> mapBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 2u);
+        EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+
+        const auto* decodedTook = decoded.cols().at(0)->as<db::ColumnVector<Duration>>();
+        const auto* decodedWaited = decoded.cols().at(1)->as<db::ColumnOptVector<Duration>>();
+        ASSERT_NE(decodedTook, nullptr);
+        ASSERT_NE(decodedWaited, nullptr);
+
+        EXPECT_EQ(decodedTook->getRaw(),
+                  (std::vector<Duration> {Duration {0},
+                                          Duration {microsecondsPerMinute},
+                                          Duration {-microsecondsPerMinute},
+                                          Duration {std::numeric_limits<int64_t>::max()}}));
+
+        EXPECT_EQ(decodedWaited->getRaw(),
+                  (std::vector<OptionalDuration> {Duration {microsecondsPerMinute},
+                                                  std::nullopt,
+                                                  Duration {2 * microsecondsPerMinute},
                                                   std::nullopt}));
     }
 }

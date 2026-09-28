@@ -1,8 +1,35 @@
+import re
 import time
 from typing import Literal, Optional
 
 from .exceptions import TuringDBException
 from .s3 import S3Client
+
+_DURATION_COMPONENT = re.compile(r"(-?)(\d+)(?:\.(\d+))?([HMS])")
+_MICROSECONDS_PER_UNIT = {"H": 3_600_000_000, "M": 60_000_000, "S": 1_000_000}
+
+
+# pandas' ISO-8601 parser rejects hours past two digits and a sign on each component,
+# both of which the server writes (PT100H, PT-25H-1M-1S), so durations are read here
+def _duration_microseconds(text: Optional[str]) -> Optional[int]:
+    if text is None:
+        return None
+
+    microseconds = 0
+    for sign, whole, fraction, unit in _DURATION_COMPONENT.findall(text):
+        value = int(whole) * _MICROSECONDS_PER_UNIT[unit]
+        if fraction:
+            value += int(fraction.ljust(6, "0")[:6])
+        microseconds += -value if sign else value
+
+    return microseconds
+
+
+def _column_values(column_type: str, values: list) -> list:
+    if column_type == "Duration":
+        return [_duration_microseconds(value) for value in values]
+
+    return values
 
 
 class HTTPClient:
@@ -261,7 +288,7 @@ class HTTPClient:
         for chunk in json["data"]:
             df_chunk = pd.DataFrame(
                 {
-                    cname: pd.Series(col, dtype=DTYPE_MAP.get(ctype, "object"))
+                    cname: pd.Series(_column_values(ctype, col), dtype=DTYPE_MAP.get(ctype, "object"))
                     for (cname, ctype), col in zip(
                         zip(column_names, column_types), chunk
                     )

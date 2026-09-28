@@ -2203,6 +2203,12 @@ void distinctAppendMapValueBytes(std::string& key, const MapEntryView entry) {
             return;
         break;
 
+        case MapBufferTypeTag::Duration:
+            key.push_back(static_cast<char>(ListBufferTypeTag::Duration));
+            distinctAppendValueBytes(key, entry.getValueAs<types::Duration::Primitive>().getMicroseconds());
+            return;
+        break;
+
         case MapBufferTypeTag::Embedding:
             throw IRException("cannot dedup by an embedding map value");
         break;
@@ -2279,6 +2285,12 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
         case ListBufferTypeTag::DateTime:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::DateTime::Primitive>().getMicroseconds());
+            return;
+        break;
+
+        case ListBufferTypeTag::Duration:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<types::Duration::Primitive>().getMicroseconds());
             return;
         break;
 
@@ -2441,6 +2453,10 @@ uint64_t hashKeyValue(CustomBool value) {
 }
 
 uint64_t hashKeyValue(types::DateTime::Primitive value) {
+    return mixKeyBits(static_cast<uint64_t>(value.getMicroseconds()));
+}
+
+uint64_t hashKeyValue(types::Duration::Primitive value) {
     return mixKeyBits(static_cast<uint64_t>(value.getMicroseconds()));
 }
 
@@ -2949,6 +2965,10 @@ NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
 
         case ValueType::DateTime:
             return &aggregateUpdateMinMax<types::DateTime::Primitive, IsMax>;
+        break;
+
+        case ValueType::Duration:
+            return &aggregateUpdateMinMax<types::Duration::Primitive, IsMax>;
         break;
 
         default:
@@ -3734,6 +3754,10 @@ Item taggedItem(const ListElementView element) {
             return Item {element.getAs<types::DateTime::Primitive>()};
         break;
 
+        case ListBufferTypeTag::Duration:
+            return Item {element.getAs<types::Duration::Primitive>()};
+        break;
+
         case ListBufferTypeTag::MapView:
             return Item {element.getAs<MapView>()};
         break;
@@ -4338,6 +4362,10 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
 
         case ValueType::DateTime:
             return &groupFoldMinMax<types::DateTime::Primitive, IsMax>;
+        break;
+
+        case ValueType::Duration:
+            return &groupFoldMinMax<types::Duration::Primitive, IsMax>;
         break;
 
         default:
@@ -7483,6 +7511,16 @@ NLUnaryFunctionKernel NLExecutor::selectDateTimeConversion(const Column* input, 
     return selectFunction<toDateTimeFunction>(input, inputNullable, memory, result);
 }
 
+NLUnaryFunctionKernel NLExecutor::selectDurationConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<microsecondsToDurationFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<microsecondsToDurationFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("duration() requires an integer count of microseconds");
+}
+
 NLUnaryFunctionKernel NLExecutor::selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     const bool holdsAString = columnHoldsElement<types::String::Primitive>(input)
                               || columnHoldsElement<types::String::OwningPrimitive>(input);
@@ -7512,6 +7550,8 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const 
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<epochSecondsToDateTimeFunction<types::Int64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<epochSecondsToDateTimeFunction<types::UInt64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<microsecondsToDurationFunction<types::Int64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<microsecondsToDurationFunction<types::UInt64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Year>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Month>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<DateTimeComponentFunction<DateTimePart::Day>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
@@ -8392,6 +8432,10 @@ NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
             return &collectFold<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &collectFold<types::Duration::Primitive>;
+        break;
+
         default:
             throw IRException("collect does not support this value type");
         break;
@@ -8431,6 +8475,10 @@ NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType)
 
         case ValueType::DateTime:
             return &collectFoldDistinct<types::DateTime::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &collectFoldDistinct<types::Duration::Primitive>;
         break;
 
         default:
@@ -8534,6 +8582,10 @@ NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueT
             return &unwindCollectValueEmit<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &unwindCollectValueEmit<types::Duration::Primitive>;
+        break;
+
         default:
             throw IRException("unwind does not support this value type");
         break;
@@ -8570,6 +8622,10 @@ NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType)
 
         case ValueType::DateTime:
             return &collectListEmit<types::DateTime::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &collectListEmit<types::Duration::Primitive>;
         break;
 
         default:
@@ -9446,6 +9502,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
             return &distinctKeyAppendPlainColumn<types::DateTime::Primitive>;
         break;
 
+        case NLChunkKind::Duration:
+            return &distinctKeyAppendPlainColumn<types::Duration::Primitive>;
+        break;
+
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a DISTINCT or grouping key: expand it into its list first");
         break;
@@ -9496,6 +9556,10 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
 
         case ValueType::DateTime:
             return &distinctKeyAppendOptColumn<types::DateTime::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &distinctKeyAppendOptColumn<types::Duration::Primitive>;
         break;
 
         case ValueType::Map:
@@ -9613,6 +9677,10 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::DateTime:
             return joinKeyFunctions<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::Duration:
+            return joinKeyFunctions<types::Duration::Primitive>();
         break;
 
         case NLChunkKind::PathRef:
@@ -9969,6 +10037,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
             return &groupFoldCountDistinctPresent<types::DateTime::Primitive>;
         break;
 
+        case ValueType::Duration:
+            return &groupFoldCountDistinctPresent<types::Duration::Primitive>;
+        break;
+
         case ValueType::Map:
             return &groupFoldCountDistinctPresentMap;
         break;
@@ -10051,6 +10123,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
 
         case NLChunkKind::DateTime:
             return &groupFoldCountDistinctValue<types::DateTime::Primitive>;
+        break;
+
+        case NLChunkKind::Duration:
+            return &groupFoldCountDistinctValue<types::Duration::Primitive>;
         break;
 
         case NLChunkKind::PathRef:
@@ -10251,6 +10327,11 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
             throwUnlessKeyedAsItsOwnType(ValueType::DateTime, keyType);
             return &mergeKeyAppendPlainColumn<types::DateTime::Primitive>;
         break;
+
+        case NLChunkKind::Duration:
+            throwUnlessKeyedAsItsOwnType(ValueType::Duration, keyType);
+            return &mergeKeyAppendPlainColumn<types::Duration::Primitive>;
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -10292,6 +10373,11 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
         case ValueType::DateTime:
             throwUnlessKeyedAsItsOwnType(ValueType::DateTime, keyType);
             return &mergeKeyAppendConstColumn<types::DateTime::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            throwUnlessKeyedAsItsOwnType(ValueType::Duration, keyType);
+            return &mergeKeyAppendConstColumn<types::Duration::Primitive>;
         break;
 
         case ValueType::Map:
@@ -10485,6 +10571,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
             return &compareColumn<types::DateTime::Primitive>;
         break;
 
+        case NLChunkKind::Duration:
+            return &compareColumn<types::Duration::Primitive>;
+        break;
+
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a sort key: expand it into its list first");
         break;
@@ -10534,6 +10624,10 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
 
         case ValueType::DateTime:
             return &compareOptColumn<types::DateTime::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &compareOptColumn<types::Duration::Primitive>;
         break;
 
         case ValueType::Map:
@@ -10622,6 +10716,7 @@ template void NLExecutor::runPropertyFetch<NodeID, types::String>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<NodeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::List>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::DateTime>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::Duration>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::Map>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Int64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::UInt64>(NLExecutionContext*, NLFunctionData*);
@@ -10631,6 +10726,7 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::List>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::DateTime>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::Duration>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Map>(NLExecutionContext*, NLFunctionData*);
 
 void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data) {

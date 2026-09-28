@@ -176,6 +176,7 @@ inline std::optional<double> cellNumber(const ListElementView cell) {
         case ListBufferTypeTag::EdgeID:
         case ListBufferTypeTag::DateTime:
         case ListBufferTypeTag::MapView:
+        case ListBufferTypeTag::Duration:
         case ListBufferTypeTag::INVALID:
             return std::nullopt;
         break;

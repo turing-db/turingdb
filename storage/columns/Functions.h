@@ -338,6 +338,25 @@ public:
     }
 };
 
+// duration() over a count of microseconds. A UInt64 count past INT64_MAX has no duration
+// and reads as null.
+template <typename Number>
+class microsecondsToDurationFunction {
+public:
+    using ArgType = Number;
+    using ResultType = std::optional<types::Duration::Primitive>;
+
+    ResultType operator()(const Number microseconds) {
+        if constexpr (std::is_unsigned_v<Number>) {
+            if (microseconds > static_cast<Number>(std::numeric_limits<types::Int64::Primitive>::max())) {
+                return std::nullopt;
+            }
+        }
+
+        return types::Duration::Primitive {static_cast<types::Int64::Primitive>(microseconds)};
+    }
+};
+
 // The field of an instant a type-erased cell carries, which is what an UNWIND of a list of
 // instants hands each row. A cell holding a null answers null, as every function over a
 // cell does; one holding no instant is a type error only the row it is in can find out

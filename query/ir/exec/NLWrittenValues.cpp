@@ -139,5 +139,6 @@ template std::optional<types::Embedding::Primitive> NLWrittenValues::read<types:
 template std::optional<types::List::Primitive> NLWrittenValues::read<types::List>(const Value& value);
 template std::optional<types::Map::Primitive> NLWrittenValues::read<types::Map>(const Value& value);
 template std::optional<types::DateTime::Primitive> NLWrittenValues::read<types::DateTime>(const Value& value);
+template std::optional<types::Duration::Primitive> NLWrittenValues::read<types::Duration>(const Value& value);
 
 }

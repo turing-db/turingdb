@@ -56,6 +56,7 @@ export const ColumnType = Object.freeze({
     MAP_VIEW: 20,
     MAP_ENTRY_VIEW: 21,
     DATE_TIME: 22,
+    DURATION: 23,
 });
 
 // The column types whose values the nested reader walks out of the flat nested bytes
@@ -81,6 +82,7 @@ const LIST_TAG_NODE_ID = 8;
 const LIST_TAG_EDGE_ID = 9;
 const LIST_TAG_DATETIME = 10;
 const LIST_TAG_MAP_VIEW = 11;
+const LIST_TAG_DURATION = 12;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -212,6 +214,7 @@ const FIXED_WIDTH_KINDS = {
     // Microseconds from the epoch, which is what a JS Date counts in milliseconds; the
     // count is handed over as it arrived so no precision is lost on the way
     [ColumnType.DATE_TIME]: { size: 8, wrap: (buffer) => new BigInt64Array(buffer) },
+    [ColumnType.DURATION]: { size: 8, wrap: (buffer) => new BigInt64Array(buffer) },
 };
 
 // Strings are decoded with one TextDecoder call over the whole column and sliced by
@@ -300,6 +303,7 @@ export class NestedReader {
                 this._cursor = payload + 8;
                 return this._view.getBigUint64(payload, true);
             case LIST_TAG_DATETIME:
+            case LIST_TAG_DURATION:
                 this._cursor = payload + 8;
                 return this._view.getBigInt64(payload, true);
             case LIST_TAG_DOUBLE:

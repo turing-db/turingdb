@@ -299,6 +299,13 @@ public:
         writeValue(std::string_view {_formatted});
     }
 
+    void writeValue(types::Duration::Primitive v) {
+        _formatted.clear();
+        Duration::format(_formatted, v);
+
+        writeValue(std::string_view {_formatted});
+    }
+
     void writeValue(bool v) {
         write(v ? "true" : "false");
     }

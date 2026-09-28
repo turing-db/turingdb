@@ -111,6 +111,13 @@ std::string valueToString(const DateTime value) {
     return result;
 }
 
+std::string valueToString(const Duration value) {
+    std::string result;
+    Duration::format(result, value);
+
+    return result;
+}
+
 // Fixed 6-decimal rendering so the v2/v3 comparison tolerates float ULP noise
 // (e.g. cosine_similarity of identical vectors yields 1.0000001 on one side, 1 on
 // the other); fmt's default "{}" would print full precision and flag that as a diff.

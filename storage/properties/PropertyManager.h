@@ -55,6 +55,8 @@ public:
             _lists.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         } else if constexpr (std::is_same_v<T, types::DateTime>) {
             _dateTimes.emplace(ptID, static_cast<PropertyContainer*>(ptr));
+        } else if constexpr (std::is_same_v<T, types::Duration>) {
+            _durations.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         } else if constexpr (std::is_same_v<T, types::Map>) {
             _maps.emplace(ptID, static_cast<PropertyContainer*>(ptr));
         }
@@ -238,6 +240,7 @@ private:
     PropertyContainerReferences _embeddings;
     PropertyContainerReferences _lists;
     PropertyContainerReferences _dateTimes;
+    PropertyContainerReferences _durations;
     PropertyContainerReferences _maps;
 
     PropertyIndexer _indexers;

@@ -2316,6 +2316,7 @@ def ToInteger : UnaryFunctionOp<"to_integer">;
 def ToFloat : UnaryFunctionOp<"to_float">;
 def ToBoolean : UnaryFunctionOp<"to_boolean">;
 def ToDateTime : UnaryFunctionOp<"to_datetime">;
+def ToDuration : UnaryFunctionOp<"to_duration">;
 def ToString : UnaryFunctionOp<"to_string">;
 
 // The calendar fields of an instant, as integer columns. The sub-second pair reads the

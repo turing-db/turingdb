@@ -22,7 +22,7 @@ using MappableTypesImpl =
                db::types::Double::Primitive, db::types::Bool::Primitive,
                db::types::String::Primitive, db::types::Embedding::Primitive,
                db::ListView, db::MapView, db::PropertyNull, db::NodeID, db::EdgeID,
-               db::types::DateTime::Primitive>;
+               db::types::DateTime::Primitive, db::types::Duration::Primitive>;
 }
 
 namespace db {

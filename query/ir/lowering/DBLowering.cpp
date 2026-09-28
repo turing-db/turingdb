@@ -134,6 +134,10 @@ mlir::Type dateTimeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEle
     return storage::DateTimeType::get(builder.getContext());
 }
 
+mlir::Type durationFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    return storage::DurationType::get(builder.getContext());
+}
+
 // A list function reads a list cell, or the type-erased cell an unwind of a list of lists
 // hands its nested lists on as. Anything else is IR no query produces.
 void throwIfNotAListInput(mlir::Type inputElement) {
@@ -232,6 +236,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, &dateTimeFunctionElement,   ResultNullability::AlwaysNullable}},
+    {"db.to_duration", {&emitNLUnaryFunction<nl::ToDuration>, &durationFunctionElement,   ResultNullability::AlwaysNullable}},
 
     // A calendar field of an instant is always readable, so the field is null exactly
     // where the instant it was read off is
@@ -391,6 +396,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isNumeric = isFloat || isInteger;
     const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
     const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
+    const bool isDuration = mlir::isa<storage::DurationType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
@@ -427,7 +433,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         case storage::AggregateKind::Max: {
             // min/max order the values, so anything with a natural order is fine -
             // numbers, strings, bools and instants - but an embedding has none.
-            if (!isNumeric && !isString && !isBool && !isDateTime) {
+            if (!isNumeric && !isString && !isBool && !isDateTime && !isDuration) {
                 throw IRException("db.min/db.max requires an orderable column");
             }
             return inputElement;

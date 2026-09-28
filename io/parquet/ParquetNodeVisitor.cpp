@@ -285,6 +285,7 @@ void ParquetNodeVisitor::addNodeProperty(NodeID id,
         case ValueType::List:
         // ValueTypes that aren't represented in Parquet
         case ValueType::Map:
+        case ValueType::Duration:
         case ValueType::UInt64:
         case ValueType::Embedding:
         case ValueType::Invalid:

@@ -165,6 +165,7 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
+        OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
         OptionalKindPairs<ListView, ListView>::Pairs,
         OptionalKindPairs<MapView, MapView>::Pairs,
 
@@ -174,6 +175,8 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        ListElementKindPairs<types::DateTime::Primitive>::Pairs,
+        ListElementKindPairs<types::Duration::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
         ListElementKindPairs<ListView>::Pairs,
         ListElementKindPairs<MapView>::Pairs,
@@ -206,6 +209,7 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
             KindPair<std::optional<types::DateTime::Primitive>, PropertyNull>,
+            KindPair<std::optional<types::Duration::Primitive>, PropertyNull>,
             KindPair<std::optional<ListElementView>, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
             KindPair<std::optional<MapView>, PropertyNull>,
@@ -259,6 +263,8 @@ struct PairRestrictions<Op> {
         // A datetime orders against another datetime only: it is an instant, not a number
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
 
+        OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
+
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
 
         // Lexicographic ordering of strings, whether each side borrows its characters
@@ -276,6 +282,8 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        ListElementKindPairs<types::DateTime::Primitive>::Pairs,
+        ListElementKindPairs<types::Duration::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
         OptionalKindPairs<ListView, ListView>::Pairs,
@@ -309,6 +317,8 @@ struct PairRestrictions<Op> {
         // A datetime orders against another datetime only: it is an instant, not a number
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
 
+        OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
+
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
 
         // Lexicographic ordering of strings, whether each side borrows its characters
@@ -326,6 +336,8 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        ListElementKindPairs<types::DateTime::Primitive>::Pairs,
+        ListElementKindPairs<types::Duration::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
         OptionalKindPairs<ListView, ListView>::Pairs,
@@ -670,6 +682,7 @@ struct OutputtedTypes {
         types::Bool::Primitive,
         types::Embedding::Primitive,
         types::DateTime::Primitive,
+        types::Duration::Primitive,
         std::optional<types::Int64::Primitive>,
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
@@ -678,6 +691,7 @@ struct OutputtedTypes {
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
+        std::optional<types::Duration::Primitive>,
         PropertyNull,
 
         std::optional<std::string>,
@@ -763,6 +777,7 @@ struct WriteProcessorPropertyTypes {
         types::Bool::Primitive,
         types::Embedding::Primitive,
         types::DateTime::Primitive,
+        types::Duration::Primitive,
         ListView,
         MapView,
 
@@ -773,6 +788,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
+        std::optional<types::Duration::Primitive>,
         std::optional<ListView>,
         std::optional<MapView>,
 
@@ -791,6 +807,7 @@ struct WriteProcessorPropertyTypes {
         types::Bool::Primitive,
         types::Embedding::Primitive,
         types::DateTime::Primitive,
+        types::Duration::Primitive,
         ListView,
         MapView,
 
@@ -801,6 +818,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
         std::optional<types::DateTime::Primitive>,
+        std::optional<types::Duration::Primitive>,
         std::optional<ListView>,
 
         std::string // For LOAD CSV inputs
@@ -936,6 +954,9 @@ struct CartesianProductKinds {
 
         types::DateTime::Primitive,
         std::optional<types::DateTime::Primitive>,
+
+        types::Duration::Primitive,
+        std::optional<types::Duration::Primitive>,
 
         // Entities and metadata
         NodeID,

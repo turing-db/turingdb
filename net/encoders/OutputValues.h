@@ -86,6 +86,9 @@ concept IsEmbedding = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Emb
 template <typename T>
 concept IsDateTime = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::DateTime::Primitive>;
 
+template <typename T>
+concept IsDuration = std::is_same_v<TypeUtils::unwrap_optional_t<T>, types::Duration::Primitive>;
+
 struct ColumnTypeGenerator {
     std::string& _name;
 
@@ -95,6 +98,8 @@ struct ColumnTypeGenerator {
             _name = fmt::format("Embedding");
         } else if constexpr (IsDateTime<T>) {
             _name = fmt::format("DateTime");
+        } else if constexpr (IsDuration<T>) {
+            _name = fmt::format("Duration");
         } else if constexpr (IsUInt64<T>) {
             _name = fmt::format("UInt64");
         } else if constexpr (IsInt64<T>) {

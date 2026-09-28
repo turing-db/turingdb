@@ -28,10 +28,11 @@ enum class ListElementOrderClass {
     Node,
     Edge,
     List,
+    DateTime,
+    Duration,
     String,
     Bool,
     Number,
-    DateTime,
     Null,
 };
 
@@ -69,6 +70,10 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
 
         case ListBufferTypeTag::DateTime:
             return ListElementOrderClass::DateTime;
+        break;
+
+        case ListBufferTypeTag::Duration:
+            return ListElementOrderClass::Duration;
         break;
 
         case ListBufferTypeTag::Embedding:
@@ -124,6 +129,9 @@ ListBufferTypeTag listTagOf(MapBufferTypeTag tag) {
         break;
         case MapBufferTypeTag::DateTime:
             return ListBufferTypeTag::DateTime;
+        break;
+        case MapBufferTypeTag::Duration:
+            return ListBufferTypeTag::Duration;
         break;
         case MapBufferTypeTag::INVALID:
             return ListBufferTypeTag::INVALID;
@@ -250,6 +258,10 @@ std::strong_ordering compareValues(const View lhs, const View rhs) {
 
         case ListElementOrderClass::DateTime:
             return valueOf<types::DateTime::Primitive>(lhs) <=> valueOf<types::DateTime::Primitive>(rhs);
+        break;
+
+        case ListElementOrderClass::Duration:
+            return valueOf<types::Duration::Primitive>(lhs) <=> valueOf<types::Duration::Primitive>(rhs);
         break;
 
         case ListElementOrderClass::Null:
@@ -498,6 +510,16 @@ bool db::operator==(const ListElementView element, const types::Bool::Primitive 
         && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
 
+bool db::operator==(const ListElementView element, const types::DateTime::Primitive value) {
+    return element.getTag() == ListBufferTypeTag::DateTime
+        && element.getAs<types::DateTime::Primitive>() == value;
+}
+
+bool db::operator==(const ListElementView element, const types::Duration::Primitive value) {
+    return element.getTag() == ListBufferTypeTag::Duration
+        && element.getAs<types::Duration::Primitive>() == value;
+}
+
 bool db::operator==(const ListElementView element, const types::Embedding::Primitive value) {
     return element.getTag() == ListBufferTypeTag::Embedding
         && EmbeddingEqual {}(element.getAs<types::Embedding::Primitive>(), value);
@@ -589,6 +611,14 @@ std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView l
             return lhs.getAs<types::DateTime::Primitive>() <=> rhs.getAs<types::DateTime::Primitive>();
         break;
 
+        case ListBufferTypeTag::Duration:
+            if (lhs.getTag() != rhsTag) {
+                return std::nullopt;
+            }
+
+            return lhs.getAs<types::Duration::Primitive>() <=> rhs.getAs<types::Duration::Primitive>();
+        break;
+
         case ListBufferTypeTag::ListView:
             if (lhs.getTag() != rhsTag) {
                 return std::nullopt;
@@ -646,10 +676,44 @@ std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView e
     return static_cast<bool>(element.getAs<types::Bool::Primitive>()) <=> static_cast<bool>(value);
 }
 
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::DateTime::Primitive value) {
+    if (element.getTag() != ListBufferTypeTag::DateTime) {
+        return std::nullopt;
+    }
+
+    return element.getAs<types::DateTime::Primitive>() <=> value;
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Duration::Primitive value) {
+    if (element.getTag() != ListBufferTypeTag::Duration) {
+        return std::nullopt;
+    }
+
+    return element.getAs<types::Duration::Primitive>() <=> value;
+}
+
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const ListView value) {
     if (element.getTag() != ListBufferTypeTag::ListView) {
         return std::nullopt;
     }
 
     return comparisonOrder(element.getAs<ListView>(), value);
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::DateTime::Primitive value) {
+    const ListElementOrderClass elementClass = orderClassOf(element.getTag());
+    if (elementClass != ListElementOrderClass::DateTime) {
+        return elementClass <=> ListElementOrderClass::DateTime;
+    }
+
+    return element.getAs<types::DateTime::Primitive>() <=> value;
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::Duration::Primitive value) {
+    const ListElementOrderClass elementClass = orderClassOf(element.getTag());
+    if (elementClass != ListElementOrderClass::Duration) {
+        return elementClass <=> ListElementOrderClass::Duration;
+    }
+
+    return element.getAs<types::Duration::Primitive>() <=> value;
 }

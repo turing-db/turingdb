@@ -14,6 +14,7 @@ DTYPE_MAP = {
     "Double": "float64",
     "Bool": "boolean",
     "DateTime": "datetime64[us, UTC]",
+    "Duration": "timedelta64[us]",
 }
 
 

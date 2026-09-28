@@ -115,6 +115,14 @@ def DateTime : StorageType<"DateTime", "datetime"> {
     }];
 }
 
+def Duration : StorageType<"Duration", "duration"> {
+    let summary = "A duration property value";
+    let description = [{
+        The element type of a chunk holding one length of time per row - storage's
+        ColumnVector<Duration>. It wraps a signed 64-bit count of microseconds.
+    }];
+}
+
 def Nullable : StorageType<"Nullable", "nullable"> {
     let summary = "A nullable property value";
     let description = [{

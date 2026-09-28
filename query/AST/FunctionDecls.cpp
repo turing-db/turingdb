@@ -108,6 +108,11 @@ void FunctionDecls::initDefault() {
     countDateTimes->setReturnTypes({{EvaluatedType::Integer}});
     countDateTimes->setIsAggregate(true);
 
+    FunctionSignature* countDurations = createFunction("count");
+    countDurations->setArguments({EvaluatedType::Duration});
+    countDurations->setReturnTypes({{EvaluatedType::Integer}});
+    countDurations->setIsAggregate(true);
+
     FunctionSignature* countListItems = createFunction("count");
     countListItems->setArguments({EvaluatedType::ListItem});
     countListItems->setReturnTypes({{EvaluatedType::Integer}});
@@ -144,6 +149,12 @@ void FunctionDecls::initDefault() {
     collectDateTimes->setReturnTypes({{EvaluatedType::List}});
     collectDateTimes->setIsAggregate(true);
     collectDateTimes->setCollectsItsArgument(true);
+
+    FunctionSignature* collectDurations = createFunction("collect");
+    collectDurations->setArguments({EvaluatedType::Duration});
+    collectDurations->setReturnTypes({{EvaluatedType::List}});
+    collectDurations->setIsAggregate(true);
+    collectDurations->setCollectsItsArgument(true);
 
     FunctionSignature* collectNodes = createFunction("collect");
     collectNodes->setArguments({nodeOrGroup});
@@ -291,6 +302,16 @@ void FunctionDecls::initDefault() {
     maxDateTime->setArguments({EvaluatedType::DateTime});
     maxDateTime->setReturnTypes({{EvaluatedType::DateTime}});
     maxDateTime->setIsAggregate(true);
+
+    FunctionSignature* minDuration = createFunction("min");
+    minDuration->setArguments({EvaluatedType::Duration});
+    minDuration->setReturnTypes({{EvaluatedType::Duration}});
+    minDuration->setIsAggregate(true);
+
+    FunctionSignature* maxDuration = createFunction("max");
+    maxDuration->setArguments({EvaluatedType::Duration});
+    maxDuration->setReturnTypes({{EvaluatedType::Duration}});
+    maxDuration->setIsAggregate(true);
 
     // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
     // null, so a column that is null on every row - a name no property in the graph carries,
@@ -516,6 +537,10 @@ void FunctionDecls::initDefault() {
     FunctionSignature* currentDateTime = createFunction("datetime");
     currentDateTime->setArguments({});
     currentDateTime->setReturnTypes({{EvaluatedType::DateTime}});
+
+    FunctionSignature* durationOfMicroseconds = createFunction("duration");
+    durationOfMicroseconds->setArguments({EvaluatedType::Integer});
+    durationOfMicroseconds->setReturnTypes({{EvaluatedType::Duration}});
 
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they
