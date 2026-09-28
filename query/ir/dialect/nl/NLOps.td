@@ -309,6 +309,31 @@ def MakeMap : NLOp<"make_map", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* StaticMapKey
+*/
+def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of one value of a map chunk, by a key fixed at plan time";
+  let description = [{
+    Imperative counterpart of db.static_map_key. Row r of the result views the entry row r's map
+    already holds, so the read copies nothing:
+
+      %v = nl.static_map_key %m key "name"
+             : (!nl.chunk<!storage.nullable<!storage.map>>) -> !nl.chunk<!storage.map_element>
+
+    The operand is nullable where a stored property fetched it and plain where a literal
+    built it, so both spellings are accepted. The result never is: a map value carries its
+    null in its own tag, so a missing key and an absent map both read back as a Null-tagged
+    entry rather than as an absent optional.
+  }];
+
+  let arguments = (ins NLChunk:$map, StrAttr:$key);
+  let results   = (outs NLMapElementChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
+}
+
+/**
 * Range
 */
 def Range : NLOp<"range", [Pure, RowAlignedThroughOperands]> {

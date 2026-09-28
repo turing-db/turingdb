@@ -107,7 +107,7 @@ void WriteStmtAnalyzer::analyze(const RemoveStmt* removeStmt) {
 
     for (PropertyExpr* property : removeStmt->getProperties()) {
         _exprAnalyzer->analyzePropertyExpr(property, ALLOW_CREATES, ValueType::Invalid);
-        _exprAnalyzer->throwIfReadsAComponent(property);
+        _exprAnalyzer->throwIfReadsPartOfAProperty(property);
     }
 }
 
@@ -348,7 +348,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             const ValueType lhsEvaluatedVt =
                 _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
 
-            _exprAnalyzer->throwIfReadsAComponent(lhs);
+            _exprAnalyzer->throwIfReadsPartOfAProperty(lhs);
 
             _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 
@@ -420,6 +420,7 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::Duration;
         case EvaluatedType::Map:
             return ValueType::Map;
+        case EvaluatedType::MapValue:
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:

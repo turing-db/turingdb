@@ -356,6 +356,12 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
         } else {
             out = "null";
         }
+    } else if (const auto* entries = dynamic_cast<const ColumnVector<MapEntryView>*>(column)) {
+        out.clear();
+        renderMapValue((*entries)[row], out);
+    } else if (const auto* constEntry = dynamic_cast<const ColumnConst<MapEntryView>*>(column)) {
+        out.clear();
+        renderMapValue(constEntry->at(0), out);
     } else if (const auto* constMap = dynamic_cast<const ColumnConst<MapView>*>(column)) {
         out.clear();
         renderMap(constMap->at(0), out);

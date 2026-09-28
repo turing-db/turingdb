@@ -13,57 +13,74 @@
 
 namespace db {
 
-/// Helper to call a function on a value type given a map value tag
-struct MapTagDispatcher {
-    MapBufferTypeTag _tag {MapBufferTypeTag::INVALID};
-
-    auto execute(const auto& executor, const MapEntryView view) const {
-        switch (_tag) {
-            case MapBufferTypeTag::Int:
-                return executor.template operator()<types::Int64::Primitive>(view);
-            break;
-            case MapBufferTypeTag::UInt:
-                return executor.template operator()<types::UInt64::Primitive>(view);
-            break;
-            case MapBufferTypeTag::Double:
-                return executor.template operator()<types::Double::Primitive>(view);
-            break;
-            case MapBufferTypeTag::Bool:
-                return executor.template operator()<types::Bool::Primitive>(view);
-            break;
-            case MapBufferTypeTag::String:
-                return executor.template operator()<types::String::Primitive>(view);
-            break;
-            case MapBufferTypeTag::Embedding:
-                return executor.template operator()<types::Embedding::Primitive>(view);
-            break;
-            case MapBufferTypeTag::ListView:
-                return executor.template operator()<ListView>(view);
-            break;
-            case MapBufferTypeTag::MapView:
-                return executor.template operator()<MapView>(view);
-            break;
-            case MapBufferTypeTag::Null:
-                return executor.template operator()<PropertyNull>(view);
-            break;
-            case MapBufferTypeTag::NodeID:
-                return executor.template operator()<NodeID>(view);
-            break;
-            case MapBufferTypeTag::EdgeID:
-                return executor.template operator()<EdgeID>(view);
-            break;
-            case MapBufferTypeTag::DateTime:
-                return executor.template operator()<types::DateTime::Primitive>(view);
-            break;
-            case MapBufferTypeTag::Duration:
-                return executor.template operator()<types::Duration::Primitive>(view);
-            break;
-            case MapBufferTypeTag::INVALID:
-            break;
+// Entries are meant to be key-sorted, but MapBuffer::insert does not sort - only the two
+// producers feeding it do - so a scan is the reading that holds for every producer. Maps
+// are small enough that it costs nothing; revisit if that stops being true.
+inline bool findMapEntry(const MapView map, const std::string_view key, MapEntryView& entry) {
+    for (const MapEntryView candidate : map) {
+        if (candidate.getKey() == key) {
+            entry = candidate;
+            return true;
         }
-        throw FatalException("Unknown MapBufferTypeTag.");
     }
-};
+
+    return false;
+}
+
+// Call the executor with the type a map value tag names 
+auto dispatchMapTag(const MapBufferTypeTag tag, const auto& executor, const MapEntryView view) {
+    switch (tag) {
+        case MapBufferTypeTag::Int:
+            return executor.template operator()<types::Int64::Primitive>(view);
+        break;
+        case MapBufferTypeTag::UInt:
+            return executor.template operator()<types::UInt64::Primitive>(view);
+        break;
+        case MapBufferTypeTag::Double:
+            return executor.template operator()<types::Double::Primitive>(view);
+        break;
+        case MapBufferTypeTag::Bool:
+            return executor.template operator()<types::Bool::Primitive>(view);
+        break;
+        case MapBufferTypeTag::String:
+            return executor.template operator()<types::String::Primitive>(view);
+        break;
+        case MapBufferTypeTag::Embedding:
+            return executor.template operator()<types::Embedding::Primitive>(view);
+        break;
+        case MapBufferTypeTag::ListView:
+            return executor.template operator()<ListView>(view);
+        break;
+        case MapBufferTypeTag::MapView:
+            return executor.template operator()<MapView>(view);
+        break;
+        case MapBufferTypeTag::Null:
+            return executor.template operator()<PropertyNull>(view);
+        break;
+        case MapBufferTypeTag::NodeID:
+            return executor.template operator()<NodeID>(view);
+        break;
+        case MapBufferTypeTag::EdgeID:
+            return executor.template operator()<EdgeID>(view);
+        break;
+        case MapBufferTypeTag::DateTime:
+            return executor.template operator()<types::DateTime::Primitive>(view);
+        break;
+        case MapBufferTypeTag::Duration:
+            return executor.template operator()<types::Duration::Primitive>(view);
+        break;
+
+        case MapBufferTypeTag::INVALID:
+        break;
+    }
+
+    throw FatalException("Unknown MapBufferTypeTag.");
+}
+
+/// Call the executor with the type the entry's own tag names.
+auto dispatchMapEntry(const auto& executor, const MapEntryView entry) {
+    return dispatchMapTag(entry.getValueTag(), executor, entry);
+}
 
 /// Helpers to convert types to map value tags
 template <typename T>

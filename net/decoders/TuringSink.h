@@ -42,6 +42,7 @@ public:
     using ListView = db::ListView;
     using ListElementView = db::ListElementView;
     using MapView = db::MapView;
+    using MapEntryView = db::MapEntryView;
 
     TuringSink(db::LocalMemory* localMemory,
                ChunkedBuffer<float>* embeddingBuffer,
@@ -84,12 +85,17 @@ public:
 
     template <typename T>
     void writeMapValue(const T& value) {
-        mapCursor().writeValue<T>(db::TypeToMapBufferTag<T>::Tag, value);
+        _lastMapEntry = mapCursor().writeValue<T>(db::TypeToMapBufferTag<T>::Tag, value);
     }
 
     void writeMapValueBytes(const char* bytes, size_t byteSize) {
-        mapCursor().writeValueBytes(bytes, byteSize);
+        _lastMapEntry = mapCursor().writeValueBytes(bytes, byteSize);
     }
+
+    // The entry the open map last completed. A map entry column stores one per row, and a
+    // nested container's entry is recorded when it opens rather than when it closes, so
+    // the view is the one to store either way.
+    db::MapEntryView lastMapEntry() const { return _lastMapEntry; }
 
     bool topMapExpectsValue() const { return mapCursor().expectsValue(); }
 
@@ -111,6 +117,8 @@ private:
 
     // Front is the column's own (top-level) container; back is the innermost open one.
     NestedContainerCursor::Stack _containerStack;
+
+    db::MapEntryView _lastMapEntry;
 
     db::ListWriteCursor& listCursor() { return _containerStack.back().getList(); }
     db::MapWriteCursor& mapCursor() { return _containerStack.back().getMap(); }

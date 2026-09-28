@@ -217,7 +217,7 @@ struct ValueToPyObject {
     }
 
     nb::object entry(const db::MapEntryView entry) const {
-        return db::MapTagDispatcher {entry.getValueTag()}.execute(*this, entry);
+        return db::dispatchMapEntry(*this, entry);
     }
 
     template <typename T>
@@ -449,6 +449,17 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "Map";
                 break;
             }
+            case db::ColumnVector<db::MapEntryView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::MapEntryView>*>(col)->getRaw();
+                nb::list lst;
+                for (const db::MapEntryView entry : src) {
+                    lst.append(listVisitor.entry(entry));
+                }
+                value = lst;
+                dtypeName = "MapValue";
+                break;
+            }
+
             case db::ColumnVector<db::ListElementView>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnVector<db::ListElementView>*>(col)->getRaw();
                 nb::list lst;
@@ -688,6 +699,18 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "ListElement";
                 break;
             }
+            case db::ColumnConst<db::MapEntryView>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::MapEntryView>*>(col)->getRaw();
+                const nb::object entryObj = listVisitor.entry(v);
+                nb::list lst;
+                for (size_t i = 0; i < rowCount; ++i) {
+                    lst.append(entryObj);
+                }
+                value = lst;
+                dtypeName = "MapValue";
+                break;
+            }
+
             case db::ColumnConst<db::MapView>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::MapView>*>(col)->getRaw();
                 const nb::object mapObj = listVisitor.view(v);

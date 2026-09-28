@@ -201,8 +201,8 @@ std::strong_ordering compareDoubles(const double lhs, const double rhs) {
 // Two numbers compare numerically whatever they are tagged as. A pair of integers of one
 // signedness compares in its own type, so neighbouring values above 2^53 keep their
 // order; any other pair goes through double, the type holding both.
-template <typename View>
-std::strong_ordering compareNumbers(const View lhs, const View rhs) {
+template <typename Lhs, typename Rhs>
+std::strong_ordering compareNumbers(const Lhs lhs, const Rhs rhs) {
     const ListBufferTypeTag lhsTag = tagOf(lhs);
     const ListBufferTypeTag rhsTag = tagOf(rhs);
 
@@ -217,8 +217,8 @@ std::strong_ordering compareNumbers(const View lhs, const View rhs) {
 
 // Orders two tagged values - two list elements, or the values of two map entries - on the
 // cross-type order the header documents
-template <typename View>
-std::strong_ordering compareValues(const View lhs, const View rhs) {
+template <typename Lhs, typename Rhs>
+std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
     const ListElementOrderClass lhsClass = orderClassOf(tagOf(lhs));
     const ListElementOrderClass rhsClass = orderClassOf(tagOf(rhs));
 
@@ -284,19 +284,19 @@ bool numericEquals(const Stored stored, const Value value) {
     }
 }
 
-template <typename Value>
-bool elementEqualsNumber(const ListElementView element, const Value value) {
-    switch (element.getTag()) {
+template <typename View, typename Value>
+bool elementEqualsNumber(const View view, const Value value) {
+    switch (tagOf(view)) {
         case ListBufferTypeTag::Int:
-            return numericEquals(element.getAs<types::Int64::Primitive>(), value);
+            return numericEquals(valueOf<types::Int64::Primitive>(view), value);
         break;
 
         case ListBufferTypeTag::UInt:
-            return numericEquals(element.getAs<types::UInt64::Primitive>(), value);
+            return numericEquals(valueOf<types::UInt64::Primitive>(view), value);
         break;
 
         case ListBufferTypeTag::Double:
-            return numericEquals(element.getAs<types::Double::Primitive>(), value);
+            return numericEquals(valueOf<types::Double::Primitive>(view), value);
         break;
 
         default:
@@ -349,8 +349,8 @@ std::strong_ordering compareElementWithNumber(const ListElementView element, con
 
 // Embeddings have no order, so equality cannot be read off compareValues wherever one may
 // sit - directly, or anywhere inside a nested list or map
-template <typename View>
-bool valuesEqual(const View lhs, const View rhs) {
+template <typename Lhs, typename Rhs>
+bool valuesEqual(const Lhs lhs, const Rhs rhs) {
     const ListBufferTypeTag lhsTag = tagOf(lhs);
     const ListBufferTypeTag rhsTag = tagOf(rhs);
 
@@ -547,6 +547,50 @@ bool db::operator==(const ListElementView element, const MapView value) {
 
 bool db::operator==(const ListElementView element, PropertyNull) {
     return element.getTag() == ListBufferTypeTag::Null;
+}
+
+bool db::operator==(const MapEntryView entry, PropertyNull) {
+    return entry.getValueTag() == MapBufferTypeTag::Null;
+}
+
+bool db::operator==(const MapEntryView lhs, const MapEntryView rhs) {
+    return valuesEqual(lhs, rhs);
+}
+
+bool db::operator==(const MapEntryView entry, const ListElementView element) {
+    return valuesEqual(entry, element);
+}
+
+bool db::operator==(const MapEntryView entry, const types::Int64::Primitive value) {
+    return elementEqualsNumber(entry, value);
+}
+
+bool db::operator==(const MapEntryView entry, const types::UInt64::Primitive value) {
+    return elementEqualsNumber(entry, value);
+}
+
+bool db::operator==(const MapEntryView entry, const types::Double::Primitive value) {
+    return elementEqualsNumber(entry, value);
+}
+
+bool db::operator==(const MapEntryView entry, const types::String::Primitive value) {
+    return entry.getValueTag() == MapBufferTypeTag::String
+        && entry.getValueAs<types::String::Primitive>() == value;
+}
+
+bool db::operator==(const MapEntryView entry, const types::Bool::Primitive value) {
+    return entry.getValueTag() == MapBufferTypeTag::Bool
+        && static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()) == static_cast<bool>(value);
+}
+
+bool db::operator==(const MapEntryView entry, const ListView value) {
+    return entry.getValueTag() == MapBufferTypeTag::ListView
+        && entry.getValueAs<ListView>() == value;
+}
+
+bool db::operator==(const MapEntryView entry, const MapView value) {
+    return entry.getValueTag() == MapBufferTypeTag::MapView
+        && entry.getValueAs<MapView>() == value;
 }
 
 std::strong_ordering db::operator<=>(const ListElementView element, const types::Int64::Primitive value) {

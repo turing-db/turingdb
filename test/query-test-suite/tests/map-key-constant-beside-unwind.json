@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: 1} AS m UNWIND [1, 2, 3] AS x RETURN x, m.a",
+  "expect": {
+    "result": "x,m.a\n1,1\n2,1\n3,1"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "return"
+  ],
+  "write-required": false
+}

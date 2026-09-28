@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) CREATE (a)-[e:TAGGED {attrs: {w: 7, s: 'z'}}]->(b) WITH 1 AS seeded MATCH ()-[r:TAGGED]->() RETURN r.attrs.w, r.attrs.s, r.attrs.nosuch",
+  "expect": {
+    "result": "r.attrs.w,r.attrs.s,r.attrs.nosuch\n7,z,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "return"
+  ],
+  "write-required": true
+}

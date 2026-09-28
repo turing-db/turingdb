@@ -931,6 +931,105 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     EXPECT_EQ(decodedCol->at(4).getTag(), db::ListBufferTypeTag::Null);
 }
 
+// A map entry column - one entry per row, what m.key reads. Every row was read under the
+// same key, so the wire carries that key with each entry, exactly as a map's own entries
+// do: the column is one map of as many entries as it has rows. A row whose map held no
+// such key still names it, tagged null.
+TEST(TuringProtoRoundTripTest, RoundTripsMapEntryColumns) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    const std::string text(64, 'q');
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> nested;
+    nested.emplace_back("k", Int64 {3});
+    const db::MapView nestedView = localMem.mapBuffer().insert(nested);
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> pairs;
+    pairs.emplace_back("a", Int64 {-3});
+    pairs.emplace_back("a", StringView {text});
+    pairs.emplace_back("a", nestedView);
+    pairs.emplace_back("a", db::PropertyNull {});
+
+    const db::MapView entries = localMem.mapBuffer().insert(pairs);
+
+    auto* col = localMem.alloc<db::ColumnVector<db::MapEntryView>>();
+    for (const db::MapEntryView entry : entries) {
+        col->push_back(entry);
+    }
+
+    addColumn(&dfMan, &source, "values", col);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::MapEntryView>>();
+    ASSERT_NE(decodedCol, nullptr);
+    ASSERT_EQ(decodedCol->size(), 4u);
+
+    for (size_t row = 0; row < decodedCol->size(); row++) {
+        EXPECT_EQ(decodedCol->at(row).getKey(), "a") << "row " << row;
+    }
+
+    EXPECT_EQ(decodedCol->at(0).getValueTag(), db::MapBufferTypeTag::Int);
+    EXPECT_EQ(decodedCol->at(0).getValueAs<Int64>(), -3);
+    EXPECT_EQ(decodedCol->at(1).getValueTag(), db::MapBufferTypeTag::String);
+    EXPECT_EQ(decodedCol->at(1).getValueAs<StringView>(), std::string_view(text));
+
+    EXPECT_EQ(decodedCol->at(2).getValueTag(), db::MapBufferTypeTag::MapView);
+    const db::MapView decodedNested = decodedCol->at(2).getValueAs<db::MapView>();
+    ASSERT_EQ(decodedNested.size(), 1u);
+    EXPECT_EQ(decodedNested.front().getKey(), "k");
+    EXPECT_EQ(decodedNested.front().getValueAs<Int64>(), 3);
+
+    EXPECT_EQ(decodedCol->at(3).getValueTag(), db::MapBufferTypeTag::Null);
+}
+
+// The constant shape of the same column, which is what `WITH {a: 1} AS m RETURN m.a`
+// produces: one entry standing for every row.
+TEST(TuringProtoRoundTripTest, RoundTripsConstantMapEntryColumn) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> pairs;
+    pairs.emplace_back("a", StringView {"xyz"});
+    const db::MapView entries = localMem.mapBuffer().insert(pairs);
+
+    auto* col = localMem.alloc<db::ColumnConst<db::MapEntryView>>();
+    col->set(entries.front());
+    addColumn(&dfMan, &source, "value", col);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 4096);
+    expectPacketSequence(packets, true);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnConst<db::MapEntryView>>();
+    ASSERT_NE(decodedCol, nullptr);
+
+    EXPECT_EQ(decodedCol->at(0).getKey(), "a");
+    EXPECT_EQ(decodedCol->at(0).getValueTag(), db::MapBufferTypeTag::String);
+    EXPECT_EQ(decodedCol->at(0).getValueAs<StringView>(), "xyz");
+}
+
 // Encode a ColumnConst<ListView> whose elements include a nested list, which itself
 // contains a doubly-nested list, and decode it back. Exercises the inline depth-first
 // encoding and the decoder's cursor stack to three levels. The small chunk size splits

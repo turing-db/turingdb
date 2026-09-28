@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: 1, b: 'x', l: [1, 2], m: {k: 3}, n: null} AS m RETURN m.a, m.b, m.l, m.m, m.n, m.nosuch",
+  "expect": {
+    "result": "m.a,m.b,m.l,m.m,m.n,m.nosuch\n1,x,\"[1, 2]\",{k: 3},null,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "return"
+  ],
+  "write-required": false
+}

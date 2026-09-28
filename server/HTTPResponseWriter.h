@@ -366,8 +366,7 @@ public:
             this->writeValue(view.getValueAs<T>());
         };
 
-        const MapTagDispatcher dispatcher {entry.getValueTag()};
-        dispatcher.execute(writeTyped, entry);
+        dispatchMapEntry(writeTyped, entry);
     }
 
     void writeValue(MapView map) {

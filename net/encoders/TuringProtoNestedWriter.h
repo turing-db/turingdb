@@ -79,8 +79,7 @@ inline WireSize computeMapByteSize(std::span<const db::MapEntryView> entries) {
 
     size_t totalSize = 0;
     for (const db::MapEntryView entry : entries) {
-        db::MapTagDispatcher dispatcher {entry.getValueTag()};
-        totalSize += dispatcher.execute(sizeVisitor, entry);
+        totalSize += db::dispatchMapEntry(sizeVisitor, entry);
     }
 
     bioassert(totalSize <= MAX_WIRE_SIZE, "Map length exceeds maximum wire size");
@@ -210,6 +209,11 @@ public:
     // the elements stay one per row; the column's null mask, already on the wire, is what
     // tells such a row from one holding a null read out of a list.
     void writeOptionalListElements(std::span<const std::optional<db::ListElementView>> elements);
+
+    // A column whose rows are each one map entry: [mapByteSize] then the entries, the row
+    // count having already given their number. Written exactly as a map's entries are, so
+    // each row carries the key it was read under.
+    void writeMapEntries(std::span<const db::MapEntryView> entries);
 
 private:
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};

@@ -19,6 +19,7 @@
 #include "list/PathTrie.h"
 
 #include "map/MapBuffer.h"
+#include "map/MapEntryView.h"
 #include "map/MapView.h"
 
 #include "buffers/SpanBuffer.h"
@@ -135,7 +136,10 @@ public:
         MakeMemoryPool<ColumnVector<MapView>>::type,
         MakeMemoryPool<ColumnOptVector<MapView>>::type,
         MakeMemoryPool<ColumnConst<MapView>>::type,
-        MakeMemoryPool<ColumnConst<std::optional<MapView>>>::type
+        MakeMemoryPool<ColumnConst<std::optional<MapView>>>::type,
+
+        MakeMemoryPool<ColumnVector<MapEntryView>>::type,
+        MakeMemoryPool<ColumnConst<MapEntryView>>::type
     >;
 
     template <typename KeyT, typename ValueT>

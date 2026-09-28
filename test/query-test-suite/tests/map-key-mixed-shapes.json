@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (:Tagged {name: 'a', attrs: {x: 1}}), (:Tagged {name: 'b', attrs: {y: 'z'}}) WITH 1 AS seeded MATCH (n:Tagged) RETURN n.name, n.attrs.x, n.attrs.y",
+  "expect": {
+    "result": "n.name,n.attrs.x,n.attrs.y\na,1,null\nb,null,z"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "return"
+  ],
+  "write-required": true
+}

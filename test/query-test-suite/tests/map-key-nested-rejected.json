@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: {b: 1}} AS m RETURN m.a.b",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | WITH {a: {b: 1}} AS m RETURN m.a.b\n       |                              ^^^^^\n-------* 'm.a' reads a key of a map held by another map, which is not supported"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "fail"
+  ],
+  "write-required": false
+}

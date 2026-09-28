@@ -8,6 +8,7 @@
 #include "CypherAST.h"
 #include "Literal.h"
 #include "Symbol.h"
+#include "QualifiedName.h"
 #include "SymbolChain.h"
 #include "expr/BinaryExpr.h"
 #include "expr/EntityTypeExpr.h"
@@ -15,6 +16,7 @@
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/Operators.h"
+#include "expr/PropertyExpr.h"
 #include "expr/StructuralExpressionComparator.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
@@ -60,6 +62,20 @@ protected:
         }
 
         return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, variable), chain);
+    }
+
+    // n.attrs.key, as the analyzer leaves it: the property named, the key beside it.
+    PropertyExpr* mapKeyRead(std::string_view variable, std::string_view property, std::string_view key) {
+        QualifiedName* name = QualifiedName::create(&_ast);
+        name->addName(Symbol::create(&_ast, variable));
+        name->addName(Symbol::create(&_ast, property));
+        name->addName(Symbol::create(&_ast, key));
+
+        PropertyExpr* expr = PropertyExpr::create(&_ast, name);
+        expr->setPropertyName(property);
+        expr->setMapKey(key);
+
+        return expr;
     }
 
     CypherAST _ast;
@@ -183,4 +199,14 @@ TEST_F(StructuralExpressionComparatorTest, labelTestsOfDifferentTypesDiffer) {
 TEST_F(StructuralExpressionComparatorTest, labelTestsCompareTheChainInOrder) {
     EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person", "Founder"}),
                                                        typeTest("n", {"Founder", "Person"})));
+}
+
+// Two keys of one map are two values, exactly as two calendar fields of one instant are, so
+// the key has to be part of what the access is compared on.
+TEST_F(StructuralExpressionComparatorTest, mapKeyReadsCompareByKey) {
+    EXPECT_TRUE(StructuralExpressionComparator::equal(mapKeyRead("n", "attrs", "x"),
+                                                      mapKeyRead("n", "attrs", "x")));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(mapKeyRead("n", "attrs", "x"),
+                                                       mapKeyRead("n", "attrs", "y")));
 }

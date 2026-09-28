@@ -29,3 +29,7 @@ void PropertyLookupExpr::setDurationPart(DurationPart part) {
     _durationPart = part;
     _readsADurationComponent = true;
 }
+
+void PropertyLookupExpr::setReadsAMapKey() {
+    _readsAMapKey = true;
+}
