@@ -32,11 +32,11 @@ UnionQuery* UnionQuery::create(CypherAST* ast, SinglePartQuery* first, const Bra
     return query;
 }
 
-size_t UnionQuery::getDedupedBranchCount() const {
+size_t UnionQuery::getDedupedBranchCount(const Branches& branches) {
     size_t deduped = 0;
 
-    for (size_t index = 1; index < _branches.size(); index++) {
-        if (!_branches[index]._all) {
+    for (size_t index = 1; index < branches.size(); index++) {
+        if (!branches[index]._all) {
             deduped = index + 1;
         }
     }

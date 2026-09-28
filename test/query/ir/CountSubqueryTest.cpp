@@ -208,6 +208,12 @@ TEST_F(CountSubqueryTest, budgetsALimitInTheBodyPerRow) {
                expected);
 }
 
+// The scan meets Remy, Adam and Maxime first
+TEST_F(CountSubqueryTest, anOuterLimitStopsThePerRowBody) {
+    expectRows("MATCH (p:Person) RETURN p.name, COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } LIMIT 3",
+               {{"Remy", "1"}, {"Adam", "1"}, {"Maxime", "1"}});
+}
+
 TEST_F(CountSubqueryTest, aPerRowBodyStandsInAConjunction) {
     expectRows("MATCH (p:Person) "
                "WHERE p.hasPhD = true AND COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 2 } = 2 "

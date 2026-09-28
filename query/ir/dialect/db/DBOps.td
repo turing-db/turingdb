@@ -3171,7 +3171,7 @@ def ExistsSubquery : TuringOp<"exists_subquery", [Pure]> {
       %b = db.exists_subquery(%p) carries_scope ({
         ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
           %s, %e, %et, %k, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
-          db.exists_yield %tag2, {%s, %e, %k} : {...}
+          db.exists_yield %tag2, {}
       }) : (!db.column<!storage.node_id>) -> !db.column<!storage.bool>
 
     `carries_scope` says the body's own dataflow keeps every input row paired with what
@@ -3180,9 +3180,9 @@ def ExistsSubquery : TuringOp<"exists_subquery", [Pure]> {
     cannot: it is run one input row at a time instead, and the row is marked when the
     body yielded anything at all for it.
 
-    The db.exists_yield names the tag as the body left it and the columns the body holds
-    there. Those columns say nothing about which rows matched when the tag is present;
-    they carry the row count for a body with no tag to answer from.
+    The db.exists_yield names the tag as the body left it, which is all a tagged body is
+    answered from. A body with no tag names the columns it holds instead, which carry the
+    row count it answers from.
 
     Reading the graph is deterministic and an EXISTS body writes nothing, so it is Pure.
   }];
@@ -3211,8 +3211,8 @@ def ExistsYield : TuringOp<"exists_yield", [Pure, Terminator, AttrSizedOperandSe
   let description = [{
     Terminates a db.exists_subquery's body region. `tag` is the row tag as the body left
     it - the input row each surviving row came from, absent when the op has no input
-    column - and `columns` are the columns the body holds there, which a body with no tag
-    reads its row count off.
+    column. A body with no tag names in `columns` the columns it holds there, which it
+    reads its row count off; a tagged body names none.
   }];
 
   let arguments = (ins Optional<ColumnRowTags>:$tag, Variadic<Column>:$columns);
@@ -3220,7 +3220,7 @@ def ExistsYield : TuringOp<"exists_yield", [Pure, Terminator, AttrSizedOperandSe
   // The tag's type is buildable and so left out; only the held column types are spelled,
   // in braces as db.optional_yield spells the ones its pattern contributes.
   let assemblyFormat = [{
-    ($tag^ `,`)? `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+    ($tag^ `,`)? `{` $columns `}` attr-dict (`:` `{` qualified(type($columns))^ `}`)?
   }];
 }
 
@@ -3245,7 +3245,7 @@ def CountSubquery : TuringOp<"count_subquery", [Pure]> {
       %n = db.count_subquery(%p) carries_scope ({
         ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
           %s, %e, %et, %k, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
-          db.count_subquery_yield %tag2, {%s, %e, %k} : {...}
+          db.count_subquery_yield %tag2, {}
       }) : (!db.column<!storage.node_id>) -> !db.column<ui64>
 
     Reading the graph is deterministic and a COUNT body writes nothing, so it is Pure.
@@ -3274,14 +3274,14 @@ def CountSubqueryYield : TuringOp<"count_subquery_yield", [Pure, Terminator, Att
 
   let description = [{
     Terminates a db.count_subquery's body region. `tag` is the row tag as the body left
-    it, absent when the body takes none, and `columns` are the columns the body holds
-    there, which a body with no tag counts its rows off.
+    it, absent when the body takes none. A body with no tag names in `columns` the columns
+    it holds there, which it counts its rows off; a tagged body names none.
   }];
 
   let arguments = (ins Optional<ColumnRowTags>:$tag, Variadic<Column>:$columns);
 
   let assemblyFormat = [{
-    ($tag^ `,`)? `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+    ($tag^ `,`)? `{` $columns `}` attr-dict (`:` `{` qualified(type($columns))^ `}`)?
   }];
 }
 

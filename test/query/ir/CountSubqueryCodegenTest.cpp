@@ -63,6 +63,30 @@ protected:
         return text.find(part) != std::string_view::npos;
     }
 
+    // The line of @param text holding the first occurrence of @param part
+    static std::string_view lineOf(std::string_view text, std::string_view part) {
+        const size_t position = text.find(part);
+        if (position == std::string_view::npos) {
+            return {};
+        }
+
+        const size_t lineStart = text.rfind('\n', position) + 1;
+        const size_t lineEnd = text.find('\n', position);
+
+        return text.substr(lineStart, lineEnd - lineStart);
+    }
+
+    // The SSA name the line holding @param op binds
+    static std::string_view resultOf(std::string_view text, std::string_view op) {
+        const std::string_view line = lineOf(text, op);
+        const size_t nameStart = line.find('%');
+        if (nameStart == std::string_view::npos) {
+            return {};
+        }
+
+        return line.substr(nameStart, line.find(' ', nameStart) - nameStart);
+    }
+
     static size_t occurrences(std::string_view text, std::string_view part) {
         size_t count = 0;
 
@@ -154,4 +178,28 @@ TEST_F(CountSubqueryCodegenTest, aBodyOverNoRowInFlightTakesNoTag) {
     const std::string_view nlProgram = dumpOf(sink, "nl");
     EXPECT_TRUE(contains(nlProgram, "nl.count_subquery_buffer()")) << nlProgram;
     EXPECT_TRUE(contains(nlProgram, "rows(")) << nlProgram;
+}
+
+TEST_F(CountSubqueryCodegenTest, anOuterLimitBudgetsTheLoopOverSingleRows) {
+    StringRowSink sink;
+    explain("EXPLAIN (codegen, nl) MATCH (p:Person) "
+            "RETURN p.name, COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } LIMIT 3",
+            sink);
+
+    const std::string_view nlProgram = dumpOf(sink, "nl");
+    const std::string rowLoop = "in " + std::string(resultOf(nlProgram, "nl.each_row")) + " limit ";
+    EXPECT_TRUE(contains(nlProgram, rowLoop)) << nlProgram;
+}
+
+// The tally reads the tag alone, so the hops of the body carry nothing else
+TEST_F(CountSubqueryCodegenTest, aTaggedBodyYieldsItsTagAlone) {
+    StringRowSink sink;
+    explainCount("(p)-[:INTERESTED_IN]->(i)<-[:INTERESTED_IN]-(q)", sink);
+
+    const std::string_view codegen = dumpOf(sink, "codegen");
+    EXPECT_TRUE(lineOf(codegen, "db.count_subquery_yield").ends_with(", {}")) << codegen;
+
+    const std::string_view nlProgram = dumpOf(sink, "nl");
+    const std::string_view secondHop = lineOf(nlProgram, "nl.get_in_edges_by_type");
+    EXPECT_TRUE(secondHop.ends_with("}) : !nl.chunk<ui64>")) << nlProgram;
 }

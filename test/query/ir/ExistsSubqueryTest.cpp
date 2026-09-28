@@ -155,6 +155,10 @@ TEST_F(ExistsSubqueryTest, answersForABodyReturningOnlyAConstantOfTheScope) {
     expectRows("WITH 5 AS k RETURN EXISTS { RETURN k }", {{"true"}});
 }
 
+TEST_F(ExistsSubqueryTest, answersOffTheBodyRowsBesideAConstantOfTheScope) {
+    expectRows("WITH 5 AS k RETURN EXISTS { MATCH (n:Person) WHERE n.age > 1000 }", {{"false"}});
+}
+
 TEST_F(ExistsSubqueryTest, standsBesideOtherPredicates) {
     expectRows("MATCH (p:Person) "
                "WHERE p.hasPhD = true AND EXISTS { (p)-[:KNOWS_WELL]->() } "
@@ -315,6 +319,12 @@ TEST_F(ExistsSubqueryTest, budgetsALimitInThePerRowBodyPerRow) {
 
 // The rest of the query runs inside the loop a per-row body opened, so a later part still
 // reads the rows the EXISTS answered for
+// The scan meets Remy, Adam and Maxime first
+TEST_F(ExistsSubqueryTest, anOuterLimitStopsThePerRowBody) {
+    expectRows("MATCH (p:Person) RETURN p.name, EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } LIMIT 3",
+               {{"Remy", "true"}, {"Adam", "true"}, {"Maxime", "true"}});
+}
+
 TEST_F(ExistsSubqueryTest, carriesOnPastAPerRowBody) {
     expectRows("MATCH (p:Person) "
                "WHERE EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } "
