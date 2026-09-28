@@ -3263,7 +3263,7 @@ def ExistsMark : NLOp<"exists_mark", [AttrSizedOperandSegments]> {
                        Variadic<NLChunk>:$columns);
 
   let assemblyFormat = [{
-    $state (`,` $tag^)? `,` `(` $columns `)` attr-dict `:` `{` qualified(type($columns)) `}`
+    $state `,` ($tag^ `,`)? `(` $columns `)` attr-dict `:` `{` qualified(type($columns)) `}`
   }];
 }
 
