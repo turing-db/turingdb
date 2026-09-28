@@ -27,17 +27,6 @@ protected:
         EXPECT_EQ(error.find("Internal Error"), std::string::npos)
             << "query: " << query << "\nerror: " << error;
     }
-
-    void expectWriteRejected(std::string_view query, std::string_view message) {
-        ChangeID changeID;
-        openChange(changeID);
-
-        const QueryStatus status = runWrite(query, changeID);
-        ASSERT_FALSE(status.isOk()) << "query accepted: " << query;
-
-        EXPECT_NE(status.getError().find(message), std::string::npos)
-            << "query: " << query << "\nerror: " << status.getError();
-    }
 };
 
 TEST_F(WithWhereDroppedVariableTest, readsADroppedConstant) {
@@ -115,12 +104,12 @@ TEST_F(WithWhereDroppedVariableTest, readsADroppedPath) {
                {{"Adam"}, {"Remy"}});
 }
 
-TEST_F(WithWhereDroppedVariableTest, rejectsADroppedMergedEntity) {
-    expectWriteRejected("MERGE (n:Person {name: 'Remy'}) WITH 1 AS one WHERE n.age > 30 RETURN one",
-                        "The WHERE of a WITH cannot read 'n'");
-    expectWriteRejected("MERGE (n:Person {name: 'Remy'}) WITH 1 AS one "
-                        "WHERE EXISTS { (n)-[:KNOWS_WELL]->() } RETURN one",
-                        "The WHERE of a WITH cannot read 'n'");
+TEST_F(WithWhereDroppedVariableTest, readsADroppedMergedEntity) {
+    expectWriteRows("MERGE (n:Person {name: 'Remy'}) WITH 1 AS one WHERE n.age > 30 RETURN one",
+                    {{"1"}});
+    expectWriteRows("MERGE (n:Person {name: 'Remy'}) WITH 1 AS one "
+                    "WHERE EXISTS { (n)-[:KNOWS_WELL]->() } RETURN one",
+                    {{"1"}});
 }
 
 TEST_F(WithWhereDroppedVariableTest, dropsAMergedEntityTheFilterDoesNotRead) {

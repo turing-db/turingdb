@@ -214,6 +214,11 @@ private:
 
         std::unordered_map<const VarDecl*, WrittenEntity> _writtenEntities;
 
+        // The mask of each entity a MERGE above the cut wrote, saying which of its rows name
+        // one this change wrote. It is bound as a column of its own, so every op the rows go
+        // through carries it along with them
+        std::unordered_map<const VarDecl*, const VariableDependency*> _pendingMasks;
+
         // The traversal root a CALL ahead of the MATCH bound, when the query lets the
         // traversal expand that column instead of scanning the graph and joining. Null
         // otherwise, which leaves every call after the traversal and every root opening
@@ -485,7 +490,9 @@ private:
                               llvm::ArrayRef<PublishedColumn> published,
                               CarriedEntities& carried) const;
 
-    void throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const;
+    // Rejects an item of @param projection naming an entity a MERGE wrote, where no mask can
+    // go along with it: out of a subquery, or through an aggregate
+    void throwOnPublishedMerge(const Projection* projection, const WithStmt* with) const;
 
     // Rejects a pattern of @param matchStmt that names an entity a CREATE of the same
     // query wrote, which the clause named by @param clause cannot read
@@ -743,15 +750,18 @@ private:
     void generateWith(const WithStmt* with);
 
     // Emits a projection that ends no query - a WITH's, or the RETURN of a subquery body -
-    // and publishes its columns as the scope of what follows. The variables its WHERE
-    // reads that the projection drops, @param filterImports, are carried beside them
-    void publishProjection(const Projection* projection,
-                           std::span<const VarDecl* const> filterImports = {});
+    // and publishes its columns as the scope of what follows. A WITH carries columns beside
+    // them: the variables its WHERE reads that the projection drops, and the mask of each
+    // entity a MERGE wrote
+    void publishProjection(const Projection* projection, const WithStmt* with = nullptr);
 
-    void collectFilterColumns(const Projection* projection,
-                              std::span<const VarDecl* const> filterImports,
+    void collectFilterColumns(std::span<const VarDecl* const> filterImports,
                               const VariableColumnMap& variableColumns,
-                              llvm::SmallVectorImpl<PublishedColumn>& filterColumns);
+                              llvm::SmallVectorImpl<PublishedColumn>& carriedColumns);
+
+    void collectPendingMasks(const Projection* projection,
+                             llvm::ArrayRef<llvm::StringRef> names,
+                             llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const;
 
     // Rebinds the scope to what the WITH published, once its WHERE has read the rest
     void dropFilterColumns(std::span<const VarDecl* const> filterImports);
@@ -767,7 +777,7 @@ private:
     void publishBoundColumns(const Projection* projection,
                              llvm::ArrayRef<llvm::StringRef> names,
                              llvm::ArrayRef<mlir::Value> columns,
-                             llvm::ArrayRef<PublishedColumn> filterColumns);
+                             llvm::ArrayRef<PublishedColumn> carriedColumns);
 
     // Publishes every column in scope under the name it already carries, so the part that
     // follows a cut reads them the way it reads what a WITH published
@@ -807,17 +817,18 @@ private:
     void translateProjectionTail(const Projection* projection,
                                  const VariableColumnMap& variableColumns,
                                  llvm::SmallVectorImpl<mlir::Value>& projected,
-                                 llvm::MutableArrayRef<PublishedColumn> filterColumns);
+                                 llvm::MutableArrayRef<PublishedColumn> carriedColumns);
 
     template <typename CutOp>
     void translateCut(const Projection* projection,
                       const Expr* countExpr,
                       std::string_view clauseName,
                       llvm::SmallVectorImpl<mlir::Value>& projected,
-                      llvm::MutableArrayRef<PublishedColumn> filterColumns);
+                      llvm::MutableArrayRef<PublishedColumn> carriedColumns);
 
     void translateDistinct(const Projection* projection,
-                           llvm::SmallVectorImpl<mlir::Value>& projected);
+                           llvm::SmallVectorImpl<mlir::Value>& projected,
+                           llvm::MutableArrayRef<PublishedColumn> carriedColumns);
 
     // Dedups a projection of constants alone, whose rows are one row repeated, by
     // capping @param projected at the single row the dedup would keep
@@ -853,7 +864,7 @@ private:
     void translateOrderBy(const Projection* projection,
                           const VariableColumnMap& variableColumns,
                           llvm::SmallVectorImpl<mlir::Value>& projected,
-                          llvm::MutableArrayRef<PublishedColumn> filterColumns);
+                          llvm::MutableArrayRef<PublishedColumn> carriedColumns);
 
     // The column holding the values of an expression: the column already published for
     // the traversal variable it names, when the expression is nothing but that variable,

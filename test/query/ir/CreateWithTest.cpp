@@ -159,17 +159,19 @@ TEST_F(CreateWithTest, readsNullForAPropertyTheCreateDidNotWrite) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
-// A MERGE's rows mix what it wrote with what it bound, and only the mask beside them tells
-// the two apart. The cut has no item to carry that mask on, so the entity cannot cross it.
-TEST_F(CreateWithTest, rejectsAWithThatPublishesAMergedEntity) {
-    runWriteExpectingError("MERGE (n:Person {name: 'Nia'}) WITH n RETURN n.name",
-                           "A WITH cannot publish 'n'");
-
-    StringRowSink sink;
-    runWrite("MERGE (n:Person {name: 'Nia'}) WITH n.name AS written RETURN written", sink);
+// A MERGE's rows mix what it wrote with what it bound, and the mask beside them that tells
+// the two apart crosses the cut with them.
+TEST_F(CreateWithTest, publishesAMergedEntity) {
+    StringRowSink published;
+    runWrite("MERGE (n:Person {name: 'Nia'}) WITH n RETURN n.name", published);
 
     const std::vector<StringRowSink::Row> expected {{"Nia"}};
-    EXPECT_EQ(sink.getRows(), expected);
+    EXPECT_EQ(published.getRows(), expected);
+
+    StringRowSink property;
+    runWrite("MERGE (n:Person {name: 'Nia'}) WITH n.name AS written RETURN written", property);
+
+    EXPECT_EQ(property.getRows(), expected);
 }
 
 // A query part reads then writes. `CREATE (n) MATCH (m)` is two parts with the cut between
