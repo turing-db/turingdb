@@ -180,9 +180,9 @@ public:
     // the pattern missed.
     static void runOptionalDrainLoop(NLExecutionContext* context, NLFunctionData* data);
 
-    // Clear the matched flags of an EXISTS accumulator and lay its row tag out over this
+    // Clear the answers of an EXISTS or COUNT accumulator and lay its row tag out over this
     // step's input rows; runs each time its block runs.
-    static void runExistsReset(NLExecutionContext* context, NLFunctionData* data);
+    static void runSubqueryExpressionReset(NLExecutionContext* context, NLFunctionData* data);
 
     // Mark as matched each input row the row tag names, or - for an accumulator with no
     // input column - the single empty row, when this step holds a row at all.
@@ -192,9 +192,8 @@ public:
     // expression stands for, one per input row of the step.
     static void runExistsResult(NLExecutionContext* context, NLFunctionData* data);
 
-    // The counting siblings of the three EXISTS statements above: zero the counts, count
-    // this step's rows toward the input rows they came from, and lay the counts out
-    static void runCountSubqueryReset(NLExecutionContext* context, NLFunctionData* data);
+    // The counting siblings of the EXISTS mark and result: count this step's rows toward
+    // the input rows they came from, and lay the counts out
     static void runCountSubqueryTally(NLExecutionContext* context, NLFunctionData* data);
     static void runCountSubqueryResult(NLExecutionContext* context, NLFunctionData* data);
 

@@ -732,6 +732,13 @@ private:
 
     NLCountSubqueryState* countSubqueryStateFor(mlir::Value handle) const;
 
+    // Record an EXISTS or COUNT buffer's input chunks and row tag on its accumulator, and the
+    // reset statement that runs each time the buffer's block runs
+    void translateSubqueryExpressionReset(NLSubqueryExpressionState* state,
+                                          mlir::OperandRange inputColumns,
+                                          mlir::Value tag,
+                                          NLStmtContainer* body);
+
     // Translate an nl.pattern_comprehension_buffer: allocate the accumulator this step's
     // matches are staged in and the row tag column the pattern carries
     void translatePatternComprehensionBuffer(mlir::nl::PatternComprehensionBuffer buffer,

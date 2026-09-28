@@ -3905,16 +3905,7 @@ void NLTranslator::translateExistsBuffer(nl::ExistsBuffer buffer, NLStmtContaine
     NLExistsState* state = _program->allocExistsState();
     _existsStates[buffer.getState()] = state;
 
-    // This step's own chunks: their row count is how many matched flags the reset clears,
-    // and how many booleans the result lays out.
-    for (const mlir::Value column : buffer.getInputColumns()) {
-        state->addInputColumn(getColumn(column));
-    }
-
-    ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
-
-    NLExistsResetData* resetData = _program->allocFunctionData<NLExistsResetData>(state, tag);
-    body->emplaceStmt(&NLExecutor::runExistsReset, resetData);
+    translateSubqueryExpressionReset(state, buffer.getInputColumns(), buffer.getTag(), body);
 }
 
 void NLTranslator::translateExistsMark(nl::ExistsMark mark, NLStmtContainer* body) {
@@ -3955,14 +3946,23 @@ void NLTranslator::translateCountSubqueryBuffer(nl::CountSubqueryBuffer buffer, 
     NLCountSubqueryState* state = _program->allocCountSubqueryState();
     _countSubqueryStates[buffer.getState()] = state;
 
-    for (const mlir::Value column : buffer.getInputColumns()) {
+    translateSubqueryExpressionReset(state, buffer.getInputColumns(), buffer.getTag(), body);
+}
+
+void NLTranslator::translateSubqueryExpressionReset(NLSubqueryExpressionState* state,
+                                                    mlir::OperandRange inputColumns,
+                                                    mlir::Value tag,
+                                                    NLStmtContainer* body) {
+    // This step's own chunks: their row count is how many answers the reset clears, and how
+    // many the result lays out.
+    for (const mlir::Value column : inputColumns) {
         state->addInputColumn(getColumn(column));
     }
 
-    ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
+    ColumnVector<uint64_t>* tagColumn = static_cast<ColumnVector<uint64_t>*>(allocColumn(tag));
 
-    NLCountSubqueryResetData* resetData = _program->allocFunctionData<NLCountSubqueryResetData>(state, tag);
-    body->emplaceStmt(&NLExecutor::runCountSubqueryReset, resetData);
+    NLSubqueryExpressionResetData* resetData = _program->allocFunctionData<NLSubqueryExpressionResetData>(state, tagColumn);
+    body->emplaceStmt(&NLExecutor::runSubqueryExpressionReset, resetData);
 }
 
 void NLTranslator::translateCountSubqueryTally(nl::CountSubqueryTally tally, NLStmtContainer* body) {
