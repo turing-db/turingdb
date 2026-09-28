@@ -4454,10 +4454,8 @@ public:
 
     void reset();
 
-    void addRows(size_t row, size_t rowCount) {
-        bioassert(row < _counts.size(), "Row tag {} is outside the {} rows of the step", row, _counts.size());
-        _counts[row] += rowCount;
-    }
+    void addRows(size_t rowCount);
+    void addTaggedRows(std::span<const uint64_t> tag);
 
     const std::vector<uint64_t>& getCounts() const { return _counts; }
 
@@ -4468,11 +4466,7 @@ private:
 
 class NLCountSubqueryResetData : public NLFunctionData {
 public:
-    NLCountSubqueryResetData(NLCountSubqueryState* state, ColumnVector<uint64_t>* tag)
-        : _state(state),
-        _tag(tag)
-    {
-    }
+    NLCountSubqueryResetData(NLCountSubqueryState* state, ColumnVector<uint64_t>* tag);
 
     NLCountSubqueryState* getState() const { return _state; }
     ColumnVector<uint64_t>* getTag() const { return _tag; }
@@ -4486,12 +4480,7 @@ private:
 // or, with no tag, the rows of @param rows toward the single row the step answers for
 class NLCountSubqueryTallyData : public NLFunctionData {
 public:
-    NLCountSubqueryTallyData(NLCountSubqueryState* state, const ColumnVector<uint64_t>* tag, const Column* rows)
-        : _state(state),
-        _tag(tag),
-        _rows(rows)
-    {
-    }
+    NLCountSubqueryTallyData(NLCountSubqueryState* state, const ColumnVector<uint64_t>* tag, const Column* rows);
 
     NLCountSubqueryState* getState() const { return _state; }
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
@@ -4505,11 +4494,7 @@ private:
 
 class NLCountSubqueryResultData : public NLFunctionData {
 public:
-    NLCountSubqueryResultData(NLCountSubqueryState* state, ColumnVector<uint64_t>* result)
-        : _state(state),
-        _result(result)
-    {
-    }
+    NLCountSubqueryResultData(NLCountSubqueryState* state, ColumnVector<uint64_t>* result);
 
     NLCountSubqueryState* getState() const { return _state; }
     ColumnVector<uint64_t>* getResult() const { return _result; }

@@ -327,11 +327,10 @@ private:
     // pipeline breaker like db.sort, but its accumulator covers one step, not the relation.
     void lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch);
 
-    // Lower a db.exists_subquery into an nl.exists_buffer, the body's own loop nest ending
-    // in an nl.exists_mark, and the nl.exists_result that reads the flags back as the
-    // boolean the op stands for; a db.count_subquery through the counting siblings of those,
-    // nl.count_subquery_buffer, _tally and _result. A body that cannot carry the rows it was
-    // given runs under a loop over them, which the rest of the query then goes on inside.
+    // Lower a db.exists_subquery to an nl.exists_buffer, the body's loop nest ending in an
+    // nl.exists_mark, and an nl.exists_result; a db.count_subquery to the count_subquery
+    // buffer, tally and result. A body that cannot carry its input rows runs under a loop
+    // over them, and the rest of the query goes on inside that loop.
     template <typename SubqueryOp, typename YieldOp>
     void lowerSubqueryExpression(SubqueryOp subquery);
 

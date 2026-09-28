@@ -306,6 +306,53 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop, ValueRange imports) {
     return success();
 }
 
+template <typename YieldOp, typename SubqueryOp>
+LogicalResult verifySubqueryExpression(SubqueryOp subquery) {
+    Block& bodyBlock = subquery.getBody().front();
+
+    auto yield = dyn_cast_or_null<YieldOp>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return subquery.emitOpError("body region must end with a ") << YieldOp::getOperationName();
+    }
+
+    const OperandRange inputs = subquery.getInputColumns();
+    const size_t inputCount = inputs.size();
+
+    // The body carries the row tag through its dataflow only when it carries the scope,
+    // and only over rows it has: a body run one row at a time, or over the single empty
+    // row, is answered for by the lowering instead.
+    const bool tagsRows = subquery.getCarriesScope() && inputCount > 0;
+
+    const size_t expectedArguments = tagsRows ? inputCount + 1 : inputCount;
+    const size_t argumentCount = bodyBlock.getNumArguments();
+
+    if (argumentCount != expectedArguments) {
+        return subquery.emitOpError("body region takes one argument per input column")
+               << (tagsRows ? " plus the row tag" : "") << ", expected " << expectedArguments
+               << " but has " << argumentCount;
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (bodyBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
+            return subquery.emitOpError("body argument ") << inputIndex << " must have the type of input column "
+                                                          << inputIndex;
+        }
+    }
+
+    const bool yieldsATag = yield.getTag() != nullptr;
+    if (tagsRows != yieldsATag) {
+        return subquery.emitOpError("the body yields a row tag exactly when it takes one");
+    }
+
+    // A body with no tag is answered for by the rows its columns hold, so it has to hold
+    // one; a tagged body is answered for by the tag, and holds whatever its clauses left.
+    if (!tagsRows && yield.getColumns().empty()) {
+        return subquery.emitOpError("an untagged body must yield at least one column, to answer from its rows");
+    }
+
+    return success();
+}
+
 }
 
 // Ensures each variable has a numeric name
@@ -1749,85 +1796,11 @@ LogicalResult OptionalMatch::verify() {
 }
 
 LogicalResult ExistsSubquery::verify() {
-    Block& bodyBlock = getBody().front();
-
-    auto yield = dyn_cast_or_null<ExistsYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
-    if (!yield) {
-        return emitOpError("body region must end with a db.exists_yield");
-    }
-
-    const OperandRange inputs = getInputColumns();
-    const size_t inputCount = inputs.size();
-
-    // The body carries the row tag through its dataflow only when it carries the scope,
-    // and only over rows it has: a body run one row at a time, or over the single empty
-    // row, is marked by the lowering instead.
-    const bool tagsRows = getCarriesScope() && inputCount > 0;
-
-    const size_t expectedArguments = tagsRows ? inputCount + 1 : inputCount;
-    if (bodyBlock.getNumArguments() != expectedArguments) {
-        return emitOpError("body region takes one argument per input column")
-               << (tagsRows ? " plus the row tag" : "") << ", expected " << expectedArguments
-               << " but has " << bodyBlock.getNumArguments();
-    }
-
-    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
-        if (bodyBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
-            return emitOpError("body argument ") << inputIndex << " must have the type of input column "
-                                                 << inputIndex;
-        }
-    }
-
-    const bool yieldsATag = yield.getTag() != nullptr;
-    if (tagsRows != yieldsATag) {
-        return emitOpError("the body yields a row tag exactly when it takes one");
-    }
-
-    // A body with no tag is answered for by the rows its columns hold, so it has to hold
-    // one; a tagged body is answered for by the tag, and holds whatever its clauses left.
-    if (!tagsRows && yield.getColumns().empty()) {
-        return emitOpError("an untagged body must yield at least one column, to answer from its rows");
-    }
-
-    return success();
+    return verifySubqueryExpression<ExistsYield>(*this);
 }
 
 LogicalResult CountSubquery::verify() {
-    Block& bodyBlock = getBody().front();
-
-    auto yield = dyn_cast_or_null<CountSubqueryYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
-    if (!yield) {
-        return emitOpError("body region must end with a db.count_subquery_yield");
-    }
-
-    const OperandRange inputs = getInputColumns();
-    const size_t inputCount = inputs.size();
-    const bool tagsRows = getCarriesScope() && inputCount > 0;
-
-    const size_t expectedArguments = tagsRows ? inputCount + 1 : inputCount;
-    if (bodyBlock.getNumArguments() != expectedArguments) {
-        return emitOpError("body region takes one argument per input column")
-               << (tagsRows ? " plus the row tag" : "") << ", expected " << expectedArguments
-               << " but has " << bodyBlock.getNumArguments();
-    }
-
-    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
-        if (bodyBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
-            return emitOpError("body argument ") << inputIndex << " must have the type of input column "
-                                                 << inputIndex;
-        }
-    }
-
-    const bool yieldsATag = yield.getTag() != nullptr;
-    if (tagsRows != yieldsATag) {
-        return emitOpError("the body yields a row tag exactly when it takes one");
-    }
-
-    if (!tagsRows && yield.getColumns().empty()) {
-        return emitOpError("an untagged body must yield at least one column, to count its rows");
-    }
-
-    return success();
+    return verifySubqueryExpression<CountSubqueryYield>(*this);
 }
 
 LogicalResult CallSubquery::verify() {

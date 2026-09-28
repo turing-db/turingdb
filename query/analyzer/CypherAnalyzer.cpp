@@ -576,11 +576,19 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     std::vector<std::string_view> correlated;
 
     for (const VarDecl* decl : outer->decls()) {
-        if (decl->isUnnamed()) {
+        if (decl->isUnnamed() || _pendingItemAliases.contains(decl)) {
             continue;
         }
 
         const std::string_view name = decl->getName();
+
+        // An alias spelling a variable's name shadows the variable once the items are analyzed
+        const VarDecl* visible = outer->getDecl(name);
+        const bool shadowed = visible != decl && !_pendingItemAliases.contains(visible);
+
+        if (shadowed) {
+            continue;
+        }
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
@@ -917,6 +925,12 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         declareItemAlias(item, item->getName());
     }
 
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        if (const auto* exprPtr = std::get_if<Expr*>(&returnItem)) {
+            _pendingItemAliases.erase((*exprPtr)->getExprVarDecl());
+        }
+    }
+
     if (projection->hasOrderBy()) {
         analyze(projection->getOrderBy(), projection);
 
@@ -991,6 +1005,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
         const EvaluatedType type = item->getType();
         const VarDecl* namedDecl = _ctxt->declareProjectedVariable(_ast, type, alias);
         item->setExprVarDecl(namedDecl);
+        _pendingItemAliases.insert(namedDecl);
 
         return;
     }
@@ -1277,7 +1292,7 @@ bool CypherAnalyzer::readsGroupWiseVariables(const SinglePartQuery* body,
 
         const VarDecl* source = sourceIt->second;
 
-        if (!elements.contains(source) && !projection->hasVariableItem(source)) {
+        if (!elements.contains(source) && !projection->hasItemDecl(source)) {
             return false;
         }
     }

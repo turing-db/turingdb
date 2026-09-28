@@ -31,6 +31,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 #include "DBDialect.h"
 #include "DBOps.h"
@@ -1790,7 +1791,7 @@ void DBProgramGenerator::generateQuery(const SinglePartQuery* query, const Union
 // between them the way a barrier drops them.
 void DBProgramGenerator::generateUnion(const UnionQuery* unionQuery) {
     const UnionQuery::Branches& branches = unionQuery->branches();
-    const size_t dedupedBranches = UnionQuery::getDedupedBranchCount(unionQuery->branches());
+    const size_t dedupedBranches = UnionQuery::getDedupedBranchCount(branches);
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
@@ -4845,6 +4846,10 @@ mlir::Value DBProgramGenerator::readWalkEntities(const Expr* argExpr, mlir::Valu
 
 mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
                                                         const VariableColumnMap* variableColumns) {
+    // An aggregate reads the rows ahead of every reduction, one an earlier aggregate of the
+    // same projection emitted included
+    const llvm::SaveAndRestore<mlir::Operation*> readsTheRowsAhead(_part._aggregateOp, nullptr);
+
     const EvaluatedType argType = argExpr->getType();
     const bool isEntity = argType == EvaluatedType::NodePattern || argType == EvaluatedType::EdgePattern;
 
@@ -6341,6 +6346,8 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     const OrderBy::ItemVector& items = orderBy->getItems();
     bioassert(!items.empty(), "ORDER BY without a key");
 
+    const llvm::SaveAndRestore<bool> ordersTheProjection(_part._orderingProjection, true);
+
     const size_t projectedCount = projection->items().size();
 
     expandPathItems(projection, projected);
@@ -7010,6 +7017,36 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
 
+    // An alias spelling the name of a variable shadows that variable in the ORDER BY
+    if (_part._orderingProjection) {
+        bool appended = false;
+
+        for (const auto& [decl, column] : _part._projectedColumns) {
+            const std::string_view name = decl->getName();
+
+            const auto importsTheAlias = [name](const SinglePartQuery* branch) {
+                return branch->getDeclContext()->getDecl(name) != nullptr;
+            };
+
+            if (!std::ranges::any_of(branches, importsTheAlias)) {
+                continue;
+            }
+
+            const auto publishedIt = std::ranges::find(scopeColumns, name, &PublishedColumn::_name);
+
+            if (publishedIt != scopeColumns.end()) {
+                *publishedIt = {decl, std::string(name), column};
+            } else {
+                scopeColumns.push_back({decl, std::string(name), column});
+                appended = true;
+            }
+        }
+
+        if (appended) {
+            std::ranges::sort(scopeColumns, {}, &PublishedColumn::_name);
+        }
+    }
+
     // A constant holds one value standing for every row rather than rows of its own, so it
     // is no input of the body: it stays bound where it is and the body reads it there
     llvm::SmallVector<PublishedColumn> inputs;
@@ -7023,6 +7060,14 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
             constants.push_back(column);
         } else if (!consumedByTheAggregate) {
             inputs.push_back(column);
+        }
+    }
+
+    // Under a grouping key no variable names, the groups are held by the aggregate's
+    // results alone, which the body then answers for under no name
+    if (inputs.empty() && _part._aggregateOp) {
+        for (const mlir::Value result : _part._aggregateOp->getResults()) {
+            inputs.push_back({nullptr, std::string(), result});
         }
     }
 

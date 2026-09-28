@@ -124,6 +124,10 @@ private:
     // carries on, was made from
     std::unordered_map<const VarDecl*, const VarDecl*> _declSources;
 
+    // The aliases a projection's items declare, until its last item is analyzed: no row
+    // holds them yet, so a subquery body in a sibling item does not import them
+    std::unordered_set<const VarDecl*> _pendingItemAliases;
+
     // The shared body of a query and of a subquery's. @param returnRequired says whether a
     // body ending on a reading clause needs a RETURN: an EXISTS body does not
     void analyzeQueryBody(const SinglePartQuery* query, bool returnRequired);
