@@ -64,7 +64,7 @@ The lowering is an accumulator over one step of the input rows:
 nl.for ... {                                  // the body's own nest
   nl.exists_mark %state, %tag2, (%k) : {...}
 }
-%b = nl.exists_result(%state) : !nl.chunk<!storage.bool>
+%b = nl.exists_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.bool>
 ```
 
 `nl.exists_buffer` sits at the top of the block binding the input chunks, so the flags are

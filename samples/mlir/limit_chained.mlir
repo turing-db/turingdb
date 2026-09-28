@@ -9,13 +9,13 @@ module {
     // next db.get_out_edges, not db.output. db.limit lowers to an
     // nl.limit_truncate placed just before that inner traversal, handing it a
     // genuinely cut chunk so the downstream loop stays limit-oblivious.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %la = db.limit(%a) count 2
+    %la = db.limit(%a) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
 
-    %a1, %e0, %et0, %b = db.get_out_edges(%la, {})
+    %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
 
-    db.output(%b)
+    db.output(%b) : !db.column<!storage.node_id>
 
     return
   }

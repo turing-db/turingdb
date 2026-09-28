@@ -17,7 +17,7 @@ module {
     // Needs no -graph: nothing here is resolved against a schema.
     %xs = db.constant([1, "Hello", [1]])
 
-    db.output(%xs)
+    db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
 
     return
   }

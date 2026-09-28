@@ -17,7 +17,7 @@ class CountSubqueryExpr : public Expr {
 public:
     using Branches = UnionQuery::Branches;
 
-    const Branches& branches() const { return _branches; }
+    const Branches& getBranches() const { return _branches; }
 
     // How many leading branches dedup against one another, as UnionQuery counts them
     size_t getDedupedBranchCount() const;

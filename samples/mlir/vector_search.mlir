@@ -17,9 +17,9 @@ module {
     // paired with them - see vector_search_hop.mlir. With rows the search does not read
     // (VECTOR SEARCH ... YIELD ids MATCH (n)) it is crossed with them through
     // db.cross_product instead; there is no variant of this op that takes a column.
-    %ids, %scores = db.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00, 0.000000e+00, 0.000000e+00])
+    %ids, %scores = db.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00, 0.000000e+00, 0.000000e+00]) : !db.column<!storage.node_id>, !db.column<f64>
 
-    db.output(%ids, %scores) names ["ids", "score"]
+    db.output(%ids, %scores) names ["ids", "score"] : !db.column<!storage.node_id>, !db.column<f64>
 
     return
   }

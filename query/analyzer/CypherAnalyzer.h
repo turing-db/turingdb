@@ -2,6 +2,7 @@
 
 #include <span>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -116,6 +117,13 @@ private:
 
     constexpr static int64_t MAX_VECTOR_INDEX_DIMENSION = 8192;
 
+    // The EXISTS and COUNT bodies analyzed so far: a SET analyzes its value expression twice
+    std::unordered_set<const SinglePartQuery*> _analyzedBodies;
+
+    // The declaration each import of a subquery body, and each variable a projection
+    // carries on, was made from
+    std::unordered_map<const VarDecl*, const VarDecl*> _declSources;
+
     // The shared body of a query and of a subquery's. @param returnRequired says whether a
     // body ending on a reading clause needs a RETURN: an EXISTS body does not
     void analyzeQueryBody(const SinglePartQuery* query, bool returnRequired);
@@ -173,6 +181,15 @@ private:
     bool joinsGroupWiseVariables(const Pattern* pattern,
                                  const Projection* projection,
                                  DeclSet& elements) const;
+
+    // Whether every variable of the scope around @param body that the body reads is a
+    // grouping key or an element
+    bool readsGroupWiseVariables(const SinglePartQuery* body,
+                                 const Projection* projection,
+                                 const DeclSet& elements) const;
+
+    // Fills @param read with every declaration the query reads, and the ones each was made from
+    void collectReadDecls(DeclSet& read) const;
 
     // Every branch of a union must project the same columns, in the same order and
     // under the same names: the union emits one result table, so a branch naming

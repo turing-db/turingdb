@@ -413,6 +413,11 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
             VarDecl* published = scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
             published->setListShape(decl->getListShape());
             projection->addPublishedDecl(published);
+
+            if (published != decl) {
+                _declSources[published] = decl;
+            }
+
             continue;
         }
 
@@ -470,6 +475,7 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
+        _declSources[imported] = decl;
     }
 
     // What the scope clause names is readable everywhere in the body. A body importing
@@ -529,7 +535,7 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
 }
 
 void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
-    const CountSubqueryExpr::Branches& branches = count->branches();
+    const CountSubqueryExpr::Branches& branches = count->getBranches();
 
     for (const UnionQuery::Branch& branch : branches) {
         if (branch._query->writesToTheGraph()) {
@@ -555,6 +561,10 @@ void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
 }
 
 void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
+    if (!_analyzedBodies.insert(body).second) {
+        return;
+    }
+
     // EXISTS is correlated: the body reads every variable in flight, through declarations
     // of its own, so the variables it binds stay inside it
     DeclContext* const outer = _ctxt;
@@ -574,6 +584,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
+        _declSources[imported] = decl;
 
         correlated.push_back(name);
     }
@@ -1164,6 +1175,26 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         const PatternComprehensionExpr* comprehension = static_cast<const PatternComprehensionExpr*>(expr);
 
         return isGroupWise(comprehension, projection, elements);
+    } else if (kind == Expr::Kind::COUNT_SUBQUERY) {
+        const CountSubqueryExpr* count = static_cast<const CountSubqueryExpr*>(expr);
+
+        for (const UnionQuery::Branch& branch : count->getBranches()) {
+            if (!readsGroupWiseVariables(branch._query, projection, elements)) {
+                return false;
+            }
+        }
+
+        return true;
+    } else if (kind == Expr::Kind::EXISTS) {
+        const ExistsExpr* exists = static_cast<const ExistsExpr*>(expr);
+
+        for (const SinglePartQuery* branch : exists->branches()) {
+            if (!readsGroupWiseVariables(branch, projection, elements)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     std::vector<const Expr*> children;
@@ -1228,6 +1259,67 @@ bool CypherAnalyzer::joinsGroupWiseVariables(const Pattern* pattern,
     }
 
     return true;
+}
+
+bool CypherAnalyzer::readsGroupWiseVariables(const SinglePartQuery* body,
+                                             const Projection* projection,
+                                             const DeclSet& elements) const {
+    DeclSet read;
+    collectReadDecls(read);
+
+    for (const VarDecl* decl : body->getDeclContext()->decls()) {
+        const auto sourceIt = _declSources.find(decl);
+        const bool readsAnImport = sourceIt != _declSources.end() && read.contains(decl);
+
+        if (!readsAnImport) {
+            continue;
+        }
+
+        const VarDecl* source = sourceIt->second;
+
+        if (!elements.contains(source) && !projection->hasVariableItem(source)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void CypherAnalyzer::collectReadDecls(DeclSet& read) const {
+    std::vector<const VarDecl*> pending;
+
+    for (const Expr* expr : _ast->getExpressions()) {
+        const Expr::Kind kind = expr->getKind();
+
+        if (kind == Expr::Kind::SYMBOL) {
+            const SymbolExpr* symbol = static_cast<const SymbolExpr*>(expr);
+            pending.push_back(symbol->getDecl());
+        } else if (kind == Expr::Kind::PROPERTY) {
+            const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
+            pending.push_back(property->getEntityVarDecl());
+        } else if (kind == Expr::Kind::ENTITY_TYPES) {
+            const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+            pending.push_back(entityType->getEntityVarDecl());
+        }
+    }
+
+    for (const EntityPattern* entity : _ast->getEntityPatterns()) {
+        pending.push_back(entity->getDecl());
+    }
+
+    while (!pending.empty()) {
+        const VarDecl* decl = pending.back();
+        pending.pop_back();
+
+        if (!decl || !read.insert(decl).second) {
+            continue;
+        }
+
+        const auto sourceIt = _declSources.find(decl);
+        if (sourceIt != _declSources.end()) {
+            pending.push_back(sourceIt->second);
+        }
+    }
 }
 
 bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs,

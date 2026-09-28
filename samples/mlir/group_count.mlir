@@ -18,13 +18,13 @@ module {
     // The grouping key "team" is a placeholder - swap it for a property your graph
     // has. Its value type is resolved during the db -> nl lowering (hence -graph),
     // so the key chunk element type is baked from it. count is always a ui64.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %team = db.get_node_properties(%a, "team")
+    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count]
+    %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
 
-    db.output(%gteam, %n)
+    db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
 
     return
   }

@@ -7496,7 +7496,7 @@ void NLExecutor::runCountSubqueryResult(NLExecutionContext* context, NLFunctionD
     NLCountSubqueryResultData* result = static_cast<NLCountSubqueryResultData*>(data);
     const NLCountSubqueryState* state = result->getState();
 
-    const std::vector<uint64_t>& counts = state->counts();
+    const std::vector<uint64_t>& counts = state->getCounts();
 
     std::vector<uint64_t>& answer = result->getResult()->getRaw();
     answer.resize(counts.size());

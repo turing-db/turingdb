@@ -82,6 +82,31 @@ concept TestsEquality =
     (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
      || std::is_same_v<F, TuringEqual> || std::is_same_v<F, TuringNotEqual>);
 
+// The built-in comparisons convert the signed operand of a mixed pair to unsigned, so a
+// count compared with -1 would be compared with 2^64 - 1
+template <typename T, typename U>
+concept MixedSignIntegers =
+    (std::same_as<T, types::Int64::Primitive> && std::same_as<U, types::UInt64::Primitive>)
+    || (std::same_as<T, types::UInt64::Primitive> && std::same_as<U, types::Int64::Primitive>);
+
+template <typename Order>
+struct TuringOrder {
+    template <typename T, typename U>
+    auto operator()(const T& a, const U& b) const -> decltype(Order {}(a, b)) {
+        if constexpr (!MixedSignIntegers<T, U>) {
+            return Order {}(a, b);
+        } else if constexpr (std::is_same_v<Order, std::greater<>>) {
+            return std::cmp_greater(a, b);
+        } else if constexpr (std::is_same_v<Order, std::less<>>) {
+            return std::cmp_less(a, b);
+        } else if constexpr (std::is_same_v<Order, std::greater_equal<>>) {
+            return std::cmp_greater_equal(a, b);
+        } else {
+            return std::cmp_less_equal(a, b);
+        }
+    }
+};
+
 // The following Boolean operators have unique semantics for 3-way logic (i.e.
 // short-circuiting) so are defined explicitly rather than generically
 template <BooleanOpt T, BooleanOpt U>
@@ -596,7 +621,11 @@ struct TuringEqual {
     template <typename T, typename U>
         requires (!ListOperand<T> || !ListOperand<U>)
     bool operator()(const T& a, const U& b) {
-        return std::equal_to<> {}(a, b);
+        if constexpr (MixedSignIntegers<T, U>) {
+            return std::cmp_equal(a, b);
+        } else {
+            return std::equal_to<> {}(a, b);
+        }
     }
 };
 
@@ -794,11 +823,11 @@ struct TuringIn {
 using Eq = BinaryPredicate<TuringEqual>;
 using Ne = BinaryPredicate<TuringNotEqual>;
 
-using Gt = BinaryPredicate<std::greater<>>;
-using Lt = BinaryPredicate<std::less<>>;
+using Gt = BinaryPredicate<TuringOrder<std::greater<>>>;
+using Lt = BinaryPredicate<TuringOrder<std::less<>>>;
 
-using Gte = BinaryPredicate<std::greater_equal<>>;
-using Lte = BinaryPredicate<std::less_equal<>>;
+using Gte = BinaryPredicate<TuringOrder<std::greater_equal<>>>;
+using Lte = BinaryPredicate<TuringOrder<std::less_equal<>>>;
 
 using And = BinaryPredicate<std::logical_and<>>;
 using Or = BinaryPredicate<std::logical_or<>>;

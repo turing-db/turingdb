@@ -10,9 +10,9 @@ module {
   func.func @main() {
     %0 = nl.get_property_type("name")
     %1 = nl.scan_nodes()
-    nl.for %arg0 in %1 {
-      %2 = nl.get_node_properties(%arg0, %0)
-      nl.output(%arg0, %2)
+    nl.for %arg0 in %1 : !nl.iter<!nl.chunk<!storage.node_id>> {
+      %2 = nl.get_node_properties(%arg0, %0) : !nl.chunk<!storage.nullable<!storage.string>>
+      nl.output(%arg0, %2) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>
     }
     return
   }

@@ -9,11 +9,11 @@ module {
     // rows, and - after the loop - an nl.count_result that materializes the single
     // tally row as an unsigned i64 (!nl.chunk<ui64>), which a function-scope
     // nl.output emits. It collapses to one row, so there is no emit loop.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %count = db.count(%a)
+    %count = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>
 
-    db.output(%count)
+    db.output(%count) : !db.column<ui64>
 
     return
   }

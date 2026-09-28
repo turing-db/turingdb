@@ -11,16 +11,16 @@
 module {
   func.func @main() {
     %0 = nl.scan_nodes()
-    nl.for %arg0 in %0 {
+    nl.for %arg0 in %0 : !nl.iter<!nl.chunk<!storage.node_id>> {
       %1 = nl.scan_nodes()
-      nl.for %arg1 in %1 {
-        %2 = nl.cross_product{%arg0} {%arg1}
-        nl.for %arg2, %arg3 in %2 {
+      nl.for %arg1 in %1 : !nl.iter<!nl.chunk<!storage.node_id>> {
+        %2 = nl.cross_product{%arg0} {%arg1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+        nl.for %arg2, %arg3 in %2 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
           %3 = nl.scan_nodes()
-          nl.for %arg4 in %3 {
-            %4 = nl.cross_product{%arg2, %arg3} {%arg4}
-            nl.for %arg5, %arg6, %arg7 in %4 {
-              nl.output(%arg5, %arg6, %arg7)
+          nl.for %arg4 in %3 : !nl.iter<!nl.chunk<!storage.node_id>> {
+            %4 = nl.cross_product{%arg2, %arg3} {%arg4} : {!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+            nl.for %arg5, %arg6, %arg7 in %4 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+              nl.output(%arg5, %arg6, %arg7) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
             }
           }
         }

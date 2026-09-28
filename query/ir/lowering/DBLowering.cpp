@@ -2639,7 +2639,7 @@ void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
         _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
     }
 
-    if (perRow) {
+    if (runsPerRow(exists)) {
         hoistLimitHandles(exists.getBody(), bodyRoot, exists);
     }
 
@@ -2687,9 +2687,10 @@ void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
 
     mlir::MLIRContext* const context = _builder.getContext();
     const nl::ChunkType boolChunk = nl::ChunkType::get(context, mlir::storage::BoolType::get(context));
+    const mlir::Value cardinality = stepChunks.empty() ? mlir::Value() : stepChunks.front();
 
     setInsertionInto(bodyRoot);
-    nl::ExistsResult result = _builder.create<nl::ExistsResult>(loc, boolChunk, state);
+    nl::ExistsResult result = _builder.create<nl::ExistsResult>(loc, boolChunk, state, cardinality);
     _valueMap[exists.getResult()] = result.getResult();
 
     if (!perRow) {
@@ -2713,9 +2714,10 @@ void DBLowering::lowerExistsSubquery(mlir::db::ExistsSubquery exists) {
 
 void DBLowering::lowerCountSubquery(mlir::db::CountSubquery count) {
     const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::OperandRange inputColumns = count.getInputColumns();
 
     llvm::SmallVector<mlir::Value, 4> inputChunks;
-    for (const mlir::Value column : count.getInputColumns()) {
+    for (const mlir::Value column : inputColumns) {
         inputChunks.push_back(mapValue(column));
     }
 
@@ -2758,7 +2760,7 @@ void DBLowering::lowerCountSubquery(mlir::db::CountSubquery count) {
         _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
     }
 
-    if (perRow) {
+    if (runsPerRow(count)) {
         hoistLimitHandles(count.getBody(), bodyRoot, count);
     }
 
@@ -2783,8 +2785,8 @@ void DBLowering::lowerCountSubquery(mlir::db::CountSubquery count) {
             heldChunks.push_back(mapValue(column));
         }
 
-        if (yield.getTag()) {
-            heldTag = mapValue(yield.getTag());
+        if (const mlir::Value tag = yield.getTag()) {
+            heldTag = mapValue(tag);
         }
     }
 
@@ -2808,8 +2810,10 @@ void DBLowering::lowerCountSubquery(mlir::db::CountSubquery count) {
     _innermostLoopBody = previousInnermostLoopBody;
     _innermostCardinality = previousInnermostCardinality;
 
+    const mlir::Value cardinality = stepChunks.empty() ? mlir::Value() : stepChunks.front();
+
     setInsertionInto(bodyRoot);
-    nl::CountSubqueryResult result = _builder.create<nl::CountSubqueryResult>(loc, state);
+    nl::CountSubqueryResult result = _builder.create<nl::CountSubqueryResult>(loc, state, cardinality);
     _valueMap[count.getResult()] = result.getResult();
 
     if (!perRow) {
@@ -2817,7 +2821,7 @@ void DBLowering::lowerCountSubquery(mlir::db::CountSubquery count) {
     }
 
     for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
-        _valueMap[count.getInputColumns()[inputIndex]] = stepChunks[inputIndex];
+        _valueMap[inputColumns[inputIndex]] = stepChunks[inputIndex];
     }
 
     for (size_t readIndex = 0; readIndex < readPast.size(); readIndex++) {

@@ -226,6 +226,7 @@ public:
     const QueryCommands& queries() const { return _queries; }
 
     const std::vector<Expr*>& getExpressions() const { return _expressions; }
+    const std::vector<EntityPattern*>& getEntityPatterns() const { return _entityPatterns; }
 
     FunctionDecls& functionDecls() { return *_functionDecls; }
     const FunctionDecls& functionDecls() const { return *_functionDecls; }

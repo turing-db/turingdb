@@ -4459,7 +4459,7 @@ public:
         _counts[row] += rowCount;
     }
 
-    const std::vector<uint64_t>& counts() const { return _counts; }
+    const std::vector<uint64_t>& getCounts() const { return _counts; }
 
 private:
     std::vector<const Column*> _inputColumns;

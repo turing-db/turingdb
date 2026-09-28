@@ -16,13 +16,13 @@ module {
     // orderable one. The property value type is resolved during the db -> nl
     // lowering (hence -graph), so the result chunk element type is baked from it -
     // swap "score" for a property your graph actually has.
-    %a = db.scan_nodes()
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %score = db.get_node_properties(%a, "score")
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %total = db.sum(%score)
+    %total = db.sum(%score) : (!db.column<none>) -> !db.column<none>
 
-    db.output(%total)
+    db.output(%total) : !db.column<none>
 
     return
   }
