@@ -3141,7 +3141,7 @@ def OptionalBuffer : NLOp<"optional_buffer", [RowAlignedThroughOperands]> {
   // The tag's type is buildable and so omitted; only the input chunk types are
   // spelled, in braces as nl.cross_product spells a factor's.
   let assemblyFormat = [{
-    `(` $input_columns `)` attr-dict `:` `{` qualified(type($input_columns)) `}`
+    `(` $input_columns `)` attr-dict (`:` `{` qualified(type($input_columns))^ `}`)?
   }];
 }
 
@@ -3235,7 +3235,7 @@ def ExistsBuffer : NLOp<"exists_buffer", [RowAlignedThroughOperands]> {
   // The tag's type is buildable and so omitted; only the input chunk types are
   // spelled, in braces as nl.optional_buffer spells its own.
   let assemblyFormat = [{
-    `(` $input_columns `)` attr-dict `:` `{` qualified(type($input_columns)) `}`
+    `(` $input_columns `)` attr-dict (`:` `{` qualified(type($input_columns))^ `}`)?
   }];
 }
 
@@ -3314,7 +3314,7 @@ def CountSubqueryBuffer : NLOp<"count_subquery_buffer", [RowAlignedThroughOperan
   let results = (outs NLCountSubqueryState:$state, NLUInt64Chunk:$tag);
 
   let assemblyFormat = [{
-    `(` $input_columns `)` attr-dict `:` `{` qualified(type($input_columns)) `}`
+    `(` $input_columns `)` attr-dict (`:` `{` qualified(type($input_columns))^ `}`)?
   }];
 }
 
@@ -3386,7 +3386,7 @@ def PatternComprehensionBuffer : NLOp<"pattern_comprehension_buffer", [RowAligne
     columns it walks so nl.pattern_comprehension_collect knows which row's list a match
     goes into.
 
-      %state, %tag = nl.pattern_comprehension_buffer %a : !nl.chunk<!storage.node_id>
+      %state, %tag = nl.pattern_comprehension_buffer(%a) : !nl.chunk<!storage.node_id>
 
     The cardinality operand is absent when nothing is in flight where the comprehension is
     read - RETURN [(a:Person)-->(b) | b.name] - which is one row of its own. The pattern
@@ -3403,7 +3403,7 @@ def PatternComprehensionBuffer : NLOp<"pattern_comprehension_buffer", [RowAligne
 
   // The tag's type is buildable and so omitted; only the cardinality chunk's is spelled.
   let assemblyFormat = [{
-    ($cardinality^ `:` qualified(type($cardinality)))? attr-dict
+    `(` ($cardinality^)? `)` attr-dict (`:` qualified(type($cardinality))^)?
   }];
 }
 

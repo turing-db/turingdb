@@ -152,6 +152,6 @@ TEST_F(ExistsSubqueryCodegenTest, aBodyOverNoRowInFlightTakesNoTag) {
     EXPECT_TRUE(contains(codegen, "-> !db.column<!storage.bool>")) << codegen;
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
-    EXPECT_TRUE(contains(nlProgram, "nl.exists_buffer() : {}")) << nlProgram;
+    EXPECT_TRUE(contains(nlProgram, "nl.exists_buffer()")) << nlProgram;
     EXPECT_FALSE(contains(nlProgram, "nl.each_row")) << nlProgram;
 }
