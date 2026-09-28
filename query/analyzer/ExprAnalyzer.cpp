@@ -1919,12 +1919,21 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     // own: the WHERE and the projection read it, and nothing outside them does
     std::vector<std::string_view> ownVariables;
     std::vector<const EntityPattern*> ownEntities;
+    std::vector<std::string_view> enclosingVariables;
 
     for (const PatternElement* element : pattern->elements()) {
         for (const EntityPattern* entity : element->getEntities()) {
             const Symbol* symbol = entity->getSymbol();
 
             if (!symbol || _ctxt->hasDecl(symbol->getName())) {
+                continue;
+            }
+
+            // A name the scope reads through to the one around it is that variable: the
+            // pattern binds to it rather than to a new one
+            if (VarDecl* enclosing = resolveVariable(symbol->getName())) {
+                _ctxt->declareAlias(symbol->getName(), enclosing);
+                enclosingVariables.push_back(symbol->getName());
                 continue;
             }
 
@@ -1954,6 +1963,10 @@ void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* exp
     analyzeExpr(projection);
 
     for (const std::string_view name : ownVariables) {
+        _ctxt->dropVariable(name);
+    }
+
+    for (const std::string_view name : enclosingVariables) {
         _ctxt->dropVariable(name);
     }
 

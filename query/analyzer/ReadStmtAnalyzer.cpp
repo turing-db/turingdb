@@ -594,6 +594,8 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
     const WhereClause* endWhere = end ? end->getWhere() : nullptr;
     const std::initializer_list<const WhereClause*> wheres {edgePattern->getWhere(), edgePattern->getHopWhere(), sourceWhere, endWhere};
 
+    std::vector<const VarDecl*>* const outerSink = _exprAnalyzer->getImportSink();
+
     std::vector<const VarDecl*> imports;
     _exprAnalyzer->setImportSink(&imports);
 
@@ -616,7 +618,7 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
         edgePattern->addHopPredicate(predicate);
     }
 
-    _exprAnalyzer->setImportSink(nullptr);
+    _exprAnalyzer->setImportSink(outerSink);
 
     for (const VarDecl* decl : imports) {
         edgePattern->addHopImport(decl);

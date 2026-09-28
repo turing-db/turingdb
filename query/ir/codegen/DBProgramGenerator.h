@@ -743,8 +743,18 @@ private:
     void generateWith(const WithStmt* with);
 
     // Emits a projection that ends no query - a WITH's, or the RETURN of a subquery body -
-    // and publishes its columns as the scope of what follows
-    void publishProjection(const Projection* projection);
+    // and publishes its columns as the scope of what follows. The variables its WHERE
+    // reads that the projection drops, @param filterImports, are carried beside them
+    void publishProjection(const Projection* projection,
+                           std::span<const VarDecl* const> filterImports = {});
+
+    void collectFilterColumns(const Projection* projection,
+                              std::span<const VarDecl* const> filterImports,
+                              const VariableColumnMap& variableColumns,
+                              llvm::SmallVectorImpl<PublishedColumn>& filterColumns);
+
+    // Rebinds the scope to what the WITH published, once its WHERE has read the rest
+    void dropFilterColumns(std::span<const VarDecl* const> filterImports);
 
     // Adds the columns a CALL subquery body carries under hidden names to what a barrier
     // inside it publishes: a name no clause of the body can spell is one it cannot drop
@@ -756,7 +766,8 @@ private:
 
     void publishBoundColumns(const Projection* projection,
                              llvm::ArrayRef<llvm::StringRef> names,
-                             llvm::ArrayRef<mlir::Value> columns);
+                             llvm::ArrayRef<mlir::Value> columns,
+                             llvm::ArrayRef<PublishedColumn> filterColumns);
 
     // Publishes every column in scope under the name it already carries, so the part that
     // follows a cut reads them the way it reads what a WITH published
@@ -795,13 +806,15 @@ private:
 
     void translateProjectionTail(const Projection* projection,
                                  const VariableColumnMap& variableColumns,
-                                 llvm::SmallVectorImpl<mlir::Value>& projected);
+                                 llvm::SmallVectorImpl<mlir::Value>& projected,
+                                 llvm::MutableArrayRef<PublishedColumn> filterColumns);
 
     template <typename CutOp>
     void translateCut(const Projection* projection,
                       const Expr* countExpr,
                       std::string_view clauseName,
-                      llvm::SmallVectorImpl<mlir::Value>& projected);
+                      llvm::SmallVectorImpl<mlir::Value>& projected,
+                      llvm::MutableArrayRef<PublishedColumn> filterColumns);
 
     void translateDistinct(const Projection* projection,
                            llvm::SmallVectorImpl<mlir::Value>& projected);
@@ -839,7 +852,8 @@ private:
 
     void translateOrderBy(const Projection* projection,
                           const VariableColumnMap& variableColumns,
-                          llvm::SmallVectorImpl<mlir::Value>& projected);
+                          llvm::SmallVectorImpl<mlir::Value>& projected,
+                          llvm::MutableArrayRef<PublishedColumn> filterColumns);
 
     // The column holding the values of an expression: the column already published for
     // the traversal variable it names, when the expression is nothing but that variable,
