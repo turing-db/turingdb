@@ -3171,7 +3171,7 @@ def OptionalCollect : NLOp<"optional_collect", [AttrSizedOperandSegments]> {
                        Variadic<NLChunk>:$columns);
 
   let assemblyFormat = [{
-    $state (`,` $tag^)? `,` `(` $columns `)` attr-dict `:` `{` qualified(type($columns)) `}`
+    $state `,` ($tag^ `,`)? `(` $columns `)` attr-dict `:` `{` qualified(type($columns)) `}`
   }];
 }
 
@@ -3420,7 +3420,7 @@ def PatternComprehensionCollect : NLOp<"pattern_comprehension_collect", []> {
     value per matched row, each under the row the tag names, so once the pattern is walked
     every row's values are in hand.
 
-      nl.pattern_comprehension_collect %state, %tag, %name : !nl.chunk<!storage.nullable<!storage.string>>
+      nl.pattern_comprehension_collect %state, tag %tag, %name : !nl.chunk<!storage.nullable<!storage.string>>
 
     The tag is absent when the accumulator has no input column: every match then belongs
     to the single empty row the step is.
@@ -3431,7 +3431,7 @@ def PatternComprehensionCollect : NLOp<"pattern_comprehension_collect", []> {
                        NLChunk:$value);
 
   let assemblyFormat = [{
-    $state (`,` $tag^)? `,` $value attr-dict `:` qualified(type($value))
+    $state `,` (`tag` $tag^ `,`)? $value attr-dict `:` qualified(type($value))
   }];
 }
 
