@@ -150,11 +150,11 @@ jobs:
 
     # The self-hosted Linux runner containers use a local on-disk cache instead
     # of the GitHub-hosted cache (no cache egress), pre-provisioned at
-    # /opt/actions-local-cache. The macOS runners are GitHub-hosted VMs with no
-    # disk that outlives the job, so they use the GitHub-hosted cache.
-    - name: Cache dependencies (Linux)
-      id: cache-dependencies-linux
-      if: runner.os == 'Linux'
+    # /opt/actions-local-cache. The macOS and -arm runners are GitHub-hosted VMs
+    # with no disk that outlives the job, so they use the GitHub-hosted cache.
+    - name: Cache dependencies (self-hosted Linux)
+      id: cache-dependencies-self-hosted
+      if: runner.os == 'Linux' && contains(matrix.os, 'turing')
       uses: corca-ai/local-cache@v2
       with:
         base: /opt/actions-local-cache
@@ -166,9 +166,9 @@ jobs:
         # (with fail-fast disabled, jobs now run to completion so caches stay clean).
         key: ${{ matrix.os }}-dependencies-v4-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
 
-    - name: Cache dependencies (macOS)
-      id: cache-dependencies-macos
-      if: runner.os == 'macOS'
+    - name: Cache dependencies (GitHub-hosted)
+      id: cache-dependencies-github-hosted
+      if: ${{ !contains(matrix.os, 'turing') }}
       uses: actions/cache@v4
       with:
         path: external/dependencies
@@ -180,7 +180,7 @@ jobs:
     - name: Build dependencies
       run: ./dependencies.sh
       env:
-        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-linux.outputs.cache-hit || steps.cache-dependencies-macos.outputs.cache-hit }}
+        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-self-hosted.outputs.cache-hit || steps.cache-dependencies-github-hosted.outputs.cache-hit }}
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
