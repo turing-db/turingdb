@@ -313,6 +313,9 @@ void stageListElementAsItsType(const ListElementView element,
         case ValueType::DateTime:
             value = std::optional {element.getAs<types::DateTime::Primitive>()};
         break;
+        case ValueType::Duration:
+            value = std::optional {element.getAs<types::Duration::Primitive>()};
+        break;
         case ValueType::String:
             value = std::optional<types::String::OwningPrimitive> {std::in_place, element.getAs<types::String::Primitive>()};
         break;

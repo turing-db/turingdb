@@ -77,6 +77,7 @@ public:
         MakeMemoryPool<ColumnConst<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::Embedding::Primitive>>::type,
         MakeMemoryPool<ColumnConst<types::DateTime::Primitive>>::type,
+        MakeMemoryPool<ColumnConst<types::Duration::Primitive>>::type,
 
         MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Int64::Primitive>>>::type,
@@ -87,6 +88,7 @@ public:
         MakeMemoryPool<ColumnConst<std::optional<types::Bool::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::Embedding::Primitive>>>::type,
         MakeMemoryPool<ColumnConst<std::optional<types::DateTime::Primitive>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<types::Duration::Primitive>>>::type,
 
         MakeMemoryPool<ColumnConst<PropertyNull>>::type,
 
@@ -97,6 +99,7 @@ public:
         MakeMemoryPool<ColumnVector<types::Bool::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::Embedding::Primitive>>::type,
         MakeMemoryPool<ColumnVector<types::DateTime::Primitive>>::type,
+        MakeMemoryPool<ColumnVector<types::Duration::Primitive>>::type,
 
         MakeMemoryPool<ColumnVector<const CommitBuilder*>>::type,
         MakeMemoryPool<ColumnVector<const Change*>>::type,
@@ -108,6 +111,7 @@ public:
         MakeMemoryPool<ColumnOptVector<std::string>>::type,
         MakeMemoryPool<ColumnOptVector<types::Embedding::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<types::DateTime::Primitive>>::type,
+        MakeMemoryPool<ColumnOptVector<types::Duration::Primitive>>::type,
         MakeMemoryPool<ColumnOptVector<NodeID>>::type,
         MakeMemoryPool<ColumnOptVector<EdgeID>>::type,
         MakeMemoryPool<ColumnOptVector<EdgeTypeID>>::type,

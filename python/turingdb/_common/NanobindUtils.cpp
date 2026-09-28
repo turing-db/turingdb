@@ -142,11 +142,13 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
     }
 }
 
-int64_t dateTimeMicroseconds(db::DateTime value) {
+template <typename T>
+int64_t temporalMicroseconds(T value) {
     return value.getMicroseconds();
 }
 
-int64_t dateTimeMicroseconds(const std::optional<db::DateTime>& value) {
+template <typename T>
+int64_t temporalMicroseconds(const std::optional<T>& value) {
     if (!value.has_value()) {
         return std::numeric_limits<int64_t>::min();
     }
@@ -155,9 +157,9 @@ int64_t dateTimeMicroseconds(const std::optional<db::DateTime>& value) {
 }
 
 template <typename T>
-nb::object dateTimeColumnAsNdarray(const std::vector<T>& src) {
+nb::object temporalColumnAsNdarray(const std::vector<T>& src) {
     return transformVectorAsNdarray<int64_t>(src, [](const T& value) {
-        return dateTimeMicroseconds(value);
+        return temporalMicroseconds(value);
     });
 }
 
@@ -174,6 +176,26 @@ namespace {
 // expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
 // them as members of one struct lets them call each other without a forward declaration.
 struct ValueToPyObject {
+    mutable nb::object _timedelta;
+    mutable nb::object _epoch;
+
+    nb::object duration(db::Duration value) const {
+        if (!_timedelta.is_valid()) {
+            _timedelta = nb::module_::import_("datetime").attr("timedelta");
+        }
+
+        return _timedelta(nb::arg("microseconds") = value.getMicroseconds());
+    }
+
+    nb::object dateTime(db::DateTime value) const {
+        if (!_epoch.is_valid()) {
+            const nb::module_ datetime = nb::module_::import_("datetime");
+            _epoch = datetime.attr("datetime")(1970, 1, 1, nb::arg("tzinfo") = datetime.attr("timezone").attr("utc"));
+        }
+
+        return _epoch + duration(db::Duration {value.getMicroseconds()});
+    }
+
     nb::object view(const db::ListView& listView) const {
         nb::list out;
         for (const db::ListElementView element : listView.elements()) {
@@ -216,6 +238,10 @@ struct ValueToPyObject {
             return view(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
             return nb::none();
+        } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
+            return duration(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
+            return dateTime(element.getAs<T>());
         } else {
             return nb::cast(element.getAs<T>());
         }
@@ -239,6 +265,10 @@ struct ValueToPyObject {
             return view(entry.getValueAs<T>());
         } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
             return nb::none();
+        } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
+            return duration(entry.getValueAs<T>());
+        } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
+            return dateTime(entry.getValueAs<T>());
         } else {
             return nb::cast(entry.getValueAs<T>());
         }
@@ -351,8 +381,14 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             }
             case db::ColumnVector<db::types::DateTime::Primitive>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnVector<db::types::DateTime::Primitive>*>(col)->getRaw();
-                value = dateTimeColumnAsNdarray(src);
+                value = temporalColumnAsNdarray(src);
                 dtypeName = "DateTime";
+                break;
+            }
+            case db::ColumnVector<db::types::Duration::Primitive>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::types::Duration::Primitive>*>(col)->getRaw();
+                value = temporalColumnAsNdarray(src);
+                dtypeName = "Duration";
                 break;
             }
             case db::ColumnVector<db::types::Embedding::Primitive>::staticKind(): {
@@ -523,8 +559,15 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
 
             case db::ColumnOptVector<db::types::DateTime::Primitive>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnOptVector<db::types::DateTime::Primitive>*>(col)->getRaw();
-                value = dateTimeColumnAsNdarray(src);
+                value = temporalColumnAsNdarray(src);
                 dtypeName = "DateTime";
+                break;
+            }
+
+            case db::ColumnOptVector<db::types::Duration::Primitive>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnOptVector<db::types::Duration::Primitive>*>(col)->getRaw();
+                value = temporalColumnAsNdarray(src);
+                dtypeName = "Duration";
                 break;
             }
 
@@ -585,16 +628,28 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             }
             case db::ColumnConst<db::types::DateTime::Primitive>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::types::DateTime::Primitive>*>(col)->getRaw();
-                value = repeatValueAsNdarray(dateTimeMicroseconds(v), rowCount);
+                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
                 dtypeName = "DateTime";
+                break;
+            }
+            case db::ColumnConst<db::types::Duration::Primitive>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::types::Duration::Primitive>*>(col)->getRaw();
+                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
+                dtypeName = "Duration";
                 break;
             }
             // datetime() reads its own nulls, so a constant one is nullable even where
             // every row of it holds an instant
             case db::ColumnConst<std::optional<db::types::DateTime::Primitive>>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::DateTime::Primitive>>*>(col)->getRaw();
-                value = repeatValueAsNdarray(dateTimeMicroseconds(v), rowCount);
+                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
                 dtypeName = "DateTime";
+                break;
+            }
+            case db::ColumnConst<std::optional<db::types::Duration::Primitive>>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Duration::Primitive>>*>(col)->getRaw();
+                value = repeatValueAsNdarray(temporalMicroseconds(v), rowCount);
+                dtypeName = "Duration";
                 break;
             }
             case db::ColumnConst<db::types::Embedding::Primitive>::staticKind(): {

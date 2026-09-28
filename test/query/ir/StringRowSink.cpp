@@ -17,6 +17,7 @@
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -112,6 +113,27 @@ bool textOfDateTime(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+bool textOfDuration(const Column* chunk, size_t rowIndex, std::string& text) {
+    if (const auto* column = dynamic_cast<const ColumnVector<Duration>*>(chunk)) {
+        Duration::format(text, column->getRaw()[rowIndex]);
+        return true;
+    }
+
+    const auto* optional = dynamic_cast<const ColumnOptVector<Duration>*>(chunk);
+    if (!optional) {
+        return false;
+    }
+
+    const std::optional<Duration>& value = optional->getRaw()[rowIndex];
+    if (!value) {
+        text = "null";
+        return true;
+    }
+
+    Duration::format(text, *value);
+    return true;
+}
+
 bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<ValueType>*>(chunk);
     if (!column) {
@@ -159,6 +181,14 @@ std::string elementText(const ListElementView& element) {
         case ListBufferTypeTag::DateTime: {
             std::string formatted;
             DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
+
+            return formatted;
+        }
+        break;
+
+        case ListBufferTypeTag::Duration: {
+            std::string formatted;
+            Duration::format(formatted, element.getAs<types::Duration::Primitive>());
 
             return formatted;
         }
@@ -427,6 +457,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfValueType(chunk, rowIndex, text)) {
         return text;
     } else if (textOfDateTime(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfDuration(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPlain<uint64_t>(chunk, rowIndex, text)) {
         return text;

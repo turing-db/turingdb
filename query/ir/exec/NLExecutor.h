@@ -461,6 +461,7 @@ public:
     // from the argument column as a conversion does. It is not selectConversion itself
     // because no numeric form of the conversion is named by the string one.
     static NLUnaryFunctionKernel selectDateTimeConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectDurationConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // size() counts the elements of a list or the characters of a string, so it picks
     // its functor from the argument column as a conversion does.

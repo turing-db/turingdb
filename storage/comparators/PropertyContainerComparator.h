@@ -175,6 +175,15 @@ public:
                 break;
             }
 
+            case ValueType::Duration: {
+                if (!TypedPropertyContainerComparator<types::Duration>::same(
+                        a->cast<types::Duration>(),
+                        b->cast<types::Duration>())) {
+                    return false;
+                }
+                break;
+            }
+
             case ValueType::Map: {
                 if (!TypedPropertyContainerComparator<types::Map>::same(a->cast<types::Map>(), b->cast<types::Map>())) {
                     return false;

@@ -416,6 +416,8 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::List;
         case EvaluatedType::DateTime:
             return ValueType::DateTime;
+        case EvaluatedType::Duration:
+            return ValueType::Duration;
         case EvaluatedType::Map:
             return ValueType::Map;
         case EvaluatedType::Null:

@@ -55,6 +55,9 @@ struct MapTagDispatcher {
             case MapBufferTypeTag::DateTime:
                 return executor.template operator()<types::DateTime::Primitive>(view);
             break;
+            case MapBufferTypeTag::Duration:
+                return executor.template operator()<types::Duration::Primitive>(view);
+            break;
             case MapBufferTypeTag::INVALID:
             break;
         }
@@ -124,6 +127,11 @@ struct TypeToMapBufferTag<EdgeID> {
 template <>
 struct TypeToMapBufferTag<types::DateTime::Primitive> {
     static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::DateTime;
+};
+
+template <>
+struct TypeToMapBufferTag<types::Duration::Primitive> {
+    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Duration;
 };
 
 }

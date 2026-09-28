@@ -31,6 +31,8 @@ struct PropertyTypeDispatcher {
                 return executor.template operator()<types::List>();
             case ValueType::DateTime:
                 return executor.template operator()<types::DateTime>();
+            case ValueType::Duration:
+                return executor.template operator()<types::Duration>();
             case ValueType::Map:
                 return executor.template operator()<types::Map>();
             case ValueType::_SIZE:

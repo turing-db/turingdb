@@ -124,6 +124,8 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
             return fn.template operator()<db::PropertyNull>(encoding);
         case ColumnInternalKind::DATE_TIME:
             return fn.template operator()<db::types::DateTime::Primitive>(encoding);
+        case ColumnInternalKind::DURATION:
+            return fn.template operator()<db::types::Duration::Primitive>(encoding);
     }
 
     throw TuringException("Unsupported incoming column type");

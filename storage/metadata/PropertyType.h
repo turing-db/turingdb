@@ -9,6 +9,7 @@
 #include "SupportedType.h"
 
 #include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 
 #include "list/EncodedList.h"
 #include "list/ListHash.h"
@@ -32,6 +33,7 @@ enum class ValueType : uint8_t {
     List,
     DateTime,
     Map,
+    Duration,
 
     _SIZE,
 };
@@ -46,7 +48,8 @@ using ValueTypeName = EnumToString<ValueType>::Create<
     EnumStringPair<ValueType::Embedding, "Embedding">,
     EnumStringPair<ValueType::List, "List">,
     EnumStringPair<ValueType::DateTime, "DateTime">,
-    EnumStringPair<ValueType::Map, "Map">>;
+    EnumStringPair<ValueType::Map, "Map">,
+    EnumStringPair<ValueType::Duration, "Duration">>;
 
 struct CustomBool {
     CustomBool() = default;
@@ -149,6 +152,13 @@ struct DateTime : public PropertyType {
     static constexpr auto _valueType = ValueType::DateTime;
 };
 
+struct Duration : public PropertyType {
+    using Primitive = db::Duration;
+    using MandatorySpan = std::span<const Primitive>;
+    using OptionalSpan = std::span<const std::optional<Primitive>>;
+    static constexpr auto _valueType = ValueType::Duration;
+};
+
 struct Map : public PropertyType {
     using Primitive = MapView;
     using OwningPrimitive = EncodedMap;
@@ -213,6 +223,9 @@ struct ValueTypeDispatcher {
             break;
             case ValueType::DateTime:
                 executor.template operator()<types::DateTime>();
+            break;
+            case ValueType::Duration:
+                executor.template operator()<types::Duration>();
             break;
             case ValueType::Map:
                 executor.template operator()<types::Map>();

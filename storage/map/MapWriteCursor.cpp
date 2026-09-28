@@ -69,4 +69,5 @@ template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const Propert
 template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const NodeID&);
 template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const EdgeID&);
 template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::DateTime::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Duration::Primitive&);
 }

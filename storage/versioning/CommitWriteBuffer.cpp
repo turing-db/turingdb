@@ -56,6 +56,10 @@ struct PrimitiveToTag<types::DateTime::Primitive> {
     using Type = types::DateTime;
 };
 template <>
+struct PrimitiveToTag<types::Duration::Primitive> {
+    using Type = types::Duration;
+};
+template <>
 struct PrimitiveToTag<types::Embedding::OwningPrimitive> {
     using Type = types::Embedding;
 };

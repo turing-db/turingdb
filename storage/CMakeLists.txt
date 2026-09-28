@@ -36,6 +36,7 @@ set(storage_sources
         map/MapHash.cpp
 
         metadata/DateTime.cpp
+        metadata/Duration.cpp
         metadata/EdgeBranchingCache.cpp
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp

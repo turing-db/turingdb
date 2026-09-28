@@ -40,6 +40,9 @@ db::ListBufferTypeTag listTagOf(db::MapBufferTypeTag tag) {
         case db::MapBufferTypeTag::DateTime:
             return db::ListBufferTypeTag::DateTime;
         break;
+        case db::MapBufferTypeTag::Duration:
+            return db::ListBufferTypeTag::Duration;
+        break;
         case db::MapBufferTypeTag::String:
         case db::MapBufferTypeTag::Embedding:
         case db::MapBufferTypeTag::ListView:

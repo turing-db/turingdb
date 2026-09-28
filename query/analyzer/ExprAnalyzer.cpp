@@ -393,7 +393,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::EdgeType, EvaluatedType::EdgeType)
                 || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)
                 || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
-                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)) {
+                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)
+                || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
                 break;
             }
 
@@ -407,6 +408,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Null)
             ) {
                 break;
             }
@@ -417,9 +419,12 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             const bool comparesListItem =
                 pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map);
@@ -504,6 +509,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
                 || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)
+                || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)
                 || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
                 // Valid pair
                 break;
@@ -525,6 +531,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
 
             if (ordersListItem) {
@@ -1597,6 +1605,8 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::List;
         case EvaluatedType::DateTime:
             return vt == ValueType::DateTime;
+        case EvaluatedType::Duration:
+            return vt == ValueType::Duration;
         case EvaluatedType::Map:
             return vt == ValueType::Map;
         case EvaluatedType::Wildcard:

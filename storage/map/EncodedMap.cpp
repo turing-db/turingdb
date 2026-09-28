@@ -57,6 +57,9 @@ void encodeValue(MapEntryView entry, std::vector<std::byte>& out) {
         case MapBufferTypeTag::DateTime:
             appendValue(out, entry.getValueAs<types::DateTime::Primitive>());
         break;
+        case MapBufferTypeTag::Duration:
+            appendValue(out, entry.getValueAs<types::Duration::Primitive>());
+        break;
         case MapBufferTypeTag::Null:
         break;
         case MapBufferTypeTag::String: {
@@ -195,6 +198,9 @@ private:
             break;
             case MapBufferTypeTag::DateTime:
                 return read<types::DateTime::Primitive>();
+            break;
+            case MapBufferTypeTag::Duration:
+                return read<types::Duration::Primitive>();
             break;
             case MapBufferTypeTag::Null:
                 return PropertyNull {};

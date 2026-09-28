@@ -165,6 +165,8 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
                 manager._bools.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
             } else if constexpr (std::is_same_v<T, types::DateTime>) {
                 manager._dateTimes.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
+            } else if constexpr (std::is_same_v<T, types::Duration>) {
+                manager._durations.emplace(pt->_id, static_cast<PropertyContainer*>(ptr));
             } else {
                 bioassert(false, "Missing trivial property type");
             }
@@ -250,6 +252,12 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
             }
             case ValueType::DateTime: {
                 if (auto res = storeTrivialContainer.operator()<types::DateTime>(manager); !res) {
+                    return res.get_unexpected();
+                }
+                break;
+            }
+            case ValueType::Duration: {
+                if (auto res = storeTrivialContainer.operator()<types::Duration>(manager); !res) {
                     return res.get_unexpected();
                 }
                 break;

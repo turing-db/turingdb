@@ -58,6 +58,8 @@ struct ColInternalKindToProtoEnum {
             return Enum::EMBEDDING;
         } else if constexpr (db::IsDateTime<T>) {
             return Enum::DATE_TIME;
+        } else if constexpr (db::IsDuration<T>) {
+            return Enum::DURATION;
         } else if constexpr (db::IsEntityList<T>) {
             return Enum::ENTITY_LIST;
         } else if constexpr (db::IsListView<T>) {

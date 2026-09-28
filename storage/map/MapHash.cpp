@@ -58,6 +58,9 @@ size_t hashMapValue(MapEntryView entry) {
         case MapBufferTypeTag::DateTime:
             return combine(seed, hashValue(entry.getValueAs<types::DateTime::Primitive>()));
         break;
+        case MapBufferTypeTag::Duration:
+            return combine(seed, hashValue(entry.getValueAs<types::Duration::Primitive>()));
+        break;
         case MapBufferTypeTag::Embedding: {
             size_t hash = seed;
             for (const float value : entry.getValueAs<types::Embedding::Primitive>()) {
@@ -112,6 +115,9 @@ bool sameMapValue(MapEntryView lhs, MapEntryView rhs) {
         break;
         case MapBufferTypeTag::DateTime:
             return lhs.getValueAs<types::DateTime::Primitive>() == rhs.getValueAs<types::DateTime::Primitive>();
+        break;
+        case MapBufferTypeTag::Duration:
+            return lhs.getValueAs<types::Duration::Primitive>() == rhs.getValueAs<types::Duration::Primitive>();
         break;
         case MapBufferTypeTag::Embedding: {
             const types::Embedding::Primitive lhsValues = lhs.getValueAs<types::Embedding::Primitive>();

@@ -477,6 +477,14 @@ private:
             }
             break;
 
+            case ListBufferTypeTag::Duration: {
+                std::string formatted;
+                Duration::format(formatted, element.getAs<types::Duration::Primitive>());
+
+                std::cout << formatted;
+            }
+            break;
+
             case ListBufferTypeTag::MapView:
             case ListBufferTypeTag::INVALID:
                 std::cout << "?";

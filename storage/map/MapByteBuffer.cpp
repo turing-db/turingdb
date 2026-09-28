@@ -130,4 +130,5 @@ template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag,
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const NodeID&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const EdgeID&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::DateTime::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Duration::Primitive&);
 }
