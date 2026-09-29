@@ -7,6 +7,7 @@
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
 #include "columns/ColumnVector.h"
+#include "buffers/StringBuffer.h"
 
 using namespace db;
 
@@ -51,9 +52,10 @@ void buildSignature(std::string& result, const Procedure* proc) {
 void writeProcedures(Data* data,
                      ProcedureState* proc,
                      const ProcedureManager* manager,
-                     ColumnVector<std::string>* nameCol,
-                     ColumnVector<std::string>* signatureCol,
-                     size_t chunkSize) {
+                     ColumnVector<std::string_view>* nameCol,
+                     ColumnVector<std::string_view>* signatureCol,
+                     size_t chunkSize,
+                     StringBuffer* stringBuffer) {
     ProcedureManager::Namespaces namespaces;
     manager->getNamespaces(namespaces);
 
@@ -85,7 +87,7 @@ void writeProcedures(Data* data,
 
             if (signatureCol) {
                 buildSignature(signature, procedure);
-                signatureCol->push_back(signature);
+                signatureCol->push_back(stringBuffer->insert(signature));
             }
 
             ++data->_procIndex;
@@ -118,8 +120,8 @@ void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("name", ProcedureType::STRING);
-    proc->addReturnValue("signature", ProcedureType::STRING);
+    proc->addReturnValue("name", ProcedureType::STRING_VIEW);
+    proc->addReturnValue("signature", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 
@@ -131,8 +133,8 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
     Column* rawNameCol = data.getReturnColumn(0);
     Column* rawSignatureCol = data.getReturnColumn(1);
 
-    auto* nameCol = static_cast<ColumnVector<std::string>*>(rawNameCol);
-    auto* signatureCol = static_cast<ColumnVector<std::string>*>(rawSignatureCol);
+    auto* nameCol = static_cast<ColumnVector<std::string_view>*>(rawNameCol);
+    auto* signatureCol = static_cast<ColumnVector<std::string_view>*>(rawSignatureCol);
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
@@ -153,7 +155,8 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
                             manager,
                             nameCol,
                             signatureCol,
-                            ctxt->getChunkSize());
+                            ctxt->getChunkSize(),
+                            ctxt->getStringBuffer());
         }
         break;
     }

@@ -18,6 +18,7 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyTypeMap.h"
 #include "versioning/Tombstones.h"
+#include "buffers/StringBuffer.h"
 #include "list/ListView.h"
 #include "ID.h"
 
@@ -28,7 +29,7 @@ namespace {
 using EdgeIDCol = ColumnVector<EdgeID>;
 using NodeIDCol = ColumnVector<NodeID>;
 using EdgeTypeIDCol = ColumnVector<EdgeTypeID>;
-using StringColumn = ColumnVector<std::string>;
+using StringColumn = ColumnVector<std::string_view>;
 
 constexpr std::string_view edgeIDsErr = "getEdges: edgeIDs must be a constant list";
 
@@ -49,6 +50,7 @@ void executeImpl(ProcedureState* proc) {
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
     const PropertyTypeMap& propTypes = reader.getMetadata().propTypes();
+    StringBuffer* stringBuffer = ctxt->getStringBuffer();
 
     const bool hasEdgeTombstones = view.hasDeletedEdges();
 
@@ -105,7 +107,7 @@ void executeImpl(ProcedureState* proc) {
 
         if (propsCol) {
             ProcUtils::encodeProperties(edge.properties(), propTypes, propsJson);
-            propsCol->push_back(propsJson);
+            propsCol->push_back(stringBuffer->insert(propsJson));
         }
     }
 
@@ -132,7 +134,7 @@ void GetEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addReturnValue("src", ProcedureType::NODE);
     proc->addReturnValue("tgt", ProcedureType::NODE);
     proc->addReturnValue("edgeTypeID", ProcedureType::EDGE_TYPE_ID);
-    proc->addReturnValue("properties", ProcedureType::STRING);
+    proc->addReturnValue("properties", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 
