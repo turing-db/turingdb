@@ -98,6 +98,11 @@ def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def SinkMakePath : Pass<"sink_make_path"> {
+    let summary = "Build a named path after the filters that only carry it, over the rows they keep";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FusePathElements : Pass<"fuse_path_elements"> {
     let summary = "Read the nodes, the relationships or the length of a named path over one walk off the walk's handles instead of the path it builds";
     let dependentDialects = ["mlir::db::DB"];
