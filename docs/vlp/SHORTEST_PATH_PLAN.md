@@ -2,8 +2,8 @@
 
 ## Status (2026-09-29)
 
-Planned; no code yet. The research behind every choice here is `SHORTEST_PATH_RESEARCH.md`;
-section numbers below prefixed with "research" point into it.
+Phase 0 implemented; Phases 1 to 5 planned. The research behind every choice here is
+`SHORTEST_PATH_RESEARCH.md`; section numbers below prefixed with "research" point into it.
 
 ## Context
 
