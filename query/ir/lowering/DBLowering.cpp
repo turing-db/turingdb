@@ -1194,6 +1194,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCurrentDateTime(currentDateTime);
     } else if (mlir::db::BroadcastConstant broadcast = mlir::dyn_cast<mlir::db::BroadcastConstant>(operation)) {
         lowerBroadcastConstant(broadcast);
+    } else if (mlir::db::ToNullable toNullable = mlir::dyn_cast<mlir::db::ToNullable>(operation)) {
+        lowerToNullable(toNullable);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
@@ -4895,6 +4897,13 @@ void DBLowering::lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast) {
     _valueMap[broadcast.getResult()] = rowAlignedChunk(mapValue(broadcast.getValue()), driverChunk);
 }
 
+void DBLowering::lowerToNullable(mlir::db::ToNullable toNullable) {
+    const mlir::Value chunk = mapValue(toNullable.getOperand());
+    const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
+
+    _valueMap[toNullable.getResult()] = toNullableChunk(chunk, element);
+}
+
 mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                            mlir::Type lhsType,
                                            mlir::Type rhsType) {
@@ -6016,12 +6025,21 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     // With no relation driving the projection the value is laid out over the single row
-    // that projection is, right where the constant is bound: a layout read from a loop
+    // that projection is, behind the constants hoisted so far: a layout read from a loop
     // nested under it must not sit below that nest.
     if (cardinality) {
         setInsertionInto(ownerBlock(cardinality));
     } else {
-        _builder.setInsertionPointAfter(chunk.getDefiningOp());
+        mlir::Operation* layoutPoint = chunk.getDefiningOp();
+
+        const bool constantsFollow = _lastHoistedConstant
+                                  && _lastHoistedConstant->getBlock() == layoutPoint->getBlock()
+                                  && layoutPoint->isBeforeInBlock(_lastHoistedConstant);
+        if (constantsFollow) {
+            layoutPoint = _lastHoistedConstant;
+        }
+
+        _builder.setInsertionPointAfter(layoutPoint);
     }
 
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);

@@ -684,7 +684,7 @@ private:
 
     // Builds the path of a walk out of its seeds and its handles, at the point it is read
     mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
-    mlir::Value makePathColumn(llvm::ArrayRef<mlir::Value> entities);
+    mlir::Value makePathColumn(llvm::ArrayRef<mlir::Value> entities, llvm::ArrayRef<int64_t> reversedPaths = {});
 
     // The entities a walk stands for, for an aggregate that reads its input's values rather
     // than counting the rows the handles are
@@ -969,8 +969,9 @@ private:
     void generateKeylessCollect(const Projection* projection);
 
     // Reduces every aggregate of a keyless projection before its items are built, so what an
-    // item computes beside an aggregate reads the one row the reduction leaves
-    void generateKeylessAggregates(const Projection* projection);
+    // item computes beside an aggregate reads the one row the reduction leaves. Each reads
+    // its input over the rows @param inputAggregateOp left, not over an earlier sibling's row.
+    void generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp);
 
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
