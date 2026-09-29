@@ -1,0 +1,57 @@
+name: Seed ubuntu-22.04 dependencies cache
+
+on:
+  push:
+    branches: [ "seed-ubuntu-2204-deps-cache" ]
+
+
+jobs:
+  seed:
+    runs-on: ubuntu-22.04-turing
+
+    env:
+      BUILD_JOBS: 4
+
+    steps:
+    - name: Use the host's build parallelism
+      run: |
+        if [ -n "${HOST_BUILD_JOBS:-}" ]; then
+          echo "BUILD_JOBS=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+        fi
+
+    - name: Disk usage (initial)
+      run: df -h
+
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+        lfs: true
+        fetch-depth: 1
+
+    - name: Checkout submodules (shallow)
+      run: |
+        git submodule update --init --force --depth 1
+        git submodule foreach '
+          if [ "$name" != "external/AFLplusplus" ]; then
+              git submodule update --init --force --recursive --depth 1
+          fi
+        '
+
+    - name: Cache dependencies (self-hosted Linux)
+      id: cache-dependencies-self-hosted
+      uses: corca-ai/local-cache@v2
+      with:
+        base: /opt/actions-local-cache
+        path: external/dependencies
+        key: ubuntu-22.04-turing-dependencies-v4-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
+
+    - name: Install build tools
+      run: ./install_build_tools.sh
+
+    - name: Build dependencies
+      run: ./dependencies.sh
+      env:
+        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-self-hosted.outputs.cache-hit }}
+
+    - name: Disk usage (final)
+      run: df -h
