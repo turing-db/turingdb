@@ -411,6 +411,7 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
             const VarDecl* decl = *declPtr;
             VarDecl* published = scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
             published->setListShape(decl->getListShape());
+            published->setIsQuantifiedPath(decl->isQuantifiedPath());
             projection->addPublishedDecl(published);
             continue;
         }
@@ -419,8 +420,11 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
         const std::optional<std::string_view> name = projection->getName(item);
         bioassert(name.has_value(), "Projected item of a WITH without a name.");
 
+        const VarDecl* itemDecl = item->getExprVarDecl();
+
         VarDecl* published = scope->getOrCreateNamedVariable(_ast, item->getType(), *name);
         published->setListShape(item->getListShape());
+        published->setIsQuantifiedPath(itemDecl && itemDecl->isQuantifiedPath());
         projection->addPublishedDecl(published);
     }
 }
@@ -469,6 +473,7 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
+        imported->setIsQuantifiedPath(decl->isQuantifiedPath());
     }
 
     // What the scope clause names is readable everywhere in the body. A body importing
@@ -547,6 +552,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
+        imported->setIsQuantifiedPath(decl->isQuantifiedPath());
 
         correlated.push_back(name);
     }
@@ -570,6 +576,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
 
             VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
             imported->setListShape(decl->getListShape());
+            imported->setIsQuantifiedPath(decl->isQuantifiedPath());
 
             correlated.push_back(name);
 
