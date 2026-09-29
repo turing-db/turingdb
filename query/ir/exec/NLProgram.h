@@ -4349,10 +4349,6 @@ private:
     NLStmtContainer _stmts;
 };
 
-// Runtime state of one EXISTS over one step of the rows it answers for: a matched flag
-// per row of that step. The lighter sibling of NLOptionalState - EXISTS answers for the
-// input rows rather than re-emitting rows, so it buffers none of them and keeps the input
-// chunks only for the row count they carry.
 // Runtime state of one EXISTS or COUNT subquery over one step of the rows it answers for
 class NLSubqueryExpressionState {
 public:

@@ -1,6 +1,7 @@
 #include "CypherAnalyzer.h"
 
 #include <algorithm>
+#include <utility>
 #include <spdlog/fmt/bundled/core.h>
 #include <string_view>
 #include <vector>
@@ -575,6 +576,15 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     // which is what keeps a pattern below that WITH reading the row the EXISTS answers for
     std::vector<std::string_view> correlated;
 
+    const auto importDecl = [this, inner, &correlated](std::string_view name, const VarDecl* decl) {
+        VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
+        imported->setListShape(decl->getListShape());
+        imported->setImportSource(decl);
+        _declSources[imported] = decl;
+
+        correlated.push_back(name);
+    };
+
     for (const VarDecl* decl : outer->decls()) {
         if (decl->isUnnamed() || _pendingItemAliases.contains(decl)) {
             continue;
@@ -590,11 +600,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
             continue;
         }
 
-        VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
-        imported->setListShape(decl->getListShape());
-        _declSources[imported] = decl;
-
-        correlated.push_back(name);
+        importDecl(name, decl);
     }
 
     // So is what the scope reads through to the ones around it - what a WITH dropped, for
@@ -614,16 +620,32 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
                 continue;
             }
 
-            VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
-            imported->setListShape(decl->getListShape());
-
-            correlated.push_back(name);
+            importDecl(name, decl);
 
             if (importSink && !std::ranges::contains(*importSink, decl)) {
                 importSink->push_back(decl);
             }
         }
     }
+
+    if (_orderedProjection) {
+        for (const Projection::ReturnItem& item : _orderedProjection->items()) {
+            const auto* exprPtr = std::get_if<Expr*>(&item);
+            if (!exprPtr) {
+                continue;
+            }
+
+            const Expr* itemExpr = *exprPtr;
+            const std::string_view alias = itemExpr->getName();
+            const bool renamesAVariable = itemExpr->getKind() == Expr::Kind::SYMBOL && !alias.empty();
+
+            if (renamesAVariable && !inner->hasDecl(alias)) {
+                importDecl(alias, itemExpr->getExprVarDecl());
+            }
+        }
+    }
+
+    const Projection* const orderedProjection = std::exchange(_orderedProjection, nullptr);
 
     std::swap(_subqueryImports, correlated);
 
@@ -632,6 +654,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     analyzeQueryBody(body, /*returnRequired=*/false);
 
     std::swap(_subqueryImports, correlated);
+    _orderedProjection = orderedProjection;
 
     // A RETURN answers for no column outside the body, but the code generator reads the
     // declarations its items publish, so they are declared in a scope nothing else holds
@@ -932,7 +955,11 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
     }
 
     if (projection->hasOrderBy()) {
+        const Projection* const outerOrderedProjection = std::exchange(_orderedProjection, projection);
+
         analyze(projection->getOrderBy(), projection);
+
+        _orderedProjection = outerOrderedProjection;
 
         // An aggregate in the ORDER BY aggregates the projection as an aggregate item
         // would - RETURN a.name ORDER BY count(b) orders one row per name - so the items

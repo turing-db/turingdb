@@ -7021,24 +7021,25 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
     if (_part._orderingProjection) {
         bool appended = false;
 
-        for (const auto& [decl, column] : _part._projectedColumns) {
-            const std::string_view name = decl->getName();
+        for (const SinglePartQuery* branch : branches) {
+            for (const VarDecl* decl : branch->getDeclContext()->decls()) {
+                const VarDecl* source = decl->getImportSource();
+                const auto projectedIt = _part._projectedColumns.find(source);
 
-            const auto importsTheAlias = [name](const SinglePartQuery* branch) {
-                return branch->getDeclContext()->getDecl(name) != nullptr;
-            };
+                if (!source || projectedIt == _part._projectedColumns.end()) {
+                    continue;
+                }
 
-            if (!std::ranges::any_of(branches, importsTheAlias)) {
-                continue;
-            }
+                const std::string_view name = decl->getName();
+                const PublishedColumn projected {source, std::string(name), projectedIt->second};
+                const auto publishedIt = std::ranges::find(scopeColumns, name, &PublishedColumn::_name);
 
-            const auto publishedIt = std::ranges::find(scopeColumns, name, &PublishedColumn::_name);
-
-            if (publishedIt != scopeColumns.end()) {
-                *publishedIt = {decl, std::string(name), column};
-            } else {
-                scopeColumns.push_back({decl, std::string(name), column});
-                appended = true;
+                if (publishedIt != scopeColumns.end()) {
+                    *publishedIt = projected;
+                } else {
+                    scopeColumns.push_back(projected);
+                    appended = true;
+                }
             }
         }
 
@@ -7118,11 +7119,17 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
         const DeclContext* bodyContext = branches[branchIndex]->getDeclContext();
         llvm::SmallVector<PublishedColumn>& scope = branchScopes[branchIndex];
 
+        const auto importedDecl = [bodyContext](std::string_view name) -> const VarDecl* {
+            const VarDecl* decl = bodyContext->getDecl(name);
+
+            return decl && decl->getImportSource() ? decl : nullptr;
+        };
+
         for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
             const PublishedColumn& input = inputs[inputIndex];
             const mlir::Value argument = bodyBlock->getArgument(static_cast<unsigned>(inputIndex));
 
-            if (const VarDecl* correlated = bodyContext->getDecl(input._name)) {
+            if (const VarDecl* correlated = importedDecl(input._name)) {
                 scope.push_back({correlated, input._name, argument});
             }
         }
@@ -7133,7 +7140,7 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
         }
 
         for (const PublishedColumn& constant : constants) {
-            if (const VarDecl* correlated = bodyContext->getDecl(constant._name)) {
+            if (const VarDecl* correlated = importedDecl(constant._name)) {
                 scope.push_back({correlated, constant._name, constant._column});
             }
         }
