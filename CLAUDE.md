@@ -236,7 +236,7 @@ Key points:
 
 ## CI runners
 
-- Linux x86 CI runs on **self-hosted runner containers** (`ubuntu-24.04-turing`), several per host. They cache `external/dependencies` on local disk with `corca-ai/local-cache` under `/opt/actions-local-cache`. Bump the key's salt when changing how deps are built, or stale entries persist.
+- Linux x86 CI runs on **self-hosted runner containers** (`ubuntu-22.04-turing`, `ubuntu-24.04-turing`), several per host. They cache `external/dependencies` on local disk with `corca-ai/local-cache` under `/opt/actions-local-cache`. Bump the key's salt when changing how deps are built, or stale entries persist.
 - macOS CI runs on **GitHub-hosted larger runners** (`macos15`, `macos26`), one job at a time each. They cache `external/dependencies` with `actions/cache`, whose repo limit is 10 GB. Linux ARM runs on GitHub-hosted `ubuntu-*-arm` and caches `external/dependencies` with `actions/cache` the same way.
 - The dependency build bakes **absolute paths into its installed CMake/pkg-config files** (e.g. faiss's `BLAS_LIBRARIES=…/external/dependencies/lib/libopenblas.a`, the LLVM/MLIR configs). A cached tree is only valid at the checkout path it was built at.
 - Per-host serialization (port 6666, host-wide `pkill turingdb`) uses a kernel `flock` via `scripts/with_host_lock.py`, which the OS releases on process exit.
