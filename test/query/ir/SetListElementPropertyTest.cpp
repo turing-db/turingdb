@@ -140,12 +140,12 @@ TEST_F(SetListElementPropertyTest, rejectsAnElementWhoseTypeThePropertyDoesNotHo
 
 TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAnElement) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1]",
-                           "Cannot create property 'score' from a list element");
+                           "Cannot create property 'score' from a list.");
 }
 
 TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAComputedElement) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1] + 1",
-                           "Cannot create property 'score' from a list element");
+                           "Cannot create property 'score' from a list.");
 }
 
 int main(int argc, char** argv) {
