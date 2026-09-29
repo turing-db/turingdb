@@ -167,7 +167,9 @@ private:
         uint64_t _minHops {0};
         uint64_t _maxHops {0};
         llvm::SmallVector<mlir::Value, 2> _hopImports;
-        llvm::SmallVector<mlir::Value, 2> _distinctFrom;
+
+        // The carried columns, by index, whose edges the hop or walk leaves out
+        llvm::SmallVector<size_t, 2> _distinctFrom;
 
         // The carried column holding each seed's own end, when the exploration is bound,
         // and whether it reports each (seed, end) pair once instead of every path
@@ -542,6 +544,13 @@ private:
                               size_t step,
                               llvm::ArrayRef<mlir::Value> hopImports,
                               NLExplorePathsLoopData* loopData);
+
+    template <typename HopOp>
+    void readDistinctFrom(HopOp hop, IteratorConfig& config);
+
+    // Hands the loop the input columns the carried columns named by _distinctFrom come from,
+    // the edge ones and the path ones apart
+    void bindExcludedColumns(const IteratorConfig& config, NLExpansionLoopData* loopData);
 
     // Translate an nl.expand_path: allocate the list column its rows expand into, and an
     // nl.path_length: allocate the count column its rows are read into

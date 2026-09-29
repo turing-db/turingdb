@@ -71,11 +71,15 @@ void GetInEdgesByTypeChunkWriter::fill(size_t maxCount) {
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
+            if (_exclusion.isSet()) {
+                _exclusion.loadRow(index);
+            }
 
             // Append this node's remaining in-edges of a requested type until
             // the span is exhausted or the row budget runs out.
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
-                if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID)) {
+                const bool excluded = _exclusion.excludes(_edgeIt->_edgeID);
+                if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID) && !excluded) {
                     _indices->push_back(index);
 
                     if constexpr (conditions[0]) {

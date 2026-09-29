@@ -188,6 +188,14 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
                               });
             }
 
+            if (_exclusion.isSet() && rangeSize > 0) {
+                _exclusion.loadRow(index);
+
+                const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
+                const size_t kept = _exclusion.pruneRun(run, prevSize, false, _indices, _edgeIDs, _srcs, _types);
+                remainingToMax += newSize - kept;
+            }
+
             _edgeIt += rangeSize;
             nextValid();
         };

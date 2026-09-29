@@ -1530,7 +1530,6 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         carried._columns,
                                                         mlir::Value(),
                                                         hopImportColumns,
-                                                        mlir::ValueRange {},
                                                         directions,
                                                         metadata.getMinHops(),
                                                         maxHopsAttr,
@@ -1540,6 +1539,7 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         mlir::IntegerAttr(),
                                                         false,
                                                         false,
+                                                        mlir::DenseI64ArrayAttr(),
                                                         static_cast<unsigned>(hopCount));
 
     registerValue(src, op.getSrcids());

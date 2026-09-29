@@ -9,6 +9,7 @@
 #include "columns/ColumnIDs.h"
 #include "datapart/EdgeRecord.h"
 #include "PartIterator.h"
+#include "EdgeExclusion.h"
 #include "TombstoneFilter.h"
 
 namespace db {
@@ -85,6 +86,11 @@ public:
     void setOtherIDs(ColumnNodeIDs* others) { _others = others; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
+    // The edges the clause bound before this hop, row-aligned with the input, which no row
+    // of it repeats: edge columns, and paths read through the trie
+    void setDistinctFrom(std::span<const ColumnEdgeIDs* const> columns) { _exclusion.setEdgeColumns(columns); }
+    void setDistinctFromPaths(std::span<const ColumnVector<PathRef>* const> columns, const PathTrie* trie) { _exclusion.setPathColumns(columns, trie); }
+
 private:
     ColumnVector<size_t>* _indices {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
@@ -92,6 +98,7 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    EdgeExclusion _exclusion;
 
     void filterTombstones();
 };

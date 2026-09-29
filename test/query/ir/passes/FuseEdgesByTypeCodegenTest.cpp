@@ -165,14 +165,18 @@ TEST_F(FuseEdgesByTypeCodegenTest, bothHopsOfATypedChainFuse) {
         generate("MATCH (a:Person)-[:KNOWS_WELL]->(b)-[:INTERESTED_IN]->(c) RETURN a, c");
 
     expectFusedToTypedHop(*module);
-    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::CheckEdgeDistinct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeDistinct>(*module), 0u);
 
     llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 2u);
     EXPECT_EQ(onlyEdgeType(hops[0].getEdgeTypes()), "KNOWS_WELL");
     EXPECT_EQ(onlyEdgeType(hops[1].getEdgeTypes()), "INTERESTED_IN");
     EXPECT_EQ(hops[1].getInputNodes(), hops[0].getTgtids());
+
+    // The second hop leaves the first's edge out itself, the check folded into it
+    ASSERT_TRUE(hops[1].getDistinctFrom().has_value());
+    EXPECT_EQ(hops[1].getDistinctFrom()->size(), 1u);
 }
 
 // A whole-graph scan and its hop are the edge set, which the edge-scan fusion takes first,
