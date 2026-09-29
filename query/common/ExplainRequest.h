@@ -10,12 +10,14 @@ namespace db {
 
 // One dump an EXPLAIN prefix can ask for. A single optimisation pass is named through
 // requestPass instead; PASSES stands for the pipeline as a whole, and asks for CODEGEN
-// with it since a dump per pass is read against the module the first pass saw.
+// with it since a dump per pass is read against the module the first pass saw. PAIRS is
+// the edge pairs of each MATCH clause, each proven distinct or kept for the check.
 enum class ExplainStage {
     AST = 0,
     VDG,
     CODEGEN,
     PASSES,
+    PAIRS,
     DB,
     NL,
 };
@@ -28,7 +30,8 @@ public:
     ExplainRequest();
     ~ExplainRequest();
 
-    // The db program and the nl program it lowers to: what a bare EXPLAIN reports
+    // The edge pairs, the db program and the nl program it lowers to: what a bare EXPLAIN
+    // reports
     void requestDefaults();
     void requestAll();
 

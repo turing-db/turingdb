@@ -129,3 +129,5 @@ add_call_v3_test(test_query_ir_push_down_filters_past_writes PushDownFiltersPast
 add_call_v3_test(test_query_ir_constant_rows_passes ConstantRowsPassesTest.cpp)
 
 add_call_v3_test(test_query_ir_fuse_distinct_edges FuseDistinctEdgesTest.cpp)
+
+add_call_v3_test(test_query_ir_prove_distinct_edges ProveDistinctEdgesTest.cpp)

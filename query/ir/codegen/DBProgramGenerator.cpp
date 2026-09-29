@@ -170,6 +170,27 @@ mlir::storage::UnicodeNormalForm toStorageNormalForm(UnicodeNormalForm form) {
     }
 }
 
+llvm::StringRef toStringRef(std::string_view text) {
+    return llvm::StringRef(text.data(), text.size());
+}
+
+// The name the query knows an edge by: a named edge's occurrences are listed under its
+// declaration, a walk of one hop by that hop's, an anonymous one is the dependency graph's own
+std::string_view edgeQueryName(const VariableDependency* edge,
+                               const VarDecl* identity,
+                               const std::unordered_map<const VarDecl*, const EdgePattern*>& walks) {
+    const auto walkIt = walks.find(edge->getDecl());
+    const EdgePattern* walk = walkIt == walks.end() ? nullptr : walkIt->second;
+
+    if (identity) {
+        return identity->getName();
+    } else if (walk && walk->getHopCount() == 1 && walk->getHop(0)->getDecl()) {
+        return walk->getHop(0)->getDecl()->getName();
+    } else {
+        return edge->getName();
+    }
+}
+
 // Whether @param column is one @param aggregateOp bound, or one computed from what it
 // bound: anything computed before it holds the matched rows the aggregate consumed. A
 // column of another block is one the body being generated binds, which no aggregate reduced
@@ -1005,6 +1026,7 @@ DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule,
     _explain(explain),
     _passContext(passContext)
 {
+    _passContext._explain = explain;
 }
 
 DBProgramGenerator::~DBProgramGenerator() {
@@ -2807,13 +2829,17 @@ const VarDecl* DBProgramGenerator::edgeIdentityOf(const VariableDependency* edge
 // The edges bound before this one in its clause whose columns flow with it here and that no
 // earlier check paired it with; each pair found is recorded as checked. Two occurrences of
 // one named edge are joined on equality by resolveEdgeIdentities and are not a pair.
-void DBProgramGenerator::collectEdgesToDiffer(const VariableDependency* edge, llvm::SmallVectorImpl<mlir::Value>& others) {
+void DBProgramGenerator::collectEdgesToDiffer(const VariableDependency* edge,
+                                              llvm::SmallVectorImpl<mlir::Value>& others,
+                                              llvm::SmallVectorImpl<llvm::StringRef>& names) {
     const size_t clause = _vdg.clauseOf(edge);
     const VarDecl* identity = edgeIdentityOf(edge);
+    names.push_back(toStringRef(edgeQueryName(edge, identity, _part._quantifiedEdges)));
 
     for (const VariableDependency* bound : _part._boundEdges) {
         const bool sameClause = _vdg.clauseOf(bound) == clause;
-        const bool sameEdge = identity && edgeIdentityOf(bound) == identity;
+        const VarDecl* boundIdentity = edgeIdentityOf(bound);
+        const bool sameEdge = identity && boundIdentity == identity;
         if (bound == edge || !sameClause || sameEdge || !holdsColumn(bound)) {
             continue;
         }
@@ -2830,14 +2856,15 @@ void DBProgramGenerator::collectEdgesToDiffer(const VariableDependency* edge, ll
         }
 
         others.push_back(column);
+        names.push_back(toStringRef(edgeQueryName(bound, boundIdentity, _part._quantifiedEdges)));
     }
 }
 
-mlir::Value DBProgramGenerator::checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others) {
+mlir::Value DBProgramGenerator::checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others, llvm::ArrayRef<llvm::StringRef> names) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
-    return _opBuilder.create<mlir::db::CheckEdgeDistinct>(loc, boolType, subject, others).getResult();
+    return _opBuilder.create<mlir::db::CheckEdgeDistinct>(loc, boolType, subject, others, _opBuilder.getStrArrayAttr(names)).getResult();
 }
 
 void DBProgramGenerator::checkEdgeDistinct(const VariableDependency* edge) {
@@ -2846,7 +2873,8 @@ void DBProgramGenerator::checkEdgeDistinct(const VariableDependency* edge) {
     }
 
     llvm::SmallVector<mlir::Value> others;
-    collectEdgesToDiffer(edge, others);
+    llvm::SmallVector<llvm::StringRef> names;
+    collectEdgesToDiffer(edge, others, names);
     _part._boundEdges.push_back(edge);
 
     if (others.empty()) {
@@ -2854,7 +2882,7 @@ void DBProgramGenerator::checkEdgeDistinct(const VariableDependency* edge) {
     }
 
     const mlir::Value subject = _part._varMap.at(edge).back();
-    filterAllColumns(checkEdgeDistinctMask(subject, others));
+    filterAllColumns(checkEdgeDistinctMask(subject, others, names));
 }
 
 void DBProgramGenerator::checkCrossedEdgesDistinct() {
@@ -2869,12 +2897,13 @@ void DBProgramGenerator::checkCrossedEdgesDistinct() {
         }
 
         llvm::SmallVector<mlir::Value> others;
-        collectEdgesToDiffer(edge, others);
+        llvm::SmallVector<llvm::StringRef> names;
+        collectEdgesToDiffer(edge, others, names);
         if (others.empty()) {
             continue;
         }
 
-        filterAllColumns(checkEdgeDistinctMask(subject, others));
+        filterAllColumns(checkEdgeDistinctMask(subject, others, names));
     }
 }
 

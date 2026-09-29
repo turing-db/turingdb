@@ -105,6 +105,17 @@ TEST_F(ExplainTest, reportsTheDbAndTheNlProgramByDefault) {
     EXPECT_TRUE(contains(nlProgram, "nl.for")) << nlProgram;
 }
 
+// The pairs a MATCH clause checks for edge distinctness are reported when there are any
+TEST_F(ExplainTest, reportsTheEdgePairsByDefault) {
+    StringRowSink sink;
+    explain("EXPLAIN MATCH (a)-[e1]->(b)-[e2]-(c) RETURN count(*)", sink);
+
+    std::vector<std::string> stages;
+    collectStages(sink, stages);
+    EXPECT_EQ(stages, (std::vector<std::string> {"pairs", "db", "nl"}));
+    EXPECT_EQ(dumpOf(sink, "pairs"), "e2 <> e1: kept\n");
+}
+
 TEST_F(ExplainTest, reportsOnlyTheStagesTheOptionsName) {
     StringRowSink sink;
     explain("EXPLAIN (nl) MATCH (n) RETURN n", sink);

@@ -3,6 +3,11 @@
 
 include "mlir/Pass/PassBase.td"
 
+def ProveDistinctEdges : Pass<"prove_distinct_edges"> {
+    let summary = "Drop the edge pairs of a check_edge_distinct that the pattern's edge types or node labels prove distinct";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseScanByLabel : Pass<"fuse_scan_by_label"> {
     let summary = "Fuse a scan_nodes and its label-set filter into a scan_nodes_by_label";
     let dependentDialects = ["mlir::db::DB"];
