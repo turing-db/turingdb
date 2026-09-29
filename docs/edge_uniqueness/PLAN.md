@@ -452,12 +452,13 @@ schema proves the two adjacent ones, which only a self-loop could share and reac
 none, and keeps the first against the third, since a reaction precedes one that precedes
 it and the arc closes both ways; that one pair is what the query still pays for. The
 summary of reactome is built once per commit, on the first query that asks for it: that
-query runs in 150 ms against 14 ms for the next, so the build over 11.5M edges costs
-135 ms, most of it the hash map lookup per edge, against the tens of milliseconds
-estimated above.
-
-Still owed from step 4: that build cost, which a dense table over (label set, type) or
-the persisted summary of step 6 would remove.
+query runs in 71 ms against 13 ms for the next, so the build over 11.5M edges costs
+58 ms, 5 ns per out-record. It got there from 135 ms in two steps, measured the same
+way: the arcs are counted in a table dense over (source label set, edge type), each cell
+holding the few target label sets it reaches, in place of a hash map keyed by the three,
+which took 20 ms off; and an edge end's label set is read from an array by node ID,
+filled range by range from the ranges each part keeps its nodes in per label set, in
+place of a read into the node array, which took the other 60 ms off.
 
 ## Steps
 
