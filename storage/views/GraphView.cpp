@@ -10,6 +10,13 @@ GraphReader GraphView::read() const {
     return GraphReader(*this);
 }
 
+const SchemaGraph& GraphView::schemaGraph() const {
+    SchemaGraph& schema = _data->schemaGraph();
+    schema.refresh(dataparts());
+
+    return schema;
+}
+
 void GraphView::setChangeDeletions(const DeletedNodes* nodes, const DeletedEdges* edges) {
     _changeDeletedNodes = nodes;
     _changeDeletedEdges = edges;
