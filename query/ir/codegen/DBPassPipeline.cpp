@@ -10,14 +10,15 @@ namespace {
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext*);
 
-constexpr size_t DB_PASS_COUNT = 34;
+constexpr size_t DB_PASS_COUNT = 35;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
 // pipeline it reports on and the pipeline that runs the same one. Every factory is handed
-// the context; only the join's cost model and the metadata count read it, the rewrites
-// beside them answering off the IR alone.
+// the context; only the edge pair proofs, the join's cost model and the metadata count
+// read it, the rewrites beside them answering off the IR alone.
 const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
+    [](const mlir::db::DBPassContext* context) { return mlir::db::createProveDistinctEdges(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkMakePath(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createPushDownFilters(); },

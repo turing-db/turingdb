@@ -174,9 +174,8 @@ TEST_F(FuseEdgesByTypeCodegenTest, bothHopsOfATypedChainFuse) {
     EXPECT_EQ(onlyEdgeType(hops[1].getEdgeTypes()), "INTERESTED_IN");
     EXPECT_EQ(hops[1].getInputNodes(), hops[0].getTgtids());
 
-    // The second hop leaves the first's edge out itself, the check folded into it
-    ASSERT_TRUE(hops[1].getDistinctFrom().has_value());
-    EXPECT_EQ(hops[1].getDistinctFrom()->size(), 1u);
+    // Two hops typed apart are proven two edges, so the second leaves nothing out
+    EXPECT_FALSE(hops[1].getDistinctFrom().has_value());
 }
 
 // A whole-graph scan and its hop are the edge set, which the edge-scan fusion takes first,

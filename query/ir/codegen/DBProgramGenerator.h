@@ -456,8 +456,10 @@ private:
     void checkEdgeDistinct(const VariableDependency* edge);
     // The pairs the hops could not check, their columns having met only in a cross product
     void checkCrossedEdgesDistinct();
-    void collectEdgesToDiffer(const VariableDependency* edge, llvm::SmallVectorImpl<mlir::Value>& others);
-    mlir::Value checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others);
+    void collectEdgesToDiffer(const VariableDependency* edge,
+                              llvm::SmallVectorImpl<mlir::Value>& others,
+                              llvm::SmallVectorImpl<llvm::StringRef>& names);
+    mlir::Value checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others, llvm::ArrayRef<llvm::StringRef> names);
     const VarDecl* edgeIdentityOf(const VariableDependency* edge) const;
 
     // Joins each pattern variable to the column a CALL yielded under its name: the two are

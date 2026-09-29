@@ -1762,15 +1762,21 @@ def CheckEdgeDistinct : TuringOp<"check_edge_distinct", [Pure]> {
               : (!db.column<!storage.edge_id>, !db.column<!storage.edge_id>) -> !db.column<!storage.bool>
       %ok = db.check_edge_distinct(%p, {%e1, %q})
               : (!db.column<!storage.path_ref>, !db.column<!storage.edge_id>, !db.column<!storage.path_ref>) -> !db.column<!storage.bool>
+
+    `names` spells the query's name for the subject and then for each of the others, which
+    is how the prove_distinct_edges pass reports each pair as proven or kept to EXPLAIN;
+    the pass drops the pairs it proves and their names with them.
+
+      %ok = db.check_edge_distinct(%e2, {%e1}) names ["e2", "e1"]
   }];
 
-  let arguments = (ins Column:$subject, Variadic<Column>:$others);
+  let arguments = (ins Column:$subject, Variadic<Column>:$others, OptionalAttr<StrArrayAttr>:$names);
   let results   = (outs Column:$result);
 
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $subject `,` `{` $others `}` `)` attr-dict `:` functional-type(operands, results)
+    `(` $subject `,` `{` $others `}` `)` (`names` $names^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 

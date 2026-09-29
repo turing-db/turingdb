@@ -1254,6 +1254,13 @@ LogicalResult CheckEdgeDistinct::verify() {
         }
     }
 
+    const ArrayAttr names = getNamesAttr();
+    const bool namesEveryColumn = !names || names.size() == getOthers().size() + 1;
+    if (!namesEveryColumn) {
+        return emitOpError("names must name the subject and each of the others, but has ")
+               << names.size() << " names for " << getOthers().size() + 1 << " columns";
+    }
+
     return success();
 }
 
