@@ -1025,6 +1025,11 @@ private:
                                    NLLimitState* limit,
                                    NLStmtContainer* body);
 
+    void allocBroadcastColumn(mlir::Value inputValue,
+                              bool isOuter,
+                              Column*& output,
+                              NLBroadcastFunction& broadcast);
+
     // Allocate the output column for one crossed column, map the loop variable to
     // it, and append it (with its block-repeat/tile broadcast) to the outer or
     // inner list of data

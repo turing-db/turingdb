@@ -277,20 +277,33 @@ using NLGatherFunction = void (*)(const Column* input,
                                   const ColumnVector<size_t>* indices,
                                   Column* output);
 
-// Type of handle per column type that lays one row of the input out over every row of the
-// output: what a hop predicate reads a column outside the hop as, the seed's own value
-// standing for the candidates of every hop the walk takes from it
-using NLRepeatRowFunction = void (*)(const Column* input,
-                                     size_t row,
+// A cross product pairs every outer row with every inner row, so the pair at
+// position p is outer row p/M with inner row p%M (M being the inner row count).
+// An input column holds only its N or M values, so filling a column of pairs
+// repeats them: that repetition is the broadcast. With outer [a0,a1] (N=2) and
+// inner [b0,b1,b2] (M=3) the whole product reads:
+//   outer -> [a0,a0,a0, a1,a1,a1]   each outer row repeated M times (block-repeat)
+//   inner -> [b0,b1,b2, b0,b1,b2]   the inner chunk repeated N times (tile)
+// so row k across all columns is one pair.
+//
+// A step fills the `rowCount` pairs starting at `position`, which is how the
+// product is cut into chunks: a slice may start and end mid-block or mid-tile, and
+// every column of the step slices at the same position, so they stay row-aligned.
+// `factor` is M for both directions - block-repeat divides the position by it,
+// tile takes the position modulo it.
+using NLBroadcastFunction = void (*)(const Column* input,
+                                     size_t factor,
+                                     size_t position,
                                      size_t rowCount,
                                      Column* output);
 
 // One column a hop predicate reads from outside the hop: the loop's own column, and the
-// chunk the region's argument reads, filled with the seed row's value before each run
+// chunk the region's argument reads, filled with the seed row's value before each run by
+// the block-repeat whose one block is that row
 struct NLHopImport {
     const Column* _source {nullptr};
     Column* _chunk {nullptr};
-    NLRepeatRowFunction _repeat {nullptr};
+    NLBroadcastFunction _broadcast {nullptr};
 };
 
 // Type of handle that appends the indices of the rows an nl.filter keeps into the
@@ -1264,26 +1277,6 @@ private:
     ColumnMask* _output {nullptr};
     std::unordered_set<uint64_t> _matchingIDs;
 };
-
-// A cross product pairs every outer row with every inner row, so the pair at
-// position p is outer row p/M with inner row p%M (M being the inner row count).
-// An input column holds only its N or M values, so filling a column of pairs
-// repeats them: that repetition is the broadcast. With outer [a0,a1] (N=2) and
-// inner [b0,b1,b2] (M=3) the whole product reads:
-//   outer -> [a0,a0,a0, a1,a1,a1]   each outer row repeated M times (block-repeat)
-//   inner -> [b0,b1,b2, b0,b1,b2]   the inner chunk repeated N times (tile)
-// so row k across all columns is one pair.
-//
-// A step fills the `rowCount` pairs starting at `position`, which is how the
-// product is cut into chunks: a slice may start and end mid-block or mid-tile, and
-// every column of the step slices at the same position, so they stay row-aligned.
-// `factor` is M for both directions - block-repeat divides the position by it,
-// tile takes the position modulo it.
-using NLBroadcastFunction = void (*)(const Column* input,
-                                     size_t factor,
-                                     size_t position,
-                                     size_t rowCount,
-                                     Column* output);
 
 // One column used as operand of nl.cross_product: its input chunk, the output
 // chunk to fill, and the broadcast that fills one from the other.

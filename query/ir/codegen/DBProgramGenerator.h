@@ -430,10 +430,22 @@ private:
     // pattern matched, so keeping the rows where the two columns agree is that join.
     void resolveYieldedIdentities();
 
+    void openComponent(const VariableDependency* root);
+
     // Translate a connected component of @ref _vdg, fills @param outVars
     void translateComponent(const VariableDependency* root,
                             std::unordered_set<const VariableDependency*>& defined,
                             std::vector<const VariableDependency*>& outVars);
+
+    void collectComponentVars(const VariableDependency* root, DefinedVars& componentVars) const;
+
+    void collectVarsOfDecl(const VarDecl* decl, llvm::SmallVectorImpl<const VariableDependency*>& vars) const;
+
+    bool walkReadsAnotherComponent(const DefinedVars& componentVars) const;
+
+    void expandCrossedComponents(llvm::ArrayRef<const VariableDependency*> roots,
+                                 const std::vector<TranslatedComponent>& components,
+                                 DefinedVars& defined);
 
     // Walks a component out from @param root, one edge traversal per hop. The root has to
     // hold a column already: translateComponent opens one with a scan, and a variable a
