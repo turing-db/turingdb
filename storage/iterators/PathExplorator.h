@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "ChunkWriter.h"
-#include "EdgeExclusion.h"
+#include "ExcludedEdges.h"
 #include "PartDirectory.h"
 #include "PathCycleTable.h"
 #include "PathExplorationDir.h"
@@ -67,11 +67,8 @@ public:
     void setDistinctEnds(bool distinct);
     void setCandidateLookahead(size_t lookahead) { _lookahead = lookahead; }
 
-    // The edges the clause bound before the path, row-aligned with the input: a walk takes
-    // none of its seed row's, whether they come as edge columns or as the paths of an
-    // earlier exploration read through the query's trie
-    void setExcludedEdges(std::span<const ColumnEdgeIDs* const> columns);
-    void setExcludedPaths(std::span<const ColumnVector<PathRef>* const> columns, const PathTrie* trie);
+    // The edges each seed row may not take, which the clause bound before the path
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
 
     void reset();
     void fill(size_t maxCount);
@@ -248,7 +245,7 @@ private:
     size_t _pendingEdgeIDBound {0};
     bool _distinctEnds {false};
     size_t _lookahead {1};
-    EdgeExclusion _exclusion;
+    ExcludedEdges _excluded;
 
     PartDirectory _parts;
     const Tombstones* _tombstones {nullptr};
@@ -270,6 +267,8 @@ private:
     PathEdgeTable _pathEdgeTable;
     std::vector<PathRef> _pathEntries;
     std::vector<uint64_t> _pathSignatures;
+    std::span<const EdgeID> _seedExcluded;
+    uint64_t _seedExclusionSignature {0};
     std::vector<Frame> _frames;
     std::vector<NodeID> _candidateNodes;
     std::vector<EdgeID> _candidateEdges;

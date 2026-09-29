@@ -142,7 +142,7 @@ void NLPendingEdgeHop::fill(size_t maxCount) {
             continue;
         }
 
-        if (_exclusion.excludes(EdgeID(_firstPendingEdgeID + offset))) {
+        if (ExcludedEdges::holds(_rowExcluded, EdgeID(_firstPendingEdgeID + offset))) {
             continue;
         }
 
@@ -191,16 +191,7 @@ void NLPendingEdgeHop::beginRun() {
     const NodeID node = (*_inputNodeIDs)[_row];
     _offsets = walksIn() ? _index->into(node) : _index->outOf(node);
 
-    if (_exclusion.isSet()) {
-        _exclusion.loadRow(_row);
-    }
-}
-
-void NLPendingEdgeHop::setExclusion(std::span<const ColumnEdgeIDs* const> edges,
-                                    std::span<const ColumnVector<PathRef>* const> paths,
-                                    const PathTrie* trie) {
-    _exclusion.setEdgeColumns(edges);
-    _exclusion.setPathColumns(paths, trie);
+    _rowExcluded = _excluded.isSet() ? _excluded.rowEdges(_row) : std::span<const EdgeID> {};
 }
 
 void NLPendingEdgeHop::nextRun() {

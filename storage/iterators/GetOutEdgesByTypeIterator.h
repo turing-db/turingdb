@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GetOutEdgesIterator.h"
-#include "EdgeExclusion.h"
+#include "ExcludedEdges.h"
 
 #include <span>
 
@@ -24,8 +24,7 @@ public:
     void setTgtIDs(ColumnNodeIDs* tgts) { _tgts = tgts; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
-    void setDistinctFrom(std::span<const ColumnEdgeIDs* const> columns) { _exclusion.setEdgeColumns(columns); }
-    void setDistinctFromPaths(std::span<const ColumnVector<PathRef>* const> columns, const PathTrie* trie) { _exclusion.setPathColumns(columns, trie); }
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
 
 private:
     // Borrowed, not owned: the caller keeps the types alive for the writer's lifetime
@@ -37,7 +36,7 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
-    EdgeExclusion _exclusion;
+    ExcludedEdges _excluded;
 
     void filterTombstones();
 };

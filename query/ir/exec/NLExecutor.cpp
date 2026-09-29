@@ -4518,6 +4518,13 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     const NLLimitState* limit = loopData->getLimit();
     const size_t chunkSize = context->getChunkSize();
 
+    loopData->collectExcludedEdges(loopData->getInput()->size());
+    const ExcludedEdges excluded = loopData->getExcludedEdges();
+    chunkWriter->setExcludedEdges(excluded);
+    if (pendingEdges) {
+        pendingEdges->setExcludedEdges(excluded);
+    }
+
     const auto hasStep = [&]() {
         return chunkWriter->isValid() || (pendingEdges && pendingEdges->isValid());
     };
@@ -5917,11 +5924,8 @@ void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData*
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
@@ -5939,11 +5943,8 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
@@ -5961,11 +5962,8 @@ void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* da
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setOtherIDs(loopData->getTargets());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Either, loopData->getTargets());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
@@ -5985,11 +5983,8 @@ void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctio
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
     pendingEdges.setEdgeTypes(loopData->getRequestedTypes());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
@@ -6008,11 +6003,8 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
     pendingEdges.setEdgeTypes(loopData->getRequestedTypes());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
@@ -6037,11 +6029,8 @@ void NLExecutor::runGetOutEdgesByLabelLoop(NLExecutionContext* context, NLFuncti
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
     pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
@@ -6062,11 +6051,8 @@ void NLExecutor::runGetInEdgesByLabelLoop(NLExecutionContext* context, NLFunctio
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
-    chunkWriter.setDistinctFrom(loopData->getExcludedEdges());
-    chunkWriter.setDistinctFromPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
-    pendingEdges.setExclusion(loopData->getExcludedEdges(), loopData->getExcludedPaths(), loopData->getExclusionTrie());
     pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
@@ -6370,8 +6356,6 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
-    explorator.setExcludedEdges(loopData->getExcludedEdges());
-    explorator.setExcludedPaths(loopData->getExcludedPaths(), loopData->getExclusionTrie());
 
     const CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
     if (writeBuffer) {
