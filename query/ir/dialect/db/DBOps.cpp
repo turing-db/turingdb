@@ -297,7 +297,7 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop, ValueRange imports) {
 
             Operation* const definingOp = operand.getDefiningOp();
             const bool definedInside = definingOp->getBlock() == &block;
-            if (!definedInside && !isa<ConstantOp>(definingOp)) {
+            if (!definedInside && !::db::yieldsConstantColumn(operand)) {
                 return op->emitOpError("hop region may only read constants from outside itself");
             }
         }
