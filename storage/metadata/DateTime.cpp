@@ -5,6 +5,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "TuringException.h"
+
 using namespace db;
 
 namespace {
@@ -246,6 +248,40 @@ std::optional<DateTime> DateTime::parse(std::string_view text) {
                           - offsetSeconds;
 
     return DateTime {seconds * MICROSECONDS_PER_SECOND + fraction};
+}
+
+Duration DateTime::operator-(const DateTime& other) const {
+    return Duration(_microseconds - other._microseconds);
+}
+
+DateTime DateTime::operator+(const Duration& duration) const {
+    const int64_t microseconds = duration.getMicroseconds();
+
+    const bool pastTheLastYear = microseconds > LAST_RENDERABLE - _microseconds;
+    const bool beforeTheFirstYear = microseconds < FIRST_RENDERABLE - _microseconds;
+
+    if (pastTheLastYear || beforeTheFirstYear) {
+        throw TuringException("The instant of a datetime plus a duration is outside the years 0000 to 9999");
+    }
+
+    return DateTime(_microseconds + microseconds);
+}
+
+DateTime DateTime::operator-(const Duration& duration) const {
+    const int64_t microseconds = duration.getMicroseconds();
+
+    const bool pastTheLastYear = microseconds < _microseconds - LAST_RENDERABLE;
+    const bool beforeTheFirstYear = microseconds > _microseconds - FIRST_RENDERABLE;
+
+    if (pastTheLastYear || beforeTheFirstYear) {
+        throw TuringException("The instant of a datetime minus a duration is outside the years 0000 to 9999");
+    }
+
+    return DateTime(_microseconds - microseconds);
+}
+
+DateTime db::operator+(const Duration& duration, const DateTime& instant) {
+    return instant + duration;
 }
 
 bool DateTime::isRenderable(DateTime value) {

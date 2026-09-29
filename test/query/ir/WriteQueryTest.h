@@ -58,6 +58,9 @@ protected:
     void expectRowsInOrder(std::string_view query, const Rows& expected);
     void expectCounts(std::string_view query, const Counts& expected);
 
+    // A reading query the engine turns away, with an error naming @param expectedError
+    void expectError(std::string_view query, std::string_view expectedError);
+
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<db::QueryInterpreterV3> _interpreter;
