@@ -407,8 +407,9 @@ public:
     static void runListPredicate(NLExecutionContext* context, NLFunctionData* data);
 
     // Read one element's predicate: a mask, a nullable mask - where a null row is unknown
-    // - or the null literal, which is unknown for every row
-    static NLTruthReadFunction selectTruthRead(bool nullable, bool untypedNull);
+    // -, a type-erased cell holding a boolean or a null, or the null literal, which is
+    // unknown for every row
+    static NLTruthReadFunction selectTruthRead(bool nullable, bool untypedNull, bool taggedCells);
 
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(ValueType valueType);
@@ -530,9 +531,9 @@ public:
     static NLGatherFunction selectCountGatherFunction();
 
     // The mask survivor collector for an nl.filter, chosen by the mask chunk's shape: a
-    // nullable mask drops null rows as well as false ones, and a mask that is null itself
-    // keeps nothing.
-    static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable, bool untypedNull);
+    // nullable mask drops null rows as well as false ones, a mask that is null itself
+    // keeps nothing, and a type-erased cell keeps its row where it holds true.
+    static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable, bool untypedNull, bool taggedCells);
 
     // Append (onto a buffer tail) for an ID chunk of this kind / a nullable value
     // chunk of this value type. Used by nl.sort_collect.

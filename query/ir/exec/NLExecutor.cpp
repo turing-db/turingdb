@@ -1272,6 +1272,46 @@ void collectOptMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) 
 void collectNoSurvivors(const Column*, ColumnVector<size_t>*) {
 }
 
+// The truth value a type-erased cell holds: its boolean, or null where it holds a null
+std::optional<bool> cellTruth(ListElementView cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Bool:
+            return static_cast<bool>(cell.getAs<types::Bool::Primitive>());
+        break;
+
+        case ListBufferTypeTag::Null:
+            return std::nullopt;
+        break;
+
+        default:
+            throw IRException("A WHERE reads a list element that is not a boolean");
+        break;
+    }
+}
+
+void collectTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
+    const std::vector<ListElementView>& cells = static_cast<const ColumnVector<ListElementView>*>(mask)->getRaw();
+    std::vector<size_t>& survivingRaw = indices->getRaw();
+
+    for (size_t row = 0; row < cells.size(); row++) {
+        if (cellTruth(cells[row]).value_or(false)) {
+            survivingRaw.push_back(row);
+        }
+    }
+}
+
+void collectOptTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
+    const std::vector<std::optional<ListElementView>>& cells =
+        static_cast<const ColumnOptVector<ListElementView>*>(mask)->getRaw();
+    std::vector<size_t>& survivingRaw = indices->getRaw();
+
+    for (size_t row = 0; row < cells.size(); row++) {
+        if (cells[row].has_value() && cellTruth(*cells[row]).value_or(false)) {
+            survivingRaw.push_back(row);
+        }
+    }
+}
+
 bool isMaskConstant(const Column* mask) {
     return mask->getContainerKind() == ContainerKind::code<ColumnConst<CustomBool>>();
 }
@@ -1663,6 +1703,19 @@ std::optional<bool> readOptMaskTruth(const Column* mask, size_t row) {
 
 std::optional<bool> readNullTruth(const Column* mask, size_t row) {
     return std::nullopt;
+}
+
+std::optional<bool> readTaggedCellTruth(const Column* cells, size_t row) {
+    return cellTruth(static_cast<const ColumnVector<ListElementView>*>(cells)->getRaw()[row]);
+}
+
+std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
+    const std::optional<ListElementView>& cell = static_cast<const ColumnOptVector<ListElementView>*>(cells)->getRaw()[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return cellTruth(*cell);
 }
 
 // The entities of one kind a path runs through, in the order the path holds them. A path
@@ -7074,9 +7127,11 @@ NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {
     return reset;
 }
 
-NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull) {
+NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull, bool taggedCells) {
     if (untypedNull) {
         return &readNullTruth;
+    } else if (taggedCells) {
+        return nullable ? &readOptTaggedCellTruth : &readTaggedCellTruth;
     } else if (nullable) {
         return &readOptMaskTruth;
     }
@@ -8817,9 +8872,11 @@ NLGatherFunction NLExecutor::selectCountGatherFunction() {
     return &gatherColumn<uint64_t>;
 }
 
-NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, bool untypedNull) {
+NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, bool untypedNull, bool taggedCells) {
     if (untypedNull) {
         return &collectNoSurvivors;
+    } else if (taggedCells) {
+        return nullable ? &collectOptTaggedCellSurvivors : &collectTaggedCellSurvivors;
     } else if (nullable) {
         return &collectOptMaskSurvivors;
     }

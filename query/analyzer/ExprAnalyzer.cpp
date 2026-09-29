@@ -961,6 +961,20 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::String;
     }
 
+    // A variable bound only ever to null, as the element of a null list is, has no entity
+    // to read: its property is null, as the property of a null entity is
+    const bool readsANullVariable = varType == EvaluatedType::Null && !allowCreate;
+    if (readsANullVariable) {
+        expr->setEntityVarDecl(varDecl);
+        expr->setPropertyName(propName->getName());
+        expr->setType(EvaluatedType::Null);
+        expr->setDynamic();
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Null));
+
+        return ValueType::Invalid;
+    }
+
     if (varType != EvaluatedType::NodePattern && varType != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
             "Variable '{}' is '{}' it must be a node or edge",
@@ -1872,7 +1886,11 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
 
     const ListShape& sourceShape = source->getListShape();
 
-    VarDecl* const itemDecl = _ctxt->getOrCreateNamedVariable(_ast, sourceShape.unwoundType(), itemName);
+    // A null list holds no element, so the variable never reads as anything but null
+    const EvaluatedType itemType = sourceType == EvaluatedType::Null ? EvaluatedType::Null
+                                                                     : sourceShape.unwoundType();
+
+    VarDecl* const itemDecl = _ctxt->getOrCreateNamedVariable(_ast, itemType, itemName);
     itemDecl->setIsUnwound(true);
     itemDecl->setListShape(sourceShape.unwound());
 
@@ -1893,9 +1911,11 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     if (predicate) {
         const EvaluatedType predicateType = predicate->getType();
 
-        // A null WHERE holds for no element, as a null WHERE cuts every row
+        // A null WHERE holds for no element, as a null WHERE cuts every row. An element of a
+        // list naming no type for its elements is read as a truth value row by row
         const bool predicateIsBoolean = predicateType == EvaluatedType::Bool
-                                     || predicateType == EvaluatedType::Null;
+                                     || predicateType == EvaluatedType::Null
+                                     || predicateType == EvaluatedType::ListItem;
 
         if (!predicateIsBoolean) {
             throwError("The WHERE of a list comprehension must be a boolean", predicate);
