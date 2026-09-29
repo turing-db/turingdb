@@ -7539,7 +7539,11 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::In:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::InOp>(loc, boolType, lhs, rhs).getResult();
+            if (rhsExpr->getType() == EvaluatedType::Null) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::InOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
 
         case BinaryOperator::_SIZE:

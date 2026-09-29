@@ -41,14 +41,19 @@ public:
 
     bool isConstant() const { return _constant; }
 
+    bool takesAVariableLengthPath() const { return _takesAVariableLengthPath; }
+
     void setName(std::string_view name) { _name = name; }
 
     void setConstant(bool constant) { _constant = constant; }
+
+    void setTakesAVariableLengthPath(bool takesPath) { _takesAVariableLengthPath = takesPath; }
 
 private:
     EvaluatedType _type {EvaluatedType::Invalid};
     std::string_view _name;
     bool _constant {false};
+    bool _takesAVariableLengthPath {false};
 };
 
 class FunctionSignature {

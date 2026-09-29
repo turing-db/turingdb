@@ -479,7 +479,9 @@ struct PairRestrictions<Op> {
 
         std::tuple<
             KindPair<PropertyNull, ListView>,
-            KindPair<PropertyNull, std::optional<ListView>>
+            KindPair<PropertyNull, std::optional<ListView>>,
+            KindPair<PropertyNull, ListElementView>,
+            KindPair<PropertyNull, std::optional<ListElementView>>
         >
     >;
 
