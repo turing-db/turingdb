@@ -406,6 +406,30 @@ struct PairRestrictions<Op> {
 };
 
 template <ColumnOperator Op>
+struct TemporalArithmeticKindPairs {
+    using Pairs = std::tuple<>;
+};
+
+template <>
+struct TemporalArithmeticKindPairs<OP_ADD> {
+    using Pairs = TupleFlatten<
+        OptionalKindPairs<types::DateTime::Primitive, types::Duration::Primitive>::Pairs,
+        ListElementKindPairs<types::DateTime::Primitive>::Pairs,
+        ListElementKindPairs<types::Duration::Primitive>::Pairs
+    >::Type;
+};
+
+template <>
+struct TemporalArithmeticKindPairs<OP_SUB> {
+    using Pairs = TupleFlatten<
+        OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
+        OptionalKindPairs<types::DateTime::Primitive, types::Duration::Primitive>::Pairs,
+        ListElementKindPairs<types::DateTime::Primitive>::Pairs,
+        ListElementKindPairs<types::Duration::Primitive>::Pairs
+    >::Type;
+};
+
+template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
           || (Op == OP_MOD) || (Op == OP_POW)
 struct PairRestrictions<Op> {
@@ -424,7 +448,10 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Int64::Primitive>::Pairs,
         ListElementKindPairs<types::UInt64::Primitive>::Pairs,
         ListElementKindPairs<types::Double::Primitive>::Pairs,
-        OptionalKindPairs<ListElementView, ListElementView>::Pairs
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
+
+        // Temporal arithmetic operations.
+        typename TemporalArithmeticKindPairs<Op>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;

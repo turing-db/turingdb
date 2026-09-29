@@ -411,6 +411,7 @@ public:
             return std::nullopt;
         }
 
+        // We throw here as we only know the type of the list element at runtime.
         throw FatalException("a duration component reads a duration, and this row holds a value that is not one");
     }
 

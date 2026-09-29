@@ -8,6 +8,8 @@
 #include <string>
 #include <string_view>
 
+#include "Duration.h"
+
 namespace db {
 
 // A calendar field of an instant. Millisecond and Microsecond name the sub-second part
@@ -44,6 +46,12 @@ public:
         return _microseconds == other._microseconds;
     }
 
+    Duration operator-(const DateTime& other) const;
+
+    DateTime operator+(const Duration& duration) const;
+
+    DateTime operator-(const Duration& duration) const;
+
     // An ISO-8601 date, or date and time, read as UTC. A trailing offset names which instant
     // the text stands for and is then spent: one count of microseconds cannot carry a zone,
     // so the value is the instant and reads back as UTC.
@@ -72,6 +80,8 @@ private:
     // values straight out of the mapped page through fs::TrivialPrimitive
     int64_t _microseconds;
 };
+
+DateTime operator+(const Duration& duration, const DateTime& instant);
 
 }
 
