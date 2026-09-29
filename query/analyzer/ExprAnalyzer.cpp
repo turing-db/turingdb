@@ -702,12 +702,6 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                                                       EvaluatedTypeName::value(b));
                 throwError(error, expr);
             }
-
-            if (a == EvaluatedType::List || a == EvaluatedType::Map) {
-                const std::string error = fmt::format("Left operand must be a scalar, not '{}'",
-                                                      EvaluatedTypeName::value(a));
-                throwError(error, expr);
-            }
         } break;
 
         case BinaryOperator::_SIZE: {
