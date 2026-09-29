@@ -5,8 +5,11 @@
 #include <compare>
 #include <functional>
 #include <string>
+#include <string_view>
 
 namespace db {
+
+class MapView;
 
 // A unit of a duration, read as the whole count of that unit it spans. A month is the
 // average Gregorian month of 30.436875 days, so a year is 365.2425 days. The ...Of...
@@ -66,6 +69,10 @@ public:
     Duration operator/(double divisor) const;
 
     static int64_t component(Duration value, DurationPart part);
+
+    static bool partNamed(std::string_view name, DurationPart& part);
+
+    static bool fromMap(const MapView& map, Duration& out);
 
     static void format(std::string& out, Duration value);
 

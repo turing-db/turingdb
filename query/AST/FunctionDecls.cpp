@@ -542,6 +542,14 @@ void FunctionDecls::initDefault() {
     durationOfMicroseconds->setArguments({EvaluatedType::Integer});
     durationOfMicroseconds->setReturnTypes({{EvaluatedType::Duration}});
 
+    FunctionSignature* durationOfMap = createFunction("duration");
+    durationOfMap->setArguments({EvaluatedType::Map});
+    durationOfMap->setReturnTypes({{EvaluatedType::Duration}});
+
+    FunctionSignature* durationOfCell = createFunction("duration");
+    durationOfCell->setArguments({EvaluatedType::ListItem});
+    durationOfCell->setReturnTypes({{EvaluatedType::Duration}});
+
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they
     // share is what the call returns.
