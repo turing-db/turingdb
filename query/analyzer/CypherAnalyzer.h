@@ -128,9 +128,11 @@ private:
     // holds them yet, so a subquery body in a sibling item does not import them
     std::unordered_set<const VarDecl*> _pendingItemAliases;
 
-    // The projection whose ORDER BY is being analyzed: a subquery body there also imports
-    // the variables its items renamed, under the new name
+    // The projection whose ORDER BY is being analyzed, and the variables its aggregate or
+    // DISTINCT consumed: the ORDER BY reads only its columns, a renamed variable included,
+    // so a subquery body there imports those and declares the consumed names itself
     const Projection* _orderedProjection {nullptr};
+    DeclSet _consumedVariables;
 
     // The shared body of a query and of a subquery's. @param returnRequired says whether a
     // body ending on a reading clause needs a RETURN: an EXISTS body does not

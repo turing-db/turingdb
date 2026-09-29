@@ -586,7 +586,8 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     };
 
     for (const VarDecl* decl : outer->decls()) {
-        if (decl->isUnnamed() || _pendingItemAliases.contains(decl)) {
+        const bool outOfScope = _pendingItemAliases.contains(decl) || _consumedVariables.contains(decl);
+        if (decl->isUnnamed() || outOfScope) {
             continue;
         }
 
@@ -646,14 +647,17 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     }
 
     const Projection* const orderedProjection = std::exchange(_orderedProjection, nullptr);
+    DeclSet consumedVariables;
 
     std::swap(_subqueryImports, correlated);
+    std::swap(_consumedVariables, consumedVariables);
 
     setScope(inner);
 
     analyzeQueryBody(body, /*returnRequired=*/false);
 
     std::swap(_subqueryImports, correlated);
+    std::swap(_consumedVariables, consumedVariables);
     _orderedProjection = orderedProjection;
 
     // A RETURN answers for no column outside the body, but the code generator reads the
@@ -955,10 +959,23 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
     }
 
     if (projection->hasOrderBy()) {
+        DeclSet consumedVariables;
+
+        const bool groupsRows = isAggregate || projection->isDistinct();
+        if (groupsRows && !projection->isReturningAll()) {
+            for (const VarDecl* decl : _ctxt->decls()) {
+                if (!projection->hasItemDecl(decl)) {
+                    consumedVariables.insert(decl);
+                }
+            }
+        }
+
         const Projection* const outerOrderedProjection = std::exchange(_orderedProjection, projection);
+        std::swap(_consumedVariables, consumedVariables);
 
         analyze(projection->getOrderBy(), projection);
 
+        std::swap(_consumedVariables, consumedVariables);
         _orderedProjection = outerOrderedProjection;
 
         // An aggregate in the ORDER BY aggregates the projection as an aggregate item
