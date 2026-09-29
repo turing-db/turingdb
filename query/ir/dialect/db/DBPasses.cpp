@@ -1355,7 +1355,8 @@ Operation* createByTypeHop(Operation* hop, ArrayAttr edgeTypes, mlir::OpBuilder&
                                                   results.drop_front(hopFixedResultCount).getTypes(),
                                                   hop->getOperand(0),
                                                   edgeTypes,
-                                                  hop->getOperands().drop_front());
+                                                  hop->getOperands().drop_front(),
+                                                  DenseI64ArrayAttr());
 
     return byTypeHop.getOperation();
 }
@@ -2028,7 +2029,8 @@ Operation* createByLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& b
                                                      results.drop_front(hopFixedResultCount).getTypes(),
                                                      hop->getOperand(0),
                                                      labels,
-                                                     hop->getOperands().drop_front());
+                                                     hop->getOperands().drop_front(),
+                                                     DenseI64ArrayAttr());
 
     return byLabelHop.getOperation();
 }
@@ -2328,47 +2330,67 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     }
 };
 
-// A path exploration whose paths are then cut down to those sharing no edge with the edges
-// or paths the clause bound before it: the exclusion spelled the long way, since the walk
-// can leave those edges out and never build the paths the filter goes on to drop
-struct ExcludedExploration {
-    ExplorePaths _exploration;
+// A hop, or a path exploration, whose rows are then cut down to those whose new edge, or
+// path, shares no edge with columns the clause bound before it: the exclusion spelled the
+// long way, since the writer can skip those edges and never build the rows the filter goes
+// on to drop
+struct ExcludedHop {
+    Operation* _op {nullptr};
     CheckEdgeDistinct _check;
     llvm::SmallVector<size_t, 2> _excludedColumns;
 };
 
-bool matchExcludedExploration(FilterOp filter, ExcludedExploration& excluded) {
+constexpr llvm::StringLiteral distinctFromAttributeName = "distinct_from";
+
+bool matchExcludedHop(FilterOp filter, ExcludedHop& excluded) {
     CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
     if (!check) {
         return false;
     }
 
-    const Value subject = check.getSubject();
-    ExplorePaths exploration = subject.getDefiningOp<ExplorePaths>();
-    if (!exploration || subject != exploration.getPaths()) {
+    const OpResult subject = dyn_cast<OpResult>(check.getSubject());
+    if (!subject) {
         return false;
     }
 
-    // Every column the paths are checked against is a carried copy the exploration handed
-    // back, whose input is row-aligned with the seeds
+    // The subject is the hop's own edge column or the walk's own path column
+    Operation* const op = subject.getOwner();
+    size_t fixedResultCount = 0;
+    unsigned subjectResult = 0;
+    if (isEdgeHop(op)) {
+        fixedResultCount = hopFixedResultCount;
+        subjectResult = 1;
+    } else if (isa<ExplorePaths>(op)) {
+        fixedResultCount = pathFixedResultCount;
+        subjectResult = 2;
+    } else {
+        return false;
+    }
+
+    if (subject.getResultNumber() != subjectResult) {
+        return false;
+    }
+
+    // Every column it is checked against is a carried copy the op handed back, whose input
+    // is row-aligned with the op's own input
     llvm::SmallVector<size_t, 2> excludedColumns;
     for (const Value other : check.getOthers()) {
         const OpResult result = dyn_cast<OpResult>(other);
-        const bool carriedBack = result && result.getOwner() == exploration.getOperation() && result.getResultNumber() >= pathFixedResultCount;
+        const bool carriedBack = result && result.getOwner() == op && result.getResultNumber() >= fixedResultCount;
         if (!carriedBack) {
             return false;
         }
 
-        excludedColumns.push_back(result.getResultNumber() - pathFixedResultCount);
+        excludedColumns.push_back(result.getResultNumber() - fixedResultCount);
     }
 
     for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != exploration.getOperation()) {
+        if (column.getDefiningOp() != op) {
             return false;
         }
     }
 
-    for (const Value result : exploration.getResults()) {
+    for (const Value result : op->getResults()) {
         for (Operation* const user : result.getUsers()) {
             const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
             if (!readsThePair) {
@@ -2377,29 +2399,31 @@ bool matchExcludedExploration(FilterOp filter, ExcludedExploration& excluded) {
         }
     }
 
-    excluded = ExcludedExploration {._exploration = exploration, ._check = check, ._excludedColumns = excludedColumns};
+    excluded = ExcludedHop {._op = op, ._check = check, ._excludedColumns = excludedColumns};
 
     return true;
 }
 
-void fuseDistinctEdges(FilterOp filter, const ExcludedExploration& excluded, mlir::OpBuilder& builder) {
-    ExplorePaths exploration = excluded._exploration;
+void fuseDistinctEdges(FilterOp filter, const ExcludedHop& excluded, mlir::OpBuilder& builder) {
+    Operation* const op = excluded._op;
     CheckEdgeDistinct check = excluded._check;
 
-    const Operation::operand_range carried = exploration.getColumnsToFilter();
-    const Operation::operand_range exclusions = exploration.getDistinctFrom();
-
-    llvm::SmallVector<Value> excludedColumns(exclusions.begin(), exclusions.end());
-    for (const size_t index : excluded._excludedColumns) {
-        excludedColumns.push_back(carried[index]);
+    llvm::SmallVector<int64_t, 4> columns;
+    if (const DenseI64ArrayAttr held = op->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName)) {
+        llvm::append_range(columns, held.asArrayRef());
     }
+    for (const size_t column : excluded._excludedColumns) {
+        columns.push_back(static_cast<int64_t>(column));
+    }
+    llvm::sort(columns);
+    columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
 
-    exploration.getDistinctFromMutable().assign(excludedColumns);
+    op->setAttr(distinctFromAttributeName, builder.getDenseI64ArrayAttr(columns));
 
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
+    const Operation::operand_range filtered = filter.getColumnsToFilter();
+    const mlir::ResultRange results = filter.getFilteredColumns();
+    for (size_t index = 0; index < results.size(); index++) {
+        results[index].replaceAllUsesWith(filtered[index]);
     }
 
     filter.erase();
@@ -2409,7 +2433,7 @@ void fuseDistinctEdges(FilterOp filter, const ExcludedExploration& excluded, mli
 struct FuseDistinctEdges : public impl::FuseDistinctEdgesBase<FuseDistinctEdges> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
-        runFilterPass<ExcludedExploration>(getOperation(), matchExcludedExploration, fuseDistinctEdges, builder);
+        runFilterPass<ExcludedHop>(getOperation(), matchExcludedHop, fuseDistinctEdges, builder);
     }
 };
 
@@ -2976,7 +3000,6 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     keptColumns,
                                                     endResult,
                                                     exploration.getHopImports(),
-                                                    exploration.getDistinctFrom(),
                                                     exploration.getDirection(),
                                                     exploration.getMinHops(),
                                                     exploration.getMaxHopsAttr(),
@@ -2985,8 +3008,19 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     exploration.getHopLabelsAttr(),
                                                     IntegerAttr(),
                                                     false,
-                                                    exploration.getDistinct());
+                                                    exploration.getDistinct(),
+                                                    DenseI64ArrayAttr());
     set.getHop().takeBody(exploration.getHop());
+
+    if (const std::optional<llvm::ArrayRef<int64_t>> excluded = exploration.getDistinctFrom()) {
+        llvm::SmallVector<int64_t, 2> renumbered;
+        for (const int64_t column : *excluded) {
+            bioassert(static_cast<size_t>(column) != endColumn, "The end column holds nodes, not the edges the walk leaves out");
+            renumbered.push_back(static_cast<size_t>(column) < endColumn ? column : column - 1);
+        }
+
+        set.setDistinctFromAttr(builder.getDenseI64ArrayAttr(renumbered));
+    }
 
     exploration.getSrcids().replaceAllUsesWith(set.getSrcids());
     exploration.getTgtids().replaceAllUsesWith(set.getTgtids());
@@ -3287,7 +3321,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
         const size_t endNodeCount = exploration.getEndNodes() ? 1u : 0u;
         layout = CarrySetLayout {._operandOffset = 1,
                                  ._resultOffset = pathFixedResultCount,
-                                 ._trailingOperandCount = endNodeCount + exploration.getHopImports().size() + exploration.getDistinctFrom().size()};
+                                 ._trailingOperandCount = endNodeCount + exploration.getHopImports().size()};
         return true;
     } else if (isa<FilterOp>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
@@ -3339,8 +3373,15 @@ void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {
 }
 
 // A sort orders by its keys and a grouping op groups by them whether or not anything reads
-// them; a group aggregate still has to reduce something and a collect to gather something.
+// them; a group aggregate still has to reduce something and a collect to gather something;
+// a hop or a walk reads the columns it leaves the edges of out.
 void keepRequiredColumns(Operation* op, llvm::SmallBitVector& keep) {
+    if (const DenseI64ArrayAttr excluded = op->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName)) {
+        for (const int64_t column : excluded.asArrayRef()) {
+            keep.set(static_cast<unsigned>(column));
+        }
+    }
+
     if (Sort sort = dyn_cast<Sort>(op)) {
         for (const int64_t keyColumn : sort.getKeyColumns()) {
             keep.set(static_cast<unsigned>(keyColumn));
@@ -3482,19 +3523,37 @@ void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, Op
     state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
 }
 
+void renumberDistinctFrom(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const DenseI64ArrayAttr excluded = op->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName);
+    if (!excluded) {
+        return;
+    }
+
+    llvm::SmallVector<int64_t, 2> renumbered;
+    for (const int64_t column : excluded.asArrayRef()) {
+        const auto keptIt = llvm::find(kept, static_cast<size_t>(column));
+        bioassert(keptIt != kept.end(), "Excluded column {} is not in the trimmed carry set", column);
+
+        renumbered.push_back(static_cast<int64_t>(keptIt - kept.begin()));
+    }
+
+    state.attributes.set(distinctFromAttributeName, builder.getDenseI64ArrayAttr(renumbered));
+}
+
 // The carry set is an exploration's second operand segment, so a trim of it rewrites the
 // segment sizes as a trimmed procedure call's are rewritten
 void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
     const int32_t keptCount = static_cast<int32_t>(kept.size());
     const int32_t endNodeCount = exploration.getEndNodes() ? 1 : 0;
     const int32_t importCount = static_cast<int32_t>(exploration.getHopImports().size());
-    const int32_t exclusionCount = static_cast<int32_t>(exploration.getDistinctFrom().size());
 
     state.attributes.set(exploration.getOperandSegmentSizesAttrName(),
-                         builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount, importCount, exclusionCount}));
+                         builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount, importCount}));
 }
 
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    renumberDistinctFrom(op, kept, state, builder);
+
     if (Sort sort = dyn_cast<Sort>(op)) {
         renumberSortKeys(sort, kept, state, builder);
     } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {

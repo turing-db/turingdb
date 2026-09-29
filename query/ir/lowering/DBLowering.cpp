@@ -2072,7 +2072,7 @@ void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
 
     // The result iterator type - the four fixed edge chunks plus one per
     // carried chunk - is inferred from the operands.
-    nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
+    nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks, getOutEdges.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdges.getOperation());
 }
 
@@ -2091,7 +2091,7 @@ void DBLowering::lowerGetInEdges(mlir::db::GetInEdges getInEdges) {
 
     // The result iterator type - the four fixed edge chunks plus one per
     // carried chunk - is inferred from the operands.
-    nl::GetInEdges edges = _builder.create<nl::GetInEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
+    nl::GetInEdges edges = _builder.create<nl::GetInEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks, getInEdges.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdges.getOperation());
 }
 
@@ -2107,7 +2107,7 @@ void DBLowering::lowerGetEdges(mlir::db::GetEdges getEdges) {
 
 
     const mlir::Location uloc = _builder.getUnknownLoc();
-    nl::GetEdges edges = _builder.create<nl::GetEdges>(uloc, inputChunk, carriedChunks);
+    nl::GetEdges edges = _builder.create<nl::GetEdges>(uloc, inputChunk, carriedChunks, getEdges.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getEdges.getOperation());
 }
 
@@ -2125,7 +2125,8 @@ void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesB
     nl::GetOutEdgesByType edges = _builder.create<nl::GetOutEdgesByType>(_builder.getUnknownLoc(),
                                                                          inputChunk,
                                                                          edgeTypeHandle,
-                                                                         carriedChunks);
+                                                                         carriedChunks,
+                                                                     getOutEdgesByType.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByType.getOperation());
 }
 
@@ -2147,7 +2148,8 @@ void DBLowering::lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByTy
     nl::GetInEdgesByType edges = _builder.create<nl::GetInEdgesByType>(_builder.getUnknownLoc(),
                                                                        inputChunk,
                                                                        edgeTypeHandle,
-                                                                       carriedChunks);
+                                                                       carriedChunks,
+                                                                   getInEdgesByType.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByType.getOperation());
 }
 
@@ -2166,7 +2168,8 @@ void DBLowering::lowerGetOutEdgesByLabel(mlir::db::GetOutEdgesByLabel getOutEdge
     nl::GetOutEdgesByLabel edges = _builder.create<nl::GetOutEdgesByLabel>(_builder.getUnknownLoc(),
                                                                            inputChunk,
                                                                            getOutEdgesByLabel.getLabelsAttr(),
-                                                                           carriedChunks);
+                                                                           carriedChunks,
+                                                                       getOutEdgesByLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByLabel.getOperation());
 }
 
@@ -2185,7 +2188,8 @@ void DBLowering::lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesBy
     nl::GetInEdgesByLabel edges = _builder.create<nl::GetInEdgesByLabel>(_builder.getUnknownLoc(),
                                                                          inputChunk,
                                                                          getInEdgesByLabel.getLabelsAttr(),
-                                                                         carriedChunks);
+                                                                         carriedChunks,
+                                                                     getInEdgesByLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByLabel.getOperation());
 }
 
@@ -5862,11 +5866,6 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
         importChunks.push_back(mapValue(importColumn));
     }
 
-    llvm::SmallVector<mlir::Value, 2> exclusionChunks;
-    for (const mlir::Value excludedColumn : explorePaths.getDistinctFrom()) {
-        exclusionChunks.push_back(mapValue(excludedColumn));
-    }
-
     setInsertionInto(ownerBlock(inputChunk));
 
     nl::ExplorePaths exploration = _builder.create<nl::ExplorePaths>(_builder.getUnknownLoc(),
@@ -5875,7 +5874,6 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      endNodeSet,
                                                                      edgeTypeSet,
                                                                      importChunks,
-                                                                     exclusionChunks,
                                                                      explorePaths.getDirection(),
                                                                      explorePaths.getMinHops(),
                                                                      explorePaths.getMaxHopsAttr(),
@@ -5883,7 +5881,8 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      explorePaths.getHopLabelsAttr(),
                                                                      explorePaths.getEndColumnAttr(),
                                                                      explorePaths.getEndsOnSeed(),
-                                                                     explorePaths.getDistinct());
+                                                                     explorePaths.getDistinct(),
+                                                                     explorePaths.getDistinctFromAttr());
 
     mlir::Region& dbHop = explorePaths.getHop();
     if (!dbHop.empty()) {

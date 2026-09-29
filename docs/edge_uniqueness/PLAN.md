@@ -343,6 +343,39 @@ steps 3 to 5 prove away, costs nothing measurable at 6,371 rows.
 Still owed from the step: the exclusion set in the explorator's random reference sweep,
 which `PathEdgeUniquenessTest` covers at the query level only.
 
+Step 2 is implemented on the same branch. `distinct_from` names carried columns by index on
+the seven hop ops and on `explore_paths`, in both dialects; `fuse_distinct_edges` folds the
+check into whichever op bound the subject, so the plans of a chain, a V, a typed or
+labelled hop, a walk after a hop and a hop after a walk carry no filter
+(`FuseDistinctEdgesTest`), and the check stays a filter only over a cross product or a
+join. `EdgeExclusion` (`storage/iterators/`) holds a row's excluded edges for the seven chunk
+writers, the pending-edge hop and the explorator. A node's out-edges carry consecutive IDs
+within a part, so on an out-run the excluded edges are located by arithmetic and no record is
+read; an in-run is scanned. The translator gathers no copy of a carried column nothing reads
+back, which the fold leaves behind. Same machine, same protocol, on a quieter day (the
+controls moved by up to 20 % between runs):
+
+    query                                                     step 1        step 2       control
+    three precedingEvent hops from every Reaction     91,706  21.4 ms     91,706  14.7 ms   94,326  13.7 ms
+    shared_input                                     198,362  245 ms     198,362  215 ms   390,348  195 ms
+    (tlp)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r)    6,371  1.66 ms      6,371  1.47 ms    6,371  1.36 ms
+    (p:TopLevelPathway)--(b)--(c)               125,684,994  609 ms  125,684,994  210 ms  125,690,888  60 ms
+    (p:TopLevelPathway)--(b)--(c)--(d)        2,421,500,620  25.7 s  2,421,500,620  23.3 s  2,547,338,854  5.8 s
+    hub, one hop then a {1,3} walk                        4  1.3 ms           4  1.3 ms         4  1.3 ms
+
+The directed shapes are within 8 % of their controls. What the undirected walks still pay
+is the scan of the in-runs: a node's in-edges are sorted by target only
+(`EdgeContainer::create`), so finding the backtrack among them reads every record of the
+run, 32 bytes each, where the control reads none. Sorting the in-edges by target then edge
+ID at build time would make that a binary search of a few records; it changes what
+`edges-in` holds on disk, so it needs a raise of `UP_TO_DATE_VERSION`, which is the decision
+to take before it. It also supersedes the shared-endpoint test of this step: on an out-run
+the arithmetic already costs one compare per excluded edge and no record, and on an in-run
+the test could only spare the scan the sort removes.
+
+Still owed from step 2: that in-edge order, and `NLPendingEdgeHop` walks its excluded edges
+one by one, which no measurement has reached.
+
 ## Steps
 
 1. **Correct first.** `db.check_edge_distinct`, its emission in codegen, its lowering,

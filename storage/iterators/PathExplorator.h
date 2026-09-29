@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ChunkWriter.h"
+#include "EdgeExclusion.h"
 #include "PartDirectory.h"
 #include "PathCycleTable.h"
 #include "PathExplorationDir.h"
@@ -247,9 +248,7 @@ private:
     size_t _pendingEdgeIDBound {0};
     bool _distinctEnds {false};
     size_t _lookahead {1};
-    std::span<const ColumnEdgeIDs* const> _excludedEdgeColumns;
-    std::span<const ColumnVector<PathRef>* const> _excludedPathColumns;
-    const PathTrie* _exclusionTrie {nullptr};
+    EdgeExclusion _exclusion;
 
     PartDirectory _parts;
     const Tombstones* _tombstones {nullptr};
@@ -271,8 +270,6 @@ private:
     PathEdgeTable _pathEdgeTable;
     std::vector<PathRef> _pathEntries;
     std::vector<uint64_t> _pathSignatures;
-    std::vector<EdgeID> _seedExcluded;
-    uint64_t _seedExclusionSignature {0};
     std::vector<Frame> _frames;
     std::vector<NodeID> _candidateNodes;
     std::vector<EdgeID> _candidateEdges;
@@ -306,10 +303,6 @@ private:
     void resizeOutputs(size_t count);
 
     uint64_t expansionKey(NodeID node, uint64_t budget) const;
-
-    bool excludes() const;
-    void collectExclusions(size_t row, std::vector<EdgeID>& edges) const;
-    bool isSeedExcluded(EdgeID edge) const;
 
     void startSeed(size_t row);
     void step();

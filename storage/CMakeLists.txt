@@ -56,6 +56,7 @@ set(storage_sources
         iterators/GetPropertiesWithNullIterator.cpp
         iterators/GetNodeLabelSetIterator.cpp
         iterators/GetEdgeTypesIterator.cpp
+        iterators/EdgeExclusion.cpp
         iterators/GetOutEdgesIterator.cpp
         iterators/GetOutEdgesByTypeIterator.cpp
         iterators/GetOutEdgesByLabelIterator.cpp

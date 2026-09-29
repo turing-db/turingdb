@@ -57,6 +57,26 @@ bool holdsEdgesOrPaths(Value column) {
     return isa<storage::EdgeIDType, storage::PathRefType>(columnType.getType());
 }
 
+// distinct_from names carried columns by index, and only an edge or path column holds an
+// edge a hop could repeat
+LogicalResult verifyDistinctFrom(Operation* operation, std::optional<llvm::ArrayRef<int64_t>> distinctFrom, OperandRange carried) {
+    if (!distinctFrom) {
+        return success();
+    }
+
+    for (const int64_t column : *distinctFrom) {
+        if (column < 0 || static_cast<size_t>(column) >= carried.size()) {
+            return operation->emitOpError("distinct_from names carried column ") << column << " of " << carried.size();
+        }
+
+        if (!holdsEdgesOrPaths(carried[static_cast<unsigned>(column)])) {
+            return operation->emitOpError("distinct_from must name edge or path columns");
+        }
+    }
+
+    return success();
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -479,10 +499,8 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("max_hops must be at least min_hops");
     }
 
-    for (const Value excluded : getDistinctFrom()) {
-        if (!holdsEdgesOrPaths(excluded)) {
-            return emitOpError("distinct_from must name edge or path columns");
-        }
+    if (failed(verifyDistinctFrom(getOperation(), getDistinctFrom(), carried))) {
+        return failure();
     }
 
     if (const ArrayAttr edgeTypes = getEdgeTypesAttr()) {
@@ -1118,12 +1136,32 @@ LogicalResult ScanInEdgesByLabelSrc::verify() {
     return success();
 }
 
+LogicalResult GetOutEdges::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetInEdges::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetEdges::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetOutEdgesByType::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetInEdgesByType::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
 LogicalResult GetOutEdgesByLabel::verify() {
     if (getLabels().empty()) {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult GetInEdgesByLabel::verify() {
@@ -1131,7 +1169,7 @@ LogicalResult GetInEdgesByLabel::verify() {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult GetOutEdgesByTypeAndLabel::verify() {

@@ -641,7 +641,7 @@ def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {
 
   // `columns_to_filter`: the variadic carry set, after the fixed input_nodes.
   // NLChunk, not NLNodeIDChunk, so chunks of any element type can be carried.
-  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   // The carried chunk element types vary from call to call and - unlike
@@ -650,7 +650,7 @@ def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {
   // group (anchored on the carried types) drops the colon when the carry set
   // is empty, keeping the first-hop syntax `(%nodes, {})`.
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -673,11 +673,11 @@ def GetInEdges : NLOp<"get_in_edges", [Pure, InferTypeOpAdaptor]> {
     are inferred; only the carried chunk types are spelled out, after the colon.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -685,11 +685,11 @@ def GetInEdges : NLOp<"get_in_edges", [Pure, InferTypeOpAdaptor]> {
 def GetEdges : NLOp<"get_edges", [Pure, InferTypeOpAdaptor]> {
   let summary = "Create a database iterator over the edges of a chunk of nodes";
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -725,7 +725,7 @@ def GetOutEdgesByType : NLOp<"get_out_edges_by_type", [Pure, InferTypeOpAdaptor]
   // `edge_types` is the resolved handle from nl.get_edge_type_set. The carry set is
   // NLChunk, not NLNodeIDChunk, so chunks of any element type can be carried,
   // exactly as on nl.get_out_edges.
-  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   // The handle prints as %h inside the parens after input_nodes; its type is
@@ -733,7 +733,7 @@ def GetOutEdgesByType : NLOp<"get_out_edges_by_type", [Pure, InferTypeOpAdaptor]
   // type. As on nl.get_out_edges, only the carried chunk types are spelled, in the
   // optional group that drops the colon when the carry set is empty.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -752,11 +752,11 @@ def GetInEdgesByType : NLOp<"get_in_edges_by_type", [Pure, InferTypeOpAdaptor]> 
     resolved into yields no chunk.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -787,11 +787,11 @@ def GetOutEdgesByLabel : NLOp<"get_out_edges_by_label", [Pure, InferTypeOpAdapto
     carried chunk types are spelled out, after the colon.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -812,11 +812,11 @@ def GetInEdgesByLabel : NLOp<"get_in_edges_by_label", [Pure, InferTypeOpAdaptor]
     resolved the same way and an absent name yields no chunk.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -934,7 +934,6 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        Optional<NLNodeSetStateHandle>:$end_nodes,
                        Optional<NLEdgeTypeHandle>:$edge_types,
                        Variadic<NLChunk>:$hop_imports,
-                       Variadic<NLChunk>:$distinct_from,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -942,7 +941,8 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        OptionalAttr<StrArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
-                       UnitAttr:$distinct);
+                       UnitAttr:$distinct,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let regions = (region MaxSizedRegion<1>:$hop);
@@ -952,8 +952,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
     (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
     (`hop_imports` `{` $hop_imports^ `:` qualified(type($hop_imports)) `}`)?
-    (`distinct_from` `{` $distinct_from^ `:` qualified(type($distinct_from)) `}`)?
-    (`ends_on_seed` $ends_on_seed^)? (`distinct` $distinct^)? ($hop^)?
+    (`distinct_from` $distinct_from^)? (`ends_on_seed` $ends_on_seed^)? (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];
 
