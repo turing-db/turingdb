@@ -433,8 +433,9 @@ TEST_F(ExistsSubqueryTest, readsOnlyTheGroupingKeysBesideAnAggregate) {
     expectError("MATCH (p:Person) RETURN p.name, count(*) > 0 AND EXISTS { (p)-[:KNOWS_WELL]->() } AS x",
                 "An expression beside an aggregate may only read the grouping keys");
 
-    expectError("MATCH (p:Person)-[:INTERESTED_IN]->(i) RETURN p, count(*) AS c ORDER BY EXISTS { (i)<-[:INTERESTED_IN]-() }",
-                "ORDER BY with an aggregate may only order by expressions over the returned columns");
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i) RETURN p, count(*) AS c ORDER BY EXISTS { (i)<-[:INTERESTED_IN]-() }",
+               {{"0", "3"}, {"1", "2"}, {"8", "2"}, {"9", "2"},
+                {"11", "1"}, {"12", "2"}, {"15", "2"}, {"17", "1"}});
 }
 
 TEST_F(ExistsSubqueryTest, answersOverUnwoundRows) {
