@@ -709,7 +709,7 @@ struct TuringIn {
 
     // The list a type-erased cell holds is the list the value is looked for in
     template <typename T, typename C>
-        requires TaggedListOperand<C> && (!ListOperand<T>)
+        requires TaggedListOperand<C>
     std::optional<CustomBool> operator()(const T& value, const C& cell) const {
         const std::optional<ListView> list = taggedList(cell);
         if (!list) {
@@ -747,6 +747,11 @@ struct TuringIn {
             if (scalar.getTag() == ListBufferTypeTag::Null) {
                 return std::nullopt;
             }
+
+            const std::optional<ListView> scalarList = taggedList(scalar);
+            if (scalarList) {
+                return (*this)(*scalarList, elements);
+            }
         } else if constexpr (TypedInternalID<Scalar>) {
             if (!scalar.isValid()) {
                 return std::nullopt;
@@ -761,7 +766,19 @@ struct TuringIn {
                 continue;
             }
 
-            if (element == scalar) {
+            if constexpr (std::is_same_v<Scalar, ListView>) {
+                const std::optional<ListView> elementList = taggedList(element);
+                if (!elementList) {
+                    continue;
+                }
+
+                const std::optional<CustomBool> equal = TuringEqual {}(*elementList, scalar);
+                if (!equal) {
+                    unknown = true;
+                } else if (equal->_boolean) {
+                    return CustomBool {true};
+                }
+            } else if (element == scalar) {
                 return CustomBool {true};
             }
         }
@@ -775,7 +792,7 @@ struct TuringIn {
 
     // Unused but needed to satisfy symmetry of dispatcher
     template <typename L, typename T>
-        requires ListOperand<L> && (!ListOperand<T>)
+        requires ListOperand<L> && (!ListOperand<T>) && (!TaggedListOperand<T>)
     std::optional<CustomBool> operator()(const L& list, const T& value) const {
         throw FatalException("IN operands in incorrect order");
     }
