@@ -12,8 +12,12 @@ at the end carrying the fixes and the tests. `REVIEW.md` records the whole run a
 committed.
 
 `$ARGUMENTS` may carry an effort level (`low`, `medium`, `high`, `xhigh`, `max`) and a
-review target (a PR number, a branch, a path). Default: `high`, and the target phase 0
-works out.
+review target (a PR number, a branch, a path, or a jj change id). Default: `high`, and the
+target phase 0 works out.
+
+Run in **jj mode** when `$ARGUMENTS` contains `jj`, or when `jj root` succeeds in the working
+directory. jj mode keeps the loop and replaces every git step; see [jj mode](#jj-mode) below.
+Where a step below names a git command, jj mode's version of that step is the one to follow.
 
 ## 0. Fix the target and the baseline, once
 
@@ -37,6 +41,67 @@ Record three things now and do not recompute them later.
 
 A clean tree with nothing to diff against ends the run here: say there is nothing to review
 and stop.
+
+## jj mode
+
+In a jj workspace, git is not a way to look at or change the tree. A workspace of another
+repo has no `.git` of its own, or one pointing at the other checkout, so `git status`,
+`git diff` and `git add` read and write *that* checkout's index. Run no git command in jj
+mode, read-only ones included: their output describes a different tree.
+
+**Phase 0.** Record the same three things from jj:
+
+```bash
+jj root
+jj st
+jj log -r '@ | @-' --no-graph -T 'change_id.short() ++ " " ++ commit_id.short() ++ " " ++ description.first_line() ++ "\n"'
+```
+
+- **The target** is one change. `$ARGUMENTS`' change id if it names one. Otherwise `@` when
+  `jj diff -r @ --stat` is non-empty, and `@-` when it is not. Record its change id, which
+  survives rewrites, not its commit id.
+- **The baseline** is `jj diff -r <target> --stat`, plus the descendants:
+  `jj log -r '<target>::' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'`.
+- **Where you started.** The change `@` is on now, so the loop can return to it.
+
+When the target is not `@`, run `jj edit <target>` before the first review, so every fix
+lands in it. Descendants rebase onto each rewrite by themselves. Going back to where you
+started at the end rewrites every file the two changes differ in, so the next build
+recompiles them.
+
+**Review.** The review cannot use git to find the diff. Pass it the change and the command
+that shows it:
+
+```
+Skill(skill: "code-review", args: "<level> jj change <id>: read the diff with `jj diff --git -r <id>`; run no git command")
+```
+
+**REVIEW.md** goes to `build/REVIEW.md`, not the repo root. jj auto-tracks new files, so a
+root `REVIEW.md` would be snapshotted into the target on the next jj command. `build/` is
+ignored. Anything else the loop writes outside `build/` becomes part of the target too:
+scratch output belongs under `build/` or the session scratchpad.
+
+**Step 5.** Never `jj abandon`, `jj restore`, `jj undo`, `jj op restore` or `jj squash`
+over the user's changes. They rewrite history the loop does not own, and nothing restores a
+change they drop. A fix that turns out wrong is edited back out by hand, as in git mode.
+
+**The commit** already exists: the target is the one commit, carrying the fixes and the
+tests. Make no new change and do not edit its description. Before the report, check:
+
+```bash
+jj diff -r <target> --stat
+jj log -r '<target>::' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ if(conflict, " CONFLICT") ++ "\n"'
+```
+
+The stat must list the phase-0 baseline plus the files the fixes touched, the new tests
+and the `CMakeLists.txt` that registers them, and nothing else. A stray scratch file is
+deleted from disk, which drops it from the change on the next snapshot. A descendant
+marked `CONFLICT` is reported, not resolved: it is the user's commit.
+
+When the target was not `@`, `jj edit` back to the change you started on.
+
+**The report** names the target's change id and new commit id in place of a sha and a
+branch, lists any descendant that conflicts, and says `REVIEW.md` is at `build/REVIEW.md`.
 
 ## The iteration
 
@@ -137,7 +202,7 @@ Correctness findings first, then simplification, then efficiency.
   work in `query/ir/`, and on this machine its native pass fails for unrelated reasons.
 - Never `git checkout --`, `git reset --hard` or `git stash`. The tree holds the user's
   uncommitted work and nothing can restore it. A fix that turns out wrong is edited back
-  out by hand.
+  out by hand. jj mode has its own list of history-rewriting commands to avoid.
 
 ### 6. Decide
 
@@ -167,7 +232,8 @@ them. When the loop ends at the cap, say so — the last round's fixes are unrev
 
 ## REVIEW.md
 
-At the repo root, untracked, never staged, one section appended per iteration. Give each
+At the repo root, untracked, never staged, one section appended per iteration. In jj mode
+it lives at `build/REVIEW.md` instead. Give each
 finding an id numbered across the run, not within the iteration — `C1`, `S1`, `E1` — so a
 later section can write `C2 reopened`.
 
@@ -203,7 +269,8 @@ test, the status. No prose paragraphs.
 
 ## The commit
 
-One commit for the whole run, made after the loop, never inside it.
+One commit for the whole run, made after the loop, never inside it. In jj mode the target
+is that commit, and this section is replaced by jj mode's checks.
 
 - On `main`, branch first — `git checkout -b converge/<slug>` carries the working tree over.
 - Stage by explicit path. Never `git add -A`, `git add .` or `git add -u`: the tree carries
