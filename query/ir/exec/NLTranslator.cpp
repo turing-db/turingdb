@@ -1962,7 +1962,9 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
                                hopEdges,
                                hopEnds,
                                getColumn(mask),
-                               NLExecutor::selectMaskSurvivorFunction(maskNullable, maskIsUntypedNull));
+                               NLExecutor::selectMaskSurvivorFunction(maskNullable,
+                                                                      maskIsUntypedNull,
+                                                                      isListElementChunk(mask.getType())));
     }
 
     body->emplaceStmt(&NLExecutor::runExplorePathsLoop, loopData);
@@ -3205,7 +3207,7 @@ void NLTranslator::translateListPredicate(nl::ListPredicate predicate, NLStmtCon
 
     const mlir::Type valueType = valueValue.getType();
     const bool nullable = mlir::isa<storage::NullableType>(mlir::cast<nl::ChunkType>(valueType).getElementType());
-    data->setTruthRead(NLExecutor::selectTruthRead(nullable, isUntypedNullChunk(valueType)));
+    data->setTruthRead(NLExecutor::selectTruthRead(nullable, isUntypedNullChunk(valueType), isListElementChunk(valueType)));
 
     body->emplaceStmt(&NLExecutor::runListPredicate, data);
 }
@@ -3319,13 +3321,16 @@ void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer*
 }
 
 void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
-    const Column* mask = getColumn(filter.getMask());
+    const mlir::Value maskValue = filter.getMask();
+    const Column* mask = getColumn(maskValue);
 
-    const auto maskChunk = mlir::cast<nl::ChunkType>(filter.getMask().getType());
+    const mlir::Type maskType = maskValue.getType();
+    const auto maskChunk = mlir::cast<nl::ChunkType>(maskType);
     const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
-    const bool maskIsUntypedNull = isUntypedNullChunk(filter.getMask().getType());
+    const bool maskIsUntypedNull = isUntypedNullChunk(maskType);
+    const bool maskHoldsTaggedCells = isListElementChunk(maskType);
     const NLMaskSurvivorFunction filterFunction =
-        NLExecutor::selectMaskSurvivorFunction(maskNullable, maskIsUntypedNull);
+        NLExecutor::selectMaskSurvivorFunction(maskNullable, maskIsUntypedNull, maskHoldsTaggedCells);
 
     NLFilterData* data = _program->allocFunctionData<NLFilterData>(mask, filterFunction);
 
