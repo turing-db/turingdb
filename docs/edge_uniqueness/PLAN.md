@@ -348,10 +348,13 @@ the seven hop ops and on `explore_paths`, in both dialects; `fuse_distinct_edges
 check into whichever op bound the subject, so the plans of a chain, a V, a typed or
 labelled hop, a walk after a hop and a hop after a walk carry no filter
 (`FuseDistinctEdgesTest`), and the check stays a filter only over a cross product or a
-join. `EdgeExclusion` (`storage/iterators/`) holds a row's excluded edges for the seven chunk
-writers, the pending-edge hop and the explorator. A node's out-edges carry consecutive IDs
-within a part, so on an out-run the excluded edges are located by arithmetic and no record is
-read; an in-run is scanned. The translator gathers no copy of a carried column nothing reads
+join. Before a loop runs, its loop data lays the excluded edges of the input's rows out
+flat, one span of edge IDs per row, resolving the edge columns and the paths of an earlier
+walk through the trie there in the query layer; storage sees only that
+(`ExcludedEdges`, two spans), and the seven chunk writers, the pending-edge hop and the
+explorator read a row's span by index. A node's out-edges carry consecutive IDs within a
+part, so on an out-run the excluded edges are located by arithmetic and no record is read;
+an in-run is scanned. The translator gathers no copy of a carried column nothing reads
 back, which the fold leaves behind. Same machine, same protocol, on a quieter day (the
 controls moved by up to 20 % between runs):
 

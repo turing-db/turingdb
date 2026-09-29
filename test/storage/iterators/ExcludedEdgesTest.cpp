@@ -11,6 +11,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/ExcludedEdges.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "reader/GraphReader.h"
@@ -37,7 +38,7 @@ struct CollectedEdge {
 
 void collectOutEdges(const GraphReader& reader,
                      const ColumnNodeIDs* input,
-                     std::span<const ColumnEdgeIDs* const> excluded,
+                     const ExcludedEdges& excluded,
                      size_t maxCount,
                      std::vector<CollectedEdge>& out) {
     ColumnVector<size_t> indices;
@@ -48,7 +49,7 @@ void collectOutEdges(const GraphReader& reader,
     writer.setIndices(&indices);
     writer.setEdgeIDs(&edgeIDs);
     writer.setTgtIDs(&targets);
-    writer.setDistinctFrom(excluded);
+    writer.setExcludedEdges(excluded);
 
     out.clear();
     while (writer.isValid()) {
@@ -61,7 +62,7 @@ void collectOutEdges(const GraphReader& reader,
 
 void collectInEdges(const GraphReader& reader,
                     const ColumnNodeIDs* input,
-                    std::span<const ColumnEdgeIDs* const> excluded,
+                    const ExcludedEdges& excluded,
                     size_t maxCount,
                     std::vector<CollectedEdge>& out) {
     ColumnVector<size_t> indices;
@@ -72,7 +73,7 @@ void collectInEdges(const GraphReader& reader,
     writer.setIndices(&indices);
     writer.setEdgeIDs(&edgeIDs);
     writer.setSrcIDs(&sources);
-    writer.setDistinctFrom(excluded);
+    writer.setExcludedEdges(excluded);
 
     out.clear();
     while (writer.isValid()) {
@@ -106,10 +107,10 @@ void expectSameContent(std::vector<std::pair<size_t, uint64_t>> expected, const 
 
 }
 
-// The writers leave out of each input row the edges its exclusion columns hold: an out-run
-// by the arithmetic over its consecutive IDs, an in-run by a scan. Node 1 has two out-edges
-// (to 0 and 2) and two in-edges (from 0 and 2).
-class EdgeExclusionTest : public TuringTest {
+// The writers leave out of each input row the edges its span holds: an out-run by the
+// arithmetic over its consecutive IDs, an in-run by a scan. Node 1 has two out-edges (to 0
+// and 2) and two in-edges (from 0 and 2).
+class ExcludedEdgesTest : public TuringTest {
 protected:
     void initialize() override {
         _jobSystem = std::make_unique<JobSystem>();
@@ -147,7 +148,7 @@ protected:
     std::unique_ptr<Graph> _graph;
 };
 
-TEST_F(EdgeExclusionTest, leavesTheExcludedEdgeOutOfAnOutRun) {
+TEST_F(ExcludedEdgesTest, leavesTheExcludedEdgeOutOfAnOutRun) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const ColumnNodeIDs input = {1, 1};
@@ -161,15 +162,15 @@ TEST_F(EdgeExclusionTest, leavesTheExcludedEdgeOutOfAnOutRun) {
     const ColumnNodeIDs zero = {0};
     collectOutEdges(reader, &zero, {}, ChunkConfig::CHUNK_SIZE, allOfZero);
 
-    const ColumnEdgeIDs excluded = {EdgeID(edgeTo(all, 0, 0)), EdgeID(edgeTo(allOfZero, 0, 1))};
-    const ColumnEdgeIDs* const columns[] = {&excluded};
+    const std::vector<size_t> offsets {0, 1, 2};
+    const std::vector<EdgeID> edges {EdgeID(edgeTo(all, 0, 0)), EdgeID(edgeTo(allOfZero, 0, 1))};
 
     std::vector<CollectedEdge> pruned;
-    collectOutEdges(reader, &input, columns, ChunkConfig::CHUNK_SIZE, pruned);
+    collectOutEdges(reader, &input, ExcludedEdges {offsets, edges}, ChunkConfig::CHUNK_SIZE, pruned);
     expectSameContent({{0, 2}, {1, 0}, {1, 2}}, pruned);
 }
 
-TEST_F(EdgeExclusionTest, leavesTheExcludedEdgeOutOfAnInRun) {
+TEST_F(ExcludedEdgesTest, leavesTheExcludedEdgeOutOfAnInRun) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const ColumnNodeIDs input = {1, 1};
@@ -178,15 +179,15 @@ TEST_F(EdgeExclusionTest, leavesTheExcludedEdgeOutOfAnInRun) {
     collectInEdges(reader, &input, {}, ChunkConfig::CHUNK_SIZE, all);
     expectSameContent({{0, 0}, {0, 2}, {1, 0}, {1, 2}}, all);
 
-    const ColumnEdgeIDs excluded = {EdgeID(edgeTo(all, 0, 0)), EdgeID(edgeTo(all, 1, 2))};
-    const ColumnEdgeIDs* const columns[] = {&excluded};
+    const std::vector<size_t> offsets {0, 1, 2};
+    const std::vector<EdgeID> edges {EdgeID(edgeTo(all, 0, 0)), EdgeID(edgeTo(all, 1, 2))};
 
     std::vector<CollectedEdge> pruned;
-    collectInEdges(reader, &input, columns, ChunkConfig::CHUNK_SIZE, pruned);
+    collectInEdges(reader, &input, ExcludedEdges {offsets, edges}, ChunkConfig::CHUNK_SIZE, pruned);
     expectSameContent({{0, 2}, {1, 0}}, pruned);
 }
 
-TEST_F(EdgeExclusionTest, prunesARunSplitAcrossFills) {
+TEST_F(ExcludedEdgesTest, prunesARunSplitAcrossFills) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const ColumnNodeIDs input = {1, 1};
@@ -194,15 +195,15 @@ TEST_F(EdgeExclusionTest, prunesARunSplitAcrossFills) {
     std::vector<CollectedEdge> all;
     collectOutEdges(reader, &input, {}, ChunkConfig::CHUNK_SIZE, all);
 
-    const ColumnEdgeIDs excluded = {EdgeID(edgeTo(all, 0, 2)), EdgeID(edgeTo(all, 1, 0))};
-    const ColumnEdgeIDs* const columns[] = {&excluded};
+    const std::vector<size_t> offsets {0, 1, 2};
+    const std::vector<EdgeID> edges {EdgeID(edgeTo(all, 0, 2)), EdgeID(edgeTo(all, 1, 0))};
 
     std::vector<CollectedEdge> pruned;
-    collectOutEdges(reader, &input, columns, 1, pruned);
+    collectOutEdges(reader, &input, ExcludedEdges {offsets, edges}, 1, pruned);
     expectSameContent({{0, 0}, {1, 2}}, pruned);
 }
 
-TEST_F(EdgeExclusionTest, twoColumnsLeaveTwoEdgesOut) {
+TEST_F(ExcludedEdgesTest, aRowMayLeaveSeveralEdgesOut) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const ColumnNodeIDs input = {1};
@@ -210,11 +211,10 @@ TEST_F(EdgeExclusionTest, twoColumnsLeaveTwoEdgesOut) {
     std::vector<CollectedEdge> all;
     collectOutEdges(reader, &input, {}, ChunkConfig::CHUNK_SIZE, all);
 
-    const ColumnEdgeIDs first = {EdgeID(edgeTo(all, 0, 0))};
-    const ColumnEdgeIDs second = {EdgeID(edgeTo(all, 0, 2))};
-    const ColumnEdgeIDs* const columns[] = {&first, &second};
+    const std::vector<size_t> offsets {0, 2};
+    const std::vector<EdgeID> edges {EdgeID(edgeTo(all, 0, 0)), EdgeID(edgeTo(all, 0, 2))};
 
     std::vector<CollectedEdge> pruned;
-    collectOutEdges(reader, &input, columns, ChunkConfig::CHUNK_SIZE, pruned);
+    collectOutEdges(reader, &input, ExcludedEdges {offsets, edges}, ChunkConfig::CHUNK_SIZE, pruned);
     EXPECT_TRUE(pruned.empty());
 }

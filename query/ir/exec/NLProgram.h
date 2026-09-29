@@ -26,6 +26,7 @@
 #include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/ExcludedEdges.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "iterators/PathTargetIndex.h"
@@ -815,9 +816,11 @@ public:
     void addExcludedEdges(const ColumnEdgeIDs* edges) { _excludedEdges.push_back(edges); }
     void addExcludedPaths(const ColumnVector<PathRef>* paths) { _excludedPaths.push_back(paths); }
     void setExclusionTrie(const PathTrie* trie) { _exclusionTrie = trie; }
-    std::span<const ColumnEdgeIDs* const> getExcludedEdges() const { return _excludedEdges; }
-    std::span<const ColumnVector<PathRef>* const> getExcludedPaths() const { return _excludedPaths; }
-    const PathTrie* getExclusionTrie() const { return _exclusionTrie; }
+
+    // Lays the excluded edges of the input's rows out flat, a span per row, which is what
+    // the writers read; empty when nothing is excluded
+    void collectExcludedEdges(size_t rowCount);
+    ExcludedEdges getExcludedEdges() const;
 
 private:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
@@ -832,6 +835,8 @@ private:
     std::vector<const ColumnEdgeIDs*> _excludedEdges;
     std::vector<const ColumnVector<PathRef>*> _excludedPaths;
     const PathTrie* _exclusionTrie {nullptr};
+    std::vector<size_t> _excludedOffsets;
+    std::vector<EdgeID> _excludedEdgeIDs;
 
     // Scratch for the writer's row-to-input-row map, which drives the gathers
     ColumnVector<size_t> _indices;
