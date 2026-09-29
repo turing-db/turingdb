@@ -379,6 +379,42 @@ the test could only spare the scan the sort removes.
 Still owed from step 2: that in-edge order, and `NLPendingEdgeHop` walks its excluded edges
 one by one, which no measurement has reached.
 
+Step 3 is implemented on the same branch. `prove_distinct_edges` runs first in the
+pipeline, on the shape codegen emits, and drops from each `db.check_edge_distinct` the
+operands the types or the labels prove. A fixed hop's type set is read off the
+`check_edge_type_constraint` filters over its etypes column and a walk's off its
+`edge_types`; the labels of a hop's two ends are read off the `check_label_constraint`
+filters over a node column born where the end was. Only the filters the rows reaching the
+check passed through count, climbing from the check through filters, carry sets and the
+factors of a cross product. P1 proves a pair whose type sets share no name. P2 takes the
+stored source and target of each edge in every orientation its direction allows, and proves
+the pair when no orientation lets both sources and both targets coincide, a coincidence
+being possible when some label set of the graph holds both nodes' labels; a path has no
+labelled ends, so a path is proven by types only. A check left with no operand goes with its
+filter and one left with fewer is rebuilt, so the pairs kept fold into the hops as before.
+P2 reads the view's `LabelSetMap`, which already holds the label sets a change's earlier
+queries wrote, and is off in a query that writes the graph, whose own label sets are
+registered after the pass runs. `check_edge_distinct` carries `names`, the query's name for
+each column, and EXPLAIN reports each pair under a `pairs` stage, on by default:
+`e2 <> e1: proven by types`, `proven by labels` or `kept`. `ProveDistinctEdgesTest` pins
+15 cases on simpledb, each proven count against the split-clause form, and the codegen test
+of a typed chain no longer expects a `distinct_from`. Same machine, same protocol, on the
+same day as the step 2 table:
+
+    query                                                        step 2        step 3       control
+    (p:Pathway)-[:hasEvent]->(r:Reaction)-[:precedingEvent]->(r2)
+                              proven by types    68,370  12.35 ms   68,370  11.76 ms   68,370  11.77 ms
+    (tlp)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r:ReactionLikeEvent)
+                              proven by labels    6,371  1.48 ms     6,371  1.45 ms     6,371  1.40 ms
+    three precedingEvent hops from every Reaction
+                              kept               91,706  14.3 ms    91,706  14.8 ms    94,326  12.9 ms
+    shared_input              2 of 6 pairs kept 198,362  196 ms    198,362  187 ms    390,348  156 ms
+
+The two proven chains run as their controls. `shared_input`'s check over the hash join
+reads two pairs where it read four, the `input` hops being typed apart from the `hasEvent`
+ones, and the pairs it keeps are the two of one type. The kept chain moved with its
+control. The pass's own time is not measured yet.
+
 ## Steps
 
 1. **Correct first.** `db.check_edge_distinct`, its emission in codegen, its lowering,
