@@ -168,6 +168,7 @@ int fuzzOne(const char* data, size_t size) {
     procedureContext.setTransaction(&txRes.value());
     procedureContext.setProcedures(system.getProcedures());
     procedureContext.setListBuffer(&mem.listBuffer());
+    procedureContext.setStringBuffer(&mem.stringBuffer());
 
     DiscardedOutputSink sink;
     db::DBDialectInterpreter interpreter(module,

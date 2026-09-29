@@ -220,6 +220,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     procedureContext.setProcedures(system.getProcedures());
     procedureContext.setChunkSize(_chunkSize);
     procedureContext.setListBuffer(&mem->listBuffer());
+    procedureContext.setStringBuffer(&mem->stringBuffer());
 
     DBDialectInterpreter interpreter(module,
                                      &view,

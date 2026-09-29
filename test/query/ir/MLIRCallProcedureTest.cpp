@@ -1510,6 +1510,7 @@ protected:
         procedureContext.setProcedures(&_procedures);
         procedureContext.setChunkSize(chunkSize);
         procedureContext.setListBuffer(&memory.listBuffer());
+        procedureContext.setStringBuffer(&memory.stringBuffer());
 
         NLInterpreter interpreter(*nlModule,
                                   &view,
@@ -1573,6 +1574,7 @@ protected:
         procedureContext.setProcedures(&_procedures);
         procedureContext.setChunkSize(chunkSize);
         procedureContext.setListBuffer(&memory.listBuffer());
+        procedureContext.setStringBuffer(&memory.stringBuffer());
 
         NLInterpreter interpreter(*nlModule,
                                   &view,

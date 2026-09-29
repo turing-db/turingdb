@@ -647,6 +647,7 @@ void setupProcedureContext(const GraphView& view,
     context.setProcedures(&procedures);
     context.setChunkSize(ChunkConfig::CHUNK_SIZE);
     context.setListBuffer(&memory.listBuffer());
+    context.setStringBuffer(&memory.stringBuffer());
 }
 
 // Runs the module's main function against the view, pushing output into sink.
