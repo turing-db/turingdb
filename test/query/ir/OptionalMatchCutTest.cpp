@@ -204,6 +204,23 @@ protected:
         return bounded.value_or(false);
     }
 
+    template <typename IteratorOp>
+    bool everyLoopOverIsBounded(mlir::ModuleOp nlModule) {
+        size_t loopCount = 0;
+        bool bounded = true;
+
+        nlModule.walk([&](mlir::nl::For forLoop) {
+            if (forLoop.getIterator().getDefiningOp<IteratorOp>()) {
+                loopCount++;
+                bounded = bounded && forLoop.getLimit() != nullptr;
+            }
+        });
+
+        EXPECT_GT(loopCount, 0) << "no loop over the expected iterator was lowered";
+
+        return bounded;
+    }
+
     static Rows prefix(const Rows& rows, size_t count) {
         return Rows(rows.begin(), rows.begin() + count);
     }
@@ -322,4 +339,85 @@ TEST_F(OptionalMatchCutTest, limitsTheRowsTheJoinReads) {
     expectRows("MATCH (p:Person) LIMIT 2 OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
                "RETURN p.name, f.name",
                prefix(friendRows, 2));
+}
+
+TEST_F(OptionalMatchCutTest, boundsTheLoopsOfThePattern) {
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule;
+    lowerQuery("MATCH (a) OPTIONAL MATCH (b), (c) RETURN a LIMIT 1", context, nlModule);
+
+    EXPECT_TRUE(everyLoopOverIsBounded<mlir::nl::ScanNodes>(*nlModule));
+    EXPECT_TRUE(everyLoopOverIsBounded<mlir::nl::CrossProduct>(*nlModule));
+}
+
+TEST_F(OptionalMatchCutTest, boundsTheLoopsOfChainedPatterns) {
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule;
+    lowerQuery("MATCH (a) OPTIONAL MATCH (b), (c) OPTIONAL MATCH (d), (e) RETURN a LIMIT 1", context, nlModule);
+
+    EXPECT_TRUE(everyLoopOverIsBounded<mlir::nl::ScanNodes>(*nlModule));
+    EXPECT_TRUE(everyLoopOverIsBounded<mlir::nl::CrossProduct>(*nlModule));
+}
+
+// A matched row the filter drops never reaches the cut, so the pattern has to be walked
+// whole to find the rows it missed
+TEST_F(OptionalMatchCutTest, leavesThePatternUnboundedUnderAFilter) {
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const std::string_view query = "MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+                                   "WITH p, f WHERE f IS NULL RETURN p.name, f.name LIMIT 2";
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule;
+    lowerQuery(query, context, nlModule);
+
+    EXPECT_FALSE(loopOverIsBounded<mlir::nl::GetOutEdgesByType>(*nlModule));
+
+    expectRows(query, {{"Maxime", "null"}, {"Luc", "null"}});
+}
+
+TEST_F(OptionalMatchCutTest, leavesThePatternUnboundedUnderAMatch) {
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule;
+    lowerQuery("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) MATCH (f)-->(g) RETURN p, g LIMIT 1",
+               context,
+               nlModule);
+
+    EXPECT_FALSE(loopOverIsBounded<mlir::nl::GetOutEdgesByType>(*nlModule));
+}
+
+TEST_F(OptionalMatchCutTest, limitsInsideThePattern) {
+    const std::string_view query = "MATCH (p:Person) OPTIONAL MATCH (p)-[:INTERESTED_IN]->(i) RETURN p.name, i.name";
+
+    for (const size_t chunkSize : {size_t {1}, ChunkConfig::CHUNK_SIZE}) {
+        Rows uncut;
+        runQuery(query, uncut, chunkSize);
+
+        for (const size_t count : {size_t {1}, size_t {2}, size_t {4}, size_t {9}}) {
+            const std::string limited = std::string(query) + " LIMIT " + std::to_string(count);
+            expectRows(limited, prefix(uncut, count), chunkSize);
+        }
+    }
+}
+
+TEST_F(OptionalMatchCutTest, limitsAWideCrossProductPattern) {
+    expectRows("MATCH (a) OPTIONAL MATCH (b), (c), (d), (e), (f) RETURN a.name LIMIT 1", {{"Remy"}});
 }

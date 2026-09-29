@@ -183,6 +183,10 @@ private:
     // two handles. Absent (null on lookup) for a consumer loop, which fans out.
     llvm::DenseMap<mlir::Operation*, mlir::Value> _loopLimitHandle;  // db producer -> handle
 
+    // The handle of the cut every row of an optional match reaches. Its pattern's loops
+    // are bounded by what that cut still admits at each step.
+    llvm::DenseMap<mlir::Operation*, mlir::Value> _optionalMatchLimits;  // db.optional_match -> handle
+
     // The columns one limit's walk has reached, so a column reached along many paths of
     // the dataflow is walked once rather than once per path
     llvm::DenseMap<mlir::Value, ProducerWalkVisit> _producerWalkVisits;
@@ -561,6 +565,10 @@ private:
     // carry its handle, so a cut charged to constants alone stops its nest as any other
     // cut does rather than letting it run to the end.
     void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::Operation* holder);
+
+    // Records in _optionalMatchLimits the optional matches ahead of @param limit that
+    // only ops keeping every row separate from it.
+    void assignOptionalMatchLimits(mlir::db::Limit limit, mlir::Value handle);
 
     // Peephole over the lowered nl function: where an nl.limit_truncate's results
     // are consumed exactly by one adjacent nl.output (the terminal-LIMIT shape),

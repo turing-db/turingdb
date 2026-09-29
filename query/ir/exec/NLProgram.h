@@ -1427,6 +1427,24 @@ private:
     size_t _count {0};
 };
 
+// nl.limit_remaining data: resets a counter to the budget another one has left each
+// time the block it lives in runs.
+class NLLimitRemainingData : public NLFunctionData {
+public:
+    NLLimitRemainingData(NLLimitState* state, const NLLimitState* source)
+        : _state(state),
+        _source(source)
+    {
+    }
+
+    NLLimitState* getState() const { return _state; }
+    const NLLimitState* getSource() const { return _source; }
+
+private:
+    NLLimitState* _state {nullptr};
+    const NLLimitState* _source {nullptr};
+};
+
 // nl.limit_update data: the counter to charge and the representative column
 // whose row count is charged against it (the same column nl.output emits).
 class NLLimitUpdateData : public NLFunctionData {

@@ -6206,6 +6206,11 @@ void NLExecutor::runLimitInit(NLExecutionContext* context, NLFunctionData* data)
     init->getState()->reset(init->getCount());
 }
 
+void NLExecutor::runLimitRemaining(NLExecutionContext* context, NLFunctionData* data) {
+    const NLLimitRemainingData* remaining = static_cast<NLLimitRemainingData*>(data);
+    remaining->getState()->reset(remaining->getSource()->getRemaining());
+}
+
 void NLExecutor::runLimitUpdate(NLExecutionContext* context, NLFunctionData* data) {
     const NLLimitUpdateData* update = static_cast<NLLimitUpdateData*>(data);
     update->getState()->update(update->getRows()->size());

@@ -122,6 +122,7 @@ public:
 
     // Reset a limit counter to its budget; runs each time its block runs.
     static void runLimitInit(NLExecutionContext* context, NLFunctionData* data);
+    static void runLimitRemaining(NLExecutionContext* context, NLFunctionData* data);
 
     // Charge the representative chunk's rows against a limit counter, recording
     // how many rows the truncate should copy this step. The sole counter mutator.

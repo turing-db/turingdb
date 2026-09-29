@@ -899,6 +899,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[crossProduct.getResult()] = config;
         } else if (nl::Limit limit = mlir::dyn_cast<nl::Limit>(operation)) {
             translateLimit(limit, body);
+        } else if (nl::LimitRemaining remaining = mlir::dyn_cast<nl::LimitRemaining>(operation)) {
+            translateLimitRemaining(remaining, body);
         } else if (nl::LimitUpdate update = mlir::dyn_cast<nl::LimitUpdate>(operation)) {
             translateLimitUpdate(update, body);
         } else if (nl::LimitTruncate truncate = mlir::dyn_cast<nl::LimitTruncate>(operation)) {
@@ -3375,6 +3377,16 @@ void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
     NLLimitInitData* initData = _program->allocFunctionData<NLLimitInitData>(state, count);
 
     body->emplaceStmt(&NLExecutor::runLimitInit, initData);
+}
+
+void NLTranslator::translateLimitRemaining(nl::LimitRemaining remaining, NLStmtContainer* body) {
+    NLLimitState* state = _program->allocLimitState();
+    _limitStates[remaining.getState()] = state;
+
+    const NLLimitState* source = limitStateFor(remaining.getSource());
+    NLLimitRemainingData* remainingData = _program->allocFunctionData<NLLimitRemainingData>(state, source);
+
+    body->emplaceStmt(&NLExecutor::runLimitRemaining, remainingData);
 }
 
 void NLTranslator::translateLimitUpdate(nl::LimitUpdate update, NLStmtContainer* body) {
