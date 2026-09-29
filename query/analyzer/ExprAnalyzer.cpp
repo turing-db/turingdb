@@ -793,7 +793,7 @@ VarDecl* ExprAnalyzer::resolveVariable(std::string_view name) {
     }
 
     VarDecl* outer = _ctxt->lookup(name);
-    if (outer && _importSink && !std::ranges::contains(*_importSink, outer)) {
+    if (outer && _importSink && std::ranges::find(*_importSink, outer) == _importSink->end()) {
         _importSink->push_back(outer);
     }
 

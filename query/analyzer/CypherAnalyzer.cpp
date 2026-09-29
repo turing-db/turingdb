@@ -621,7 +621,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
 
             importDecl(name, decl);
 
-            if (importSink && !std::ranges::contains(*importSink, decl)) {
+            if (importSink && std::ranges::find(*importSink, decl) == importSink->end()) {
                 importSink->push_back(decl);
             }
         }
@@ -1051,7 +1051,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
 
     const bool rebindsAnImport = declared
                                  && declared != aliasedDecl
-                                 && std::ranges::contains(_subqueryImports, alias);
+                                 && std::ranges::find(_subqueryImports, alias) != _subqueryImports.end();
 
     if (rebindsAnImport) {
         throwError(fmt::format("Variable '{}' is imported by the CALL: a clause of the subquery "
