@@ -415,6 +415,50 @@ reads two pairs where it read four, the `input` hops being typed apart from the 
 ones, and the pairs it keeps are the two of one type. The kept chain moved with its
 control. The pass's own time is not measured yet.
 
+Step 4 is implemented on the same branch. `SchemaGraph` under `storage/metadata/` holds
+one arc per (source label set, edge type, target label set) the parts hold, with the
+count of its edges and of those closing on their own node, built by one pass over each
+part's out-records with a label set lookup per end; `CommitData` caches it beside
+`EdgeBranchingCache`, `GraphView::schemaGraph()` refreshes it for a view holding more parts
+than it was built on, and nothing writes it to disk. It answers `embeds`: whether a pattern
+of labelled nodes and typed edges maps homomorphically onto the arcs, by a depth-first
+search taking next the edge with the most ends placed and giving up, embedding, past
+200,000 arcs visited. The pass reads the whole clause for it now: every fixed hop the rows
+reaching the check came through, with the node columns two of them share, and the node
+columns an equality of the flow holds equal, including the one the hop closing a cycle
+lands beside, which codegen emits after that hop's check and the pass reads down the
+filter chain as long as nothing else consumes the rows. P3 merges the pair's sources and
+targets in each orientation the directions allow, turns the hops into one pattern with
+the pair's edge first, and proves the pair when no orientation embeds; it is off with
+pending writes, whose edges are in no part. `ProveDistinctEdgesTest` gains the two-hop
+chains with no self-loop to share, the three-hop chains whose ends a two-cycle of the
+schema does or does not close, the closed triangle, and the change that holds an
+uncommitted self-loop; `SchemaGraphTest` pins the summary of simpledb, the embedding of a
+hop, a self-loop, a two-cycle and an undirected edge, and the refresh to a commit adding
+a self-loop. The fold test's typed and labelled shapes moved to a V, the chain they used
+being proven now. Same machine, same protocol:
+
+    query                                                        step 3        step 4       control
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)
+                              proven by schema                 -   121,323  13.7 ms   121,323  13.9 ms
+    (p:TopLevelPathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)
+                              3 of 3 proven by schema          -    28,799  2.75 ms    28,799  2.73 ms
+    three precedingEvent hops from every Reaction
+                              2 of 3 proven by schema   91,706  14.7 ms    91,706  14.4 ms    94,326  13.3 ms
+    shared_input              2 of 6 kept, as before   198,362  187 ms    198,362  193 ms    390,348  163 ms
+
+The hasEvent chains run as their controls. Of the precedingEvent chain's three pairs the
+schema proves the two adjacent ones, which only a self-loop could share and reactome has
+none, and keeps the first against the third, since a reaction precedes one that precedes
+it and the arc closes both ways; that one pair is what the query still pays for. The
+summary of reactome is built once per commit, on the first query that asks for it: that
+query runs in 150 ms against 14 ms for the next, so the build over 11.5M edges costs
+135 ms, most of it the hash map lookup per edge, against the tens of milliseconds
+estimated above.
+
+Still owed from step 4: that build cost, which a dense table over (label set, type) or
+the persisted summary of step 6 would remove.
+
 ## Steps
 
 1. **Correct first.** `db.check_edge_distinct`, its emission in codegen, its lowering,
