@@ -396,6 +396,41 @@ public:
     }
 };
 
+template <DurationPart part>
+class TaggedDurationComponentFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(const ArgType cell) const {
+        const ListBufferTypeTag tag = cell.getTag();
+
+        if (tag == ListBufferTypeTag::Duration) {
+            return Duration::component(cell.getAs<types::Duration::Primitive>(), part);
+        } else if (tag == ListBufferTypeTag::Null) {
+            return std::nullopt;
+        }
+
+        throw FatalException("a duration component reads a duration, and this row holds a value that is not one");
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+};
+
+template <DurationPart part>
+class DurationComponentFunction {
+public:
+    using ArgType = types::Duration::Primitive;
+    using ResultType = types::Int64::Primitive;
+    using TaggedCounterpart = TaggedDurationComponentFunction<part>;
+
+    ResultType operator()(const types::Duration::Primitive value) {
+        return Duration::component(value, part);
+    }
+};
+
 // toInteger() and toFloat() over a number rather than a string. Every conversion keeps an
 // optional result so one column type carries it whatever the argument was, and so a double
 // that no integer can represent reads as null.

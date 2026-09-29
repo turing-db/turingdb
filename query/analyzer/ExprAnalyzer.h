@@ -102,9 +102,9 @@ public:
                                   bool allowCreate = false,
                                   ValueType defaultType = ValueType::Invalid);
 
-    // A write and an index name a property of the graph; a calendar field read off one is
-    // an integer computed from it, which names nothing that can be written or indexed.
-    void throwIfReadsADateTimeComponent(const PropertyExpr* expr);
+    // A write and an index name a property of the graph; a component read off one is an
+    // integer computed from it, which names nothing that can be written or indexed.
+    void throwIfReadsAComponent(const PropertyExpr* expr);
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 

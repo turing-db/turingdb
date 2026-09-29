@@ -24,3 +24,8 @@ void PropertyLookupExpr::setDateTimePart(DateTimePart part) {
     _dateTimePart = part;
     _readsADateTimeComponent = true;
 }
+
+void PropertyLookupExpr::setDurationPart(DurationPart part) {
+    _durationPart = part;
+    _readsADurationComponent = true;
+}

@@ -41,6 +41,11 @@ public:
     DateTimePart getDateTimePart() const { return _dateTimePart; }
     void setDateTimePart(DateTimePart part);
 
+    bool readsADurationComponent() const { return _readsADurationComponent; }
+    bool readsAComponent() const { return _readsADateTimeComponent || _readsADurationComponent; }
+    DurationPart getDurationPart() const { return _durationPart; }
+    void setDurationPart(DurationPart part);
+
     // The field of the loaded row a header access reads, under the declaration the load
     // publishes its column with. Null on a property access, and on a header access whose
     // row no load bound. Kept apart from the expression's own declaration, since an alias
@@ -55,8 +60,10 @@ private:
     std::string_view _propName;
     ValueType _createdValueType {ValueType::Invalid};
     DateTimePart _dateTimePart {DateTimePart::Year};
+    DurationPart _durationPart {DurationPart::Years};
     bool _stringTableHeaderAccess {false};
     bool _readsADateTimeComponent {false};
+    bool _readsADurationComponent {false};
 
     PropertyExpr(QualifiedName* name)
         : Expr(Kind::PROPERTY),

@@ -1198,6 +1198,13 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
         const VarDecl* const entityDecl = property->getEntityVarDecl();
 
+        const bool readsAComponentOfAReturnedProperty = property->readsAComponent()
+                                                     && projection->hasItemReadingThePropertyOfComponent(property);
+
+        if (readsAComponentOfAReturnedProperty) {
+            return true;
+        }
+
         return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
     } else if (kind == Expr::Kind::ENTITY_TYPES) {
         const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
@@ -1749,7 +1756,7 @@ void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
     // empty/invalid decl is fine.
     _exprAnalyzer->registerNodePatternDeclaration(node);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
-    _exprAnalyzer->throwIfReadsADateTimeComponent(propertyExpr);
+    _exprAnalyzer->throwIfReadsAComponent(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
     const std::string_view propName = propertyExpr->getPropName();
@@ -1787,7 +1794,7 @@ void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
     // empty/invalid decl is fine.
     _exprAnalyzer->registerEdgePatternDeclaration(edge);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
-    _exprAnalyzer->throwIfReadsADateTimeComponent(propertyExpr);
+    _exprAnalyzer->throwIfReadsAComponent(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
     const std::string_view propName = propertyExpr->getPropName();

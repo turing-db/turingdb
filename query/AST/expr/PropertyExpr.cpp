@@ -17,3 +17,8 @@ void PropertyExpr::setDateTimePart(DateTimePart part) {
     _dateTimePart = part;
     _readsADateTimeComponent = true;
 }
+
+void PropertyExpr::setDurationPart(DurationPart part) {
+    _durationPart = part;
+    _readsADurationComponent = true;
+}

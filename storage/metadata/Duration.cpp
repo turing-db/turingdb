@@ -8,10 +8,99 @@ using namespace db;
 
 namespace {
 
-constexpr uint64_t MICROSECONDS_PER_SECOND = 1000000;
-constexpr uint64_t SECONDS_PER_MINUTE = 60;
-constexpr uint64_t SECONDS_PER_HOUR = 3600;
+constexpr int64_t MICROSECONDS_PER_SECOND = 1000000;
+constexpr int64_t SECONDS_PER_MINUTE = 60;
+constexpr int64_t SECONDS_PER_HOUR = 3600;
 
+constexpr int64_t MICROSECONDS_PER_MILLISECOND = 1000;
+constexpr int64_t MICROSECONDS_PER_MINUTE = 60 * MICROSECONDS_PER_SECOND;
+constexpr int64_t MICROSECONDS_PER_HOUR = 60 * MICROSECONDS_PER_MINUTE;
+constexpr int64_t MICROSECONDS_PER_DAY = 24 * MICROSECONDS_PER_HOUR;
+constexpr int64_t MICROSECONDS_PER_WEEK = 7 * MICROSECONDS_PER_DAY;
+constexpr int64_t MICROSECONDS_PER_MONTH = 2629746 * MICROSECONDS_PER_SECOND;
+constexpr int64_t MICROSECONDS_PER_QUARTER = 3 * MICROSECONDS_PER_MONTH;
+constexpr int64_t MICROSECONDS_PER_YEAR = 12 * MICROSECONDS_PER_MONTH;
+
+}
+
+int64_t Duration::component(Duration value, DurationPart part) {
+    const int64_t microseconds = value.getMicroseconds();
+
+    switch (part) {
+        case DurationPart::Years:
+            return microseconds / MICROSECONDS_PER_YEAR;
+        break;
+
+        case DurationPart::Quarters:
+            return microseconds / MICROSECONDS_PER_QUARTER;
+        break;
+
+        case DurationPart::Months:
+            return microseconds / MICROSECONDS_PER_MONTH;
+        break;
+
+        case DurationPart::Weeks:
+            return microseconds / MICROSECONDS_PER_WEEK;
+        break;
+
+        case DurationPart::Days:
+            return microseconds / MICROSECONDS_PER_DAY;
+        break;
+
+        case DurationPart::Hours:
+            return microseconds / MICROSECONDS_PER_HOUR;
+        break;
+
+        case DurationPart::Minutes:
+            return microseconds / MICROSECONDS_PER_MINUTE;
+        break;
+
+        case DurationPart::Seconds:
+            return microseconds / MICROSECONDS_PER_SECOND;
+        break;
+
+        case DurationPart::Milliseconds:
+            return microseconds / MICROSECONDS_PER_MILLISECOND;
+        break;
+
+        case DurationPart::Microseconds:
+            return microseconds;
+        break;
+
+        case DurationPart::QuartersOfYear:
+            return component(value, DurationPart::Quarters) % 4;
+        break;
+
+        case DurationPart::MonthsOfYear:
+            return component(value, DurationPart::Months) % 12;
+        break;
+
+        case DurationPart::MonthsOfQuarter:
+            return component(value, DurationPart::Months) % 3;
+        break;
+
+        case DurationPart::DaysOfWeek:
+            return component(value, DurationPart::Days) % 7;
+        break;
+
+        case DurationPart::MinutesOfHour:
+            return component(value, DurationPart::Minutes) % 60;
+        break;
+
+        case DurationPart::SecondsOfMinute:
+            return component(value, DurationPart::Seconds) % 60;
+        break;
+
+        case DurationPart::MillisecondsOfSecond:
+            return component(value, DurationPart::Milliseconds) % 1000;
+        break;
+
+        case DurationPart::MicrosecondsOfSecond:
+            return component(value, DurationPart::Microseconds) % 1000000;
+        break;
+    }
+
+    return 0;
 }
 
 void Duration::format(std::string& out, Duration value) {

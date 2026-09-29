@@ -107,7 +107,7 @@ void WriteStmtAnalyzer::analyze(const RemoveStmt* removeStmt) {
 
     for (PropertyExpr* property : removeStmt->getProperties()) {
         _exprAnalyzer->analyzePropertyExpr(property, ALLOW_CREATES, ValueType::Invalid);
-        _exprAnalyzer->throwIfReadsADateTimeComponent(property);
+        _exprAnalyzer->throwIfReadsAComponent(property);
     }
 }
 
@@ -348,7 +348,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             const ValueType lhsEvaluatedVt =
                 _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
 
-            _exprAnalyzer->throwIfReadsADateTimeComponent(lhs);
+            _exprAnalyzer->throwIfReadsAComponent(lhs);
 
             _exprAnalyzer->analyzeRootExpr(v._propValueExpr);
 

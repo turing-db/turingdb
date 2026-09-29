@@ -2331,6 +2331,26 @@ def DateTimeSecond : UnaryFunctionOp<"datetime_second">;
 def DateTimeMillisecond : UnaryFunctionOp<"datetime_millisecond">;
 def DateTimeMicrosecond : UnaryFunctionOp<"datetime_microsecond">;
 
+// The units of a duration, each the whole count of that unit it spans, as integer columns.
+def DurationYears : UnaryFunctionOp<"duration_years">;
+def DurationQuarters : UnaryFunctionOp<"duration_quarters">;
+def DurationMonths : UnaryFunctionOp<"duration_months">;
+def DurationWeeks : UnaryFunctionOp<"duration_weeks">;
+def DurationDays : UnaryFunctionOp<"duration_days">;
+def DurationHours : UnaryFunctionOp<"duration_hours">;
+def DurationMinutes : UnaryFunctionOp<"duration_minutes">;
+def DurationSeconds : UnaryFunctionOp<"duration_seconds">;
+def DurationMilliseconds : UnaryFunctionOp<"duration_milliseconds">;
+def DurationMicroseconds : UnaryFunctionOp<"duration_microseconds">;
+def DurationQuartersOfYear : UnaryFunctionOp<"duration_quarters_of_year">;
+def DurationMonthsOfYear : UnaryFunctionOp<"duration_months_of_year">;
+def DurationMonthsOfQuarter : UnaryFunctionOp<"duration_months_of_quarter">;
+def DurationDaysOfWeek : UnaryFunctionOp<"duration_days_of_week">;
+def DurationMinutesOfHour : UnaryFunctionOp<"duration_minutes_of_hour">;
+def DurationSecondsOfMinute : UnaryFunctionOp<"duration_seconds_of_minute">;
+def DurationMillisecondsOfSecond : UnaryFunctionOp<"duration_milliseconds_of_second">;
+def DurationMicrosecondsOfSecond : UnaryFunctionOp<"duration_microseconds_of_second">;
+
 def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperands]> {
   let summary = "The instant the query runs, as a constant column";
   let description = [{

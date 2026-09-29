@@ -82,12 +82,27 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const bool sameEntity = lhsProperty->getEntityVarDecl() == rhsProperty->getEntityVarDecl();
             const bool sameProperty = lhsProperty->getPropName() == rhsProperty->getPropName();
 
-            // Two calendar fields of one instant are two values, so the field is part of
+            // Two components of one value are two values, so the component is part of
             // what the access reads: n.at.year and n.at.day name the same property
-            const bool sameComponent
-                = lhsProperty->readsADateTimeComponent() == rhsProperty->readsADateTimeComponent()
-                  && (!lhsProperty->readsADateTimeComponent()
-                      || lhsProperty->getDateTimePart() == rhsProperty->getDateTimePart());
+            const bool lhsReadsADateTime = lhsProperty->readsADateTimeComponent();
+            const bool rhsReadsADateTime = rhsProperty->readsADateTimeComponent();
+            const bool lhsReadsADuration = lhsProperty->readsADurationComponent();
+            const bool rhsReadsADuration = rhsProperty->readsADurationComponent();
+
+            const bool neitherReadsAComponent = !lhsReadsADateTime
+                                             && !rhsReadsADateTime
+                                             && !lhsReadsADuration
+                                             && !rhsReadsADuration;
+
+            const bool sameDateTimeComponent = lhsReadsADateTime
+                                            && rhsReadsADateTime
+                                            && lhsProperty->getDateTimePart() == rhsProperty->getDateTimePart();
+
+            const bool sameDurationComponent = lhsReadsADuration
+                                            && rhsReadsADuration
+                                            && lhsProperty->getDurationPart() == rhsProperty->getDurationPart();
+
+            const bool sameComponent = neitherReadsAComponent || sameDateTimeComponent || sameDurationComponent;
 
             return sameEntity && sameProperty && sameComponent;
         }
@@ -216,6 +231,24 @@ bool StructuralExpressionComparator::equalSymbolChains(const SymbolChain* lhs, c
     };
 
     return std::ranges::equal(*lhs, *rhs, sameName);
+}
+
+bool StructuralExpressionComparator::readsThePropertyOfComponent(const Expr* candidate, const PropertyExpr* component) {
+    if (candidate->getKind() != Expr::Kind::PROPERTY) {
+        return false;
+    } 
+
+    if (!component->readsAComponent()) {
+        return false;
+    }
+
+    const PropertyExpr* property = static_cast<const PropertyExpr*>(candidate);
+
+    const bool candidateReadsAComponent = property->readsAComponent();
+    const bool sameEntity = property->getEntityVarDecl() == component->getEntityVarDecl();
+    const bool sameProperty = property->getPropName() == component->getPropName();
+
+    return !candidateReadsAComponent && sameEntity && sameProperty;
 }
 
 bool StructuralExpressionComparator::equalLiterals(const Literal* lhs, const Literal* rhs) {
