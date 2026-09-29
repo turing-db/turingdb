@@ -68,14 +68,12 @@ void GetOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
-            if (_exclusion.isSet()) {
-                _exclusion.loadRow(index);
-            }
+            const std::span<const EdgeID> rowExcluded = _excluded.isSet() ? _excluded.rowEdges(index) : std::span<const EdgeID> {};
 
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
                 const LabelSetHandle targetLabels = reader.getNodeLabelSet(_edgeIt->_otherID);
 
-                const bool excluded = _exclusion.excludes(_edgeIt->_edgeID);
+                const bool excluded = ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
                 if (targetLabels.isValid() && targetLabels.hasAtLeastLabels(_labelset) && !excluded) {
                     _indices->push_back(index);
 

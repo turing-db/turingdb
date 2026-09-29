@@ -11,7 +11,7 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
-#include "iterators/EdgeExclusion.h"
+#include "iterators/ExcludedEdges.h"
 #include "metadata/LabelSetHandle.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
@@ -80,11 +80,8 @@ public:
     // so it must outlive the hop.
     void setEndpointLabelSet(const LabelSet& labelset);
 
-    // The edges the clause bound before the hop, row-aligned with its input, which it walks
-    // past: edge columns, and paths read through the trie
-    void setExclusion(std::span<const ColumnEdgeIDs* const> edges,
-                      std::span<const ColumnVector<PathRef>* const> paths,
-                      const PathTrie* trie);
+    // The edges each input row of the hop may not repeat
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
 
     bool isValid() const { return _row < _inputNodeIDs->size(); }
 
@@ -112,7 +109,8 @@ private:
     size_t _firstQueryEdge {0};
     size_t _pendingEdgeCount {0};
 
-    EdgeExclusion _exclusion;
+    ExcludedEdges _excluded;
+    std::span<const EdgeID> _rowExcluded;
 
     Direction _direction {Direction::Out};
     std::optional<std::span<const EdgeTypeID>> _edgeTypes;

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ChunkWriter.h"
+#include "ExcludedEdges.h"
 #include "PartDirectory.h"
 #include "PathDistanceIndex.h"
 #include "PathExplorationDir.h"
@@ -51,6 +52,7 @@ public:
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
     void setTargets(ColumnNodeIDs* targets) { _targets = targets; }
     void setDistinctEnds(bool distinct);
+    void setExcludedEdges(const ExcludedEdges& excluded);
     void setTargetIndex(const PathTargetIndex* index);
     void setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound);
 

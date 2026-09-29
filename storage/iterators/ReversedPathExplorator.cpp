@@ -85,6 +85,10 @@ void ReversedPathExplorator::setDistinctEnds(bool distinct) {
     _explorator.setDistinctEnds(distinct);
 }
 
+void ReversedPathExplorator::setExcludedEdges(const ExcludedEdges& excluded) {
+    bioassert(!excluded.isSet(), "The walk from the end set leaves no seed row's edges out");
+}
+
 void ReversedPathExplorator::setTargetIndex(const PathTargetIndex* index) {
     _explorator.setTargetIndex(index);
 }

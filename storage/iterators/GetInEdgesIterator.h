@@ -5,7 +5,7 @@
 #include "Iterator.h"
 #include "ChunkWriter.h"
 #include "PartIterator.h"
-#include "EdgeExclusion.h"
+#include "ExcludedEdges.h"
 #include "TombstoneFilter.h"
 #include "datapart/EdgeRecord.h"
 #include "columns/ColumnEdgeTypes.h"
@@ -79,10 +79,8 @@ public:
     void setSrcIDs(ColumnNodeIDs* srcs) { _srcs = srcs; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
-    // The edges the clause bound before this hop, row-aligned with the input, which no row
-    // of it repeats: edge columns, and paths read through the trie
-    void setDistinctFrom(std::span<const ColumnEdgeIDs* const> columns) { _exclusion.setEdgeColumns(columns); }
-    void setDistinctFromPaths(std::span<const ColumnVector<PathRef>* const> columns, const PathTrie* trie) { _exclusion.setPathColumns(columns, trie); }
+    // The edges each input row of the hop may not repeat
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
 
 private:
     ColumnVector<size_t>* _indices {nullptr};
@@ -91,7 +89,7 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
-    EdgeExclusion _exclusion;
+    ExcludedEdges _excluded;
 
     void filterTombstones();
 };
