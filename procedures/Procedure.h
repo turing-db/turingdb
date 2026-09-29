@@ -20,6 +20,14 @@ public:
         const Column* _col {nullptr};
     };
 
+    struct ReturnItem {
+        std::string_view _name;
+        ProcedureType _type {ProcedureType::INVALID};
+    };
+
+    template <size_t N>
+    using ReturnItems = std::array<ReturnItem, N>;
+
     struct YieldItem {
         std::string_view _baseName;
         std::string_view _asName;
