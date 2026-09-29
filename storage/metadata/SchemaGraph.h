@@ -11,6 +11,7 @@
 
 namespace db {
 
+class GraphMetadata;
 class LabelSetMap;
 
 // The edges of one type from the nodes of one label set to the nodes of another, and how
@@ -54,7 +55,7 @@ public:
     SchemaGraph(const SchemaGraph&) = delete;
     SchemaGraph& operator=(const SchemaGraph&) = delete;
 
-    void refresh(DataPartSpan parts);
+    void refresh(DataPartSpan parts, const GraphMetadata& metadata);
 
     std::span<const SchemaArc> arcs() const { return _arcs; }
 
@@ -71,7 +72,7 @@ private:
     size_t _edgeCount {0};
     std::vector<SchemaArc> _arcs;
 
-    void build(DataPartSpan parts);
+    void build(DataPartSpan parts, const GraphMetadata& metadata);
 };
 
 }
