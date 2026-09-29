@@ -1,13 +1,13 @@
 #include "SchemaGraph.h"
 
 #include <algorithm>
-#include <tuple>
-#include <unordered_map>
 
 #include "datapart/DataPart.h"
 #include "datapart/EdgeContainer.h"
 #include "datapart/EdgeRecord.h"
 #include "datapart/NodeContainer.h"
+#include "metadata/EdgeTypeMap.h"
+#include "metadata/GraphMetadata.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/LabelSetMap.h"
 
@@ -17,52 +17,42 @@ using namespace db;
 
 namespace {
 
-struct ArcKey {
-    LabelSetID _source;
-    EdgeTypeID _type;
-    LabelSetID _target;
-
-    bool operator==(const ArcKey& other) const = default;
-};
-
-struct ArcKeyHash {
-    size_t operator()(const ArcKey& key) const {
-        const size_t source = key._source.getValue();
-        const size_t type = key._type.getValue();
-        const size_t target = key._target.getValue();
-
-        return (source * 0x9E3779B97F4A7C15ull) ^ (type * 0xC2B2AE3D27D4EB4Full) ^ target;
-    }
-};
-
-struct ArcCounts {
+// The edges of one cell of the build table, a source label set over one type, by target
+struct TargetCounts {
+    LabelSetID _target {0};
     size_t _count {0};
     size_t _selfLoopCount {0};
 };
 
-// The label set of a node: the parts are ordered by first node ID, so a node's owner is
-// the last part starting at or before it
+// The label set of every node by node ID, filled range by range from the ranges each
+// part keeps its nodes in per label set, so an edge end costs one read
 class NodeLabelSets {
 public:
     explicit NodeLabelSets(DataPartSpan parts) {
+        size_t nodeCount = 0;
         for (const WeakArc<DataPart>& arc : parts) {
             const DataPart* part = arc.get();
-            _firstNodeIDs.push_back(part->getFirstNodeID());
-            _nodes.push_back(&part->nodes());
+            nodeCount = part->getFirstNodeID().getValue() + part->getNodeContainerSize();
+        }
+
+        _labelSets.resize(nodeCount);
+        for (const WeakArc<DataPart>& arc : parts) {
+            const DataPart* part = arc.get();
+            for (const auto& [labelSet, nodeRange] : part->nodes().getLabelSetIndexer()) {
+                std::fill_n(_labelSets.begin() + nodeRange._first.getValue(), nodeRange._count, labelSet.getID());
+            }
         }
     }
 
     LabelSetID get(NodeID node) const {
-        const auto afterOwner = std::upper_bound(_firstNodeIDs.begin(), _firstNodeIDs.end(), node);
-        bioassert(afterOwner != _firstNodeIDs.begin(), "Node {} precedes every part", node.getValue());
+        const LabelSetID labelSet = _labelSets[node.getValue()];
+        bioassert(labelSet.isValid(), "Node {} is in no range of its part", node.getValue());
 
-        const size_t owner = static_cast<size_t>(afterOwner - _firstNodeIDs.begin()) - 1;
-        return _nodes[owner]->getNodeLabelSet(node).getID();
+        return labelSet;
     }
 
 private:
-    std::vector<NodeID> _firstNodeIDs;
-    std::vector<const NodeContainer*> _nodes;
+    std::vector<LabelSetID> _labelSets;
 };
 
 constexpr size_t embeddingArcVisitBudget = 200000;
@@ -222,7 +212,7 @@ SchemaGraph::SchemaGraph() {
 SchemaGraph::~SchemaGraph() {
 }
 
-void SchemaGraph::refresh(DataPartSpan parts) {
+void SchemaGraph::refresh(DataPartSpan parts, const GraphMetadata& metadata) {
     size_t nodeCount = 0;
     size_t edgeCount = 0;
     for (const WeakArc<DataPart>& arc : parts) {
@@ -238,39 +228,67 @@ void SchemaGraph::refresh(DataPartSpan parts) {
         return;
     }
 
-    build(parts);
+    build(parts, metadata);
 
     _built = true;
     _nodeCount = nodeCount;
     _edgeCount = edgeCount;
 }
 
-void SchemaGraph::build(DataPartSpan parts) {
+// A table dense over (source label set, edge type), the IDs of both running from zero,
+// whose cells hold the few target label sets each reaches
+void SchemaGraph::build(DataPartSpan parts, const GraphMetadata& metadata) {
     const NodeLabelSets labelSets(parts);
+    const size_t labelSetCount = metadata.labelsets().getCount();
+    const size_t edgeTypeCount = metadata.edgeTypes().getCount();
 
-    std::unordered_map<ArcKey, ArcCounts, ArcKeyHash> counts;
+    // The out-records of a part run node by node, so a node's label set is looked up once
+    NodeID sourceNode;
+    LabelSetID source;
+
+    std::vector<std::vector<TargetCounts>> cells(labelSetCount * edgeTypeCount);
     for (const WeakArc<DataPart>& arc : parts) {
         const DataPart* part = arc.get();
 
         for (const EdgeRecord& edge : part->edges().getOuts()) {
-            const ArcKey key {labelSets.get(edge._nodeID), edge._edgeTypeID, labelSets.get(edge._otherID)};
+            if (edge._nodeID != sourceNode) {
+                sourceNode = edge._nodeID;
+                source = labelSets.get(sourceNode);
+            }
 
-            ArcCounts& counted = counts[key];
-            counted._count++;
+            const LabelSetID target = labelSets.get(edge._otherID);
+            const size_t cell = source.getValue() * edgeTypeCount + edge._edgeTypeID.getValue();
+            bioassert(cell < cells.size(), "Edge {} runs over a label set or a type the metadata lacks", edge._edgeID.getValue());
+
+            std::vector<TargetCounts>& targets = cells[cell];
+            auto counted = std::ranges::find_if(targets, [target](const TargetCounts& counts) {
+                return counts._target == target;
+            });
+            if (counted == targets.end()) {
+                targets.push_back(TargetCounts {target, 0, 0});
+                counted = targets.end() - 1;
+            }
+
+            counted->_count++;
             if (edge._nodeID == edge._otherID) {
-                counted._selfLoopCount++;
+                counted->_selfLoopCount++;
             }
         }
     }
 
     _arcs.clear();
-    for (const auto& [key, counted] : counts) {
-        _arcs.push_back(SchemaArc {key._source, key._type, key._target, counted._count, counted._selfLoopCount});
-    }
+    for (size_t cell = 0; cell < cells.size(); cell++) {
+        std::vector<TargetCounts>& targets = cells[cell];
+        std::ranges::sort(targets, [](const TargetCounts& left, const TargetCounts& right) {
+            return left._target < right._target;
+        });
 
-    std::ranges::sort(_arcs, [](const SchemaArc& left, const SchemaArc& right) {
-        return std::tie(left._source, left._type, left._target) < std::tie(right._source, right._type, right._target);
-    });
+        const LabelSetID source {static_cast<LabelSetID::Type>(cell / edgeTypeCount)};
+        const EdgeTypeID type {static_cast<EdgeTypeID::Type>(cell % edgeTypeCount)};
+        for (const TargetCounts& counted : targets) {
+            _arcs.push_back(SchemaArc {source, type, counted._target, counted._count, counted._selfLoopCount});
+        }
+    }
 }
 
 bool SchemaGraph::embeds(const SchemaPattern& pattern, const LabelSetMap& labelSets) const {

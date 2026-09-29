@@ -185,7 +185,7 @@ TEST_F(SchemaGraphTest, refreshesToThePartsAViewHolds) {
     const GraphView viewBefore = before.viewGraph();
 
     SchemaGraph schema;
-    schema.refresh(viewBefore.dataparts());
+    schema.refresh(viewBefore.dataparts(), viewBefore.metadata());
     const size_t arcsBefore = schema.arcs().size();
 
     writeSelfLoop(NodeID {0}, "KNOWS_WELL");
@@ -204,7 +204,7 @@ TEST_F(SchemaGraphTest, refreshesToThePartsAViewHolds) {
     };
 
     EXPECT_EQ(selfLoops(schema), 0u);
-    schema.refresh(viewAfter.dataparts());
+    schema.refresh(viewAfter.dataparts(), viewAfter.metadata());
     EXPECT_EQ(selfLoops(schema), 1u);
     EXPECT_GE(schema.arcs().size(), arcsBefore);
 

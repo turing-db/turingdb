@@ -12,7 +12,7 @@ GraphReader GraphView::read() const {
 
 const SchemaGraph& GraphView::schemaGraph() const {
     SchemaGraph& schema = _data->schemaGraph();
-    schema.refresh(dataparts());
+    schema.refresh(dataparts(), metadata());
 
     return schema;
 }
