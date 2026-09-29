@@ -224,6 +224,9 @@ jobs:
       env:
         PYTHON_VERSION: ${{ matrix.python_version }}
         VERSION_OVERRIDE: ${{ steps.version.outputs.version }}
+        # setuptools_scm's `git describe --dirty` scans every submodule work tree. It takes
+        # 8-20 s on the macOS runners and has crossed the 40 s default there.
+        SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT: 300
 
     - name: Run unit tests
       run: |
