@@ -65,3 +65,16 @@ TEST_F(ListPredicateOverAListPropertyTest, rejectsAnElementThatIsNotABoolean) {
 
     runQueryExpectingError("MATCH (n:Person {name: 'Luc'}) RETURN any(x IN n.flags WHERE x)", "not a boolean");
 }
+
+TEST_F(ListPredicateOverAListPropertyTest, testsAnElementForNull) {
+    runWrite("MATCH (n:Person {name: 'Luc'}) SET n.flags = [true, false, null]");
+
+    expectRows("MATCH (n:Person {name: 'Luc'}) RETURN single(x IN n.flags WHERE x IS NULL), any(x IN n.flags WHERE x IS NOT NULL)",
+               {{"true", "true"}});
+}
+
+TEST_F(ListPredicateOverAListPropertyTest, comparesEachElementWithTrue) {
+    runWrite("MATCH (n:Person {name: 'Luc'}) SET n.flags = [true, false, null]");
+
+    expectRows("MATCH (n:Person {name: 'Luc'}) RETURN all(x IN n.flags WHERE x = true)", {{"false"}});
+}
