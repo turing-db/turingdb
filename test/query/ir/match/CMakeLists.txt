@@ -180,3 +180,5 @@ target_include_directories(test_query_ir_component_name_resolution PRIVATE ${IR_
 
 # Two dashes as a subtraction of a negation, or as an undirected hop between nodes.
 add_call_v3_test(test_query_ir_double_dash DoubleDashTest.cpp)
+
+add_call_v3_test(test_query_ir_edge_uniqueness EdgeUniquenessTest.cpp)
