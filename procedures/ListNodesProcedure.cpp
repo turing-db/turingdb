@@ -26,6 +26,7 @@
 #include "metadata/PropertyTypeMap.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Tombstones.h"
+#include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "list/ListElementView.h"
@@ -41,7 +42,7 @@ namespace {
 
 using NodeIDCol = ColumnVector<NodeID>;
 using ListColumn = ColumnVector<ListView>;
-using StringColumn = ColumnVector<std::string>;
+using StringColumn = ColumnVector<std::string_view>;
 
 constexpr std::string_view labelsErr = "listNodes: labels must be a constant list";
 constexpr std::string_view propertiesErr = "listNodes: properties must be a constant map";
@@ -134,6 +135,7 @@ void executeImpl(ProcedureState* proc) {
     const LabelMap& labelMap = metadata.labels();
     const PropertyTypeMap& propTypes = metadata.propTypes();
     ListBuffer<4096>* listBuffer = ctxt->getListBuffer();
+    StringBuffer* stringBuffer = ctxt->getStringBuffer();
 
     const bool hasTombstones = view.hasDeletedNodes();
 
@@ -222,7 +224,7 @@ void executeImpl(ProcedureState* proc) {
 
         if (propsCol) {
             ProcUtils::encodeProperties(node.properties(), propTypes, propsJson);
-            propsCol->push_back(propsJson);
+            propsCol->push_back(stringBuffer->insert(propsJson));
         }
 
         return true;
@@ -309,7 +311,7 @@ void ListNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addConstantArgument("limit", ProcedureType::INT64);
     proc->addReturnValue("id", ProcedureType::NODE);
     proc->addReturnValue("labels", ProcedureType::LIST);
-    proc->addReturnValue("properties", ProcedureType::STRING);
+    proc->addReturnValue("properties", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 

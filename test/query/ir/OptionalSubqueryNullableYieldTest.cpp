@@ -133,6 +133,7 @@ protected:
         procedureContext.setProcedures(&_procedures);
         procedureContext.setChunkSize(ChunkConfig::CHUNK_SIZE);
         procedureContext.setListBuffer(&memory.listBuffer());
+        procedureContext.setStringBuffer(&memory.stringBuffer());
 
         DBDialectInterpreter interpreter(moduleOp,
                                          &view,
