@@ -49,6 +49,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
+#define GEN_PASS_DEF_SINKMAKEPATH
 #define GEN_PASS_DEF_FUSEPATHELEMENTS
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
 #define GEN_PASS_DEF_FUSEEXPLOREENDFACTOR
@@ -1953,6 +1954,89 @@ struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreH
             hop.dropAllReferences();
             hop.getBlocks().clear();
         });
+    }
+};
+
+// A filter carrying a named path its mask does not read cuts the rows before the path is
+// built: the build moves behind it, over the columns the filter keeps. Null where it stays.
+MakePath sinkPastFilter(MakePath build, mlir::OpBuilder& builder) {
+    const Value path = build.getResult();
+    if (!path.hasOneUse()) {
+        return nullptr;
+    }
+
+    FilterOp filter = dyn_cast<FilterOp>(*path.getUsers().begin());
+    if (!filter || filter->getBlock() != build->getBlock()) {
+        return nullptr;
+    }
+
+    const OperandRange carried = filter.getColumnsToFilter();
+
+    llvm::SmallVector<Value> keptColumns;
+    llvm::SmallVector<Type> keptTypes;
+    llvm::SmallVector<size_t> keptIndices(carried.size(), 0);
+    size_t pathIndex = 0;
+
+    for (size_t index = 0; index < carried.size(); index++) {
+        const Value column = carried[index];
+        if (column == path) {
+            pathIndex = index;
+            continue;
+        }
+
+        keptIndices[index] = keptColumns.size();
+        keptColumns.push_back(column);
+        keptTypes.push_back(column.getType());
+    }
+
+    llvm::SmallVector<size_t> entityIndices;
+    for (const Value entity : build.getEntities()) {
+        const auto keptIt = llvm::find(keptColumns, entity);
+        if (keptIt == keptColumns.end()) {
+            return nullptr;
+        }
+
+        entityIndices.push_back(static_cast<size_t>(keptIt - keptColumns.begin()));
+    }
+
+    builder.setInsertionPoint(filter);
+    FilterOp narrowed = builder.create<FilterOp>(filter.getLoc(), keptTypes, filter.getMask(), keptColumns);
+
+    llvm::SmallVector<Value> entities;
+    for (const size_t entityIndex : entityIndices) {
+        entities.push_back(narrowed.getResult(entityIndex));
+    }
+
+    builder.setInsertionPointAfter(narrowed);
+    MakePath sunk = builder.create<MakePath>(build.getLoc(), path.getType(), entities, build.getReversedPathsAttr());
+
+    const ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        const Value replacement = index == pathIndex ? sunk.getResult() : narrowed.getResult(keptIndices[index]);
+        filtered[index].replaceAllUsesWith(replacement);
+    }
+
+    filter.erase();
+    build.erase();
+
+    return sunk;
+}
+
+struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        llvm::SmallVector<MakePath> builds;
+        getOperation()->walk([&builds](MakePath build) {
+            builds.push_back(build);
+        });
+
+        while (!builds.empty()) {
+            const MakePath sunk = sinkPastFilter(builds.pop_back_val(), builder);
+            if (sunk) {
+                builds.push_back(sunk);
+            }
+        }
     }
 };
 
