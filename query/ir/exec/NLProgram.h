@@ -973,6 +973,11 @@ public:
     void setDistinctEnds() { _distinctEnds = true; }
     bool isDistinctEnds() const { return _distinctEnds; }
 
+    void addExcludedEdges(const ColumnEdgeIDs* edges) { _excludedEdges.push_back(edges); }
+    void addExcludedPaths(const ColumnVector<PathRef>* paths) { _excludedPaths.push_back(paths); }
+    std::span<const ColumnEdgeIDs* const> getExcludedEdges() const { return _excludedEdges; }
+    std::span<const ColumnVector<PathRef>* const> getExcludedPaths() const { return _excludedPaths; }
+
 private:
     ColumnVector<PathRef>* _paths {nullptr};
     PathTrie* _trie {nullptr};
@@ -996,6 +1001,8 @@ private:
     NLNodeSetState* _endNodeSet {nullptr};
     PathTargetIndex _targetIndex;
     bool _distinctEnds {false};
+    std::vector<const ColumnEdgeIDs*> _excludedEdges;
+    std::vector<const ColumnVector<PathRef>*> _excludedPaths;
 
     ColumnNodeIDs* _hopSources {nullptr};
     ColumnEdgeIDs* _hopEdges {nullptr};
@@ -1342,6 +1349,35 @@ private:
     const ColumnEdgeTypes* _input {nullptr};
     ColumnMask* _output {nullptr};
     std::unordered_set<uint64_t> _matchingIDs;
+};
+
+// An edge or path column nl.check_edge_distinct reads a row's edges from
+struct NLEdgeHolder {
+    const Column* _column {nullptr};
+    bool _holdsPaths {false};
+};
+
+class NLCheckEdgeDistinctData : public NLFunctionData {
+public:
+    NLCheckEdgeDistinctData(const NLEdgeHolder& subject, ColumnMask* output, const PathTrie* trie)
+        : _subject(subject),
+        _output(output),
+        _trie(trie)
+    {
+    }
+
+    const NLEdgeHolder& getSubject() const { return _subject; }
+    std::span<const NLEdgeHolder> getOthers() const { return _others; }
+    ColumnMask* getOutput() const { return _output; }
+    const PathTrie* getTrie() const { return _trie; }
+
+    void addOther(const NLEdgeHolder& other) { _others.push_back(other); }
+
+private:
+    NLEdgeHolder _subject;
+    std::vector<NLEdgeHolder> _others;
+    ColumnMask* _output {nullptr};
+    const PathTrie* _trie {nullptr};
 };
 
 // One column used as operand of nl.cross_product: its input chunk, the output

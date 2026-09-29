@@ -86,26 +86,47 @@ TEST_F(ExploreBoundAndDistinctCypherTest, explainShowsTheBoundEnd) {
 }
 
 TEST_F(ExploreBoundAndDistinctCypherTest, boundEndKeepsThePathsLandingOnTheJoinedNode) {
-    // The pairs a direct edge joins, then every path between them, both from the engine
+    // The pairs a direct edge joins, with that edge, then every path between them, both
+    // from the engine. A path may not take the joining edge, so it is bound either way
+    // round: a walk from Remy to Adam survives beside the edge from Adam to Remy
     StringRowSink joined;
-    runQuery("MATCH (a:Person)-->(b) RETURN a.name, b.name", joined);
+    runQuery("MATCH (a:Person)-[d]-(b) RETURN a.name, b.name, d", joined);
 
-    std::set<StringRowSink::Row> pairs(joined.getRows().begin(), joined.getRows().end());
+    std::set<StringRowSink::Row> pairs;
+    for (const StringRowSink::Row& row : joined.getRows()) {
+        pairs.insert(row);
+    }
     ASSERT_FALSE(pairs.empty());
 
     StringRowSink unconstrained;
     runQuery("MATCH (a:Person)-[e]->{1,3}(b) RETURN a.name, e, b.name", unconstrained);
 
+    const auto holdsEdge = [](std::string_view path, std::string_view edge) {
+        for (size_t begin = 0; begin < path.size();) {
+            const size_t end = std::min(path.find(", ", begin), path.size());
+            if (path.substr(begin, end - begin) == edge) {
+                return true;
+            }
+
+            begin = end + 2;
+        }
+
+        return false;
+    };
+
     Rows expected;
     for (const StringRowSink::Row& row : unconstrained.getRows()) {
-        if (pairs.contains(StringRowSink::Row {row[0], row[2]})) {
-            expected.push_back(row);
+        for (const StringRowSink::Row& pair : pairs) {
+            const bool joinsThePath = pair[0] == row[0] && pair[1] == row[2] && !holdsEdge(row[1], pair[2]);
+            if (joinsThePath) {
+                expected.push_back(row);
+            }
         }
     }
     std::sort(expected.begin(), expected.end());
 
     StringRowSink sink;
-    runQuery("MATCH (a:Person)-[e]->{1,3}(b), (a)-->(b) RETURN a.name, e, b.name", sink);
+    runQuery("MATCH (a:Person)-[e]->{1,3}(b), (a)-[d]-(b) RETURN a.name, e, b.name", sink);
 
     Rows rows;
     sink.sortedRows(rows);

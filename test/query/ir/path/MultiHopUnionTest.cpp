@@ -183,14 +183,14 @@ TEST_F(MultiHopUnionTest, gathersTheSameNodesOneHopAtATime) {
                idRows({"0", "4", "5", "9"}));
 
     expectRows("MATCH (s {name: 'Remy'})--()--()--(c) RETURN DISTINCT id(c) AS id",
-               idRows({"1", "6", "2", "3", "8", "10", "11"}));
+               idRows({"6", "2", "3", "1", "8", "10", "11"}));
 }
 
-// The hops are walks and not simple paths, so they revisit heavily: 6 walks at one hop, 15
-// at two and 70 at three. UNION ALL reports every one of those 91 endpoints, and the dedup
-// is what turns them into the 11 nodes the neighbourhood holds.
+// The hops are trails, never taking an edge twice, but nodes repeat: 6 trails at one hop,
+// 9 at two and 21 at three. UNION ALL reports every one of those 36 endpoints, and the
+// dedup is what turns them into the 11 nodes the neighbourhood holds.
 TEST_F(MultiHopUnionTest, dedupsTheWalksThatShareAnEndpoint) {
-    expectRowCount(threeHopUnionAll, 91);
+    expectRowCount(threeHopUnionAll, 36);
     expectRowCount(threeHopUnion, 11);
 }
 
@@ -203,21 +203,21 @@ TEST_F(MultiHopUnionTest, dropsAHopThatReachesNothingNew) {
     expectRows("MATCH (s {name: 'Remy'})-->(a) RETURN DISTINCT id(a) AS id",
                idRows({"1", "6", "2", "3"}));
     expectRows("MATCH (s {name: 'Remy'})-->()-->()-->(c) RETURN DISTINCT id(c) AS id",
-               idRows({"1", "6", "2", "3"}));
+               idRows({"6", "2", "3", "1"}));
 }
 
 // A fanout of two per hop keeps Adam(1) and Ghosts(6) of the first, Remy itself(0) and
-// Bio(4) of the second, and of the third only nodes the first already had - four nodes
-// where the uncapped walk of the same three hops gathers eleven.
+// Bio(4) of the second, and of the third Ghosts again and Computers(2) - five nodes where
+// the uncapped walk of the same three hops gathers eleven.
 TEST_F(MultiHopUnionTest, capsEachHopAtItsOwnFanoutLimit) {
-    expectRows(cappedThreeHopUnion, idRows({"1", "6", "0", "4"}));
+    expectRows(cappedThreeHopUnion, idRows({"1", "6", "0", "4", "2"}));
 
     expectRows("MATCH (s {name: 'Remy'})--(a) RETURN DISTINCT id(a) AS id LIMIT 2",
                idRows({"1", "6"}));
     expectRows("MATCH (s {name: 'Remy'})--()--(b) RETURN DISTINCT id(b) AS id LIMIT 2",
                idRows({"0", "4"}));
     expectRows("MATCH (s {name: 'Remy'})--()--()--(c) RETURN DISTINCT id(c) AS id LIMIT 2",
-               idRows({"1", "6"}));
+               idRows({"6", "2"}));
 }
 
 // The limit is charged per branch, so three hops capped at two each report six rows under

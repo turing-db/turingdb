@@ -1359,12 +1359,22 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     always shortens to a trail of as many; deeper minimums keep the trail semantics and
     walk, remembering each subtree no held edge constrained so that the prefixes arriving
     at a node later stop there. `paths` must have no use, which the verifier requires.
+
+    `distinct_from` are edge or path columns row-aligned with `input_nodes`, holding the
+    edges the same MATCH clause bound before the path: `e1` in
+    `MATCH (a)-[e1]->(b)-[e]->{1,3}(c)`, or the first path of two. No path takes one of a
+    seed row's edges, so the rows come out as db.check_edge_distinct over the paths would
+    leave them, without the paths being built; the fuse_distinct_edges pass sets it from
+    that check. The search of the distinct mode honours it too.
+
+      %s, %t, %p, %e1f = db.explore_paths(%b, {%e1}) forward hops 1 to 3 distinct_from {%e1}
   }];
 
   let arguments = (ins Column:$input_nodes,
                        Variadic<Column>:$columns_to_filter,
                        Optional<ColumnNodeIDs>:$end_nodes,
                        Variadic<Column>:$hop_imports,
+                       Variadic<Column>:$distinct_from,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -1386,8 +1396,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
     (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
-    (`hop_imports` `{` $hop_imports^ `}`)? (`ends_on_seed` $ends_on_seed^)?
-    (`distinct` $distinct^)? ($hop^)?
+    (`hop_imports` `{` $hop_imports^ `}`)? (`distinct_from` `{` $distinct_from^ `}`)?
+    (`ends_on_seed` $ends_on_seed^)? (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)
   }];
 
@@ -1706,6 +1716,33 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
 
   let assemblyFormat = [{
     `(` $edge_type_ids `,` $edge_types `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def CheckEdgeDistinct : TuringOp<"check_edge_distinct", [Pure]> {
+  let summary = "Test each row's edge, or path, against the edges bound before it in the clause";
+
+  let description = [{
+    Relationship isomorphism: within one MATCH clause no edge is bound twice, whether by
+    two hops, by a hop and a variable-length path, or by two paths. `subject` is the edge
+    or path column the newest hop bound; `others` are edge or path columns bound before
+    it, row-aligned with it. The mask is true where the subject shares no edge with any
+    of them: an edge differs from an edge, is not on a path, and a path has no edge on
+    another path.
+
+      %ok = db.check_edge_distinct(%e2, {%e1})
+              : (!db.column<!storage.edge_id>, !db.column<!storage.edge_id>) -> !db.column<!storage.bool>
+      %ok = db.check_edge_distinct(%p, {%e1, %q})
+              : (!db.column<!storage.path_ref>, !db.column<!storage.edge_id>, !db.column<!storage.path_ref>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$subject, Variadic<Column>:$others);
+  let results   = (outs Column:$result);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $subject `,` `{` $others `}` `)` attr-dict `:` functional-type(operands, results)
   }];
 }
 

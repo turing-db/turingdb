@@ -47,6 +47,16 @@ bool isMaskColumn(Type type) {
     return isa<storage::BoolType>(value) || isa<NoneType>(value);
 }
 
+// Whether the column holds edge IDs or handles of paths, the two forms an edge can be bound in
+bool holdsEdgesOrPaths(Value column) {
+    const auto columnType = dyn_cast<ColumnType>(column.getType());
+    if (!columnType) {
+        return false;
+    }
+
+    return isa<storage::EdgeIDType, storage::PathRefType>(columnType.getType());
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -467,6 +477,12 @@ LogicalResult ExplorePaths::verify() {
     const std::optional<uint64_t> maxHops = getMaxHops();
     if (maxHops && *maxHops < getMinHops()) {
         return emitOpError("max_hops must be at least min_hops");
+    }
+
+    for (const Value excluded : getDistinctFrom()) {
+        if (!holdsEdgesOrPaths(excluded)) {
+            return emitOpError("distinct_from must name edge or path columns");
+        }
     }
 
     if (const ArrayAttr edgeTypes = getEdgeTypesAttr()) {
@@ -1183,6 +1199,24 @@ LogicalResult CheckLabelConstraint::verify() {
 
 LogicalResult CheckEdgeTypeConstraint::verify() {
     return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
+}
+
+LogicalResult CheckEdgeDistinct::verify() {
+    if (!holdsEdgesOrPaths(getSubject())) {
+        return emitOpError("subject must be an edge or path column");
+    }
+
+    if (getOthers().empty()) {
+        return emitOpError("needs at least one column to differ from");
+    }
+
+    for (const Value other : getOthers()) {
+        if (!holdsEdgesOrPaths(other)) {
+            return emitOpError("others must be edge or path columns");
+        }
+    }
+
+    return success();
 }
 
 void Output::build(OpBuilder& builder, OperationState& state, ValueRange columns) {
