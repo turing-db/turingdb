@@ -124,10 +124,6 @@ private:
     // carries on, was made from
     std::unordered_map<const VarDecl*, const VarDecl*> _declSources;
 
-    // The aliases a projection's items declare, until its last item is analyzed: no row
-    // holds them yet, so a subquery body in a sibling item does not import them
-    std::unordered_set<const VarDecl*> _pendingItemAliases;
-
     // The projection whose ORDER BY is being analyzed, and the variables its aggregate or
     // DISTINCT consumed: the ORDER BY reads only its columns, a renamed variable included,
     // so a subquery body there imports those and declares the consumed names itself
