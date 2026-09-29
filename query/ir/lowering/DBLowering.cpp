@@ -16,6 +16,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "NLOps.h"
 
@@ -892,6 +893,19 @@ bool dropsRows(mlir::Operation* operation) {
                      mlir::db::RemoveDuplicates>(operation);
 }
 
+// Hands every row it reads on as at least one row, and writes nothing. An optional match
+// qualifies: a row its pattern misses comes out padded.
+bool keepsEveryRow(mlir::Operation* operation) {
+    if (mlir::isa<mlir::db::OptionalMatch>(operation)) {
+        return true;
+    }
+
+    return mlir::isMemoryEffectFree(operation)
+        && !opensRowLoop(operation)
+        && !dropsRows(operation)
+        && !reducesToOneRow(operation);
+}
+
 // The list element types an unwind can drain into a column of that very type: the entity
 // IDs, the value types a nullable value chunk is laid out for, and a nested list, which
 // drains into a list column one level shallower. An unresolved element, an embedding, or
@@ -957,6 +971,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _innermostCardinality = mlir::Value();
     _limitHandles.clear();
     _loopLimitHandle.clear();
+    _optionalMatchLimits.clear();
     _sortTopK.clear();
     _fusedLimits.clear();
 
@@ -1039,6 +1054,8 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
         if (!producedByALoop) {
             assignCardinalityDriverLoop(limit, handle, holder);
         }
+
+        assignOptionalMatchLimits(limit, handle);
     }
 }
 
@@ -2236,6 +2253,13 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, inputChunks);
     const mlir::Value state = buffer.getState();
 
+    // Every row drained reaches the cut, so once the pattern has matched as many rows as
+    // the cut still admits, the drain spends the budget before it reaches a missed row.
+    mlir::Value patternLimit;
+    if (const mlir::Value cutLimit = _optionalMatchLimits.lookup(optionalMatch.getOperation())) {
+        patternLimit = _builder.create<nl::LimitRemaining>(loc, cutLimit).getState();
+    }
+
     // The pattern reads this step's rows through its block arguments, and the row tag
     // through the trailing one; a pattern with nothing to join onto has neither.
     mlir::Block& patternBlock = optionalMatch.getPattern().front();
@@ -2255,6 +2279,15 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     _rootBlock = stepBlock;
     _innermostLoopBody = nullptr;
     _innermostCardinality = mlir::Value();
+
+    if (patternLimit) {
+        mlir::db::OptionalYield patternYield = mlir::cast<mlir::db::OptionalYield>(patternBlock.getTerminator());
+
+        _producerWalkVisits.clear();
+        for (const mlir::Value column : patternYield.getColumns()) {
+            assignProducerLoops(column, patternLimit, /*rowsDroppedBeforeTheCut=*/false, optionalMatch.getOperation());
+        }
+    }
 
     llvm::SmallVector<mlir::Value, 4> matchedChunks;
     mlir::Value matchedTag;
@@ -2297,6 +2330,10 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
 
     setInsertionInto(deepestOwnerBlock(matchedChunks, stepBlock));
     _builder.create<nl::OptionalCollect>(loc, state, matchedTag, matchedChunks);
+
+    if (patternLimit) {
+        _builder.create<nl::LimitUpdate>(loc, patternLimit, matchedChunks.front());
+    }
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
@@ -4329,6 +4366,19 @@ void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value 
     }
 
     assignProducerLoops(driver->getResult(0), handle, rowsDropped, holder);
+}
+
+void DBLowering::assignOptionalMatchLimits(mlir::db::Limit limit, mlir::Value handle) {
+    for (mlir::Operation* operation = limit->getPrevNode(); operation; operation = operation->getPrevNode()) {
+        const bool isOptionalMatch = mlir::isa<mlir::db::OptionalMatch>(operation);
+        const bool drainedUnderThisCut = isOptionalMatch && _loopLimitHandle.lookup(operation) == handle;
+
+        if (drainedUnderThisCut) {
+            _optionalMatchLimits[operation] = handle;
+        } else if (!keepsEveryRow(operation)) {
+            return;
+        }
+    }
 }
 
 void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {

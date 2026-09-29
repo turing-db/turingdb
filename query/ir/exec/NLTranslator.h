@@ -467,6 +467,7 @@ private:
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)
     void translateLimit(mlir::nl::Limit limit, NLStmtContainer* body);
+    void translateLimitRemaining(mlir::nl::LimitRemaining remaining, NLStmtContainer* body);
 
     // Translate an nl.limit_update: look up the counter the handle names and
     // record the charge against the representative chunk's row count

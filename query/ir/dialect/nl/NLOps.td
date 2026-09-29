@@ -1413,6 +1413,28 @@ def Limit : NLOp<"limit", []> {
 }
 
 /**
+* LimitRemaining
+*/
+// NOT Pure: like nl.limit, it resets a distinct counter each time it runs, so it must
+// not be CSE'd, hoisted or eliminated.
+def LimitRemaining : NLOp<"limit_remaining", []> {
+  let summary = "Create (and reset) a row-limit counter, initialized to what another one still admits";
+  let description = [{
+    Reads the remaining budget of the source counter at the point it runs and
+    produces a fresh !nl.limit_state initialized to it. The source is only read;
+    the new counter is charged by its own nl.limit_update and read by the loops
+    it bounds, as a counter nl.limit produces is. The result type is buildable
+    and omitted.
+
+      %budget = nl.limit_remaining(%h)
+  }];
+
+  let arguments = (ins NLLimitStateHandle:$source);
+  let results   = (outs NLLimitState:$state);
+  let assemblyFormat = "`(` $source `)` attr-dict";
+}
+
+/**
 * LimitUpdate
 */
 // NOT Pure: it mutates the handle, so it must run exactly where it sits and must
