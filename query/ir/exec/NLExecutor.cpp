@@ -331,31 +331,7 @@ void unwindListValueEmit(const Column* source,
     }
 }
 
-// The present-in-every-row sibling of unwindListValueEmit: a nested list is always there,
-// so the elements drain into a plain column rather than a nullable one.
-template <typename SourceColumn, typename Element>
-void unwindListPlainEmit(const Column* source,
-                         const ColumnVector<size_t>* rows,
-                         const ColumnVector<size_t>* positions,
-                         Column* output) {
-    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
-    const std::vector<size_t>& rowsRaw = rows->getRaw();
-    const std::vector<size_t>& positionsRaw = positions->getRaw();
-
-    std::vector<Element>& outputRaw = static_cast<ColumnVector<Element>*>(output)->getRaw();
-    outputRaw.resize(rowsRaw.size());
-
-    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Element>::Tag;
-
-    for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
-        bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwound list's element type.");
-
-        outputRaw[index] = element.getAs<Element>();
-    }
-}
-
-// The entity sibling of unwindListPlainEmit: an ID column spells a null entity as an
+// The entity sibling of unwindListValueEmit: an ID column spells a null entity as an
 // invalid ID, so the tagged null a list holds drains back into one rather than tripping
 // the tag check.
 template <typename SourceColumn, typename IDType>
@@ -8151,11 +8127,6 @@ NLUnwindElementEmitFunction NLExecutor::selectListUnwindNodeEmit(bool sourceIsNu
 NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit(bool sourceIsNullable) {
     return sourceIsNullable ? &unwindListValidIDEmit<ColumnOptVector<ListView>, EdgeID>
                             : &unwindListValidIDEmit<ColumnVector<ListView>, EdgeID>;
-}
-
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindListEmit(bool sourceIsNullable) {
-    return sourceIsNullable ? &unwindListPlainEmit<ColumnOptVector<ListView>, ListView>
-                            : &unwindListPlainEmit<ColumnVector<ListView>, ListView>;
 }
 
 NLUnwindElementCountFunction NLExecutor::selectTaggedUnwindElementCount() {
