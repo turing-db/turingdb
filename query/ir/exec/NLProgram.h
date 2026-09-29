@@ -811,6 +811,15 @@ public:
         _carriedColumns.push_back(carried);
     }
 
+    // The edges the clause bound before this expansion, row-aligned with the input, which
+    // no row of it may repeat: edge columns, and paths read through the query's trie
+    void addExcludedEdges(const ColumnEdgeIDs* edges) { _excludedEdges.push_back(edges); }
+    void addExcludedPaths(const ColumnVector<PathRef>* paths) { _excludedPaths.push_back(paths); }
+    void setExclusionTrie(const PathTrie* trie) { _exclusionTrie = trie; }
+    std::span<const ColumnEdgeIDs* const> getExcludedEdges() const { return _excludedEdges; }
+    std::span<const ColumnVector<PathRef>* const> getExcludedPaths() const { return _excludedPaths; }
+    const PathTrie* getExclusionTrie() const { return _exclusionTrie; }
+
 private:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
     NLLimitState* _limit {nullptr};
@@ -820,6 +829,10 @@ private:
 
     CarriedColumns _carriedColumns;
     NLStmtContainer _stmts;
+
+    std::vector<const ColumnEdgeIDs*> _excludedEdges;
+    std::vector<const ColumnVector<PathRef>*> _excludedPaths;
+    const PathTrie* _exclusionTrie {nullptr};
 
     // Scratch for the writer's row-to-input-row map, which drives the gathers
     ColumnVector<size_t> _indices;
@@ -973,11 +986,6 @@ public:
     void setDistinctEnds() { _distinctEnds = true; }
     bool isDistinctEnds() const { return _distinctEnds; }
 
-    void addExcludedEdges(const ColumnEdgeIDs* edges) { _excludedEdges.push_back(edges); }
-    void addExcludedPaths(const ColumnVector<PathRef>* paths) { _excludedPaths.push_back(paths); }
-    std::span<const ColumnEdgeIDs* const> getExcludedEdges() const { return _excludedEdges; }
-    std::span<const ColumnVector<PathRef>* const> getExcludedPaths() const { return _excludedPaths; }
-
 private:
     ColumnVector<PathRef>* _paths {nullptr};
     PathTrie* _trie {nullptr};
@@ -1001,8 +1009,6 @@ private:
     NLNodeSetState* _endNodeSet {nullptr};
     PathTargetIndex _targetIndex;
     bool _distinctEnds {false};
-    std::vector<const ColumnEdgeIDs*> _excludedEdges;
-    std::vector<const ColumnVector<PathRef>*> _excludedPaths;
 
     ColumnNodeIDs* _hopSources {nullptr};
     ColumnEdgeIDs* _hopEdges {nullptr};

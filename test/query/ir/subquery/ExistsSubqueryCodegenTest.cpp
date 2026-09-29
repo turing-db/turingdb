@@ -202,5 +202,5 @@ TEST_F(ExistsSubqueryCodegenTest, aTaggedBodyYieldsItsTagAlone) {
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
     const std::string_view secondHop = lineOf(nlProgram, "nl.get_in_edges_by_type");
-    EXPECT_TRUE(secondHop.ends_with("}) : !nl.chunk<ui64>, !nl.chunk<!storage.edge_id>")) << nlProgram;
+    EXPECT_TRUE(secondHop.ends_with("}) distinct_from [1] : !nl.chunk<ui64>, !nl.chunk<!storage.edge_id>")) << nlProgram;
 }

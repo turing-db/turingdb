@@ -640,6 +640,7 @@ void NLTranslator::bindGetEdgesByLabel(HopOp hop, IteratorKind kind) {
         config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
     }
 
+    readDistinctFrom(hop, config);
     _iteratorConfigs[hop.getResult()] = config;
 }
 
@@ -657,6 +658,35 @@ void NLTranslator::bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind) {
     }
 
     _iteratorConfigs[hop.getResult()] = config;
+}
+
+template <typename HopOp>
+void NLTranslator::readDistinctFrom(HopOp hop, IteratorConfig& config) {
+    const std::optional<llvm::ArrayRef<int64_t>> excluded = hop.getDistinctFrom();
+    if (!excluded) {
+        return;
+    }
+
+    for (const int64_t column : *excluded) {
+        config._distinctFrom.push_back(static_cast<size_t>(column));
+    }
+}
+
+void NLTranslator::bindExcludedColumns(const IteratorConfig& config, NLExpansionLoopData* loopData) {
+    for (const size_t index : config._distinctFrom) {
+        const mlir::Value excluded = config._carriedColumns[index];
+        const Column* column = getColumn(excluded);
+
+        if (holdsPaths(excluded)) {
+            loopData->addExcludedPaths(static_cast<const ColumnVector<PathRef>*>(column));
+        } else {
+            loopData->addExcludedEdges(static_cast<const ColumnEdgeIDs*>(column));
+        }
+    }
+
+    if (!config._distinctFrom.empty()) {
+        loopData->setExclusionTrie(&_memory->pathTrie());
+    }
 }
 
 void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
@@ -701,28 +731,33 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            readDistinctFrom(getOutEdges, config);
             _iteratorConfigs[getOutEdges.getResult()] = config;
         } else if (nl::GetInEdges getInEdges = mlir::dyn_cast<nl::GetInEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetInEdges, getInEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getInEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            readDistinctFrom(getInEdges, config);
             _iteratorConfigs[getInEdges.getResult()] = config;
         } else if (nl::GetEdges getEdges = mlir::dyn_cast<nl::GetEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetEdges, getEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            readDistinctFrom(getEdges, config);
             _iteratorConfigs[getEdges.getResult()] = config;
         } else if (nl::GetOutEdgesByType getOutEdgesByType = mlir::dyn_cast<nl::GetOutEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdgesByType, getOutEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             edgeTypeNames(getOutEdgesByType.getEdgeTypes(), config._edgeTypes);
+            readDistinctFrom(getOutEdgesByType, config);
             _iteratorConfigs[getOutEdgesByType.getResult()] = config;
         } else if (nl::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<nl::GetInEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::GetInEdgesByType, getInEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getInEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             edgeTypeNames(getInEdgesByType.getEdgeTypes(), config._edgeTypes);
+            readDistinctFrom(getInEdgesByType, config);
             _iteratorConfigs[getInEdgesByType.getResult()] = config;
         } else if (nl::GetOutEdgesByLabel getOutEdgesByLabel = mlir::dyn_cast<nl::GetOutEdgesByLabel>(operation)) {
             bindGetEdgesByLabel(getOutEdgesByLabel, IteratorKind::GetOutEdgesByLabel);
@@ -745,8 +780,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._hopRegion = &explorePaths.getHop();
             const mlir::OperandRange hopImports = explorePaths.getHopImports();
             config._hopImports.assign(hopImports.begin(), hopImports.end());
-            const mlir::OperandRange distinctFrom = explorePaths.getDistinctFrom();
-            config._distinctFrom.assign(distinctFrom.begin(), distinctFrom.end());
+            readDistinctFrom(explorePaths, config);
             if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
                 for (const mlir::Attribute label : *endLabels) {
                     config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
@@ -1874,6 +1908,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     loopData->getIndices()->reserve(_program->getChunkSize());
 
     bindCarriedColumns(config, loopBody, 4, loopData);
+    bindExcludedColumns(config, loopData);
 
     NLHandlerFunction handler = nullptr;
     if (config._kind == IteratorKind::GetOutEdges) {
@@ -1918,8 +1953,13 @@ void NLTranslator::bindCarriedColumns(const IteratorConfig& config,
             throw IRException("Carried column is not row-aligned with the input chunk");
         }
 
+        // A carried column nothing reads back is one the op keeps for its own sake - the
+        // end column or an excluded edge - and reads at the input, so no copy is gathered
         const unsigned argumentIndex = static_cast<unsigned>(firstCarriedArgument + carriedIndex);
-        Column* carriedOutput = allocColumn(loopBody.getArgument(argumentIndex));
+        Column* carriedOutput = allocColumnIfUsed(loopBody.getArgument(argumentIndex));
+        if (!carriedOutput) {
+            continue;
+        }
 
         const NLCarriedColumn carriedColumn(getColumn(carriedValue),
                                             carriedOutput,
@@ -1980,15 +2020,7 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
     }
 
     bindCarriedColumns(config, loopBody, 3, loopData);
-
-    for (const mlir::Value excluded : config._distinctFrom) {
-        const Column* column = getColumn(excluded);
-        if (holdsPaths(excluded)) {
-            loopData->addExcludedPaths(static_cast<const ColumnVector<PathRef>*>(column));
-        } else {
-            loopData->addExcludedEdges(static_cast<const ColumnEdgeIDs*>(column));
-        }
-    }
+    bindExcludedColumns(config, loopData);
 
     // The bound end is the carried column's input, row-aligned with the seeds; a walk
     // ending where it began targets the seeds themselves

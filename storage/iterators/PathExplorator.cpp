@@ -34,7 +34,7 @@ uint64_t scatter(uint64_t key) {
 }
 
 uint64_t signatureBit(EdgeID edge) {
-    return 1ull << ((edge.getValue() * 0x9E3779B97F4A7C15ull) >> 58);
+    return EdgeExclusion::signatureBit(edge);
 }
 
 // The words a node holds in the cycle search, each one bit per seed of the batch
@@ -402,39 +402,11 @@ void PathExplorator::setEndNodeSet(std::span<const NodeID> endNodeSet) {
 }
 
 void PathExplorator::setExcludedEdges(std::span<const ColumnEdgeIDs* const> columns) {
-    _excludedEdgeColumns = columns;
+    _exclusion.setEdgeColumns(columns);
 }
 
 void PathExplorator::setExcludedPaths(std::span<const ColumnVector<PathRef>* const> columns, const PathTrie* trie) {
-    _excludedPathColumns = columns;
-    _exclusionTrie = trie;
-}
-
-bool PathExplorator::excludes() const {
-    return !_excludedEdgeColumns.empty() || !_excludedPathColumns.empty();
-}
-
-void PathExplorator::collectExclusions(size_t row, std::vector<EdgeID>& edges) const {
-    for (const ColumnEdgeIDs* column : _excludedEdgeColumns) {
-        edges.push_back((*column)[row]);
-    }
-
-    for (const ColumnVector<PathRef>* column : _excludedPathColumns) {
-        PathRef current = (*column)[row];
-        for (uint64_t depth = _exclusionTrie->getDepth(current); depth > 0; depth--) {
-            const PathTrieEntry& entry = _exclusionTrie->get(current);
-            edges.push_back(entry._edge);
-            current = entry._parent;
-        }
-    }
-}
-
-bool PathExplorator::isSeedExcluded(EdgeID edge) const {
-    if ((_seedExclusionSignature & signatureBit(edge)) == 0) {
-        return false;
-    }
-
-    return std::find(_seedExcluded.begin(), _seedExcluded.end(), edge) != _seedExcluded.end();
+    _exclusion.setPathColumns(columns, trie);
 }
 
 void PathExplorator::setDistinctEnds(bool distinct) {
@@ -644,13 +616,8 @@ void PathExplorator::startSeed(size_t row) {
     _dependencies.clear();
     _target = PathTargetHandle {};
 
-    _seedExcluded.clear();
-    _seedExclusionSignature = 0;
-    if (excludes()) {
-        collectExclusions(row, _seedExcluded);
-        for (const EdgeID edge : _seedExcluded) {
-            _seedExclusionSignature |= signatureBit(edge);
-        }
+    if (_exclusion.isSet()) {
+        _exclusion.loadRow(row);
     }
 
     const NodeID seed = (*_input)[row];
@@ -895,7 +862,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const bool backtracks = hasPathEdges && edge == lastEdge;
         const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
-        const bool excluded = isSeedExcluded(edge);
+        const bool excluded = _exclusion.excludes(edge);
         const size_t heldAt = backtracks ? _pathEdges.size() - 1
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
         const bool onTrail = heldAt != NO_TAINT;
@@ -1379,15 +1346,14 @@ void PathExplorator::collectBatchExclusions(size_t firstRow, size_t count) {
     reach._excluded.clear();
     reach._excludedSignature = 0;
 
-    if (!excludes()) {
+    if (!_exclusion.isSet()) {
         return;
     }
 
     for (size_t bit = 0; bit < count; bit++) {
-        _seedExcluded.clear();
-        collectExclusions(firstRow + bit, _seedExcluded);
+        _exclusion.loadRow(firstRow + bit);
 
-        for (const EdgeID edge : _seedExcluded) {
+        for (const EdgeID edge : _exclusion.getEdges()) {
             reach._excluded.emplace_back(edge, 1ull << bit);
         }
     }
