@@ -134,7 +134,7 @@ struct BinaryOpExecutor {
  * unsigned type would wrap that result around zero (12 - 18 as 2^64 - 6).
  */
 template <typename T>
-inline auto asSignedInteger(T&& value) {
+inline auto arithmeticOperand(T&& value) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, uint64_t>) {
@@ -239,61 +239,36 @@ inline bool holdsAnInteger(const T& value) {
     }
 }
 
-/**
- * @brief The integer such an operand holds, read where @ref holdsAnInteger answered for it.
- */
-template <typename T>
-inline int64_t integerOperand(const T& value) {
-    if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
-        return cellInteger(value);
-    } else if constexpr (TypeUtils::is_optional_v<T>) {
-        return integerOperand(*value);
-    } else {
-        return static_cast<int64_t>(value);
-    }
-}
-
 template <typename T>
 concept Temporal = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, DateTime>
                 || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, Duration>;
 
-template <typename T, typename V>
-concept MayHold = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>
-               || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, V>;
-
-template <typename V, typename T>
-    requires MayHold<T, V>
-inline bool holdsA(const T& value) {
+// Calls @param visit with the value an operand holds, read as its own type: a cell as the
+// type its tag names, a column value as itself. An operand holding nothing arithmetic reads
+// answers null, as an absent operand does.
+template <typename T, typename Visit>
+inline std::optional<ListElementView> visitArithmeticOperand(const T& value, Visit&& visit) {
     if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
-        return value.getTag() == TypeToListBufferTag<V>::Tag;
+        auto visitor = [&visit]<typename N>(ListElementView view) -> std::optional<ListElementView> {
+            if constexpr (std::is_same_v<N, types::UInt64::Primitive>) {
+                return visit(static_cast<int64_t>(view.getAs<N>()));
+            } else if constexpr (std::is_same_v<N, types::Int64::Primitive>
+                              || std::is_same_v<N, types::Double::Primitive>
+                              || std::is_same_v<N, types::DateTime::Primitive>
+                              || std::is_same_v<N, types::Duration::Primitive>) {
+                return visit(view.getAs<N>());
+            } else {
+                return std::nullopt;
+            }
+        };
+
+       return ListTagDispatcher{value.getTag()}.execute(visitor, value);
+
     } else if constexpr (TypeUtils::is_optional_v<T>) {
-        return value.has_value() && holdsA<V>(*value);
+        return value.has_value() ? visitArithmeticOperand(*value, visit) : std::nullopt;
     } else {
-        return true;
+        return visit(arithmeticOperand(value));
     }
-}
-
-template <typename V, typename W, typename T, typename U>
-    requires MayHold<T, V> && MayHold<U, W>
-inline bool operandsAs(const T& a, const U& b, V& lhs, W& rhs) {
-    if (!(holdsA<V>(a) && holdsA<W>(b))) {
-        return false;
-    }
-
-    const auto read = []<typename X, typename Y>(const Y& value) -> X {
-        if constexpr (std::is_same_v<std::decay_t<Y>, ListElementView>) {
-            return value.template getAs<X>();
-        } else if constexpr (std::is_same_v<TypeUtils::unwrap_optional_t<Y>, ListElementView>) {
-            return value->template getAs<X>();
-        } else {
-            return TypeUtils::unwrap(value);
-        }
-    };
-
-    lhs = read.template operator()<V>(a);
-    rhs = read.template operator()<W>(b);
-
-    return true;
 }
 
 template <typename T>
@@ -351,7 +326,7 @@ struct BinaryOp {
     template <typename T>
     static inline decltype(auto) operand(T&& value) {
         if constexpr (NarrowsUnsigned) {
-            return asSignedInteger(std::forward<T>(value));
+            return arithmeticOperand(std::forward<T>(value));
         } else {
             return std::forward<T>(value);
         }
@@ -380,55 +355,15 @@ struct BinaryOp {
     inline std::optional<ListElementView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
 
-        constexpr bool adds = std::is_same_v<F, std::plus<>>;
-        constexpr bool subtracts = std::is_same_v<F, Subtract>;
-
-        // Add and subtract durations from instants
-        if constexpr ((adds || subtracts) && MayHold<T, DateTime> && MayHold<U, Duration>) {
-            DateTime instant {};
-            Duration duration {};
-
-            if (operandsAs(a, b, instant, duration)) {
-                return stagedCell(F {}(instant, duration));
-            }
-        }
-
-        // Add duration with datetime
-        if constexpr (adds && MayHold<T, Duration> && MayHold<U, DateTime>) {
-            Duration duration {};
-            DateTime instant {};
-
-            if (operandsAs(a, b, duration, instant)) {
-                return stagedCell(duration + instant);
-            }
-        }
-
-        if constexpr (subtracts && MayHold<T, DateTime> && MayHold<U, DateTime>) {
-            DateTime lhs {};
-            DateTime rhs {};
-
-            if (operandsAs(a, b, lhs, rhs)) {
-                return stagedCell(lhs - rhs);
-            }
-        }
-
-        //Any other operation between two temporal types is undefined.
-        if constexpr (Temporal<T> || Temporal<U>) {
-            return std::nullopt;
-        } else {
-            if (holdsAnInteger(a) && holdsAnInteger(b)) {
-                return stagedCell(F {}(integerOperand(a), integerOperand(b)));
-            }
-
-            const std::optional<double> lhs = cellOperand(a);
-            const std::optional<double> rhs = cellOperand(b);
-
-            if (!lhs.has_value() || !rhs.has_value()) {
-                return std::nullopt;
-            }
-
-            return stagedCell(F {}(*lhs, *rhs));
-        }
+        return visitArithmeticOperand(a, [this, &b](const auto lhs) {
+            return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<ListElementView> {
+                if constexpr (requires { F {}(lhs, rhs); }) {
+                    return stagedCell(F {}(lhs, rhs));
+                } else {
+                    throw TuringException("Operands are not valid and compatible types");
+                }
+            });
+        });
     }
 
     template <typename T, typename U>
@@ -463,16 +398,24 @@ struct Subtract : std::minus<> {
 
 struct SafeDivides {
     template <typename T, typename U>
+        requires (!Temporal<U>) && requires(T&& a, U&& b) { std::divides<> {}(a, b); }
     inline auto operator()(T&& a, U&& b) const {
         if (b == 0) {
             throw TuringException("Attempted to divide by zero.");
         }
         return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
     }
+
+    // Unused but defined to satisfy dispatcher
+    template <typename T>
+    Duration operator()(T&& number, Duration duration) const {
+        throw TuringException("A number divided by a duration is not defined.");
+    }
 };
 
 struct SafeModulo {
     template <typename T, typename U>
+        requires std::is_arithmetic_v<std::decay_t<T>> && std::is_arithmetic_v<std::decay_t<U>>
     inline auto operator()(T&& a, U&& b) const {
         using DecayT = std::decay_t<T>;
         using DecayU = std::decay_t<U>;

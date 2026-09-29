@@ -6829,7 +6829,12 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
             const mlir::db::ColumnType zeroType = allocColumnType(zeroAttr.getType());
             const mlir::Value zero = _opBuilder.create<mlir::db::ConstantOp>(loc, zeroType, zeroAttr).getResult();
 
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, zero, operandVal).getResult();
+            const bool negatesADuration = expr->getType() == EvaluatedType::Duration;
+            const mlir::Value origin = negatesADuration
+                                         ? _opBuilder.create<mlir::db::ToDuration>(loc, noneType, zero).getResult()
+                                         : zero;
+
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, origin, operandVal).getResult();
         }
         break;
 

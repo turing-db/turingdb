@@ -22,6 +22,11 @@ TEST_F(TemporalMixedListElementArithmeticTest, subtractsAnInstantFromAnIndexedIn
 }
 
 TEST_F(TemporalMixedListElementArithmeticTest, subtractsAnInstantFromEachUnwoundElement) {
-    expectRows("UNWIND [datetime('2024-01-02T00:00:00Z'), 1] AS t RETURN t - datetime('2024-01-01T00:00:00Z')",
+    expectRows("UNWIND [datetime('2024-01-02T00:00:00Z'), 'x'] AS t RETURN t - datetime('2024-01-01T00:00:00Z')",
                {{"PT24H"}, {"null"}});
+}
+
+TEST_F(TemporalMixedListElementArithmeticTest, rejectsAnInstantSubtractedFromAnInteger) {
+    expectError("UNWIND [datetime('2024-01-02T00:00:00Z'), 1] AS t RETURN t - datetime('2024-01-01T00:00:00Z')",
+                "Operands are not valid and compatible types");
 }
