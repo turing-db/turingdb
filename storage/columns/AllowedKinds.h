@@ -465,6 +465,8 @@ struct PairRestrictions<Op> {
         ListMembershipKindPairs<EdgeID>::Pairs,
 
         ListMembershipKindPairs<ListElementView>::Pairs,
+        ListMembershipKindPairs<ListView>::Pairs,
+        ListMembershipKindPairs<MapView>::Pairs,
 
         TaggedMembershipKindPairs<types::Int64::Primitive>::Pairs,
         TaggedMembershipKindPairs<types::UInt64::Primitive>::Pairs,
@@ -476,6 +478,8 @@ struct PairRestrictions<Op> {
         TaggedMembershipKindPairs<NodeID>::Pairs,
         TaggedMembershipKindPairs<EdgeID>::Pairs,
         TaggedMembershipKindPairs<ListElementView>::Pairs,
+        TaggedMembershipKindPairs<ListView>::Pairs,
+        TaggedMembershipKindPairs<MapView>::Pairs,
 
         std::tuple<
             KindPair<PropertyNull, ListView>,
