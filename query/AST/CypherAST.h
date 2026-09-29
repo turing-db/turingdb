@@ -44,6 +44,7 @@ class ListExpr;
 class ListSliceExpr;
 class ListComprehensionExpr;
 class PatternComprehensionExpr;
+class ListPredicateExpr;
 class CaseExpr;
 class Pattern;
 class PatternElement;
@@ -150,6 +151,7 @@ public:
     friend ListSliceExpr;
     friend ListComprehensionExpr;
     friend PatternComprehensionExpr;
+    friend ListPredicateExpr;
     friend CaseExpr;
     friend Pattern;
     friend PatternElement;

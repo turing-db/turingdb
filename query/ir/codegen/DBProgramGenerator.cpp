@@ -87,6 +87,7 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/IndexExpr.h"
 #include "expr/ListComprehensionExpr.h"
+#include "expr/ListPredicateExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
@@ -226,7 +227,7 @@ mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::stri
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext&);
 
-constexpr size_t dbPassCount = 28;
+constexpr size_t dbPassCount = 29;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -251,6 +252,7 @@ const std::array<DBPassFactory, dbPassCount> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndConstraint(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreHopLabels(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createFusePathElements(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndNodes(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndFactor(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndSet(); },
@@ -1664,6 +1666,32 @@ mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Valu
     const mlir::db::ColumnType resultType = allocColumnType(countType);
 
     return _opBuilder.create<mlir::db::PathLength>(_opBuilder.getUnknownLoc(), resultType, column).getResult();
+}
+
+mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
+    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
+    bioassert(columnType && mlir::isa<mlir::storage::EntityListType>(columnType.getType()),
+              "A named path is read off the entity sequence its element built");
+
+    mlir::Type resultType;
+    switch (kind) {
+        case mlir::storage::PathElementsKind::Nodes:
+            resultType = mlir::storage::ListType::get(_mlirCtxt, mlir::storage::NodeIDType::get(_mlirCtxt));
+        break;
+
+        case mlir::storage::PathElementsKind::Relationships:
+            resultType = mlir::storage::ListType::get(_mlirCtxt, mlir::storage::EdgeIDType::get(_mlirCtxt));
+        break;
+
+        case mlir::storage::PathElementsKind::Length:
+            resultType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
+        break;
+    }
+
+    const mlir::db::ColumnType nullableType =
+        allocColumnType(mlir::storage::NullableType::get(_mlirCtxt, resultType));
+
+    return _opBuilder.create<mlir::db::PathElements>(_opBuilder.getUnknownLoc(), nullableType, column, kind).getResult();
 }
 
 void DBProgramGenerator::createMain() {
@@ -3345,9 +3373,9 @@ void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmt
             matchSeen = true;
 
             const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+            generateNamedPaths(matchStmt);
             generateMatchConstraints(matchStmt);
             generateMatchFilter(matchStmt);
-            generateNamedPaths(matchStmt);
 
             if (!matchStmt->isOptional()) {
                 generateMatchOrderBy(matchStmt);
@@ -6701,6 +6729,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::LIST_PREDICATE: {
+            const ListPredicateExpr* predicate = static_cast<const ListPredicateExpr*>(expr);
+            translateListPredicateExpr(expr, predicate);
+        }
+        break;
+
         case Expr::Kind::LIST:
             throwError(fmt::format("Unsupported expression: {}",
                                    ExprKindDescription::value(kind)),
@@ -6769,26 +6803,89 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
                                                         const ListComprehensionExpr* comprehension) {
     const mlir::Value source = getOrTranslateExprColumn(comprehension->getSource());
 
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    auto comprehensionOp = _opBuilder.create<mlir::db::ListComprehension>(_opBuilder.getUnknownLoc(),
+                                                                          noneType,
+                                                                          source,
+                                                                          carrySet._columns);
+
+    generateElementRegion(comprehensionOp.getBody(),
+                          comprehension,
+                          carrySet,
+                          /*cutsElements=*/true,
+                          comprehension->getProjection());
+
+    _part._exprMap[expr] = comprehensionOp.getResult();
+}
+
+void DBProgramGenerator::translateListPredicateExpr(const Expr* expr, const ListPredicateExpr* predicate) {
+    const ListComprehensionExpr* comprehension = predicate->getComprehension();
+    const mlir::Value source = getOrTranslateExprColumn(comprehension->getSource());
+
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
+
+    mlir::storage::ListPredicateKind kind = mlir::storage::ListPredicateKind::All;
+    switch (predicate->getQuantifier()) {
+        case ListPredicateExpr::Quantifier::All:
+            kind = mlir::storage::ListPredicateKind::All;
+        break;
+
+        case ListPredicateExpr::Quantifier::Any:
+            kind = mlir::storage::ListPredicateKind::Any;
+        break;
+
+        case ListPredicateExpr::Quantifier::None:
+            kind = mlir::storage::ListPredicateKind::None;
+        break;
+
+        case ListPredicateExpr::Quantifier::Single:
+            kind = mlir::storage::ListPredicateKind::Single;
+        break;
+    }
+
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    auto predicateOp = _opBuilder.create<mlir::db::ListPredicate>(_opBuilder.getUnknownLoc(),
+                                                                  boolType,
+                                                                  source,
+                                                                  carrySet._columns,
+                                                                  kind);
+
+    generateElementRegion(predicateOp.getBody(),
+                          comprehension,
+                          carrySet,
+                          /*cutsElements=*/false,
+                          comprehension->getPredicate());
+
+    _part._exprMap[expr] = predicateOp.getResult();
+}
+
+void DBProgramGenerator::collectElementCarrySet(CarrySet& carrySet) {
     // The body reads the elements of one row's list rather than the rows in flight, so
     // every column of those rows is carried: the op repeats each over the elements of its
     // own row. A constant stands for every row already and needs no carrying, which is
     // the one column the collection leaves out.
-    CarrySet carrySet;
     if (_part._aggregateOp) {
         collectGroupedColumns(carrySet);
     } else {
         collectCarrySet(carrySet);
     }
+}
 
+void DBProgramGenerator::generateElementRegion(mlir::Region& region,
+                                               const ListComprehensionExpr* comprehension,
+                                               const CarrySet& carrySet,
+                                               bool cutsElements,
+                                               const Expr* valueExpr) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::db::ColumnType rowTagType =
         allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
-
-    auto comprehensionOp = _opBuilder.create<mlir::db::ListComprehension>(loc,
-                                                                          noneType,
-                                                                          source,
-                                                                          carrySet._columns);
 
     llvm::SmallVector<mlir::Type> argumentTypes {noneType, rowTagType};
     llvm::SmallVector<mlir::Location> argumentLocations {loc, loc};
@@ -6799,10 +6896,7 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     }
 
     const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
-    mlir::Block* const bodyBlock = _opBuilder.createBlock(&comprehensionOp.getBody(),
-                                                          {},
-                                                          argumentTypes,
-                                                          argumentLocations);
+    mlir::Block* const bodyBlock = _opBuilder.createBlock(&region, {}, argumentTypes, argumentLocations);
 
     const VariableIdentityMap outerVarMap = _part._varMap;
     const EdgeTypeColumnMap outerEdgeTypeMap = _part._edgeTypeMap;
@@ -6822,7 +6916,8 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     mlir::Value rowTags = bodyBlock->getArgument(1);
 
     // The WHERE cuts the elements themselves rather than masking what they contribute
-    if (const Expr* predicateExpr = comprehension->getPredicate()) {
+    const Expr* const predicateExpr = comprehension->getPredicate();
+    if (cutsElements && predicateExpr) {
         const mlir::Value predicate = getOrTranslateExprColumn(predicateExpr);
 
         const llvm::SmallVector<mlir::Value> filtered(bodyBlock->args_begin(), bodyBlock->args_end());
@@ -6842,10 +6937,8 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
         rebindProjectedColumns(filtered, filterOp.getResults());
     }
 
-    // A comprehension with no projection hands each element on as it stands
-    const Expr* const projectionExpr = comprehension->getProjection();
-    const mlir::Value value = projectionExpr ? getOrTranslateExprColumn(projectionExpr)
-                                             : _part._comprehensionElements[itemDecl];
+    const mlir::Value value = valueExpr ? getOrTranslateExprColumn(valueExpr)
+                                       : _part._comprehensionElements[itemDecl];
 
     _opBuilder.create<mlir::db::ComprehensionYield>(loc, rowTags, value);
 
@@ -6856,8 +6949,6 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     _part._createdEntities = outerCreatedEntities;
     _part._exprMap = outerExprMap;
     _part._projectedColumns = outerProjectedColumns;
-
-    _part._exprMap[expr] = comprehensionOp.getResult();
 }
 
 void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
@@ -8146,6 +8237,26 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
 
     if (funcName == "range") {
         translateRange(expr, args);
+        return;
+    }
+
+    const bool readsANamedPath = args && args->size() == 1 && args->front()->getType() == EvaluatedType::GraphPath;
+    if (readsANamedPath) {
+        // Beside `RETURN p` the path rides the handle column of its walk, which reads as
+        // the entities it runs through
+        const Expr* pathExpr = args->front();
+        const mlir::Value path = readWalkEntities(pathExpr, translateArg(pathExpr));
+
+        if (funcName == "length") {
+            _part._exprMap[expr] = pathElementsColumn(path, mlir::storage::PathElementsKind::Length);
+        } else if (funcName == "nodes") {
+            _part._exprMap[expr] = pathElementsColumn(path, mlir::storage::PathElementsKind::Nodes);
+        } else if (funcName == "relationships") {
+            _part._exprMap[expr] = pathElementsColumn(path, mlir::storage::PathElementsKind::Relationships);
+        } else {
+            throwError(fmt::format("{}() does not read a path", funcName), expr);
+        }
+
         return;
     }
 

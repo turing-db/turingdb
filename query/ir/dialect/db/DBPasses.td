@@ -98,6 +98,11 @@ def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FusePathElements : Pass<"fuse_path_elements"> {
+    let summary = "Read the nodes, the relationships or the length of a named path over one walk off the walk's handles instead of the path it builds";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreEndNodes : Pass<"fuse_explore_end_nodes"> {
     let summary = "Fuse a path exploration and the equality filter binding its end nodes to a carried column into an exploration ending on that column";
     let dependentDialects = ["mlir::db::DB"];

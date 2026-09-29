@@ -59,6 +59,10 @@ public:
     ListView expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed) const;
     ListView expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const;
 
+    // Every node the path runs through: the seed then the end of each hop, or reversed
+    // the ends from the last back then the seed. A path of no hops gives the seed alone.
+    ListView expandNodes(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const;
+
     static size_t arenaOf(PathRef path) { return path.getValue() >> indexBits; }
     static size_t indexOf(PathRef path) { return path.getValue() & indexMask; }
 

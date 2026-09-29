@@ -10,6 +10,7 @@
 #include "FunctionInvocationExpr.h"
 #include "IndexExpr.h"
 #include "ListComprehensionExpr.h"
+#include "ListPredicateExpr.h"
 #include "ListSliceExpr.h"
 #include "ListExpr.h"
 #include "LiteralExpr.h"
@@ -115,6 +116,15 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             if (const Expr* projection = comprehension->getProjection()) {
                 children.push_back(projection);
             }
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::LIST_PREDICATE: {
+            const ListPredicateExpr* predicate = static_cast<const ListPredicateExpr*>(expr);
+
+            children.push_back(predicate->getComprehension());
 
             return true;
         }

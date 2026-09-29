@@ -16,6 +16,7 @@
 #include "expr/ListSliceExpr.h"
 #include "expr/ListComprehensionExpr.h"
 #include "expr/PatternComprehensionExpr.h"
+#include "expr/ListPredicateExpr.h"
 #include "expr/CaseExpr.h"
 #include "expr/ExistsExpr.h"
 #include "expr/CountSubqueryExpr.h"

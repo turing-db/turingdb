@@ -131,6 +131,23 @@ ListView PathTrie::expandEnds(PathRef path, QueryListBuffer& buffer, bool revers
     return cursor.getView();
 }
 
+ListView PathTrie::expandNodes(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const {
+    const uint64_t depth = getDepth(path);
+    const uint64_t count = depth + 1;
+    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(NodeID));
+
+    PathRef current = path;
+    for (uint64_t index = depth; index > 0; index--) {
+        const PathTrieEntry& entry = get(current);
+        cursor.writeValueAt(reversed ? depth - index : index, ListBufferTypeTag::NodeID, entry._node);
+        current = entry._parent;
+    }
+
+    cursor.writeValueAt(reversed ? depth : 0, ListBufferTypeTag::NodeID, seed);
+
+    return cursor.getView();
+}
+
 ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const {
     const uint64_t depth = getDepth(path);
     ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(NodeID));

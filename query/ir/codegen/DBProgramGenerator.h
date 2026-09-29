@@ -52,6 +52,7 @@ class IndexExpr;
 class Literal;
 class ListLiteral;
 class ListComprehensionExpr;
+class ListPredicateExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class ListSliceExpr;
@@ -1000,6 +1001,24 @@ private:
     // the variable and yielding what each one contributes
     void translateListComprehensionExpr(const Expr* expr, const ListComprehensionExpr* comprehension);
 
+    // Emits the db.list_predicate of `all(x IN xs WHERE p(x))` and its three siblings: the
+    // same source, carry set and body, yielding the predicate's value for each element
+    void translateListPredicateExpr(const Expr* expr, const ListPredicateExpr* predicate);
+
+    // The columns an op over the elements of one row's list carries: every column in
+    // flight, since the body reads the elements rather than the rows
+    void collectElementCarrySet(CarrySet& carrySet);
+
+    // Generates the body region of such an op: the entry block binds the element to the
+    // comprehension's variable, the row tag and the carry set. With @param cutsElements the
+    // comprehension's WHERE cuts the elements as a filter; the yield names the tag and what
+    // @param valueExpr computes for each element, the element itself when it is null
+    void generateElementRegion(mlir::Region& region,
+                               const ListComprehensionExpr* comprehension,
+                               const CarrySet& carrySet,
+                               bool cutsElements,
+                               const Expr* valueExpr);
+
     // Emits the db.pattern_comprehension of `[(a)-[:KNOWS]->(b) WHERE p(b) | f(b)]`: the
     // columns in flight as its inputs, and a pattern region generated as a MATCH of its
     // own, ending on what each match contributes to the list of the row it came from
@@ -1158,6 +1177,9 @@ private:
 
     // The column size() reads over a path column: the hop count of each path
     mlir::Value pathLengthColumn(const Expr* argExpr, mlir::Value column);
+
+    // The column nodes(), relationships() or length() reads over a named path
+    mlir::Value pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind);
 
     // @param joinedTarget is where the column the hop lands on is written when the caller
     // closes a join with it, and null when the hop binds it to @param tgt - the two forms

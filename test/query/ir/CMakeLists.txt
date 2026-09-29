@@ -294,6 +294,7 @@ add_call_v3_test(test_query_ir_explore_bound_and_distinct_cypher ExploreBoundAnd
 add_call_v3_test(test_query_ir_explore_edge_type_disjunction ExploreEdgeTypeDisjunctionTest.cpp)
 add_call_v3_test(test_query_ir_self_referencing_pattern SelfReferencingPatternTest.cpp)
 add_call_v3_test(test_query_ir_named_path NamedPathTest.cpp)
+add_call_v3_test(test_query_ir_named_path_functions NamedPathFunctionsTest.cpp)
 add_call_v3_test(test_query_ir_several_walks SeveralWalksTest.cpp)
 add_call_v3_test(test_query_ir_optional_walk OptionalWalkTest.cpp)
 add_call_v3_test(test_query_ir_count_path_rows CountPathRowsTest.cpp)
@@ -3493,6 +3494,17 @@ target_link_libraries(test_query_ir_pattern_comprehension_where PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_pattern_comprehension_where PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_predicate ListPredicateTest.cpp)
+target_link_libraries(test_query_ir_list_predicate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_list_comprehension ListComprehensionTest.cpp)
 target_link_libraries(test_query_ir_list_comprehension PRIVATE

@@ -842,6 +842,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateRange(range, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
+        } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
+            translateListPredicate(listPredicate, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -870,6 +872,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakePath(makePath, body);
         } else if (nl::PathLength pathLength = mlir::dyn_cast<nl::PathLength>(operation)) {
             translatePathLength(pathLength, body);
+        } else if (nl::PathElements pathElements = mlir::dyn_cast<nl::PathElements>(operation)) {
+            translatePathElements(pathElements, body);
         } else if (nl::GetNodeLabelSet getNodeLabelSet = mlir::dyn_cast<nl::GetNodeLabelSet>(operation)) {
             translateGetNodeLabelSet(getNodeLabelSet, body);
         } else if (nl::GetEdgeTypes getEdgeTypes = mlir::dyn_cast<nl::GetEdgeTypes>(operation)) {
@@ -1967,6 +1971,10 @@ void NLTranslator::translateExpandPath(nl::ExpandPath expand, NLStmtContainer* b
         case storage::PathExpansionKind::Ends:
             kind = PathExpansionKind::Ends;
         break;
+
+        case storage::PathExpansionKind::Nodes:
+            kind = PathExpansionKind::Nodes;
+        break;
     }
 
     NLExpandPathData* data = _program->allocFunctionData<NLExpandPathData>(paths,
@@ -1987,6 +1995,37 @@ void NLTranslator::translatePathLength(nl::PathLength length, NLStmtContainer* b
 
     NLPathLengthData* data = _program->allocFunctionData<NLPathLengthData>(paths, output, &_memory->pathTrie());
     body->emplaceStmt(&NLExecutor::runPathLength, data);
+}
+
+void NLTranslator::translatePathElements(nl::PathElements elements, NLStmtContainer* body) {
+    const ColumnVector<EntityList>* paths = static_cast<const ColumnVector<EntityList>*>(getColumn(elements.getPath()));
+
+    PathElementsKind kind = PathElementsKind::Nodes;
+    Column* output = nullptr;
+    switch (elements.getKind()) {
+        case storage::PathElementsKind::Nodes:
+            kind = PathElementsKind::Nodes;
+            output = allocOptListColumn();
+        break;
+
+        case storage::PathElementsKind::Relationships:
+            kind = PathElementsKind::Relationships;
+            output = allocOptListColumn();
+        break;
+
+        case storage::PathElementsKind::Length:
+            kind = PathElementsKind::Length;
+            output = allocOptColumnForValueType(ValueType::UInt64);
+        break;
+    }
+
+    _valueSlots[elements.getResult()] = output;
+
+    NLPathElementsData* data = _program->allocFunctionData<NLPathElementsData>(paths,
+                                                                               output,
+                                                                               kind,
+                                                                               &_memory->listBuffer());
+    body->emplaceStmt(&NLExecutor::runPathElements, data);
 }
 
 void NLTranslator::translateMakePath(nl::MakePath makePath, NLStmtContainer* body) {
@@ -3048,14 +3087,60 @@ void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
     body->emplaceStmt(&NLExecutor::runRange, data);
 }
 
+template <typename Op>
+mlir::Value NLTranslator::translateElementBody(Op op, NLElementBodyData* data) {
+    const mlir::Value sourceValue = op.getSource();
+    const Column* source = data->getSource();
+
+    // The body binds the element, then the row tag, then one chunk per carried column -
+    // the block argument order of the op's region.
+    mlir::Block& bodyBlock = op.getBody().front();
+    const mlir::Value elementValue = bodyBlock.getArgument(0);
+
+    const size_t chunkSize = _program->getChunkSize();
+    data->getRows()->reserve(chunkSize);
+    data->getPositions()->reserve(chunkSize);
+    data->getRowTags()->reserve(chunkSize);
+
+    if (!data->getElementEmitFunc()) {
+        const NLCarriedColumn elementColumn(source,
+                                            allocColumn(elementValue),
+                                            selectGatherForChunkType(sourceValue.getType()));
+        data->addCarriedColumn(elementColumn);
+    }
+
+    const mlir::OperandRange carriedColumns = op.getColumnsToFilter();
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const mlir::Value carriedValue = carriedColumns[carriedIndex];
+        const mlir::Value bodyChunk = bodyBlock.getArgument(static_cast<unsigned>(2 + carriedIndex));
+
+        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
+                                            allocColumn(bodyChunk),
+                                            selectGatherForChunkType(bodyChunk.getType()));
+        data->addCarriedColumn(carriedColumn);
+    }
+
+    translateBlock(bodyBlock, data->getStmts());
+
+    // The op's verifier guarantees the terminator, so a body without one here means
+    // unverified IR.
+    nl::ComprehensionYield yield = mlir::dyn_cast<nl::ComprehensionYield>(bodyBlock.back());
+    if (!yield) {
+        throw IRException("The body of an op over the elements of a list does not end with an nl.comprehension_yield");
+    }
+
+    const mlir::Value valueValue = yield.getValue();
+    data->setYield(getColumn(yield.getRowTags()), getColumn(valueValue));
+
+    return valueValue;
+}
+
 void NLTranslator::translateListComprehension(nl::ListComprehension comprehension, NLStmtContainer* body) {
     const mlir::Value sourceValue = comprehension.getSource();
     const Column* source = getColumn(sourceValue);
 
     const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
 
-    // The body binds the element, then the row tag, then one chunk per carried column -
-    // the block argument order of the op's region.
     mlir::Block& bodyBlock = comprehension.getBody().front();
     const mlir::Value elementValue = bodyBlock.getArgument(0);
     const mlir::Value rowTagValue = bodyBlock.getArgument(1);
@@ -3083,44 +3168,71 @@ void NLTranslator::translateListComprehension(nl::ListComprehension comprehensio
                                                              result,
                                                              _memory);
 
-    const size_t chunkSize = _program->getChunkSize();
-    data->getRows()->reserve(chunkSize);
-    data->getPositions()->reserve(chunkSize);
-    rowTags->reserve(chunkSize);
-
-    if (!elementEmit) {
-        const NLCarriedColumn elementColumn(source,
-                                            allocColumn(elementValue),
-                                            selectGatherForChunkType(sourceValue.getType()));
-        data->addCarriedColumn(elementColumn);
-    }
-
-    const mlir::OperandRange carriedColumns = comprehension.getColumnsToFilter();
-    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
-        const mlir::Value carriedValue = carriedColumns[carriedIndex];
-        const mlir::Value bodyChunk = bodyBlock.getArgument(static_cast<unsigned>(2 + carriedIndex));
-
-        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
-                                            allocColumn(bodyChunk),
-                                            selectGatherForChunkType(bodyChunk.getType()));
-        data->addCarriedColumn(carriedColumn);
-    }
-
-    translateBlock(bodyBlock, data->getStmts());
-
-    // ListComprehension::verify guarantees the terminator, so a body without one here
-    // means unverified IR.
-    nl::ComprehensionYield yield = mlir::dyn_cast<nl::ComprehensionYield>(bodyBlock.back());
-    if (!yield) {
-        throw IRException("nl.list_comprehension body does not end with an nl.comprehension_yield");
-    }
-
-    const mlir::Value valueValue = yield.getValue();
-    data->setYield(getColumn(yield.getRowTags()),
-                   getColumn(valueValue),
-                   selectListItemRead(valueValue.getType()));
+    const mlir::Value valueValue = translateElementBody(comprehension, data);
+    data->setValueRead(selectListItemRead(valueValue.getType()));
 
     body->emplaceStmt(&NLExecutor::runListComprehension, data);
+}
+
+void NLTranslator::translateListPredicate(nl::ListPredicate predicate, NLStmtContainer* body) {
+    const mlir::Value sourceValue = predicate.getSource();
+    const Column* source = getColumn(sourceValue);
+
+    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
+
+    mlir::Block& bodyBlock = predicate.getBody().front();
+    const mlir::Value elementValue = bodyBlock.getArgument(0);
+    const mlir::Value rowTagValue = bodyBlock.getArgument(1);
+
+    NLUnwindElementCountFunction elementCount = nullptr;
+    NLUnwindElementEmitFunction elementEmit = nullptr;
+    selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
+
+    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
+
+    const mlir::Value resultValue = predicate.getResult();
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    ColumnVector<uint64_t>* const rowTags =
+        static_cast<ColumnVector<uint64_t>*>(allocColumn(rowTagValue));
+
+    ListPredicateKind kind = ListPredicateKind::All;
+    switch (predicate.getKind()) {
+        case storage::ListPredicateKind::All:
+            kind = ListPredicateKind::All;
+        break;
+
+        case storage::ListPredicateKind::Any:
+            kind = ListPredicateKind::Any;
+        break;
+
+        case storage::ListPredicateKind::None:
+            kind = ListPredicateKind::None;
+        break;
+
+        case storage::ListPredicateKind::Single:
+            kind = ListPredicateKind::Single;
+        break;
+    }
+
+    NLListPredicateData* data =
+        _program->allocFunctionData<NLListPredicateData>(source,
+                                                         elementCount,
+                                                         elementEmit,
+                                                         selectCellAbsent(sourceElement),
+                                                         elementOutput,
+                                                         rowTags,
+                                                         result,
+                                                         kind);
+
+    const mlir::Value valueValue = translateElementBody(predicate, data);
+
+    const mlir::Type valueType = valueValue.getType();
+    const bool nullable = mlir::isa<storage::NullableType>(mlir::cast<nl::ChunkType>(valueType).getElementType());
+    data->setTruthRead(NLExecutor::selectTruthRead(nullable, isUntypedNullChunk(valueType)));
+
+    body->emplaceStmt(&NLExecutor::runListPredicate, data);
 }
 
 void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {

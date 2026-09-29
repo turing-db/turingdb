@@ -464,6 +464,10 @@ private:
     void translatePathLength(mlir::nl::PathLength length, NLStmtContainer* body);
     void translateMakePath(mlir::nl::MakePath makePath, NLStmtContainer* body);
 
+    // Translate an nl.path_elements: allocate the nullable list or count column its
+    // paths are read into
+    void translatePathElements(mlir::nl::PathElements elements, NLStmtContainer* body);
+
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)
     void translateLimit(mlir::nl::Limit limit, NLStmtContainer* body);
@@ -994,6 +998,15 @@ private:
     // carried column and the list column the step fills, pick the handlers that read the
     // source column's shape, and translate the body the elements run through
     void translateListComprehension(mlir::nl::ListComprehension comprehension, NLStmtContainer* body);
+
+    // Translate an nl.list_predicate the same way, into the nullable mask the step fills
+    void translateListPredicate(mlir::nl::ListPredicate predicate, NLStmtContainer* body);
+
+    // What the two share: the element chunk and the row tag bound over the source's
+    // cells, allocated into @param data's own, then the carry set and the body translated
+    // over them. Returns the value the body yields, for the caller to pick its read.
+    template <typename Op>
+    mlir::Value translateElementBody(Op op, NLElementBodyData* data);
 
     // Allocates the list column an nl.range writes, and binds the read each bound column
     // is taken through

@@ -97,6 +97,44 @@ Type getPathIteratorType(MLIRContext* context, TypeRange carriedChunkTypes) {
     return IteratorType::get(context, chunkTypes);
 }
 
+// The body of an op over the elements of one row's list: one block taking the element,
+// the row tag and one chunk per carried column, ending in a yield
+LogicalResult verifyElementBody(Operation* op, Block& bodyBlock, OperandRange carried) {
+    auto yield = dyn_cast_or_null<ComprehensionYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return op->emitOpError("body region must end with an nl.comprehension_yield");
+    }
+
+    const size_t expectedArguments = carried.size() + 2;
+
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return op->emitOpError("body region takes the element and the row tag plus one chunk per "
+                               "carried column, ")
+               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    }
+
+    if (!llvm::isa<ChunkType>(bodyBlock.getArgument(0).getType())) {
+        return op->emitOpError("body argument 0 must be the chunk of elements");
+    }
+
+    const auto rowTagType = llvm::dyn_cast<ChunkType>(bodyBlock.getArgument(1).getType());
+
+    if (!rowTagType || !rowTagType.getElementType().isUnsignedInteger(64)) {
+        return op->emitOpError("body argument 1 must be the ui64 chunk of row tags");
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return op->emitOpError("body argument ") << carriedIndex + 2
+                                                     << " must have the type of carried chunk "
+                                                     << carriedIndex;
+        }
+    }
+
+    return success();
+}
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -716,40 +754,8 @@ LogicalResult Range::verify() {
 // naming what each element contributes. The result holds one list per row of the source
 // chunk.
 LogicalResult ListComprehension::verify() {
-    Block& bodyBlock = getBody().front();
-
-    auto yield = dyn_cast_or_null<ComprehensionYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
-    if (!yield) {
-        return emitOpError("body region must end with an nl.comprehension_yield");
-    }
-
-    const OperandRange carried = getColumnsToFilter();
-    const size_t expectedArguments = carried.size() + 2;
-
-    if (bodyBlock.getNumArguments() != expectedArguments) {
-        return emitOpError("body region takes the element and the row tag plus one chunk per "
-                           "carried column, ")
-               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
-    }
-
-    if (!llvm::isa<ChunkType>(bodyBlock.getArgument(0).getType())) {
-        return emitOpError("body argument 0 must be the chunk of elements");
-    }
-
-    const auto rowTagType = llvm::dyn_cast<ChunkType>(bodyBlock.getArgument(1).getType());
-
-    if (!rowTagType || !rowTagType.getElementType().isUnsignedInteger(64)) {
-        return emitOpError("body argument 1 must be the ui64 chunk of row tags");
-    }
-
-    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        const Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
-
-        if (argumentType != carried[carriedIndex].getType()) {
-            return emitOpError("body argument ") << carriedIndex + 2
-                                                 << " must have the type of carried chunk "
-                                                 << carriedIndex;
-        }
+    if (failed(verifyElementBody(getOperation(), getBody().front(), getColumnsToFilter()))) {
+        return failure();
     }
 
     const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
@@ -757,6 +763,23 @@ LogicalResult ListComprehension::verify() {
 
     if (!nullableType || !llvm::isa<storage::ListType>(nullableType.getValueType())) {
         return emitOpError("result must be a chunk of nullable lists");
+    }
+
+    return success();
+}
+
+// The same body, ending on the predicate's value for each element. The result holds one
+// truth value per row of the source chunk, null where the elements leave it unknown.
+LogicalResult ListPredicate::verify() {
+    if (failed(verifyElementBody(getOperation(), getBody().front(), getColumnsToFilter()))) {
+        return failure();
+    }
+
+    const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
+    const auto nullableType = llvm::dyn_cast<storage::NullableType>(elementType);
+
+    if (!nullableType || !nullableType.getValueType().isInteger(1)) {
+        return emitOpError("result must be a chunk of nullable booleans");
     }
 
     return success();
