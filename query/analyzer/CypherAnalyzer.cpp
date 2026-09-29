@@ -586,16 +586,14 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     };
 
     for (const VarDecl* decl : outer->decls()) {
-        const bool outOfScope = _pendingItemAliases.contains(decl) || _consumedVariables.contains(decl);
-        if (decl->isUnnamed() || outOfScope) {
+        if (decl->isUnnamed() || _consumedVariables.contains(decl)) {
             continue;
         }
 
         const std::string_view name = decl->getName();
 
         // An alias spelling a variable's name shadows the variable once the items are analyzed
-        const VarDecl* visible = outer->getDecl(name);
-        const bool shadowed = visible != decl && !_pendingItemAliases.contains(visible);
+        const bool shadowed = outer->getDecl(name) != decl;
 
         if (shadowed) {
             continue;
@@ -952,12 +950,6 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         declareItemAlias(item, item->getName());
     }
 
-    for (const Projection::ReturnItem& returnItem : projection->items()) {
-        if (const auto* exprPtr = std::get_if<Expr*>(&returnItem)) {
-            _pendingItemAliases.erase((*exprPtr)->getExprVarDecl());
-        }
-    }
-
     if (projection->hasOrderBy()) {
         DeclSet consumedVariables;
 
@@ -1049,7 +1041,6 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
         const EvaluatedType type = item->getType();
         const VarDecl* namedDecl = _ctxt->declareProjectedVariable(_ast, type, alias);
         item->setExprVarDecl(namedDecl);
-        _pendingItemAliases.insert(namedDecl);
 
         return;
     }
