@@ -108,6 +108,11 @@ def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseDistinctEdges : Pass<"fuse_distinct_edges"> {
+    let summary = "Fold the edge-distinctness check over a path exploration's paths into the exploration, which then takes none of a seed row's bound edges";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
     let summary = "Replace the hop region of a path exploration that only asks each hop's end node for labels with those labels";
     let dependentDialects = ["mlir::db::DB"];

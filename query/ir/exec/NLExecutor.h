@@ -123,6 +123,7 @@ public:
     // Fills a boolean mask
     static void runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data);
     static void runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data);
+    static void runCheckEdgeDistinct(NLExecutionContext* context, NLFunctionData* data);
 
     // Drive the pairs of a cross product, running the body once per chunk of them.
     static void runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data);

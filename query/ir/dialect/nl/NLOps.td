@@ -934,6 +934,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        Optional<NLNodeSetStateHandle>:$end_nodes,
                        Optional<NLEdgeTypeHandle>:$edge_types,
                        Variadic<NLChunk>:$hop_imports,
+                       Variadic<NLChunk>:$distinct_from,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -950,8 +951,9 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
     (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
-    (`hop_imports` `{` $hop_imports^ `:` qualified(type($hop_imports)) `}`)? (`ends_on_seed` $ends_on_seed^)?
-    (`distinct` $distinct^)? ($hop^)?
+    (`hop_imports` `{` $hop_imports^ `:` qualified(type($hop_imports)) `}`)?
+    (`distinct_from` `{` $distinct_from^ `:` qualified(type($distinct_from)) `}`)?
+    (`ends_on_seed` $ends_on_seed^)? (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];
 
@@ -1238,6 +1240,24 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThrou
 
   let assemblyFormat = [{
     `(` $labelset_ids `,` $labels `)` attr-dict `:` qualified(type($result))
+  }];
+}
+
+def CheckEdgeDistinct : NLOp<"check_edge_distinct", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Test each row's edge, or path, against the edges bound before it in the clause";
+  let description = [{
+    Imperative counterpart of db.check_edge_distinct: true where the subject chunk's edge,
+    or path, shares no edge with any of the other chunks' edges or paths of that row.
+
+      %ok = nl.check_edge_distinct(%e2, {%e1})
+              : (!nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_id>) -> !nl.chunk<!storage.bool>
+  }];
+
+  let arguments = (ins NLChunk:$subject, Variadic<NLChunk>:$others);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $subject `,` `{` $others `}` `)` attr-dict `:` functional-type(operands, results)
   }];
 }
 

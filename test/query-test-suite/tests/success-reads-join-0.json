@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (a)-->(y), (b)-->(x), (b)-->(y) RETURN a\nORDER BY a",
   "expect": {
-    "result": "a\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n6\n6\n8\n8\n8\n8\n8\n9\n9\n9\n9\n9\n11\n11\n12\n12\n12\n12\n12\n12\n15\n15\n15\n15\n15\n15\n17\n17\n17"
+    "result": "a"
   },
   "tags": [
     "success",

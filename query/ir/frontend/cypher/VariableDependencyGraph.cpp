@@ -96,11 +96,16 @@ VariableDependencyGraph& VariableDependencyGraph::operator=(VariableDependencyGr
 void VariableDependencyGraph::build(std::span<Stmt* const> stmts) {
     for (const Stmt* stmt : stmts) {
         if (const MatchStmt* match = dynamic_cast<const MatchStmt*>(stmt)) {
+            _clauseCount++;
+            _currentClause = _clauseCount;
+
             const Pattern* pattern = match->getPattern();
             const Pattern::PatternElements& elements = pattern->elements();
             for (const PatternElement* element : elements) {
                 registerPatternElement(element);
             }
+
+            _currentClause = 0;
         } else if (const UnwindStmt* unwind = dynamic_cast<const UnwindStmt*>(stmt)) {
             registerUnwindStmt(unwind);
         }
@@ -123,6 +128,13 @@ void VariableDependencyGraph::clear() {
     _edgeIdentities.clear();
     _unwindSources.clear();
     _boundVars.clear();
+    _edgeClauses.clear();
+}
+
+size_t VariableDependencyGraph::clauseOf(const VariableDependency* edgeVar) const {
+    const auto findIt = _edgeClauses.find(edgeVar);
+
+    return findIt == _edgeClauses.end() ? 0 : findIt->second;
 }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,
@@ -205,6 +217,8 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             edgeVar = newVariable(occurrenceName);
             edgeOccurrences.push_back(edgeVar);
         }
+
+        _edgeClauses[edgeVar] = _currentClause;
 
         const EdgePatternData* edgeData = edge->getData();
         if (edgeData) {

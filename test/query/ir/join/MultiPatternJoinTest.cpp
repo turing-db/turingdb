@@ -66,32 +66,17 @@ protected:
 // two-hop walks a -> b -> c of simpledb - out of Remy (0), Adam (1) and Ghosts (6), the only
 // nodes an edge both enters and leaves
 TEST_F(MultiPatternJoinTest, joinsAPatternWithTheWalkThatContainsIt) {
-    const std::vector<StringRowSink::Row> expected {{"0", "1", "0"},
-                                                    {"0", "1", "4"},
-                                                    {"0", "1", "5"},
-                                                    {"0", "6", "0"},
-                                                    {"1", "0", "1"},
-                                                    {"1", "0", "2"},
-                                                    {"1", "0", "3"},
-                                                    {"1", "0", "6"},
-                                                    {"6", "0", "1"},
-                                                    {"6", "0", "2"},
-                                                    {"6", "0", "3"},
-                                                    {"6", "0", "6"}};
-
-    expectRows("MATCH (b)-->(c), (a)-->(b)-->(c) RETURN a, b, c;", expected);
+    // The two hops from b to c need two edges between them, and simpledb has no parallel edge
+    expectRows("MATCH (b)-->(c), (a)-->(b)-->(c) RETURN a, b, c;", {});
 }
 
 // success-reads-joins-on-filters-5: nothing forces a and b apart, nor c and d, so every pair
 // of edges into x is crossed with every pair of two-hop ways out of x onto one e. Remy (0),
 // Adam (1) and Ghosts (6) are the only such x, and a is whoever enters them.
 TEST_F(MultiPatternJoinTest, joinsTwoWaysIntoANodeWithTwoWaysOutOfIt) {
-    std::vector<StringRowSink::Row> expected;
-    expected.insert(expected.end(), 8, {"0"});
-    expected.insert(expected.end(), 12, {"1"});
-    expected.insert(expected.end(), 12, {"6"});
-
-    expectRows("MATCH (a)-->(x), (b)-->(x), (x)-->(c)-->(e), (x)-->(d)-->(e) RETURN a", expected);
+    // Only Remy is entered twice and left by two 2-hop walks to one node, and those walks
+    // end on Remy through the very edges that enter it, so no six edges are distinct
+    expectRows("MATCH (a)-->(x), (b)-->(x), (x)-->(c)-->(e), (x)-->(d)-->(e) RETURN a", {});
 }
 
 // The four patterns alone produce 9792 rows, with n one of Remy (0), Adam (1) and Ghosts (6).

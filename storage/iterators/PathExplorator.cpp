@@ -401,6 +401,42 @@ void PathExplorator::setEndNodeSet(std::span<const NodeID> endNodeSet) {
     _filtersByEndNodeSet = true;
 }
 
+void PathExplorator::setExcludedEdges(std::span<const ColumnEdgeIDs* const> columns) {
+    _excludedEdgeColumns = columns;
+}
+
+void PathExplorator::setExcludedPaths(std::span<const ColumnVector<PathRef>* const> columns, const PathTrie* trie) {
+    _excludedPathColumns = columns;
+    _exclusionTrie = trie;
+}
+
+bool PathExplorator::excludes() const {
+    return !_excludedEdgeColumns.empty() || !_excludedPathColumns.empty();
+}
+
+void PathExplorator::collectExclusions(size_t row, std::vector<EdgeID>& edges) const {
+    for (const ColumnEdgeIDs* column : _excludedEdgeColumns) {
+        edges.push_back((*column)[row]);
+    }
+
+    for (const ColumnVector<PathRef>* column : _excludedPathColumns) {
+        PathRef current = (*column)[row];
+        for (uint64_t depth = _exclusionTrie->getDepth(current); depth > 0; depth--) {
+            const PathTrieEntry& entry = _exclusionTrie->get(current);
+            edges.push_back(entry._edge);
+            current = entry._parent;
+        }
+    }
+}
+
+bool PathExplorator::isSeedExcluded(EdgeID edge) const {
+    if ((_seedExclusionSignature & signatureBit(edge)) == 0) {
+        return false;
+    }
+
+    return std::find(_seedExcluded.begin(), _seedExcluded.end(), edge) != _seedExcluded.end();
+}
+
 void PathExplorator::setDistinctEnds(bool distinct) {
     bioassert(!distinct || !_paths, "The distinct mode emits no path");
     _distinctEnds = distinct;
@@ -607,6 +643,15 @@ void PathExplorator::startSeed(size_t row) {
     _candidateEdges.clear();
     _dependencies.clear();
     _target = PathTargetHandle {};
+
+    _seedExcluded.clear();
+    _seedExclusionSignature = 0;
+    if (excludes()) {
+        collectExclusions(row, _seedExcluded);
+        for (const EdgeID edge : _seedExcluded) {
+            _seedExclusionSignature |= signatureBit(edge);
+        }
+    }
 
     const NodeID seed = (*_input)[row];
 
@@ -850,10 +895,11 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const bool backtracks = hasPathEdges && edge == lastEdge;
         const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
+        const bool excluded = isSeedExcluded(edge);
         const size_t heldAt = backtracks ? _pathEdges.size() - 1
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
         const bool onTrail = heldAt != NO_TAINT;
-        const bool ruledOut = backtracks || wrongType || deleted || onTrail;
+        const bool ruledOut = backtracks || wrongType || deleted || excluded || onTrail;
         const bool beyondLabels = !ruledOut && _distances && !_distances->canReachEndWithin(record._otherID, remainingHops);
         const bool beyondTarget = !ruledOut && !beyondLabels && checksTarget && !canReachTargetWithin(record._otherID, remainingHops);
 
@@ -1018,6 +1064,8 @@ void PathExplorator::startBatch() {
     reach._closedSeeds = 0;
     reach._batchActive = true;
     _seedCursor += count;
+
+    collectBatchExclusions(reach._batchFirstRow, count);
 
     // A seed's own bit stays out of its seen word at a minimum of one hop, so a directed walk
     // reports the seed at the level of its shortest cycle. Undirected, stepping back along the
@@ -1326,6 +1374,63 @@ uint64_t PathExplorator::closingReturns(uint64_t returning, uint64_t twice, std:
     return closing;
 }
 
+void PathExplorator::collectBatchExclusions(size_t firstRow, size_t count) {
+    Reachability& reach = _reach;
+    reach._excluded.clear();
+    reach._excludedSignature = 0;
+
+    if (!excludes()) {
+        return;
+    }
+
+    for (size_t bit = 0; bit < count; bit++) {
+        _seedExcluded.clear();
+        collectExclusions(firstRow + bit, _seedExcluded);
+
+        for (const EdgeID edge : _seedExcluded) {
+            reach._excluded.emplace_back(edge, 1ull << bit);
+        }
+    }
+
+    const auto byEdge = [](const std::pair<EdgeID, uint64_t>& lhs, const std::pair<EdgeID, uint64_t>& rhs) {
+        return lhs.first.getValue() < rhs.first.getValue();
+    };
+    std::sort(reach._excluded.begin(), reach._excluded.end(), byEdge);
+
+    size_t kept = 0;
+    for (const auto& [edge, mask] : reach._excluded) {
+        const bool sameEdge = kept > 0 && reach._excluded[kept - 1].first == edge;
+        if (sameEdge) {
+            reach._excluded[kept - 1].second |= mask;
+        } else {
+            reach._excluded[kept] = {edge, mask};
+            kept++;
+        }
+    }
+    reach._excluded.resize(kept);
+
+    for (const auto& [edge, mask] : reach._excluded) {
+        reach._excludedSignature |= signatureBit(edge);
+    }
+}
+
+uint64_t PathExplorator::excludedSeedMask(EdgeID edge) const {
+    const Reachability& reach = _reach;
+    if ((reach._excludedSignature & signatureBit(edge)) == 0) {
+        return 0;
+    }
+
+    const auto before = [](const std::pair<EdgeID, uint64_t>& entry, uint64_t value) {
+        return entry.first.getValue() < value;
+    };
+    const auto found = std::lower_bound(reach._excluded.begin(), reach._excluded.end(), edge.getValue(), before);
+    if (found == reach._excluded.end() || found->first != edge) {
+        return 0;
+    }
+
+    return found->second;
+}
+
 void PathExplorator::emitGainedRows(size_t maxCount) {
     Reachability& reach = _reach;
 
@@ -1380,9 +1485,13 @@ void PathExplorator::expandLevel() {
 
         collectReachCandidates(node);
 
-        for (const NodeID candidate : reach._candidateNodes) {
+        const size_t candidateCount = reach._candidateNodes.size();
+        for (size_t candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++) {
+            const NodeID candidate = reach._candidateNodes[candidateIndex];
+            const uint64_t allowed = word & ~excludedSeedMask(reach._candidateEdges[candidateIndex]);
+
             PathReachTable::Slot& slot = reached.reach(candidate);
-            const uint64_t gained = word & ~slot._seen;
+            const uint64_t gained = allowed & ~slot._seen;
             if (gained == 0) {
                 continue;
             }

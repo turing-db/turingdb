@@ -48,6 +48,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
+#define GEN_PASS_DEF_FUSEDISTINCTEDGES
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEFETCHNODES
@@ -2327,6 +2328,91 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     }
 };
 
+// A path exploration whose paths are then cut down to those sharing no edge with the edges
+// or paths the clause bound before it: the exclusion spelled the long way, since the walk
+// can leave those edges out and never build the paths the filter goes on to drop
+struct ExcludedExploration {
+    ExplorePaths _exploration;
+    CheckEdgeDistinct _check;
+    llvm::SmallVector<size_t, 2> _excludedColumns;
+};
+
+bool matchExcludedExploration(FilterOp filter, ExcludedExploration& excluded) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check) {
+        return false;
+    }
+
+    const Value subject = check.getSubject();
+    ExplorePaths exploration = subject.getDefiningOp<ExplorePaths>();
+    if (!exploration || subject != exploration.getPaths()) {
+        return false;
+    }
+
+    // Every column the paths are checked against is a carried copy the exploration handed
+    // back, whose input is row-aligned with the seeds
+    llvm::SmallVector<size_t, 2> excludedColumns;
+    for (const Value other : check.getOthers()) {
+        const OpResult result = dyn_cast<OpResult>(other);
+        const bool carriedBack = result && result.getOwner() == exploration.getOperation() && result.getResultNumber() >= pathFixedResultCount;
+        if (!carriedBack) {
+            return false;
+        }
+
+        excludedColumns.push_back(result.getResultNumber() - pathFixedResultCount);
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != exploration.getOperation()) {
+            return false;
+        }
+    }
+
+    for (const Value result : exploration.getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    excluded = ExcludedExploration {._exploration = exploration, ._check = check, ._excludedColumns = excludedColumns};
+
+    return true;
+}
+
+void fuseDistinctEdges(FilterOp filter, const ExcludedExploration& excluded, mlir::OpBuilder& builder) {
+    ExplorePaths exploration = excluded._exploration;
+    CheckEdgeDistinct check = excluded._check;
+
+    const Operation::operand_range carried = exploration.getColumnsToFilter();
+    const Operation::operand_range exclusions = exploration.getDistinctFrom();
+
+    llvm::SmallVector<Value> excludedColumns(exclusions.begin(), exclusions.end());
+    for (const size_t index : excluded._excludedColumns) {
+        excludedColumns.push_back(carried[index]);
+    }
+
+    exploration.getDistinctFromMutable().assign(excludedColumns);
+
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(check);
+}
+
+struct FuseDistinctEdges : public impl::FuseDistinctEdgesBase<FuseDistinctEdges> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<ExcludedExploration>(getOperation(), matchExcludedExploration, fuseDistinctEdges, builder);
+    }
+};
+
 // The labels a hop region asks of the hop's end node, when that is all it asks: a yield of
 // one label check over the end's label set, and nothing else in the block
 bool matchHopLabels(ExplorePaths exploration, ArrayAttr& labels) {
@@ -2890,6 +2976,7 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     keptColumns,
                                                     endResult,
                                                     exploration.getHopImports(),
+                                                    exploration.getDistinctFrom(),
                                                     exploration.getDirection(),
                                                     exploration.getMinHops(),
                                                     exploration.getMaxHopsAttr(),
@@ -3200,7 +3287,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
         const size_t endNodeCount = exploration.getEndNodes() ? 1u : 0u;
         layout = CarrySetLayout {._operandOffset = 1,
                                  ._resultOffset = pathFixedResultCount,
-                                 ._trailingOperandCount = endNodeCount + exploration.getHopImports().size()};
+                                 ._trailingOperandCount = endNodeCount + exploration.getHopImports().size() + exploration.getDistinctFrom().size()};
         return true;
     } else if (isa<FilterOp>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
@@ -3401,9 +3488,10 @@ void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, 
     const int32_t keptCount = static_cast<int32_t>(kept.size());
     const int32_t endNodeCount = exploration.getEndNodes() ? 1 : 0;
     const int32_t importCount = static_cast<int32_t>(exploration.getHopImports().size());
+    const int32_t exclusionCount = static_cast<int32_t>(exploration.getDistinctFrom().size());
 
     state.attributes.set(exploration.getOperandSegmentSizesAttrName(),
-                         builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount, importCount}));
+                         builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount, importCount, exclusionCount}));
 }
 
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {

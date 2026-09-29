@@ -236,12 +236,12 @@ TEST_F(ExistenceComparisonTest, filtersOnTheExclusiveDisjunction) {
 // row and orders at or above (n)-->(b) on all of them.
 TEST_F(ExistenceComparisonTest, groupsOnTheComparisonOfTwoMatchedPatterns) {
     expectRows("MATCH (n)-->(m), (a)-->(b) RETURN (a)-->(b) >= (n)-->(b) AS c, count(*)",
-               {{"true", "324"}});
+               {{"true", "306"}});
 }
 
 TEST_F(ExistenceComparisonTest, groupsOnTheExclusiveDisjunctionOfTwoMatchedPatterns) {
     expectRows("MATCH (n)-->(m), (a)-->(b) RETURN (a)-->(b) XOR (n)-->(b) AS c, count(*)",
-               {{"false", "73"}, {"true", "251"}});
+               {{"false", "55"}, {"true", "251"}});
 }
 
 TEST_F(ExistenceComparisonTest, additionOfTwoPatternsIsRejected) {

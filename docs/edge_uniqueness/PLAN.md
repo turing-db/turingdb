@@ -289,6 +289,37 @@ Each proof rule gets its own case, on a shape it decides, with the pass that imp
 `test/storage/iterators/PathExplorationReference.cpp` gains the exclusion set so the
 explorator's random sweeps cover points 1 to 4.
 
+## Status (2026-09-29)
+
+Step 1 is implemented on the branch `edge-uniqueness-plan`. `db.check_edge_distinct` is
+emitted after every hop and path of a clause against every edge or path bound before it,
+and once more after the clause's `WHERE` for the pairs a cross product or a hash join
+brought together, which keeps `fuse_hash_join` matching the product and its equality;
+`fuse_distinct_edges` folds the check over a path into `explore_paths` as `distinct_from`,
+so the walk and the distinct search skip the excluded edges themselves. `MATCH` clauses
+are numbered in the dependency graph, so a second `MATCH` or an `OPTIONAL MATCH` is its own
+scope. All 18 cases of `EdgeUniquenessTest` and `PathEdgeUniquenessTest` pass, and so do
+the 490 tests of `test/query/ir`, the query suite and the storage iterators.
+
+What moved with the semantics: 27 test files pinned homomorphic counts and now pin the
+isomorphic ones, checked against a Python enumeration of simpledb; 14 suite oracles were
+regenerated the same way; `CycleShapesTest`'s graph gained the 2-cycles b-d and a-d and a
+second d->c edge, since the triangle and one 2-cycle hold no square or double cycle as a
+trail; `CascadedMergeJoinTest`, `MultiPatternJoinTest` and `CommaPatternJoinKeysTest` now
+match nothing on simpledb, which has no parallel edge, and want a fixture with one.
+`FuzzHangTest` lost its count over eight islands: the product's 39,182,082,048 rows used to
+count without a column, and the checks between its three edge islands, sitting after the
+whole cascade, now read every row (12,697,896,960 survive, in 150 s). Checking each pair at
+the innermost product that carries both sides would cut that to the 9,072 rows of the edge
+islands, and needs the cascade to order those islands innermost; row order is what stops
+that today. The codegen tests over two hops of different types (`FuseEdgesByTypeCodegenTest`,
+`FuseEdgesByEndpointLabelCodegenTest`) expect the check's filter until step 3 proves it away.
+
+Still owed from the step: the reactome measurement, since both copies on the bench
+machine, the binary dump under `~/.turing-bench` and the parquet dump, are in a format this
+build reports as outdated; and the exclusion set in the explorator's random reference
+sweep, which `PathEdgeUniquenessTest` covers at the query level only.
+
 ## Steps
 
 1. **Correct first.** `db.check_edge_distinct`, its emission in codegen, its lowering,

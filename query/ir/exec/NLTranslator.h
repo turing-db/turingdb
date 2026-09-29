@@ -143,6 +143,7 @@ private:
         uint64_t _maxHops {0};
         mlir::Region* _hopRegion {nullptr};
         llvm::SmallVector<mlir::Value, 2> _hopImports;
+        llvm::SmallVector<mlir::Value, 2> _distinctFrom;
 
         // The labels every hop's end must carry, when the op asks only that of a hop; views
         // into the op's interned StringAttr storage like _labels
@@ -923,6 +924,7 @@ private:
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
     void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);
+    void translateCheckEdgeDistinct(mlir::nl::CheckEdgeDistinct op, NLStmtContainer* body);
 
     void translateCreateNode(mlir::nl::CreateNode createNode, NLStmtContainer* body);
 
