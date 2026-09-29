@@ -1439,6 +1439,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerCheckLabelConstraint(checkLabelConstraint);
     } else if (mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<mlir::db::CheckEdgeTypeConstraint>(operation)) {
         lowerCheckEdgeTypeConstraint(checkEdgeTypeConstraint);
+    } else if (mlir::db::CheckEdgeDistinct checkEdgeDistinct = mlir::dyn_cast<mlir::db::CheckEdgeDistinct>(operation)) {
+        lowerCheckEdgeDistinct(checkEdgeDistinct);
     } else if (mlir::db::CreateNode createNode = mlir::dyn_cast<mlir::db::CreateNode>(operation)) {
         lowerCreateNode(createNode);
     } else if (mlir::db::CreateEdge createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(operation)) {
@@ -3076,6 +3078,29 @@ mlir::Type DBLowering::checkResultChunkType(bool nullable) {
     }
 
     return nl::ChunkType::get(context, storage::BoolType::get(context));
+}
+
+void DBLowering::lowerCheckEdgeDistinct(mlir::db::CheckEdgeDistinct checkEdgeDistinct) {
+    const mlir::Value subjectChunk = mapValue(checkEdgeDistinct.getSubject());
+
+    llvm::SmallVector<mlir::Value, 4> otherChunks;
+    for (const mlir::Value other : checkEdgeDistinct.getOthers()) {
+        otherChunks.push_back(mapValue(other));
+    }
+
+    setInsertionInto(deepestOwnerBlock(otherChunks, ownerBlock(subjectChunk)));
+
+    const mlir::Type boolChunkType = nl::ChunkType::get(
+        _builder.getContext(),
+        storage::BoolType::get(_builder.getContext()));
+
+    nl::CheckEdgeDistinct check = _builder.create<nl::CheckEdgeDistinct>(
+        _builder.getUnknownLoc(),
+        boolChunkType,
+        subjectChunk,
+        otherChunks);
+
+    _valueMap[checkEdgeDistinct.getResult()] = check.getResult();
 }
 
 mlir::Block* DBLowering::deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback) {
@@ -6840,6 +6865,11 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
         importChunks.push_back(mapValue(importColumn));
     }
 
+    llvm::SmallVector<mlir::Value, 2> exclusionChunks;
+    for (const mlir::Value excludedColumn : explorePaths.getDistinctFrom()) {
+        exclusionChunks.push_back(mapValue(excludedColumn));
+    }
+
     setInsertionInto(ownerBlock(inputChunk));
 
     nl::ExplorePaths exploration = _builder.create<nl::ExplorePaths>(_builder.getUnknownLoc(),
@@ -6848,6 +6878,7 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      endNodeSet,
                                                                      edgeTypeSets,
                                                                      importChunks,
+                                                                     exclusionChunks,
                                                                      explorePaths.getDirectionsAttr(),
                                                                      explorePaths.getMinHopsAttr(),
                                                                      explorePaths.getMaxHopsAttr(),

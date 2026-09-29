@@ -78,6 +78,10 @@ public:
     const UnwindSourceMap& unwindSources() const { return _unwindSources; }
     const BoundVars& boundVars() const { return _boundVars; }
 
+    /// The MATCH clause an edge variable was registered under, numbered from one across
+    /// every build of this graph, or zero for a variable no MATCH clause registered
+    size_t clauseOf(const VariableDependency* edgeVar) const;
+
     bool empty() const { return _vars.empty() && _edges.empty(); }
 
     /**
@@ -102,6 +106,12 @@ private:
 
     // The variables a preceding WITH bound, in the order that WITH projects them
     BoundVars _boundVars;
+
+    // The MATCH clause each edge variable belongs to, under which relationship uniqueness
+    // holds; the count never resets, so two builds never share a clause
+    std::unordered_map<const VariableDependency*, size_t> _edgeClauses;
+    size_t _clauseCount {0};
+    size_t _currentClause {0};
 
     const DiagnosticsManager* _diagnostics {nullptr};
 

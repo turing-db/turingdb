@@ -167,6 +167,7 @@ private:
         uint64_t _minHops {0};
         uint64_t _maxHops {0};
         llvm::SmallVector<mlir::Value, 2> _hopImports;
+        llvm::SmallVector<mlir::Value, 2> _distinctFrom;
 
         // The carried column holding each seed's own end, when the exploration is bound,
         // and whether it reports each (seed, end) pair once instead of every path
@@ -995,6 +996,7 @@ private:
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
     void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);
+    void translateCheckEdgeDistinct(mlir::nl::CheckEdgeDistinct op, NLStmtContainer* body);
 
     void translateCreateNode(mlir::nl::CreateNode createNode, NLStmtContainer* body);
 

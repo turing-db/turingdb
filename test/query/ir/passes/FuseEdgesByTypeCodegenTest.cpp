@@ -165,7 +165,8 @@ TEST_F(FuseEdgesByTypeCodegenTest, bothHopsOfATypedChainFuse) {
         generate("MATCH (a:Person)-[:KNOWS_WELL]->(b)-[:INTERESTED_IN]->(c) RETURN a, c");
 
     expectFusedToTypedHop(*module);
-    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeDistinct>(*module), 1u);
 
     llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 2u);

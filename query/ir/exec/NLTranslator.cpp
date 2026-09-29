@@ -65,6 +65,14 @@ namespace storage = mlir::storage;
 
 namespace {
 
+// Whether the chunk holds path handles rather than edge IDs, the two forms an edge is bound in
+bool holdsPaths(mlir::Value chunk) {
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+
+    return mlir::isa<storage::PathRefType>(chunkType.getElementType());
+}
+
+
 // A chunk holding the single row a reduction collapsed the whole relation to, or a
 // computation over such rows and constants: like a constant, it holds one value for
 // every row of the step that reads it, whichever loop that step belongs to.
@@ -852,6 +860,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._maxHops = explorePaths.getMaxHops().value_or(std::numeric_limits<uint64_t>::max());
             const mlir::OperandRange hopImports = explorePaths.getHopImports();
             config._hopImports.assign(hopImports.begin(), hopImports.end());
+            const mlir::OperandRange distinctFrom = explorePaths.getDistinctFrom();
+            config._distinctFrom.assign(distinctFrom.begin(), distinctFrom.end());
             if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
                 resolveLabelNames(*endLabels, config._labels);
             }
@@ -1092,6 +1102,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCheckLabelConstraint(checkLabelConstraint, body);
         } else if (nl::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<nl::CheckEdgeTypeConstraint>(operation)) {
             translateCheckEdgeTypeConstraint(checkEdgeTypeConstraint, body);
+        } else if (nl::CheckEdgeDistinct checkEdgeDistinct = mlir::dyn_cast<nl::CheckEdgeDistinct>(operation)) {
+            translateCheckEdgeDistinct(checkEdgeDistinct, body);
         } else if (nl::EachRow eachRow = mlir::dyn_cast<nl::EachRow>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::EachRow;
@@ -2341,6 +2353,15 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
     throwIfCarriedNotRowAligned(config);
     bindCarriedColumns(config._carriedColumns, loopBody, 3, loopData);
 
+    for (const mlir::Value excluded : config._distinctFrom) {
+        const Column* column = getColumn(excluded);
+        if (holdsPaths(excluded)) {
+            loopData->addExcludedPaths(static_cast<const ColumnVector<PathRef>*>(column));
+        } else {
+            loopData->addExcludedEdges(static_cast<const ColumnEdgeIDs*>(column));
+        }
+    }
+
     // The bound end is the carried column's input, row-aligned with the seeds; a walk
     // ending where it began targets the seeds themselves
     if (config._endColumn) {
@@ -2766,6 +2787,22 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
     } else {
         body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>, data);
     }
+}
+
+void NLTranslator::translateCheckEdgeDistinct(nl::CheckEdgeDistinct op, NLStmtContainer* body) {
+    ColumnMask* output = _memory->alloc<ColumnMask>();
+    output->reserve(_program->getChunkSize());
+    _valueSlots[op.getResult()] = output;
+
+    const mlir::Value subject = op.getSubject();
+    const NLEdgeHolder subjectHolder {getColumn(subject), holdsPaths(subject)};
+    NLCheckEdgeDistinctData* data = _program->allocFunctionData<NLCheckEdgeDistinctData>(subjectHolder, output, &_memory->pathTrie());
+
+    for (const mlir::Value other : op.getOthers()) {
+        data->addOther(NLEdgeHolder {getColumn(other), holdsPaths(other)});
+    }
+
+    body->emplaceStmt(&NLExecutor::runCheckEdgeDistinct, data);
 }
 
 void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContainer* body) {

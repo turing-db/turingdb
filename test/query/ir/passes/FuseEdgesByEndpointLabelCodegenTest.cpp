@@ -81,7 +81,7 @@ protected:
     // cut down by is left.
     void expectFusedToLabelledHop(mlir::ModuleOp module) {
         EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(module), 0u);
-        EXPECT_EQ(countOps<mlir::db::FilterOp>(module), 0u);
+        EXPECT_EQ(countOps<mlir::db::FilterOp>(module), countOps<mlir::db::CheckEdgeDistinct>(module));
     }
 
 private:

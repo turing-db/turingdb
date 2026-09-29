@@ -37,6 +37,7 @@
 #include "iterators/PathExplorator.h"
 #include "iterators/PathTargetIndex.h"
 #include "iterators/PathHopFilter.h"
+#include "list/PathTrie.h"
 #include "iterators/PathLabelHopFilter.h"
 #include "iterators/ReversedPathExplorator.h"
 #include "iterators/ScanEdgesByEndpointLabelsChunkWriter.h"
@@ -100,6 +101,55 @@
 using namespace db;
 
 namespace {
+
+EdgeID edgeAt(const NLEdgeHolder& holder, size_t row) {
+    return (*static_cast<const ColumnEdgeIDs*>(holder._column))[row];
+}
+
+PathRef pathAt(const NLEdgeHolder& holder, size_t row) {
+    return (*static_cast<const ColumnVector<PathRef>*>(holder._column))[row];
+}
+
+bool pathHoldsEdge(const PathTrie& trie, PathRef path, EdgeID edge) {
+    PathRef current = path;
+    for (uint64_t depth = trie.getDepth(path); depth > 0; depth--) {
+        const PathTrieEntry& entry = trie.get(current);
+        if (entry._edge == edge) {
+            return true;
+        }
+
+        current = entry._parent;
+    }
+
+    return false;
+}
+
+bool pathsShareAnEdge(const PathTrie& trie, PathRef first, PathRef second) {
+    PathRef current = first;
+    for (uint64_t depth = trie.getDepth(first); depth > 0; depth--) {
+        const PathTrieEntry& entry = trie.get(current);
+        if (pathHoldsEdge(trie, second, entry._edge)) {
+            return true;
+        }
+
+        current = entry._parent;
+    }
+
+    return false;
+}
+
+bool sharesAnEdge(const NLEdgeHolder& subject, const NLEdgeHolder& other, size_t row, const PathTrie& trie) {
+    if (!subject._holdsPaths && !other._holdsPaths) {
+        return edgeAt(subject, row) == edgeAt(other, row);
+    } else if (subject._holdsPaths && other._holdsPaths) {
+        return pathsShareAnEdge(trie, pathAt(subject, row), pathAt(other, row));
+    } else if (subject._holdsPaths) {
+        return pathHoldsEdge(trie, pathAt(subject, row), edgeAt(other, row));
+    } else {
+        return pathHoldsEdge(trie, pathAt(other, row), edgeAt(subject, row));
+    }
+}
+
 
 template <typename Handler>
 void dispatchIDChunkKind(NLChunkKind kind, Handler&& handler) {
@@ -7606,6 +7656,8 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
+    explorator.setExcludedEdges(loopData->getExcludedEdges());
+    explorator.setExcludedPaths(loopData->getExcludedPaths(), loopData->getTrie());
 
     const CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
     if (writeBuffer) {
@@ -12967,6 +13019,30 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
 
 template void NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runCheckEdgeTypeConstraint<ColumnOptMask>(NLExecutionContext*, NLFunctionData*);
+
+void NLExecutor::runCheckEdgeDistinct(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCheckEdgeDistinctData* check = static_cast<NLCheckEdgeDistinctData*>(data);
+
+    const NLEdgeHolder& subject = check->getSubject();
+    const std::span<const NLEdgeHolder> others = check->getOthers();
+    const PathTrie& trie = *check->getTrie();
+    ColumnMask* output = check->getOutput();
+
+    const size_t rowCount = subject._column->size();
+    output->resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        bool distinct = true;
+        for (const NLEdgeHolder& other : others) {
+            if (sharesAnEdge(subject, other, row, trie)) {
+                distinct = false;
+                break;
+            }
+        }
+
+        (*output)[row] = distinct;
+    }
+}
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_CONCAT>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

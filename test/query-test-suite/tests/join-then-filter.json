@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN  x.name, a.name, a.age, b.name, b.age",
   "expect": {
-    "result": "x.name,a.name,a.age,b.name,b.age\nRemy,Adam,32,Adam,32\nAdam,Remy,32,Remy,32\nGhosts,Remy,32,Remy,32",
-    "resultJson": "{\"header\":{\"column_names\":[\"x.name\",\"a.name\",\"a.age\",\"b.name\",\"b.age\"],\"column_types\":[\"String\",\"String\",\"Int64\",\"String\",\"Int64\"]},\"data\":[[[\"Remy\",\"Adam\",\"Ghosts\"],[\"Adam\",\"Remy\",\"Remy\"],[32,32,32],[\"Adam\",\"Remy\",\"Remy\"],[32,32,32]]]}"
+    "result": "x.name,a.name,a.age,b.name,b.age",
+    "resultJson": "{\"header\":{\"column_names\":[\"x.name\",\"a.name\",\"a.age\",\"b.name\",\"b.age\"],\"column_types\":[\"String\",\"String\",\"Int64\",\"String\",\"Int64\"]},\"data\":[]}"
   },
   "tags": [],
   "write-required": false
