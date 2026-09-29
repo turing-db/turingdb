@@ -114,6 +114,14 @@ bool Projection::hasItem(const Expr* key) const {
 }
 
 bool Projection::hasVariableItem(const VarDecl* decl) const {
+    return hasItemDecl(decl, true);
+}
+
+bool Projection::hasItemDecl(const VarDecl* decl) const {
+    return hasItemDecl(decl, false);
+}
+
+bool Projection::hasItemDecl(const VarDecl* decl, bool bareVariablesOnly) const {
     if (!decl) {
         return false;
     }
@@ -125,28 +133,9 @@ bool Projection::hasVariableItem(const VarDecl* decl) const {
             // Only a bare variable returns the variable itself; every other item returns
             // a value computed from it, which leaves the variable behind
             const bool isBareVariable = projectedExpr->getKind() == Expr::Kind::SYMBOL;
+            const bool returnsTheDecl = isBareVariable || !bareVariablesOnly;
 
-            if (isBareVariable && projectedExpr->getExprVarDecl() == decl) {
-                return true;
-            }
-        } else if (const VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
-            if (*itemDecl == decl) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-bool Projection::hasItemDecl(const VarDecl* decl) const {
-    if (!decl) {
-        return false;
-    }
-
-    for (const ReturnItem& item : _items) {
-        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
-            if ((*itemExpr)->getExprVarDecl() == decl) {
+            if (returnsTheDecl && projectedExpr->getExprVarDecl() == decl) {
                 return true;
             }
         } else if (std::get<VarDecl*>(item) == decl) {

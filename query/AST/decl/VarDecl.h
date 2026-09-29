@@ -26,6 +26,11 @@ public:
 
     void setListShape(const ListShape& shape) { _listShape = shape; }
 
+    // The variable of the enclosing query an EXISTS or COUNT body imported this one from;
+    // null for a variable the body declares itself, even under the name of an outer one
+    void setImportSource(const VarDecl* source) { _importSource = source; }
+    const VarDecl* getImportSource() const { return _importSource; }
+
     EvaluatedType getType() const { return _type; }
 
     // How deeply a List-typed variable nests and what its innermost elements are. A
@@ -45,6 +50,7 @@ private:
     EvaluatedType _type {EvaluatedType::Invalid};
     ListShape _listShape;
     std::string_view _name;
+    const VarDecl* _importSource {nullptr};
     bool _isUnnamed {false};
     bool _isUnwound {false};
     bool _isQuantifiedPath {false};

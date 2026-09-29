@@ -108,6 +108,7 @@ private:
     std::unordered_set<std::string_view> _namesSet;
 
     Items::const_iterator locateItem(const Expr* key) const;
+    bool hasItemDecl(const VarDecl* decl, bool bareVariablesOnly) const;
 
     Projection();
     ~Projection();
