@@ -165,3 +165,12 @@ void WriteQueryTest::expectCounts(std::string_view query, const Counts& expected
 
     EXPECT_EQ(actual, expected) << "query: " << query;
 }
+
+void WriteQueryTest::expectError(std::string_view query, std::string_view expectedError) {
+    RowSink sink;
+    const QueryStatus status = runQuery(query, &sink);
+
+    ASSERT_FALSE(status.isOk()) << "query: " << query << "\nexpected it to fail";
+    EXPECT_NE(status.getError().find(expectedError), std::string::npos)
+        << "query: " << query << "\nerror: " << status.getError();
+}

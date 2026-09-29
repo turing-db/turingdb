@@ -4965,6 +4965,17 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                 return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
             }
 
+            const bool lhsIsAnInstant = mlir::isa<storage::DateTimeType>(chunkValueElement(_builder, lhsType));
+            const bool rhsIsAnInstant = mlir::isa<storage::DateTimeType>(chunkValueElement(_builder, rhsType));
+
+            if (lhsIsAnInstant || rhsIsAnInstant) {
+                const mlir::Type duration = storage::DurationType::get(ctx);
+                const mlir::Type instant = storage::DateTimeType::get(ctx);
+                const mlir::Type temporal = lhsIsAnInstant && rhsIsAnInstant ? duration : instant;
+
+                return operandNullable ? storage::NullableType::get(ctx, temporal) : temporal;
+            }
+
             const NumericOperand lhs = numericOperand(lhsType);
             const NumericOperand rhs = numericOperand(rhsType);
             const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);

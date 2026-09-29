@@ -151,6 +151,11 @@ bool computesOverListItem(TypePairBitset pair) {
         || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double);
 }
 
+bool computesTimeOverListItem(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
+        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+}
+
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
 // pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
 // nesting is made of.
@@ -632,6 +637,14 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            if (pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Duration)) {
+                type = EvaluatedType::DateTime;
+                break;
+            } else if (computesTimeOverListItem(pair)) {
+                type = EvaluatedType::ListItem;
+                break;
+            }
+
             // Arithmetic over an unknown value is unknown, whatever the other side holds.
             // The list cases come first: [1, 2] + null appends the null instead
             if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
@@ -689,6 +702,24 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::Mult:
         case BinaryOperator::Div:
         case BinaryOperator::Mod: {
+            const bool isSubtraction = expr->getOperator() == BinaryOperator::Sub;
+
+            if (isSubtraction) {
+                const bool subtractsInstants = a == EvaluatedType::DateTime && b == EvaluatedType::DateTime;
+                const bool subtractsADuration = a == EvaluatedType::DateTime && b == EvaluatedType::Duration;
+
+                if (subtractsInstants) {
+                    type = EvaluatedType::Duration;
+                    break;
+                } else if (subtractsADuration) {
+                    type = EvaluatedType::DateTime;
+                    break;
+                } else if (computesTimeOverListItem(pair)) {
+                    type = EvaluatedType::ListItem;
+                    break;
+                }
+            }
+
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
                 type = EvaluatedType::Integer;
                 break;

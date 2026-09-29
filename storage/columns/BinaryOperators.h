@@ -15,6 +15,7 @@
 #include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
 #include "list/ListUtils.h"
+#include "metadata/DateTime.h"
 
 #include "BioAssert.h"
 #include "TuringException.h"
@@ -23,6 +24,7 @@ namespace db {
 
 namespace {
 
+struct Subtract;
 struct SafeDivides;
 struct SafeModulo;
 struct Power;
@@ -252,13 +254,56 @@ inline int64_t integerOperand(const T& value) {
 }
 
 template <typename T>
+concept Temporal = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, DateTime>
+                || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, Duration>;
+
+template <typename T, typename V>
+concept MayHold = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>
+               || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, V>;
+
+template <typename V, typename T>
+    requires MayHold<T, V>
+inline bool holdsA(const T& value) {
+    if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
+        return value.getTag() == TypeToListBufferTag<V>::Tag;
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return value.has_value() && holdsA<V>(*value);
+    } else {
+        return true;
+    }
+}
+
+template <typename V, typename W, typename T, typename U>
+    requires MayHold<T, V> && MayHold<U, W>
+inline bool operandsAs(const T& a, const U& b, V& lhs, W& rhs) {
+    if (!(holdsA<V>(a) && holdsA<W>(b))) {
+        return false;
+    }
+
+    const auto read = []<typename X, typename Y>(const Y& value) -> X {
+        if constexpr (std::is_same_v<std::decay_t<Y>, ListElementView>) {
+            return value.template getAs<X>();
+        } else if constexpr (std::is_same_v<TypeUtils::unwrap_optional_t<Y>, ListElementView>) {
+            return value->template getAs<X>();
+        } else {
+            return TypeUtils::unwrap(value);
+        }
+    };
+
+    lhs = read.template operator()<V>(a);
+    rhs = read.template operator()<W>(b);
+
+    return true;
+}
+
+template <typename T>
 concept TaggedCell = std::same_as<TypeUtils::unwrap_optional_t<T>, ListElementView>;
 
 // The operators whose result carries the type of its operands, as opposed to the index,
 // which reads a cell as the list it may hold rather than as a number
 template <typename F>
 concept ComputesNumbers = std::is_same_v<F, std::plus<>>
-                       || std::is_same_v<F, std::minus<>>
+                       || std::is_same_v<F, Subtract>
                        || std::is_same_v<F, std::multiplies<>>
                        || std::is_same_v<F, SafeDivides>
                        || std::is_same_v<F, SafeModulo>;
@@ -335,18 +380,55 @@ struct BinaryOp {
     inline std::optional<ListElementView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
 
-        if (holdsAnInteger(a) && holdsAnInteger(b)) {
-            return stagedCell(F {}(integerOperand(a), integerOperand(b)));
+        constexpr bool adds = std::is_same_v<F, std::plus<>>;
+        constexpr bool subtracts = std::is_same_v<F, Subtract>;
+
+        // Add and subtract durations from instants
+        if constexpr ((adds || subtracts) && MayHold<T, DateTime> && MayHold<U, Duration>) {
+            DateTime instant {};
+            Duration duration {};
+
+            if (operandsAs(a, b, instant, duration)) {
+                return stagedCell(F {}(instant, duration));
+            }
         }
 
-        const std::optional<double> lhs = cellOperand(a);
-        const std::optional<double> rhs = cellOperand(b);
+        // Add duration with datetime
+        if constexpr (adds && MayHold<T, Duration> && MayHold<U, DateTime>) {
+            Duration duration {};
+            DateTime instant {};
 
-        if (!lhs.has_value() || !rhs.has_value()) {
+            if (operandsAs(a, b, duration, instant)) {
+                return stagedCell(duration + instant);
+            }
+        }
+
+        if constexpr (subtracts && MayHold<T, DateTime> && MayHold<U, DateTime>) {
+            DateTime lhs {};
+            DateTime rhs {};
+
+            if (operandsAs(a, b, lhs, rhs)) {
+                return stagedCell(lhs - rhs);
+            }
+        }
+
+        //Any other operation between two temporal types is undefined.
+        if constexpr (Temporal<T> || Temporal<U>) {
             return std::nullopt;
-        }
+        } else {
+            if (holdsAnInteger(a) && holdsAnInteger(b)) {
+                return stagedCell(F {}(integerOperand(a), integerOperand(b)));
+            }
 
-        return stagedCell(F {}(*lhs, *rhs));
+            const std::optional<double> lhs = cellOperand(a);
+            const std::optional<double> rhs = cellOperand(b);
+
+            if (!lhs.has_value() || !rhs.has_value()) {
+                return std::nullopt;
+            }
+
+            return stagedCell(F {}(*lhs, *rhs));
+        }
     }
 
     template <typename T, typename U>
@@ -367,6 +449,15 @@ struct BinaryOp {
         const QueryListBuffer::ListItemVariant element {value};
 
         return _listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&element, 1}).front();
+    }
+};
+
+struct Subtract : std::minus<> {
+    using std::minus<>::operator();
+
+    // Unused but defined to satisfy dispatcher
+    DateTime operator()(Duration duration, DateTime instant) const {
+        throw TuringException("A duration minus a datetime is not defined.");
     }
 };
 
@@ -607,7 +698,7 @@ struct ValueListIndexImpl {
 }
 
 using Add = BinaryOp<std::plus<>>;
-using Sub = BinaryOp<std::minus<>>;
+using Sub = BinaryOp<Subtract>;
 using Mul = BinaryOp<std::multiplies<>>;
 using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
