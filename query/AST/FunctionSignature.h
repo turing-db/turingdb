@@ -88,6 +88,10 @@ public:
     // argument, so an UNWIND of it binds what an UNWIND of the argument would - tail.
     bool returnsItsArgumentShape() const { return _returnsItsArgumentShape; }
 
+    // Whether this returns one element of its list argument, typed as an UNWIND of that
+    // list types what it binds - head and last.
+    bool returnsAnElementOfItsArgument() const { return _returnsAnElementOfItsArgument; }
+
     // The shape the list this returns has whatever it was called with - range, whose
     // elements are integers however its bounds were written. A signature naming none
     // leaves the shape to the rule its other flags name.
@@ -116,6 +120,8 @@ public:
 
     void setReturnsItsArgumentShape(bool returnsShape) { _returnsItsArgumentShape = returnsShape; }
 
+    void setReturnsAnElementOfItsArgument(bool returnsElement) { _returnsAnElementOfItsArgument = returnsElement; }
+
     void setReturnedListShape(const ListShape& shape) { _returnedListShape = shape; }
 
 private:
@@ -129,6 +135,7 @@ private:
     bool _collectsItsArgument {false};
     bool _unifiesItsArguments {false};
     bool _returnsItsArgumentShape {false};
+    bool _returnsAnElementOfItsArgument {false};
 };
 
 }
