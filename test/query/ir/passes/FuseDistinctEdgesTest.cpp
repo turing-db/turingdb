@@ -55,11 +55,11 @@ TEST_F(FuseDistinctEdgesTest, foldsIntoAnInHop) {
 }
 
 TEST_F(FuseDistinctEdgesTest, foldsIntoATypedHop) {
-    expectFolded("MATCH (a)-[:KNOWS_WELL]->(b)-[:KNOWS_WELL]->(c) RETURN count(*)", "db.get_out_edges_by_type", "3");
+    expectFolded("MATCH (a)-[:KNOWS_WELL]->(b)<-[:KNOWS_WELL]-(c) RETURN count(*)", "db.get_in_edges_by_type", "2");
 }
 
 TEST_F(FuseDistinctEdgesTest, foldsIntoALabelledHop) {
-    expectFolded("MATCH (a)-->(b)-->(c:Person) RETURN count(*)", "db.get_out_edges_by_label", "4");
+    expectFolded("MATCH (a)-->(b)<--(c:Person) RETURN count(*)", "db.get_in_edges_by_label", "13");
 }
 
 TEST_F(FuseDistinctEdgesTest, foldsIntoATypedAndLabelledHop) {

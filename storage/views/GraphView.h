@@ -47,6 +47,9 @@ public:
     [[nodiscard]] const CommitHistory& history() const { return _data->history(); }
     std::span<const WeakArc<Index>> indexes() const { return _data->indexes(); }
 
+    // The commit's summary by label set and edge type, brought up to the view's parts
+    [[nodiscard]] const SchemaGraph& schemaGraph() const;
+
 private:
     friend GraphReader;
     const CommitData* _data {nullptr};

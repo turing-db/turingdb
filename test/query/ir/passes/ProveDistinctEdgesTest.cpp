@@ -13,9 +13,10 @@ using namespace turing::test;
 using Rows = std::vector<StringRowSink::Row>;
 
 // The pairs of a clause the pattern proves distinct lose their check before any pass fuses
-// the hops: two edges typed apart are two edges, and so are two whose coincidence needs a
-// node no label set of the graph allows. The rows are the same with the check and without,
-// which the split-clause form, out of the rule's reach, pins.
+// the hops: two edges typed apart are two edges, so are two whose coincidence needs a node
+// no label set of the graph allows, and so are two whose coincidence closes the pattern
+// into a cycle no arc of the graph's schema closes. The rows are the same with the check
+// and without, which the split-clause form, out of the rule's reach, pins.
 class ProveDistinctEdgesTest : public CallV3Test {
 protected:
     void explain(std::string_view query, std::string& pairs, std::string& program) {
@@ -80,12 +81,12 @@ TEST_F(ProveDistinctEdgesTest, provesTwoHopsTypedApart) {
                  "8");
 }
 
-TEST_F(ProveDistinctEdgesTest, keepsTwoHopsOfOneType) {
-    expectKept("MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c) RETURN count(*)", "e2 <> e1: kept\n", "3");
+TEST_F(ProveDistinctEdgesTest, keepsTwoHopsOfOneTypeMeetingAtANode) {
+    expectKept("MATCH (a)-[e1:KNOWS_WELL]->(b)<-[e2:KNOWS_WELL]-(c) RETURN count(*)", "e2 <> e1: kept\n", "2");
 }
 
-TEST_F(ProveDistinctEdgesTest, keepsAnUntypedHopBesideATypedOne) {
-    expectKept("MATCH (a)-[e1]->(b)-[e2:INTERESTED_IN]->(c) RETURN count(*)", "e2 <> e1: kept\n", "8");
+TEST_F(ProveDistinctEdgesTest, keepsAnUntypedHopMeetingATypedOne) {
+    expectKept("MATCH (a)-[e1]->(b)<-[e2:INTERESTED_IN]-(c) RETURN count(*)", "e2 <> e1: kept\n", "12");
 }
 
 TEST_F(ProveDistinctEdgesTest, namesAnonymousEdgesAsTheDependencyGraphDoes) {
@@ -163,6 +164,60 @@ TEST_F(ProveDistinctEdgesTest, keepsAnUndirectedHopTheLabelsLeaveAnOrientation) 
     expectKept("MATCH (a:Person)-[e1]->(b:Interest)-[e2]-(c) RETURN count(*)", "e2 <> e1: kept\n", "13");
 }
 
+// Two directed hops in a row share an edge only around a self-loop, and a chain of three
+// shares its first and third only around a two-cycle; simpledb has no self-loop, and
+// Remy and Adam close the one two-cycle of KNOWS_WELL
+TEST_F(ProveDistinctEdgesTest, provesTwoHopsOfOneTypeWithoutASelfLoop) {
+    expectProven("MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c) RETURN count(*)", "e2 <> e1: proven by schema\n", "3");
+}
+
+TEST_F(ProveDistinctEdgesTest, provesTwoUntypedDirectedHopsWithoutASelfLoop) {
+    expectProven("MATCH (a)-[e1]->(b)-[e2]->(c) RETURN count(*)", "e2 <> e1: proven by schema\n", "12");
+}
+
+TEST_F(ProveDistinctEdgesTest, keepsTheEndsOfAChainATwoCycleCloses) {
+    const std::string_view query = "MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c)-[e3:KNOWS_WELL]->(d) RETURN count(*)";
+
+    std::string pairs;
+    std::string program;
+    explain(query, pairs, program);
+
+    EXPECT_EQ(pairs, "e2 <> e1: proven by schema\ne3 <> e1: kept\ne3 <> e2: proven by schema\n");
+    EXPECT_EQ(countOf(program, "distinct_from"), 1u) << program;
+
+    expectCount(query, "1");
+}
+
+// An interest is interested in nothing, so no INTERESTED_IN chain comes back on itself
+TEST_F(ProveDistinctEdgesTest, provesTheEndsOfAChainNoTwoCycleCloses) {
+    expectProven("MATCH (a)-[e1:INTERESTED_IN]->(b)-[e2:INTERESTED_IN]->(c)-[e3:INTERESTED_IN]->(d) RETURN count(*)",
+                 "e2 <> e1: proven by schema\ne3 <> e1: proven by schema\ne3 <> e2: proven by schema\n",
+                 "0");
+}
+
+// Remy is interested in Ghosts, which knows Remy well: the two-cycle the ends of this
+// chain would share is in the schema, so the pair stays
+TEST_F(ProveDistinctEdgesTest, keepsTheEndsOfAChainTwoTypesClose) {
+    const std::string_view query = "MATCH (a)-[e1:INTERESTED_IN]->(b)-[e2:KNOWS_WELL]->(c)-[e3:INTERESTED_IN]->(d) RETURN count(*)";
+
+    std::string pairs;
+    std::string program;
+    explain(query, pairs, program);
+
+    EXPECT_EQ(pairs, "e2 <> e1: proven by types\ne3 <> e1: kept\ne3 <> e2: proven by types\n");
+
+    expectCount(query, "2");
+}
+
+// The hop closing the triangle lands beside the node it closes on and an equality after
+// the check joins the two; the merge reads it, so every pair of the triangle closes on a
+// self-loop and none survives
+TEST_F(ProveDistinctEdgesTest, provesEveryPairOfAClosedTriangle) {
+    expectProven("MATCH (a)-[e1]->(b)-[e2]->(c)-[e3]->(a) RETURN count(*)",
+                 "e1 <> e3: proven by schema\ne2 <> e3: proven by schema\ne2 <> e1: proven by schema\n",
+                 "0");
+}
+
 // A node an earlier query of the change wrote is in the graph's label sets already, so a
 // node carrying both labels takes the proof away
 TEST_F(ProveDistinctEdgesTest, readsTheLabelSetsAChangeAdded) {
@@ -172,6 +227,25 @@ TEST_F(ProveDistinctEdgesTest, readsTheLabelSetsAChangeAdded) {
                          sink);
 
     EXPECT_EQ(sink.getRows(), (Rows {{"pairs", "e2 <> e1: kept\n"}}));
+}
+
+// The self-loop a change has not committed is in no part, so the schema proves nothing
+// while the change holds it
+TEST_F(ProveDistinctEdgesTest, keepsTheSchemaProofOutOfAChangeWithPendingEdges) {
+    StringRowSink sink;
+    runWritesInOneChange("CREATE (n:Person {name: 'loop'})-[:KNOWS_WELL]->(n)",
+                         "EXPLAIN (pairs) MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c) RETURN count(*)",
+                         sink);
+
+    EXPECT_EQ(sink.getRows(), (Rows {{"pairs", "e2 <> e1: kept\n"}}));
+}
+
+// Once the self-loop is committed the schema holds it and the proof is gone; the loop
+// walked twice is the one row the check then cuts, so the count stays at 3
+TEST_F(ProveDistinctEdgesTest, readsTheSelfLoopACommitAdded) {
+    runWrite("CREATE (n:Person {name: 'loop'})-[:KNOWS_WELL]->(n)");
+
+    expectKept("MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c) RETURN count(*)", "e2 <> e1: kept\n", "3");
 }
 
 // The query's own writes can add a label set before its rows are read, so the labels prove
