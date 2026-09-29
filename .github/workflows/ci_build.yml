@@ -62,6 +62,17 @@ jobs:
       CTEST_PARALLEL_LEVEL: 4
 
     steps:
+    # A runner with a host to itself sets HOST_BUILD_JOBS in its container
+    # environment, which replaces the cap above for the rest of the job.
+    - name: Use the host's build parallelism
+      if: runner.os == 'Linux'
+      run: |
+        if [ -n "${HOST_BUILD_JOBS:-}" ]; then
+          echo "BUILD_JOBS=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+          echo "CTEST_PARALLEL_LEVEL=$HOST_BUILD_JOBS" >> "$GITHUB_ENV"
+        fi
+
     # Only the disk-constrained GitHub-hosted Linux runners (the -arm labels)
     # need this. The self-hosted -turing containers are lean images that never
     # shipped the android/dotnet/haskell bloat this action strips, so it frees
