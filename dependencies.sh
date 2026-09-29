@@ -313,7 +313,8 @@ if [[ "$(uname)" == "Linux" ]]; then
     ARROW_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
 
-cmake "${ARROW_CMAKE_ARGS[@]}" $ARROW_SRC_DIR/cpp
+ARROW_THRIFT_URL="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz" \
+    cmake "${ARROW_CMAKE_ARGS[@]}" $ARROW_SRC_DIR/cpp
 cmake --build $BUILD_DIR/arrow -j $NUM_JOBS
 cmake --install $BUILD_DIR/arrow
 
