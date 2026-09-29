@@ -1,0 +1,89 @@
+name: Seed GitHub-hosted dependencies cache
+
+on:
+  workflow_dispatch:
+
+
+jobs:
+  seed:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-22.04-arm", "ubuntu-24.04-arm", "macos15", "macos26"]
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      BUILD_JOBS: 4
+
+    steps:
+    - name: Free disk space
+      if: runner.os == 'Linux'
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: false
+        swap-storage: false
+
+    - name: Free disk space (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        ACTIVE_XCODE=$(dirname "$(dirname "$(xcode-select -p)")")
+        echo "Keeping $ACTIVE_XCODE"
+        sudo xcrun simctl runtime delete all || true
+        for xcode in /Applications/Xcode*.app; do
+            if [ "$xcode" != "$ACTIVE_XCODE" ]; then
+                sudo rm -rf "$xcode" &
+            fi
+        done
+        sudo rm -rf "$HOME/Library/Android" &
+        sudo rm -rf "$HOME/.dotnet" &
+        sudo rm -rf "$HOME/hostedtoolcache/CodeQL" &
+        wait
+
+    - name: Disk usage (initial)
+      run: df -h
+
+    - name: Install git-lfs (GitHub-hosted ARM)
+      if: contains(matrix.os, 'arm')
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git-lfs
+        git lfs install
+
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+        lfs: true
+        fetch-depth: 1
+
+    - name: Checkout submodules (shallow)
+      run: |
+        git submodule update --init --force --depth 1
+        git submodule foreach '
+          if [ "$name" != "external/AFLplusplus" ]; then
+              git submodule update --init --force --recursive --depth 1
+          fi
+        '
+
+    - name: Cache dependencies (GitHub-hosted)
+      id: cache-dependencies-github-hosted
+      uses: actions/cache@v4
+      with:
+        path: external/dependencies
+        key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
+
+    - name: Install build tools
+      run: ./install_build_tools.sh
+
+    - name: Build dependencies
+      run: ./dependencies.sh
+      env:
+        SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-github-hosted.outputs.cache-hit }}
+
+    - name: Disk usage (final)
+      run: df -h
