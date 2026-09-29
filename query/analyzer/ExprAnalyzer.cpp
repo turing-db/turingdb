@@ -1,7 +1,6 @@
 #include "ExprAnalyzer.h"
 
 #include <algorithm>
-#include <unordered_map>
 
 #include "CypherAnalyzer.h"
 #include "DiagnosticsManager.h"
@@ -24,6 +23,8 @@
 #include "decl/VarDecl.h"
 
 #include "embedding/EmbeddingBucket.h"
+#include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 #include "StringBucket.h"
 
 #include "expr/All.h"
@@ -34,58 +35,6 @@
 using namespace db;
 
 namespace {
-
-template <typename Part>
-bool partNamed(const std::unordered_map<std::string_view, Part>& parts, std::string_view name, Part& part) {
-    const auto it = parts.find(name);
-    if (it == parts.end()) {
-        return false;
-    }
-
-    part = it->second;
-
-    return true;
-}
-
-bool dateTimePartNamed(std::string_view name, DateTimePart& part) {
-    static const std::unordered_map<std::string_view, DateTimePart> parts = {
-        {"year",        DateTimePart::Year       },
-        {"month",       DateTimePart::Month      },
-        {"day",         DateTimePart::Day        },
-        {"hour",        DateTimePart::Hour       },
-        {"minute",      DateTimePart::Minute     },
-        {"second",      DateTimePart::Second     },
-        {"millisecond", DateTimePart::Millisecond},
-        {"microsecond", DateTimePart::Microsecond},
-    };
-
-    return partNamed(parts, name, part);
-}
-
-bool durationPartNamed(std::string_view name, DurationPart& part) {
-    static const std::unordered_map<std::string_view, DurationPart> parts = {
-        {"years",                DurationPart::Years               },
-        {"quarters",             DurationPart::Quarters            },
-        {"months",               DurationPart::Months              },
-        {"weeks",                DurationPart::Weeks               },
-        {"days",                 DurationPart::Days                },
-        {"hours",                DurationPart::Hours               },
-        {"minutes",              DurationPart::Minutes             },
-        {"seconds",              DurationPart::Seconds             },
-        {"milliseconds",         DurationPart::Milliseconds        },
-        {"microseconds",         DurationPart::Microseconds        },
-        {"quartersOfYear",       DurationPart::QuartersOfYear      },
-        {"monthsOfYear",         DurationPart::MonthsOfYear        },
-        {"monthsOfQuarter",      DurationPart::MonthsOfQuarter     },
-        {"daysOfWeek",           DurationPart::DaysOfWeek          },
-        {"minutesOfHour",        DurationPart::MinutesOfHour       },
-        {"secondsOfMinute",      DurationPart::SecondsOfMinute     },
-        {"millisecondsOfSecond", DurationPart::MillisecondsOfSecond},
-        {"microsecondsOfSecond", DurationPart::MicrosecondsOfSecond},
-    };
-
-    return partNamed(parts, name, part);
-}
 
 std::string_view componentOwnerName(bool namesADateTimePart, bool namesADurationPart) {
     if (namesADateTimePart) {
@@ -1014,8 +963,8 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     if (readsAComponentOfAProperty) {
         const Symbol* componentSymbol = qualifiedName->back();
         componentName = componentSymbol->getName();
-        namesADateTimePart = dateTimePartNamed(componentName, part);
-        namesADurationPart = durationPartNamed(componentName, durationPart);
+        namesADateTimePart = DateTime::partNamed(componentName, part);
+        namesADurationPart = Duration::partNamed(componentName, durationPart);
         componentOwner = componentOwnerName(namesADateTimePart, namesADurationPart);
 
         // A write naming a property the graph does not carry would introduce it, and a
@@ -1037,13 +986,13 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         const std::string_view name = propName->getName();
 
         if (varType == EvaluatedType::DateTime) {
-            if (!dateTimePartNamed(name, part)) {
+            if (!DateTime::partNamed(name, part)) {
                 throwError(fmt::format("'{}' is not a component of a datetime", name), expr);
             }
 
             expr->setDateTimePart(part);
         } else {
-            if (!durationPartNamed(name, durationPart)) {
+            if (!Duration::partNamed(name, durationPart)) {
                 throwError(fmt::format("'{}' is not a component of a duration", name), expr);
             }
 
@@ -1246,7 +1195,7 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
     if (baseType == EvaluatedType::DateTime) {
         DateTimePart part {DateTimePart::Year};
-        if (!dateTimePartNamed(propName, part)) {
+        if (!DateTime::partNamed(propName, part)) {
             throwError(fmt::format("'{}' is not a component of a datetime", propName), expr);
         }
 
@@ -1254,7 +1203,7 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
         type = EvaluatedType::Integer;
     } else if (baseType == EvaluatedType::Duration) {
         DurationPart part {DurationPart::Years};
-        if (!durationPartNamed(propName, part)) {
+        if (!Duration::partNamed(propName, part)) {
             throwError(fmt::format("'{}' is not a component of a duration", propName), expr);
         }
 

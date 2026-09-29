@@ -102,10 +102,10 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.edge_type",  &NLExecutor::selectFunction<EdgeTypesFunction>},
     {"nl.start_node", &NLExecutor::selectFunction<StartNodeFunction>},
     {"nl.end_node",   &NLExecutor::selectFunction<EndNodeFunction>},
-    {"nl.to_integer", &NLExecutor::selectConversion<toIntegerFunction>},
-    {"nl.to_float",   &NLExecutor::selectConversion<toFloatFunction>},
+    {"nl.to_integer", &NLExecutor::selectConversion<ToIntegerFunction>},
+    {"nl.to_float",   &NLExecutor::selectConversion<ToFloatFunction>},
     {"nl.to_string",  &NLExecutor::selectToString},
-    {"nl.to_boolean", &NLExecutor::selectFunction<toBoolFunction>},
+    {"nl.to_boolean", &NLExecutor::selectFunction<ToBoolFunction>},
     {"nl.to_datetime", &NLExecutor::selectDateTimeConversion},
     {"nl.to_duration", &NLExecutor::selectDurationConversion},
 

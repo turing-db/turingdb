@@ -64,6 +64,8 @@ public:
     // scaling to microseconds from overflowing.
     static bool fromEpochSeconds(int64_t seconds, DateTime& value);
 
+    static bool partNamed(std::string_view name, DateTimePart& part);
+
     static int64_t component(DateTime value, DateTimePart part);
 
     static void format(std::string& out, DateTime value);

@@ -4,10 +4,13 @@
 #include <stdint.h>
 
 #include <iterator>
+#include <string_view>
+#include <unordered_map>
 
 #include <spdlog/fmt/fmt.h>
 
 #include "TuringException.h"
+#include "map/MapView.h"
 
 using namespace db;
 
@@ -54,6 +57,64 @@ bool productOverflows(int64_t a, int64_t b) {
 
 bool isAWholeInt64(double value) {
     return value == trunc(value) && value >= -TWO_TO_THE_63 && value < TWO_TO_THE_63;
+}
+
+// The ...Of... parts are remainders, not units, so they have no length
+int64_t microsecondsPerUnit(DurationPart part) {
+    switch (part) {
+        case DurationPart::Years:
+            return MICROSECONDS_PER_YEAR;
+        break;
+
+        case DurationPart::Quarters:
+            return MICROSECONDS_PER_QUARTER;
+        break;
+
+        case DurationPart::Months:
+            return MICROSECONDS_PER_MONTH;
+        break;
+
+        case DurationPart::Weeks:
+            return MICROSECONDS_PER_WEEK;
+        break;
+
+        case DurationPart::Days:
+            return MICROSECONDS_PER_DAY;
+        break;
+
+        case DurationPart::Hours:
+            return MICROSECONDS_PER_HOUR;
+        break;
+
+        case DurationPart::Minutes:
+            return MICROSECONDS_PER_MINUTE;
+        break;
+
+        case DurationPart::Seconds:
+            return MICROSECONDS_PER_SECOND;
+        break;
+
+        case DurationPart::Milliseconds:
+            return MICROSECONDS_PER_MILLISECOND;
+        break;
+
+        case DurationPart::Microseconds:
+            return 1;
+        break;
+
+        case DurationPart::QuartersOfYear:
+        case DurationPart::MonthsOfYear:
+        case DurationPart::MonthsOfQuarter:
+        case DurationPart::DaysOfWeek:
+        case DurationPart::MinutesOfHour:
+        case DurationPart::SecondsOfMinute:
+        case DurationPart::MillisecondsOfSecond:
+        case DurationPart::MicrosecondsOfSecond:
+            return 0;
+        break;
+    }
+
+    return 0;
 }
 
 }
@@ -204,6 +265,84 @@ int64_t Duration::component(Duration value, DurationPart part) {
     }
 
     return 0;
+}
+
+bool Duration::partNamed(std::string_view name, DurationPart& part) {
+    static const std::unordered_map<std::string_view, DurationPart> parts = {
+        {"years",                DurationPart::Years               },
+        {"quarters",             DurationPart::Quarters            },
+        {"months",               DurationPart::Months              },
+        {"weeks",                DurationPart::Weeks               },
+        {"days",                 DurationPart::Days                },
+        {"hours",                DurationPart::Hours               },
+        {"minutes",              DurationPart::Minutes             },
+        {"seconds",              DurationPart::Seconds             },
+        {"milliseconds",         DurationPart::Milliseconds        },
+        {"microseconds",         DurationPart::Microseconds        },
+        {"quartersOfYear",       DurationPart::QuartersOfYear      },
+        {"monthsOfYear",         DurationPart::MonthsOfYear        },
+        {"monthsOfQuarter",      DurationPart::MonthsOfQuarter     },
+        {"daysOfWeek",           DurationPart::DaysOfWeek          },
+        {"minutesOfHour",        DurationPart::MinutesOfHour       },
+        {"secondsOfMinute",      DurationPart::SecondsOfMinute     },
+        {"millisecondsOfSecond", DurationPart::MillisecondsOfSecond},
+        {"microsecondsOfSecond", DurationPart::MicrosecondsOfSecond},
+    };
+
+    const auto it = parts.find(name);
+    if (it == parts.end()) {
+        return false;
+    }
+
+    part = it->second;
+
+    return true;
+}
+
+bool Duration::fromMap(const MapView& map, Duration& out) {
+    Duration sum {0};
+    bool holdsANullCount = false;
+
+    for (const MapEntryView entry : map) {
+        const std::string_view unit = entry.getKey();
+
+        DurationPart part {DurationPart::Years};
+        const bool namesAPart = partNamed(unit, part);
+        const int64_t microseconds = namesAPart ? microsecondsPerUnit(part) : 0;
+
+        if (microseconds == 0) {
+            throw TuringException(fmt::format("Unknown duration component: {}", unit));
+        }
+
+        const Duration perUnit(microseconds);
+        const MapBufferTypeTag tag = entry.getValueTag();
+
+        if (tag == MapBufferTypeTag::Int) {
+            sum = sum + perUnit * entry.getValueAs<int64_t>();
+        } else if (tag == MapBufferTypeTag::UInt) {
+            const uint64_t count = entry.getValueAs<uint64_t>();
+
+            if (count > static_cast<uint64_t>(INT64_MAX)) {
+                throw TuringException("Duration overflow");
+            }
+
+            sum = sum + perUnit * static_cast<int64_t>(count);
+        } else if (tag == MapBufferTypeTag::Double) {
+            sum = sum + perUnit * entry.getValueAs<double>();
+        } else if (tag == MapBufferTypeTag::Null) {
+            holdsANullCount = true;
+        } else {
+            throw TuringException(fmt::format("duration() reads a number for each unit, and the map key '{}' holds a value that is not one", unit));
+        }
+    }
+
+    if (holdsANullCount) {
+        return false;
+    }
+
+    out = sum;
+
+    return true;
 }
 
 void Duration::format(std::string& out, Duration value) {

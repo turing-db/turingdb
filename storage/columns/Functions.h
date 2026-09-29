@@ -17,6 +17,7 @@
 #include "list/ListElementView.h"
 
 #include "list/ListBuffer.h"
+#include "map/MapView.h"
 
 #include "buffers/StringBuffer.h"
 
@@ -199,7 +200,7 @@ public:
     ResultType operator()(const IDT id) const { return static_cast<types::Int64::Primitive>(id.getValue()); }
 };
 
-class toIntegerFunction {
+class ToIntegerFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Int64::Primitive>;
@@ -224,7 +225,7 @@ public:
 };
 
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
-class toFloatFunction {
+class ToFloatFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Double::Primitive>;
@@ -255,7 +256,7 @@ private:
     std::string _buf; // Temporary buffer to null-terminate string view
 };
 
-class toBoolFunction {
+class ToBoolFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Bool::Primitive>;
@@ -279,7 +280,7 @@ private:
     static void strToLower(std::string& lower, std::string_view src);
 };
 
-class toDateTimeFunction {
+class ToDateTimeFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::DateTime::Primitive>;
@@ -289,12 +290,12 @@ public:
     }
 };
 
-class toStringFunction {
+class ToStringFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = types::String::Primitive;
 
-    explicit toStringFunction(StringBuffer* stringBuffer);
+    explicit ToStringFunction(StringBuffer* stringBuffer);
 
     ResultType operator()(std::string_view sv) const {
         return _stringBuffer->insert(sv);
@@ -307,12 +308,12 @@ private:
 // toString() of a number or a boolean. A double keeps the point Cypher prints it with, so
 // toString(1.0) is "1.0" where the shortest round trip of it is "1".
 template <typename Value>
-class toStringFromValueFunction {
+class ToStringFromValueFunction {
 public:
     using ArgType = Value;
     using ResultType = types::String::Primitive;
 
-    explicit toStringFromValueFunction(StringBuffer* stringBuffer)
+    explicit ToStringFromValueFunction(StringBuffer* stringBuffer)
         : _stringBuffer(stringBuffer)
     {
     }
@@ -330,7 +331,7 @@ private:
 // datetime() over a count of seconds since the Unix epoch rather than over text. A count
 // naming an instant outside the renderable range reads as null, as unparsable text does.
 template <typename Number>
-class epochSecondsToDateTimeFunction {
+class EpochSecondsToDateTimeFunction {
 public:
     using ArgType = Number;
     using ResultType = std::optional<types::DateTime::Primitive>;
@@ -354,7 +355,7 @@ public:
 // duration() over a count of microseconds. A UInt64 count past INT64_MAX has no duration
 // and reads as null.
 template <typename Number>
-class microsecondsToDurationFunction {
+class MicrosecondsToDurationFunction {
 public:
     using ArgType = Number;
     using ResultType = std::optional<types::Duration::Primitive>;
@@ -367,6 +368,47 @@ public:
         }
 
         return types::Duration::Primitive {static_cast<types::Int64::Primitive>(microseconds)};
+    }
+};
+
+class MapToDurationFunction {
+public:
+    using ArgType = MapView;
+    using ResultType = std::optional<types::Duration::Primitive>;
+
+    ResultType operator()(const MapView map) const {
+        types::Duration::Primitive value;
+        if (!Duration::fromMap(map, value)) {
+            return std::nullopt;
+        }
+
+        return value;
+    }
+};
+
+class TaggedDurationFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Duration::Primitive>;
+
+    ResultType operator()(const ArgType cell) const {
+        const ListBufferTypeTag tag = cell.getTag();
+
+        if (tag == ListBufferTypeTag::Int) {
+            return MicrosecondsToDurationFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
+        } else if (tag == ListBufferTypeTag::UInt) {
+            return MicrosecondsToDurationFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
+        } else if (tag == ListBufferTypeTag::MapView) {
+            return MapToDurationFunction {}(cell.getAs<MapView>());
+        } else if (tag == ListBufferTypeTag::Null) {
+            return std::nullopt;
+        }
+
+        throw FatalException("duration() reads an integer or a map, and this row holds a value that is neither");
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
     }
 };
 
@@ -449,7 +491,7 @@ public:
 // optional result so one column type carries it whatever the argument was, and so a double
 // that no integer can represent reads as null.
 template <typename Number>
-class toIntegerFromNumberFunction {
+class ToIntegerFromNumberFunction {
 public:
     using ArgType = Number;
     using ResultType = std::optional<types::Int64::Primitive>;
@@ -477,7 +519,7 @@ public:
 };
 
 template <typename Number>
-class toFloatFromNumberFunction {
+class ToFloatFromNumberFunction {
 public:
     using ArgType = Number;
     using ResultType = std::optional<types::Double::Primitive>;
@@ -504,18 +546,18 @@ struct ConversionFunctorFor {
 };
 
 template <ConvertibleNumber Argument>
-struct ConversionFunctorFor<toIntegerFunction, Argument> {
-    using Type = toIntegerFromNumberFunction<Argument>;
+struct ConversionFunctorFor<ToIntegerFunction, Argument> {
+    using Type = ToIntegerFromNumberFunction<Argument>;
 };
 
 template <ConvertibleNumber Argument>
-struct ConversionFunctorFor<toFloatFunction, Argument> {
-    using Type = toFloatFromNumberFunction<Argument>;
+struct ConversionFunctorFor<ToFloatFunction, Argument> {
+    using Type = ToFloatFromNumberFunction<Argument>;
 };
 
 template <ConvertibleNumber Argument>
-struct ConversionFunctorFor<toStringFunction, Argument> {
-    using Type = toStringFromValueFunction<Argument>;
+struct ConversionFunctorFor<ToStringFunction, Argument> {
+    using Type = ToStringFromValueFunction<Argument>;
 };
 
 // The list family over a type-erased cell, which is what a list looks like wherever its

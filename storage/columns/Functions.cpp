@@ -188,7 +188,7 @@ LabelsFunction::ResultType LabelsFunction::operator()(const NodeID node) {
     return _listBuffer->insert(_elements);
 }
 
-toStringFunction::toStringFunction(StringBuffer* stringBuffer)
+ToStringFunction::ToStringFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {
 }
@@ -343,7 +343,7 @@ TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) co
     throw TuringException("id() reads a node or an edge, and this row holds a value that is neither");
 }
 
-void toBoolFunction::strToLower(std::string& lower, std::string_view src) {
+void ToBoolFunction::strToLower(std::string& lower, std::string_view src) {
     lower.clear();
     lower.reserve();
     for (const auto c : src) {

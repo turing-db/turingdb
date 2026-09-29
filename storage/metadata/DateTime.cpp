@@ -2,6 +2,8 @@
 
 #include <charconv>
 #include <chrono>
+#include <string_view>
+#include <unordered_map>
 
 #include <spdlog/fmt/fmt.h>
 
@@ -306,6 +308,28 @@ bool DateTime::fromEpochSeconds(int64_t seconds, DateTime& value) {
     }
 
     value = DateTime {seconds * MICROSECONDS_PER_SECOND};
+
+    return true;
+}
+
+bool DateTime::partNamed(std::string_view name, DateTimePart& part) {
+    static const std::unordered_map<std::string_view, DateTimePart> parts = {
+        {"year",        DateTimePart::Year       },
+        {"month",       DateTimePart::Month      },
+        {"day",         DateTimePart::Day        },
+        {"hour",        DateTimePart::Hour       },
+        {"minute",      DateTimePart::Minute     },
+        {"second",      DateTimePart::Second     },
+        {"millisecond", DateTimePart::Millisecond},
+        {"microsecond", DateTimePart::Microsecond},
+    };
+
+    const auto it = parts.find(name);
+    if (it == parts.end()) {
+        return false;
+    }
+
+    part = it->second;
 
     return true;
 }
