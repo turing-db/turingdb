@@ -82,18 +82,23 @@ def ImportGraph : SystemOp<"import_graph"> {
 
       %g = db.import_graph jsonl("/data/social.jsonl") as "social"
              embeddings {vec = 128 : ui64} : !db.column<!storage.string>
+
+    `durations` is the `WITH DURATIONS [prop, ...]` clause of `LOAD JSONL` and
+    `LOAD PARQUET`: the properties whose integers count microseconds. Neither
+    format has a duration type. Each name is a unit entry, as in `date_times`.
   }];
 
   let arguments = (ins StrAttr:$path,
                        StrAttr:$graph_name,
                        GraphImportFormat:$format,
                        OptionalAttr<DictionaryAttr>:$embeddings,
-                       OptionalAttr<DictionaryAttr>:$date_times);
+                       OptionalAttr<DictionaryAttr>:$date_times,
+                       OptionalAttr<DictionaryAttr>:$durations);
   let results   = (outs ColumnStrings:$graph);
 
   let assemblyFormat = [{
     $format `(` $path `)` `as` $graph_name (`embeddings` $embeddings^)?
-    (`datetimes` $date_times^)? attr-dict `:` qualified(type($graph))
+    (`datetimes` $date_times^)? (`durations` $durations^)? attr-dict `:` qualified(type($graph))
   }];
 }
 

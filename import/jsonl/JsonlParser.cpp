@@ -1,5 +1,7 @@
 #include "JsonlParser.h"
 
+#include <stdint.h>
+
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <unordered_map>
@@ -15,6 +17,7 @@
 #include "writers/DataPartBuilder.h"
 
 #include "DateTimeSpec.h"
+#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 
 #include "Profiler.h"
@@ -144,6 +147,25 @@ JsonlImportResult<std::optional<DateTime>> tryGetDateTime(std::string_view name,
     return instant;
 }
 
+JsonlImportResult<std::optional<Duration>> tryGetDuration(std::string_view name,
+                                                          const json& value,
+                                                          const DurationSpec& durationSpecs,
+                                                          size_t lineNumber) {
+    if (!durationSpecs.contains(name)) {
+        return std::optional<Duration> {};
+    }
+
+    const bool isUnsignedPastInt64 = value.is_number_unsigned()
+                                  && value.get<uint64_t>() > static_cast<uint64_t>(INT64_MAX);
+    if (!value.is_number_integer() || isUnsignedPastInt64) {
+        return JsonlImportError::result(JsonlImportErrorType::NON_DURATION_VALUE,
+                                        lineNumber,
+                                        fmt::format("property '{}' reads '{}'", name, value.dump()));
+    }
+
+    return std::optional<Duration> {Duration(value.get<int64_t>())};
+}
+
 std::optional<size_t> tryGetEmbDim(std::string_view name,
                                    const json& value,
                                    const EmbeddingsSpec& embeddingSpecs) {
@@ -163,7 +185,8 @@ std::optional<size_t> tryGetEmbDim(std::string_view name,
 JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                                            std::istream& stream,
                                            const EmbeddingsSpec& embeddingSpecs,
-                                           const DateTimeSpec& dateTimeSpecs) {
+                                           const DateTimeSpec& dateTimeSpecs,
+                                           const DurationSpec& durationSpecs) {
     Profile profile("JsonlParser::parse");
 
     std::string line;
@@ -246,9 +269,12 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         const bool valueIsEmbedding = embDim.has_value();
 
                         // A JSONL export spells a missing column as a null, so a null
-                        // in a property named as a datetime is that entity having no
-                        // instant rather than the file contradicting the clause
-                        if (value.is_null() && dateTimeSpecs.contains(ptName)) {
+                        // in a property named as a datetime or a duration is that entity
+                        // having no value rather than the file contradicting the clause
+                        const bool isMissingTemporal = value.is_null()
+                                                    && (dateTimeSpecs.contains(ptName)
+                                                        || durationSpecs.contains(ptName));
+                        if (isMissingTemporal) {
                             continue;
                         }
 
@@ -258,10 +284,19 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             return instant.get_unexpected();
                         }
 
+                        const JsonlImportResult<std::optional<Duration>> duration =
+                            tryGetDuration(ptName, value, durationSpecs, lineNumber);
+                        if (!duration) {
+                            return duration.get_unexpected();
+                        }
+
                         const bool valueIsDateTime = instant.value().has_value();
+                        const bool valueIsDuration = duration.value().has_value();
 
                         if (valueIsDateTime) {
                             vt = ValueType::DateTime;
+                        } else if (valueIsDuration) {
+                            vt = ValueType::Duration;
                         } else if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {
@@ -284,6 +319,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
 
                         if (valueIsDateTime) {
                             builder.addNodeProperty<types::DateTime>(nodeID, pt._id, *instant.value());
+                        } else if (valueIsDuration) {
+                            builder.addNodeProperty<types::Duration>(nodeID, pt._id, *duration.value());
                         } else if (value.is_number_float()) {
                             builder.addNodeProperty<types::Double>(nodeID, pt._id, value.get<double>());
                         } else if (value.is_boolean()) {
@@ -370,9 +407,12 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         const bool valueIsEmbedding = embDim.has_value();
 
                         // A JSONL export spells a missing column as a null, so a null
-                        // in a property named as a datetime is that entity having no
-                        // instant rather than the file contradicting the clause
-                        if (value.is_null() && dateTimeSpecs.contains(ptName)) {
+                        // in a property named as a datetime or a duration is that entity
+                        // having no value rather than the file contradicting the clause
+                        const bool isMissingTemporal = value.is_null()
+                                                    && (dateTimeSpecs.contains(ptName)
+                                                        || durationSpecs.contains(ptName));
+                        if (isMissingTemporal) {
                             continue;
                         }
 
@@ -382,10 +422,19 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             return instant.get_unexpected();
                         }
 
+                        const JsonlImportResult<std::optional<Duration>> duration =
+                            tryGetDuration(ptName, value, durationSpecs, lineNumber);
+                        if (!duration) {
+                            return duration.get_unexpected();
+                        }
+
                         const bool valueIsDateTime = instant.value().has_value();
+                        const bool valueIsDuration = duration.value().has_value();
 
                         if (valueIsDateTime) {
                             vt = ValueType::DateTime;
+                        } else if (valueIsDuration) {
+                            vt = ValueType::Duration;
                         } else if (value.is_number_float()) {
                             vt = ValueType::Double;
                         } else if (value.is_boolean()) {
@@ -408,6 +457,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
 
                         if (valueIsDateTime) {
                             builder.addEdgeProperty<types::DateTime>(edge, pt._id, *instant.value());
+                        } else if (valueIsDuration) {
+                            builder.addEdgeProperty<types::Duration>(edge, pt._id, *duration.value());
                         } else if (value.is_number_float()) {
                             builder.addEdgeProperty<types::Double>(edge, pt._id, value.get<double>());
                         } else if (value.is_boolean()) {

@@ -7,6 +7,7 @@
 
 #include "ChangeManager.h"
 #include "DateTimeSpec.h"
+#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 #include "GraphFileType.h"
 #include "GraphLoadStatus.h"
@@ -48,7 +49,8 @@ public:
                        const fs::Path& filePath,
                        JobSystem* jobSystem,
                        const EmbeddingsSpec& embeddingSpecs = {},
-                       const DateTimeSpec& dateTimeSpecs = {});
+                       const DateTimeSpec& dateTimeSpecs = {},
+                       const DurationSpec& durationSpecs = {});
 
     GraphFileType getGraphFileType(const fs::Path& graphPath) const;
 
@@ -77,7 +79,8 @@ private:
                        const fs::Path& dbPath,
                        JobSystem* jobSystem,
                        const EmbeddingsSpec& embeddingSpecs,
-                       const DateTimeSpec& dateTimeSpecs);
+                       const DateTimeSpec& dateTimeSpecs,
+                       const DurationSpec& durationSpecs);
 
     Graph* loadGmlDB(std::string_view graphName,
                      const fs::Path& dbPath,
@@ -89,6 +92,7 @@ private:
 
     Graph* loadParquetDB(std::string_view graphName,
                          const fs::Path& dbPath,
-                         JobSystem* jobSystem);
+                         JobSystem* jobSystem,
+                         const DurationSpec& durationSpecs);
 };
 }

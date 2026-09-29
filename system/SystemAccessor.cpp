@@ -67,8 +67,9 @@ DumpResult<void> SystemAccessor::loadCommit(std::string_view name, CommitHash ha
 Graph* SystemAccessor::importGraph(const fs::Path& path,
                                    std::string_view name,
                                    const EmbeddingsSpec& embeddingSpecs,
-                                   const DateTimeSpec& dateTimeSpecs) {
-    return _sysMan->importGraph(path, name, embeddingSpecs, dateTimeSpecs);
+                                   const DateTimeSpec& dateTimeSpecs,
+                                   const DurationSpec& durationSpecs) {
+    return _sysMan->importGraph(path, name, embeddingSpecs, dateTimeSpecs, durationSpecs);
 }
 
 GraphFileType SystemAccessor::getGraphFileType(const fs::Path& path) const {

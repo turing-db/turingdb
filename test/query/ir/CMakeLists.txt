@@ -4526,6 +4526,54 @@ target_link_libraries(test_query_ir_duration_scaled_by_a_double PRIVATE turing_i
 add_turing_test(test_query_ir_duration_cell_dividend DurationCellDividendTest.cpp)
 target_link_libraries(test_query_ir_duration_cell_dividend PRIVATE turing_ir_test_write_query_s)
 
+add_turing_test(test_query_ir_load_jsonl_duration LoadJsonlDurationTest.cpp)
+target_sources(test_query_ir_load_jsonl_duration PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_jsonl_duration PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_jsonl_duration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_load_parquet_duration LoadParquetDurationTest.cpp)
+target_sources(test_query_ir_load_parquet_duration PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_parquet_duration PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_parquet_duration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(test_query_ir_load_parquet_duration
+    PRIVATE PARQUET_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/import/parquet")
+
+add_turing_test(test_query_ir_load_jsonl_embedding_duration_clash LoadJsonlEmbeddingDurationClashTest.cpp)
+target_sources(test_query_ir_load_jsonl_embedding_duration_clash PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_jsonl_embedding_duration_clash PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_jsonl_embedding_duration_clash PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_parquet_duration_logical_type ParquetDurationLogicalTypeTest.cpp)
+target_sources(test_query_ir_parquet_duration_logical_type PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_parquet_duration_logical_type PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_parquet_duration_logical_type PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(test_query_ir_parquet_duration_logical_type
+    PRIVATE PARQUET_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/import/parquet")
+
 add_turing_test(test_query_ir_temporal_cell_arithmetic TemporalCellArithmeticTest.cpp)
 target_link_libraries(test_query_ir_temporal_cell_arithmetic PRIVATE turing_ir_test_write_query_s)
 

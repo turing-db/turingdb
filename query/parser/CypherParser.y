@@ -95,6 +95,7 @@
     #include "stmt/UnwindStmt.h"
     #include "stmt/WithStmt.h"
     #include "DateTimeSpec.h"
+    #include "DurationSpec.h"
     #include "EmbeddingsSpec.h"
     #include "JsonlImportSpecs.h"
 
@@ -206,6 +207,7 @@
 %token<std::string_view> AVAILABLE
 %token<std::string_view> HEADERS
 %token<std::string_view> DATETIMES
+%token<std::string_view> DURATIONS
 %token<std::string_view> EMBEDDINGS
 %token<std::string_view> JSONL
 %token<std::string_view> LIST
@@ -450,6 +452,7 @@
 %type<db::JsonlImportSpecs> jsonlOptions
 %type<db::JsonlImportSpecs> jsonlOption
 %type<DateTimeSpec> dateTimeSpecs
+%type<DurationSpec> durationSpecs
 
 %expect 0
 
@@ -587,6 +590,7 @@ loadJsonl
         $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
         $$->setEmbeddingSpecs(std::move($4._embeddings));
         $$->setDateTimeSpecs(std::move($4._dateTimes));
+        $$->setDurationSpecs(std::move($4._durations));
         LOC($$, @$);
       }
     | LOAD JSONL STRING_LITERAL AS ID jsonlOptions {
@@ -594,6 +598,7 @@ loadJsonl
         $$->setGraphName($5);
         $$->setEmbeddingSpecs(std::move($6._embeddings));
         $$->setDateTimeSpecs(std::move($6._dateTimes));
+        $$->setDurationSpecs(std::move($6._durations));
         LOC($$, @$);
       }
     ;
@@ -615,6 +620,9 @@ jsonlOption
     | WITH DATETIMES OBRACK dateTimeSpecs CBRACK {
         $$._dateTimes = std::move($4);
       }
+    | WITH DURATIONS OBRACK durationSpecs CBRACK {
+        $$._durations = std::move($4);
+      }
     ;
 
 dateTimeSpecs
@@ -629,6 +637,23 @@ dateTimeSpecs
         $$.emplace($3);
       }
     | dateTimeSpecs COMMA ID {
+        $$ = std::move($1);
+        $$.emplace($3);
+      }
+    ;
+
+durationSpecs
+    : STRING_LITERAL {
+        $$.emplace($1);
+      }
+    | ID {
+        $$.emplace($1);
+      }
+    | durationSpecs COMMA STRING_LITERAL {
+        $$ = std::move($1);
+        $$.emplace($3);
+      }
+    | durationSpecs COMMA ID {
         $$ = std::move($1);
         $$.emplace($3);
       }
@@ -793,6 +818,17 @@ loadParquet
       }
     | LOAD PARQUET STRING_LITERAL {
         $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
+        LOC($$, @$);
+      }
+    | LOAD PARQUET STRING_LITERAL AS ID WITH DURATIONS OBRACK durationSpecs CBRACK {
+        $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
+        $$->setGraphName($5);
+        $$->setDurationSpecs(std::move($9));
+        LOC($$, @$);
+      }
+    | LOAD PARQUET STRING_LITERAL WITH DURATIONS OBRACK durationSpecs CBRACK {
+        $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
+        $$->setDurationSpecs(std::move($7));
         LOC($$, @$);
       }
     ;
@@ -1949,6 +1985,7 @@ symbol
     : ESC_LITERAL { $$ = Symbol::create(ast, $1); }
     | ID { $$ = Symbol::create(ast, $1); }
     | DATETIMES { $$ = Symbol::create(ast, $1); }
+    | DURATIONS { $$ = Symbol::create(ast, $1); }
     | FILTER { $$ = Symbol::create(ast, $1); }
     | EXTRACT { $$ = Symbol::create(ast, $1); }
     | EMBEDDING { $$ = Symbol::create(ast, $1); }

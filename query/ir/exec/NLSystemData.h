@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "DateTimeSpec.h"
+#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 #include "Path.h"
 #include "VecLibMetadata.h"
@@ -78,12 +79,14 @@ public:
                       std::string_view graphName,
                       const EmbeddingsSpec& embeddings,
                       const DateTimeSpec& dateTimes,
+                      const DurationSpec& durations,
                       std::string_view statement,
                       NLViewColumn* graph)
         : _path(path),
         _graphName(graphName),
         _embeddings(embeddings),
         _dateTimes(dateTimes),
+        _durations(durations),
         _statement(statement),
         _graph(graph)
     {
@@ -93,6 +96,7 @@ public:
     std::string_view getGraphName() const { return _graphName; }
     const EmbeddingsSpec& getEmbeddings() const { return _embeddings; }
     const DateTimeSpec& getDateTimes() const { return _dateTimes; }
+    const DurationSpec& getDurations() const { return _durations; }
     std::string_view getStatement() const { return _statement; }
     NLViewColumn* getGraph() const { return _graph; }
 
@@ -101,6 +105,7 @@ private:
     std::string_view _graphName;
     EmbeddingsSpec _embeddings;
     DateTimeSpec _dateTimes;
+    DurationSpec _durations;
     std::string_view _statement;
     NLViewColumn* _graph {nullptr};
 };

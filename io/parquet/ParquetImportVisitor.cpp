@@ -178,11 +178,25 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
     }
 
     const bool isList = maxRepLevel > 0;
+    const std::string name {isList ? listPropertyName(path) : std::string_view {path}};
+
+    const bool holdsDurations = _durationSpecs.contains(name);
+    if (holdsDurations) {
+        const bool hasNoLogicalType = !logicalType || logicalType->is_none();
+        const bool isSignedInt = logicalType && logicalType->is_int()
+                              && static_cast<const parquet::IntLogicalType&>(*logicalType).is_signed();
+        const bool isPlainInt64 = physicalType == parquet::Type::INT64 && (hasNoLogicalType || isSignedInt);
+        if (!isPlainInt64) {
+            throw TuringException(fmt::format("Duration property '{}' must be an INT64 column counting microseconds.",
+                                              name));
+        }
+
+        valueType = ValueType::Duration;
+    }
+
     if (isList) {
         valueType = ValueType::List;
     }
-
-    const std::string name {isList ? listPropertyName(path) : std::string_view {path}};
     const PropertyType propType = metadataBuilder.getOrCreatePropertyType(name, valueType);
 
     // A name already registered keeps the type it was registered with, and the values this
@@ -203,7 +217,8 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
                         .physicalType = physicalType,
                         .maxDefLevel = maxDefLevel,
                         .maxRepLevel = maxRepLevel,
-                        .timeUnit = timeUnit};
+                        .timeUnit = timeUnit,
+                        .holdsDurations = holdsDurations};
 
     if (isList) {
         collectListDefLevels(descriptor, col.listDefLevels);
@@ -429,6 +444,10 @@ ListContainer::ListItemVariant ParquetImportVisitor::listElement(const PropertyC
 
             if (holdsTimestamps) {
                 return toDateTime(prop, value);
+            }
+
+            if (prop.holdsDurations) {
+                return types::Duration::Primitive {value};
             }
 
             return value;

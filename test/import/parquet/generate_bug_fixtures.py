@@ -174,6 +174,48 @@ def datetime_name_clash_fixtures():
     write(edges, "datetime_name_clash_edges.parquet")
 
 
+def duration_property_fixtures():
+    # Parquet has no duration type, so LOAD PARQUET ... WITH DURATIONS names the INT64
+    # columns that count microseconds. "count" is an INT64 left unnamed, "startedAt" and
+    # "note" are columns a duration clause must refuse.
+    nodes = pa.table(
+        {
+            "__id": pa.array([0, 1, 2], pa.int64()),
+            "__labels": pa.array([[b"Task"], [b"Task"], [b"Task"]], LABELS_TYPE),
+            "elapsed": pa.array([90061000000, -1000000, None], pa.int64()),
+            "laps": pa.array([[1000000, 2000000], [], None], pa.list_(pa.int64())),
+            "count": pa.array([1, 2, 3], pa.int64()),
+            "startedAt": pa.array([1710408600000000, 0, 0], pa.int64()).cast(pa.timestamp("us", tz="UTC")),
+            "note": pa.array(["a", "b", "c"], pa.string()),
+        }
+    )
+    write(nodes, "duration_property_nodes.parquet")
+
+    edges = pa.table(
+        {
+            "__source": pa.array([0], pa.int64()),
+            "__target": pa.array([1], pa.int64()),
+            "__type": pa.array([b"WAITED"], pa.binary()),
+            "wait": pa.array([5000000], pa.int64()),
+        }
+    )
+    write(edges, "duration_property_edges.parquet")
+
+
+def duration_logical_type_nodes():
+    # INT64 columns whose logical type says they count something other than signed
+    # microseconds: an unsigned integer and a TIME(NANOS)
+    nodes = pa.table(
+        {
+            "__id": pa.array([0, 1], pa.int64()),
+            "__labels": pa.array([[b"Task"], [b"Task"]], LABELS_TYPE),
+            "unsignedCount": pa.array([2**63, 1], pa.uint64()),
+            "timeOfDay": pa.array([1000, 2000], pa.time64("ns")),
+        }
+    )
+    write(nodes, "duration_logical_type_nodes.parquet")
+
+
 if __name__ == "__main__":
     minimal_edges()
     multipage_string_nodes()
@@ -182,3 +224,5 @@ if __name__ == "__main__":
     datetime_property_edges()
     datetime_out_of_range_nodes()
     datetime_name_clash_fixtures()
+    duration_property_fixtures()
+    duration_logical_type_nodes()
