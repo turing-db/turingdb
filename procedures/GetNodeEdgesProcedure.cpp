@@ -19,6 +19,7 @@
 #include "reader/GraphReader.h"
 #include "datapart/EdgeRecord.h"
 #include "versioning/Tombstones.h"
+#include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "ID.h"
@@ -29,7 +30,7 @@ namespace {
 
 using NodeIDCol = ColumnVector<NodeID>;
 using ListColumn = ColumnVector<ListView>;
-using StringColumn = ColumnVector<std::string>;
+using StringColumn = ColumnVector<std::string_view>;
 using ItemVariant = ListBuffer<>::ListItemVariant;
 using LimitMap = std::unordered_map<EdgeTypeID, size_t>;
 // Ordered so the JSON emitted by countsToJson has a deterministic key order
@@ -109,6 +110,7 @@ void executeImpl(ProcedureState* proc) {
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
     ListBuffer<>* listBuffer = ctxt->getListBuffer();
+    StringBuffer* stringBuffer = ctxt->getStringBuffer();
 
     const bool hasNodeTombstones = view.hasDeletedNodes();
     const bool hasEdgeTombstones = view.hasDeletedEdges();
@@ -226,11 +228,11 @@ void executeImpl(ProcedureState* proc) {
         }
         if (outCountsCol) {
             countsToJson(outCounts, countsJson);
-            outCountsCol->push_back(countsJson);
+            outCountsCol->push_back(stringBuffer->insert(countsJson));
         }
         if (inCountsCol) {
             countsToJson(inCounts, countsJson);
-            inCountsCol->push_back(countsJson);
+            inCountsCol->push_back(stringBuffer->insert(countsJson));
         }
     }
 
@@ -262,8 +264,8 @@ void GetNodeEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addReturnValue("id", ProcedureType::NODE);
     proc->addReturnValue("outgoingEdges", ProcedureType::LIST);
     proc->addReturnValue("incomingEdges", ProcedureType::LIST);
-    proc->addReturnValue("outEdgeCounts", ProcedureType::STRING);
-    proc->addReturnValue("inEdgeCounts", ProcedureType::STRING);
+    proc->addReturnValue("outEdgeCounts", ProcedureType::STRING_VIEW);
+    proc->addReturnValue("inEdgeCounts", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 

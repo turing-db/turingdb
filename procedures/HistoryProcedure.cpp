@@ -9,6 +9,7 @@
 #include "versioning/Transaction.h"
 #include "versioning/VersionController.h"
 #include "columns/ColumnVector.h"
+#include "buffers/StringBuffer.h"
 
 using namespace db;
 
@@ -41,10 +42,11 @@ void resolveHeadCommit(Data* data, const ProcedureContext* ctxt, const VersionCo
 
 void writeChunk(Data* data,
                 ProcedureState* proc,
-                size_t chunkSize) {
+                size_t chunkSize,
+                StringBuffer* stringBuffer) {
     size_t count = 0;
 
-    auto* commitCol = static_cast<ColumnVector<std::string>*>(data->getReturnColumn(0));
+    auto* commitCol = static_cast<ColumnVector<std::string_view>*>(data->getReturnColumn(0));
     auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
     auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
     auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
@@ -69,9 +71,11 @@ void writeChunk(Data* data,
         const bool isHead = (count == 0);
 
         if (commitCol) {
-            commitCol->push_back(isHead
+            const std::string hash = isHead
                 ? fmt::format("{:x}(HEAD)", commit->hash().get())
-                : fmt::format("{:x}", commit->hash().get()));
+                : fmt::format("{:x}", commit->hash().get());
+
+            commitCol->push_back(stringBuffer->insert(hash));
         }
         if (nodeCountCol) {
             nodeCountCol->push_back(commit->getNumNodes());
@@ -106,7 +110,7 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("commit", ProcedureType::STRING);
+    proc->addReturnValue("commit", ProcedureType::STRING_VIEW);
     proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
     proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
     proc->addReturnValue("partCount", ProcedureType::UINT_64);
@@ -119,6 +123,7 @@ void HistoryProcedure::execute(ProcedureState* proc) {
     const VersionController& controller = ctxt->getGraph()->getVersionController();
 
     const size_t chunkSize = ctxt->getChunkSize();
+    StringBuffer* stringBuffer = ctxt->getStringBuffer();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE:
@@ -133,7 +138,7 @@ void HistoryProcedure::execute(ProcedureState* proc) {
         break;
 
         case ProcedureState::Step::EXECUTE:
-            writeChunk(&data, proc, chunkSize);
+            writeChunk(&data, proc, chunkSize, stringBuffer);
         break;
     }
 }

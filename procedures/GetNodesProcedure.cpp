@@ -22,6 +22,7 @@
 #include "metadata/PropertyType.h"
 #include "metadata/LabelSetHandle.h"
 #include "versioning/Tombstones.h"
+#include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "ID.h"
@@ -33,7 +34,7 @@ namespace {
 using NodeIDCol = ColumnVector<NodeID>;
 using ListColumn = ColumnVector<ListView>;
 using UInt64Col = ColumnVector<types::UInt64::Primitive>;
-using StringColumn = ColumnVector<std::string>;
+using StringColumn = ColumnVector<std::string_view>;
 
 constexpr std::string_view nodeIDsErr = "getNodes: nodeIDs must be a constant list";
 
@@ -57,6 +58,7 @@ void executeImpl(ProcedureState* proc) {
     const LabelMap& labelMap = metadata.labels();
     const PropertyTypeMap& propTypes = metadata.propTypes();
     ListBuffer<4096>* listBuffer = ctxt->getListBuffer();
+    StringBuffer* stringBuffer = ctxt->getStringBuffer();
 
     const bool hasTombstones = view.hasDeletedNodes();
 
@@ -122,7 +124,7 @@ void executeImpl(ProcedureState* proc) {
 
         if (propsCol) {
             ProcUtils::encodeProperties(node.properties(), propTypes, propsJson);
-            propsCol->push_back(propsJson);
+            propsCol->push_back(stringBuffer->insert(propsJson));
         }
     }
 
@@ -149,7 +151,7 @@ void GetNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addReturnValue("labels", ProcedureType::LIST);
     proc->addReturnValue("inEdgeCount", ProcedureType::UINT_64);
     proc->addReturnValue("outEdgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("properties", ProcedureType::STRING);
+    proc->addReturnValue("properties", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 

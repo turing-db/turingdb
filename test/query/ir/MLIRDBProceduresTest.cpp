@@ -156,8 +156,8 @@ private:
     std::vector<std::string> _rows;
 };
 
-// Collects the (commit, node count, edge count, part count) rows db.history emits: an
-// owned-string chunk and three unsigned counters, plus how many chunks they arrived in.
+// Collects the (commit, node count, edge count, part count) rows db.history emits: a
+// borrowed-string chunk and three unsigned counters, plus how many chunks they arrived in.
 // The rows are kept in the order they were emitted, since walking the chain head-first is
 // part of what the procedure produces.
 class HistorySink : public NLOutputSink {
@@ -172,7 +172,7 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 4u);
 
-        const auto* commits = dynamic_cast<const ColumnVector<std::string>*>(chunks[0]);
+        const auto* commits = dynamic_cast<const ColumnVector<types::String::Primitive>*>(chunks[0]);
         const auto* nodeCounts = dynamic_cast<const ColumnVector<types::UInt64::Primitive>*>(chunks[1]);
         const auto* edgeCounts = dynamic_cast<const ColumnVector<types::UInt64::Primitive>*>(chunks[2]);
         const auto* partCounts = dynamic_cast<const ColumnVector<types::UInt64::Primitive>*>(chunks[3]);
@@ -191,7 +191,7 @@ public:
         const auto& edgeCountRaw = edgeCounts->getRaw();
         const auto& partCountRaw = partCounts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.push_back(Row {commitRaw[rowIndex],
+            _rows.push_back(Row {std::string(commitRaw[rowIndex]),
                                  nodeCountRaw[rowIndex],
                                  edgeCountRaw[rowIndex],
                                  partCountRaw[rowIndex]});
