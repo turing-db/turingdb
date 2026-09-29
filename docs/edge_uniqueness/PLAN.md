@@ -359,14 +359,14 @@ back, which the fold leaves behind. Same machine, same protocol, on a quieter da
 controls moved by up to 20 % between runs):
 
     query                                                     step 1        step 2       control
-    three precedingEvent hops from every Reaction     91,706  21.4 ms     91,706  14.7 ms   94,326  13.7 ms
-    shared_input                                     198,362  245 ms     198,362  215 ms   390,348  195 ms
-    (tlp)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r)    6,371  1.66 ms      6,371  1.47 ms    6,371  1.36 ms
-    (p:TopLevelPathway)--(b)--(c)               125,684,994  609 ms  125,684,994  210 ms  125,690,888  60 ms
-    (p:TopLevelPathway)--(b)--(c)--(d)        2,421,500,620  25.7 s  2,421,500,620  23.3 s  2,547,338,854  5.8 s
+    three precedingEvent hops from every Reaction     91,706  21.4 ms     91,706  14.7 ms   94,326  13.0 ms
+    shared_input                                     198,362  245 ms     198,362  200 ms   390,348  179 ms
+    (tlp)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r)    6,371  1.66 ms      6,371  1.49 ms    6,371  1.36 ms
+    (p:TopLevelPathway)--(b)--(c)               125,684,994  609 ms  125,684,994  190 ms  125,690,888  66 ms
+    (p:TopLevelPathway)--(b)--(c)--(d)        2,421,500,620  25.7 s  2,421,500,620  22.0 s  2,547,338,854  5.8 s
     hub, one hop then a {1,3} walk                        4  1.3 ms           4  1.3 ms         4  1.3 ms
 
-The directed shapes are within 8 % of their controls. What the undirected walks still pay
+The directed shapes are within 13 % of their controls. What the undirected walks still pay
 is the scan of the in-runs: a node's in-edges are sorted by target only
 (`EdgeContainer::create`), so finding the backtrack among them reads every record of the
 run, 32 bytes each, where the control reads none. Sorting the in-edges by target then edge
