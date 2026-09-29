@@ -1256,6 +1256,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCallProcedure(call);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
+    } else if (mlir::isa<mlir::db::Head, mlir::db::Last>(operation)) {
+        lowerHeadOrLast(operation);
     } else if (lookupUnaryFunctionLowering(operation)) {
         lowerUnaryFunction(&operation);
     } else if (lookupBinaryFunctionLowering(operation)) {
@@ -5316,6 +5318,33 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
     setInsertionForUnaryOp(inputChunk);
 
     _valueMap[op->getResult(0)] = spec->emit(_builder, _builder.getUnknownLoc(), resultType, inputChunk);
+}
+
+void DBLowering::lowerHeadOrLast(mlir::Operation& operation) {
+    const mlir::Value listChunk = mapValue(operation.getOperand(0));
+    const mlir::Type listChunkType = listChunk.getType();
+
+    const bool listsTypedElements = isListChunk(listChunkType)
+                                 && !mlir::isa<storage::ListElementType, mlir::NoneType>(indexedListElementType(listChunkType));
+    if (!listsTypedElements) {
+        lowerUnaryFunction(&operation);
+        return;
+    }
+
+    const int64_t position = mlir::isa<mlir::db::Head>(operation) ? 0 : -1;
+
+    setInsertionAfterHoistedConstants();
+    nl::Constant positionConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), _builder.getI64IntegerAttr(position));
+    _lastHoistedConstant = positionConstant.getOperation();
+
+    const mlir::Value positionChunk = positionConstant.getResult();
+    const mlir::Type resultElement = binaryResultElement(BinaryResultKind::Index, listChunkType, positionChunk.getType());
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
+
+    setInsertionForBinaryOp(listChunk, positionChunk);
+
+    nl::ListIndex element = _builder.create<nl::ListIndex>(_builder.getUnknownLoc(), resultType, listChunk, positionChunk);
+    _valueMap[operation.getResult(0)] = element.getResult();
 }
 
 void DBLowering::lowerBinaryFunction(mlir::Operation* op) {

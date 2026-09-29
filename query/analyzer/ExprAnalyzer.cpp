@@ -1475,6 +1475,15 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             expr->setListShape(providedArgs.front()->getListShape());
         }
 
+        if (signature->returnsAnElementOfItsArgument() && !providedArgs.empty()) {
+            const ListShape& listShape = providedArgs.front()->getListShape();
+
+            if (listShape.isList()) {
+                expr->setType(listShape.unwoundType());
+                expr->setListShape(listShape.unwound());
+            }
+        }
+
         const ListShape& returnedShape = signature->returnedListShape();
         if (returnedShape.isList() && expr->getType() == EvaluatedType::List) {
             expr->setListShape(returnedShape);

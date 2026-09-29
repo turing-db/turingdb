@@ -363,19 +363,20 @@ void FunctionDecls::initDefault() {
     sizeString->setArguments({EvaluatedType::String});
     sizeString->setReturnTypes({{EvaluatedType::Integer}});
 
-    // The first element of a list carries whichever type that element has, and a stored
-    // list may mix them, so head answers with the tagged scalar an UNWIND of the list
-    // binds: an empty list - and an absent one - head into the null such a cell holds.
+    // The first element of a list has the type the list names for its elements, and a
+    // stored list names none, since it may mix them: there head answers with the tagged
+    // scalar an UNWIND of the list binds. An empty list - and an absent one - heads into null.
     FunctionSignature* head = createFunction("head");
     head->setArguments({EvaluatedType::List});
     head->setReturnTypes({{EvaluatedType::ListItem}});
+    head->setReturnsAnElementOfItsArgument(true);
 
-    // A stored list may mix the types of its elements, so last answers with the same tagged
-    // scalar head does; an empty list - and an absent one - has no final element, so it
-    // reads as the null such a cell holds.
+    // The last element, typed as head types the first; an empty list - and an absent one -
+    // has no final element, so it reads as null.
     FunctionSignature* last = createFunction("last");
     last->setArguments({EvaluatedType::List});
     last->setReturnTypes({{EvaluatedType::ListItem}});
+    last->setReturnsAnElementOfItsArgument(true);
 
     // Dropping the first element leaves a list over the same elements, so it nests as
     // deeply as the one it came from; the tail of an empty list is empty, not null.

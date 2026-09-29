@@ -530,6 +530,11 @@ private:
 
     void lowerUnaryFunction(mlir::Operation* op);
 
+    // head() and last() of a list are its elements at 0 and -1, read as the type the list
+    // holds. A tagged cell, or a list of them, names no element type and keeps the
+    // function's own read, which answers a cell holding null as null
+    void lowerHeadOrLast(mlir::Operation& operation);
+
     void lowerBinaryFunction(mlir::Operation* op);
 
     void setInsertionForUnaryOp(mlir::Value operandChunk);

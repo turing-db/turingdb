@@ -80,5 +80,5 @@ TEST_F(LengthAliasTest, rejectsTheLengthOfANumber) {
 }
 
 TEST_F(LengthAliasTest, rejectsTheLengthOfACellHoldingNeitherAListNorAString) {
-    expectRejected("RETURN length(head([1, 2]))", "size() and length() read a list or a string");
+    expectRejected("RETURN length(head([1, 'a']))", "size() and length() read a list or a string");
 }
