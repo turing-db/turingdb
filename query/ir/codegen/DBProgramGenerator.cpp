@@ -216,6 +216,46 @@ bool isUntypedNullColumn(mlir::Value column) {
     return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
 }
 
+mlir::Type pathElementsType(mlir::MLIRContext* context, mlir::storage::PathElementsKind kind) {
+    switch (kind) {
+        case mlir::storage::PathElementsKind::Nodes:
+            return mlir::storage::ListType::get(context, mlir::storage::NodeIDType::get(context));
+        break;
+
+        case mlir::storage::PathElementsKind::Relationships:
+            return mlir::storage::ListType::get(context, mlir::storage::EdgeIDType::get(context));
+        break;
+
+        case mlir::storage::PathElementsKind::Length:
+            return mlir::IntegerType::get(context, 64, mlir::IntegerType::Unsigned);
+        break;
+    }
+
+    return mlir::Type();
+}
+
+mlir::storage::ListPredicateKind listPredicateKind(ListPredicateExpr::Quantifier quantifier) {
+    switch (quantifier) {
+        case ListPredicateExpr::Quantifier::All:
+            return mlir::storage::ListPredicateKind::All;
+        break;
+
+        case ListPredicateExpr::Quantifier::Any:
+            return mlir::storage::ListPredicateKind::Any;
+        break;
+
+        case ListPredicateExpr::Quantifier::None:
+            return mlir::storage::ListPredicateKind::None;
+        break;
+
+        case ListPredicateExpr::Quantifier::Single:
+            return mlir::storage::ListPredicateKind::Single;
+        break;
+    }
+
+    return mlir::storage::ListPredicateKind::All;
+}
+
 mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::string_view> names) {
     llvm::SmallVector<llvm::StringRef> refs;
     for (const std::string_view name : names) {
@@ -1673,21 +1713,7 @@ mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::sto
     bioassert(columnType && mlir::isa<mlir::storage::EntityListType>(columnType.getType()),
               "A named path is read off the entity sequence its element built");
 
-    mlir::Type resultType;
-    switch (kind) {
-        case mlir::storage::PathElementsKind::Nodes:
-            resultType = mlir::storage::ListType::get(_mlirCtxt, mlir::storage::NodeIDType::get(_mlirCtxt));
-        break;
-
-        case mlir::storage::PathElementsKind::Relationships:
-            resultType = mlir::storage::ListType::get(_mlirCtxt, mlir::storage::EdgeIDType::get(_mlirCtxt));
-        break;
-
-        case mlir::storage::PathElementsKind::Length:
-            resultType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
-        break;
-    }
-
+    const mlir::Type resultType = pathElementsType(_mlirCtxt, kind);
     const mlir::db::ColumnType nullableType =
         allocColumnType(mlir::storage::NullableType::get(_mlirCtxt, resultType));
 
@@ -3436,12 +3462,22 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
     const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
 
     llvm::SmallVector<mlir::Value> entities {resolveEntityColumn(rootNode->getDecl())};
+    llvm::SmallVector<int64_t> reversedPaths;
 
     for (auto [edgePattern, nodePattern] : element->getElementChain()) {
         // A walk lands on the node the pattern ends the hop with, so its own last entry
         // is that node and the pattern's column would repeat it
         if (edgePattern->getQuantifiedPath()) {
-            entities.push_back(pathHandleColumn(edgePattern->getDecl()));
+            const VarDecl* const walkDecl = edgePattern->getDecl();
+            entities.push_back(pathHandleColumn(walkDecl));
+
+            // Seeded from the far end, the walk lands on the node ahead of it instead, and
+            // the node it seeded from follows it
+            const PartScope::PathBinding& binding = _part._pathBindings.at(walkDecl);
+            if (binding._reversed) {
+                reversedPaths.push_back(static_cast<int64_t>(entities.size() - 1));
+                entities.push_back(resolveEntityColumn(nodePattern->getDecl()));
+            }
         } else {
             entities.push_back(resolveEntityColumn(edgePattern->getDecl()));
             entities.push_back(resolveEntityColumn(nodePattern->getDecl()));
@@ -3452,13 +3488,14 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
         bioassert(entity, "A named path over an entity the traversal left unbound");
     }
 
-    _part._namedPaths[pathDecl] = makePathColumn(entities);
+    _part._namedPaths[pathDecl] = makePathColumn(entities, reversedPaths);
 }
 
-mlir::Value DBProgramGenerator::makePathColumn(llvm::ArrayRef<mlir::Value> entities) {
+mlir::Value DBProgramGenerator::makePathColumn(llvm::ArrayRef<mlir::Value> entities, llvm::ArrayRef<int64_t> reversedPaths) {
     const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::EntityListType::get(_mlirCtxt));
+    const mlir::ArrayAttr reversedAttr = reversedPaths.empty() ? mlir::ArrayAttr() : _opBuilder.getI64ArrayAttr(reversedPaths);
 
-    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities).getResult();
+    return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities, reversedAttr).getResult();
 }
 
 const EdgePattern* DBProgramGenerator::singleQuantifiedRelationship(const PatternElement* element) {
@@ -6829,25 +6866,7 @@ void DBProgramGenerator::translateListPredicateExpr(const Expr* expr, const List
     CarrySet carrySet;
     collectElementCarrySet(carrySet);
 
-    mlir::storage::ListPredicateKind kind = mlir::storage::ListPredicateKind::All;
-    switch (predicate->getQuantifier()) {
-        case ListPredicateExpr::Quantifier::All:
-            kind = mlir::storage::ListPredicateKind::All;
-        break;
-
-        case ListPredicateExpr::Quantifier::Any:
-            kind = mlir::storage::ListPredicateKind::Any;
-        break;
-
-        case ListPredicateExpr::Quantifier::None:
-            kind = mlir::storage::ListPredicateKind::None;
-        break;
-
-        case ListPredicateExpr::Quantifier::Single:
-            kind = mlir::storage::ListPredicateKind::Single;
-        break;
-    }
-
+    const mlir::storage::ListPredicateKind kind = listPredicateKind(predicate->getQuantifier());
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
     auto predicateOp = _opBuilder.create<mlir::db::ListPredicate>(_opBuilder.getUnknownLoc(),
@@ -6905,6 +6924,7 @@ void DBProgramGenerator::generateElementRegion(mlir::Region& region,
     const PartScope::CreatedEntityMap outerCreatedEntities = _part._createdEntities;
     const ExprValueMap outerExprMap = _part._exprMap;
     const ProjectedColumnMap outerProjectedColumns = _part._projectedColumns;
+    const std::unordered_map<const VarDecl*, mlir::Value> outerNamedPaths = _part._namedPaths;
 
     const VarDecl* const itemDecl = comprehension->getDecl();
 
@@ -6949,6 +6969,7 @@ void DBProgramGenerator::generateElementRegion(mlir::Region& region,
     _part._createdEntities = outerCreatedEntities;
     _part._exprMap = outerExprMap;
     _part._projectedColumns = outerProjectedColumns;
+    _part._namedPaths = outerNamedPaths;
 }
 
 void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
@@ -8240,11 +8261,11 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         return;
     }
 
-    const bool readsANamedPath = args && args->size() == 1 && args->front()->getType() == EvaluatedType::GraphPath;
+    const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
+    const bool readsANamedPath = pathExpr && pathExpr->getType() == EvaluatedType::GraphPath;
     if (readsANamedPath) {
         // Beside `RETURN p` the path rides the handle column of its walk, which reads as
         // the entities it runs through
-        const Expr* pathExpr = args->front();
         const mlir::Value path = readWalkEntities(pathExpr, translateArg(pathExpr));
 
         if (funcName == "length") {
@@ -8483,7 +8504,7 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
     }
 }
 
-void DBProgramGenerator::generateKeylessAggregates(const Projection* projection) {
+void DBProgramGenerator::generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp) {
     llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
@@ -8495,7 +8516,14 @@ void DBProgramGenerator::generateKeylessAggregates(const Projection* projection)
     }
 
     for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
+        mlir::Operation* const lastAggregateOp = _part._aggregateOp;
+        _part._aggregateOp = inputAggregateOp;
+
         translateExpr(aggregateExpr);
+
+        if (_part._aggregateOp == inputAggregateOp) {
+            _part._aggregateOp = lastAggregateOp;
+        }
     }
 }
 
@@ -8505,8 +8533,9 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     }
 
     if (!projection->hasGroupingKeys()) {
+        mlir::Operation* const inputAggregateOp = _part._aggregateOp;
         generateKeylessCollect(projection);
-        generateKeylessAggregates(projection);
+        generateKeylessAggregates(projection, inputAggregateOp);
         return;
     }
 
@@ -8623,8 +8652,9 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     // projection is the one keyless group, whichever way it spells its key - RETURN 1 AS
     // x, count(n) counts the whole match, as RETURN count(n) does
     if (keyColumns.empty()) {
+        mlir::Operation* const inputAggregateOp = _part._aggregateOp;
         generateKeylessCollect(projection);
-        generateKeylessAggregates(projection);
+        generateKeylessAggregates(projection, inputAggregateOp);
         return;
     }
 

@@ -295,6 +295,9 @@ add_call_v3_test(test_query_ir_explore_edge_type_disjunction ExploreEdgeTypeDisj
 add_call_v3_test(test_query_ir_self_referencing_pattern SelfReferencingPatternTest.cpp)
 add_call_v3_test(test_query_ir_named_path NamedPathTest.cpp)
 add_call_v3_test(test_query_ir_named_path_functions NamedPathFunctionsTest.cpp)
+add_call_v3_test(test_query_ir_path_functions_of_a_walk PathFunctionsOfAWalkTest.cpp)
+add_call_v3_test(test_query_ir_named_path_beside_an_element_where NamedPathBesideAnElementWhereTest.cpp)
+add_call_v3_test(test_query_ir_mixed_named_path_seeded_from_its_end MixedNamedPathSeededFromItsEndTest.cpp)
 add_call_v3_test(test_query_ir_several_walks SeveralWalksTest.cpp)
 add_call_v3_test(test_query_ir_optional_walk OptionalWalkTest.cpp)
 add_call_v3_test(test_query_ir_count_path_rows CountPathRowsTest.cpp)
@@ -3505,6 +3508,54 @@ target_link_libraries(test_query_ir_list_predicate PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_element_ops_over_a_constant_list ElementOpsOverAConstantListTest.cpp)
+target_sources(test_query_ir_element_ops_over_a_constant_list PRIVATE StringRowSink.cpp CallV3Test.cpp)
+target_link_libraries(test_query_ir_element_ops_over_a_constant_list PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_element_ops_over_a_constant_list PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_predicate_over_booleans ListPredicateOverBooleansTest.cpp)
+target_sources(test_query_ir_list_predicate_over_booleans PRIVATE StringRowSink.cpp CallV3Test.cpp)
+target_link_libraries(test_query_ir_list_predicate_over_booleans PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_predicate_over_booleans PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_path_element_index PathElementIndexTest.cpp)
+target_sources(test_query_ir_path_element_index PRIVATE StringRowSink.cpp CallV3Test.cpp)
+target_link_libraries(test_query_ir_path_element_index PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_path_element_index PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_keyless_aggregates_over_element_ops KeylessAggregatesOverElementOpsTest.cpp)
+target_sources(test_query_ir_keyless_aggregates_over_element_ops PRIVATE StringRowSink.cpp CallV3Test.cpp)
+target_link_libraries(test_query_ir_keyless_aggregates_over_element_ops PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_keyless_aggregates_over_element_ops PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_list_comprehension ListComprehensionTest.cpp)
 target_link_libraries(test_query_ir_list_comprehension PRIVATE

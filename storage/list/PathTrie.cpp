@@ -85,7 +85,8 @@ PathRef PathTrie::handleOf(size_t arena, size_t index) {
 
 void PathTrie::appendHops(PathRef path, EntityList& entities, bool reversed) const {
     const uint64_t depth = getDepth(path);
-    const size_t firstEntry = entities.size();
+    const bool writesOverTheNodeAhead = reversed && !entities.empty();
+    const size_t firstEntry = writesOverTheNodeAhead ? entities.size() - 1 : entities.size();
     entities.resize(firstEntry + depth * 2);
 
     PathRef current = path;

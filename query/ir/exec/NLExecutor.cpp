@@ -1108,14 +1108,21 @@ struct ValueListIndexSelector {
 // an OPTIONAL MATCH did not match - reads back as one rather than as an absent optional.
 template <typename IDType, typename LhsCol, typename RhsCol>
 void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, LocalMemory*) {
-    const std::vector<ListView>& lists = static_cast<const LhsCol*>(lhs)->getRaw();
+    const auto& lists = static_cast<const LhsCol*>(lhs)->getRaw();
     const RhsCol* indices = static_cast<const RhsCol*>(rhs);
 
     std::vector<IDType>& ids = static_cast<ColumnVector<IDType>*>(result)->getRaw();
     ids.assign(lists.size(), IDType {});
 
     for (size_t row = 0; row < lists.size(); row++) {
-        const std::optional<IDType> id = ValueListIndex<IDType> {}(lists[row], (*indices)[row]);
+        std::optional<IDType> id;
+        if constexpr (std::is_same_v<LhsCol, ColumnOptVector<ListView>>) {
+            if (lists[row].has_value()) {
+                id = ValueListIndex<IDType> {}(*lists[row], (*indices)[row]);
+            }
+        } else {
+            id = ValueListIndex<IDType> {}(lists[row], (*indices)[row]);
+        }
 
         if (id.has_value()) {
             ids[row] = *id;
@@ -1123,8 +1130,9 @@ void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, 
     }
 }
 
-// A collect over a pattern variable gathers into a plain list column, which is the one
-// shape an entity is read out of; any other leaves the kernel unselected.
+// A collect over a pattern variable gathers into a plain list column, and nodes() and
+// relationships() read a path into a nullable one: those are the shapes an entity is read
+// out of, and any other leaves the kernel unselected.
 template <typename IDType>
 struct EntityListIndexSelector {
     LocalMemory* _memory {nullptr};
@@ -1133,7 +1141,9 @@ struct EntityListIndexSelector {
 
     template <typename LhsCol, typename RhsCol>
     void operator()(const LhsCol*, const RhsCol*) {
-        if constexpr (std::is_same_v<LhsCol, ColumnVector<ListView>>) {
+        constexpr bool readsAListColumn = std::is_same_v<LhsCol, ColumnVector<ListView>>
+                                       || std::is_same_v<LhsCol, ColumnOptVector<ListView>>;
+        if constexpr (readsAListColumn) {
             _result = _memory->alloc<ColumnVector<IDType>>();
             _fn = &applyEntityListIndex<IDType, LhsCol, RhsCol>;
         }
@@ -1655,18 +1665,16 @@ std::optional<bool> readNullTruth(const Column* mask, size_t row) {
     return std::nullopt;
 }
 
-// The entities of one kind a path runs through, in the order the path holds them
+// The entities of one kind a path runs through, in the order the path holds them. A path
+// alternates node and edge from its first node, so they are every other entry from @param first
 template <typename IDType>
-ListView listPathEntities(const EntityList& path, EntityType listed, ListBufferTypeTag tag, QueryListBuffer& buffer) {
-    const size_t count = static_cast<size_t>(std::ranges::count(path, listed, &EntityList::Entry::_type));
+ListView listPathEntities(const EntityList& path, size_t first, ListBufferTypeTag tag, QueryListBuffer& buffer) {
+    const EntityList::Container& entries = path.getEntries();
+    const size_t count = (entries.size() - first + 1) / 2;
     ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
 
-    size_t index = 0;
-    for (const EntityList::Entry& entry : path) {
-        if (entry._type == listed) {
-            cursor.writeValueAt(index, tag, IDType(entry._id.getValue()));
-            index++;
-        }
+    for (size_t index = 0; index < count; index++) {
+        cursor.writeValueAt(index, tag, IDType(entries[first + 2 * index]._id.getValue()));
     }
 
     return cursor.getView();
@@ -1719,6 +1727,49 @@ std::optional<bool> decideListPredicate(ListPredicateKind kind, size_t trues, si
     }
 
     return std::nullopt;
+}
+
+// Runs the body of an op over the elements of one row's list a chunk of (row, element)
+// pairs at a time, and hands @param takeYield the tags of the elements each chunk yielded
+template <typename TakeYield>
+void runElementBody(NLExecutionContext* context, NLElementBodyData* data, NLElementCursor& cursor, TakeYield takeYield) {
+    const Column* source = data->getSource();
+    const NLStmtContainer* body = data->getStmts();
+    const NLUnwindElementEmitFunction elementEmit = data->getElementEmitFunc();
+    const size_t chunkSize = context->getChunkSize();
+
+    ColumnVector<size_t>* rows = data->getRows();
+    ColumnVector<size_t>* positions = data->getPositions();
+    ColumnVector<uint64_t>* rowTags = data->getRowTags();
+
+    while (!cursor.exhausted()) {
+        cursor.fillChunk(chunkSize, rows->getRaw(), elementEmit ? &positions->getRaw() : nullptr);
+
+        // The tag of an element is the row the pair came from: the body hands back the
+        // tags of the elements its WHERE kept
+        const std::vector<size_t>& rowsRaw = rows->getRaw();
+        std::vector<uint64_t>& rowTagsRaw = rowTags->getRaw();
+        rowTagsRaw.assign(rowsRaw.begin(), rowsRaw.end());
+
+        if (elementEmit) {
+            elementEmit(source, rows, positions, data->getElementOutput());
+        }
+
+        for (const NLCarriedColumn& carriedColumn : data->carriedColumns()) {
+            const auto gatherFunc = carriedColumn.getGatherFunc();
+            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
+        }
+
+        runBody(context, body);
+
+        const std::vector<uint64_t>& yieldedRaw =
+            static_cast<const ColumnVector<uint64_t>*>(data->getYieldedRowTags())->getRaw();
+
+        bioassert(data->getValue()->size() == yieldedRaw.size(),
+                  "Yielded value of an op over list elements is not row-aligned with its row tags.");
+
+        takeYield(yieldedRaw);
+    }
 }
 
 template <typename Primitive>
@@ -6240,9 +6291,9 @@ void NLExecutor::runPathElements(NLExecutionContext* context, NLFunctionData* da
         if (path.empty()) {
             lists[row] = std::nullopt;
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities<NodeID>(path, EntityType::Node, ListBufferTypeTag::NodeID, listBuffer);
+            lists[row] = listPathEntities<NodeID>(path, 0, ListBufferTypeTag::NodeID, listBuffer);
         } else {
-            lists[row] = listPathEntities<EdgeID>(path, EntityType::Edge, ListBufferTypeTag::EdgeID, listBuffer);
+            lists[row] = listPathEntities<EdgeID>(path, 1, ListBufferTypeTag::EdgeID, listBuffer);
         }
     }
 }
@@ -6763,16 +6814,9 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
 
     const Column* source = predicate->getSource();
 
-    const NLStmtContainer* body = predicate->getStmts();
-    const NLUnwindElementEmitFunction elementEmit = predicate->getElementEmitFunc();
     const NLCellAbsentFunction cellAbsent = predicate->getCellAbsentFunc();
     const NLTruthReadFunction truthRead = predicate->getTruthRead();
     const Column* value = predicate->getValue();
-    const size_t chunkSize = context->getChunkSize();
-
-    ColumnVector<size_t>* rows = predicate->getRows();
-    ColumnVector<size_t>* positions = predicate->getPositions();
-    ColumnVector<uint64_t>* rowTags = predicate->getRowTags();
 
     NLElementCursor cursor(source, predicate->getElementCountFunc());
     const size_t sourceRows = cursor.getSourceRows();
@@ -6784,30 +6828,7 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
     falseCounts.assign(sourceRows, 0);
     nullCounts.assign(sourceRows, 0);
 
-    while (!cursor.exhausted()) {
-        cursor.fillChunk(chunkSize, rows->getRaw(), elementEmit ? &positions->getRaw() : nullptr);
-
-        const std::vector<size_t>& rowsRaw = rows->getRaw();
-        std::vector<uint64_t>& rowTagsRaw = rowTags->getRaw();
-        rowTagsRaw.assign(rowsRaw.begin(), rowsRaw.end());
-
-        if (elementEmit) {
-            elementEmit(source, rows, positions, predicate->getElementOutput());
-        }
-
-        for (const NLCarriedColumn& carriedColumn : predicate->carriedColumns()) {
-            const auto gatherFunc = carriedColumn.getGatherFunc();
-            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
-        }
-
-        runBody(context, body);
-
-        const std::vector<uint64_t>& taggedRaw =
-            static_cast<const ColumnVector<uint64_t>*>(predicate->getYieldedRowTags())->getRaw();
-
-        bioassert(value->size() == taggedRaw.size(),
-                  "Yielded predicate of a list predicate is not row-aligned with its row tags.");
-
+    runElementBody(context, predicate, cursor, [&](const std::vector<uint64_t>& taggedRaw) {
         for (size_t element = 0; element < taggedRaw.size(); element++) {
             const std::optional<bool> truth = truthRead(value, element);
             const size_t row = taggedRaw[element];
@@ -6820,7 +6841,7 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
                 falseCounts[row]++;
             }
         }
-    }
+    });
 
     const ListPredicateKind kind = predicate->getKind();
     std::vector<std::optional<CustomBool>>& resultRaw =
@@ -6847,18 +6868,11 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
 
     const Column* source = comprehension->getSource();
 
-    const NLStmtContainer* body = comprehension->getStmts();
-    const NLUnwindElementEmitFunction elementEmit = comprehension->getElementEmitFunc();
     const NLCellAbsentFunction cellAbsent = comprehension->getCellAbsentFunc();
     const NLListItemReadFunction valueRead = comprehension->getValueRead();
     const Column* value = comprehension->getValue();
     LocalMemory* const memory = comprehension->getMemory();
     ListBuffer<>& listBuffer = memory->listBuffer();
-    const size_t chunkSize = context->getChunkSize();
-
-    ColumnVector<size_t>* rows = comprehension->getRows();
-    ColumnVector<size_t>* positions = comprehension->getPositions();
-    ColumnVector<uint64_t>* rowTags = comprehension->getRowTags();
 
     NLElementCursor cursor(source, comprehension->getElementCountFunc());
     const size_t sourceRows = cursor.getSourceRows();
@@ -6901,39 +6915,14 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
         staged.erase(staged.begin(), staged.begin() + builtElements);
     };
 
-    while (!cursor.exhausted()) {
-        cursor.fillChunk(chunkSize, rows->getRaw(), elementEmit ? &positions->getRaw() : nullptr);
-
-        // The tag of an element is the row its list goes into, which is the row the pair
-        // came from: the body hands back the tags of the elements its WHERE kept
-        const std::vector<size_t>& rowsRaw = rows->getRaw();
-        std::vector<uint64_t>& rowTagsRaw = rowTags->getRaw();
-        rowTagsRaw.assign(rowsRaw.begin(), rowsRaw.end());
-
-        if (elementEmit) {
-            elementEmit(source, rows, positions, comprehension->getElementOutput());
-        }
-
-        for (const NLCarriedColumn& carriedColumn : comprehension->carriedColumns()) {
-            const auto gatherFunc = carriedColumn.getGatherFunc();
-            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
-        }
-
-        runBody(context, body);
-
-        const std::vector<uint64_t>& keptRaw =
-            static_cast<const ColumnVector<uint64_t>*>(comprehension->getYieldedRowTags())->getRaw();
-
-        bioassert(value->size() == keptRaw.size(),
-                  "Yielded value of a list comprehension is not row-aligned with its row tags.");
-
+    runElementBody(context, comprehension, cursor, [&](const std::vector<uint64_t>& keptRaw) {
         for (size_t element = 0; element < keptRaw.size(); element++) {
             staged.push_back(valueRead(value, element, memory));
             stagedCounts[keptRaw[element]]++;
         }
 
         buildRowsBefore(cursor.getRow());
-    }
+    });
 
     buildRowsBefore(sourceRows);
 }

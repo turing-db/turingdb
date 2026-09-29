@@ -555,7 +555,9 @@ LogicalResult ExpandPath::verify() {
     }
 
     const Type elementType = list.getElementType();
-    if (getKind() == storage::PathExpansionKind::Edges) {
+    const storage::PathExpansionKind kind = getKind();
+
+    if (kind == storage::PathExpansionKind::Edges) {
         if (!isa<storage::EdgeIDType>(elementType)) {
             return emitOpError("kind edges expands to a list of edge IDs");
         }
@@ -565,8 +567,8 @@ LogicalResult ExpandPath::verify() {
 
     // Reversed, the kinds swap: the pattern's end list is the walk's source list read
     // backwards, so that is the one holding the seed. The nodes hold it either way.
-    const bool readsTheSeed = getKind() == storage::PathExpansionKind::Sources
-                           || getKind() == storage::PathExpansionKind::Nodes;
+    const bool readsTheSeed = kind == storage::PathExpansionKind::Sources
+                           || kind == storage::PathExpansionKind::Nodes;
     if (readsTheSeed && !getSrcids()) {
         return emitOpError("kind sources and nodes read the seed of each path from srcids");
     }
@@ -1180,6 +1182,18 @@ LogicalResult Case::verify() {
     } else if (conditions.size() != values.size()) {
         return emitOpError("expects one value per condition, but has ")
                << values.size() << " values for " << conditions.size() << " conditions";
+    }
+
+    return success();
+}
+
+LogicalResult ToNullable::verify() {
+    const Type operandType = cast<ColumnType>(getOperand().getType()).getType();
+    const Type resultType = cast<ColumnType>(getResult().getType()).getType();
+    const auto nullable = dyn_cast<storage::NullableType>(resultType);
+
+    if (!nullable || nullable.getValueType() != operandType) {
+        return emitOpError("must produce the nullable column of its operand's values");
     }
 
     return success();

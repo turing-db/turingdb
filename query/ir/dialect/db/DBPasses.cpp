@@ -1960,6 +1960,7 @@ struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreH
 // what nodes(), relationships() and length() read off it is what the handles already
 // answer: the seed then each hop's end, the edges, and the depth
 struct WalkPath {
+    MakePath _build;
     Value _seed;
     Value _path;
     bool _reversed {false};
@@ -1987,7 +1988,7 @@ bool matchWalkPath(PathElements elements, WalkPath& walk) {
         return false;
     }
 
-    walk = WalkPath {._seed = seed, ._path = path, ._reversed = reversed};
+    walk = WalkPath {._build = build, ._seed = seed, ._path = path, ._reversed = reversed};
 
     return true;
 }
@@ -2044,12 +2045,15 @@ struct FusePathElements : public impl::FusePathElementsBase<FusePathElements> {
                 continue;
             }
 
-            Operation* const build = elements.getPath().getDefiningOp();
-
             builder.setInsertionPoint(elements);
-            elements.getResult().replaceAllUsesWith(walkPathElements(elements, walk, builder));
+            const Value handles = walkPathElements(elements, walk, builder);
+
+            Value result = elements.getResult();
+            ToNullable widened = builder.create<ToNullable>(elements.getLoc(), result.getType(), handles);
+
+            result.replaceAllUsesWith(widened.getResult());
             elements.erase();
-            eraseIfUnused(build);
+            eraseIfUnused(walk._build);
         }
     }
 };

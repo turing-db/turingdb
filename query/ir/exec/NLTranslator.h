@@ -1008,6 +1008,11 @@ private:
     template <typename Op>
     mlir::Value translateElementBody(Op op, NLElementBodyData* data);
 
+    // What the two allocate alike: the drain the source's shape takes, the element and
+    // row-tag chunks and the result column. @param extra is what @param Data adds.
+    template <typename Data, typename Op, typename... Extra>
+    Data* allocElementData(Op op, Extra... extra);
+
     // Allocates the list column an nl.range writes, and binds the read each bound column
     // is taken through
     void translateRange(mlir::nl::Range range, NLStmtContainer* body);

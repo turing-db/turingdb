@@ -426,6 +426,28 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
     return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
 }
 
+ListPredicateKind listPredicateKind(storage::ListPredicateKind kind) {
+    switch (kind) {
+        case storage::ListPredicateKind::All:
+            return ListPredicateKind::All;
+        break;
+
+        case storage::ListPredicateKind::Any:
+            return ListPredicateKind::Any;
+        break;
+
+        case storage::ListPredicateKind::None:
+            return ListPredicateKind::None;
+        break;
+
+        case storage::ListPredicateKind::Single:
+            return ListPredicateKind::Single;
+        break;
+    }
+
+    return ListPredicateKind::All;
+}
+
 bool isNullableListElement(mlir::Type elementType) {
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 
@@ -3087,6 +3109,38 @@ void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
     body->emplaceStmt(&NLExecutor::runRange, data);
 }
 
+template <typename Data, typename Op, typename... Extra>
+Data* NLTranslator::allocElementData(Op op, Extra... extra) {
+    const mlir::Value sourceValue = op.getSource();
+    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
+
+    mlir::Block& bodyBlock = op.getBody().front();
+    const mlir::Value elementValue = bodyBlock.getArgument(0);
+    const mlir::Value rowTagValue = bodyBlock.getArgument(1);
+
+    NLUnwindElementCountFunction elementCount = nullptr;
+    NLUnwindElementEmitFunction elementEmit = nullptr;
+    selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
+
+    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
+
+    const mlir::Value resultValue = op.getResult();
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    ColumnVector<uint64_t>* const rowTags =
+        static_cast<ColumnVector<uint64_t>*>(allocColumn(rowTagValue));
+
+    return _program->allocFunctionData<Data>(getColumn(sourceValue),
+                                             elementCount,
+                                             elementEmit,
+                                             selectCellAbsent(sourceElement),
+                                             elementOutput,
+                                             rowTags,
+                                             result,
+                                             extra...);
+}
+
 template <typename Op>
 mlir::Value NLTranslator::translateElementBody(Op op, NLElementBodyData* data) {
     const mlir::Value sourceValue = op.getSource();
@@ -3136,37 +3190,7 @@ mlir::Value NLTranslator::translateElementBody(Op op, NLElementBodyData* data) {
 }
 
 void NLTranslator::translateListComprehension(nl::ListComprehension comprehension, NLStmtContainer* body) {
-    const mlir::Value sourceValue = comprehension.getSource();
-    const Column* source = getColumn(sourceValue);
-
-    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
-
-    mlir::Block& bodyBlock = comprehension.getBody().front();
-    const mlir::Value elementValue = bodyBlock.getArgument(0);
-    const mlir::Value rowTagValue = bodyBlock.getArgument(1);
-
-    NLUnwindElementCountFunction elementCount = nullptr;
-    NLUnwindElementEmitFunction elementEmit = nullptr;
-    selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
-
-    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
-
-    const mlir::Value resultValue = comprehension.getResult();
-    Column* const result = allocColumnForChunkType(resultValue.getType());
-    _valueSlots[resultValue] = result;
-
-    ColumnVector<uint64_t>* const rowTags =
-        static_cast<ColumnVector<uint64_t>*>(allocColumn(rowTagValue));
-
-    NLListComprehensionData* data =
-        _program->allocFunctionData<NLListComprehensionData>(source,
-                                                             elementCount,
-                                                             elementEmit,
-                                                             selectCellAbsent(sourceElement),
-                                                             elementOutput,
-                                                             rowTags,
-                                                             result,
-                                                             _memory);
+    NLListComprehensionData* data = allocElementData<NLListComprehensionData>(comprehension, _memory);
 
     const mlir::Value valueValue = translateElementBody(comprehension, data);
     data->setValueRead(selectListItemRead(valueValue.getType()));
@@ -3175,56 +3199,7 @@ void NLTranslator::translateListComprehension(nl::ListComprehension comprehensio
 }
 
 void NLTranslator::translateListPredicate(nl::ListPredicate predicate, NLStmtContainer* body) {
-    const mlir::Value sourceValue = predicate.getSource();
-    const Column* source = getColumn(sourceValue);
-
-    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
-
-    mlir::Block& bodyBlock = predicate.getBody().front();
-    const mlir::Value elementValue = bodyBlock.getArgument(0);
-    const mlir::Value rowTagValue = bodyBlock.getArgument(1);
-
-    NLUnwindElementCountFunction elementCount = nullptr;
-    NLUnwindElementEmitFunction elementEmit = nullptr;
-    selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
-
-    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
-
-    const mlir::Value resultValue = predicate.getResult();
-    Column* const result = allocColumnForChunkType(resultValue.getType());
-    _valueSlots[resultValue] = result;
-
-    ColumnVector<uint64_t>* const rowTags =
-        static_cast<ColumnVector<uint64_t>*>(allocColumn(rowTagValue));
-
-    ListPredicateKind kind = ListPredicateKind::All;
-    switch (predicate.getKind()) {
-        case storage::ListPredicateKind::All:
-            kind = ListPredicateKind::All;
-        break;
-
-        case storage::ListPredicateKind::Any:
-            kind = ListPredicateKind::Any;
-        break;
-
-        case storage::ListPredicateKind::None:
-            kind = ListPredicateKind::None;
-        break;
-
-        case storage::ListPredicateKind::Single:
-            kind = ListPredicateKind::Single;
-        break;
-    }
-
-    NLListPredicateData* data =
-        _program->allocFunctionData<NLListPredicateData>(source,
-                                                         elementCount,
-                                                         elementEmit,
-                                                         selectCellAbsent(sourceElement),
-                                                         elementOutput,
-                                                         rowTags,
-                                                         result,
-                                                         kind);
+    NLListPredicateData* data = allocElementData<NLListPredicateData>(predicate, listPredicateKind(predicate.getKind()));
 
     const mlir::Value valueValue = translateElementBody(predicate, data);
 

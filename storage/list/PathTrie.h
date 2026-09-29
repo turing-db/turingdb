@@ -48,10 +48,10 @@ public:
 
     void clear();
 
-    // Appends the hops of the path in walk order, an edge entry then the node it lands
-    // on for each, to what the caller has already built. Reversed it appends them from the
-    // far end back, the node an edge lands on before that edge, which is the order a
-    // pattern walked from its own far end spells out
+    // Appends the hops of the path in walk order, an edge entry then the node it lands on
+    // for each. Reversed it appends them from the far end back, the node an edge lands on
+    // before that edge, over the node entry ahead: that is the node the walk ended at, and
+    // a walk of no hops leaves it to the seed the caller writes next
     void appendHops(PathRef path, EntityList& entities, bool reversed) const;
 
     // Each list in walk order, or backwards from the node the walk ended on

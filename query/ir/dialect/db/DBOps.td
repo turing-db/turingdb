@@ -1394,10 +1394,11 @@ def MakePath : TuringOp<"make_path", [Pure]> {
     because the pattern's far end was bound first and seeding there was cheaper. Such an
     operand contributes its hops from the far end back - the node an edge lands on, then
     that edge - so the sequence still reads the way the pattern is written. The node the
-    walk seeded from is then the element's last entity, so it is written after the path
-    rather than before it.
+    walk seeded from is written after the path rather than before it. Written after a
+    node, the path writes over that node, which is the one the walk ended at.
 
       %p = db.make_path(%pe, %b) {reversed_paths = [0]} : (...) -> !db.column<!storage.entity_list>
+      %p = db.make_path(%a, %x, %k, %pe, %b) {reversed_paths = [3]} : (...) -> !db.column<!storage.entity_list>
   }];
 
   let arguments = (ins Variadic<Column>:$entities,
@@ -2424,6 +2425,23 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
   let assemblyFormat = [{
     `(` $value (`,` $driver^)? `)` attr-dict `:` functional-type(operands, results)
   }];
+}
+
+def ToNullable : TuringOp<"to_nullable", [Pure, ConstantThroughOperands]> {
+  let summary = "Read a column as the nullable column of its values, holding a value in every row";
+  let description = [{
+    What a rewrite answering a nullable column with a plain one wraps it in, so that
+    every reader of the column keeps the type it was built against:
+
+      %l = db.to_nullable %n : (!db.column<ui64>) -> !db.column<!storage.nullable<ui64>>
+  }];
+
+  let arguments = (ins Column:$operand);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+
+  let hasVerifier = 1;
 }
 
 class PredicateOp<string mnemonic, list<Trait> traits = []>

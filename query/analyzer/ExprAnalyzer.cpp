@@ -1890,13 +1890,16 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
 
     _ctxt->dropVariable(itemName);
 
-    // A null WHERE holds for no element, as a null WHERE cuts every row
-    const bool predicateIsBoolean = !predicate
-                                 || predicate->getType() == EvaluatedType::Bool
-                                 || predicate->getType() == EvaluatedType::Null;
+    if (predicate) {
+        const EvaluatedType predicateType = predicate->getType();
 
-    if (!predicateIsBoolean) {
-        throwError("The WHERE of a list comprehension must be a boolean", predicate);
+        // A null WHERE holds for no element, as a null WHERE cuts every row
+        const bool predicateIsBoolean = predicateType == EvaluatedType::Bool
+                                     || predicateType == EvaluatedType::Null;
+
+        if (!predicateIsBoolean) {
+            throwError("The WHERE of a list comprehension must be a boolean", predicate);
+        }
     }
 
     const bool aggregatesTheBody = (predicate && predicate->isAggregate())
