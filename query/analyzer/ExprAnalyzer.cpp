@@ -695,8 +695,9 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             // A type-erased cell holds whatever its row put there, so the test reads the
             // list out of its tag and answers null for a row holding something else
             const bool searchesACell = b == EvaluatedType::ListItem;
+            const bool searchesNull = b == EvaluatedType::Null;
 
-            if (b != EvaluatedType::List && b != EvaluatedType::Map && !searchesACell) {
+            if (b != EvaluatedType::List && b != EvaluatedType::Map && !searchesACell && !searchesNull) {
                 const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
                                                       EvaluatedTypeName::value(b));
                 throwError(error, expr);
@@ -1376,7 +1377,12 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
                 expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
                 providedArgs.begin(), [answersNullOverNull](const FunctionArgumentType& expected, const Expr* arg) {
                     const EvaluatedType argType = arg->getType();
-                    return argType == expected.getType() || (answersNullOverNull && argType == EvaluatedType::Null);
+                    const VarDecl* decl = arg->getExprVarDecl();
+
+                    const bool bindsAPath = decl && decl->isQuantifiedPath();
+                    const bool typeMatches = argType == expected.getType() || (answersNullOverNull && argType == EvaluatedType::Null);
+
+                    return typeMatches && (!bindsAPath || expected.takesAVariableLengthPath());
                 });
 
             if (!matchingArgs) {

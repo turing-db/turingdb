@@ -86,6 +86,34 @@ TEST_F(NullInListElementTest, answersNullForAnIntegerInAMissingPropertyElement) 
     expectRows("MATCH (n) RETURN 1 IN [n.y][0]", expected);
 }
 
+TEST_F(NullInListElementTest, answersNullForNullInANestedListElement) {
+    expectRows("RETURN null IN [[1]][0]", {{"null"}});
+}
+
+TEST_F(NullInListElementTest, answersFalseForNullInAnEmptyNestedListElement) {
+    expectRows("RETURN null IN [[]][0]", {{"false"}});
+}
+
+TEST_F(NullInListElementTest, answersNullForNullInANestedMissingPropertyElement) {
+    const std::vector<StringRowSink::Row> expected(simpleGraphNodeCount, {"null"});
+
+    expectRows("MATCH (n) RETURN null IN [[n.y]][0]", expected);
+}
+
+TEST_F(NullInListElementTest, answersNullForNullInNull) {
+    expectRows("RETURN null IN null", {{"null"}});
+}
+
+TEST_F(NullInListElementTest, answersNullForAPropertyInNull) {
+    const std::vector<StringRowSink::Row> expected(simpleGraphNodeCount, {"null"});
+
+    expectRows("MATCH (n) RETURN n.name IN null", expected);
+}
+
+TEST_F(NullInListElementTest, filtersEveryRowOnAPropertyInNull) {
+    expectRows("MATCH (n) WHERE n.name IN null RETURN n.name", {});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

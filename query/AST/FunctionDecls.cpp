@@ -61,14 +61,20 @@ void FunctionDecls::initDefault() {
     keysEdges->setArguments({EvaluatedType::EdgePattern});
     keysEdges->setReturnTypes({{EvaluatedType::String}});
 
+    FunctionArgumentType nodeOrGroup(EvaluatedType::NodePattern);
+    nodeOrGroup.setTakesAVariableLengthPath(true);
+
+    FunctionArgumentType edgeOrPath(EvaluatedType::EdgePattern);
+    edgeOrPath.setTakesAVariableLengthPath(true);
+
     // Aggregate functions
     FunctionSignature* countNodes = createFunction("count");
-    countNodes->setArguments({EvaluatedType::NodePattern});
+    countNodes->setArguments({nodeOrGroup});
     countNodes->setReturnTypes({{EvaluatedType::Integer}});
     countNodes->setIsAggregate(true);
 
     FunctionSignature* countEdges = createFunction("count");
-    countEdges->setArguments({EvaluatedType::EdgePattern});
+    countEdges->setArguments({edgeOrPath});
     countEdges->setReturnTypes({{EvaluatedType::Integer}});
     countEdges->setIsAggregate(true);
 
@@ -140,13 +146,13 @@ void FunctionDecls::initDefault() {
     collectDateTimes->setCollectsItsArgument(true);
 
     FunctionSignature* collectNodes = createFunction("collect");
-    collectNodes->setArguments({EvaluatedType::NodePattern});
+    collectNodes->setArguments({nodeOrGroup});
     collectNodes->setReturnTypes({{EvaluatedType::List}});
     collectNodes->setIsAggregate(true);
     collectNodes->setCollectsItsArgument(true);
 
     FunctionSignature* collectEdges = createFunction("collect");
-    collectEdges->setArguments({EvaluatedType::EdgePattern});
+    collectEdges->setArguments({edgeOrPath});
     collectEdges->setReturnTypes({{EvaluatedType::List}});
     collectEdges->setIsAggregate(true);
     collectEdges->setCollectsItsArgument(true);
@@ -426,7 +432,7 @@ void FunctionDecls::initDefault() {
 
     // The hop count of a variable-length path
     FunctionSignature* sizePath = createFunction("size");
-    sizePath->setArguments({EvaluatedType::EdgePattern});
+    sizePath->setArguments({edgeOrPath});
     sizePath->setReturnTypes({{EvaluatedType::Integer}});
 
     // Conversion functions
