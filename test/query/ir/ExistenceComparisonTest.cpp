@@ -281,7 +281,7 @@ TEST_F(ExistenceComparisonTest, powerIsRejected) {
 }
 
 TEST_F(ExistenceComparisonTest, unaryMinusIsRejected) {
-    expectExpressionError("-((a)-->(b))", "Operand must be an integer or double, not 'Bool'");
+    expectExpressionError("-((a)-->(b))", "Operand must be an integer, a double or a duration, not 'Bool'");
 }
 
 TEST_F(ExistenceComparisonTest, startsWithIsRejected) {

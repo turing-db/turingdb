@@ -414,6 +414,7 @@ template <>
 struct TemporalArithmeticKindPairs<OP_ADD> {
     using Pairs = TupleFlatten<
         OptionalKindPairs<types::DateTime::Primitive, types::Duration::Primitive>::Pairs,
+        OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
         ListElementKindPairs<types::DateTime::Primitive>::Pairs,
         ListElementKindPairs<types::Duration::Primitive>::Pairs
     >::Type;
@@ -424,7 +425,19 @@ struct TemporalArithmeticKindPairs<OP_SUB> {
     using Pairs = TupleFlatten<
         OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
         OptionalKindPairs<types::DateTime::Primitive, types::Duration::Primitive>::Pairs,
+        OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
         ListElementKindPairs<types::DateTime::Primitive>::Pairs,
+        ListElementKindPairs<types::Duration::Primitive>::Pairs
+    >::Type;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_MUL) || (Op == OP_DIV)
+struct TemporalArithmeticKindPairs<Op> {
+    using Pairs = TupleFlatten<
+        OptionalKindPairs<types::Duration::Primitive, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<types::Duration::Primitive, types::UInt64::Primitive>::Pairs,
+        OptionalKindPairs<types::Duration::Primitive, types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::Duration::Primitive>::Pairs
     >::Type;
 };

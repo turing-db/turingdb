@@ -53,6 +53,18 @@ public:
         return _microseconds == other._microseconds;
     }
 
+    Duration operator+(const Duration& other) const;
+
+    Duration operator-(const Duration& other) const;
+
+    Duration operator*(int64_t factor) const;
+
+    Duration operator*(double factor) const;
+
+    Duration operator/(int64_t divisor) const;
+
+    Duration operator/(double divisor) const;
+
     static int64_t component(Duration value, DurationPart part);
 
     static void format(std::string& out, Duration value);
@@ -60,6 +72,10 @@ public:
 private:
     int64_t _microseconds;
 };
+
+Duration operator*(int64_t factor, const Duration& duration);
+
+Duration operator*(double factor, const Duration& duration);
 
 }
 

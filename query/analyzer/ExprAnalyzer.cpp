@@ -640,6 +640,9 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             if (pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Duration)) {
                 type = EvaluatedType::DateTime;
                 break;
+            } else if (pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
+                type = EvaluatedType::Duration;
+                break;
             } else if (computesTimeOverListItem(pair)) {
                 type = EvaluatedType::ListItem;
                 break;
@@ -702,19 +705,36 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::Mult:
         case BinaryOperator::Div:
         case BinaryOperator::Mod: {
-            const bool isSubtraction = expr->getOperator() == BinaryOperator::Sub;
+            const BinaryOperator binaryOperator = expr->getOperator();
+            const bool isSubtraction = binaryOperator == BinaryOperator::Sub;
+            const bool isMultiplication = binaryOperator == BinaryOperator::Mult;
+            const bool isDivision = binaryOperator == BinaryOperator::Div;
 
             if (isSubtraction) {
                 const bool subtractsInstants = a == EvaluatedType::DateTime && b == EvaluatedType::DateTime;
                 const bool subtractsADuration = a == EvaluatedType::DateTime && b == EvaluatedType::Duration;
+                const bool subtractsDurations = a == EvaluatedType::Duration && b == EvaluatedType::Duration;
 
-                if (subtractsInstants) {
+                if (subtractsInstants || subtractsDurations) {
                     type = EvaluatedType::Duration;
                     break;
                 } else if (subtractsADuration) {
                     type = EvaluatedType::DateTime;
                     break;
                 } else if (computesTimeOverListItem(pair)) {
+                    type = EvaluatedType::ListItem;
+                    break;
+                }
+            } else if (isMultiplication || isDivision) {
+                const bool scalesByANumber = pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Integer)
+                                          || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Double);
+                const bool scalesAListItem = pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+                const bool scalesTheDuration = isMultiplication || a == EvaluatedType::Duration;
+
+                if (scalesByANumber && scalesTheDuration) {
+                    type = EvaluatedType::Duration;
+                    break;
+                } else if (scalesAListItem) {
                     type = EvaluatedType::ListItem;
                     break;
                 }
@@ -844,10 +864,12 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
                 type = EvaluatedType::Integer;
             } else if (operandType == EvaluatedType::Double) {
                 type = EvaluatedType::Double;
+            } else if (operandType == EvaluatedType::Duration) {
+                type = EvaluatedType::Duration;
             } else if (operandType == EvaluatedType::Null) {
                 type = EvaluatedType::Null;
             } else {
-                const std::string error = fmt::format("Operand must be an integer or double, not '{}'",
+                const std::string error = fmt::format("Operand must be an integer, a double or a duration, not '{}'",
                                                       EvaluatedTypeName::value(operandType));
                 throwError(error, expr);
             }
