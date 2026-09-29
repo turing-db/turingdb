@@ -315,10 +315,33 @@ islands, and needs the cascade to order those islands innermost; row order is wh
 that today. The codegen tests over two hops of different types (`FuseEdgesByTypeCodegenTest`,
 `FuseEdgesByEndpointLabelCodegenTest`) expect the check's filter until step 3 proves it away.
 
-Still owed from the step: the reactome measurement, since both copies on the bench
-machine, the binary dump under `~/.turing-bench` and the parquet dump, are in a format this
-build reports as outdated; and the exclusion set in the explorator's random reference
-sweep, which `PathEdgeUniquenessTest` covers at the query level only.
+Measured on reactome (2,978,202 nodes, 11,537,843 edges, rebuilt from the parquet dump
+through `LOAD JSONL` since both dumps on the machine predate the current format), median of
+three runs after a warmup through the shell, before and after this step. Each query is also
+run split into one clause per hop, which the rule does not reach, as the control:
+
+    query                                                        before       after      control
+    (r:Reaction)-[:precedingEvent]->()-[:precedingEvent]->()-[:precedingEvent]->()
+                                                   count   94,326 17.3 ms   91,706 21.4 ms   94,326 17.2 ms
+    shared_input (two hasEvent hops from one pathway, two input hops to one entity)
+                                                   count  390,348 164 ms   198,362 245 ms   390,348 206 ms
+    (tlp:TopLevelPathway)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r:ReactionLikeEvent)
+                                                   count    6,371 1.66 ms    6,371 1.66 ms    6,371 1.72 ms
+    (p:TopLevelPathway)--(b)--(c)             count  125,690,888 66 ms   125,684,994 609 ms   125,690,888 65 ms
+    (p:TopLevelPathway)--(b)--(c)--(d)      count  2,547,338,854 8.6 s   2,421,500,620 25.7 s   2,547,338,854 5.8 s
+    (r:Reaction {stId: hub})<-[:precedingEvent]-(b)<-[:precedingEvent]-{1,3}(d:Reaction)
+                                                   count        4 1.6 ms        4 1.3 ms        4 1.3 ms
+
+198,362 is memgraph's count in `docs/path_bench.md`. The filter after the hop costs 24 %
+on the typed chain and 49 % on `shared_input`, whose check reads four edge columns after
+the hash join. The untyped undirected walks are the case step 2 exists for: the count used
+to read no column at all, and the check now materializes both hops' edges over 125 million
+rows and compacts them, 66 to 609 ms; in the writer the backtrack is one compare per
+candidate against a register and no row is built. The typed two-hop chain, the shape
+steps 3 to 5 prove away, costs nothing measurable at 6,371 rows.
+
+Still owed from the step: the exclusion set in the explorator's random reference sweep,
+which `PathEdgeUniquenessTest` covers at the query level only.
 
 ## Steps
 
