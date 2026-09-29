@@ -97,6 +97,12 @@ the order the codegen meets them:
    exact for `min_hops <= 1`: a walk that avoids a set of forbidden edges shortens to a
    trail that avoids them.
 
+`test/query/ir/PathEdgeUniquenessTest.cpp` pins the four on simpledb and fails today on
+each: 28 rows for 24 with a hop before the path, 28 for 24 with a hop after it, 68 for 46
+with two paths, and under `WITH DISTINCT a, b, c`, where `EXPLAIN` shows the exploration
+marked `distinct`, 26 for 24 after a hop and 57 for 43 after a path; the trail rule inside
+one path, 42, is its control.
+
 Nothing else in the explorator changes: `ends_on_seed`, `end_column`, `end_labels`, the
 pruning indexes and the hop predicate are unaffected, and a zero-length path has no edge to
 check. The structural proofs of the next section apply to paths exactly as to hops: a typed
@@ -277,8 +283,9 @@ produced the table above: enumerate the query on simpledb in Python under isomor
 compare, or run memgraph on the same graph as `docs/path_bench.md` did. A new
 `EdgeUniquenessTest.cpp` on simpledb pins the fifteen counts of the table, the clause
 scoping (a second `MATCH` and an `OPTIONAL MATCH` keep 44), and each proof rule on a shape
-it decides. `test/storage/iterators/PathExplorationReference.cpp` gains the exclusion set so
-the explorator's random sweeps cover points 1 to 4.
+it decides; `PathEdgeUniquenessTest.cpp` already pins the four path cases.
+`test/storage/iterators/PathExplorationReference.cpp` gains the exclusion set so the
+explorator's random sweeps cover points 1 to 4.
 
 ## Steps
 
