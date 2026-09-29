@@ -16,6 +16,7 @@ class Limit;
 class Skip;
 class OrderBy;
 class Expr;
+class PropertyExpr;
 class VarDecl;
 class CypherAST;
 
@@ -87,6 +88,7 @@ public:
     size_t findItemIndex(const Expr* key) const;
     const Expr* findItemExpr(const Expr* key) const;
     bool hasItem(const Expr* key) const;
+    bool hasItemReadingThePropertyOfComponent(const PropertyExpr* component) const;
     bool hasVariableItem(const VarDecl* decl) const;
     bool hasItemDecl(const VarDecl* decl) const;
 

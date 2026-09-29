@@ -2541,6 +2541,26 @@ def DateTimeSecond : NLUnaryFunctionOp<"datetime_second", [ConstantThroughOperan
 def DateTimeMillisecond : NLUnaryFunctionOp<"datetime_millisecond", [ConstantThroughOperands]>;
 def DateTimeMicrosecond : NLUnaryFunctionOp<"datetime_microsecond", [ConstantThroughOperands]>;
 
+// The db.duration_* family lowers to these.
+def DurationYears : NLUnaryFunctionOp<"duration_years", [ConstantThroughOperands]>;
+def DurationQuarters : NLUnaryFunctionOp<"duration_quarters", [ConstantThroughOperands]>;
+def DurationMonths : NLUnaryFunctionOp<"duration_months", [ConstantThroughOperands]>;
+def DurationWeeks : NLUnaryFunctionOp<"duration_weeks", [ConstantThroughOperands]>;
+def DurationDays : NLUnaryFunctionOp<"duration_days", [ConstantThroughOperands]>;
+def DurationHours : NLUnaryFunctionOp<"duration_hours", [ConstantThroughOperands]>;
+def DurationMinutes : NLUnaryFunctionOp<"duration_minutes", [ConstantThroughOperands]>;
+def DurationSeconds : NLUnaryFunctionOp<"duration_seconds", [ConstantThroughOperands]>;
+def DurationMilliseconds : NLUnaryFunctionOp<"duration_milliseconds", [ConstantThroughOperands]>;
+def DurationMicroseconds : NLUnaryFunctionOp<"duration_microseconds", [ConstantThroughOperands]>;
+def DurationQuartersOfYear : NLUnaryFunctionOp<"duration_quarters_of_year", [ConstantThroughOperands]>;
+def DurationMonthsOfYear : NLUnaryFunctionOp<"duration_months_of_year", [ConstantThroughOperands]>;
+def DurationMonthsOfQuarter : NLUnaryFunctionOp<"duration_months_of_quarter", [ConstantThroughOperands]>;
+def DurationDaysOfWeek : NLUnaryFunctionOp<"duration_days_of_week", [ConstantThroughOperands]>;
+def DurationMinutesOfHour : NLUnaryFunctionOp<"duration_minutes_of_hour", [ConstantThroughOperands]>;
+def DurationSecondsOfMinute : NLUnaryFunctionOp<"duration_seconds_of_minute", [ConstantThroughOperands]>;
+def DurationMillisecondsOfSecond : NLUnaryFunctionOp<"duration_milliseconds_of_second", [ConstantThroughOperands]>;
+def DurationMicrosecondsOfSecond : NLUnaryFunctionOp<"duration_microseconds_of_second", [ConstantThroughOperands]>;
+
 def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "The instant the query runs, as a single-value chunk";
   let description = [{

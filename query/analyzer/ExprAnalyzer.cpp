@@ -35,6 +35,18 @@ using namespace db;
 
 namespace {
 
+template <typename Part>
+bool partNamed(const std::unordered_map<std::string_view, Part>& parts, std::string_view name, Part& part) {
+    const auto it = parts.find(name);
+    if (it == parts.end()) {
+        return false;
+    }
+
+    part = it->second;
+
+    return true;
+}
+
 bool dateTimePartNamed(std::string_view name, DateTimePart& part) {
     static const std::unordered_map<std::string_view, DateTimePart> parts = {
         {"year",        DateTimePart::Year       },
@@ -47,14 +59,42 @@ bool dateTimePartNamed(std::string_view name, DateTimePart& part) {
         {"microsecond", DateTimePart::Microsecond},
     };
 
-    const auto it = parts.find(name);
-    if (it == parts.end()) {
-        return false;
+    return partNamed(parts, name, part);
+}
+
+bool durationPartNamed(std::string_view name, DurationPart& part) {
+    static const std::unordered_map<std::string_view, DurationPart> parts = {
+        {"years",                DurationPart::Years               },
+        {"quarters",             DurationPart::Quarters            },
+        {"months",               DurationPart::Months              },
+        {"weeks",                DurationPart::Weeks               },
+        {"days",                 DurationPart::Days                },
+        {"hours",                DurationPart::Hours               },
+        {"minutes",              DurationPart::Minutes             },
+        {"seconds",              DurationPart::Seconds             },
+        {"milliseconds",         DurationPart::Milliseconds        },
+        {"microseconds",         DurationPart::Microseconds        },
+        {"quartersOfYear",       DurationPart::QuartersOfYear      },
+        {"monthsOfYear",         DurationPart::MonthsOfYear        },
+        {"monthsOfQuarter",      DurationPart::MonthsOfQuarter     },
+        {"daysOfWeek",           DurationPart::DaysOfWeek          },
+        {"minutesOfHour",        DurationPart::MinutesOfHour       },
+        {"secondsOfMinute",      DurationPart::SecondsOfMinute     },
+        {"millisecondsOfSecond", DurationPart::MillisecondsOfSecond},
+        {"microsecondsOfSecond", DurationPart::MicrosecondsOfSecond},
+    };
+
+    return partNamed(parts, name, part);
+}
+
+std::string_view componentOwnerName(bool namesADateTimePart, bool namesADurationPart) {
+    if (namesADateTimePart) {
+        return "datetime";
+    } else if (namesADurationPart) {
+        return "duration";
     }
 
-    part = it->second;
-
-    return true;
+    return "datetime or a duration";
 }
 
 // The type a CASE takes when one branch gives @param carried and another gives
@@ -887,8 +927,8 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
 ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate, ValueType defaultType) {
     const QualifiedName* qualifiedName = expr->getFullName();
 
-    // Two names read a property of an entity or a field of a row; three read a calendar
-    // field off a property holding an instant, which is the one chain a value extends
+    // Two names read a property of an entity or a field of a row; three read a component
+    // off a property holding an instant or a duration, the one chain a value extends
     const bool readsAComponentOfAProperty = qualifiedName->size() == 3;
 
     if (qualifiedName->size() != 2 && !readsAComponentOfAProperty) {
@@ -912,28 +952,52 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     const EvaluatedType varType = varDecl->getType();
 
     DateTimePart part {DateTimePart::Year};
-    if (readsAComponentOfAProperty) {
-        const Symbol* componentName = qualifiedName->back();
+    DurationPart durationPart {DurationPart::Years};
+    bool namesADateTimePart = false;
+    bool namesADurationPart = false;
+    std::string_view componentName;
+    std::string_view componentOwner;
 
-        if (!dateTimePartNamed(componentName->getName(), part)) {
-            throwError(fmt::format("'{}' is not a component of a datetime", componentName->getName()), expr);
-        }
+    if (readsAComponentOfAProperty) {
+        const Symbol* componentSymbol = qualifiedName->back();
+        componentName = componentSymbol->getName();
+        namesADateTimePart = dateTimePartNamed(componentName, part);
+        namesADurationPart = durationPartNamed(componentName, durationPart);
+        componentOwner = componentOwnerName(namesADateTimePart, namesADurationPart);
 
         // A write naming a property the graph does not carry would introduce it, and a
         // component names none: turned away here, before the name is read as a new one
         if (allowCreate) {
-            throwError("A datetime component cannot name a property.", expr);
+            if (!namesADateTimePart && !namesADurationPart) {
+                throwError(fmt::format("'{}' is not a component of a {}", componentName, componentOwner), expr);
+            }
+
+            throwError(fmt::format("A {} component cannot name a property.", componentOwner), expr);
         }
     }
 
-    // d.year, where d was bound to an instant rather than to an entity
-    if (varType == EvaluatedType::DateTime && !readsAComponentOfAProperty) {
-        if (!dateTimePartNamed(propName->getName(), part)) {
-            throwError(fmt::format("'{}' is not a component of a datetime", propName->getName()), expr);
+    // d.year or d.hours, where d was bound to an instant or a duration rather than to an entity
+    const bool bindsAValueWithComponents = varType == EvaluatedType::DateTime
+                                        || varType == EvaluatedType::Duration;
+
+    if (bindsAValueWithComponents && !readsAComponentOfAProperty) {
+        const std::string_view name = propName->getName();
+
+        if (varType == EvaluatedType::DateTime) {
+            if (!dateTimePartNamed(name, part)) {
+                throwError(fmt::format("'{}' is not a component of a datetime", name), expr);
+            }
+
+            expr->setDateTimePart(part);
+        } else {
+            if (!durationPartNamed(name, durationPart)) {
+                throwError(fmt::format("'{}' is not a component of a duration", name), expr);
+            }
+
+            expr->setDurationPart(durationPart);
         }
 
         expr->setEntityVarDecl(varDecl);
-        expr->setDateTimePart(part);
         expr->setType(EvaluatedType::Integer);
         expr->setDynamic();
 
@@ -944,8 +1008,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     if (varType == EvaluatedType::StringTable) {
         if (readsAComponentOfAProperty) {
-            throwError(fmt::format("Field '{}' of '{}' is 'String', only a datetime has components",
-                                   propName->getName(), varName->getName()),
+            throwError(fmt::format("Field '{}' of '{}' is 'String', only a {} has components",
+                                   propName->getName(),
+                                   varName->getName(),
+                                   componentOwner),
                        expr);
         }
 
@@ -1057,20 +1123,42 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     if (readsAComponentOfAProperty) {
         const bool readsAnInstant = type == EvaluatedType::DateTime;
-
-        // A name no property in the graph carries reads null on every row, and a component
-        // of null is null too: there is no instant to turn away, only nothing to read
-        if (!readsAnInstant && !readsAsNull) {
-            throwError(fmt::format("Property '{}' is '{}', only a datetime has components",
-                                   propName->getName(), EvaluatedTypeName::value(type)),
-                       expr);
-        }
-
-        expr->setDateTimePart(part);
+        const bool readsADuration = type == EvaluatedType::Duration;
 
         if (readsAnInstant) {
+            if (!namesADateTimePart) {
+                throwError(fmt::format("'{}' is not a component of a datetime", componentName), expr);
+            }
+
+            expr->setDateTimePart(part);
+
             type = EvaluatedType::Integer;
             vt = ValueType::Int64;
+        } else if (readsADuration) {
+            if (!namesADurationPart) {
+                throwError(fmt::format("'{}' is not a component of a duration", componentName), expr);
+            }
+
+            expr->setDurationPart(durationPart);
+
+            type = EvaluatedType::Integer;
+            vt = ValueType::Int64;
+        } else if (readsAsNull) {
+            // A name no property in the graph carries reads null on every row, and a
+            // component of null is null too: there is no value to turn away, only nothing to read
+            if (!namesADateTimePart && !namesADurationPart) {
+                throwError(fmt::format("'{}' is not a component of a {}", componentName, componentOwner), expr);
+            } else if (namesADateTimePart) {
+                expr->setDateTimePart(part);
+            } else {
+                expr->setDurationPart(durationPart);
+            }
+        } else {
+            throwError(fmt::format("Property '{}' is '{}', only a {} has components",
+                                   propName->getName(),
+                                   EvaluatedTypeName::value(type),
+                                   componentOwner),
+                       expr);
         }
     }
 
@@ -1083,9 +1171,11 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     return vt;
 }
 
-void ExprAnalyzer::throwIfReadsADateTimeComponent(const PropertyExpr* expr) {
+void ExprAnalyzer::throwIfReadsAComponent(const PropertyExpr* expr) {
     if (expr->readsADateTimeComponent()) {
         throwError("A datetime component cannot name a property.", expr);
+    } else if (expr->readsADurationComponent()) {
+        throwError("A duration component cannot name a property.", expr);
     }
 }
 
@@ -1108,6 +1198,14 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
         }
 
         expr->setDateTimePart(part);
+        type = EvaluatedType::Integer;
+    } else if (baseType == EvaluatedType::Duration) {
+        DurationPart part {DurationPart::Years};
+        if (!durationPartNamed(propName, part)) {
+            throwError(fmt::format("'{}' is not a component of a duration", propName), expr);
+        }
+
+        expr->setDurationPart(part);
         type = EvaluatedType::Integer;
     } else if (readsAnEntity) {
         const auto propTypeFound = _graphMetadata.propTypes().get(propName);

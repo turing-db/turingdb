@@ -3,6 +3,7 @@
 #include "Expr.h"
 
 #include "metadata/DateTime.h"
+#include "metadata/Duration.h"
 
 namespace db {
 
@@ -21,11 +22,17 @@ public:
     DateTimePart getDateTimePart() const { return _dateTimePart; }
     void setDateTimePart(DateTimePart part);
 
+    bool readsADurationComponent() const { return _readsADurationComponent; }
+    DurationPart getDurationPart() const { return _durationPart; }
+    void setDurationPart(DurationPart part);
+
 private:
     Expr* _base {nullptr};
     std::string_view _propName;
     DateTimePart _dateTimePart {DateTimePart::Year};
+    DurationPart _durationPart {DurationPart::Years};
     bool _readsADateTimeComponent {false};
+    bool _readsADurationComponent {false};
 
     PropertyLookupExpr(Expr* base, std::string_view propName);
 

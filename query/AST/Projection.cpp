@@ -113,6 +113,20 @@ bool Projection::hasItem(const Expr* key) const {
     return locateItem(key) != _items.end();
 }
 
+bool Projection::hasItemReadingThePropertyOfComponent(const PropertyExpr* component) const {
+    for (const ReturnItem& item : _items) {
+        const Expr* const* itemExpr = std::get_if<Expr*>(&item);
+        const bool readsTheProperty = itemExpr
+                                   && StructuralExpressionComparator::readsThePropertyOfComponent(*itemExpr, component);
+
+        if (readsTheProperty) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool Projection::hasVariableItem(const VarDecl* decl) const {
     return hasItemDecl(decl, true);
 }

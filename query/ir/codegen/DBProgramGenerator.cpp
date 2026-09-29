@@ -7904,17 +7904,23 @@ mlir::Type DBProgramGenerator::propertyValueType(const PropertyExpr* propExpr) {
 }
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
-    const mlir::Value value = translatePropertyRead(propExpr);
+    return emitComponentOf(propExpr, translatePropertyRead(propExpr));
+}
 
+mlir::Value DBProgramGenerator::emitComponentOf(const PropertyExpr* propExpr, mlir::Value value) {
     // A component of a name no property in the graph carries is the null that read is,
-    // with no instant for the field op to read off
+    // with no value for the component op to read off
     const bool readsNull = propExpr->getType() == EvaluatedType::Null;
 
-    if (!propExpr->readsADateTimeComponent() || readsNull) {
+    if (readsNull) {
         return value;
+    } else if (propExpr->readsADateTimeComponent()) {
+        return emitDateTimeComponent(propExpr->getDateTimePart(), value);
+    } else if (propExpr->readsADurationComponent()) {
+        return emitDurationComponent(propExpr->getDurationPart(), value);
     }
 
-    return emitDateTimeComponent(propExpr->getDateTimePart(), value);
+    return value;
 }
 
 mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr) {
@@ -7931,6 +7937,8 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
 
     if (lookupExpr->readsADateTimeComponent()) {
         return emitDateTimeComponent(lookupExpr->getDateTimePart(), baseColumn);
+    } else if (lookupExpr->readsADurationComponent()) {
+        return emitDurationComponent(lookupExpr->getDurationPart(), baseColumn);
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -7997,20 +8005,102 @@ mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::V
     return mlir::Value();
 }
 
+mlir::Value DBProgramGenerator::emitDurationComponent(DurationPart part, mlir::Value duration) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    switch (part) {
+        case DurationPart::Years:
+            return _opBuilder.create<mlir::db::DurationYears>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Quarters:
+            return _opBuilder.create<mlir::db::DurationQuarters>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Months:
+            return _opBuilder.create<mlir::db::DurationMonths>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Weeks:
+            return _opBuilder.create<mlir::db::DurationWeeks>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Days:
+            return _opBuilder.create<mlir::db::DurationDays>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Hours:
+            return _opBuilder.create<mlir::db::DurationHours>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Minutes:
+            return _opBuilder.create<mlir::db::DurationMinutes>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Seconds:
+            return _opBuilder.create<mlir::db::DurationSeconds>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Milliseconds:
+            return _opBuilder.create<mlir::db::DurationMilliseconds>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::Microseconds:
+            return _opBuilder.create<mlir::db::DurationMicroseconds>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::QuartersOfYear:
+            return _opBuilder.create<mlir::db::DurationQuartersOfYear>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::MonthsOfYear:
+            return _opBuilder.create<mlir::db::DurationMonthsOfYear>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::MonthsOfQuarter:
+            return _opBuilder.create<mlir::db::DurationMonthsOfQuarter>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::DaysOfWeek:
+            return _opBuilder.create<mlir::db::DurationDaysOfWeek>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::MinutesOfHour:
+            return _opBuilder.create<mlir::db::DurationMinutesOfHour>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::SecondsOfMinute:
+            return _opBuilder.create<mlir::db::DurationSecondsOfMinute>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::MillisecondsOfSecond:
+            return _opBuilder.create<mlir::db::DurationMillisecondsOfSecond>(loc, noneType, duration).getResult();
+        break;
+
+        case DurationPart::MicrosecondsOfSecond:
+            return _opBuilder.create<mlir::db::DurationMicrosecondsOfSecond>(loc, noneType, duration).getResult();
+        break;
+    }
+
+    return mlir::Value();
+}
+
 mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propExpr) {
     const VarDecl* entityDecl = propExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
 
-    // d.year names no property: the instant its component is read off is the column the
-    // variable itself was bound to
-    if (entityDecl->getType() == EvaluatedType::DateTime) {
+    // d.year and d.hours name no property: the value the component is read off is the
+    // column the variable itself was bound to
+    const EvaluatedType entityType = entityDecl->getType();
+    if (entityType == EvaluatedType::DateTime || entityType == EvaluatedType::Duration) {
         const auto projectedIt = _part._projectedColumns.find(entityDecl);
         const mlir::Value boundColumn = projectedIt != end(_part._projectedColumns)
                                       ? projectedIt->second
                                       : resolveEntityColumn(entityDecl);
 
-        bioassert(boundColumn, "Datetime component read on unknown variable: {}", varName);
+        bioassert(boundColumn, "Component read on unknown variable: {}", varName);
 
         return boundColumn;
     }
@@ -8052,7 +8142,6 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType resultType = allocColumnType(propertyValueType(propExpr));
     const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
-    const EvaluatedType entityType = entityDecl->getType();
 
     const bool isNode = entityType == EvaluatedType::NodePattern;
     const bool isEdge = entityType == EvaluatedType::EdgePattern;
@@ -8905,6 +8994,17 @@ void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedCol
         if (StructuralExpressionComparator::equal(keyExpr, expr)) {
             _part._exprMap[expr] = keyColumn;
             return;
+        }
+    }
+
+    if (expr->getKind() == Expr::Kind::PROPERTY) {
+        const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
+
+        for (const auto& [keyExpr, keyColumn] : groupedColumns) {
+            if (StructuralExpressionComparator::readsThePropertyOfComponent(keyExpr, property)) {
+                _part._exprMap[expr] = emitComponentOf(property, keyColumn);
+                return;
+            }
         }
     }
 
