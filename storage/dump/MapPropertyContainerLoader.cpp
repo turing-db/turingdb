@@ -108,7 +108,7 @@ DumpResult<std::unique_ptr<PropertyContainer>> MapPropertyContainerLoader::load(
             return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
         }
 
-        const EncodedMap encoded(std::span {stream.data() + recordOffset, length});
+        const EncodedMap encoded(std::span<const std::byte> {stream.data() + recordOffset, length});
         values.append(encoded.decodeInto(values));
 
         recordOffset += length;
