@@ -1442,6 +1442,10 @@ void DBProgramGenerator::collectHopImports(const EdgePattern* pattern,
                                            llvm::SmallVectorImpl<mlir::Value>& columns) {
     for (const VarDecl* decl : pattern->hopImports()) {
         const mlir::Value column = resolveEntityColumn(decl);
+        if (column && yieldsConstantColumn(column)) {
+            continue;
+        }
+
         const bool readable = column && isRowAlignedHere(column);
         if (!readable) {
             throw TuringException(fmt::format("A predicate on a hop cannot read '{}': it holds no value while the path is walked",
