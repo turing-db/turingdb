@@ -49,6 +49,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
+#define GEN_PASS_DEF_FUSEPATHELEMENTS
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
 #define GEN_PASS_DEF_FUSEEXPLOREENDFACTOR
 #define GEN_PASS_DEF_FUSEEXPLOREENDSET
@@ -1952,6 +1953,104 @@ struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreH
             hop.dropAllReferences();
             hop.getBlocks().clear();
         });
+    }
+};
+
+// A named path over one walk is the node the walk seeds from and its handle column, so
+// what nodes(), relationships() and length() read off it is what the handles already
+// answer: the seed then each hop's end, the edges, and the depth
+struct WalkPath {
+    Value _seed;
+    Value _path;
+    bool _reversed {false};
+};
+
+bool matchWalkPath(PathElements elements, WalkPath& walk) {
+    MakePath build = elements.getPath().getDefiningOp<MakePath>();
+    if (!build) {
+        return false;
+    }
+
+    const OperandRange entities = build.getEntities();
+    if (entities.size() != 2) {
+        return false;
+    }
+
+    const std::optional<ArrayAttr> reversedPaths = build.getReversedPaths();
+    const bool reversed = reversedPaths && !reversedPaths->empty();
+
+    const Value seed = reversed ? entities[1] : entities[0];
+    const Value path = reversed ? entities[0] : entities[1];
+
+    const auto elementOf = [](Value value) { return cast<ColumnType>(value.getType()).getType(); };
+    if (!isa<storage::NodeIDType>(elementOf(seed)) || !isa<storage::PathRefType>(elementOf(path))) {
+        return false;
+    }
+
+    walk = WalkPath {._seed = seed, ._path = path, ._reversed = reversed};
+
+    return true;
+}
+
+Value walkPathElements(PathElements elements, const WalkPath& walk, mlir::OpBuilder& builder) {
+    MLIRContext* const context = builder.getContext();
+    const Location loc = elements.getLoc();
+
+    switch (elements.getKind()) {
+        case storage::PathElementsKind::Length: {
+            const Type countType = ColumnType::get(context, IntegerType::get(context, 64, IntegerType::Unsigned));
+            return builder.create<PathLength>(loc, countType, walk._path).getResult();
+        }
+        break;
+
+        case storage::PathElementsKind::Relationships: {
+            const Type listType = ColumnType::get(context, storage::ListType::get(context, storage::EdgeIDType::get(context)));
+            return builder.create<ExpandPath>(loc,
+                                              listType,
+                                              walk._path,
+                                              Value(),
+                                              storage::PathExpansionKind::Edges,
+                                              walk._reversed).getResult();
+        }
+        break;
+
+        case storage::PathElementsKind::Nodes: {
+            const Type listType = ColumnType::get(context, storage::ListType::get(context, storage::NodeIDType::get(context)));
+            return builder.create<ExpandPath>(loc,
+                                              listType,
+                                              walk._path,
+                                              walk._seed,
+                                              storage::PathExpansionKind::Nodes,
+                                              walk._reversed).getResult();
+        }
+        break;
+    }
+
+    return Value();
+}
+
+struct FusePathElements : public impl::FusePathElementsBase<FusePathElements> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        llvm::SmallVector<PathElements> reads;
+        getOperation()->walk([&reads](PathElements elements) {
+            reads.push_back(elements);
+        });
+
+        for (PathElements elements : reads) {
+            WalkPath walk;
+            if (!matchWalkPath(elements, walk)) {
+                continue;
+            }
+
+            Operation* const build = elements.getPath().getDefiningOp();
+
+            builder.setInsertionPoint(elements);
+            elements.getResult().replaceAllUsesWith(walkPathElements(elements, walk, builder));
+            elements.erase();
+            eraseIfUnused(build);
+        }
     }
 };
 

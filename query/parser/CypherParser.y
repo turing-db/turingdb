@@ -86,6 +86,7 @@
     #include "stmt/VectorSearchStmt.h"
     #include "expr/ListExpr.h"
     #include "expr/ListComprehensionExpr.h"
+    #include "expr/ListPredicateExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
@@ -326,6 +327,8 @@
 %type<db::Expr*> bracketExpr
 %type<std::pair<db::WhereClause*, db::Expr*>> comprehensionTail
 %type<db::ListComprehensionExpr*> filterExpr
+%type<db::Expr*> filterWith
+%type<db::ListPredicateExpr::Quantifier> filterKeyword
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
 %type<std::pair<db::CaseExpr::Tests, db::Expr*>> whenThen
@@ -1433,7 +1436,7 @@ atomExpr
     | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | bracketExpr { $$ = $1; }
-    | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
+    | filterWith { $$ = $1; }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
     | subqueryCount { $$ = $1; }
@@ -1736,14 +1739,14 @@ parenthesizedExpr
     ;
 
 filterWith
-    : filterKeyword OPAREN filterExpr CPAREN { scanner.notImplemented(@$, "Filters"); }
+    : filterKeyword OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, $1, $3); LOC($$, @$); }
     ;
 
 filterKeyword
-    : ALL
-    | ANY
-    | NONE
-    | SINGLE
+    : ALL { $$ = ListPredicateExpr::Quantifier::All; }
+    | ANY { $$ = ListPredicateExpr::Quantifier::Any; }
+    | NONE { $$ = ListPredicateExpr::Quantifier::None; }
+    | SINGLE { $$ = ListPredicateExpr::Quantifier::Single; }
     ;
 
 bracketExpr

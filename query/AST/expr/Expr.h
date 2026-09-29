@@ -31,6 +31,7 @@ public:
         LIST_SLICE,
         LIST_COMPREHENSION,
         PATTERN_COMPREHENSION,
+        LIST_PREDICATE,
         CASE,
         EXISTS,
         COUNT_SUBQUERY,
@@ -130,6 +131,7 @@ using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::LIST_SLICE, "LIST_SLICE">,
     EnumStringPair<Expr::Kind::LIST_COMPREHENSION, "LIST_COMPREHENSION">,
     EnumStringPair<Expr::Kind::PATTERN_COMPREHENSION, "PATTERN_COMPREHENSION">,
+    EnumStringPair<Expr::Kind::LIST_PREDICATE, "LIST_PREDICATE">,
     EnumStringPair<Expr::Kind::CASE, "CASE">,
     EnumStringPair<Expr::Kind::EXISTS, "EXISTS">,
     EnumStringPair<Expr::Kind::COUNT_SUBQUERY, "COUNT_SUBQUERY">

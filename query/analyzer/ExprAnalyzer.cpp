@@ -290,6 +290,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::PATTERN_COMPREHENSION:
             analyzePatternComprehensionExpr(static_cast<PatternComprehensionExpr*>(expr));
         break;
+        case Expr::Kind::LIST_PREDICATE:
+            analyzeListPredicateExpr(static_cast<ListPredicateExpr*>(expr));
+        break;
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
         break;
@@ -1887,7 +1890,12 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
 
     _ctxt->dropVariable(itemName);
 
-    if (predicate && predicate->getType() != EvaluatedType::Bool) {
+    // A null WHERE holds for no element, as a null WHERE cuts every row
+    const bool predicateIsBoolean = !predicate
+                                 || predicate->getType() == EvaluatedType::Bool
+                                 || predicate->getType() == EvaluatedType::Null;
+
+    if (!predicateIsBoolean) {
         throwError("The WHERE of a list comprehension must be a boolean", predicate);
     }
 
@@ -1922,6 +1930,24 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
+}
+
+void ExprAnalyzer::analyzeListPredicateExpr(ListPredicateExpr* expr) {
+    ListComprehensionExpr* const comprehension = expr->getComprehension();
+    analyzeExpr(comprehension);
+
+    if (!comprehension->getPredicate()) {
+        throwError("A list predicate needs a WHERE over its elements: all(x IN xs WHERE p(x))", expr);
+    }
+
+    expr->setType(EvaluatedType::Bool);
+    expr->setDynamic();
+
+    if (comprehension->isAggregate()) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool));
 }
 
 void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* expr) {

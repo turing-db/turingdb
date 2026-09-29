@@ -126,6 +126,49 @@ ParseResult appendFactorYieldTypes(OpAsmParser& parser,
     return success();
 }
 
+// The body of an op over the elements of one row's list: one block taking the element,
+// the row tag and one argument per carried column, ending in a yield that names the tag
+LogicalResult verifyElementBody(Operation* op, Block& bodyBlock, OperandRange carried) {
+    auto yield = dyn_cast_or_null<ComprehensionYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return op->emitOpError("body region must end with a db.comprehension_yield");
+    }
+
+    const size_t expectedArguments = carried.size() + 2;
+
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return op->emitOpError("body region takes the element and the row tag plus one argument per "
+                               "carried column, ")
+               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    }
+
+    if (!llvm::isa<ColumnType>(bodyBlock.getArgument(0).getType())) {
+        return op->emitOpError("body argument 0 must be the column of elements");
+    }
+
+    const auto rowTagType = llvm::dyn_cast<ColumnType>(bodyBlock.getArgument(1).getType());
+
+    if (!rowTagType || !rowTagType.getType().isUnsignedInteger(64)) {
+        return op->emitOpError("body argument 1 must be the ui64 column of row tags");
+    }
+
+    if (!yield.getRowTags()) {
+        return op->emitOpError("body must yield the row tag of every surviving element");
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return op->emitOpError("body argument ") << carriedIndex + 2
+                                                     << " must have the type of carried column "
+                                                     << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // Parses `factor { ... }` into a fresh region of result. The factor takes no
 // operands and no block arguments, so the region is parsed with an empty
 // argument list.
@@ -517,14 +560,49 @@ LogicalResult ExpandPath::verify() {
             return emitOpError("kind edges expands to a list of edge IDs");
         }
     } else if (!isa<storage::NodeIDType>(elementType)) {
-        return emitOpError("kind sources and ends expand to a list of node IDs");
+        return emitOpError("kind sources, ends and nodes expand to a list of node IDs");
     }
 
     // Reversed, the kinds swap: the pattern's end list is the walk's source list read
-    // backwards, so that is the one holding the seed
-    const bool readsTheSeed = getKind() == storage::PathExpansionKind::Sources;
+    // backwards, so that is the one holding the seed. The nodes hold it either way.
+    const bool readsTheSeed = getKind() == storage::PathExpansionKind::Sources
+                           || getKind() == storage::PathExpansionKind::Nodes;
     if (readsTheSeed && !getSrcids()) {
-        return emitOpError("kind sources reads the seed of each path from srcids");
+        return emitOpError("kind sources and nodes read the seed of each path from srcids");
+    }
+
+    return success();
+}
+
+LogicalResult PathElements::verify() {
+    const auto column = dyn_cast<ColumnType>(getResult().getType());
+    const auto nullable = column ? dyn_cast<storage::NullableType>(column.getType()) : storage::NullableType();
+    if (!nullable) {
+        return emitOpError("must produce a nullable column: the path an OPTIONAL MATCH missed reads as null");
+    }
+
+    const Type value = nullable.getValueType();
+    const auto list = dyn_cast<storage::ListType>(value);
+    const Type element = list ? list.getElementType() : Type();
+
+    switch (getKind()) {
+        case storage::PathElementsKind::Nodes:
+            if (!isa_and_nonnull<storage::NodeIDType>(element)) {
+                return emitOpError("kind nodes reads a list of node IDs");
+            }
+        break;
+
+        case storage::PathElementsKind::Relationships:
+            if (!isa_and_nonnull<storage::EdgeIDType>(element)) {
+                return emitOpError("kind relationships reads a list of edge IDs");
+            }
+        break;
+
+        case storage::PathElementsKind::Length:
+            if (!value.isUnsignedInteger(64)) {
+                return emitOpError("kind length reads a ui64 count");
+            }
+        break;
     }
 
     return success();
@@ -1484,47 +1562,11 @@ LogicalResult Unwind::verify() {
 // The body binds the element, the row tag and one argument per carried column, and ends
 // naming what each element contributes.
 LogicalResult ListComprehension::verify() {
-    Block& bodyBlock = getBody().front();
+    return verifyElementBody(getOperation(), getBody().front(), getColumnsToFilter());
+}
 
-    auto yield = dyn_cast_or_null<ComprehensionYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
-    if (!yield) {
-        return emitOpError("body region must end with a db.comprehension_yield");
-    }
-
-    const mlir::OperandRange carried = getColumnsToFilter();
-    const size_t expectedArguments = carried.size() + 2;
-
-    if (bodyBlock.getNumArguments() != expectedArguments) {
-        return emitOpError("body region takes the element and the row tag plus one argument per "
-                           "carried column, ")
-               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
-    }
-
-    if (!llvm::isa<ColumnType>(bodyBlock.getArgument(0).getType())) {
-        return emitOpError("body argument 0 must be the column of elements");
-    }
-
-    const auto rowTagType = llvm::dyn_cast<ColumnType>(bodyBlock.getArgument(1).getType());
-
-    if (!rowTagType || !rowTagType.getType().isUnsignedInteger(64)) {
-        return emitOpError("body argument 1 must be the ui64 column of row tags");
-    }
-
-    if (!yield.getRowTags()) {
-        return emitOpError("body must yield the row tag of every surviving element");
-    }
-
-    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
-
-        if (argumentType != carried[carriedIndex].getType()) {
-            return emitOpError("body argument ") << carriedIndex + 2
-                                                 << " must have the type of carried column "
-                                                 << carriedIndex;
-        }
-    }
-
-    return success();
+LogicalResult ListPredicate::verify() {
+    return verifyElementBody(getOperation(), getBody().front(), getColumnsToFilter());
 }
 
 // The pattern takes one argument per input column and the row tag, and ends naming what

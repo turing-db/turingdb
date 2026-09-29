@@ -1013,6 +1013,7 @@ enum class PathExpansionKind {
     Edges,
     Sources,
     Ends,
+    Nodes,
 };
 
 // nl.expand_path data: one list per row, written into the query's list buffer from the
@@ -1072,6 +1073,42 @@ private:
     const ColumnVector<PathRef>* _paths {nullptr};
     ColumnVector<uint64_t>* _output {nullptr};
     const PathTrie* _trie {nullptr};
+};
+
+// What a named path is read for; the interpreter-side counterpart of the MLIR
+// storage::PathElementsKind, which the translator maps onto this
+enum class PathElementsKind {
+    Nodes,
+    Relationships,
+    Length,
+};
+
+// nl.path_elements data: one list of node IDs, one list of edge IDs or one hop count per
+// row, read off the entity sequence of each path and null where that sequence is empty.
+// The lists are written into the query's list buffer.
+class NLPathElementsData : public NLFunctionData {
+public:
+    NLPathElementsData(const ColumnVector<EntityList>* paths,
+                       Column* output,
+                       PathElementsKind kind,
+                       QueryListBuffer* listBuffer)
+        : _paths(paths),
+        _output(output),
+        _kind(kind),
+        _listBuffer(listBuffer)
+    {
+    }
+
+    const ColumnVector<EntityList>* getPaths() const { return _paths; }
+    Column* getOutput() const { return _output; }
+    PathElementsKind getKind() const { return _kind; }
+    QueryListBuffer* getListBuffer() const { return _listBuffer; }
+
+private:
+    const ColumnVector<EntityList>* _paths {nullptr};
+    Column* _output {nullptr};
+    PathElementsKind _kind {PathElementsKind::Nodes};
+    QueryListBuffer* _listBuffer {nullptr};
 };
 
 // One entity of a path being built: the column holding it on each row, and which of the
@@ -3962,38 +3999,33 @@ private:
     Column* _result {nullptr};
 };
 
-// nl.list_comprehension data: the per-row list build of `[x IN xs WHERE p(x) | f(x)]`.
-// Holds the source column with the handler counting the elements each of its cells
-// contributes, the drain filling the element chunk from them and the one telling a cell
-// holding no list from an empty one, the carry set gathered by each element's source row -
-// the same NLCarriedColumn shape the unwind loop uses - and the body computing what each
-// element contributes. The scratch columns hold, per element of the current chunk, the
-// source row it came from and the position of the element inside that row's cell; the row
-// tag column holds that same row for the body to cut alongside the elements, and the
-// staged elements and their per-row counts hold what the whole step gathered, which the
-// lists are built from once every element has been seen.
-class NLListComprehensionData : public NLFunctionData {
+// What an op computing over the elements of one row's list holds - nl.list_comprehension
+// and nl.list_predicate. The source column with the handler counting the elements each
+// of its cells contributes, the drain filling the element chunk from them and the one
+// telling a cell holding no list from an empty one; the carry set gathered by each
+// element's source row - the same NLCarriedColumn shape the unwind loop uses; the body
+// computing over the elements; and what that body ends on, the row each element came
+// from and the value it contributes. The scratch columns hold, per element of the current
+// chunk, the source row it came from and the position of the element inside that row's
+// cell; the row tag column holds that same row for the body to cut alongside the elements.
+class NLElementBodyData : public NLFunctionData {
 public:
     using CarriedColumns = std::vector<NLCarriedColumn>;
 
     // @param elementEmit and @param elementOutput are null when the source's cells are
     // themselves the elements, exactly as on NLUnwindLoopData.
-    NLListComprehensionData(const Column* source,
-                            NLUnwindElementCountFunction elementCount,
-                            NLUnwindElementEmitFunction elementEmit,
-                            NLCellAbsentFunction cellAbsent,
-                            Column* elementOutput,
-                            ColumnVector<uint64_t>* rowTags,
-                            Column* result,
-                            LocalMemory* memory)
+    NLElementBodyData(const Column* source,
+                      NLUnwindElementCountFunction elementCount,
+                      NLUnwindElementEmitFunction elementEmit,
+                      NLCellAbsentFunction cellAbsent,
+                      Column* elementOutput,
+                      ColumnVector<uint64_t>* rowTags)
         : _source(source),
         _elementCount(elementCount),
         _elementEmit(elementEmit),
         _cellAbsent(cellAbsent),
         _elementOutput(elementOutput),
-        _rowTags(rowTags),
-        _result(result),
-        _memory(memory)
+        _rowTags(rowTags)
     {
     }
 
@@ -4003,8 +4035,6 @@ public:
     NLCellAbsentFunction getCellAbsentFunc() const { return _cellAbsent; }
     Column* getElementOutput() const { return _elementOutput; }
     ColumnVector<uint64_t>* getRowTags() const { return _rowTags; }
-    Column* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
 
     const CarriedColumns& carriedColumns() const { return _carriedColumns; }
 
@@ -4012,23 +4042,16 @@ public:
         _carriedColumns.push_back(carried);
     }
 
-    // What the body ends on: the row each surviving element came from, and the value it
-    // contributes to that row's list under the read its column shape takes
     const Column* getYieldedRowTags() const { return _yieldedRowTags; }
     const Column* getValue() const { return _value; }
-    NLListItemReadFunction getValueRead() const { return _valueRead; }
 
-    void setYield(const Column* yieldedRowTags, const Column* value, NLListItemReadFunction valueRead) {
+    void setYield(const Column* yieldedRowTags, const Column* value) {
         _yieldedRowTags = yieldedRowTags;
         _value = value;
-        _valueRead = valueRead;
     }
 
     ColumnVector<size_t>* getRows() { return &_rows; }
     ColumnVector<size_t>* getPositions() { return &_positions; }
-
-    std::vector<ListBuffer<>::ListItemVariant>& stagedElements() { return _stagedElements; }
-    std::vector<size_t>& stagedCounts() { return _stagedCounts; }
 
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
@@ -4040,21 +4063,105 @@ private:
     NLCellAbsentFunction _cellAbsent {nullptr};
     Column* _elementOutput {nullptr};
     ColumnVector<uint64_t>* _rowTags {nullptr};
-    Column* _result {nullptr};
-    LocalMemory* _memory {nullptr};
 
     const Column* _yieldedRowTags {nullptr};
     const Column* _value {nullptr};
-    NLListItemReadFunction _valueRead {nullptr};
 
     CarriedColumns _carriedColumns;
     NLStmtContainer _stmts;
 
     ColumnVector<size_t> _rows;
     ColumnVector<size_t> _positions;
+};
+
+// nl.list_comprehension data: the per-row list build of `[x IN xs WHERE p(x) | f(x)]`.
+// The value each element contributes is read under the read its column shape takes; the
+// staged elements and their per-row counts hold what the whole step gathered, which the
+// lists are built from once every element has been seen.
+class NLListComprehensionData : public NLElementBodyData {
+public:
+    NLListComprehensionData(const Column* source,
+                            NLUnwindElementCountFunction elementCount,
+                            NLUnwindElementEmitFunction elementEmit,
+                            NLCellAbsentFunction cellAbsent,
+                            Column* elementOutput,
+                            ColumnVector<uint64_t>* rowTags,
+                            Column* result,
+                            LocalMemory* memory)
+        : NLElementBodyData(source, elementCount, elementEmit, cellAbsent, elementOutput, rowTags),
+        _result(result),
+        _memory(memory)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    NLListItemReadFunction getValueRead() const { return _valueRead; }
+    void setValueRead(NLListItemReadFunction valueRead) { _valueRead = valueRead; }
+
+    std::vector<ListBuffer<>::ListItemVariant>& stagedElements() { return _stagedElements; }
+    std::vector<size_t>& stagedCounts() { return _stagedCounts; }
+
+private:
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    NLListItemReadFunction _valueRead {nullptr};
 
     std::vector<ListBuffer<>::ListItemVariant> _stagedElements;
     std::vector<size_t> _stagedCounts;
+};
+
+// How many elements of a list a predicate must hold for; the interpreter-side
+// counterpart of the MLIR storage::ListPredicateKind, which the translator maps onto this
+enum class ListPredicateKind {
+    All,
+    Any,
+    None,
+    Single,
+};
+
+// The truth value one element's predicate holds, absent where it is null
+using NLTruthReadFunction = std::optional<bool> (*)(const Column* mask, size_t row);
+
+// nl.list_predicate data: the per-row decision of `all(x IN xs WHERE p(x))` and its
+// siblings. Each element's truth value is read off the yielded mask and tallied into the
+// counts of its row, which decide the row once every element has been seen; the result
+// is a nullable mask.
+class NLListPredicateData : public NLElementBodyData {
+public:
+    NLListPredicateData(const Column* source,
+                        NLUnwindElementCountFunction elementCount,
+                        NLUnwindElementEmitFunction elementEmit,
+                        NLCellAbsentFunction cellAbsent,
+                        Column* elementOutput,
+                        ColumnVector<uint64_t>* rowTags,
+                        Column* result,
+                        ListPredicateKind kind)
+        : NLElementBodyData(source, elementCount, elementEmit, cellAbsent, elementOutput, rowTags),
+        _result(result),
+        _kind(kind)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+    ListPredicateKind getKind() const { return _kind; }
+
+    NLTruthReadFunction getTruthRead() const { return _truthRead; }
+    void setTruthRead(NLTruthReadFunction truthRead) { _truthRead = truthRead; }
+
+    std::vector<size_t>& trueCounts() { return _trueCounts; }
+    std::vector<size_t>& falseCounts() { return _falseCounts; }
+    std::vector<size_t>& nullCounts() { return _nullCounts; }
+
+private:
+    Column* _result {nullptr};
+    ListPredicateKind _kind {ListPredicateKind::All};
+    NLTruthReadFunction _truthRead {nullptr};
+
+    std::vector<size_t> _trueCounts;
+    std::vector<size_t> _falseCounts;
+    std::vector<size_t> _nullCounts;
 };
 
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context,

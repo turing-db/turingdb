@@ -110,6 +110,10 @@ public:
     static void runPathLength(NLExecutionContext* context, NLFunctionData* data);
     static void runMakePath(NLExecutionContext* context, NLFunctionData* data);
 
+    // Read the nodes, the relationships or the length of each named path of a chunk
+    // (nl.path_elements)
+    static void runPathElements(NLExecutionContext* context, NLFunctionData* data);
+
     static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
     static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
 
@@ -397,6 +401,14 @@ public:
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own
     // cell as one contiguous run of the query's list buffer.
     static void runListComprehension(NLExecutionContext* context, NLFunctionData* data);
+
+    // Decide one truth value per row (nl.list_predicate): the body runs over the elements
+    // the same way, and each row is decided from the tally of what its elements answered
+    static void runListPredicate(NLExecutionContext* context, NLFunctionData* data);
+
+    // Read one element's predicate: a mask, a nullable mask - where a null row is unknown
+    // - or the null literal, which is unknown for every row
+    static NLTruthReadFunction selectTruthRead(bool nullable, bool untypedNull);
 
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(ValueType valueType);

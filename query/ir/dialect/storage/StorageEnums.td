@@ -146,12 +146,34 @@ def PathDirection : I64EnumAttr<"PathDirection", "The direction a path explorati
     let cppNamespace = "::mlir::storage";
 }
 
-// Which list a path expands to: its edges, the source node of each hop, or the end
-// node of each hop.
+// Which list a path expands to: its edges, the source node of each hop, the end node
+// of each hop, or every node it runs through - the seed then the end of each hop.
 def PathExpansionKind : I64EnumAttr<"PathExpansionKind", "The list a path expands to", [
     I64EnumAttrCase<"Edges", 0, "edges">,
     I64EnumAttrCase<"Sources", 1, "sources">,
     I64EnumAttrCase<"Ends", 2, "ends">,
+    I64EnumAttrCase<"Nodes", 3, "nodes">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// What a named path is read for: the nodes it runs through, its relationships, or the
+// number of them.
+def PathElementsKind : I64EnumAttr<"PathElementsKind", "What a named path is read for", [
+    I64EnumAttrCase<"Nodes", 0, "nodes">,
+    I64EnumAttrCase<"Relationships", 1, "relationships">,
+    I64EnumAttrCase<"Length", 2, "length">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// How many elements of a list a predicate must hold for: every one, at least one, none
+// of them, or exactly one.
+def ListPredicateKind : I64EnumAttr<"ListPredicateKind", "The quantifier of a list predicate", [
+    I64EnumAttrCase<"All", 0, "all">,
+    I64EnumAttrCase<"Any", 1, "any">,
+    I64EnumAttrCase<"None", 2, "none">,
+    I64EnumAttrCase<"Single", 3, "single">,
 ]> {
     let cppNamespace = "::mlir::storage";
 }

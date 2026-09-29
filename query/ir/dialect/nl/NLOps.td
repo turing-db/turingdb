@@ -395,10 +395,52 @@ def ListComprehension : NLOp<"list_comprehension", [Pure, RowAlignedThroughOpera
 }
 
 /**
+* ListPredicate
+*/
+def ListPredicate : NLOp<"list_predicate", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise decision of whether a predicate holds for the elements of that row's list";
+
+  let description = [{
+    Imperative counterpart of db.list_predicate. Row r of the result is whether the
+    predicate the body yields holds for as many elements of row r as the kind asks:
+
+      %ok = nl.list_predicate(%tags, {%n}) kind all ({
+        ^bb0(%x: !nl.chunk<!storage.nullable<!storage.string>>,
+             %tag: !nl.chunk<ui64>,
+             %nIn: !nl.chunk<!storage.node_id>):
+          %p = nl.neq %x, %c : ...
+          nl.comprehension_yield %tag, %p : !nl.chunk<!storage.nullable<!storage.bool>>
+      }) : (!nl.chunk<!storage.nullable<!storage.list<!storage.string>>>,
+            !nl.chunk<!storage.node_id>)
+        -> !nl.chunk<!storage.nullable<!storage.bool>>
+
+    The body runs over chunks of the (row, element) pairs exactly as nl.list_comprehension's
+    does, and hands back the row tag and the predicate's value for each element. The
+    result is nullable: a row whose source cell holds no list gets a null, and so does a
+    row whose elements leave the answer unknown - a null predicate counts as neither
+    holding nor failing.
+  }];
+
+  let arguments = (ins NLChunk:$source, Variadic<NLChunk>:$columns_to_filter, ListPredicateKind:$kind);
+  let results   = (outs NLChunk:$result);
+
+  // Exactly one block, ending in an nl.comprehension_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` `{` $columns_to_filter `}` `)` `kind` $kind $body attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * ComprehensionYield
 */
-def ComprehensionYield : NLOp<"comprehension_yield", [Pure, Terminator, HasParent<"ListComprehension">]> {
-  let summary = "Name the row each surviving element of an nl.list_comprehension came from and what it contributes";
+def ComprehensionYield : NLOp<"comprehension_yield",
+                              [Pure, Terminator, ParentOneOf<["ListComprehension", "ListPredicate"]>]> {
+  let summary = "Name the row each element of an nl.list_comprehension or nl.list_predicate came from and what it contributes";
 
   let arguments = (ins NLUInt64Chunk:$row_tags, NLChunk:$value);
 
@@ -853,8 +895,8 @@ def ExpandPath : NLOp<"expand_path", [Pure, RowAlignedThroughOperands]> {
   let summary = "Expand each path handle of a chunk into a list";
   let description = [{
     Imperative counterpart of db.expand_path: one list per row, of the path's edges, of
-    the end node of each hop, or of the source node of each hop (the seed chunk's row
-    then every end but the last).
+    the end node of each hop, of the source node of each hop (the seed chunk's row
+    then every end but the last), or of every node (the seed then every end).
 
       %e = nl.expand_path(%p, %s) kind edges
              : (!nl.chunk<!storage.path_ref>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.list<!storage.edge_id>>
@@ -912,6 +954,28 @@ def MakePath : NLOp<"make_path", [Pure, RowAlignedThroughOperands]> {
 
   let assemblyFormat = [{
     `(` $entities `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
+* PathElements
+*/
+def PathElements : NLOp<"path_elements", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Read the nodes, the relationships or the length of each named path of a chunk";
+  let description = [{
+    Imperative counterpart of db.path_elements: one list of node IDs, one list of edge
+    IDs or one hop count per row, read off the entity sequence nl.make_path laid out,
+    and null on the rows whose sequence is empty - the paths an OPTIONAL MATCH missed.
+
+      %ns = nl.path_elements(%p) kind nodes
+              : (!nl.chunk<!storage.entity_list>) -> !nl.chunk<!storage.nullable<!storage.list<!storage.node_id>>>
+  }];
+
+  let arguments = (ins NLChunk:$path, PathElementsKind:$kind);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $path `)` `kind` $kind attr-dict `:` functional-type(operands, results)
   }];
 }
 

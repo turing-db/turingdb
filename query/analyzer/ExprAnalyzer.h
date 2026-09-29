@@ -39,6 +39,7 @@ class NodePattern;
 class EdgePattern;
 class ListExpr;
 class ListComprehensionExpr;
+class ListPredicateExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class ListSliceExpr;
@@ -86,6 +87,7 @@ public:
     void analyzeListExpr(ListExpr* expr);
     void analyzeListComprehensionExpr(ListComprehensionExpr* expr);
     void analyzePatternComprehensionExpr(PatternComprehensionExpr* expr);
+    void analyzeListPredicateExpr(ListPredicateExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeCountSubqueryExpr(CountSubqueryExpr* expr);

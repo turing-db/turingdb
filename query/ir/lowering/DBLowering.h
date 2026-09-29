@@ -228,6 +228,30 @@ private:
     // and the op built around it, since the type of the lists is the type of what that
     // body yields
     void lowerListComprehension(mlir::db::ListComprehension comprehension);
+
+    // Lowers `all(x IN xs WHERE p(x))` and its siblings the same way, into an op whose
+    // result is one nullable truth value per row
+    void lowerListPredicate(mlir::db::ListPredicate predicate);
+
+    // What the two share: the chunks an op over the elements of one row's list reads.
+    // The source is laid out over the carried chunks where it is a constant, and the
+    // body's arguments are the element, the row tag and one chunk per carried column.
+    struct ElementOperands {
+        mlir::Value _sourceChunk;
+        llvm::SmallVector<mlir::Value, 4> _carriedChunks;
+        llvm::SmallVector<mlir::Type, 4> _argumentTypes;
+        llvm::SmallVector<mlir::Location, 4> _argumentLocations;
+    };
+
+    void lowerElementOperands(mlir::Value source, mlir::OperandRange carried, ElementOperands& operands);
+
+    // Lowers the body of such an op into @param nlBody, whose arguments are already bound,
+    // and hands back the chunks its yield names. The nl yield is the caller's to create,
+    // after which it erases the placeholder terminator this returns
+    mlir::Operation* lowerElementBody(mlir::Block& dbBody,
+                                      mlir::Block* nlBody,
+                                      mlir::Value& rowTagChunk,
+                                      mlir::Value& valueChunk);
     void lowerListSlice(mlir::db::ListSlice slice);
     void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
@@ -263,6 +287,7 @@ private:
 
     void lowerExpandPath(mlir::db::ExpandPath expandPath);
     void lowerPathLength(mlir::db::PathLength pathLength);
+    void lowerPathElements(mlir::db::PathElements pathElements);
 
     // Lower a db.make_path into the loop body its entity chunks are bound in, where each
     // row already holds every node, edge and path the element runs through

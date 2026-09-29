@@ -1638,6 +1638,89 @@ bool caseTestNever(const Column* condition, size_t row) {
     return false;
 }
 
+std::optional<bool> readMaskTruth(const Column* mask, size_t row) {
+    return static_cast<bool>(static_cast<const ColumnMask*>(mask)->getRaw()[row]);
+}
+
+std::optional<bool> readOptMaskTruth(const Column* mask, size_t row) {
+    const std::optional<CustomBool>& value = static_cast<const ColumnOptMask*>(mask)->getRaw()[row];
+    if (!value.has_value()) {
+        return std::nullopt;
+    }
+
+    return static_cast<bool>(*value);
+}
+
+std::optional<bool> readNullTruth(const Column* mask, size_t row) {
+    return std::nullopt;
+}
+
+// The entities of one kind a path runs through, in the order the path holds them
+template <typename IDType>
+ListView listPathEntities(const EntityList& path, EntityType listed, ListBufferTypeTag tag, QueryListBuffer& buffer) {
+    const size_t count = static_cast<size_t>(std::ranges::count(path, listed, &EntityList::Entry::_type));
+    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
+
+    size_t index = 0;
+    for (const EntityList::Entry& entry : path) {
+        if (entry._type == listed) {
+            cursor.writeValueAt(index, tag, IDType(entry._id.getValue()));
+            index++;
+        }
+    }
+
+    return cursor.getView();
+}
+
+// The truth value a list predicate holds for a row, from how many of its elements held,
+// failed or answered null: an unknown element leaves the answer unknown unless the known
+// ones already decide it
+std::optional<bool> decideListPredicate(ListPredicateKind kind, size_t trues, size_t falses, size_t nulls) {
+    switch (kind) {
+        case ListPredicateKind::All:
+            if (falses > 0) {
+                return false;
+            } else if (nulls > 0) {
+                return std::nullopt;
+            }
+
+            return true;
+        break;
+
+        case ListPredicateKind::Any:
+            if (trues > 0) {
+                return true;
+            } else if (nulls > 0) {
+                return std::nullopt;
+            }
+
+            return false;
+        break;
+
+        case ListPredicateKind::None:
+            if (trues > 0) {
+                return false;
+            } else if (nulls > 0) {
+                return std::nullopt;
+            }
+
+            return true;
+        break;
+
+        case ListPredicateKind::Single:
+            if (trues > 1) {
+                return false;
+            } else if (nulls > 0) {
+                return std::nullopt;
+            }
+
+            return trues == 1;
+        break;
+    }
+
+    return std::nullopt;
+}
+
 template <typename Primitive>
 void caseWriteOptCell(Column* result, const Column* value, size_t row) {
     std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
@@ -6099,6 +6182,14 @@ void NLExecutor::runExpandPath(NLExecutionContext* context, NLFunctionData* data
                 lists[row] = trie.expandEnds(paths[row], listBuffer, reversed);
             }
         break;
+
+        case PathExpansionKind::Nodes: {
+            const std::vector<NodeID>& seeds = expand->getSeeds()->getRaw();
+            for (size_t row = 0; row < paths.size(); row++) {
+                lists[row] = trie.expandNodes(paths[row], seeds[row], listBuffer, reversed);
+            }
+        }
+        break;
     }
 }
 
@@ -6111,6 +6202,48 @@ void NLExecutor::runPathLength(NLExecutionContext* context, NLFunctionData* data
     lengths.resize(paths.size());
     for (size_t row = 0; row < paths.size(); row++) {
         lengths[row] = trie.getDepth(paths[row]);
+    }
+}
+
+void NLExecutor::runPathElements(NLExecutionContext* context, NLFunctionData* data) {
+    const NLPathElementsData* elements = static_cast<NLPathElementsData*>(data);
+    const std::vector<EntityList>& paths = elements->getPaths()->getRaw();
+    const PathElementsKind kind = elements->getKind();
+
+    // A path an OPTIONAL MATCH missed is an empty sequence; every path found runs
+    // through at least one node
+    if (kind == PathElementsKind::Length) {
+        std::vector<std::optional<uint64_t>>& lengths =
+            static_cast<ColumnOptVector<uint64_t>*>(elements->getOutput())->getRaw();
+        lengths.resize(paths.size());
+
+        for (size_t row = 0; row < paths.size(); row++) {
+            const EntityList& path = paths[row];
+            if (path.empty()) {
+                lengths[row] = std::nullopt;
+            } else {
+                lengths[row] = path.size() / 2;
+            }
+        }
+
+        return;
+    }
+
+    QueryListBuffer& listBuffer = *elements->getListBuffer();
+
+    std::vector<std::optional<ListView>>& lists =
+        static_cast<ColumnOptVector<ListView>*>(elements->getOutput())->getRaw();
+    lists.resize(paths.size());
+
+    for (size_t row = 0; row < paths.size(); row++) {
+        const EntityList& path = paths[row];
+        if (path.empty()) {
+            lists[row] = std::nullopt;
+        } else if (kind == PathElementsKind::Nodes) {
+            lists[row] = listPathEntities<NodeID>(path, EntityType::Node, ListBufferTypeTag::NodeID, listBuffer);
+        } else {
+            lists[row] = listPathEntities<EdgeID>(path, EntityType::Edge, ListBufferTypeTag::EdgeID, listBuffer);
+        }
     }
 }
 
@@ -6625,6 +6758,90 @@ void NLExecutor::runPatternComprehension(NLExecutionContext* context, NLFunction
     comprehension->getState()->buildLists(memory->listBuffer(), comprehension->getResult()->getRaw());
 }
 
+void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* data) {
+    NLListPredicateData* predicate = static_cast<NLListPredicateData*>(data);
+
+    const Column* source = predicate->getSource();
+
+    const NLStmtContainer* body = predicate->getStmts();
+    const NLUnwindElementEmitFunction elementEmit = predicate->getElementEmitFunc();
+    const NLCellAbsentFunction cellAbsent = predicate->getCellAbsentFunc();
+    const NLTruthReadFunction truthRead = predicate->getTruthRead();
+    const Column* value = predicate->getValue();
+    const size_t chunkSize = context->getChunkSize();
+
+    ColumnVector<size_t>* rows = predicate->getRows();
+    ColumnVector<size_t>* positions = predicate->getPositions();
+    ColumnVector<uint64_t>* rowTags = predicate->getRowTags();
+
+    NLElementCursor cursor(source, predicate->getElementCountFunc());
+    const size_t sourceRows = cursor.getSourceRows();
+
+    std::vector<size_t>& trueCounts = predicate->trueCounts();
+    std::vector<size_t>& falseCounts = predicate->falseCounts();
+    std::vector<size_t>& nullCounts = predicate->nullCounts();
+    trueCounts.assign(sourceRows, 0);
+    falseCounts.assign(sourceRows, 0);
+    nullCounts.assign(sourceRows, 0);
+
+    while (!cursor.exhausted()) {
+        cursor.fillChunk(chunkSize, rows->getRaw(), elementEmit ? &positions->getRaw() : nullptr);
+
+        const std::vector<size_t>& rowsRaw = rows->getRaw();
+        std::vector<uint64_t>& rowTagsRaw = rowTags->getRaw();
+        rowTagsRaw.assign(rowsRaw.begin(), rowsRaw.end());
+
+        if (elementEmit) {
+            elementEmit(source, rows, positions, predicate->getElementOutput());
+        }
+
+        for (const NLCarriedColumn& carriedColumn : predicate->carriedColumns()) {
+            const auto gatherFunc = carriedColumn.getGatherFunc();
+            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
+        }
+
+        runBody(context, body);
+
+        const std::vector<uint64_t>& taggedRaw =
+            static_cast<const ColumnVector<uint64_t>*>(predicate->getYieldedRowTags())->getRaw();
+
+        bioassert(value->size() == taggedRaw.size(),
+                  "Yielded predicate of a list predicate is not row-aligned with its row tags.");
+
+        for (size_t element = 0; element < taggedRaw.size(); element++) {
+            const std::optional<bool> truth = truthRead(value, element);
+            const size_t row = taggedRaw[element];
+
+            if (!truth.has_value()) {
+                nullCounts[row]++;
+            } else if (*truth) {
+                trueCounts[row]++;
+            } else {
+                falseCounts[row]++;
+            }
+        }
+    }
+
+    const ListPredicateKind kind = predicate->getKind();
+    std::vector<std::optional<CustomBool>>& resultRaw =
+        static_cast<ColumnOptMask*>(predicate->getResult())->getRaw();
+    resultRaw.resize(sourceRows);
+
+    for (size_t row = 0; row < sourceRows; row++) {
+        if (cellAbsent(source, row)) {
+            resultRaw[row] = std::nullopt;
+            continue;
+        }
+
+        const std::optional<bool> decided = decideListPredicate(kind, trueCounts[row], falseCounts[row], nullCounts[row]);
+        if (decided.has_value()) {
+            resultRaw[row] = CustomBool(*decided);
+        } else {
+            resultRaw[row] = std::nullopt;
+        }
+    }
+}
+
 void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionData* data) {
     NLListComprehensionData* comprehension = static_cast<NLListComprehensionData*>(data);
 
@@ -6866,6 +7083,16 @@ NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return reset;
+}
+
+NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull) {
+    if (untypedNull) {
+        return &readNullTruth;
+    } else if (nullable) {
+        return &readOptMaskTruth;
+    }
+
+    return &readMaskTruth;
 }
 
 NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, bool untypedNull) {

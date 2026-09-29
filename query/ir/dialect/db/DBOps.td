@@ -550,6 +550,47 @@ def ListComprehension : TuringOp<"list_comprehension", [Pure]> {
 }
 
 /**
+* ListPredicate
+*/
+def ListPredicate : TuringOp<"list_predicate", [Pure]> {
+  let summary = "Decide, per row, whether a predicate holds for the elements of that row's list";
+
+  let description = [{
+    Cypher's `all(x IN xs WHERE p(x))`, and `any`, `none` and `single` over the same
+    form. The op reads one list column and produces one boolean per row: whether the
+    predicate holds for as many of the row's elements as the kind asks.
+
+      %ok = db.list_predicate(%tags, {%n}) kind all ({
+        ^bb0(%x: !db.column<none>, %tag: !db.column<ui64>, %nIn: !db.column<!storage.node_id>):
+          %p = db.neq %x, %c : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+          db.comprehension_yield %tag, %p : !db.column<!storage.bool>
+      }) : (!db.column<none>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+
+    The region is db.list_comprehension's: the entry block takes the element, the row
+    tag and one argument per carried column, and the yield names the tag and the
+    predicate's value for each element. The body cuts nothing: an element whose
+    predicate is null counts as unknown, which is what makes the answer null where
+    Cypher says so - `all` is null when no element fails and one is unknown, `any` when
+    none holds and one is unknown, `none` as `any` is, `single` when the elements known
+    to hold are at most one and one is unknown. An empty list holds for `all` and `none`
+    and fails `any` and `single`; a row whose source cell is null gets a null.
+  }];
+
+  let arguments = (ins Column:$source, Variadic<Column>:$columns_to_filter, ListPredicateKind:$kind);
+  let results   = (outs ColumnBools:$result);
+
+  // Exactly one block, ending in a db.comprehension_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` `{` $columns_to_filter `}` `)` `kind` $kind $body attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * PatternComprehension
 */
 def PatternComprehension : TuringOp<"pattern_comprehension", [Pure]> {
@@ -606,14 +647,14 @@ def PatternComprehension : TuringOp<"pattern_comprehension", [Pure]> {
 */
 def ComprehensionYield : TuringOp<"comprehension_yield",
                                   [Pure, Terminator,
-                                   ParentOneOf<["ListComprehension", "PatternComprehension"]>]> {
+                                   ParentOneOf<["ListComprehension", "ListPredicate", "PatternComprehension"]>]> {
   let summary = "Name the row each surviving element of a comprehension came from and what it contributes";
 
   let description = [{
-    Terminates the body of a db.list_comprehension or the pattern of a
-    db.pattern_comprehension. `row_tags` is the row tag as the body left it - the row each
-    surviving element came from, which a WHERE cuts alongside the element - and `value` is
-    what that element contributes to its row's list. The tag is absent only for a
+    Terminates the body of a db.list_comprehension or a db.list_predicate, or the pattern
+    of a db.pattern_comprehension. `row_tags` is the row tag as the body left it - the row
+    each surviving element came from, which a WHERE cuts alongside the element - and
+    `value` is what that element contributes to its row's list, or its row's predicate. The tag is absent only for a
     db.pattern_comprehension that takes no input column: the one list it builds covers the
     single empty row, which every match belongs to.
   }];
@@ -1270,7 +1311,9 @@ def ExpandPath : TuringOp<"expand_path", [Pure]> {
     is the ordered edge IDs the path variable binds to, `kind ends` the end node of each
     hop and `kind sources` the source node of each hop (the seed, read from `srcids`,
     followed by every end but the last) - the lists the group variables of a
-    quantified path pattern bind to.
+    quantified path pattern bind to. `kind nodes` is every node the path runs through,
+    the seed then the end of each hop, which is what nodes() reads off a named path
+    over the walk; a path of no hops gives the seed alone.
 
     `reversed` writes the list backwards, for an exploration the pattern's far end seeded:
     the walk took its hops the other way round, so the last one it took is the pattern's
@@ -1283,7 +1326,7 @@ def ExpandPath : TuringOp<"expand_path", [Pure]> {
   }];
 
   // The seeds are read by whichever kind ends up holding them - `kind sources` in walk
-  // order, `kind ends` reversed - so the other kind leaves them out
+  // order, `kind ends` reversed, `kind nodes` either way - so the other kind leaves them out
   let arguments = (ins ColumnPathRefs:$paths,
                        Optional<ColumnNodeIDs>:$srcids,
                        PathExpansionKind:$kind,
@@ -1363,6 +1406,38 @@ def MakePath : TuringOp<"make_path", [Pure]> {
 
   let assemblyFormat = [{
     `(` $entities `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* PathElements
+*/
+def PathElements : TuringOp<"path_elements", [Pure]> {
+  let summary = "Read the nodes, the relationships or the length of each named path";
+
+  let description = [{
+    `nodes(p)`, `relationships(p)` and `length(p)` over the path a named pattern
+    element binds: one list of node IDs, one list of edge IDs or one hop count per row,
+    read off the entity sequence db.make_path laid out.
+
+      %ns = db.path_elements(%p) kind nodes
+              : (!db.column<!storage.entity_list>) -> !db.column<!storage.nullable<!storage.list<!storage.node_id>>>
+      %n = db.path_elements(%p) kind length
+              : (!db.column<!storage.entity_list>) -> !db.column<!storage.nullable<ui64>>
+
+    A path an OPTIONAL MATCH missed is an empty sequence, and each function of it is
+    null, so the results are nullable. Over the path of one node and one walk,
+    fuse_path_elements answers from the walk's handles instead: db.path_length for the
+    length and db.expand_path for the two lists.
+  }];
+
+  let arguments = (ins ColumnEntityList:$path, PathElementsKind:$kind);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $path `)` `kind` $kind attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;

@@ -435,6 +435,22 @@ void FunctionDecls::initDefault() {
     sizePath->setArguments({edgeOrPath});
     sizePath->setReturnTypes({{EvaluatedType::Integer}});
 
+    // The three reads of a named path: its hop count, the nodes it runs through and its
+    // relationships, the two lists typed so that a comprehension over them binds an entity
+    FunctionSignature* lengthPath = createFunction("length");
+    lengthPath->setArguments({EvaluatedType::GraphPath});
+    lengthPath->setReturnTypes({{EvaluatedType::Integer}});
+
+    FunctionSignature* nodesPath = createFunction("nodes");
+    nodesPath->setArguments({EvaluatedType::GraphPath});
+    nodesPath->setReturnTypes({{EvaluatedType::List}});
+    nodesPath->setReturnedListShape(ListShape(EvaluatedType::NodePattern, 1));
+
+    FunctionSignature* relationshipsPath = createFunction("relationships");
+    relationshipsPath->setArguments({EvaluatedType::GraphPath});
+    relationshipsPath->setReturnTypes({{EvaluatedType::List}});
+    relationshipsPath->setReturnedListShape(ListShape(EvaluatedType::EdgePattern, 1));
+
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");
     toInteger->setArguments({EvaluatedType::String});
