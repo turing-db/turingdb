@@ -1907,14 +1907,13 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
 
         for (size_t importIndex = 0; importIndex < config._hopImports.size(); importIndex++) {
             const mlir::Value importValue = config._hopImports[importIndex];
-            const mlir::Type importType = importValue.getType();
 
-            Column* const importChunk = allocColumnForChunkType(importType);
+            Column* importChunk = nullptr;
+            NLBroadcastFunction broadcast = nullptr;
+            allocBroadcastColumn(importValue, true, importChunk, broadcast);
             _valueSlots[hopBlock.getArgument(static_cast<unsigned>(3 + importIndex))] = importChunk;
 
-            loopData->addHopImport(NLHopImport {getColumn(importValue),
-                                                importChunk,
-                                                NLExecutor::selectRepeatRowFunction(getChunkKind(importType))});
+            loopData->addHopImport(NLHopImport {getColumn(importValue), importChunk, broadcast});
         }
 
         translateBlock(hopBlock, loopData->getHopStmts());
@@ -6015,10 +6014,10 @@ void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
-void NLTranslator::addCrossColumn(mlir::Value inputValue,
-                                  mlir::Value resultValue,
-                                  bool isOuter,
-                                  NLCrossProductLoopData* data) {
+void NLTranslator::allocBroadcastColumn(mlir::Value inputValue,
+                                        bool isOuter,
+                                        Column*& output,
+                                        NLBroadcastFunction& broadcast) {
     const Column* input = getColumn(inputValue);
 
     const auto chunkType = mlir::cast<nl::ChunkType>(inputValue.getType());
@@ -6028,8 +6027,6 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
     // nullable value chunk allocates a ColumnOptVector and broadcasts on its
     // value type; a list_element chunk allocates a column of tagged scalars, which
     // carry their own type; an ID chunk allocates on its chunk kind.
-    Column* output = nullptr;
-    NLBroadcastFunction broadcast = nullptr;
 
     // A constant column holds one value standing for every row, so repeating it block-wise
     // and tiling it give the same column: the one broadcast serves both sides.
@@ -6079,6 +6076,17 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
         broadcast = isOuter ? NLExecutor::selectBlockRepeatFunction(kind)
                             : NLExecutor::selectTileFunction(kind);
     }
+}
+
+void NLTranslator::addCrossColumn(mlir::Value inputValue,
+                                  mlir::Value resultValue,
+                                  bool isOuter,
+                                  NLCrossProductLoopData* data) {
+    const Column* input = getColumn(inputValue);
+
+    Column* output = nullptr;
+    NLBroadcastFunction broadcast = nullptr;
+    allocBroadcastColumn(inputValue, isOuter, output, broadcast);
 
     _valueSlots[resultValue] = output;
 

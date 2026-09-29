@@ -74,3 +74,30 @@ TEST_F(HopPredicateNonSeedVariableTest, aQuantifiedPathReadsAVariableCarriedByAW
 
     EXPECT_EQ(reached, _walksLongerThanKidsAge);
 }
+
+TEST_F(HopPredicateNonSeedVariableTest, aRangeLiteralReadsAValueCarriedByAWith) {
+    writeAHopShorterThanKidsAge();
+
+    std::vector<StringRowSink::Row> reached;
+    rows("MATCH (c:Person {name: 'Kid'}) WITH c.age AS age MATCH (n:Person)-[e:KNOWS_WELL*1..2 WHERE e.duration > age]->(m) RETURN n.name, m.name", reached);
+
+    EXPECT_EQ(reached, _walksLongerThanKidsAge);
+}
+
+TEST_F(HopPredicateNonSeedVariableTest, aRangeLiteralReadsAnUnwoundValue) {
+    writeAHopShorterThanKidsAge();
+
+    std::vector<StringRowSink::Row> reached;
+    rows("UNWIND [2, 25] AS age MATCH (n:Person)-[e:KNOWS_WELL*1..2 WHERE e.duration > age]->(m) RETURN age, n.name, m.name", reached);
+
+    const std::vector<StringRowSink::Row> expected {
+        {"2", "Adam", "Adam"},
+        {"2", "Adam", "Remy"},
+        {"2", "Kid", "Pal"},
+        {"2", "Kid", "Quiet"},
+        {"2", "Pal", "Quiet"},
+        {"2", "Remy", "Adam"},
+        {"2", "Remy", "Remy"},
+    };
+    EXPECT_EQ(reached, expected);
+}

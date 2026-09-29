@@ -1179,18 +1179,6 @@ void gatherColumn(const Column* input,
     }
 }
 
-// Lay one row of a column out over every row of the output
-template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void repeatRowColumn(const Column* input, size_t row, size_t rowCount, Column* output) {
-    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
-    ColumnType* typedOutput = static_cast<ColumnType*>(output);
-
-    auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
-
-    std::fill_n(outputRaw.begin(), rowCount, typedInput->getRaw()[row]);
-}
-
 // Fill a chunk with a run of null rows. Every element type reads its own
 // default-constructed value as null: an ID defaults to the invalid ID that ID::isValid
 // rejects, which is how an entity an OPTIONAL MATCH did not match is spelled.
@@ -5759,7 +5747,7 @@ public:
             std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
 
             for (const NLHopImport& import : imports) {
-                import._repeat(import._source, seedRow, count, import._chunk);
+                import._broadcast(import._source, count, seedRow * count, count, import._chunk);
             }
 
             runBody(_context, stmts);
@@ -8530,13 +8518,6 @@ NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
 
 NLGatherFunction NLExecutor::selectCountGatherFunction() {
     return &gatherColumn<uint64_t>;
-}
-
-NLRepeatRowFunction NLExecutor::selectRepeatRowFunction(NLChunkKind kind) {
-    NLRepeatRowFunction selected = nullptr;
-    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &repeatRowColumn<ElementType>; });
-
-    return selected;
 }
 
 NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, bool untypedNull) {

@@ -2190,9 +2190,12 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
     llvm::SmallVector<const VariableDependency*> roots;
     collectOrderedRoots(roots);
 
+    llvm::SmallVector<const VariableDependency*> crossedRoots;
+    DefinedVars crossedComponentVars;
+
     // TODO: Use nodes at ends of diameter
     for (const VariableDependency* root : roots) {
-        if (defined.contains(root)) {
+        if (defined.contains(root) || crossedComponentVars.contains(root)) {
             continue;
         }
 
@@ -2203,7 +2206,19 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
         component._region->push_back(scratch); // Region destructor frees scratch
         _opBuilder.setInsertionPointToStart(scratch);
 
-        translateComponent(root, defined, component._vars);
+        DefinedVars componentVars;
+        collectComponentVars(root, componentVars);
+
+        if (walkReadsAnotherComponent(componentVars)) {
+            openComponent(root);
+            defined.insert(root);
+            component._vars.push_back(root);
+
+            crossedRoots.push_back(root);
+            crossedComponentVars.insert(componentVars.begin(), componentVars.end());
+        } else {
+            translateComponent(root, defined, component._vars);
+        }
 
         for (const VariableDependency* var : component._vars) {
             bioassert(_part._varMap.contains(var), "Component var {} not registered", var->getName());
@@ -2257,6 +2272,8 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
     }
 
     _opBuilder.setInsertionPointToEnd(mainBlock);
+
+    expandCrossedComponents(crossedRoots, components, defined);
 }
 
 // A chunk holds the rows of the loop whose body binds it, so a column bound in an
@@ -2771,9 +2788,7 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     }
 }
 
-void DBProgramGenerator::translateComponent(const VariableDependency* root,
-                                            DefinedVars& defined,
-                                            std::vector<const VariableDependency*>& outVars) {
+void DBProgramGenerator::openComponent(const VariableDependency* root) {
     // A root's dataflow opens with whatever already holds its rows: the column a CALL bound
     // it to, the literal list an UNWIND binds it to, or - a pattern variable nothing has
     // bound yet - a scan of the graph's nodes.
@@ -2799,6 +2814,12 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
     }
 
     applyConstraints(root);
+}
+
+void DBProgramGenerator::translateComponent(const VariableDependency* root,
+                                            DefinedVars& defined,
+                                            std::vector<const VariableDependency*>& outVars) {
+    openComponent(root);
 
     // Forms the "carried set" for this connected component
     std::vector<const VariableDependency*> carriedSet;
@@ -2806,6 +2827,85 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
     expandComponent(root, defined, carriedSet, outVars);
 
     closeBoundJoins(carriedSet, outVars);
+}
+
+void DBProgramGenerator::collectComponentVars(const VariableDependency* root, DefinedVars& componentVars) const {
+    llvm::SmallVector<const VariableDependency*> worklist {root};
+    while (!worklist.empty()) {
+        const VariableDependency* const current = worklist.pop_back_val();
+        if (!componentVars.insert(current).second) {
+            continue;
+        }
+
+        for (const DependencyEdge* edge : current->edges()) {
+            worklist.push_back(edge->src() == current ? edge->tgt() : edge->src());
+        }
+    }
+}
+
+void DBProgramGenerator::collectVarsOfDecl(const VarDecl* decl, llvm::SmallVectorImpl<const VariableDependency*>& vars) const {
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+    const auto identityIt = edgeIdentities.find(decl);
+    if (identityIt != edgeIdentities.end()) {
+        vars.append(identityIt->second.begin(), identityIt->second.end());
+    }
+
+    for (const VariableDependency& var : _vdg.vars()) {
+        if (var.getDecl() == decl) {
+            vars.push_back(&var);
+        }
+    }
+}
+
+bool DBProgramGenerator::walkReadsAnotherComponent(const DefinedVars& componentVars) const {
+    const auto inComponent = [&componentVars](const VariableDependency* var) {
+        return componentVars.contains(var);
+    };
+
+    llvm::SmallVector<const VariableDependency*> walkVars;
+    llvm::SmallVector<const VariableDependency*> importVars;
+
+    for (const auto& [edgeDecl, pattern] : _part._quantifiedEdges) {
+        walkVars.clear();
+        collectVarsOfDecl(edgeDecl, walkVars);
+
+        if (!llvm::any_of(walkVars, inComponent)) {
+            continue;
+        }
+
+        for (const VarDecl* import : pattern->hopImports()) {
+            importVars.clear();
+            collectVarsOfDecl(import, importVars);
+
+            for (const VariableDependency* var : importVars) {
+                if (inComponent(var)) {
+                    continue;
+                }
+
+                const bool holdsRows = !holdsColumn(var) || !yieldsConstantColumn(_part._varMap.at(var).back());
+                if (holdsRows) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+void DBProgramGenerator::expandCrossedComponents(llvm::ArrayRef<const VariableDependency*> roots,
+                                                 const std::vector<TranslatedComponent>& components,
+                                                 DefinedVars& defined) {
+    std::vector<const VariableDependency*> carriedSet;
+    for (const TranslatedComponent& component : components) {
+        carriedSet.insert(carriedSet.end(), component._vars.begin(), component._vars.end());
+    }
+
+    std::vector<const VariableDependency*> expandedVars;
+    for (const VariableDependency* root : roots) {
+        expandComponent(root, defined, carriedSet, expandedVars);
+        closeBoundJoins(carriedSet, expandedVars);
+    }
 }
 
 void DBProgramGenerator::expandComponent(const VariableDependency* root,
