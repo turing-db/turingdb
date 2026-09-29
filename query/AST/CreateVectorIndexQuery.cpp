@@ -7,7 +7,7 @@ using namespace db;
 
 CreateVectorIndexQuery::CreateVectorIndexQuery(DeclContext* declContext,
                                                std::string_view indexName,
-                                               vec::Dimension dimension,
+                                               int64_t dimension,
                                                vec::DistanceMetric metric,
                                                vec::IndexType indexType)
     : QueryCommand(declContext),
@@ -23,7 +23,7 @@ CreateVectorIndexQuery::~CreateVectorIndexQuery() {
 
 CreateVectorIndexQuery* CreateVectorIndexQuery::create(CypherAST* ast,
                                                        std::string_view indexName,
-                                                       vec::Dimension dimension,
+                                                       int64_t dimension,
                                                        vec::DistanceMetric metric,
                                                        vec::IndexType indexType) {
     DeclContext* declContext = DeclContext::create(ast, nullptr);

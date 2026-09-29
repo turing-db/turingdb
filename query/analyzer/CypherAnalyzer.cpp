@@ -1498,11 +1498,12 @@ void CypherAnalyzer::analyze(S3TransferQuery* s3Transfer) {
 }
 
 void CypherAnalyzer::analyze(const CreateVectorIndexQuery* query) {
-    if (query->getDimension() == 0) {
+    const int64_t dimension = query->getDimension();
+    if (dimension <= 0) {
         throwError("Vector index dimension must be greater than 0", query);
     }
 
-    if (query->getDimension() > MAX_VECTOR_INDEX_DIMENSION) {
+    if (dimension > MAX_VECTOR_INDEX_DIMENSION) {
         throwError(fmt::format("Vector index dimension must not exceed {}", MAX_VECTOR_INDEX_DIMENSION), query);
     }
 

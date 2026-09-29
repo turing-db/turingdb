@@ -420,7 +420,7 @@ void DBSystemProgramGenerator::generateCreateVectorIndex(const CreateVectorIndex
     mlir::db::CreateVectorIndex op = _opBuilder->create<mlir::db::CreateVectorIndex>(_opBuilder->getUnknownLoc(),
                                                               stringColumnType(),
                                                               toStringRef(query->getIndexName()),
-                                                              query->getDimension(),
+                                                              static_cast<uint64_t>(query->getDimension()),
                                                               toVectorMetric(query->getMetric()),
                                                               toVectorIndexKind(query->getIndexType()));
 

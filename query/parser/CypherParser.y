@@ -672,11 +672,11 @@ installExtensionQuery
 createVectorIndexQuery
     // no type provided => default to flat
     : CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric {
-        $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9, vec::IndexType::FLAT);
+        $$ = CreateVectorIndexQuery::create(ast, $4, $7, $9, vec::IndexType::FLAT);
         LOC($$, @$);
       }
     | CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric TYPE indexType {
-        $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9, $11);
+        $$ = CreateVectorIndexQuery::create(ast, $4, $7, $9, $11);
         LOC($$, @$);
       }
     ;

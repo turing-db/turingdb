@@ -110,7 +110,7 @@ private:
     // WITH descopes.
     std::vector<std::string_view> _subqueryImports;
 
-    constexpr static size_t MAX_VECTOR_INDEX_DIMENSION = 8192;
+    constexpr static int64_t MAX_VECTOR_INDEX_DIMENSION = 8192;
 
     // The shared body of a query and of a subquery's. @param returnRequired says whether a
     // body ending on a reading clause needs a RETURN: an EXISTS body does not

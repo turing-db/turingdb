@@ -85,3 +85,10 @@ TEST_F(CreateVectorIndexDimensionTest, boundsTheDimensionOfAnHNSWIndexToo) {
     expectRejected("CREATE VECTOR INDEX vectors WITH DIMENSION 100000 METRIC EUCLID TYPE HNSW",
                    "dimension must not exceed 8192");
 }
+
+TEST_F(CreateVectorIndexDimensionTest, rejectsADimensionPastTheRangeOfTheDimensionType) {
+    expectRejected("CREATE VECTOR INDEX vectors WITH DIMENSION 4294975488 METRIC EUCLID",
+                   "dimension must not exceed 8192");
+    expectRejected("CREATE VECTOR INDEX vectors WITH DIMENSION 4294967296 METRIC EUCLID",
+                   "dimension must not exceed 8192");
+}
