@@ -233,6 +233,12 @@ jobs:
         cd build
         make test ARGS="--output-on-failure"
 
+    # Every unit test binary links the engine and MLIR statically, about 130 MB each:
+    # the 631 of them take 63 GB, and no later step runs them. Keeping them through
+    # regress filled the 150 GB disk of ubuntu-runner-aws1.
+    - name: Delete unit test binaries
+      run: find build/test -type f -perm -u+x -delete
+
     - name: Verify wheel installation
       run: |
         uv venv .venv-test --python ${{ matrix.python_version }}
