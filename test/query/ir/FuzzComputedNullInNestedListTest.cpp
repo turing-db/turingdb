@@ -78,3 +78,23 @@ TEST_F(FuzzComputedNullInNestedListTest, UnwindNullDifferenceBesideNestedList) {
 TEST_F(FuzzComputedNullInNestedListTest, UnwindNullSumBesideNestedList) {
     expectRows("UNWIND [[1], null + 1] AS l RETURN l", {{"[1]"}, {"null"}});
 }
+
+TEST_F(FuzzComputedNullInNestedListTest, UnwindMissingPropertyBesideNestedList) {
+    expectRows("MATCH (n {name: 'Remy'}) WITH [[1], n.missing] AS xs UNWIND xs AS l RETURN l", {{"[1]"}, {"null"}});
+}
+
+TEST_F(FuzzComputedNullInNestedListTest, UnwindTheUnwoundNestedList) {
+    expectRows("UNWIND [[1, 2], null - null] AS l UNWIND l AS x RETURN x", {{"1"}, {"2"}});
+}
+
+TEST_F(FuzzComputedNullInNestedListTest, SizeAndIndexOfUnwoundNestedList) {
+    expectRows("UNWIND [[1, 2], null - null] AS l RETURN size(l), l[0]", {{"2", "1"}, {"null", "null"}});
+}
+
+TEST_F(FuzzComputedNullInNestedListTest, CountUnwoundNestedLists) {
+    expectRows("UNWIND [[1, 2], null - null] AS l RETURN count(l)", {{"1"}});
+}
+
+TEST_F(FuzzComputedNullInNestedListTest, ListComprehensionOverNestedListAndNull) {
+    expectRows("RETURN [x IN [[1], null - null] | x]", {{"[[1], null]"}});
+}

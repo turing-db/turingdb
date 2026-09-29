@@ -788,7 +788,6 @@ public:
     static NLUnwindElementEmitFunction selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType);
     static NLUnwindElementEmitFunction selectListUnwindNodeEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectListUnwindEdgeEmit(bool sourceIsNullable);
-    static NLUnwindElementEmitFunction selectListUnwindListEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLUnwindElementEmitFunction selectOptTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);

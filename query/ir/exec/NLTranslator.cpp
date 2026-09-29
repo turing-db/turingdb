@@ -1329,8 +1329,6 @@ NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkT
         return NLExecutor::selectListUnwindNodeEmit(sourceIsNullable);
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLExecutor::selectListUnwindEdgeEmit(sourceIsNullable);
-    } else if (mlir::isa<storage::ListType>(elementType)) {
-        return NLExecutor::selectListUnwindListEmit(sourceIsNullable);
     }
 
     return NLExecutor::selectListUnwindElementEmit(sourceIsNullable);

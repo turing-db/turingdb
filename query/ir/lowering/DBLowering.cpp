@@ -1409,10 +1409,11 @@ mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type
         return storage::ListElementType::get(context);
     }
 
-    // An entity ID and a nested list are present in every row they are drained from, so
-    // they ride a plain chunk; a value rides the nullable one every value-chunk consumer
-    // dispatches on, as lowerUnwindConst's homogeneous list does.
-    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::ListType>(listElement)) {
+    // An entity ID column spells a null entity as an invalid ID, so an entity rides a
+    // plain chunk; a value or a nested list, either of which may be a tagged null, rides
+    // the nullable one every value-chunk consumer dispatches on, as lowerUnwindConst's
+    // homogeneous list does.
+    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType>(listElement)) {
         return listElement;
     }
 
