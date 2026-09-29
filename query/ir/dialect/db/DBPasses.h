@@ -5,6 +5,7 @@
 #include "DBDialect.h"
 
 namespace db {
+class ExplainReport;
 class GraphView;
 }
 
@@ -23,13 +24,17 @@ namespace mlir::db {
 // clearing _usesHashJoin fuses none - the two overrides the v2 planner carries as well.
 // With no graph there is nothing to estimate, so every match fuses. count_from_metadata
 // reads _hasPendingWrites: the query then sees writes the graph's counts leave out.
+// prove_distinct_edges reads the graph's label sets and writes what it proved to _explain,
+// the report of an EXPLAIN prefix, when there is one.
 struct DBPassContext {
     const ::db::GraphView* _view {nullptr};
     bool _forcesHashJoin {false};
     bool _usesHashJoin {true};
     bool _hasPendingWrites {false};
+    ::db::ExplainReport* _explain {nullptr};
 };
 
+std::unique_ptr<Pass> createProveDistinctEdges(const DBPassContext* context);
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context);
 std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context);
 
