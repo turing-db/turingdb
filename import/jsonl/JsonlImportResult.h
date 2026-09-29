@@ -18,6 +18,7 @@ enum class JsonlImportErrorType : uint8_t {
     MISMATCH_EMB_DIM,
     NON_NUMERIC_EMB,
     NON_DATETIME_VALUE,
+    NON_DURATION_VALUE,
 
     _SIZE
 };
@@ -34,7 +35,8 @@ using JsonlImportErrorTypeDescription = EnumToString<JsonlImportErrorType>::Crea
     EnumStringPair<JsonlImportErrorType::MISSING_EDGE_TGT_ID, "Missing edge target node id">,
     EnumStringPair<JsonlImportErrorType::MISMATCH_EMB_DIM, "Found embedding property of differing dimensions">,
     EnumStringPair<JsonlImportErrorType::NON_NUMERIC_EMB, "Found non-numeric value in embedding">,
-    EnumStringPair<JsonlImportErrorType::NON_DATETIME_VALUE, "Found a value naming no instant in a datetime property">
+    EnumStringPair<JsonlImportErrorType::NON_DATETIME_VALUE, "Found a value naming no instant in a datetime property">,
+    EnumStringPair<JsonlImportErrorType::NON_DURATION_VALUE, "Found a value that is not a count of microseconds in a duration property">
 >;
 
 class JsonlImportError {

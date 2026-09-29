@@ -272,12 +272,17 @@ void ParquetEdgeVisitor::addEdgeProperty(const EdgeRecord& edge,
         }
         break;
 
+        case ValueType::Duration: {
+            const int64_t value = _propInt64Vals.at(columnIndex)[valueIndex];
+            builder.addEdgeProperty<types::Duration>(edge, prop.propertyTypeID, types::Duration::Primitive {value});
+        }
+        break;
+
         // Handled by applyEdgeListProperty, which groups the repeated values into lists
         // before any row reaches here
         case ValueType::List:
         // ValueTypes that aren't represented in Parquet
         case ValueType::Map:
-        case ValueType::Duration:
         case ValueType::UInt64:
         case ValueType::Embedding:
         case ValueType::Invalid:

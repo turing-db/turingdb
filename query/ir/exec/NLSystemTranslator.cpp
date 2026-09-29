@@ -13,6 +13,7 @@
 #include "StorageEnums.h"
 
 #include "DateTimeSpec.h"
+#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 #include "Path.h"
 
@@ -171,10 +172,11 @@ void fillEmbeddingsSpec(mlir::DictionaryAttr attribute, EmbeddingsSpec& specs) {
     }
 }
 
-// The properties a LOAD JSONL named as instants, one unit entry each - the name is the
-// whole of it. A null attribute - every other import, and a JSONL one with no such clause -
-// leaves the spec empty.
-void fillDateTimeSpec(mlir::DictionaryAttr attribute, DateTimeSpec& specs) {
+// The properties an import named as instants or durations, one unit entry each - the name
+// is the whole of it. A null attribute - an import with no such clause - leaves the spec
+// empty.
+template <typename PropertyNameSpec>
+void fillPropertyNameSpec(mlir::DictionaryAttr attribute, PropertyNameSpec& specs) {
     if (!attribute) {
         return;
     }
@@ -220,13 +222,17 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         fillEmbeddingsSpec(importGraph.getEmbeddingsAttr(), embeddings);
 
         DateTimeSpec dateTimes;
-        fillDateTimeSpec(importGraph.getDateTimesAttr(), dateTimes);
+        fillPropertyNameSpec(importGraph.getDateTimesAttr(), dateTimes);
+
+        DurationSpec durations;
+        fillPropertyNameSpec(importGraph.getDurationsAttr(), durations);
 
         NLImportGraphData* data =
             _program->allocFunctionData<NLImportGraphData>(fs::Path(importGraph.getPath().str()),
                                                            toStringView(importGraph.getGraphName()),
                                                            embeddings,
                                                            dateTimes,
+                                                           durations,
                                                            importStatement(importGraph.getFormat()),
                                                            allocResult<NLViewColumn>(importGraph.getGraph()));
         body->emplaceStmt(&NLSystemExecutor::runImportGraph, data);

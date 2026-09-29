@@ -1590,6 +1590,17 @@ void CypherAnalyzer::analyze(LoadJsonlQuery* loadJsonl) {
     if (!validDims) {
         throwError("All embedding properties must have dimension greater than 1.");
     }
+
+    const DateTimeSpec& dateTimeSpecs = loadJsonl->getDateTimeSpecs();
+    for (const std::string_view name : loadJsonl->getDurationSpecs()) {
+        if (dateTimeSpecs.contains(name)) {
+            throwError(fmt::format("Property '{}' is named both a datetime and a duration.", name),
+                       loadJsonl);
+        } else if (embDims.find(name) != embDims.end()) {
+            throwError(fmt::format("Property '{}' is named both an embedding and a duration.", name),
+                       loadJsonl);
+        }
+    }
 }
 
 void CypherAnalyzer::analyze(LoadGMLQuery* loadGML) {

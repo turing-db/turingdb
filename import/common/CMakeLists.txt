@@ -1,6 +1,7 @@
 add_library(turing_db_import_common_s
   STATIC
   DateTimeSpec.cpp
+  DurationSpec.cpp
   EmbeddingsSpec.cpp
 )
 

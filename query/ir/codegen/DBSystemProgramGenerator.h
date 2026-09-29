@@ -95,7 +95,8 @@ private:
                              std::string_view graphName,
                              mlir::storage::GraphImportFormat format,
                              mlir::DictionaryAttr embeddings,
-                             mlir::DictionaryAttr dateTimes = {});
+                             mlir::DictionaryAttr dateTimes = {},
+                             mlir::DictionaryAttr durations = {});
 
     void generatePropertyIndex(std::string_view indexName,
                                const PropertyExpr* propertyExpr,

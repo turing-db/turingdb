@@ -70,12 +70,13 @@ def ImportGraph : NLSystemOp<"import_graph"> {
                        StrAttr:$graph_name,
                        GraphImportFormat:$format,
                        OptionalAttr<DictionaryAttr>:$embeddings,
-                       OptionalAttr<DictionaryAttr>:$date_times);
+                       OptionalAttr<DictionaryAttr>:$date_times,
+                       OptionalAttr<DictionaryAttr>:$durations);
   let results   = (outs NLChunk:$graph);
 
   let assemblyFormat = [{
     $format `(` $path `)` `as` $graph_name (`embeddings` $embeddings^)?
-    (`datetimes` $date_times^)? attr-dict `:` qualified(type($graph))
+    (`datetimes` $date_times^)? (`durations` $durations^)? attr-dict `:` qualified(type($graph))
   }];
 }
 

@@ -12,14 +12,14 @@ void ParquetImporter::import() {
     bioassert(_builder, "Null CommitBuilder.");
 
     {
-        ParquetNodeVisitor nodeVisitor(_builder, _nodeIDs);
+        ParquetNodeVisitor nodeVisitor(_builder, _nodeIDs, _durationSpecs);
         ParquetReader reader(_nodeFile, nodeVisitor);
         reader.ensureFileOpen();
         while (reader.nextChunk()) { }
     }
 
     {
-        ParquetEdgeVisitor edgeVisitor(_builder, _nodeIDs);
+        ParquetEdgeVisitor edgeVisitor(_builder, _nodeIDs, _durationSpecs);
         ParquetReader reader(_edgeFile, edgeVisitor);
         reader.ensureFileOpen();
         while (reader.nextChunk()) { }

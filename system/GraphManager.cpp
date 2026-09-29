@@ -134,7 +134,8 @@ Graph* GraphManager::importGraph(std::string_view graphName,
                                  const fs::Path& filePath,
                                  JobSystem* jobSystem,
                                  const EmbeddingsSpec& embeddingSpecs,
-                                 const DateTimeSpec& dateTimeSpecs) {
+                                 const DateTimeSpec& dateTimeSpecs,
+                                 const DurationSpec& durationSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / filePath;
 
     // Step 1. Check if graph was already loaded || is already loading
@@ -163,18 +164,18 @@ Graph* GraphManager::importGraph(std::string_view graphName,
             return loadGmlDB(graphName, absolute, jobSystem);
         break;
         case GraphFileType::JSONL:
-            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs, dateTimeSpecs);
+            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs, dateTimeSpecs, durationSpecs);
         break;
         case GraphFileType::BINARY:
             return loadBinaryDB(graphName, absolute, jobSystem);
         break;
         case GraphFileType::PARQUET:
-            return loadParquetDB(graphName, absolute, jobSystem);
+            return loadParquetDB(graphName, absolute, jobSystem, durationSpecs);
         break;
         case GraphFileType::UNKNOWN:
             // If we can not determine the file type, assume it is a JSONL graph
             // FIXME To be changed
-            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs, dateTimeSpecs);
+            return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs, dateTimeSpecs, durationSpecs);
         break;
         case GraphFileType::_SIZE:
             throw TuringException("Unsupported graph type");
@@ -250,7 +251,8 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
                                  const fs::Path& dbPath,
                                  JobSystem* jobSystem,
                                  const EmbeddingsSpec& embeddingSpecs,
-                                 const DateTimeSpec& dateTimeSpecs) {
+                                 const DateTimeSpec& dateTimeSpecs,
+                                 const DurationSpec& durationSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return nullptr;
@@ -278,7 +280,7 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
     Change* change = _changes.createChange(graph.get(), CommitHash::head());
     ChangeAccessor changeAccessor = change->access();
 
-    const auto importRes = JsonlParser::parse(changeAccessor, file, embeddingSpecs, dateTimeSpecs);
+    const auto importRes = JsonlParser::parse(changeAccessor, file, embeddingSpecs, dateTimeSpecs, durationSpecs);
 
     if (!importRes) {
         _changes.deleteChange(changeAccessor, change->id());
@@ -359,7 +361,8 @@ Graph* GraphManager::loadGmlDB(std::string_view graphName,
 
 Graph* GraphManager::loadParquetDB(std::string_view graphName,
                                    const fs::Path& dbPath,
-                                   JobSystem* jobSystem) {
+                                   JobSystem* jobSystem,
+                                   const DurationSpec& durationSpecs) {
     const fs::Path graphPath = _config->getGraphsDir() / graphName;
     if (graphPath == dbPath) {
         return nullptr;
@@ -394,7 +397,7 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     // Unfortunately I think we need to have this try-catch due to the dependency on the
     // Parquet lib which throws. Removing would require a rewrite of the reader.
     // TODO: Attempt to remove this try-catch and make the importer/reader exception free
-    ParquetImporter importer(nodeFile, edgeFile, commitBuilder);
+    ParquetImporter importer(nodeFile, edgeFile, commitBuilder, durationSpecs);
     try {
         importer.import();
     } catch (...) {

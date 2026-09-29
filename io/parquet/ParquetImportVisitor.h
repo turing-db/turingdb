@@ -13,6 +13,7 @@
 
 #include "ParquetReader.h"
 
+#include "DurationSpec.h"
 #include "ID.h"
 #include "list/ListContainer.h"
 #include "list/ListView.h"
@@ -35,9 +36,10 @@ public:
     using NodeIDs = std::span<const int64_t>;
     using IDMap = std::unordered_map<int64_t, NodeID>;
 
-    ParquetImportVisitor(CommitBuilder* builder, IDMap& nodeIDs)
+    ParquetImportVisitor(CommitBuilder* builder, IDMap& nodeIDs, const DurationSpec& durationSpecs)
         : _builder(builder),
-        _nodeIDs(nodeIDs)
+        _nodeIDs(nodeIDs),
+        _durationSpecs(durationSpecs)
     {
     }
 
@@ -60,6 +62,8 @@ protected:
         // A list of timestamps is a List column whose elements still carry it.
         parquet::LogicalType::TimeUnit::unit timeUnit {parquet::LogicalType::TimeUnit::UNKNOWN};
 
+        bool holdsDurations {false};
+
         // Indexed by repetition depth: the definition level a value must reach for the
         // list at that depth to hold an element. Index 0 is unused.
         std::vector<int16_t> listDefLevels;
@@ -74,6 +78,8 @@ protected:
     // Maps node IDs as defined by the parquet file to TuringDB NodeIDs defined by the
     // @ref DataPartBuilder used when importing
     IDMap& _nodeIDs;
+
+    const DurationSpec& _durationSpecs;
 
     std::unordered_map<size_t, PropertyColumn> _propertyColumns;
 

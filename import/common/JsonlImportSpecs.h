@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "DateTimeSpec.h"
+#include "DurationSpec.h"
 #include "EmbeddingsSpec.h"
 
 namespace db {
@@ -13,6 +14,7 @@ namespace db {
 struct JsonlImportSpecs {
     EmbeddingsSpec _embeddings;
     DateTimeSpec _dateTimes;
+    DurationSpec _durations;
 
     // Takes the hints another clause of the same statement gave
     void absorb(JsonlImportSpecs&& other) {
@@ -22,6 +24,10 @@ struct JsonlImportSpecs {
 
         for (const std::string_view name : other._dateTimes) {
             _dateTimes.emplace(name);
+        }
+
+        for (const std::string_view name : other._durations) {
+            _durations.emplace(name);
         }
     }
 };
