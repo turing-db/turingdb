@@ -143,6 +143,11 @@ def FuseDistinctEdges : Pass<"fuse_distinct_edges"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseProductDistinctEdges : Pass<"fuse_product_distinct_edges"> {
+    let summary = "Fold the edge-distinctness check between the two factors of a cross product into the product, which then leaves out the pairs holding one edge twice";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def HoistHopConjuncts : Pass<"hoist_hop_conjuncts"> {
     let summary = "Move each conjunct of a path exploration's hop predicate to the earliest step of its body that binds every node and edge it reads";
     let dependentDialects = ["mlir::db::DB"];

@@ -86,17 +86,3 @@ TEST_F(FuseDistinctEdgesTest, foldsAThreeHopChainTwice) {
     runQuery("MATCH (a)-[e1]-(b)-[e2]-(c)-[e3]-(d) RETURN count(*)", sink);
     EXPECT_EQ(sink.getRows(), (Rows {{"106"}}));
 }
-
-// Two patterns meeting in a cross product bind their edges before any hop can leave the
-// other's out, so the check stays a filter over the product
-TEST_F(FuseDistinctEdgesTest, keepsTheCheckOverACrossProduct) {
-    std::string program;
-    dump("MATCH (a)-[e1]->(b), (c)-[e2]->(d) RETURN count(*)", program);
-
-    EXPECT_TRUE(contains(program, "db.check_edge_distinct")) << program;
-    EXPECT_FALSE(contains(program, "distinct_from")) << program;
-
-    StringRowSink sink;
-    runQuery("MATCH (a)-[e1]->(b), (c)-[e2]->(d) RETURN count(*)", sink);
-    EXPECT_EQ(sink.getRows(), (Rows {{"306"}}));
-}

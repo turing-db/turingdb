@@ -54,3 +54,5 @@ target_include_directories(test_query_ir_comma_pattern_join_keys PRIVATE ${IR_TE
 add_turing_test(test_query_ir_multi_pattern_join MultiPatternJoinTest.cpp)
 target_sources(test_query_ir_multi_pattern_join PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_multi_pattern_join PRIVATE ${IR_TEST_DIR})
+
+add_ir_tests(test_query_ir_cross_product_distinct_edges CrossProductDistinctEdgesTest.cpp)
