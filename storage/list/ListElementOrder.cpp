@@ -392,21 +392,6 @@ std::optional<std::partial_ordering> elementNumberComparisonOrder(const ListElem
     }
 }
 
-std::optional<std::partial_ordering> listComparisonOrder(const ListView lhs, const ListView rhs) {
-    const std::span<const ListElementView> lhsElements = lhs.elements();
-    const std::span<const ListElementView> rhsElements = rhs.elements();
-    const size_t common = std::min(lhsElements.size(), rhsElements.size());
-
-    for (size_t index = 0; index < common; index++) {
-        const std::optional<std::partial_ordering> order = comparisonOrder(lhsElements[index], rhsElements[index]);
-        if (!order || *order != std::partial_ordering::equivalent) {
-            return order;
-        }
-    }
-
-    return lhsElements.size() <=> rhsElements.size();
-}
-
 }
 
 std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElementView rhs) {
@@ -609,13 +594,28 @@ std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView l
                 return std::nullopt;
             }
 
-            return listComparisonOrder(lhs.getAs<ListView>(), rhs.getAs<ListView>());
+            return comparisonOrder(lhs.getAs<ListView>(), rhs.getAs<ListView>());
         break;
 
         default:
             return std::nullopt;
         break;
     }
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListView lhs, const ListView rhs) {
+    const std::span<const ListElementView> lhsElements = lhs.elements();
+    const std::span<const ListElementView> rhsElements = rhs.elements();
+    const size_t common = std::min(lhsElements.size(), rhsElements.size());
+
+    for (size_t index = 0; index < common; index++) {
+        const std::optional<std::partial_ordering> order = comparisonOrder(lhsElements[index], rhsElements[index]);
+        if (!order || *order != std::partial_ordering::equivalent) {
+            return order;
+        }
+    }
+
+    return lhsElements.size() <=> rhsElements.size();
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Int64::Primitive value) {
@@ -644,4 +644,12 @@ std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView e
     }
 
     return static_cast<bool>(element.getAs<types::Bool::Primitive>()) <=> static_cast<bool>(value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const ListView value) {
+    if (element.getTag() != ListBufferTypeTag::ListView) {
+        return std::nullopt;
+    }
+
+    return comparisonOrder(element.getAs<ListView>(), value);
 }
