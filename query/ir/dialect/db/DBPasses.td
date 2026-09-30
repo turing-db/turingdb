@@ -59,7 +59,7 @@ def FuseScanEdgesByEndpointLabel : Pass<"fuse_scan_edges_by_endpoint_label"> {
 }
 
 def FuseEdgesByEndpointLabel : Pass<"fuse_edges_by_endpoint_label"> {
-    let summary = "Fuse a directed hop and the label check on the endpoint it reaches into a by-label hop";
+    let summary = "Fuse a directed hop and the label check on the endpoint it reaches into a by-label or by-type-and-label hop";
     let dependentDialects = ["mlir::db::DB"];
 }
 

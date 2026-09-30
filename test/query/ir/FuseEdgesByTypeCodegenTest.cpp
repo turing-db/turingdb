@@ -137,16 +137,17 @@ TEST_F(FuseEdgesByTypeCodegenTest, edgePropertyIsReadOffTheTypedHop) {
     EXPECT_EQ(properties.front().getInputEdges(), hops.front().getEids());
 }
 
-// The edge type is applied before the target's labels, so the hop fuses and the label
-// constraint stays behind it as an ordinary filter.
-TEST_F(FuseEdgesByTypeCodegenTest, labelledTargetKeepsItsFilterBehindTheTypedHop) {
+// The edge type is applied before the target's labels, and the typed hop then takes the
+// labels too.
+TEST_F(FuseEdgesByTypeCodegenTest, labelledTargetRidesOntoTheTypedHop) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("MATCH (a:Person)-[:KNOWS_WELL]->(b:Interest) RETURN a, b");
 
     expectFusedToTypedHop(*module);
-    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByTypeAndLabel>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
 }
 
 // A predicate on the far end sits behind the type check, so the hop fuses under it.

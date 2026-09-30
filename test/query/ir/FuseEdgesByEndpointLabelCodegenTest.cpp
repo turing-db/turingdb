@@ -151,14 +151,27 @@ TEST_F(FuseEdgesByEndpointLabelCodegenTest, labelledSourceOfAnOutHopKeepsItsNode
     EXPECT_EQ(countOps<mlir::db::GetInEdgesByLabel>(*module), 0u);
 }
 
-// The type narrows the hop first and there is no op holding both an edge type and a label
-// set, so the label stays a check over the by-type hop.
-TEST_F(FuseEdgesByEndpointLabelCodegenTest, typedHopKeepsItsLabelCheck) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-->(b)-[:KNOWS_WELL]->(c:Person) RETURN a, c");
+TEST_F(FuseEdgesByEndpointLabelCodegenTest, labelledTargetOfATypedOutHopBecomesAByTypeAndLabelHop) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-->(b)-[:KNOWS_WELL|INTERESTED_IN]->(c:Person) RETURN a, c");
 
+    expectFusedToLabelledHop(*module);
     EXPECT_EQ(countOps<mlir::db::GetOutEdgesByLabel>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::GetOutEdgesByTypeAndLabel> hops = collect<mlir::db::GetOutEdgesByTypeAndLabel>(*module);
+    ASSERT_EQ(hops.size(), 1u);
+    EXPECT_EQ(hops.front().getEdgeTypes().size(), 2u);
+
+    ASSERT_EQ(hops.front().getLabels().size(), 1u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(hops.front().getLabels()[0]).getValue(), "Person");
+}
+
+TEST_F(FuseEdgesByEndpointLabelCodegenTest, labelledSourceOfATypedInHopBecomesAByTypeAndLabelHop) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)<--(b)<-[:KNOWS_WELL]-(c:Founder) RETURN a, c");
+
+    expectFusedToLabelledHop(*module);
+    EXPECT_EQ(countOps<mlir::db::GetInEdgesByType>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::GetInEdgesByTypeAndLabel>(*module), 1u);
 }
 
 // An undirected hop reads both edge directions of its nodes, so neither end is the one it

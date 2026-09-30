@@ -1180,6 +1180,72 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
 }
 
 /**
+* GetOutEdgesByTypeAndLabel
+*/
+def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Fetch the out-edges of the named types arriving at the nodes carrying every given label, filtering carried columns alongside";
+
+  let description = [{
+    get_out_edges_by_type and get_out_edges_by_label in one hop. In
+    `MATCH (a)-[:KNOWS]->(b:Person)` an out-edge is kept when it carries one of
+    `edge_types` and its target's label set is a superset of `labels`:
+
+      %s, %e, %t, %b = get_out_edges_by_type_and_label(%a, ["KNOWS"], ["Person"], {})
+
+    `edge_types` is a disjunction resolved as on get_out_edges_by_type, and an empty
+    one walks no edge. `labels` is a conjunction resolved as on get_out_edges_by_label
+    and must not be empty. The result chunk shape and the `columns_to_filter` carry set
+    match get_out_edges.
+  }];
+
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$filtered_columns);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* GetInEdgesByTypeAndLabel
+*/
+def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Fetch the in-edges of the named types leaving the nodes carrying every given label, filtering carried columns alongside";
+
+  let description = [{
+    The reverse-direction sibling of get_out_edges_by_type_and_label. In
+    `MATCH (a)<-[:KNOWS]-(b:Person)` an in-edge is kept when it carries one of
+    `edge_types` and its source's label set is a superset of `labels`:
+
+      %s, %e, %t, %b = get_in_edges_by_type_and_label(%a, ["KNOWS"], ["Person"], {})
+
+    `srcids` holds the labelled end and `tgtids` the input node the hop walked from,
+    as on get_in_edges_by_label.
+  }];
+
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$filtered_columns);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * ExplorePaths
 */
 def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

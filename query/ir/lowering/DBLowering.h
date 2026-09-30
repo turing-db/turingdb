@@ -267,6 +267,8 @@ private:
     void lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByType);
     void lowerGetOutEdgesByLabel(mlir::db::GetOutEdgesByLabel getOutEdgesByLabel);
     void lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesByLabel);
+    void lowerGetOutEdgesByTypeAndLabel(mlir::db::GetOutEdgesByTypeAndLabel getOutEdgesByTypeAndLabel);
+    void lowerGetInEdgesByTypeAndLabel(mlir::db::GetInEdgesByTypeAndLabel getInEdgesByTypeAndLabel);
 
     // Lower a db.explore_paths the way lowerGetOutEdges lowers a hop: the nl.explore_paths
     // nests in the loop binding its input chunk, its attributes pass through, and its hop

@@ -635,6 +635,22 @@ void NLTranslator::bindGetEdgesByLabel(HopOp hop, IteratorKind kind) {
     _iteratorConfigs[hop.getResult()] = config;
 }
 
+template <typename HopOp>
+void NLTranslator::bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind) {
+    IteratorConfig config {kind, hop.getInputNodes(), {}};
+
+    const mlir::OperandRange carriedColumns = hop.getColumnsToFilter();
+    config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+
+    edgeTypeNames(hop.getEdgeTypes(), config._edgeTypes);
+
+    for (const mlir::Attribute label : hop.getLabels()) {
+        config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+    }
+
+    _iteratorConfigs[hop.getResult()] = config;
+}
+
 void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
     for (mlir::Operation& operation : block) {
         if (nl::ScanNodes scanNodes = mlir::dyn_cast<nl::ScanNodes>(operation)) {
@@ -704,6 +720,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             bindGetEdgesByLabel(getOutEdgesByLabel, IteratorKind::GetOutEdgesByLabel);
         } else if (nl::GetInEdgesByLabel getInEdgesByLabel = mlir::dyn_cast<nl::GetInEdgesByLabel>(operation)) {
             bindGetEdgesByLabel(getInEdgesByLabel, IteratorKind::GetInEdgesByLabel);
+        } else if (nl::GetOutEdgesByTypeAndLabel getOutEdgesByTypeAndLabel = mlir::dyn_cast<nl::GetOutEdgesByTypeAndLabel>(operation)) {
+            bindGetEdgesByTypeAndLabel(getOutEdgesByTypeAndLabel, IteratorKind::GetOutEdgesByTypeAndLabel);
+        } else if (nl::GetInEdgesByTypeAndLabel getInEdgesByTypeAndLabel = mlir::dyn_cast<nl::GetInEdgesByTypeAndLabel>(operation)) {
+            bindGetEdgesByTypeAndLabel(getInEdgesByTypeAndLabel, IteratorKind::GetInEdgesByTypeAndLabel);
         } else if (nl::ExplorePaths explorePaths = mlir::dyn_cast<nl::ExplorePaths>(operation)) {
             IteratorConfig config {IteratorKind::ExplorePaths, explorePaths.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = explorePaths.getColumnsToFilter();
@@ -1775,6 +1795,9 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     const bool byLabel = config._kind == IteratorKind::GetOutEdgesByLabel
                          || config._kind == IteratorKind::GetInEdgesByLabel;
 
+    const bool byTypeAndLabel = config._kind == IteratorKind::GetOutEdgesByTypeAndLabel
+                                || config._kind == IteratorKind::GetInEdgesByTypeAndLabel;
+
     // A by-type hop carries the resolved edge type in an NLEdgeByTypeLoopData and a
     // by-label one its label set in an NLEdgeByLabelLoopData; a plain hop uses the
     // base NLEdgeLoopData. The shared driver below (reserve, carried columns, body)
@@ -1805,6 +1828,21 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                                                       targets,
                                                                       labelset,
                                                                       matchable);
+    } else if (byTypeAndLabel) {
+        llvm::SmallVector<EdgeTypeID, 4> requestedTypes;
+        resolveEdgeTypes(config._edgeTypes, requestedTypes);
+
+        LabelSet labelset;
+        const bool labelsMatchable = resolveLabelSet(config._labels, labelset);
+
+        loopData = _program->allocFunctionData<NLEdgeByTypeAndLabelLoopData>(inputNodeIDs,
+                                                                             sources,
+                                                                             edgeIDs,
+                                                                             edgeTypes,
+                                                                             targets,
+                                                                             requestedTypes,
+                                                                             labelset,
+                                                                             labelsMatchable);
     } else {
         loopData = _program->allocFunctionData<NLEdgeLoopData>(inputNodeIDs,
                                                                sources,
@@ -1832,8 +1870,12 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
         handler = &NLExecutor::runGetInEdgesByTypeLoop;
     } else if (config._kind == IteratorKind::GetOutEdgesByLabel) {
         handler = &NLExecutor::runGetOutEdgesByLabelLoop;
-    } else {
+    } else if (config._kind == IteratorKind::GetInEdgesByLabel) {
         handler = &NLExecutor::runGetInEdgesByLabelLoop;
+    } else if (config._kind == IteratorKind::GetOutEdgesByTypeAndLabel) {
+        handler = &NLExecutor::runGetOutEdgesByTypeAndLabelLoop;
+    } else {
+        handler = &NLExecutor::runGetInEdgesByTypeAndLabelLoop;
     }
     body->emplaceStmt(handler, loopData);
 
