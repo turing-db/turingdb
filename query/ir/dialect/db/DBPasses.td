@@ -63,6 +63,11 @@ def FuseEdgesByEndpointLabel : Pass<"fuse_edges_by_endpoint_label"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def RemoveRedundantLabelChecks : Pass<"remove_redundant_label_checks"> {
+    let summary = "Remove a label filter over nodes already known to carry every label it asks for";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseEdgeTypePredicates : Pass<"fuse_edge_type_predicates"> {
     let summary = "Combine two edge-type checks over the same column into one";
     let dependentDialects = ["mlir::db::DB"];

@@ -267,7 +267,7 @@ mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::stri
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext&);
 
-constexpr size_t dbPassCount = 30;
+constexpr size_t dbPassCount = 31;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -291,6 +291,7 @@ const std::array<DBPassFactory, dbPassCount> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanInEdgesByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByEndpointLabel(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createRemoveRedundantLabelChecks(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndConstraint(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreHopLabels(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFusePathElements(); },
