@@ -1888,11 +1888,17 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
     As on db.cross_product the result types are not spelled after the regions;
     the parser recovers them from the two yields and the verifier checks they line
     up. Reading the graph is deterministic, so the op is Pure.
+
+    `distinct_from` leaves out the joined pairs whose two rows hold one edge, as
+    on db.cross_product: pairs of edge columns, a left factor's yield index
+    followed by a right factor's.
+
+      ... } on 2, 1 distinct_from [1, 0]
   }];
 
   // Which column of each factor's yield carries the join key: the left factor's,
   // then the right factor's.
-  let arguments = (ins UI64Attr:$leftKey, UI64Attr:$rightKey);
+  let arguments = (ins UI64Attr:$leftKey, UI64Attr:$rightKey, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // The results are the concatenation of the two factors' yielded columns; the
   // count and types are recovered from the yields, never spelled out.

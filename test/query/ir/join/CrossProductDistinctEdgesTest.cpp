@@ -166,6 +166,36 @@ func.func @main() {
 }
 )mlir";
 
+// Every pair of edges with one target but not an edge with itself, joined on the target
+constexpr const char* edgeJoinProgram = R"mlir(
+func.func @main() {
+  %0:4 = db.hash_join factor {
+    %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+    db.yield %e, %d : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
+  } factor {
+    %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+    db.yield %e, %d : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
+  } on 1, 1 distinct_from [0, 0]
+  db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+constexpr const char* limitedEdgeJoinProgram = R"mlir(
+func.func @main() {
+  %0:4 = db.hash_join factor {
+    %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+    db.yield %e, %d : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
+  } factor {
+    %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+    db.yield %e, %d : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
+  } on 1, 1 distinct_from [0, 0]
+  %1:4 = db.limit(%0#0, %0#1, %0#2, %0#3) count 5 : (!db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>)
+  db.output(%1#0, %1#1, %1#2, %1#3) : !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 void runLoweredProgram(const char* programText, const GraphView& view, NLOutputSink& sink, size_t chunkSize) {
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
@@ -196,8 +226,8 @@ void sorted(std::vector<Tuple> tuples, std::vector<Tuple>& result) {
 
 }
 
-// A cross product with distinct_from leaves out the pairs whose two edges are one edge,
-// whatever chunk size cuts the product, and never lays out a chunk past that size.
+// A cross product or a hash join with distinct_from leaves out the pairs whose two edges
+// are one edge, whatever chunk size cuts it, and never lays out a chunk past that size.
 class CrossProductDistinctEdgesTest : public TuringTest {
 protected:
     void initialize() override {
@@ -326,6 +356,47 @@ TEST_F(CrossProductDistinctEdgesTest, aLimitKeepsTheFirstRowsTheProductLeaves) {
 
         IDTupleSink limited;
         runLoweredProgram(limitedEdgePairProgram, view, limited, chunkSize);
+        EXPECT_EQ(limited.getTuples(), expected) << "at chunk size " << chunkSize;
+        EXPECT_LE(limited.getLargestChunkRowCount(), chunkSize) << "at chunk size " << chunkSize;
+    }
+}
+
+TEST_F(CrossProductDistinctEdgesTest, aJoinLeavesOutThePairsOfOneEdge) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+
+    std::vector<Tuple> edges;
+    std::vector<uint64_t> nodes;
+    readGraph(view, edges, nodes);
+
+    std::vector<Tuple> expected;
+    for (const Tuple& left : edges) {
+        for (const Tuple& right : edges) {
+            if (left[2] == right[2] && left[0] != right[0]) {
+                expected.push_back({left[0], left[2], right[0], right[2]});
+            }
+        }
+    }
+    ASSERT_FALSE(expected.empty());
+
+    expectRowsAtEveryChunkSize(edgeJoinProgram, view, expected);
+}
+
+TEST_F(CrossProductDistinctEdgesTest, aLimitKeepsTheFirstRowsTheJoinLeaves) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+
+    for (const size_t chunkSize : _chunkSizes) {
+        IDTupleSink unlimited;
+        runLoweredProgram(edgeJoinProgram, view, unlimited, chunkSize);
+        ASSERT_GE(unlimited.getTuples().size(), 5u) << "at chunk size " << chunkSize;
+
+        const std::vector<Tuple> expected(unlimited.getTuples().begin(), unlimited.getTuples().begin() + 5);
+
+        IDTupleSink limited;
+        runLoweredProgram(limitedEdgeJoinProgram, view, limited, chunkSize);
         EXPECT_EQ(limited.getTuples(), expected) << "at chunk size " << chunkSize;
         EXPECT_LE(limited.getLargestChunkRowCount(), chunkSize) << "at chunk size " << chunkSize;
     }

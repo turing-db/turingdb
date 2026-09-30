@@ -2444,11 +2444,11 @@ struct FuseDistinctEdges : public impl::FuseDistinctEdgesBase<FuseDistinctEdges>
     }
 };
 
-// A cross product whose rows are then cut down to those where an edge one factor bound
-// differs from an edge the other did: the exclusion spelled the long way, since the
-// product can skip the pairs holding one edge twice and never lay out the rows
+// A cross product or a hash join whose rows are then cut down to those where an edge one
+// factor bound differs from an edge the other did: the exclusion spelled the long way,
+// since the op can skip the pairs holding one edge twice and never lay out the rows
 struct CrossedEdgePairs {
-    CrossProduct _product;
+    Operation* _crossing {nullptr};
     CheckEdgeDistinct _check;
     llvm::SmallVector<int64_t, 4> _pairs;
 };
@@ -2461,23 +2461,23 @@ bool holdsEdges(Value column) {
 
 bool matchCrossedEdgePairs(FilterOp filter, CrossedEdgePairs& crossed) {
     CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
-    if (!check) {
+    if (!check || !holdsEdges(check.getSubject())) {
         return false;
     }
 
-    CrossProduct product = check.getSubject().getDefiningOp<CrossProduct>();
-    if (!product || !holdsEdges(check.getSubject())) {
+    Operation* const crossing = check.getSubject().getDefiningOp();
+    if (!isa_and_nonnull<CrossProduct, HashJoin>(crossing)) {
         return false;
     }
 
-    const size_t leftCount = factorYieldColumns(product.getLeftFactor()).size();
+    const size_t leftCount = factorYieldColumns(crossing->getRegion(0)).size();
     const size_t subjectIndex = cast<OpResult>(check.getSubject()).getResultNumber();
     const bool subjectOnTheLeft = subjectIndex < leftCount;
 
     llvm::SmallVector<int64_t, 4> pairs;
     for (const Value other : check.getOthers()) {
         const OpResult result = dyn_cast<OpResult>(other);
-        if (!result || result.getOwner() != product.getOperation() || !holdsEdges(other)) {
+        if (!result || result.getOwner() != crossing || !holdsEdges(other)) {
             return false;
         }
 
@@ -2494,12 +2494,12 @@ bool matchCrossedEdgePairs(FilterOp filter, CrossedEdgePairs& crossed) {
     }
 
     for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != product.getOperation()) {
+        if (column.getDefiningOp() != crossing) {
             return false;
         }
     }
 
-    for (const Value result : product->getResults()) {
+    for (const Value result : crossing->getResults()) {
         for (Operation* const user : result.getUsers()) {
             const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
             if (!readsThePair) {
@@ -2508,22 +2508,22 @@ bool matchCrossedEdgePairs(FilterOp filter, CrossedEdgePairs& crossed) {
         }
     }
 
-    crossed = CrossedEdgePairs {._product = product, ._check = check, ._pairs = pairs};
+    crossed = CrossedEdgePairs {._crossing = crossing, ._check = check, ._pairs = pairs};
 
     return true;
 }
 
 void fuseProductDistinctEdges(FilterOp filter, const CrossedEdgePairs& crossed, mlir::OpBuilder& builder) {
-    CrossProduct product = crossed._product;
+    Operation* const crossing = crossed._crossing;
     CheckEdgeDistinct check = crossed._check;
 
     llvm::SmallVector<int64_t, 4> pairs;
-    if (const DenseI64ArrayAttr held = product.getDistinctFromAttr()) {
+    if (const DenseI64ArrayAttr held = crossing->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName)) {
         llvm::append_range(pairs, held.asArrayRef());
     }
     llvm::append_range(pairs, crossed._pairs);
 
-    product.setDistinctFromAttr(builder.getDenseI64ArrayAttr(pairs));
+    crossing->setAttr(distinctFromAttributeName, builder.getDenseI64ArrayAttr(pairs));
 
     const Operation::operand_range filtered = filter.getColumnsToFilter();
     const mlir::ResultRange results = filter.getFilteredColumns();

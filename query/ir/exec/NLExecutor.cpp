@@ -8329,6 +8329,7 @@ void NLExecutor::runHashJoinProbeLoop(NLExecutionContext* context, NLFunctionDat
     const size_t chunkSize = context->getChunkSize();
     const NLLimitState* limit = probe->getLimit();
     const NLStmtContainer* loopBody = probe->getStmts();
+    const std::vector<NLJoinEdgePair>& edgePairs = probe->edgePairs();
 
     // Walk the pairs a chunk at a time, holding the probe row reached and the next row of
     // its group to pair, so a step can start and end partway through one row's matches.
@@ -8362,8 +8363,15 @@ void NLExecutor::runHashJoinProbeLoop(NLExecutionContext* context, NLFunctionDat
             // Every row of the group carries the key this probe row matched, so the group
             // is walked without comparing again.
             while (match != NLHashJoinIndex::noRow && probeRaw.size() < stepBudget) {
-                probeRaw.push_back(probeRow);
-                buildRaw.push_back(match);
+                bool sharesAnEdge = false;
+                for (const NLJoinEdgePair& pair : edgePairs) {
+                    sharesAnEdge |= pair._probe->getRaw()[probeRow] == pair._build->getRaw()[match];
+                }
+
+                if (!sharesAnEdge) {
+                    probeRaw.push_back(probeRow);
+                    buildRaw.push_back(match);
+                }
 
                 match = index.getNextInGroup(match);
             }

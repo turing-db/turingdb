@@ -2059,6 +2059,13 @@ private:
 // output chunk and the gather that reads the matched rows back - both in the
 // NLCarriedColumn (input, output, gather) shape the edge and sort loops use. The two
 // index scratches hold this step's matched pairs, one row of each side per output row.
+// A pair of edge columns of a hash join, a probe column and a build buffer, whose rows the
+// join only pairs where they hold two different edges
+struct NLJoinEdgePair {
+    const ColumnEdgeIDs* _probe {nullptr};
+    const ColumnEdgeIDs* _build {nullptr};
+};
+
 class NLHashJoinProbeLoopData : public NLFunctionData {
 public:
     NLHashJoinProbeLoopData(NLHashJoinState* state)
@@ -2073,6 +2080,9 @@ public:
 
     void addProbeColumn(const NLCarriedColumn& column) { _probeColumns.push_back(column); }
     void addBuildColumn(const NLCarriedColumn& column) { _buildColumns.push_back(column); }
+
+    const std::vector<NLJoinEdgePair>& edgePairs() const { return _edgePairs; }
+    void addEdgePair(const NLJoinEdgePair& pair) { _edgePairs.push_back(pair); }
 
     // The governing limit counter, or null for an unbounded probe. When set, only
     // getRemaining() matched pairs are laid out; it never mutates the counter (the
@@ -2110,6 +2120,7 @@ private:
     NLHashJoinState* _state {nullptr};
     std::vector<NLCarriedColumn> _probeColumns;
     std::vector<NLCarriedColumn> _buildColumns;
+    std::vector<NLJoinEdgePair> _edgePairs;
 
     const Column* _key {nullptr};
     const Column* _buildKey {nullptr};

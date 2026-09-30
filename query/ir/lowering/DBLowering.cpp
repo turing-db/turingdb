@@ -3054,7 +3054,8 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
     nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc,
                                                                  iteratorType,
                                                                  state,
-                                                                 probeColumns);
+                                                                 probeColumns,
+                                                                 join.getDistinctFromAttr());
 
     // A key many build rows carry makes more pairs than the probe chunk holds, so the
     // pairs come out chunk by chunk and the probe drives a loop of its own nested in the
