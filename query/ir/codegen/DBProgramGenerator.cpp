@@ -4917,6 +4917,11 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
     const llvm::SaveAndRestore<mlir::Operation*> readsTheRowsAhead(_part._aggregateOp, nullptr);
 
     const EvaluatedType argType = argExpr->getType();
+
+    if (argType == EvaluatedType::Null) {
+        return alignConstantToDriver(nullConstantColumn());
+    }
+
     const bool isEntity = argType == EvaluatedType::NodePattern || argType == EvaluatedType::EdgePattern;
 
     if (isEntity) {

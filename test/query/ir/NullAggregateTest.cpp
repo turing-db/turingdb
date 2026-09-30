@@ -116,6 +116,30 @@ TEST_F(NullAggregateTest, reducesBesideAPopulatedColumn) {
     expectRows("MATCH (n:Person) RETURN max(n.age), max(n.shoeSize)", {{"32", "null"}});
 }
 
+TEST_F(NullAggregateTest, reducesAnAllNullList) {
+    expectRows("UNWIND [null, null] AS x RETURN min(x)", {{"null"}});
+    expectRows("UNWIND [null, null] AS x RETURN max(x)", {{"null"}});
+    expectRows("UNWIND [null, null] AS x RETURN avg(x)", {{"null"}});
+    expectRows("UNWIND [null, null] AS x RETURN sum(x)", {{"0"}});
+    expectRows("UNWIND [null, null] AS x RETURN count(x)", {{"0"}});
+    expectRows("UNWIND [null, null] AS x RETURN collect(x)", {{"[]"}});
+}
+
+// One element is enough to read the verdict from, the boundary of the rule
+TEST_F(NullAggregateTest, reducesASingletonNullList) {
+    expectRows("UNWIND [null] AS x RETURN min(x), max(x)", {{"null", "null"}});
+}
+
+TEST_F(NullAggregateTest, reducesAnAllNullListPerGroup) {
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [null, null] AS x "
+               "RETURN n.name, min(x), max(x), sum(x), count(x)",
+               {{"Remy", "null", "null", "0", "0"}});
+}
+
+TEST_F(NullAggregateTest, reducesTheDistinctNothingOfAnAllNullList) {
+    expectRows("UNWIND [null, null] AS x RETURN sum(DISTINCT x), count(DISTINCT x)", {{"0", "0"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
