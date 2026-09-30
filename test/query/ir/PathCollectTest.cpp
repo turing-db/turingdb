@@ -29,6 +29,13 @@ protected:
         std::sort(expected.begin(), expected.end());
         EXPECT_EQ(rows, expected) << query;
     }
+
+    void expectOrderedRows(std::string_view query, const Rows& expected) {
+        StringRowSink sink;
+        runQuery(query, sink);
+
+        EXPECT_EQ(sink.getRows(), expected) << query;
+    }
 };
 
 TEST_F(PathCollectTest, collectsPaths) {
@@ -149,4 +156,54 @@ TEST_F(PathCollectTest, findsAMissedPathInNoList) {
 TEST_F(PathCollectTest, findsAPathInAListReadOutOfAList) {
     expectRows("MATCH p = (n:Person {name: 'Remy'})-[e]->(m:Person) WITH [collect(p), 1] AS nested MATCH q = (a:Person)-[x]->(b:Person) RETURN q, q IN nested[0]",
                {{"(0), [0], (1)", "true"}, {"(1), [4], (0)", "false"}});
+}
+
+TEST_F(PathCollectTest, listsAMissedPathAsNull) {
+    expectRows("MATCH (n:Person) WHERE n.name IN ['Remy', 'Luc'] OPTIONAL MATCH p = (n)-[e]->(m:Person) RETURN n.name, [p]",
+               {{"Remy", "<(0), [0], (1)>"}, {"Luc", "null"}});
+}
+
+TEST_F(PathCollectTest, unwindsAListedMissedPathAsANullPath) {
+    expectRows("MATCH (n:Person) WHERE n.name IN ['Remy', 'Luc'] OPTIONAL MATCH p = (n)-[e]->(m:Person) UNWIND [p] AS q RETURN n.name, q, length(q)",
+               {{"Remy", "(0), [0], (1)", "1"}, {"Luc", "null", "null"}});
+}
+
+TEST_F(PathCollectTest, collectsPathsBesideOtherTypes) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) UNWIND [p, 1] AS x RETURN collect(x)",
+               {{"<(0), [0], (1)>, 1, <(1), [4], (0)>, 1"}});
+}
+
+TEST_F(PathCollectTest, dedupsPathsBesideOtherTypes) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) UNWIND [p, 1] AS x RETURN DISTINCT x",
+               {{"<(0), [0], (1)>"}, {"<(1), [4], (0)>"}, {"1"}});
+}
+
+TEST_F(PathCollectTest, ordersPathsBeforeNumbers) {
+    expectOrderedRows("MATCH p = (n:Person)-[e]->(m:Person) UNWIND [p, 1] AS x RETURN x ORDER BY x",
+                      {{"<(0), [0], (1)>"}, {"<(1), [4], (0)>"}, {"1"}, {"1"}});
+}
+
+TEST_F(PathCollectTest, addsNoNumberToAPath) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) UNWIND [p, 1] AS x RETURN x + 1",
+               {{"null"}, {"null"}, {"2"}, {"2"}});
+}
+
+TEST_F(PathCollectTest, ordersListsOfPaths) {
+    expectOrderedRows("MATCH p = (n:Person)-[e]->(m:Person) WITH n, collect(p) AS paths RETURN n.name, paths ORDER BY paths DESC",
+                      {{"Adam", "<(1), [4], (0)>"}, {"Remy", "<(0), [0], (1)>"}});
+}
+
+TEST_F(PathCollectTest, prependsAPathToCollectedPaths) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) WITH collect(p) AS paths MATCH q = (a:Person {name: 'Remy'})-[x]->(b:Person) RETURN q + paths",
+               {{"<(0), [0], (1)>, <(0), [0], (1)>, <(1), [4], (0)>"}});
+}
+
+TEST_F(PathCollectTest, listsAPathReadOutOfAListBesideOtherTypes) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) WITH collect(p) AS paths RETURN [1, 'a', paths[0], null]",
+               {{"1, a, <(0), [0], (1)>, null"}});
+}
+
+TEST_F(PathCollectTest, mapsAListOfOnePathOntoItself) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) RETURN [x IN [p] | x]",
+               {{"<(0), [0], (1)>"}, {"<(1), [4], (0)>"}});
 }
