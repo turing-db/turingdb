@@ -3442,6 +3442,25 @@ void groupFoldCountDistinctPresentList(Column* accumulator,
     }
 }
 
+void groupFoldCountDistinctList(Column* accumulator,
+                                std::vector<uint64_t>& counts,
+                                const Column* input,
+                                const std::vector<size_t>& groups,
+                                NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnVector<ListView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendListBytes(distinct.getKey(), inputRaw[row]);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
 void groupFoldCountDistinctPresentMap(Column* accumulator,
                                       std::vector<uint64_t>& counts,
                                       const Column* input,
@@ -10019,7 +10038,7 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         break;
 
         case NLChunkKind::List:
-            throw IRException("count(DISTINCT) cannot key on a list column: a list has no scalar value to count distinct");
+            return &groupFoldCountDistinctList;
         break;
 
         case NLChunkKind::Map:
