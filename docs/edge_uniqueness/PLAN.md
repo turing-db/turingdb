@@ -526,6 +526,45 @@ A directed walk of an acyclic type leaving the fixed hop's target can never take
 hop's edge, and the rule needs the walk's direction and start beside the hop's ends,
 which `PatternEdge` does not carry for a path.
 
+## Owed (2026-09-30)
+
+Steps 1 to 5 are done. What the status above leaves open, by where it shows:
+
+1. **The in-edge order.** Sort a node's in-edges by target then edge ID at build time, so
+   the backtrack among them is a binary search rather than a scan of every record. The
+   undirected walks pay that scan today: 220 ms against a 63 ms control for two hops,
+   22.2 s against 6.5 s for three. It changes what `edges-in` holds on disk and needs a
+   raise of `UP_TO_DATE_VERSION`, which is the decision to take first. (step 2)
+2. **Pruning inside the cross product and the hash join.** The check stays a filter after
+   the product; `shared_input` pays 185 ms against 152 ms for it. `FuzzHangTest` reads
+   12,697,896,960 rows in 150 s for the same reason, and checking each pair at the innermost
+   product that carries both sides would cut that to 9,072 rows once the cascade orders the
+   edge islands innermost. (steps 1 and 6)
+3. **The benchmark table.** `samples/path_bench` has no table for the fixed-hop shapes,
+   each run with the check, with the writer prune and with the pair proven; the status
+   sections measured each step through the shell instead. The pass's own time is
+   unmeasured too, and the plan wants it in the microseconds. (step 3 and Benchmarks)
+4. **The suite audit.** Every oracle with two or more edges in one clause is suspect, v2
+   having generated them homomorphically. Step 1 moved 14 and step 5 the 10 that were
+   failing; the fixtures that agree by luck have not been swept. `CascadedMergeJoinTest`,
+   `MultiPatternJoinTest` and `CommaPatternJoinKeysTest` match nothing on simpledb and
+   want a fixture with a parallel edge. (step 1)
+5. **P4 beside a walk.** A directed walk of an acyclic type leaving the fixed hop's target
+   can never take that hop's edge. `PatternEdge` carries no direction or start for a path,
+   so a hop beside a walk is proven by types only. (step 5)
+6. **The explorator's reference sweep.** `PathExplorationReference.cpp` has no exclusion
+   set, so the per-seed exclusions and the batch mask of the distinct search are covered
+   by `PathEdgeUniquenessTest` at the query level only. (step 1)
+7. **`NLPendingEdgeHop`** walks its excluded edges one by one, which no measurement has
+   reached. (step 2)
+8. **Persisting the answers.** The summary and the acyclicity of each type set are rebuilt
+   on the first query of every commit, 58 ms for the summary and 65 to 80 ms per type set
+   on reactome, 237 ms for every type at once. A persisted form in the part's dump removes
+   both; before that, the sort's three arrays over the 3M nodes could shrink to the nodes
+   the types touch. (steps 4, 5 and 6)
+9. **Later still.** A signature column for chains past six hops, and `shortestPath` beside
+   a hop in one clause, which is neither checked nor proven. (step 6)
+
 ## Steps
 
 1. **Correct first.** `db.check_edge_distinct`, its emission in codegen, its lowering,
