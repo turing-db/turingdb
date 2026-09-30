@@ -34,6 +34,7 @@ private:
 
     TombstoneFilter _filter;
     ExcludedEdges _excluded;
+    size_t _heldInRun {0};
 
     void filterTombstones();
 };

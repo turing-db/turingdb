@@ -148,8 +148,8 @@ void expectSameContent(std::vector<std::pair<size_t, uint64_t>> expected, const 
 }
 
 // The writers leave out of each input row the edges its span holds: an out-run by the
-// arithmetic over its consecutive IDs, an in-run by a scan. Node 1 has two out-edges (to 0
-// and 2) and two in-edges (from 0 and 2).
+// arithmetic over its consecutive IDs, an in-run by each edge's out-record. Node 1 has two
+// out-edges (to 0 and 2) and two in-edges (from 0 and 2).
 class ExcludedEdgesTest : public TuringTest {
 protected:
     void initialize() override {
