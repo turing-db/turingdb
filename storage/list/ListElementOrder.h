@@ -1,6 +1,7 @@
 #pragma once
 
 #include <compare>
+#include <optional>
 
 #include "ID.h"
 #include "ListElementView.h"
@@ -82,5 +83,17 @@ std::strong_ordering operator<=>(ListElementView element, types::UInt64::Primiti
 std::strong_ordering operator<=>(ListElementView element, types::Double::Primitive value);
 std::strong_ordering operator<=>(ListElementView element, types::String::Primitive value);
 std::strong_ordering operator<=>(ListElementView element, types::Bool::Primitive value);
+
+/**
+ * @brief Compares an element of a @ref ListByteBuffer as <, <=, > and >= do. Unlike the
+ * order above, only two numbers, strings, booleans, datetimes or lists compare: any other
+ * pair, a null on either side included, is absent. A NaN is unordered against every number.
+ */
+std::optional<std::partial_ordering> comparisonOrder(ListElementView lhs, ListElementView rhs);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Int64::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::UInt64::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Double::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::String::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Bool::Primitive value);
 
 }

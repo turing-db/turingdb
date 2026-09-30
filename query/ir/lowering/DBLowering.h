@@ -489,7 +489,8 @@ private:
 
     enum class BinaryResultKind {
         Numeric,   // add/sub/mul/div/mod: promoted numeric, nullable if either operand is
-        Boolean,   // eq/neq/gt/lt/gte/lte and and/or/xor: i1, nullable if either is
+        Boolean,   // and/or/xor and the string predicates: i1, nullable if either is
+        Comparison, // eq/neq/gt/lt/gte/lte: i1, nullable if either is or holds tagged cells
         Double,    // pow: always f64 per openCypher, nullable if either operand is
         Concat,    // concat: string or list (determined at lowering)
         Index,     // index: a nullable tagged scalar, whatever the list holds
