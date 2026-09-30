@@ -94,6 +94,7 @@
 
 ## Build & CI
 - @feedback_no_macos_strip.md — wheel build's `_strip_binary` is Linux-only; skip strip on macOS (dylib/codesign issues)
+- @reference_ci_runner_hosts.md — self-hosted Linux runner hosts: labels, cores, HOST_BUILD_JOBS, /opt layout, watchdog, icecream gate
 
 ## Codebase references
 - @reference_bioassert_throws.md — bioassert throws a catchable FatalException (TuringException); the abort() is dead code
