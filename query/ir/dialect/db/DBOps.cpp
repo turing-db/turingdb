@@ -794,9 +794,21 @@ void CrossProduct::build(OpBuilder& builder, OperationState& state, TypeRange re
 // right factor's - matching the result count parsed from the `%a, %b =` list.
 ParseResult CrossProduct::parse(OpAsmParser& parser, OperationState& result) {
     const bool regionsFailed = parseFactorRegion(parser, result)
-                               || parseFactorRegion(parser, result)
-                               || parser.parseOptionalAttrDict(result.attributes);
+                               || parseFactorRegion(parser, result);
     if (regionsFailed) {
+        return failure();
+    }
+
+    if (succeeded(parser.parseOptionalKeyword("distinct_from"))) {
+        const Attribute pairs = DenseI64ArrayAttr::parse(parser, Type());
+        if (!pairs) {
+            return failure();
+        }
+
+        result.addAttribute(getDistinctFromAttrName(result.name), pairs);
+    }
+
+    if (parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
 
@@ -817,11 +829,49 @@ void CrossProduct::print(OpAsmPrinter& printer) {
     printer << " " << factorKeyword << " ";
     printer.printRegion(getRightFactor());
 
-    printer.printOptionalAttrDict((*this)->getAttrs());
+    const DenseI64ArrayAttr pairs = getDistinctFromAttr();
+    if (pairs) {
+        printer << " distinct_from ";
+        pairs.print(printer);
+    }
+
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getDistinctFromAttrName()});
 }
 
 LogicalResult CrossProduct::verify() {
-    return verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor());
+    if (failed(verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor()))) {
+        return failure();
+    }
+
+    const DenseI64ArrayAttr pairs = getDistinctFromAttr();
+    if (!pairs) {
+        return success();
+    }
+
+    const llvm::ArrayRef<int64_t> indices = pairs.asArrayRef();
+    if (indices.size() % 2 != 0) {
+        return emitOpError("distinct_from lists pairs of a left and a right column, but holds ") << indices.size() << " indices";
+    }
+
+    const Operation::operand_range leftColumns = getFactorYield(getLeftFactor()).getColumns();
+    const Operation::operand_range rightColumns = getFactorYield(getRightFactor()).getColumns();
+
+    for (size_t position = 0; position < indices.size(); position++) {
+        const bool onTheLeft = position % 2 == 0;
+        const Operation::operand_range columns = onTheLeft ? leftColumns : rightColumns;
+        const int64_t index = indices[position];
+
+        if (index < 0 || static_cast<size_t>(index) >= columns.size()) {
+            return emitOpError("distinct_from index ") << index << " names no column the " << (onTheLeft ? "left" : "right") << " factor yields";
+        }
+
+        const ColumnType column = cast<ColumnType>(columns[index].getType());
+        if (!isa<storage::EdgeIDType>(column.getType())) {
+            return emitOpError("distinct_from names the ") << (onTheLeft ? "left" : "right") << " column " << index << ", which holds no edges";
+        }
+    }
+
+    return success();
 }
 
 // Builds the op from the branch count alone and creates that many empty blocks. The

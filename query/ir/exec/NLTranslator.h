@@ -110,6 +110,7 @@ private:
         // empty for the other kinds.
         llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
         llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
+        llvm::SmallVector<int64_t, 4> _crossDistinctFrom;
 
         // The step's chunks an EachRow iterator walks one row at a time; empty for the
         // other kinds.

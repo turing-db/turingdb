@@ -1812,7 +1812,19 @@ def CrossProduct : TuringOp<"cross_product", [Pure]> {
     The result types are not spelled after the regions; the parser recovers them
     from the two yields and the verifier checks they line up. Reading the graph
     is deterministic, so the op is Pure.
+
+    `distinct_from` leaves out the pairs whose two rows hold one edge: it lists
+    pairs of edge columns, a left factor's yield index followed by a right
+    factor's, and a pair of rows is kept only where every listed pair of columns
+    holds two different edges. It is the relationship isomorphism of the pattern
+    the two factors come from, folded in from the db.check_edge_distinct filter
+    over the product:
+
+      %e1, %e2 = db.cross_product factor { ... db.yield %e : ... }
+                                  factor { ... db.yield %f : ... } distinct_from [0, 0]
   }];
+
+  let arguments = (ins OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // The results are the concatenation of the two factors' yielded columns; the
   // count and types are recovered from the yields, never spelled out.

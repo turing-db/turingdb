@@ -121,3 +121,6 @@ target_link_libraries(test_query_ir_multi_pattern_join PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_multi_pattern_join PRIVATE ${IR_TEST_DIR})
+
+add_ir_tests(test_query_ir_cross_product_distinct_edges CrossProductDistinctEdgesTest.cpp)
+target_link_libraries(test_query_ir_cross_product_distinct_edges PRIVATE turing_db_examples_s)

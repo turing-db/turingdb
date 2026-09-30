@@ -2648,7 +2648,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
     // One row against N pairs the input row with each of the N rows the body yielded for
     // it, which is the op's result: the inputs then the body's columns
     setInsertionInto(deepestOwnerBlock(yieldedChunks, rowBody));
-    nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, rowChunks, yieldedChunks);
+    nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, rowChunks, yieldedChunks, mlir::DenseI64ArrayAttr());
 
     buildLoopForSource(cross.getResult(), call.getOperation());
 }
@@ -2730,7 +2730,7 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
         outer.push_back(buffer.getTag());
 
         setInsertionInto(deepestOwnerBlock(yieldedChunks, bodyRoot));
-        nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, outer, yieldedChunks);
+        nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, outer, yieldedChunks, mlir::DenseI64ArrayAttr());
         nl::For pairs = _builder.create<nl::For>(loc, cross.getResult(), mlir::Value {});
 
         const mlir::Block::BlockArgListType pairChunks = pairs.getBody()->getArguments();
@@ -3000,7 +3000,8 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
 
     nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
                                                                outerColumns,
-                                                               innerColumns);
+                                                               innerColumns,
+                                                               product.getDistinctFromAttr());
 
     // The pairs come out chunk by chunk, so the product drives a loop of its own
     // nested in the inner factor's - the third level of the nest, below the two the

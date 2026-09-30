@@ -1423,15 +1423,15 @@ void applyNotOnNullConst(Column*, const Column*) {
 // `rowCount` pairs from `position` on, which may start partway into one input
 // row's block and end partway into another's.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void blockRepeatColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
+void blockRepeatColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output, size_t outputOffset) {
     const ColumnType* typedInput = static_cast<const ColumnType*>(input);
     ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
+    outputRaw.resize(outputOffset + rowCount);
 
-    auto outputIt = outputRaw.begin();
+    auto outputIt = outputRaw.begin() + outputOffset;
     size_t rowsLeft = rowCount;
     size_t inputIndex = position / factor;
     size_t doneInBlock = position % factor;
@@ -1447,8 +1447,8 @@ void blockRepeatColumn(const Column* input, size_t factor, size_t position, size
     }
 }
 
-void blockRepeatConstColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
-    output->assignFromLine(input, 0, rowCount);
+void blockRepeatConstColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output, size_t outputOffset) {
+    output->assignFromLine(input, 0, outputOffset + rowCount);
 }
 
 // Tile: the inner column of a cross product, where the inner chunk repeats once
@@ -1457,20 +1457,20 @@ void blockRepeatConstColumn(const Column* input, size_t factor, size_t position,
 // another. M is the tile's own length, which is what the enclosing product passes
 // as the factor.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void tileColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
+void tileColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output, size_t outputOffset) {
     const ColumnType* typedInput = static_cast<const ColumnType*>(input);
     ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
+    outputRaw.resize(outputOffset + rowCount);
 
     const size_t tileLength = inputRaw.size();
     if (tileLength == 0) {
         return;
     }
 
-    auto outputIt = outputRaw.begin();
+    auto outputIt = outputRaw.begin() + outputOffset;
     size_t rowsLeft = rowCount;
     size_t inputIndex = position % tileLength;
 
@@ -1482,6 +1482,105 @@ void tileColumn(const Column* input, size_t factor, size_t position, size_t rowC
         inputIndex = 0;
     }
 }
+
+// The pairs of a cross product that distinct_from leaves out, found in the order the
+// product walks them: outer row i with each inner row j holding i's edge in one of the
+// edge pairs, at position i*M + j. An outer row's inner rows are looked up once, when the
+// walk reaches it, in each pair's inner edges sorted with their rows.
+class CrossProductHoles {
+public:
+    CrossProductHoles(NLCrossProductLoopData* loopData, size_t outerRowCount, size_t innerRowCount)
+        : _loopData(loopData),
+        _outerRowCount(outerRowCount),
+        _innerRowCount(innerRowCount)
+    {
+        const NLCrossProductLoopData::EdgePairs& pairs = loopData->edgePairs();
+        std::vector<NLCrossProductLoopData::InnerEdgeIndex>& indices = loopData->innerEdgeIndices();
+        indices.resize(pairs.size());
+
+        for (size_t pairIndex = 0; pairIndex < pairs.size(); pairIndex++) {
+            const std::vector<EdgeID>& innerEdges = pairs[pairIndex]._inner->getRaw();
+            NLCrossProductLoopData::InnerEdgeIndex& index = indices[pairIndex];
+
+            index.resize(innerEdges.size());
+            for (size_t innerRow = 0; innerRow < innerEdges.size(); innerRow++) {
+                index[innerRow] = {innerEdges[innerRow], innerRow};
+            }
+
+            std::sort(index.begin(), index.end());
+        }
+    }
+
+    // The first left-out position at or after @p position, or the product's row count.
+    // The walk only moves forward, so the hole found last answers every position up to it.
+    size_t next(size_t position) {
+        const size_t productRowCount = _outerRowCount * _innerRowCount;
+        if (_loopData->edgePairs().empty()) {
+            return productRowCount;
+        }
+
+        if (_foundHole && position >= _searchedFrom && position <= *_foundHole) {
+            return *_foundHole;
+        }
+
+        _searchedFrom = position;
+        _foundHole = findFrom(position);
+
+        return *_foundHole;
+    }
+
+private:
+    NLCrossProductLoopData* _loopData {nullptr};
+    size_t _outerRowCount {0};
+    size_t _innerRowCount {0};
+    size_t _heldOuterRow {std::numeric_limits<size_t>::max()};
+    size_t _searchedFrom {0};
+    std::optional<size_t> _foundHole;
+
+    size_t findFrom(size_t position) {
+        size_t outerRow = position / _innerRowCount;
+        size_t innerRow = position % _innerRowCount;
+
+        while (outerRow < _outerRowCount) {
+            if (outerRow != _heldOuterRow) {
+                holdOuterRow(outerRow);
+            }
+
+            const std::vector<size_t>& rowHoles = _loopData->rowHoles();
+            const auto hole = std::lower_bound(rowHoles.begin(), rowHoles.end(), innerRow);
+            if (hole != rowHoles.end()) {
+                return outerRow * _innerRowCount + *hole;
+            }
+
+            outerRow++;
+            innerRow = 0;
+        }
+
+        return _outerRowCount * _innerRowCount;
+    }
+
+    void holdOuterRow(size_t outerRow) {
+        const NLCrossProductLoopData::EdgePairs& pairs = _loopData->edgePairs();
+        const std::vector<NLCrossProductLoopData::InnerEdgeIndex>& indices = _loopData->innerEdgeIndices();
+        std::vector<size_t>& rowHoles = _loopData->rowHoles();
+
+        rowHoles.clear();
+        for (size_t pairIndex = 0; pairIndex < pairs.size(); pairIndex++) {
+            const EdgeID edge = pairs[pairIndex]._outer->getRaw()[outerRow];
+            const NLCrossProductLoopData::InnerEdgeIndex& index = indices[pairIndex];
+
+            auto match = std::lower_bound(index.begin(), index.end(), std::make_pair(edge, size_t {0}));
+            for (; match != index.end() && match->first == edge; match++) {
+                rowHoles.push_back(match->second);
+            }
+        }
+
+        std::sort(rowHoles.begin(), rowHoles.end());
+        rowHoles.erase(std::unique(rowHoles.begin(), rowHoles.end()), rowHoles.end());
+
+        _heldOuterRow = outerRow;
+    }
+};
 
 // Constant broadcast: the one value a ColumnConst holds is laid out over every row
 // of the step, as a present value. The two broadcasts above repeat the several
@@ -6172,7 +6271,7 @@ public:
             std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
 
             for (const NLHopImport& import : imports) {
-                import._broadcast(import._source, count, seedRow * count, count, import._chunk);
+                import._broadcast(import._source, count, seedRow * count, count, import._chunk, 0);
             }
 
             runBody(_context, stmts);
@@ -6577,24 +6676,27 @@ void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData
 
     const NLCrossProductLoopData::Columns& outerColumns = loopData->outerColumns();
     const NLCrossProductLoopData::Columns& innerColumns = loopData->innerColumns();
-    bioassert(!outerColumns.empty() && !innerColumns.empty(),
+    bioassert(loopData->getOuterRows() && loopData->getInnerRows(),
               "nl.cross_product needs a column on each side to size the product");
 
-    // N outer rows crossed with M inner rows make N*M pairs. The counts come from
-    // the first column of each side; every column of a side is row-aligned with
-    // that first one, which is what lets one position slice them all.
-    const size_t outerRowCount = outerColumns.front().getInput()->size();
-    const size_t innerRowCount = innerColumns.front().getInput()->size();
+    // N outer rows crossed with M inner rows make N*M pairs. Every column of a side is
+    // row-aligned with the one the side is sized by, which is what lets one position
+    // slice them all.
+    const size_t outerRowCount = loopData->getOuterRows()->size();
+    const size_t innerRowCount = loopData->getInnerRows()->size();
 
     const size_t productRowCount = outerRowCount * innerRowCount;
     const size_t chunkSize = context->getChunkSize();
     const NLLimitState* limit = loopData->getLimit();
     const NLStmtContainer* loopBody = loopData->getStmts();
 
-    // Walk the pairs a chunk at a time. Under a limit the step is cut to what the
-    // budget can still emit - the pairs come out in (outer, inner) order, so the
-    // step's prefix is exactly what the nl.limit_update/nl.output below can take,
-    // and the loop stops once the budget is spent, as a scan's loop does.
+    CrossProductHoles holes(loopData, outerRowCount, innerRowCount);
+
+    // Walk the pairs a chunk at a time, a step gathering the slices between the pairs
+    // distinct_from leaves out until it is full. Under a limit the step is cut to what the
+    // budget can still emit - the pairs come out in (outer, inner) order, so the step's
+    // prefix is exactly what the nl.limit_update/nl.output below can take, and the loop
+    // stops once the budget is spent, as a scan's loop does.
     size_t position = 0;
     while (position < productRowCount) {
         const size_t remaining = limit ? limit->getRemaining() : productRowCount;
@@ -6602,22 +6704,35 @@ void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData
             return;
         }
 
-        const size_t chunkRowCount = std::min(chunkSize, productRowCount - position);
-        const size_t rowCount = std::min(chunkRowCount, remaining);
+        const size_t stepRowCount = std::min(chunkSize, remaining);
+        size_t filled = 0;
 
-        for (const NLCrossColumn& column : outerColumns) {
-            const NLBroadcastFunction broadcast = column.getBroadcast();
-            broadcast(column.getInput(), innerRowCount, position, rowCount, column.getOutput());
+        while (filled < stepRowCount && position < productRowCount) {
+            const size_t hole = holes.next(position);
+            const size_t sliceEnd = std::min(hole, position + stepRowCount - filled);
+            const size_t sliceRowCount = sliceEnd - position;
+
+            for (const NLCrossColumn& column : outerColumns) {
+                const NLBroadcastFunction broadcast = column.getBroadcast();
+                broadcast(column.getInput(), innerRowCount, position, sliceRowCount, column.getOutput(), filled);
+            }
+
+            for (const NLCrossColumn& column : innerColumns) {
+                const NLBroadcastFunction broadcast = column.getBroadcast();
+                broadcast(column.getInput(), innerRowCount, position, sliceRowCount, column.getOutput(), filled);
+            }
+
+            filled += sliceRowCount;
+            position = sliceEnd;
+
+            if (position == hole && hole < productRowCount) {
+                position++;
+            }
         }
 
-        for (const NLCrossColumn& column : innerColumns) {
-            const NLBroadcastFunction broadcast = column.getBroadcast();
-            broadcast(column.getInput(), innerRowCount, position, rowCount, column.getOutput());
+        if (filled > 0) {
+            runBody(context, loopBody);
         }
-
-        runBody(context, loopBody);
-
-        position += rowCount;
     }
 }
 
@@ -6646,7 +6761,7 @@ void NLExecutor::runLimitTruncate(NLExecutionContext* context, NLFunctionData* d
     // nl.limit_update); never mutates the counter.
     for (const NLCrossColumn& column : truncate->columns()) {
         const NLBroadcastFunction copyPrefix = column.getBroadcast();
-        copyPrefix(column.getInput(), 1, 0, emitThisStep, column.getOutput());
+        copyPrefix(column.getInput(), 1, 0, emitThisStep, column.getOutput(), 0);
     }
 }
 

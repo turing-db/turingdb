@@ -113,6 +113,11 @@ def FuseDistinctEdges : Pass<"fuse_distinct_edges"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseProductDistinctEdges : Pass<"fuse_product_distinct_edges"> {
+    let summary = "Fold the edge-distinctness check between the two factors of a cross product into the product, which then leaves out the pairs holding one edge twice";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
     let summary = "Replace the hop region of a path exploration that only asks each hop's end node for labels with those labels";
     let dependentDialects = ["mlir::db::DB"];

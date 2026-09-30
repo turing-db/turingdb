@@ -10,7 +10,7 @@ namespace {
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext*);
 
-constexpr size_t DB_PASS_COUNT = 35;
+constexpr size_t DB_PASS_COUNT = 36;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -53,6 +53,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createTrimUnreadColumns(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreDistinctEnds(); },
     [](const mlir::db::DBPassContext* context) { return mlir::db::createCountFromMetadata(context); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createFuseProductDistinctEdges(); },
 };
 
 }
