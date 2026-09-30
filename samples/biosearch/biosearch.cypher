@@ -20,12 +20,12 @@ MATCH (seed)
 WHERE seed.speciesName = 'Homo sapiens'
   AND (seed.displayName = 'STAT1' OR seed.displayName STARTS WITH 'STAT1 [')
 MATCH p = (seed)((a)-[]-(b)
-    WHERE NOT coalesce(a.schemaClass, '') IN ['ProteinDrug', 'ChemicalDrug']
+    WHERE NOT a:Drug
       AND coalesce(b.speciesName, '') IN ['', 'Homo sapiens']
       AND NOT coalesce(b.schemaClass, '') IN ['Summation', 'InstanceEdit', 'Species', 'Disease', 'Compartment', 'ReferenceDatabase', 'DatabaseIdentifier', 'EntityFunctionalStatus', 'LiteratureReference', 'Publication', 'UndirectedInteraction', 'ReferenceGeneProduct', 'SimpleEntity', 'GO_MolecularFunction', 'FailedReaction', 'ReviewStatus', 'Deleted', 'DeletedInstance', 'DeletedControlledVocabulary', 'UpdateTracker', 'Release']
       AND NOT coalesce(b.displayName, '') IN ['ATP [cytosol]', 'ADP [cytosol]', 'AMP [cytosol]', 'H2O [cytosol]', 'AdoMet [cytosol]', 'AdoHcy [cytosol]', 'gain_of_function via non_conservative_missense_variant', 'lapatinib, neratinib, afatinib, AZ5104, tesevatinib, canertinib, sapitinib, CP-724714, AEE78 [cytosol]']
 ){1,5}(t)
-WHERE t.schemaClass IN ['ProteinDrug', 'ChemicalDrug']
+WHERE t:Drug
 WITH t, length(p) AS hops, [n IN nodes(p) | n.displayName] AS path
 WITH t, min(hops) AS distance, collect([hops, path]) AS candidates
 WITH t, distance, [c IN candidates WHERE c[0] = distance] AS shortest
