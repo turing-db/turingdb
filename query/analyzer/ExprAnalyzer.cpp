@@ -1132,12 +1132,14 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     analyzeExpr(indexExpr);
 
     const EvaluatedType baseType = base->getType();
+    const VarDecl* baseDecl = base->getExprVarDecl();
 
+    const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
     const bool indexesAList = baseType == EvaluatedType::List
                            || baseType == EvaluatedType::ListItem;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
-    if (!indexesAList && !indexesACSVRow) {
+    if (!indexesAPath && !indexesAList && !indexesACSVRow) {
         throwError(fmt::format("Index operator [] can only be applied to a list or a CSV row, not '{}'",
                                EvaluatedTypeName::value(baseType)), expr);
     }
@@ -1145,15 +1147,15 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const EvaluatedType indexType = indexExpr->getType();
 
     const bool indexesByPosition = indexType == EvaluatedType::Integer;
-    const bool indexesByNull = indexesAList && indexType == EvaluatedType::Null;
+    const bool indexesByNull = (indexesAPath || indexesAList) && indexType == EvaluatedType::Null;
 
     if (!indexesByPosition && !indexesByNull) {
         throwError(fmt::format("Index expression must be an integer, not '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
     }
 
-    if (indexesAList) {
-        const EvaluatedType elementType = base->getListShape().unwoundType();
+    if (indexesAPath || indexesAList) {
+        const EvaluatedType elementType = indexesAPath ? baseType : base->getListShape().unwoundType();
         const bool readsAValue = convertibleToValueType(elementType);
         const bool readsAnEntity = elementType == EvaluatedType::NodePattern
                                 || elementType == EvaluatedType::EdgePattern;

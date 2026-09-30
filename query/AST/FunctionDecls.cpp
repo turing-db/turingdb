@@ -436,6 +436,10 @@ void FunctionDecls::initDefault() {
     sizePath->setArguments({edgeOrPath});
     sizePath->setReturnTypes({{EvaluatedType::Integer}});
 
+    FunctionSignature* sizeGroup = createFunction("size");
+    sizeGroup->setArguments({nodeOrGroup});
+    sizeGroup->setReturnTypes({{EvaluatedType::Integer}});
+
     // The three reads of a named path: its hop count, the nodes it runs through and its
     // relationships, the two lists typed so that a comprehension over them binds an entity
     FunctionSignature* lengthPath = createFunction("length");

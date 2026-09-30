@@ -7691,8 +7691,12 @@ void DBProgramGenerator::translateListSliceExpr(const Expr* expr, const ListSlic
 void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr) {
     const Expr* base = indexExpr->getBase();
     const EvaluatedType baseType = base->getType();
+    const VarDecl* baseDecl = base->getExprVarDecl();
 
-    if (baseType == EvaluatedType::List || baseType == EvaluatedType::ListItem) {
+    const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
+    const bool indexesAList = baseType == EvaluatedType::List || baseType == EvaluatedType::ListItem;
+
+    if (indexesAPath || indexesAList) {
         const Expr* index = indexExpr->getIndexExpr();
 
         translateExpr(base);
@@ -7701,12 +7705,14 @@ void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* i
         bioassert(_part._exprMap.contains(base), "List index with unknown base.");
         bioassert(_part._exprMap.contains(index), "List index with unknown index.");
 
+        const mlir::Value list = readWalkEntities(base, _part._exprMap.at(base));
+
         const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
         const mlir::Location loc = _opBuilder.getUnknownLoc();
 
         _part._exprMap[expr] = _opBuilder.create<mlir::db::ListIndex>(loc,
                                                                       noneType,
-                                                                      _part._exprMap.at(base),
+                                                                      list,
                                                                       _part._exprMap.at(index)).getResult();
         return;
     }
@@ -8147,11 +8153,13 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     const Expr* argExpr = args->front();
     const mlir::Value translated = translateAggregateInput(argExpr, nullptr);
 
-    // A quantified pattern binds the handle of the walk. A count reads its rows off the
-    // handles, and every other aggregate the entities each one stands for
-    const mlir::Value inputColumn = funcName == "count" ? translated : readWalkEntities(argExpr, translated);
-
     const bool isDistinct = invocation->isDistinct();
+
+    // A quantified pattern binds the handle of the walk. A count reads its rows off the
+    // handles unless it counts distinct walks, and every other aggregate the entities
+    // each one stands for
+    const bool countsHandles = funcName == "count" && !isDistinct;
+    const mlir::Value inputColumn = countsHandles ? translated : readWalkEntities(argExpr, translated);
 
     // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x):
     // the flag is spent here rather than on a seen-set the result cannot depend on
@@ -8245,7 +8253,9 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         }
 
         const Expr* argExpr = args->front();
-        if (argExpr->getType() == EvaluatedType::EdgePattern) {
+        const EvaluatedType argType = argExpr->getType();
+
+        if (argType == EvaluatedType::EdgePattern || argType == EvaluatedType::NodePattern) {
             const mlir::Value column = translateArg(argExpr);
 
             // An OPTIONAL MATCH hands a walk on as the list of its edges, which size() reads
@@ -8578,7 +8588,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             const VarDecl* decl = *varDeclPtr;
             const auto findIt = variableColumns.find(decl);
             bioassert(findIt != variableColumns.end(), "Grouping key variable {} not found.", decl->getName());
-            const mlir::Value keyColumn = findIt->second;
+            const mlir::Value keyColumn = listColumnOf(decl, findIt->second);
 
             // A constant tells no two rows apart, so it groups nothing - whether the
             // projection spells it out or a wildcard expands it
@@ -8614,7 +8624,8 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const Expr* item = std::get<Expr*>(returnItem);
 
         if (!item->isAggregate()) {
-            const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, item);
+            const mlir::Value keyColumn = listColumnOf(item->getExprVarDecl(),
+                                                       getOrTranslateExprColumn(variableColumns, item));
 
             // An aggregate may be taken over the alias of an item declared before it -
             // count(x) of RETURN 1 AS x, count(x) - and the column that alias names is
@@ -8723,7 +8734,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
 
         const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);
-        const bool countsHandles = funcName == "count";
+        const bool countsHandles = funcName == "count" && !invocation->isDistinct();
 
         aggInputColumns.push_back(countsHandles ? inputColumn : readWalkEntities(argExpr, inputColumn));
         aggKinds.push_back(*kind);
