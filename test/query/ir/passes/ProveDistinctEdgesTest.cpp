@@ -140,7 +140,8 @@ TEST_F(ProveDistinctEdgesTest, narrowsACheckToThePairsItKeeps) {
     expectCount(query, "3");
 }
 
-// Over a cross product the check stays a filter, narrowed to the pair the types keep
+// Over a cross product the check narrows to the pair the types keep, which folds into the
+// product
 TEST_F(ProveDistinctEdgesTest, narrowsACheckOverACrossProduct) {
     const std::string_view query = "MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:INTERESTED_IN]->(c), (d)-[e3:KNOWS_WELL]->(f) RETURN count(*)";
 
@@ -149,9 +150,9 @@ TEST_F(ProveDistinctEdgesTest, narrowsACheckOverACrossProduct) {
     explain(query, pairs, program);
 
     EXPECT_EQ(pairs, "e2 <> e1: proven by types\ne1 <> e3: kept\ne2 <> e3: proven by types\n");
-    EXPECT_TRUE(contains(program, "db.check_edge_distinct(")) << program;
-    EXPECT_TRUE(contains(program, "names [\"e1\", \"e3\"]")) << program;
-    EXPECT_FALSE(contains(program, "distinct_from")) << program;
+    EXPECT_FALSE(contains(program, "db.check_edge_distinct(")) << program;
+    EXPECT_TRUE(contains(program, "db.cross_product")) << program;
+    EXPECT_EQ(countOf(program, "distinct_from"), 1u) << program;
 
     expectCount(query, "16");
 }

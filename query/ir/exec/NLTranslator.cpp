@@ -1006,6 +1006,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange innerColumns = crossProduct.getInnerColumns();
             config._crossInnerColumns.assign(innerColumns.begin(), innerColumns.end());
 
+            if (const std::optional<llvm::ArrayRef<int64_t>> pairs = crossProduct.getDistinctFrom()) {
+                config._crossDistinctFrom.assign(pairs->begin(), pairs->end());
+            }
+
             _iteratorConfigs[crossProduct.getResult()] = config;
         } else if (nl::Limit limit = mlir::dyn_cast<nl::Limit>(operation)) {
             translateLimit(limit, body);
@@ -6239,6 +6243,16 @@ void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,
 
     NLCrossProductLoopData* loopData = _program->allocFunctionData<NLCrossProductLoopData>();
     loopData->setLimit(limit);
+    loopData->setOuterRows(getColumn(outerColumns.front()));
+    loopData->setInnerRows(getColumn(innerColumns.front()));
+
+    const std::span<const int64_t> distinctFrom = config._crossDistinctFrom;
+    for (size_t position = 0; position + 1 < distinctFrom.size(); position += 2) {
+        const Column* outer = getColumn(outerColumns[distinctFrom[position]]);
+        const Column* inner = getColumn(innerColumns[distinctFrom[position + 1]]);
+        loopData->addEdgePair(NLCrossEdgePair {._outer = static_cast<const ColumnEdgeIDs*>(outer),
+                                               ._inner = static_cast<const ColumnEdgeIDs*>(inner)});
+    }
 
     // The loop binds one variable per crossed column - the outer columns followed by
     // the inner, the order inferReturnTypes lays the iterator's chunks out - so walk
@@ -6246,12 +6260,18 @@ void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,
     unsigned argumentIndex = 0;
 
     for (const mlir::Value column : outerColumns) {
-        addCrossColumn(column, loopBody.getArgument(argumentIndex), /*isOuter=*/true, loopData);
+        const mlir::BlockArgument argument = loopBody.getArgument(argumentIndex);
+        if (!argument.use_empty()) {
+            addCrossColumn(column, argument, /*isOuter=*/true, loopData);
+        }
         argumentIndex++;
     }
 
     for (const mlir::Value column : innerColumns) {
-        addCrossColumn(column, loopBody.getArgument(argumentIndex), /*isOuter=*/false, loopData);
+        const mlir::BlockArgument argument = loopBody.getArgument(argumentIndex);
+        if (!argument.use_empty()) {
+            addCrossColumn(column, argument, /*isOuter=*/false, loopData);
+        }
         argumentIndex++;
     }
 

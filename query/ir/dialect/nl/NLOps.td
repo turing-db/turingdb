@@ -1382,12 +1382,21 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     the loop stops once the budget is spent, and - since the pairs come out in
     (outer, inner) order - a step lays out only the prefix the following
     nl.limit_update/nl.output can still emit.
+
+    `distinct_from` lists pairs of edge columns, an outer column's index in its
+    brace group followed by an inner one's, and leaves out every pair of rows in
+    which a listed pair holds one edge: the steps fill up with the pairs that
+    remain, so no column is laid out for a pair that is left out.
+
+      %pairs = nl.cross_product {%e} {%f} distinct_from [0, 0]
+                 : {!nl.chunk<!storage.edge_id>} {!nl.chunk<!storage.edge_id>}
   }];
 
   // The outer and inner column groups to cross. Two operand groups of independent
   // size need AttrSizedOperandSegments to record each group's size.
   let arguments = (ins Variadic<NLChunk>:$outer_columns,
-                       Variadic<NLChunk>:$inner_columns);
+                       Variadic<NLChunk>:$inner_columns,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // An iterator over the crossed columns, outer group then inner group; inferred
   // from the operands since the broadcast keeps each chunk's element type.
@@ -1399,7 +1408,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   // operandSegmentSizes attribute is populated and elided automatically by the
   // generated parser/printer.
   let assemblyFormat = [{
-    `{` $outer_columns `}` `{` $inner_columns `}` attr-dict `:`
+    `{` $outer_columns `}` `{` $inner_columns `}` (`distinct_from` $distinct_from^)? attr-dict `:`
     `{` qualified(type($outer_columns)) `}` `{` qualified(type($inner_columns)) `}`
   }];
 }

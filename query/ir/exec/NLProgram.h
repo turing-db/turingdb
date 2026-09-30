@@ -11,6 +11,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -291,12 +292,14 @@ using NLGatherFunction = void (*)(const Column* input,
 // product is cut into chunks: a slice may start and end mid-block or mid-tile, and
 // every column of the step slices at the same position, so they stay row-aligned.
 // `factor` is M for both directions - block-repeat divides the position by it,
-// tile takes the position modulo it.
+// tile takes the position modulo it. The slice is written from `outputOffset` on, so
+// one step can hold several slices.
 using NLBroadcastFunction = void (*)(const Column* input,
                                      size_t factor,
                                      size_t position,
                                      size_t rowCount,
-                                     Column* output);
+                                     Column* output,
+                                     size_t outputOffset);
 
 // One column a hop predicate reads from outside the hop: the loop's own column, and the
 // chunk the region's argument reads, filled with the seed row's value before each run by
@@ -1418,9 +1421,18 @@ private:
 // (inner rows) are read at run time from the first column of each group, so the
 // product has N*M pairs; the loop walks them chunk by chunk rather than laying all
 // of them out at once.
+// A pair of edge columns of a cross product, one from each side, whose rows the product
+// only pairs where they hold two different edges
+struct NLCrossEdgePair {
+    const ColumnEdgeIDs* _outer {nullptr};
+    const ColumnEdgeIDs* _inner {nullptr};
+};
+
 class NLCrossProductLoopData : public NLFunctionData {
 public:
     using Columns = std::vector<NLCrossColumn>;
+    using EdgePairs = std::vector<NLCrossEdgePair>;
+    using InnerEdgeIndex = std::vector<std::pair<EdgeID, size_t>>;
 
     const Columns& outerColumns() const { return _outerColumns; }
     const Columns& innerColumns() const { return _innerColumns; }
@@ -1432,6 +1444,20 @@ public:
     void addInnerColumn(const NLCrossColumn& column) {
         _innerColumns.push_back(column);
     }
+
+    // The columns the two sides are sized by, broadcast or not
+    const Column* getOuterRows() const { return _outerRows; }
+    const Column* getInnerRows() const { return _innerRows; }
+    void setOuterRows(const Column* rows) { _outerRows = rows; }
+    void setInnerRows(const Column* rows) { _innerRows = rows; }
+
+    const EdgePairs& edgePairs() const { return _edgePairs; }
+    void addEdgePair(const NLCrossEdgePair& pair) { _edgePairs.push_back(pair); }
+
+    // Scratch the loop reuses from one run to the next: each pair's inner edges sorted
+    // with their rows, and the inner rows one outer row may not pair with
+    std::vector<InnerEdgeIndex>& innerEdgeIndices() { return _innerEdgeIndices; }
+    std::vector<size_t>& rowHoles() { return _rowHoles; }
 
     // The governing limit counter, or null for an unbounded loop. The loop stops
     // once it reaches zero and a step lays out at most that many pairs; it never
@@ -1445,6 +1471,11 @@ public:
 private:
     Columns _outerColumns;
     Columns _innerColumns;
+    const Column* _outerRows {nullptr};
+    const Column* _innerRows {nullptr};
+    EdgePairs _edgePairs;
+    std::vector<InnerEdgeIndex> _innerEdgeIndices;
+    std::vector<size_t> _rowHoles;
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };
