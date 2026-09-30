@@ -1949,14 +1949,19 @@ def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
     A `limit` on the enclosing nl.for bounds the pairing the way it bounds a
     product: the loop stops once the budget is spent, and a step lays out only the
     prefix the following nl.limit_update/nl.output can still emit.
+
+    `distinct_from` lists pairs of edge columns, a probe column's index followed by
+    a build column's, and leaves out every matched pair in which a listed pair holds
+    one edge, as on nl.cross_product.
   }];
 
   let arguments = (ins NLHashJoinStateHandle:$state,
-                       Variadic<NLChunk>:$columns);
+                       Variadic<NLChunk>:$columns,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    $state `,` `(` $columns `)` attr-dict `:`
+    $state `,` `(` $columns `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     `(` qualified(type($columns)) `)` `->` qualified(type($result))
   }];
   let hasVerifier = 1;

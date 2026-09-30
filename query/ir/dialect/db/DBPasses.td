@@ -114,7 +114,7 @@ def FuseDistinctEdges : Pass<"fuse_distinct_edges"> {
 }
 
 def FuseProductDistinctEdges : Pass<"fuse_product_distinct_edges"> {
-    let summary = "Fold the edge-distinctness check between the two factors of a cross product into the product, which then leaves out the pairs holding one edge twice";
+    let summary = "Fold the edge-distinctness check between the two factors of a cross product or a hash join into the op, which then leaves out the pairs holding one edge twice";
     let dependentDialects = ["mlir::db::DB"];
 }
 

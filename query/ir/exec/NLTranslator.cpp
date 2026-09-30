@@ -1007,7 +1007,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._crossInnerColumns.assign(innerColumns.begin(), innerColumns.end());
 
             if (const std::optional<llvm::ArrayRef<int64_t>> pairs = crossProduct.getDistinctFrom()) {
-                config._crossDistinctFrom.assign(pairs->begin(), pairs->end());
+                config._crossedDistinctFrom.assign(pairs->begin(), pairs->end());
             }
 
             _iteratorConfigs[crossProduct.getResult()] = config;
@@ -1044,6 +1044,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
 
             const mlir::OperandRange probeColumns = hashJoinProbe.getColumns();
             config._probeColumns.assign(probeColumns.begin(), probeColumns.end());
+
+            if (const std::optional<llvm::ArrayRef<int64_t>> pairs = hashJoinProbe.getDistinctFrom()) {
+                config._crossedDistinctFrom.assign(pairs->begin(), pairs->end());
+            }
 
             _iteratorConfigs[hashJoinProbe.getResult()] = config;
         } else if (nl::Distinct distinct = mlir::dyn_cast<nl::Distinct>(operation)) {
@@ -4431,9 +4435,13 @@ void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
     // edge and sort loops use, over the pair of index scratches the probe fills.
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
         const mlir::Value column = columns[columnIndex];
+        const mlir::BlockArgument bound = loopBody.getArgument(static_cast<unsigned>(columnIndex));
+        if (bound.use_empty()) {
+            continue;
+        }
 
         Column* output = allocColumnForChunkType(column.getType());
-        _valueSlots[loopBody.getArgument(static_cast<unsigned>(columnIndex))] = output;
+        _valueSlots[bound] = output;
 
         data->addProbeColumn(NLCarriedColumn(getColumn(column),
                                              output,
@@ -4450,6 +4458,10 @@ void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
 
         if (bound.getType() != bufferType) {
             throw IRException("nl.hash_join_probe must declare each build chunk as the chunk type the nl.hash_join_collect appended");
+        }
+
+        if (bound.use_empty()) {
+            continue;
         }
 
         Column* output = allocColumnForChunkType(bufferType);
@@ -4475,6 +4487,14 @@ void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
                         state->buffer(buildKey),
                         selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
                         selectKeyMatchableForChunkType(keyColumn.getType()));
+
+    const std::span<const int64_t> distinctFrom = config._crossedDistinctFrom;
+    for (size_t position = 0; position + 1 < distinctFrom.size(); position += 2) {
+        const Column* probeEdges = getColumn(columns[distinctFrom[position]]);
+        const Column* buildEdges = state->buffer(distinctFrom[position + 1]);
+        data->addEdgePair(NLJoinEdgePair {._probe = static_cast<const ColumnEdgeIDs*>(probeEdges),
+                                          ._build = static_cast<const ColumnEdgeIDs*>(buildEdges)});
+    }
 
     body->emplaceStmt(&NLExecutor::runHashJoinProbeLoop, data);
 
@@ -6245,7 +6265,7 @@ void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,
     loopData->setOuterRows(getColumn(outerColumns.front()));
     loopData->setInnerRows(getColumn(innerColumns.front()));
 
-    const std::span<const int64_t> distinctFrom = config._crossDistinctFrom;
+    const std::span<const int64_t> distinctFrom = config._crossedDistinctFrom;
     for (size_t position = 0; position + 1 < distinctFrom.size(); position += 2) {
         const Column* outer = getColumn(outerColumns[distinctFrom[position]]);
         const Column* inner = getColumn(innerColumns[distinctFrom[position + 1]]);

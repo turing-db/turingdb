@@ -254,6 +254,62 @@ LogicalResult verifyFactorResults(Operation* op, Region& leftFactor, Region& rig
     return success();
 }
 
+// distinct_from on a two-factor op lists pairs of edge columns, a left factor's yield index
+// followed by a right factor's
+LogicalResult verifyFactorDistinctFrom(Operation* op, Region& leftFactor, Region& rightFactor, DenseI64ArrayAttr pairs) {
+    if (!pairs) {
+        return success();
+    }
+
+    const llvm::ArrayRef<int64_t> indices = pairs.asArrayRef();
+    if (indices.size() % 2 != 0) {
+        return op->emitOpError("distinct_from lists pairs of a left and a right column, but holds ") << indices.size() << " indices";
+    }
+
+    const Operation::operand_range leftColumns = getFactorYield(leftFactor).getColumns();
+    const Operation::operand_range rightColumns = getFactorYield(rightFactor).getColumns();
+
+    for (size_t position = 0; position < indices.size(); position++) {
+        const bool onTheLeft = position % 2 == 0;
+        const Operation::operand_range columns = onTheLeft ? leftColumns : rightColumns;
+        const int64_t index = indices[position];
+
+        if (index < 0 || static_cast<size_t>(index) >= columns.size()) {
+            return op->emitOpError("distinct_from index ") << index << " names no column the " << (onTheLeft ? "left" : "right") << " factor yields";
+        }
+
+        const ColumnType column = cast<ColumnType>(columns[index].getType());
+        if (!isa<storage::EdgeIDType>(column.getType())) {
+            return op->emitOpError("distinct_from names the ") << (onTheLeft ? "left" : "right") << " column " << index << ", which holds no edges";
+        }
+    }
+
+    return success();
+}
+
+// The optional `distinct_from [...]` a two-factor op spells after its regions
+ParseResult parseDistinctFrom(OpAsmParser& parser, OperationState& result, StringAttr name) {
+    if (failed(parser.parseOptionalKeyword("distinct_from"))) {
+        return success();
+    }
+
+    const Attribute pairs = DenseI64ArrayAttr::parse(parser, Type());
+    if (!pairs) {
+        return failure();
+    }
+
+    result.addAttribute(name, pairs);
+
+    return success();
+}
+
+void printDistinctFrom(OpAsmPrinter& printer, DenseI64ArrayAttr pairs) {
+    if (pairs) {
+        printer << " distinct_from ";
+        pairs.print(printer);
+    }
+}
+
 // A literal list typed as homogeneous - db.unwind_const's typed column, db.const_list's
 // typed list - must carry at least one element and every element must carry one shared
 // type, or be a null, which rides a unit attr and shares whatever type the others carry.
@@ -799,16 +855,8 @@ ParseResult CrossProduct::parse(OpAsmParser& parser, OperationState& result) {
         return failure();
     }
 
-    if (succeeded(parser.parseOptionalKeyword("distinct_from"))) {
-        const Attribute pairs = DenseI64ArrayAttr::parse(parser, Type());
-        if (!pairs) {
-            return failure();
-        }
-
-        result.addAttribute(getDistinctFromAttrName(result.name), pairs);
-    }
-
-    if (parser.parseOptionalAttrDict(result.attributes)) {
+    if (parseDistinctFrom(parser, result, getDistinctFromAttrName(result.name))
+        || parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
 
@@ -829,11 +877,7 @@ void CrossProduct::print(OpAsmPrinter& printer) {
     printer << " " << factorKeyword << " ";
     printer.printRegion(getRightFactor());
 
-    const DenseI64ArrayAttr pairs = getDistinctFromAttr();
-    if (pairs) {
-        printer << " distinct_from ";
-        pairs.print(printer);
-    }
+    printDistinctFrom(printer, getDistinctFromAttr());
 
     printer.printOptionalAttrDict((*this)->getAttrs(), {getDistinctFromAttrName()});
 }
@@ -843,35 +887,7 @@ LogicalResult CrossProduct::verify() {
         return failure();
     }
 
-    const DenseI64ArrayAttr pairs = getDistinctFromAttr();
-    if (!pairs) {
-        return success();
-    }
-
-    const llvm::ArrayRef<int64_t> indices = pairs.asArrayRef();
-    if (indices.size() % 2 != 0) {
-        return emitOpError("distinct_from lists pairs of a left and a right column, but holds ") << indices.size() << " indices";
-    }
-
-    const Operation::operand_range leftColumns = getFactorYield(getLeftFactor()).getColumns();
-    const Operation::operand_range rightColumns = getFactorYield(getRightFactor()).getColumns();
-
-    for (size_t position = 0; position < indices.size(); position++) {
-        const bool onTheLeft = position % 2 == 0;
-        const Operation::operand_range columns = onTheLeft ? leftColumns : rightColumns;
-        const int64_t index = indices[position];
-
-        if (index < 0 || static_cast<size_t>(index) >= columns.size()) {
-            return emitOpError("distinct_from index ") << index << " names no column the " << (onTheLeft ? "left" : "right") << " factor yields";
-        }
-
-        const ColumnType column = cast<ColumnType>(columns[index].getType());
-        if (!isa<storage::EdgeIDType>(column.getType())) {
-            return emitOpError("distinct_from names the ") << (onTheLeft ? "left" : "right") << " column " << index << ", which holds no edges";
-        }
-    }
-
-    return success();
+    return verifyFactorDistinctFrom(getOperation(), getLeftFactor(), getRightFactor(), getDistinctFromAttr());
 }
 
 // Builds the op from the branch count alone and creates that many empty blocks. The
@@ -1020,7 +1036,8 @@ ParseResult HashJoin::parse(OpAsmParser& parser, OperationState& result) {
         return failure();
     }
 
-    if (parser.parseOptionalAttrDict(result.attributes)) {
+    if (parseDistinctFrom(parser, result, getDistinctFromAttrName(result.name))
+        || parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
 
@@ -1047,7 +1064,9 @@ void HashJoin::print(OpAsmPrinter& printer) {
 
     printer << " " << keysKeyword << " " << getLeftKey() << ", " << getRightKey();
 
-    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName()});
+    printDistinctFrom(printer, getDistinctFromAttr());
+
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName(), getDistinctFromAttrName()});
 }
 
 // The results line up with the two factors' yields exactly as a cross product's do, and
@@ -1071,7 +1090,7 @@ LogicalResult HashJoin::verify() {
                                                 << rightCount << " columns the right factor yields";
     }
 
-    return success();
+    return verifyFactorDistinctFrom(getOperation(), getLeftFactor(), getRightFactor(), getDistinctFromAttr());
 }
 
 LogicalResult CreateNode::verify() {
