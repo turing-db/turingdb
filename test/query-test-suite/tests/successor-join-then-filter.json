@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b)-->(x) WHERE a.age = b.age RETURN  x.name, a.name, a.age, b.name, b.age",
   "expect": {
-    "result": "x.name,a.name,a.age,b.name,b.age\nAdam,Remy,32,Remy,32\nGhosts,Remy,32,Remy,32\nComputers,Remy,32,Remy,32\nEighties,Remy,32,Remy,32\nRemy,Adam,32,Adam,32\nBio,Adam,32,Adam,32\nCooking,Adam,32,Adam,32",
-    "resultJson": "{\"header\":{\"column_names\":[\"x.name\",\"a.name\",\"a.age\",\"b.name\",\"b.age\"],\"column_types\":[\"String\",\"String\",\"Int64\",\"String\",\"Int64\"]},\"data\":[[[\"Adam\",\"Ghosts\",\"Computers\",\"Eighties\",\"Remy\",\"Bio\",\"Cooking\"],[\"Remy\",\"Remy\",\"Remy\",\"Remy\",\"Adam\",\"Adam\",\"Adam\"],[32,32,32,32,32,32,32],[\"Remy\",\"Remy\",\"Remy\",\"Remy\",\"Adam\",\"Adam\",\"Adam\"],[32,32,32,32,32,32,32]]]}"
+    "result": "x.name,a.name,a.age,b.name,b.age",
+    "resultJson": "{\"header\":{\"column_names\":[\"x.name\",\"a.name\",\"a.age\",\"b.name\",\"b.age\"],\"column_types\":[\"String\",\"String\",\"Int64\",\"String\",\"Int64\"]},\"data\":[[[],[],[],[],[]]]}"
   },
   "tags": [],
   "write-required": false

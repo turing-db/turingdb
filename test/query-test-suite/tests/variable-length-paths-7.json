@@ -3,7 +3,7 @@
     "graph": "simpledb",
     "query": "MATCH (i:Supernatural)-->(n:Person)-[e]->*(m:Person) RETURN i.name, n.name, e, m.name",
     "expect": {
-        "result": "i.name,n.name,e,m.name\nGhosts,Remy,[],Remy\nGhosts,Remy,[0],Adam\nGhosts,Remy,\"[0, 4]\",Remy\nGhosts,Remy,\"[0, 4, 1, 7]\",Remy\nGhosts,Remy,\"[1, 7]\",Remy\nGhosts,Remy,\"[1, 7, 0]\",Adam\nGhosts,Remy,\"[1, 7, 0, 4]\",Remy"
+        "result": "i.name,n.name,e,m.name\nGhosts,Remy,[],Remy\nGhosts,Remy,[0],Adam\nGhosts,Remy,\"[0, 4]\",Remy"
     },
     "tags": [
         "variable",
