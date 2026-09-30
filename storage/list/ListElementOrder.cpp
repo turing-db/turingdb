@@ -360,6 +360,38 @@ bool valuesEqual(const View lhs, const View rhs) {
     return compareValues(lhs, rhs) == std::strong_ordering::equal;
 }
 
+// A pair involving a float compares as IEEE doubles rather than through compareDoubles,
+// which sorts a NaN after every number where a comparison must answer false
+template <typename Lhs, typename Rhs>
+std::partial_ordering numberComparisonOrder(const Lhs lhs, const Rhs rhs) {
+    if constexpr (std::is_integral_v<Lhs> && std::is_integral_v<Rhs>) {
+        return compareNumericValues(lhs, rhs);
+    } else {
+        return static_cast<double>(lhs) <=> static_cast<double>(rhs);
+    }
+}
+
+template <typename Value>
+std::optional<std::partial_ordering> elementNumberComparisonOrder(const ListElementView element, const Value value) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return numberComparisonOrder(element.getAs<types::Int64::Primitive>(), value);
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return numberComparisonOrder(element.getAs<types::UInt64::Primitive>(), value);
+        break;
+
+        case ListBufferTypeTag::Double:
+            return numberComparisonOrder(element.getAs<types::Double::Primitive>(), value);
+        break;
+
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
 }
 
 std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElementView rhs) {
@@ -523,4 +555,101 @@ std::strong_ordering db::operator<=>(const ListElementView element, const types:
     }
 
     return static_cast<bool>(element.getAs<types::Bool::Primitive>()) <=> static_cast<bool>(value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView lhs, const ListElementView rhs) {
+    const ListBufferTypeTag rhsTag = rhs.getTag();
+
+    switch (rhsTag) {
+        case ListBufferTypeTag::Int:
+            return comparisonOrder(lhs, rhs.getAs<types::Int64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return comparisonOrder(lhs, rhs.getAs<types::UInt64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::Double:
+            return comparisonOrder(lhs, rhs.getAs<types::Double::Primitive>());
+        break;
+
+        case ListBufferTypeTag::String:
+            return comparisonOrder(lhs, rhs.getAs<types::String::Primitive>());
+        break;
+
+        case ListBufferTypeTag::Bool:
+            return comparisonOrder(lhs, rhs.getAs<types::Bool::Primitive>());
+        break;
+
+        case ListBufferTypeTag::DateTime:
+            if (lhs.getTag() != rhsTag) {
+                return std::nullopt;
+            }
+
+            return lhs.getAs<types::DateTime::Primitive>() <=> rhs.getAs<types::DateTime::Primitive>();
+        break;
+
+        case ListBufferTypeTag::ListView:
+            if (lhs.getTag() != rhsTag) {
+                return std::nullopt;
+            }
+
+            return comparisonOrder(lhs.getAs<ListView>(), rhs.getAs<ListView>());
+        break;
+
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListView lhs, const ListView rhs) {
+    const std::span<const ListElementView> lhsElements = lhs.elements();
+    const std::span<const ListElementView> rhsElements = rhs.elements();
+    const size_t common = std::min(lhsElements.size(), rhsElements.size());
+
+    for (size_t index = 0; index < common; index++) {
+        const std::optional<std::partial_ordering> order = comparisonOrder(lhsElements[index], rhsElements[index]);
+        if (!order || *order != std::partial_ordering::equivalent) {
+            return order;
+        }
+    }
+
+    return lhsElements.size() <=> rhsElements.size();
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Int64::Primitive value) {
+    return elementNumberComparisonOrder(element, value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::UInt64::Primitive value) {
+    return elementNumberComparisonOrder(element, value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Double::Primitive value) {
+    return elementNumberComparisonOrder(element, value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::String::Primitive value) {
+    if (element.getTag() != ListBufferTypeTag::String) {
+        return std::nullopt;
+    }
+
+    return element.getAs<types::String::Primitive>() <=> value;
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Bool::Primitive value) {
+    if (element.getTag() != ListBufferTypeTag::Bool) {
+        return std::nullopt;
+    }
+
+    return static_cast<bool>(element.getAs<types::Bool::Primitive>()) <=> static_cast<bool>(value);
+}
+
+std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const ListView value) {
+    if (element.getTag() != ListBufferTypeTag::ListView) {
+        return std::nullopt;
+    }
+
+    return comparisonOrder(element.getAs<ListView>(), value);
 }

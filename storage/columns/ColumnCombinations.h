@@ -64,17 +64,30 @@ public:
 };
 
 /// A type-erased cell holds no truth value of its own, so comparing a mask against one
-/// answers a mask rather than a column of cells
+/// answers a mask rather than a column of cells - a nullable one, since the cell may hold a
+/// null or a value of another type
 template <typename Op>
 class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<ListElementView>> {
 public:
-    using ResultColumnType = ColumnMask;
+    using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>
 class ColumnCombinationImpl<Op, ColumnVector<ListElementView>, ColumnMask> {
 public:
-    using ResultColumnType = ColumnMask;
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<ListElementView>> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op>
+class ColumnCombinationImpl<Op, ColumnConst<ListElementView>, ColumnMask> {
+public:
+    using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>

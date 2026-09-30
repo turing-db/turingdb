@@ -503,7 +503,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)) {
+                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)
+                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
                 // Valid pair
                 break;
             }
@@ -523,7 +524,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
 
             if (ordersListItem) {
                 break;
