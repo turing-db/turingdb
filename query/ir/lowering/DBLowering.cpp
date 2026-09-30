@@ -101,10 +101,6 @@ mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, input).getResult();
 }
 
-mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::OwnedStringType::get(builder.getContext());
-}
-
 mlir::Type stringFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return storage::StringType::get(builder.getContext());
 }
@@ -267,8 +263,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.duration_seconds_of_minute",      {&emitNLUnaryFunction<nl::DurationSecondsOfMinute>,      &integerFunctionElement, ResultNullability::FollowsInput}},
     {"db.duration_milliseconds_of_second", {&emitNLUnaryFunction<nl::DurationMillisecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
     {"db.duration_microseconds_of_second", {&emitNLUnaryFunction<nl::DurationMicrosecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-
-    {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>,  &ownedStringFunctionElement, ResultNullability::FollowsInput}},
+    {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>,  &stringFunctionElement,      ResultNullability::FollowsInput}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
