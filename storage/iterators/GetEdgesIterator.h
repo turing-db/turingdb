@@ -2,6 +2,7 @@
 
 #include "Iterator.h"
 
+#include <array>
 #include <span>
 
 #include "ChunkWriter.h"
@@ -59,6 +60,7 @@ protected:
     ColumnNodeIDs::ConstIterator _nodeIt;
 
     std::span<const EdgeRecord> _edges;
+    std::span<const EdgeRecord> _nodeOutEdges;
     std::span<const EdgeRecord>::iterator _edgeIt;
     Direction _direction {Direction::Outgoing};
 
@@ -98,7 +100,19 @@ private:
     TombstoneFilter _filter;
     ExcludedEdges _excluded;
 
+    const DataPart* _boundPart {nullptr};
+    std::span<const EdgeRecord> _partOutEdges;
+    EdgeID _partFirstEdgeID {0};
+    std::span<const size_t> _partSelfLoopOffsets;
+    size_t _heldInOutRun {0};
+    size_t _heldInInRun {0};
+    size_t _heldInRun {0};
+
     void filterTombstones();
+    void classifyRow(std::span<const EdgeID> excluded);
+
+    template <std::array<bool, 3> conditions>
+    size_t copyRunLeavingOut(std::span<const EdgeID> excluded, size_t begin, size_t count);
 };
 
 struct GetEdgesRange {
