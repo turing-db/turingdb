@@ -276,7 +276,10 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
-        OptionalKindPairs<ListElementView, ListElementView>::Pairs
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
+
+        OptionalKindPairs<ListView, ListView>::Pairs,
+        ListElementKindPairs<ListView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -323,7 +326,10 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
-        OptionalKindPairs<ListElementView, ListElementView>::Pairs
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
+
+        OptionalKindPairs<ListView, ListView>::Pairs,
+        ListElementKindPairs<ListView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<

@@ -90,6 +90,8 @@ std::strong_ordering operator<=>(ListElementView element, types::Bool::Primitive
  * pair, a null on either side included, is absent. A NaN is unordered against every number.
  */
 std::optional<std::partial_ordering> comparisonOrder(ListElementView lhs, ListElementView rhs);
+std::optional<std::partial_ordering> comparisonOrder(ListView lhs, ListView rhs);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, ListView value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Int64::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::UInt64::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Double::Primitive value);

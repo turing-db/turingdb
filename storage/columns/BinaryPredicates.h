@@ -89,6 +89,9 @@ concept TaggedCellOperand =
 template <typename T, typename U>
 concept ComparesATaggedCell = (TaggedCellOperand<T> || TaggedCellOperand<U>) && !HoldsPropertyNull<T, U>;
 
+template <typename T, typename U>
+concept OrdersToANullableBool = ComparesATaggedCell<T, U> || (ListOperand<T> && ListOperand<U>);
+
 template <typename T>
 inline bool holdsAValue(const T& operand) {
     if constexpr (TypeUtils::is_optional_v<T>) {
@@ -113,7 +116,7 @@ inline std::optional<ListView> heldList(const T& operand) {
 
 template <typename T, typename U>
 inline std::optional<std::partial_ordering> cellComparisonOrder(const T& a, const U& b) {
-    if constexpr (std::is_same_v<T, ListElementView>) {
+    if constexpr (std::is_same_v<T, ListElementView> || std::is_same_v<T, U>) {
         return comparisonOrder(a, b);
     } else {
         const std::optional<std::partial_ordering> order = comparisonOrder(b, a);
@@ -140,7 +143,7 @@ concept MixedSignIntegers =
 template <typename Order>
 struct TuringOrder {
     template <typename T, typename U>
-        requires (!ComparesATaggedCell<T, U>)
+        requires (!OrdersToANullableBool<T, U>)
     auto operator()(const T& a, const U& b) const -> decltype(Order {}(a, b)) {
         if constexpr (!MixedSignIntegers<T, U>) {
             return Order {}(a, b);
@@ -156,7 +159,7 @@ struct TuringOrder {
     }
 
     template <typename T, typename U>
-        requires ComparesATaggedCell<T, U>
+        requires OrdersToANullableBool<T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) const {
         if (!holdsAValue(a) || !holdsAValue(b)) {
             return std::nullopt;
