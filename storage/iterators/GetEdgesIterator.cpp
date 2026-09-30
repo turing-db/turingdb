@@ -205,93 +205,6 @@ void GetEdgesChunkWriter::filterTombstones() {
 static constexpr size_t NColumns = 3;
 static constexpr size_t NCombinations = 1 << NColumns;
 
-template <std::array<bool, NColumns> conditions>
-size_t GetEdgesChunkWriter::copyRunLeavingOut(std::span<const EdgeID> excluded, size_t begin, size_t count) {
-    EdgeID* edgeIDs = nullptr;
-    NodeID* others = nullptr;
-    EdgeTypeID* types = nullptr;
-
-    if constexpr (conditions[0]) {
-        _edgeIDs->resize(begin + count);
-        edgeIDs = _edgeIDs->data() + begin;
-    }
-    if constexpr (conditions[1]) {
-        _others->resize(begin + count);
-        others = _others->data() + begin;
-    }
-    if constexpr (conditions[2]) {
-        _types->resize(begin + count);
-        types = _types->data() + begin;
-    }
-
-    const EdgeRecord* records = &*_edgeIt;
-    const bool outgoing = _direction == Direction::Outgoing;
-    const size_t outSliceFirst = outgoing ? records - _partOutEdges.data() : 0;
-
-    const auto nextHeld = [&](size_t from) {
-        if (outgoing) {
-            size_t next = count;
-            for (const EdgeID edge : excluded) {
-                const size_t position = (edge - _partFirstEdgeID).getValue() - outSliceFirst;
-                if (position >= from && position < next) {
-                    next = position;
-                }
-            }
-
-            return next;
-        } else {
-            for (size_t offset = from; offset < count; offset++) {
-                const EdgeID edge = records[offset]._edgeID;
-                for (const EdgeID held : excluded) {
-                    if (held == edge) {
-                        return offset;
-                    }
-                }
-            }
-
-            return count;
-        }
-    };
-
-    size_t from = 0;
-    size_t written = 0;
-    size_t found = 0;
-
-    while (from < count) {
-        const size_t hole = found < _heldInRun ? nextHeld(from) : count;
-        const size_t length = hole - from;
-
-        if constexpr (conditions[0]) {
-            std::transform(records + from, records + hole, edgeIDs + written, [](const EdgeRecord& record) { return record._edgeID; });
-        }
-        if constexpr (conditions[1]) {
-            std::transform(records + from, records + hole, others + written, [](const EdgeRecord& record) { return record._otherID; });
-        }
-        if constexpr (conditions[2]) {
-            std::transform(records + from, records + hole, types + written, [](const EdgeRecord& record) { return record._edgeTypeID; });
-        }
-
-        written += length;
-        from = hole + 1;
-        found += hole < count;
-    }
-
-    const size_t kept = begin + written;
-    _indices->resize(kept);
-
-    if constexpr (conditions[0]) {
-        _edgeIDs->resize(kept);
-    }
-    if constexpr (conditions[1]) {
-        _others->resize(kept);
-    }
-    if constexpr (conditions[2]) {
-        _types->resize(kept);
-    }
-
-    return kept;
-}
-
 void GetEdgesChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
@@ -347,7 +260,17 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
 
             if constexpr (!indicesOnly) {
                 if (_heldInRun > 0) {
-                    const size_t kept = copyRunLeavingOut<conditions>(excluded, prevSize, rangeSize);
+                    const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
+                    const EdgeContainer* outPart = _direction == Direction::Outgoing ? &_boundPart->edges() : nullptr;
+                    const size_t kept = ExcludedEdges::copyRunLeavingOut(excluded,
+                                                                         _heldInRun,
+                                                                         run,
+                                                                         prevSize,
+                                                                         outPart,
+                                                                         _indices,
+                                                                         _edgeIDs,
+                                                                         _others,
+                                                                         _types);
                     _heldInRun -= newSize - kept;
                     remainingToMax += newSize - kept;
                 } else {

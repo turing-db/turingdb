@@ -3,6 +3,8 @@
 #include <iterator>
 
 #include "columns/ColumnIDs.h"
+#include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
 #include "EdgeTypeMatch.h"
 #include "IteratorUtils.h"
 
@@ -74,11 +76,19 @@ void GetOutEdgesByTypeChunkWriter::fill(size_t maxCount) {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
             const std::span<const EdgeID> rowExcluded = _excluded.isSet() ? _excluded.rowEdges(index) : std::span<const EdgeID> {};
+            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
+                const DataPart* part = _partIt.get();
+                _heldInRun = ExcludedEdges::countInOutRun(rowExcluded, part->edges(), _edges);
+            }
 
             // Append this node's remaining edges of a requested type until the
             // span is exhausted or the row budget runs out.
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
-                const bool excluded = ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
+                const bool excluded = _heldInRun > 0 && ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
+                if (excluded) {
+                    _heldInRun--;
+                }
+
                 if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID) && !excluded) {
                     _indices->push_back(index);
 

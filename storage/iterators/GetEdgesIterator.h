@@ -2,7 +2,6 @@
 
 #include "Iterator.h"
 
-#include <array>
 #include <span>
 
 #include "ChunkWriter.h"
@@ -110,9 +109,6 @@ private:
 
     void filterTombstones();
     void classifyRow(std::span<const EdgeID> excluded);
-
-    template <std::array<bool, 3> conditions>
-    size_t copyRunLeavingOut(std::span<const EdgeID> excluded, size_t begin, size_t count);
 };
 
 struct GetEdgesRange {

@@ -4,6 +4,7 @@
 
 #include "indexers/EdgeIndexer.h"
 #include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
 #include "IteratorUtils.h"
 
 namespace db {
@@ -146,52 +147,83 @@ void GetInEdgesChunkWriter::fill(size_t maxCount) {
     }
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+        constexpr bool indicesOnly = !conditions[0] && !conditions[1] && !conditions[2];
+
         while (isValid() && remainingToMax > 0) {
             const size_t avail = std::distance(_edgeIt, _edges.end());
             const size_t rangeSize = std::min(remainingToMax, avail);
             const size_t prevSize = _indices->size();
-            const size_t newSize = prevSize + rangeSize;
-            _indices->resize(newSize);
-
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
+
+            std::span<const EdgeID> excluded;
+            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
+                excluded = _excluded.rowEdges(index);
+
+                const DataPart* part = _partIt.get();
+                _heldInRun = ExcludedEdges::countInInRun(excluded, part->edges(), *_nodeIt);
+            } else if (_heldInRun > 0) {
+                excluded = _excluded.rowEdges(index);
+            }
+
+            // With only indices written every row of a run is the same, so the rows
+            // its excluded edges would have produced can come off the slice's end
+            size_t dropped = 0;
+            if constexpr (indicesOnly) {
+                dropped = std::min(_heldInRun, rangeSize);
+                _heldInRun -= dropped;
+            }
+
+            const size_t newSize = prevSize + rangeSize - dropped;
+            _indices->resize(newSize);
             std::fill(_indices->begin() + prevSize, _indices->end(), index);
-            remainingToMax -= rangeSize;
+            remainingToMax -= rangeSize - dropped;
 
-            if constexpr (conditions[0]) {
-                _edgeIDs->resize(newSize);
-                std::generate((_edgeIDs)->begin() + prevSize,
-                              (_edgeIDs)->end(),
-                              [edgeIt = this->_edgeIt]() mutable {
-                                  const EdgeID id = edgeIt->_edgeID;
-                                  ++edgeIt;
-                                  return id;
-                              });
-            }
-            if constexpr (conditions[1]) {
-                _srcs->resize(newSize);
-                std::generate((_srcs)->begin() + prevSize,
-                              (_srcs)->end(),
-                              [edgeIt = this->_edgeIt]() mutable {
-                                  const NodeID id = edgeIt->_otherID;
-                                  ++edgeIt;
-                                  return id;
-                              });
-            }
-            if constexpr (conditions[2]) {
-                _types->resize(newSize);
-                std::generate((_types)->begin() + prevSize,
-                              (_types)->end(),
-                              [edgeIt = this->_edgeIt]() mutable {
-                                  const EdgeTypeID id = edgeIt->_edgeTypeID;
-                                  ++edgeIt;
-                                  return id;
-                              });
-            }
-
-            if (_excluded.isSet() && rangeSize > 0) {
-                const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
-                const size_t kept = ExcludedEdges::pruneRun(_excluded.rowEdges(index), run, prevSize, false, _indices, _edgeIDs, _srcs, _types);
-                remainingToMax += newSize - kept;
+            if constexpr (!indicesOnly) {
+                if (_heldInRun > 0) {
+                    const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
+                    const size_t kept = ExcludedEdges::copyRunLeavingOut(excluded,
+                                                                         _heldInRun,
+                                                                         run,
+                                                                         prevSize,
+                                                                         nullptr,
+                                                                         _indices,
+                                                                         _edgeIDs,
+                                                                         _srcs,
+                                                                         _types);
+                    _heldInRun -= newSize - kept;
+                    remainingToMax += newSize - kept;
+                } else {
+                    if constexpr (conditions[0]) {
+                        _edgeIDs->resize(newSize);
+                        std::generate((_edgeIDs)->begin() + prevSize,
+                                      (_edgeIDs)->end(),
+                                      [edgeIt = this->_edgeIt]() mutable {
+                                          const EdgeID id = edgeIt->_edgeID;
+                                          ++edgeIt;
+                                          return id;
+                                      });
+                    }
+                    if constexpr (conditions[1]) {
+                        _srcs->resize(newSize);
+                        std::generate((_srcs)->begin() + prevSize,
+                                      (_srcs)->end(),
+                                      [edgeIt = this->_edgeIt]() mutable {
+                                          const NodeID id = edgeIt->_otherID;
+                                          ++edgeIt;
+                                          return id;
+                                      });
+                    }
+                    if constexpr (conditions[2]) {
+                        _types->resize(newSize);
+                        std::generate((_types)->begin() + prevSize,
+                                      (_types)->end(),
+                                      [edgeIt = this->_edgeIt]() mutable {
+                                          const EdgeTypeID id = edgeIt->_edgeTypeID;
+                                          ++edgeIt;
+                                          return id;
+                                      });
+                    }
+                }
             }
 
             _edgeIt += rangeSize;
