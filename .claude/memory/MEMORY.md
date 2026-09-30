@@ -87,6 +87,7 @@
 - @feedback_no_build_during_iteration.md — don't build after every micro-edit; wait until the user asks
 - @feedback_no_redundant_cmake.md — don't run `cmake ..` before `make`; make reconfigures itself
 - @feedback_pr_body_plain_sentence.md — PR body is a bare imperative sentence ("Implement X."), not a one-sentence summary of scope or design
+- @feedback_pr_title_ticket_code.md — PR title starts with the Linear ticket code ("TUR-124: ...") when there is one; commit subjects stay area-prefixed
 
 ## Project context
 - @project_partitioning.md — partitioning is near-term; some customers asked for METIS-style structural partitioning
