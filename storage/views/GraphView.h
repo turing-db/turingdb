@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <unordered_set>
 
 #include "datapart/DataPartSpan.h"
@@ -49,6 +50,9 @@ public:
 
     // The commit's summary by label set and edge type, brought up to the view's parts
     [[nodiscard]] const SchemaGraph& schemaGraph() const;
+
+    // Whether the edges of the types over the view's parts form a DAG
+    [[nodiscard]] bool isAcyclicOver(std::span<const EdgeTypeID> edgeTypes) const;
 
 private:
     friend GraphReader;

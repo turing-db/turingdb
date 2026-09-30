@@ -17,6 +17,12 @@ const SchemaGraph& GraphView::schemaGraph() const {
     return schema;
 }
 
+bool GraphView::isAcyclicOver(std::span<const EdgeTypeID> edgeTypes) const {
+    EdgeTypeAcyclicityCache& cache = _data->acyclicityCache();
+
+    return cache.isAcyclic(dataparts(), edgeTypes);
+}
+
 void GraphView::setChangeDeletions(const DeletedNodes* nodes, const DeletedEdges* edges) {
     _changeDeletedNodes = nodes;
     _changeDeletedEdges = edges;
