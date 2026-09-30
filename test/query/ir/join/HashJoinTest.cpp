@@ -129,8 +129,8 @@ TEST_F(HashJoinTest, dropsTheColumnAKeyWasReadFromWhenNothingElseReadsIt) {
     // distinctness check reads and the key it matches on - where the fusion left four, b
     // and c among them.
     EXPECT_TRUE(contains(program, "%0:6 = db.hash_join")) << program;
-    EXPECT_TRUE(contains(program, "on 2, 2")) << program;
-    EXPECT_TRUE(contains(program, "db.output(%2#1, %2#0)")) << program;
+    EXPECT_TRUE(contains(program, "on 2, 2 distinct_from [1, 0]")) << program;
+    EXPECT_TRUE(contains(program, "db.output(%0#0, %0#4)")) << program;
 }
 
 // An edge property keys a join the same way a node property does.
