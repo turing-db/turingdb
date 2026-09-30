@@ -125,7 +125,8 @@ bool namesAListElementType(EvaluatedType type) {
 // one level deeper than the lists they are. Elements that share no type - an empty list,
 // a mix of types, lists of differing shape - leave the leaf Invalid, which is what makes
 // the list hand out tagged scalars. A null names no type of its own, so it agrees with
-// every element: [1, null, 3] is a list of integers with a null in it.
+// every element: [1, null, 3] is a list of integers with a null in it, and [null, null]
+// is a list of nulls rather than a list that mixes types.
 ListShape sharedListShape(std::span<Expr* const> elements) {
     const Expr* first = nullptr;
     for (Expr* const element : elements) {
@@ -136,7 +137,11 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
     }
 
     if (!first) {
-        return ListShape(EvaluatedType::Invalid, 1);
+        if (elements.empty()) {
+            return {EvaluatedType::Invalid, 1};
+        }
+
+        return {EvaluatedType::Null, 1};
     }
 
     const EvaluatedType shared = first->getType();
