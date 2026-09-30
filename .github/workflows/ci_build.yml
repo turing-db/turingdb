@@ -51,11 +51,12 @@ jobs:
     # and macos* labels are self-hosted runners; ubuntu-*-arm are GitHub-hosted.
     runs-on: ${{ matrix.os }}
 
-    # Cap parallelism at 4 across every step. The shared self-hosted runners
-    # share host memory across instances, so -j nproc on the heavy LLVM/MLIR (and
-    # wheel) compiles trips the OOM killer ("Killed signal terminated program
-    # cc1plus"). BUILD_JOBS feeds dependencies.sh; CMAKE_BUILD_PARALLEL_LEVEL caps
-    # the scikit-build-core wheel build; CTEST_PARALLEL_LEVEL caps the test run.
+    # Cap parallelism at 4 for the dependency build and the tests. The shared
+    # self-hosted runners share host memory across instances, so -j nproc on the
+    # heavy LLVM/MLIR compiles trips the OOM killer ("Killed signal terminated
+    # program cc1plus"). BUILD_JOBS feeds dependencies.sh; CTEST_PARALLEL_LEVEL
+    # caps the test run. The wheel build ignores CMAKE_BUILD_PARALLEL_LEVEL and
+    # runs make -j nproc.
     env:
       BUILD_JOBS: 4
       CMAKE_BUILD_PARALLEL_LEVEL: 4
