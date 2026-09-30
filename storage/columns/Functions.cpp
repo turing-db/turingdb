@@ -188,6 +188,11 @@ LabelsFunction::ResultType LabelsFunction::operator()(const NodeID node) {
     return _listBuffer->insert(_elements);
 }
 
+toStringFunction::toStringFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
 EdgeTypesFunction::EdgeTypesFunction(GraphView view, StringBuffer* stringBuffer)
     : _view(view),
     _stringBuffer(stringBuffer)

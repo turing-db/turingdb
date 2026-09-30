@@ -451,6 +451,8 @@ Functor makeFunctor(NLExecutionContext* context, LocalMemory* memory) {
         return Functor(*context->getView(), context->getWriteBuffer());
     } else if constexpr (std::is_constructible_v<Functor, GraphView>) {
         return Functor(*context->getView());
+    } else if constexpr (std::is_constructible_v<Functor, StringBuffer*>) {
+        return Functor(&memory->stringBuffer());
     } else {
         return Functor {};
     }

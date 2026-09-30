@@ -289,16 +289,19 @@ public:
     }
 };
 
-// toString() of a string is that string. The conversions below produce the characters they
-// answer, so their result is a string of its own rather than a view of one the graph holds.
 class toStringFunction {
 public:
     using ArgType = types::String::Primitive;
-    using ResultType = std::string;
+    using ResultType = types::String::Primitive;
+
+    explicit toStringFunction(StringBuffer* stringBuffer);
 
     ResultType operator()(std::string_view sv) const {
-        return std::string(sv);
+        return _stringBuffer->insert(sv);
     }
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
 };
 
 // toString() of a number or a boolean. A double keeps the point Cypher prints it with, so
@@ -307,11 +310,21 @@ template <typename Value>
 class toStringFromValueFunction {
 public:
     using ArgType = Value;
-    using ResultType = std::string;
+    using ResultType = types::String::Primitive;
+
+    explicit toStringFromValueFunction(StringBuffer* stringBuffer)
+        : _stringBuffer(stringBuffer)
+    {
+    }
 
     ResultType operator()(const Value value) const {
-        return valueText(value);
+        ValueTextScratch scratch;
+
+        return _stringBuffer->insert(valueTextInto(value, scratch));
     }
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
 };
 
 // datetime() over a count of seconds since the Unix epoch rather than over text. A count

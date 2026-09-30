@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <array>
 #include <span>
-#include <string>
 #include <string_view>
 #include <type_traits>
 
@@ -47,14 +46,6 @@ std::string_view valueTextInto(const Value value, std::span<char> scratch) {
 
         return {scratch.data(), size};
     }
-}
-
-// The same text, for a reader that keeps it: what toString() answers.
-template <typename Value>
-std::string valueText(const Value value) {
-    ValueTextScratch scratch;
-
-    return std::string(valueTextInto(value, scratch));
 }
 
 }
