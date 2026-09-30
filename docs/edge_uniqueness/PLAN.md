@@ -460,6 +460,72 @@ which took 20 ms off; and an edge end's label set is read from an array by node 
 filled range by range from the ranges each part keeps its nodes in per label set, in
 place of a read into the node array, which took the other 60 ms off.
 
+Step 5 is implemented on the same branch. `EdgeTypeAcyclicityCache` under
+`storage/metadata/` answers whether the edges of a set of types, over every part and the
+deleted ones included, form a DAG: one pass over the out-records collects the edges of the
+types, and Kahn's algorithm over them, laid out by source node, takes every node exactly
+when no closed walk holds an in-degree up. `CommitData` caches one answer per type set
+beside `EdgeBranchingCache`, keyed by the node and edge counts of the parts it ran on, so
+a view holding more parts sorts again, and `GraphView::isAcyclicOver` reads it. P4 takes
+the merged pattern of each orientation, as P3 does, and searches it for a directed cycle
+whose edges all carry types the parts hold no cycle of: a depth-first search from each
+node over the nodes after it, an undirected edge left out since it runs either way, an
+edge of any type widening the set to every type of the graph. The pair is proven when
+every orientation closes such a cycle; the rule runs after P3, is off with pending writes
+as P3 is, and reports `proven by acyclicity`. An orientation the summary rules out is not
+searched, so the sort is paid only for the ones it leaves open: the undirected two-hop
+walk merges into a self-loop in one orientation, which the summary refuses, and into one
+edge in the other, which holds no cycle, so it sorts nothing. `ProveDistinctEdgesTest` gains a reporting
+line of four engineers of one label set, whose chain the summary cannot tell apart, the
+self-arc closing it, and the sort can: the three-hop chain, the four-hop chain, the chain
+two types acyclic on their own close together, the untyped chain some type closes, the
+change holding an uncommitted edge and the commit closing the line into a ring.
+`EdgeTypeAcyclicityCacheTest` pins the sort of simpledb by type, the self-loop and the
+sort again for a commit adding a cycle. Ten suite oracles the earlier steps had left at
+their homomorphic counts moved to the isomorphic ones, checked against a Python
+enumeration: eight comma patterns joined on one node are empty, `value-hash-join-where-2`
+loses its 7 self-pairs and keeps 20 rows, `variable-length-paths-7` loses the 4 walks
+through its fixed hop and keeps 3. Same machine, same protocol:
+
+    query                                                        step 4        step 5       control
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)
+                              1 of 3 kept -> proven by acyclicity
+                                                       112,689  24.0 ms   112,689  22.8 ms   112,689  22.6 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)-[:hasEvent]->(d)
+                              3 of 6 kept -> 6 of 6 proven
+                                                        85,898  35.0 ms    85,898  31.8 ms    85,898  31.6 ms
+    (x:Complex)-[:hasComponent]->(a)-[:hasComponent]->(b)-[:hasComponent]->(c)
+                              1 of 3 kept -> proven by acyclicity
+                                                       149,061  28.1 ms   149,061  26.1 ms   149,061  26.4 ms
+    three precedingEvent hops from every Reaction
+                              1 of 3 kept, as before   91,706  13.7 ms    91,706  13.8 ms    94,326  12.9 ms
+    shared_input              2 of 6 kept, as before  198,362  184 ms    198,362  185 ms    390,348  152 ms
+    (p:TopLevelPathway)-->(a)-->(b)-->(c)
+                              1 of 3 kept, every type sorted    -        194,209  3.1 ms    194,209  2.3 ms
+    (p:TopLevelPathway)--(b)--(c)
+                              kept, nothing sorted              -    125,684,994  220 ms  125,690,888  63 ms
+    (p:TopLevelPathway)--(b)--(c)--(d)
+                              3 of 3 kept, nothing sorted       -  2,421,500,620  22.2 s  2,547,338,854  6.5 s
+
+The hasEvent and hasComponent chains run as their controls. The precedingEvent chain
+keeps the pair between its first and third hops: the sort finds the cycles its 4,492
+reactions lie on and the report says `kept`. The untyped undirected walks of steps 1 and 2
+keep every pair, as the backtrack demands, and sort nothing; they run as they did after
+step 2 (190 ms and 22.0 s then, against controls of 66 ms and 5.8 s). The sort of one type
+is paid once per commit, on the first query that asks for it, measured as that query's
+first run against its next once the summary was built: 87 against 23 ms for hasEvent, 106
+against 26 for hasComponent and 91 against 14 for precedingEvent, so 65 to 80 ms each. The
+directed untyped chain asks for every type at once, since its second-cycle orientation
+embeds through precedingEvent: it pays 237 ms (239 against 3.1) and keeps its pair, the
+graph being cyclic. Each sort is a pass over the 11.5M out-records and three arrays over
+the 3M nodes; sorting only the nodes the types touch would cut the arrays, and a persisted
+answer the pass.
+
+Still owed from step 5: P4 beside a walk, which the pass proves by types only, as P3 does.
+A directed walk of an acyclic type leaving the fixed hop's target can never take that
+hop's edge, and the rule needs the walk's direction and start beside the hop's ends,
+which `PatternEdge` does not carry for a path.
+
 ## Steps
 
 1. **Correct first.** `db.check_edge_distinct`, its emission in codegen, its lowering,
