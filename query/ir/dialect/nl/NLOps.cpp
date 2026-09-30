@@ -348,6 +348,22 @@ LogicalResult GetInEdgesByLabel::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult GetOutEdgesByTypeAndLabel::inferReturnTypes(MLIRContext* context,
+                                                          std::optional<Location> location,
+                                                          GetOutEdgesByTypeAndLabel::Adaptor adaptor,
+                                                          SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
+LogicalResult GetInEdgesByTypeAndLabel::inferReturnTypes(MLIRContext* context,
+                                                         std::optional<Location> location,
+                                                         GetInEdgesByTypeAndLabel::Adaptor adaptor,
+                                                         SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
 void Yield::build(OpBuilder& builder, OperationState& state) {
 }
 
