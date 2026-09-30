@@ -416,6 +416,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
     const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
     const bool isDuration = mlir::isa<storage::DurationType>(inputElement);
+    const bool isPath = mlir::isa<storage::EntityListType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
@@ -451,8 +452,8 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         case storage::AggregateKind::Min:
         case storage::AggregateKind::Max: {
             // min/max order the values, so anything with a natural order is fine -
-            // numbers, strings, bools and instants - but an embedding has none.
-            if (!isNumeric && !isString && !isBool && !isDateTime && !isDuration) {
+            // numbers, strings, bools, instants, durations and paths - but an embedding has none.
+            if (!isNumeric && !isString && !isBool && !isDateTime && !isDuration && !isPath) {
                 throw IRException("db.min/db.max requires an orderable column");
             }
             return inputElement;
@@ -588,14 +589,14 @@ mlir::Type indexedListElementType(mlir::Type chunkType) {
     return listType ? listType.getElementType() : mlir::Type {};
 }
 
-// The element types a list gathers entities under, which an index reads back out as the
-// entity column they came from.
+// The element types a list gathers entities and paths under, which an index reads back out
+// as the column they came from.
 bool namesAnEntityType(mlir::Type element) {
     if (!element) {
         return false;
     }
 
-    return mlir::isa<storage::NodeIDType, storage::EdgeIDType>(element);
+    return mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::EntityListType>(element);
 }
 
 // The element types an index reads out as a value column rather than as a tagged cell:
@@ -757,6 +758,12 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
         case storage::GroupAggregateKind::AvgDistinct: {
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const mlir::Type inputElement = inputChunkType.getElementType();
+
+            // A path an OPTIONAL MATCH missed is empty, which is its null
+            if (mlir::isa<storage::EntityListType>(inputElement)) {
+                return nl::ChunkType::get(context, aggregateResultElementType(builder, groupKindToAggregateKind(kind), inputElement));
+            }
+
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputElement);
             const bool taggedCells = mlir::isa<storage::ListElementType>(inputElement);
             if (!inputNullable && !taggedCells) {
@@ -937,7 +944,7 @@ bool keepsEveryRow(mlir::Operation* operation) {
 // the list_element a heterogeneous list holds drains as tagged scalars instead - none of
 // them names a column shape the drain could fill.
 bool drainsToItsOwnElementType(mlir::Type listElement) {
-    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::StringType, storage::ListType>(listElement)) {
+    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::EntityListType, storage::StringType, storage::ListType>(listElement)) {
         return true;
     } else if (mlir::isa<mlir::Float64Type>(listElement)) {
         return true;
@@ -1472,11 +1479,11 @@ mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type
         return storage::ListElementType::get(context);
     }
 
-    // An entity ID column spells a null entity as an invalid ID, so an entity rides a
-    // plain chunk; a value or a nested list, either of which may be a tagged null, rides
-    // the nullable one every value-chunk consumer dispatches on, as lowerUnwindConst's
-    // homogeneous list does.
-    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType>(listElement)) {
+    // An entity ID column spells a null entity as an invalid ID and a path column a null
+    // path as an empty one, so either rides a plain chunk; a value or a nested list, either
+    // of which may be a tagged null, rides the nullable one every value-chunk consumer
+    // dispatches on, as lowerUnwindConst's homogeneous list does.
+    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::EntityListType>(listElement)) {
         return listElement;
     }
 
@@ -1644,6 +1651,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
                                                        storage::ListType,
                                                        storage::MapType,
                                                        storage::ListElementType,
+                                                       storage::EntityListType,
                                                        storage::OwnedStringType>(valueElement);
 
     if (!holdsCellsPresentInEveryRow) {
@@ -1773,6 +1781,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
                                                        storage::EdgeIDType,
                                                        storage::ListType,
                                                        storage::ListElementType,
+                                                       storage::EntityListType,
                                                        storage::OwnedStringType>(valueElement);
 
     if (!holdsCellsPresentInEveryRow) {
@@ -1862,6 +1871,7 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
                                                            storage::ListType,
                                                            storage::MapType,
                                                            storage::ListElementType,
+                                                           storage::EntityListType,
                                                            storage::OwnedStringType>(element);
 
         if (!holdsCellsPresentInEveryRow) {
@@ -3734,8 +3744,10 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // own tag, so there is no one value type to read the column as.
     const mlir::Type alignedElement = mlir::cast<nl::ChunkType>(alignedChunk.getType()).getElementType();
     const bool taggedCells = mlir::isa<storage::ListElementType>(alignedElement);
+    const bool reducesPaths = mlir::isa<storage::EntityListType>(alignedElement);
+    const bool foldedAsItStands = taggedCells || reducesPaths;
 
-    const mlir::Value inputChunk = taggedCells ? alignedChunk : nullableValueChunk(alignedChunk);
+    const mlir::Value inputChunk = foldedAsItStands ? alignedChunk : nullableValueChunk(alignedChunk);
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
@@ -3743,7 +3755,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // A type-erased column is read as the tagged cell it holds; every other input is a
     // nullable value chunk, and the reduction is resolved from the value type it wraps.
     const mlir::Type inputChunkElement = mlir::cast<nl::ChunkType>(inputChunk.getType()).getElementType();
-    const mlir::Type inputElement = taggedCells
+    const mlir::Type inputElement = foldedAsItStands
         ? inputChunkElement
         : mlir::cast<storage::NullableType>(inputChunkElement).getValueType();
 
@@ -3785,8 +3797,10 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // in place at function scope, right after the producing loop. The result is a
     // single-row nullable value chunk - an aggregate can be null (min/max/avg of no
     // non-null row), and sum rides the same representation.
-    const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
-    const nl::ChunkType resultChunkType = nl::ChunkType::get(context, resultNullable);
+    const mlir::Type resultChunkElement = reducesPaths
+        ? resultElement
+        : static_cast<mlir::Type>(storage::NullableType::get(context, resultElement));
+    const nl::ChunkType resultChunkType = nl::ChunkType::get(context, resultChunkElement);
 
     setInsertionAfterProducingLoop(producingBlock);
     nl::AggregateResult aggregateResult = _builder.create<nl::AggregateResult>(loc, resultChunkType, state, kind);
@@ -3835,9 +3849,9 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
         // the column as.
         const mlir::Value aggregateChunk = chunks[chunkIndex];
         const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(aggregateChunk.getType()).getElementType();
-        const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
+        const bool foldedAsItStands = mlir::isa<storage::ListElementType, storage::EntityListType>(aggregateElement);
 
-        if (reducesValues(kind) && !taggedCells) {
+        if (reducesValues(kind) && !foldedAsItStands) {
             chunks[chunkIndex] = nullableValueChunk(aggregateChunk);
         }
     }
@@ -3940,7 +3954,8 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                               storage::EdgeIDType,
                                                               storage::ListType,
-                                                              storage::ListElementType>(collectedElement);
+                                                              storage::ListElementType,
+                                                              storage::EntityListType>(collectedElement);
 
         if (!collectsCellsPresentInEveryRow) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
@@ -3956,9 +3971,9 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         const size_t chunkIndex = keyCount + valueCount + aggregateIndex;
 
         const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
-        const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
+        const bool foldedAsItStands = mlir::isa<storage::ListElementType, storage::EntityListType>(aggregateElement);
 
-        if (reducesValues(kind) && !taggedCells) {
+        if (reducesValues(kind) && !foldedAsItStands) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
         }
     }
@@ -5027,8 +5042,9 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const mlir::Type element = indexedListElementType(lhsType);
 
-            // An entity column carries its null in the ID, so a list of nodes or edges
-            // hands its elements back as the entity column they were gathered from
+            // An entity column carries its null in the ID and a path column in an empty
+            // path, so a list of either hands its elements back as the column they were
+            // gathered from
             if (namesAnEntityType(element)) {
                 return element;
             }
@@ -5695,6 +5711,11 @@ void DBLowering::lowerPathLength(mlir::db::PathLength pathLength) {
 
 void DBLowering::lowerPathElements(mlir::db::PathElements pathElements) {
     const mlir::Value pathChunk = mapValue(pathElements.getPath());
+
+    const mlir::Type pathElement = mlir::cast<nl::ChunkType>(pathChunk.getType()).getElementType();
+    if (!mlir::isa<storage::EntityListType>(pathElement)) {
+        throw IRException("nodes(), relationships() and length() read a path, and this column holds none");
+    }
 
     setInsertionInto(ownerBlock(pathChunk));
 

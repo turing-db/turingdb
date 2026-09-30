@@ -83,6 +83,8 @@ ListView ListContainer::copy(ListView list) {
             return copy(view.getAs<ListView>());
         } else if constexpr (std::same_as<T, MapView>) {
             return getMaps().copy(view.getAs<MapView>());
+        } else if constexpr (std::same_as<T, PathView>) {
+            throw FatalException("Cannot store a list holding a path: a path is not a property value");
         } else {
             return view.getAs<T>();
         }

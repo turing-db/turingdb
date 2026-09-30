@@ -9,6 +9,7 @@
 
 #include "ID.h"
 #include "ListBufferTypeTag.h"
+#include "PathView.h"
 
 #include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
@@ -28,6 +29,7 @@ enum class ListElementOrderClass {
     Node,
     Edge,
     List,
+    Path,
     DateTime,
     Duration,
     String,
@@ -82,6 +84,10 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
 
         case ListBufferTypeTag::MapView:
             return ListElementOrderClass::Map;
+        break;
+
+        case ListBufferTypeTag::Path:
+            return ListElementOrderClass::Path;
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -241,6 +247,10 @@ std::strong_ordering compareValues(const View lhs, const View rhs) {
 
         case ListElementOrderClass::List:
             return valueOf<ListView>(lhs) <=> valueOf<ListView>(rhs);
+        break;
+
+        case ListElementOrderClass::Path:
+            return valueOf<PathView>(lhs).getEntities() <=> valueOf<PathView>(rhs).getEntities();
         break;
 
         case ListElementOrderClass::String:

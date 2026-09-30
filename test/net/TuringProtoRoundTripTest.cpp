@@ -960,6 +960,71 @@ TEST(TuringProtoRoundTripTest, RoundTripsNestedListColumns) {
     EXPECT_EQ(outerIt->getAs<StringView>(), std::string_view("end"));
 }
 
+// A list of paths, as collect(p) builds it, with a chunk size small enough that the
+// entities of a path span packets
+TEST(TuringProtoRoundTripTest, RoundTripsAListHoldingPaths) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    // (0)-[4]->(1), then the path of a single node (7)
+    std::vector<db::ListBuffer<>::ListItemVariant> firstEntities;
+    firstEntities.emplace_back(db::NodeID {0});
+    firstEntities.emplace_back(db::EdgeID {4});
+    firstEntities.emplace_back(db::NodeID {1});
+    const db::PathView first {localMem.listBuffer().insert(firstEntities)};
+
+    std::vector<db::ListBuffer<>::ListItemVariant> secondEntities;
+    secondEntities.emplace_back(db::NodeID {7});
+    const db::PathView second {localMem.listBuffer().insert(secondEntities)};
+
+    std::vector<db::ListBuffer<>::ListItemVariant> pathItems;
+    pathItems.emplace_back(first);
+    pathItems.emplace_back(second);
+    const db::ListView paths = localMem.listBuffer().insert(pathItems);
+
+    auto* listCol = localMem.alloc<db::ColumnConst<db::ListView>>();
+    listCol->set(paths);
+    addColumn(&dfMan, &source, "paths", listCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    const auto* decodedList = decoded.cols().at(0)->as<db::ColumnConst<db::ListView>>();
+    ASSERT_NE(decodedList, nullptr);
+
+    const db::ListView decodedPaths = decodedList->at(0);
+    ASSERT_EQ(decodedPaths.size(), 2u);
+
+    EXPECT_EQ(decodedPaths.front().getTag(), db::ListBufferTypeTag::Path);
+    const db::ListView firstView = decodedPaths.front().getAs<db::PathView>().getEntities();
+    ASSERT_EQ(firstView.size(), 3u);
+
+    auto entityIt = firstView.begin();
+    EXPECT_EQ(entityIt->getTag(), db::ListBufferTypeTag::NodeID);
+    EXPECT_EQ(entityIt->getAs<db::NodeID>(), db::NodeID {0});
+    ++entityIt;
+    EXPECT_EQ(entityIt->getTag(), db::ListBufferTypeTag::EdgeID);
+    EXPECT_EQ(entityIt->getAs<db::EdgeID>(), db::EdgeID {4});
+    ++entityIt;
+    EXPECT_EQ(entityIt->getTag(), db::ListBufferTypeTag::NodeID);
+    EXPECT_EQ(entityIt->getAs<db::NodeID>(), db::NodeID {1});
+
+    EXPECT_EQ(decodedPaths.back().getTag(), db::ListBufferTypeTag::Path);
+    const db::ListView secondView = decodedPaths.back().getAs<db::PathView>().getEntities();
+    ASSERT_EQ(secondView.size(), 1u);
+    EXPECT_EQ(secondView.front().getAs<db::NodeID>(), db::NodeID {7});
+}
+
 // Encode a ColumnVector<ListElementView> whose every row is itself a list (nested), one
 // of them empty, and decode it back. Each row is a top-level element that pushes a child
 // cursor; the empty row's child completes with zero elements. Guards the row-capture path

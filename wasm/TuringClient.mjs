@@ -83,6 +83,7 @@ const LIST_TAG_EDGE_ID = 9;
 const LIST_TAG_DATETIME = 10;
 const LIST_TAG_MAP_VIEW = 11;
 const LIST_TAG_DURATION = 12;
+const LIST_TAG_PATH = 13;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -289,6 +290,20 @@ export class NestedReader {
         return Object.fromEntries(entries);
     }
 
+    // A path is its count, then one [tag][u64 id] per entity, read as an entity list's entries
+    _readPath() {
+        const count = this._view.getUint32(this._cursor, true);
+        this._cursor += 4;
+
+        const entries = new Array(count);
+        for (let index = 0; index < count; index++) {
+            const tag = this._bytes[this._cursor];
+            entries[index] = { type: tag === LIST_TAG_NODE_ID ? 0 : 1, id: this._view.getBigUint64(this._cursor + 1, true) };
+            this._cursor += 9;
+        }
+        return entries;
+    }
+
     _readElement() {
         const tag = this._bytes[this._cursor];
         const payload = this._cursor + 1;
@@ -331,6 +346,9 @@ export class NestedReader {
             case LIST_TAG_MAP_VIEW:
                 this._cursor = payload;
                 return this._readMap();
+            case LIST_TAG_PATH:
+                this._cursor = payload;
+                return this._readPath();
             default:
                 throw new TuringQueryError("DECODE_ERROR", `Unknown list element tag ${tag}`);
         }

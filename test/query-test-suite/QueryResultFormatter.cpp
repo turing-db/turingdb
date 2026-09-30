@@ -136,6 +136,7 @@ template <typename T>
 [[maybe_unused]] std::string valueToString(const db::ListElementView element);
 [[maybe_unused]] std::string valueToString(db::ListView view);
 [[maybe_unused]] std::string valueToString(db::MapView view);
+[[maybe_unused]] std::string valueToString(db::PathView path);
 
 template <typename T>
 [[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
@@ -159,6 +160,26 @@ template <typename T>
             result += fmt::format("({})", entry._id.getValue());
         } else {
             result += fmt::format("[{}]", entry._id.getValue());
+        }
+    }
+
+    result += "]";
+    return result;
+}
+
+[[maybe_unused]] std::string valueToString(const db::PathView path) {
+    std::string result = "[";
+    size_t i = 0;
+
+    for (const db::ListElementView entity : path.getEntities()) {
+        if (i++ > 0) {
+            result += ", ";
+        }
+
+        if (entity.getTag() == db::ListBufferTypeTag::NodeID) {
+            result += fmt::format("({})", entity.getAs<db::NodeID>().getValue());
+        } else {
+            result += fmt::format("[{}]", entity.getAs<db::EdgeID>().getValue());
         }
     }
 

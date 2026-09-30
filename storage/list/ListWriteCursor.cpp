@@ -64,6 +64,7 @@ template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const ty
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Embedding::Primitive&);
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const ListView&);
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const MapView&);
+template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const PathView&);
 
 // The fixed-width elements. A decoder reading a wire whose layout already matches the
 // stored one copies these through writeRaw instead; a caller holding the value itself,

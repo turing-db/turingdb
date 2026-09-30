@@ -54,6 +54,7 @@
 #include "list/ListUtils.h"
 #include "map/MapHash.h"
 #include "list/PathTrie.h"
+#include "list/PathView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -1130,6 +1131,94 @@ void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, 
     }
 }
 
+// A path as an element of a list: its entities, written in the order it runs through them
+// as the list the element views
+PathView pathElement(const EntityList& path, QueryListBuffer& buffer) {
+    static_assert(sizeof(NodeID) == sizeof(EdgeID), "Node and edge entries of a path element share one width");
+
+    const EntityList::Container& entries = path.getEntries();
+    ListWriteCursor cursor = buffer.reserveList(entries.size(), entries.size() * sizeof(NodeID));
+
+    for (size_t index = 0; index < entries.size(); index++) {
+        const EntityList::Entry& entry = entries[index];
+        const uint64_t id = entry._id.getValue();
+
+        if (entry._type == EntityType::Node) {
+            cursor.writeValueAt(index, ListBufferTypeTag::NodeID, NodeID(id));
+        } else {
+            cursor.writeValueAt(index, ListBufferTypeTag::EdgeID, EdgeID(id));
+        }
+    }
+
+    return PathView {cursor.getView()};
+}
+
+void readPathEntities(const PathView element, EntityList& path) {
+    path.clear();
+
+    for (const ListElementView entity : element.getEntities()) {
+        if (entity.getTag() == ListBufferTypeTag::NodeID) {
+            path.add(EntityType::Node, EntityID(entity.getAs<NodeID>().getValue()));
+        } else {
+            path.add(EntityType::Edge, EntityID(entity.getAs<EdgeID>().getValue()));
+        }
+    }
+}
+
+void readPathElement(const ListElementView element, EntityList& path) {
+    if (element.getTag() == ListBufferTypeTag::Null) {
+        path.clear();
+        return;
+    }
+
+    bioassert(element.getTag() == ListBufferTypeTag::Path, "Unwound element of a list of paths is not a path.");
+
+    readPathEntities(element.getAs<PathView>(), path);
+}
+
+// The path sibling of applyEntityListIndex: an empty path is how a path column spells null
+template <typename LhsCol, typename RhsCol>
+void applyPathListIndex(Column* result, const Column* lhs, const Column* rhs, LocalMemory*) {
+    const auto& lists = static_cast<const LhsCol*>(lhs)->getRaw();
+    const RhsCol* indices = static_cast<const RhsCol*>(rhs);
+
+    std::vector<EntityList>& paths = static_cast<ColumnVector<EntityList>*>(result)->getRaw();
+    paths.resize(lists.size());
+
+    for (size_t row = 0; row < lists.size(); row++) {
+        std::optional<PathView> path;
+        if constexpr (std::is_same_v<LhsCol, ColumnOptVector<ListView>>) {
+            if (lists[row].has_value()) {
+                path = ValueListIndex<PathView> {}(*lists[row], (*indices)[row]);
+            }
+        } else {
+            path = ValueListIndex<PathView> {}(lists[row], (*indices)[row]);
+        }
+
+        if (path.has_value()) {
+            readPathEntities(*path, paths[row]);
+        } else {
+            paths[row].clear();
+        }
+    }
+}
+
+struct PathListIndexSelector {
+    LocalMemory* _memory {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+
+    template <typename LhsCol, typename RhsCol>
+    void operator()(const LhsCol*, const RhsCol*) {
+        constexpr bool readsAListColumn = std::is_same_v<LhsCol, ColumnVector<ListView>>
+                                       || std::is_same_v<LhsCol, ColumnOptVector<ListView>>;
+        if constexpr (readsAListColumn) {
+            _result = _memory->alloc<ColumnVector<EntityList>>();
+            _fn = &applyPathListIndex<LhsCol, RhsCol>;
+        }
+    }
+};
+
 // A collect over a pattern variable gathers into a plain list column, and nodes() and
 // relationships() read a path into a nullable one: those are the shapes an entity is read
 // out of, and any other leaves the kernel unselected.
@@ -1733,6 +1822,24 @@ ListView listPathEntities(const EntityList& path, size_t first, ListBufferTypeTa
     return cursor.getView();
 }
 
+template <typename SourceColumn>
+void unwindListPathEmit(const Column* source,
+                        const ColumnVector<size_t>* rows,
+                        const ColumnVector<size_t>* positions,
+                        Column* output) {
+    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<EntityList>& outputRaw = static_cast<ColumnVector<EntityList>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
+        readPathElement(element, outputRaw[index]);
+    }
+}
+
 // The truth value a list predicate holds for a row, from how many of its elements held,
 // failed or answered null: an unknown element leaves the answer unknown unless the known
 // ones already decide it
@@ -1915,6 +2022,40 @@ int compareOptListElementColumn(const Column* column, size_t a, size_t b) {
 
 // 3-way compare two rows of a collected list column. Two lists order lexicographically
 // on the element order above, so a list can be the key the rows are sorted on.
+// A path orders as the list of its alternating nodes and relationships, each by its ID.
+// A path an OPTIONAL MATCH missed is empty, and sorts after every path as a null does.
+std::strong_ordering comparePaths(const EntityList& pathA, const EntityList& pathB) {
+    const bool aNull = pathA.empty();
+    const bool bNull = pathB.empty();
+    if (aNull || bNull) {
+        return aNull <=> bNull;
+    }
+
+    const auto compareEntries = [](const EntityList::Entry& entryA, const EntityList::Entry& entryB) {
+        const std::strong_ordering typeOrder = entryA._type <=> entryB._type;
+        if (typeOrder != std::strong_ordering::equal) {
+            return typeOrder;
+        }
+
+        return entryA._id <=> entryB._id;
+    };
+
+    return std::lexicographical_compare_three_way(pathA.begin(), pathA.end(), pathB.begin(), pathB.end(), compareEntries);
+}
+
+int comparePathColumn(const Column* column, size_t a, size_t b) {
+    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(column)->getRaw();
+    const std::strong_ordering order = comparePaths(raw[a], raw[b]);
+
+    if (order == std::strong_ordering::less) {
+        return -1;
+    } else if (order == std::strong_ordering::greater) {
+        return 1;
+    }
+
+    return 0;
+}
+
 int compareListColumn(const Column* column, size_t a, size_t b) {
     const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
     const std::strong_ordering order = raw[a] <=> raw[b];
@@ -2304,6 +2445,12 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
             return;
         break;
 
+        case ListBufferTypeTag::Path:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendListBytes(key, element.getAs<PathView>().getEntities());
+            return;
+        break;
+
         case ListBufferTypeTag::INVALID:
             throw IRException("cannot dedup by an untagged element");
         break;
@@ -2398,6 +2545,25 @@ void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& 
 void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& key) {
     const auto& raw = static_cast<const ColumnVector<MapView>*>(column)->getRaw();
     distinctAppendMapBytes(key, raw[row]);
+}
+
+// A path keys as its length then each entry's type and ID. A path an OPTIONAL MATCH missed
+// is empty, so every null keys alike.
+void distinctAppendPathBytes(std::string& key, const EntityList& path) {
+    const size_t length = path.size();
+    key.append(reinterpret_cast<const char*>(&length), sizeof(length));
+
+    for (const EntityList::Entry& entry : path) {
+        const uint64_t id = entry._id.getValue();
+
+        key.push_back(static_cast<char>(entry._type));
+        key.append(reinterpret_cast<const char*>(&id), sizeof(id));
+    }
+}
+
+void distinctKeyAppendPathColumn(const Column* column, size_t row, std::string& key) {
+    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(column)->getRaw();
+    distinctAppendPathBytes(key, raw[row]);
 }
 
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
@@ -3195,6 +3361,73 @@ void groupFoldMinMax(Column* accumulator,
     }
 }
 
+// A path's extreme is the path itself, and an empty one stands for the null an input of
+// missed paths reduces to
+template <bool IsMax>
+void foldExtremePath(EntityList& current, const EntityList& path) {
+    if (path.empty()) {
+        return;
+    }
+
+    const std::strong_ordering order = comparePaths(path, current);
+    const bool isMoreExtreme = IsMax ? order > 0 : order < 0;
+
+    if (current.empty() || isMoreExtreme) {
+        current = path;
+    }
+}
+
+void aggregateResetPath(NLAggregateState* state) {
+    std::vector<EntityList>& raw = static_cast<ColumnVector<EntityList>*>(state->getAccumulator())->getRaw();
+    raw.assign(1, EntityList {});
+    state->setCount(0);
+}
+
+template <bool IsMax>
+void aggregateUpdatePathExtreme(NLAggregateState* state, const Column* input) {
+    EntityList& current = static_cast<ColumnVector<EntityList>*>(state->getAccumulator())->getRaw().front();
+    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+
+    for (const EntityList& path : inputRaw) {
+        foldExtremePath<IsMax>(current, path);
+    }
+}
+
+void aggregateResultPath(const NLAggregateState* state, Column* output) {
+    const EntityList& reduced = static_cast<const ColumnVector<EntityList>*>(state->getAccumulator())->getRaw().front();
+    static_cast<ColumnVector<EntityList>*>(output)->getRaw().assign(1, reduced);
+}
+
+void groupGrowPath(Column* accumulator,
+                   std::vector<uint64_t>& counts,
+                   size_t groupCount) {
+    static_cast<ColumnVector<EntityList>*>(accumulator)->getRaw().resize(groupCount);
+}
+
+template <bool IsMax>
+void groupFoldPathExtreme(Column* accumulator,
+                          std::vector<uint64_t>& counts,
+                          const Column* input,
+                          const std::vector<size_t>& groups,
+                          NLGroupDistinctTally& distinct) {
+    std::vector<EntityList>& raw = static_cast<ColumnVector<EntityList>*>(accumulator)->getRaw();
+    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        foldExtremePath<IsMax>(raw[groups[row]], inputRaw[row]);
+    }
+}
+
+void groupEmitPath(const Column* accumulator,
+                   const std::vector<uint64_t>& counts,
+                   size_t begin,
+                   size_t count,
+                   Column* output) {
+    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(accumulator)->getRaw();
+    std::vector<EntityList>& outputRaw = static_cast<ColumnVector<EntityList>*>(output)->getRaw();
+    outputRaw.assign(raw.begin() + begin, raw.begin() + begin + count);
+}
+
 // Fold a chunk's present values into per-group avg accumulators: a running f64 sum
 // (the accumulator, widened from the input) plus the per-group non-null count. avg
 // divides the two at the emit step.
@@ -3429,6 +3662,30 @@ void groupFoldCountDistinctListElement(Column* accumulator,
 
         distinct.beginKey(group);
         distinctAppendElementBytes(distinct.getKey(), *element);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
+void groupFoldCountDistinctPath(Column* accumulator,
+                                std::vector<uint64_t>& counts,
+                                const Column* input,
+                                const std::vector<size_t>& groups,
+                                NLGroupDistinctTally& distinct) {
+    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const EntityList& path = inputRaw[row];
+        if (path.empty()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendPathBytes(distinct.getKey(), path);
 
         if (distinct.insertIfNew()) {
             counts[group]++;
@@ -3762,6 +4019,14 @@ Item taggedItem(const ListElementView element) {
             return Item {element.getAs<MapView>()};
         break;
 
+        case ListBufferTypeTag::Path:
+            if constexpr (std::is_constructible_v<Item, PathView>) {
+                return Item {element.getAs<PathView>()};
+            } else {
+                throw IRException("A map cannot hold a path");
+            }
+        break;
+
         case ListBufferTypeTag::INVALID:
             throw IRException("cannot collect an untagged element");
         break;
@@ -3931,6 +4196,82 @@ void collectOptListFoldDistinct(Column* values,
         const size_t position = valuesRaw.size();
         valuesRaw.push_back(*list);
         groupPositions[group].push_back(position);
+    }
+}
+
+// A path an OPTIONAL MATCH missed is empty, which is the null collect drops
+void collectPathFold(Column* values,
+                     const Column* input,
+                     const std::vector<size_t>& groups,
+                     std::vector<std::vector<size_t>>& groupPositions,
+                     NLGroupDistinctTally& distinct) {
+    std::vector<EntityList>& valuesRaw = static_cast<ColumnVector<EntityList>*>(values)->getRaw();
+    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const EntityList& path = inputRaw[row];
+        if (path.empty()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(path);
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+void collectPathFoldDistinct(Column* values,
+                             const Column* input,
+                             const std::vector<size_t>& groups,
+                             std::vector<std::vector<size_t>>& groupPositions,
+                             NLGroupDistinctTally& distinct) {
+    std::vector<EntityList>& valuesRaw = static_cast<ColumnVector<EntityList>*>(values)->getRaw();
+    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const EntityList& path = inputRaw[row];
+        if (path.empty()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendPathBytes(distinct.getKey(), path);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(path);
+        groupPositions[group].push_back(position);
+    }
+}
+
+void collectPathListEmit(const Column* values,
+                         const std::vector<std::vector<size_t>>& groupPositions,
+                         size_t begin,
+                         size_t count,
+                         ListBuffer<>& listBuffer,
+                         Column* output) {
+    const std::vector<EntityList>& valuesRaw = static_cast<const ColumnVector<EntityList>*>(values)->getRaw();
+    std::vector<ListView>& outputRaw = static_cast<ColumnVector<ListView>*>(output)->getRaw();
+
+    outputRaw.clear();
+    outputRaw.reserve(count);
+
+    std::vector<ListBuffer<>::ListItemVariant> elements;
+    for (size_t index = 0; index < count; index++) {
+        const std::vector<size_t>& positions = groupPositions[begin + index];
+
+        elements.clear();
+        elements.reserve(positions.size());
+        for (const size_t position : positions) {
+            elements.push_back(pathElement(valuesRaw[position], listBuffer));
+        }
+
+        outputRaw.push_back(listBuffer.insert(elements));
     }
 }
 
@@ -4112,6 +4453,17 @@ Item optItem(const Column* input, size_t row, LocalMemory*) {
     }
 
     return Item {*cell};
+}
+
+// A path is stored as the tagged null where an OPTIONAL MATCH missed it, as an entity is
+template <typename Item>
+Item pathItem(const Column* input, size_t row, LocalMemory* memory) {
+    const EntityList& path = (*static_cast<const ColumnVector<EntityList>*>(input))[row];
+    if (path.empty()) {
+        return Item {PropertyNull {}};
+    }
+
+    return Item {pathElement(path, memory->listBuffer())};
 }
 
 // The entity sibling of valueItem: an entity an OPTIONAL MATCH did not match is an invalid
@@ -7086,6 +7438,10 @@ NLListItemReadFunction NLExecutor::selectEdgeListItemRead() {
     return &validIDItem<ListBuffer<>::ListItemVariant, EdgeID>;
 }
 
+NLListItemReadFunction NLExecutor::selectPathListItemRead() {
+    return &pathItem<ListBuffer<>::ListItemVariant>;
+}
+
 NLListItemReadFunction NLExecutor::selectNestedListItemRead() {
     return &plainItem<ListBuffer<>::ListItemVariant, ListView>;
 }
@@ -7353,6 +7709,26 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
                            typename Pairs::AllowedMixed,
                            BinaryOpSelector<Op>,
                            typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+    result = selector._result;
+    return selector._fn;
+}
+
+NLBinaryFn NLExecutor::selectPathListIndex(const Column* lhs,
+                                           const Column* rhs,
+                                           LocalMemory* memory,
+                                           Column*& result) {
+    using Pairs = PairRestrictions<OP_INDEX>;
+
+    PathListIndexSelector selector {._memory = memory};
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           PathListIndexSelector,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+    if (!selector._fn) {
+        throw IRException("A path is read out of a plain list column, not out of a constant or a type-erased one");
+    }
 
     result = selector._result;
     return selector._fn;
@@ -8549,6 +8925,11 @@ NLUnwindElementEmitFunction NLExecutor::selectListUnwindNodeEmit(bool sourceIsNu
                             : &unwindListValidIDEmit<ColumnVector<ListView>, NodeID>;
 }
 
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindPathEmit(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindListPathEmit<ColumnOptVector<ListView>>
+                            : &unwindListPathEmit<ColumnVector<ListView>>;
+}
+
 NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit(bool sourceIsNullable) {
     return sourceIsNullable ? &unwindListValidIDEmit<ColumnOptVector<ListView>, EdgeID>
                             : &unwindListValidIDEmit<ColumnVector<ListView>, EdgeID>;
@@ -8699,6 +9080,13 @@ void NLExecutor::selectCollectListHandlers(bool distinctValues,
                                            NLCollectListEmitFunction& listEmit) {
     fold = distinctValues ? &collectListFoldDistinct : &collectCellFold<ListView>;
     listEmit = &collectListEmit<ListView>;
+}
+
+void NLExecutor::selectCollectPathHandlers(bool distinctValues,
+                                           NLCollectFoldFunction& fold,
+                                           NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectPathFoldDistinct : &collectPathFold;
+    listEmit = &collectPathListEmit;
 }
 
 void NLExecutor::selectCollectOptListHandlers(bool distinctValues,
@@ -9301,6 +9689,42 @@ NLGroupAggregateEmitFunction NLExecutor::selectOptOwnedStringGroupAggregateEmit(
     return &groupEmitCopy<types::String::OwningPrimitive>;
 }
 
+NLAggregateResetFunction NLExecutor::selectPathAggregateReset() {
+    return &aggregateResetPath;
+}
+
+NLAggregateUpdateFunction NLExecutor::selectPathAggregateUpdate(AggregateKind kind) {
+    if (kind == AggregateKind::Min) {
+        return &aggregateUpdatePathExtreme</*IsMax=*/false>;
+    } else if (kind == AggregateKind::Max) {
+        return &aggregateUpdatePathExtreme</*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of paths");
+}
+
+NLAggregateResultFunction NLExecutor::selectPathAggregateResult() {
+    return &aggregateResultPath;
+}
+
+NLGroupAggregateGrowFunction NLExecutor::selectPathGroupAggregateGrow() {
+    return &groupGrowPath;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectPathGroupAggregateFold(GroupAggregateKind kind) {
+    if (kind == GroupAggregateKind::Min) {
+        return &groupFoldPathExtreme</*IsMax=*/false>;
+    } else if (kind == GroupAggregateKind::Max) {
+        return &groupFoldPathExtreme</*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of paths");
+}
+
+NLGroupAggregateEmitFunction NLExecutor::selectPathGroupAggregateEmit() {
+    return &groupEmitPath;
+}
+
 NLGatherFunction NLExecutor::selectMaskGather() {
     return &gatherColumn<ColumnMask::Bool_t, ColumnMask>;
 }
@@ -9529,7 +9953,7 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::EntityList:
-            throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
+            return &distinctKeyAppendPathColumn;
         break;
     }
 
@@ -10152,7 +10576,7 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         break;
 
         case NLChunkKind::EntityList:
-            throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
+            return &groupFoldCountDistinctPath;
         break;
     }
 
@@ -10598,7 +11022,7 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::EntityList:
-            throw IRException("A path column cannot be a sort key: a path has no order here");
+            return &comparePathColumn;
         break;
     }
 

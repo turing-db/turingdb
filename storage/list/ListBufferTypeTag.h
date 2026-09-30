@@ -19,6 +19,7 @@ enum class ListBufferTypeTag : uint8_t {
     DateTime,
     MapView,
     Duration,
+    Path,
 
     INVALID,
 };

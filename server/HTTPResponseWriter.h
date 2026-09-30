@@ -334,6 +334,29 @@ public:
         write(std::to_string(v.getValue()));
     }
 
+    void writeValue(PathView path) {
+        write('[');
+
+        bool first = true;
+        for (const ListElementView entity : path.getEntities()) {
+            if (!first) {
+                write(',');
+            }
+            first = false;
+
+            const bool isNode = entity.getTag() == ListBufferTypeTag::NodeID;
+            const uint64_t id = isNode ? entity.getAs<NodeID>().getValue() : entity.getAs<EdgeID>().getValue();
+
+            write("{\"type\":\"");
+            write(isNode ? "node" : "edge");
+            write("\",\"id\":");
+            write(std::to_string(id));
+            write('}');
+        }
+
+        write(']');
+    }
+
     void writeValue(ListElementView element) {
         const auto writeTyped = [this]<typename T>(const ListElementView view) {
             this->writeValue(view.getAs<T>());

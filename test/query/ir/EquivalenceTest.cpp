@@ -163,6 +163,7 @@ std::string valueToString(const T& value) {
 std::string valueToString(const ListElementView element);
 std::string valueToString(ListView view);
 std::string valueToString(MapView view);
+std::string valueToString(PathView path);
 
 template <typename T>
 std::string valueToString(const std::optional<T>& value) {
@@ -186,6 +187,26 @@ std::string valueToString(const EntityList& value) {
             result += fmt::format("({})", entity._id.getValue());
         } else {
             result += fmt::format("[{}]", entity._id.getValue());
+        }
+    }
+
+    result += "]";
+    return result;
+}
+
+std::string valueToString(const PathView path) {
+    std::string result = "[";
+    size_t index = 0;
+
+    for (const ListElementView entity : path.getEntities()) {
+        if (index++ > 0) {
+            result += ", ";
+        }
+
+        if (entity.getTag() == ListBufferTypeTag::NodeID) {
+            result += fmt::format("({})", entity.getAs<NodeID>().getValue());
+        } else {
+            result += fmt::format("[{}]", entity.getAs<EdgeID>().getValue());
         }
     }
 

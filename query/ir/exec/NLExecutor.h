@@ -351,6 +351,10 @@ public:
     // Index a list of nodes or of edges, reading each element out as the entity column it
     // was gathered from. A position past the end reads as the invalid ID, which is how an
     // entity column spells a null.
+    static NLBinaryFn selectPathListIndex(const Column* lhs,
+                                          const Column* rhs,
+                                          LocalMemory* memory,
+                                          Column*& result);
     static NLBinaryFn selectEntityListIndex(NLChunkKind kind, const Column* lhs, const Column* rhs,
                                             LocalMemory* memory, Column*& result);
 
@@ -492,6 +496,12 @@ public:
     static NLGroupAggregateGrowFunction selectOptOwnedStringGroupAggregateGrow();
     static NLGroupAggregateFoldFunction selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateEmitFunction selectOptOwnedStringGroupAggregateEmit();
+    static NLAggregateResetFunction selectPathAggregateReset();
+    static NLAggregateUpdateFunction selectPathAggregateUpdate(AggregateKind kind);
+    static NLAggregateResultFunction selectPathAggregateResult();
+    static NLGroupAggregateGrowFunction selectPathGroupAggregateGrow();
+    static NLGroupAggregateFoldFunction selectPathGroupAggregateFold(GroupAggregateKind kind);
+    static NLGroupAggregateEmitFunction selectPathGroupAggregateEmit();
 
     // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
     // what a label test, an edge type test and a merge produce - where an i1 value chunk
@@ -807,6 +817,7 @@ public:
     static NLUnwindElementEmitFunction selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType);
     static NLUnwindElementEmitFunction selectListUnwindNodeEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectListUnwindEdgeEmit(bool sourceIsNullable);
+    static NLUnwindElementEmitFunction selectListUnwindPathEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLUnwindElementEmitFunction selectOptTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
@@ -820,6 +831,7 @@ public:
     static NLListItemReadFunction selectNodeListItemRead();
     static NLListItemReadFunction selectEdgeListItemRead();
     static NLListItemReadFunction selectNestedListItemRead();
+    static NLListItemReadFunction selectPathListItemRead();
     static NLListItemReadFunction selectNestedMapListItemRead();
     static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
@@ -863,6 +875,9 @@ public:
                                                NLCollectListEmitFunction& listEmit);
 
     // The handlers a collect of a list column reads: the cells nest into a list of lists.
+    static void selectCollectPathHandlers(bool distinctValues,
+                                          NLCollectFoldFunction& fold,
+                                          NLCollectListEmitFunction& listEmit);
     static void selectCollectListHandlers(bool distinctValues,
                                           NLCollectFoldFunction& fold,
                                           NLCollectListEmitFunction& listEmit);

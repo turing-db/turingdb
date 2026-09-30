@@ -15,6 +15,7 @@
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
+#include "list/PathView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
@@ -144,6 +145,25 @@ bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+// A path held in a list, read as <(node), [edge], ...> so it stands apart from its neighbours
+std::string pathElementText(const PathView& path) {
+    std::string text = "<";
+
+    for (const ListElementView& entity : path.getEntities()) {
+        if (text.size() > 1) {
+            text += ", ";
+        }
+
+        if (entity.getTag() == ListBufferTypeTag::NodeID) {
+            text += fmt::format("({})", entity.getAs<NodeID>().getValue());
+        } else {
+            text += fmt::format("[{}]", entity.getAs<EdgeID>().getValue());
+        }
+    }
+
+    return text + ">";
+}
+
 std::string elementText(const ListElementView& element) {
     switch (element.getTag()) {
         case ListBufferTypeTag::Int:
@@ -192,6 +212,10 @@ std::string elementText(const ListElementView& element) {
 
             return formatted;
         }
+        break;
+
+        case ListBufferTypeTag::Path:
+            return pathElementText(element.getAs<PathView>());
         break;
 
         case ListBufferTypeTag::Embedding:

@@ -105,6 +105,20 @@ struct NestedValueReadVisitor {
             captureOutView(_sink->beginNestedList(numElements, numBytes));
 
             return true;
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            if (_context->_inBuf->readable() < tagSize + sizeof(WireSize) + sizeof(WireSize)) {
+                return false;
+            }
+            _context->_inBuf->increaseReadOffset(tagSize);
+
+            WireSize numEntities = 0;
+            WireSize numBytes = 0;
+            _context->_inBuf->readData(&numEntities, sizeof(numEntities));
+            _context->_inBuf->readData(&numBytes, sizeof(numBytes));
+
+            captureOutView(_sink->beginNestedPath(numEntities, numBytes));
+
+            return true;
         } else if constexpr (std::is_same_v<T, db::MapView>) {
             if (_context->_inBuf->readable() < tagSize + sizeof(WireSize) + sizeof(WireSize)) {
                 return false;

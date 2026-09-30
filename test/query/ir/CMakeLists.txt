@@ -302,6 +302,9 @@ add_call_v3_test(test_query_ir_mixed_named_path_seeded_from_its_end MixedNamedPa
 add_call_v3_test(test_query_ir_several_walks SeveralWalksTest.cpp)
 add_call_v3_test(test_query_ir_optional_walk OptionalWalkTest.cpp)
 add_call_v3_test(test_query_ir_count_path_rows CountPathRowsTest.cpp)
+add_call_v3_test(test_query_ir_path_grouping_keys PathGroupingKeysTest.cpp)
+add_call_v3_test(test_query_ir_path_ordering PathOrderingTest.cpp)
+add_call_v3_test(test_query_ir_path_collect PathCollectTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query

@@ -959,6 +959,14 @@ void DBProgramGenerator::rebindYieldedColumn(const VarDecl* decl, mlir::TypedVal
     }
 }
 
+void DBProgramGenerator::rebindNamedPath(const VarDecl* decl, mlir::Value column) {
+    const bool namesAWalk = _part._namedPathWalks.erase(decl) > 0;
+
+    if (namesAWalk || _part._namedPaths.contains(decl)) {
+        _part._namedPaths[decl] = column;
+    }
+}
+
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_part._varMap.contains(var), "ScanNodes for registered variable");
 
@@ -1711,10 +1719,6 @@ mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Valu
 }
 
 mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    bioassert(columnType && mlir::isa<mlir::storage::EntityListType>(columnType.getType()),
-              "A named path is read off the entity sequence its element built");
-
     const mlir::Type resultType = pathElementsType(_mlirCtxt, kind);
     const mlir::db::ColumnType nullableType =
         allocColumnType(mlir::storage::NullableType::get(_mlirCtxt, resultType));
@@ -8904,6 +8908,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             // A YIELD can bind onto a variable a pattern already carries, which leaves the
             // one declaration on both a variable and a yielded column, so both are rebound.
             rebindYieldedColumn(keyVarDeclAtPos[i], results[i]);
+            rebindNamedPath(keyVarDeclAtPos[i], results[i]);
             continue;
         }
 
@@ -8923,6 +8928,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const VarDecl* symDecl = sym->getDecl();
 
         rebindYieldedColumn(symDecl, results[i]);
+        rebindNamedPath(symDecl, results[i]);
 
         const auto identityIt = edgeIdentityVars.find(symDecl);
 

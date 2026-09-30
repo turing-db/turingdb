@@ -2,6 +2,7 @@
 
 #include "ListView.h"
 #include "ListBufferTypeTag.h"
+#include "PathView.h"
 
 #include "map/MapView.h"
 
@@ -56,6 +57,9 @@ struct ListTagDispatcher {
             break;
             case ListBufferTypeTag::MapView:
                 return executor.template operator()<MapView>(view);
+            break;
+            case ListBufferTypeTag::Path:
+                return executor.template operator()<PathView>(view);
             break;
 
             case ListBufferTypeTag::INVALID:
@@ -132,6 +136,11 @@ struct TypeToListBufferTag<types::Duration::Primitive> {
 template <>
 struct TypeToListBufferTag<MapView> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::MapView;
+};
+
+template <>
+struct TypeToListBufferTag<PathView> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Path;
 };
 
 }

@@ -540,6 +540,26 @@ void asString(std::string& out, const db::EntityList& list) {
     }
 }
 
+// A path held in a list, bracketed so it stands apart from the elements beside it
+void asString(std::string& out, const db::PathView path) {
+    out += '<';
+
+    size_t i = 0;
+    for (const ListElementView entity : path.getEntities()) {
+        if (i++ != 0) {
+            out += ", ";
+        }
+
+        if (entity.getTag() == ListBufferTypeTag::NodeID) {
+            out += fmt::format("({})", entity.getAs<NodeID>().getValue());
+        } else {
+            out += fmt::format("[{}]", entity.getAs<EdgeID>().getValue());
+        }
+    }
+
+    out += '>';
+}
+
 void asString(std::string& out, db::ValueType v) {
     out += ValueTypeName::value(v);
 }
