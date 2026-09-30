@@ -17,6 +17,7 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringSet.h"
 
 #include "CardinalityEstimation.h"
 #include "metadata/GraphMetadata.h"
@@ -45,6 +46,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANINEDGESBYLABEL
 #define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
+#define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
@@ -1848,6 +1850,139 @@ struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<Fuse
         runFilterPass<EndpointLabelledHop>(getOperation(),
                                            matchEndpointLabelledHop,
                                            fuseEdgesByEndpointLabel,
+                                           builder);
+    }
+};
+
+void addLabelNames(ArrayAttr names, llvm::StringSet<>& labels) {
+    for (const Attribute name : names) {
+        labels.insert(cast<StringAttr>(name).getValue());
+    }
+}
+
+void addFilterLabels(FilterOp filter, Value filtered, llvm::StringSet<>& labels) {
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    for (const Value conjunct : conjuncts) {
+        CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
+        if (!check) {
+            continue;
+        }
+
+        GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+        if (labelSet && labelSet.getInputNodes() == filtered) {
+            addLabelNames(check.getLabels(), labels);
+        }
+    }
+}
+
+// The labels every node of a column carries, known from where its rows come from: the
+// by-label read that made them and each label filter they passed on the way.
+void collectKnownLabels(Value column, llvm::StringSet<>& labels) {
+    constexpr size_t srcResultIndex = 0;
+    constexpr size_t tgtResultIndex = 3;
+
+    for (;;) {
+        Operation* const def = column.getDefiningOp();
+        if (!def) {
+            return;
+        }
+
+        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+
+        if (ScanNodesByLabel scan = dyn_cast<ScanNodesByLabel>(def)) {
+            addLabelNames(scan.getLabels(), labels);
+            return;
+        } else if (ScanNodesByPropertyValue scan = dyn_cast<ScanNodesByPropertyValue>(def)) {
+            if (const std::optional<ArrayAttr> scanLabels = scan.getLabels()) {
+                addLabelNames(*scanLabels, labels);
+            }
+            return;
+        } else if (isa<ScanOutEdgesByLabelSrc, ScanInEdgesByLabelSrc>(def)) {
+            if (resultIndex == srcResultIndex) {
+                addLabelNames(def->getAttrOfType<ArrayAttr>("labels"), labels);
+            }
+            return;
+        } else if (isa<ScanOutEdgesByLabelTgt, ScanInEdgesByLabelTgt>(def)) {
+            if (resultIndex == tgtResultIndex) {
+                addLabelNames(def->getAttrOfType<ArrayAttr>("labels"), labels);
+            }
+            return;
+        } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
+            const Value filtered = filter.getColumnsToFilter()[resultIndex];
+            addFilterLabels(filter, filtered, labels);
+            column = filtered;
+        } else if (isEdgeHop(def)) {
+            const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
+            const size_t reachedResultIndex = isReverseHop(def) ? srcResultIndex : tgtResultIndex;
+
+            if (resultIndex == inputResultIndex) {
+                column = def->getOperand(0);
+            } else if (resultIndex >= hopFixedResultCount) {
+                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
+            } else {
+                const ArrayAttr hopLabels = def->getAttrOfType<ArrayAttr>("labels");
+                if (resultIndex == reachedResultIndex && hopLabels) {
+                    addLabelNames(hopLabels, labels);
+                }
+                return;
+            }
+        } else {
+            return;
+        }
+    }
+}
+
+// A label filter over nodes already known to carry every label it asks for keeps every row.
+struct RedundantLabelCheck {
+    CheckLabelConstraint _check;
+    GetNodeLabelSet _labelSet;
+};
+
+bool matchRedundantLabelCheck(FilterOp filter, RedundantLabelCheck& redundant) {
+    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet) {
+        return false;
+    }
+
+    llvm::StringSet<> knownLabels;
+    collectKnownLabels(labelSet.getInputNodes(), knownLabels);
+
+    for (const Attribute label : check.getLabels()) {
+        if (!knownLabels.contains(cast<StringAttr>(label).getValue())) {
+            return false;
+        }
+    }
+
+    redundant = RedundantLabelCheck {._check = check, ._labelSet = labelSet};
+
+    return true;
+}
+
+void removeRedundantLabelCheck(FilterOp filter, const RedundantLabelCheck& redundant, mlir::OpBuilder& builder) {
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(redundant._check);
+    eraseIfUnused(redundant._labelSet);
+}
+
+struct RemoveRedundantLabelChecks : public impl::RemoveRedundantLabelChecksBase<RemoveRedundantLabelChecks> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<RedundantLabelCheck>(getOperation(),
+                                           matchRedundantLabelCheck,
+                                           removeRedundantLabelCheck,
                                            builder);
     }
 };
