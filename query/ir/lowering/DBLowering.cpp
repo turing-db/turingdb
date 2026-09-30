@@ -3155,10 +3155,10 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
     const mlir::Location loc = _builder.getUnknownLoc();
     const mlir::Value handle = _limitHandles.lookup(limit.getOperation());
 
-    // The representative is the first limited column, in the innermost producing
-    // loop body (post-cross-product if there is one), so its row count is what
-    // this step charges and the truncate copies.
-    const mlir::Value representative = chunks.front();
+    // The representative is the limited column bound deepest, in the innermost
+    // producing loop body (post-cross-product if there is one), so its row count is
+    // what this step charges and the truncate copies.
+    const mlir::Value representative = deepestBoundChunk(chunks);
     setInsertionInto(ownerBlock(representative));
 
     // Charge this step's rows, then copy the first emitThisStep rows of every
@@ -3206,10 +3206,10 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
     _builder.setInsertionPointToStart(_rootBlock);
     const mlir::Value handle = _builder.create<nl::Skip>(loc, skip.getCount()).getState();
 
-    // The representative is the first skipped column, in the innermost producing
-    // loop body (post-cross-product if there is one), so its row count is what this
-    // step charges and the truncate's suffix is cut from.
-    const mlir::Value representative = chunks.front();
+    // The representative is the skipped column bound deepest, in the innermost
+    // producing loop body (post-cross-product if there is one), so its row count is
+    // what this step charges and the truncate's suffix is cut from.
+    const mlir::Value representative = deepestBoundChunk(chunks);
     setInsertionInto(ownerBlock(representative));
 
     // Charge this step's rows, then lift the surviving suffix of every skipped
@@ -3310,8 +3310,7 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
     // sits in the innermost producing loop body, where all sorted columns are
     // bound together (the same block db.output would emit from), so the buffers
     // stay row-aligned.
-    const mlir::Value representative = chunks.front();
-    setInsertionInto(ownerBlock(representative));
+    setInsertionInto(ownerBlock(deepestBoundChunk(chunks)));
     _builder.create<nl::SortCollect>(loc, state, chunks);
 
     // The emit phase is an nl.sort source iterator plus its nl.for, placed after
@@ -3874,8 +3873,7 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // It sits in the innermost producing loop body, where all columns are bound
     // together (the same block db.output would emit from), so the group assignment
     // and the per-group folds stay row-aligned.
-    const mlir::Value representative = chunks.front();
-    setInsertionInto(ownerBlock(representative));
+    setInsertionInto(ownerBlock(deepestBoundChunk(chunks)));
     _builder.create<nl::GroupAggregateUpdate>(loc, state, chunks);
 
     // The emit iterator yields one chunk per output column: the grouping-key columns
@@ -3995,8 +3993,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     // sits in the innermost producing loop body, where all columns are bound together
     // (the same block db.output would emit from), so the group assignment and the
     // per-group appends stay row-aligned.
-    const mlir::Value representative = chunks.front();
-    setInsertionInto(accumulatorUpdateBlock(ownerBlock(representative)));
+    setInsertionInto(accumulatorUpdateBlock(ownerBlock(deepestBoundChunk(chunks))));
     _builder.create<nl::CollectUpdate>(loc, state, chunks);
 
     // The emit phase: an nl.collect source iterator yielding one row per group - the

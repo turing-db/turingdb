@@ -305,6 +305,8 @@ add_call_v3_test(test_query_ir_count_path_rows CountPathRowsTest.cpp)
 add_call_v3_test(test_query_ir_path_grouping_keys PathGroupingKeysTest.cpp)
 add_call_v3_test(test_query_ir_path_ordering PathOrderingTest.cpp)
 add_call_v3_test(test_query_ir_path_collect PathCollectTest.cpp)
+add_call_v3_test(test_query_ir_keyless_aggregate_order_by KeylessAggregateOrderByTest.cpp)
+add_call_v3_test(test_query_ir_grouping_over_keyless_aggregates GroupingOverKeylessAggregatesTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query

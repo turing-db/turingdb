@@ -964,14 +964,24 @@ private:
                                     llvm::ArrayRef<mlir::Value> aggregateColumns = {},
                                     llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds = {});
 
-    // The collects a keyless projection returns, built as one op so a single drain emits
+    void generateKeylessGroup(const Projection* projection);
+
+    // A key may order the groups by an aggregate the projection does not return -
+    // RETURN a.name ORDER BY count(b) - which the aggregation has to compute all the same.
+    // Its result column is then read by the sort alone, and no db.output reads it, which is
+    // what keeps it out of the rows
+    void appendOrderByAggregates(const Projection* projection,
+                                 llvm::SmallVectorImpl<const FunctionInvocationExpr*>& invocations);
+
+    // The collects a keyless projection reduces, built as one op so a single drain emits
     // them all. One collect needs no help: its own translation is that op.
-    void generateKeylessCollect(const Projection* projection);
+    void generateKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs);
 
     // Reduces every aggregate of a keyless projection before its items are built, so what an
     // item computes beside an aggregate reads the one row the reduction leaves. Each reads
     // its input over the rows @param inputAggregateOp left, not over an earlier sibling's row.
-    void generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp);
+    void generateKeylessAggregates(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs,
+                                   mlir::Operation* inputAggregateOp);
 
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
