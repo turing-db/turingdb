@@ -500,6 +500,10 @@ struct PairRestrictions<Op> {
         TaggedMembershipKindPairs<MapView>::Pairs,
 
         std::tuple<
+            KindPair<EntityList, ListView>,
+            KindPair<EntityList, std::optional<ListView>>,
+            KindPair<EntityList, ListElementView>,
+            KindPair<EntityList, std::optional<ListElementView>>,
             KindPair<PropertyNull, ListView>,
             KindPair<PropertyNull, std::optional<ListView>>,
             KindPair<PropertyNull, ListElementView>,

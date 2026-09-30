@@ -130,3 +130,23 @@ TEST_F(PathCollectTest, storesNoPath) {
     runWriteExpectingError("MATCH p = (n:Person {name: 'Remy'})-[e]->(m:Person) WITH n, collect(p) AS paths SET n.paths = paths",
                            "a path is not a property value");
 }
+
+TEST_F(PathCollectTest, findsAPathInCollectedPaths) {
+    expectRows("MATCH p = (n:Person {name: 'Remy'})-[e]->(m:Person) WITH collect(p) AS paths MATCH q = (a:Person)-[x]->(b:Person) RETURN q, q IN paths",
+               {{"(0), [0], (1)", "true"}, {"(1), [4], (0)", "false"}});
+}
+
+TEST_F(PathCollectTest, findsAnUnwoundPathInItsList) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) WITH collect(p) AS paths UNWIND paths AS q RETURN q IN paths",
+               {{"true"}, {"true"}});
+}
+
+TEST_F(PathCollectTest, findsAMissedPathInNoList) {
+    expectRows("MATCH p = (n:Person)-[e]->(m:Person) WITH collect(p) AS paths MATCH (a:Person {name: 'Luc'}) OPTIONAL MATCH q = (a)-[x]->(b:Person) RETURN q IN paths",
+               {{"null"}});
+}
+
+TEST_F(PathCollectTest, findsAPathInAListReadOutOfAList) {
+    expectRows("MATCH p = (n:Person {name: 'Remy'})-[e]->(m:Person) WITH [collect(p), 1] AS nested MATCH q = (a:Person)-[x]->(b:Person) RETURN q, q IN nested[0]",
+               {{"(0), [0], (1)", "true"}, {"(1), [4], (0)", "false"}});
+}

@@ -3,6 +3,7 @@
 #include <compare>
 #include <optional>
 
+#include "EntityList.h"
 #include "ID.h"
 #include "ListElementView.h"
 #include "ListView.h"
@@ -63,6 +64,7 @@ bool operator==(ListElementView element, NodeID value);
 bool operator==(ListElementView element, EdgeID value);
 bool operator==(ListElementView element, ListView value);
 bool operator==(ListElementView element, MapView value);
+bool operator==(ListElementView element, const EntityList& path);
 
 /**
  * @brief Tests an element of a @ref ListByteBuffer for null, as IS (NOT) NULL does.

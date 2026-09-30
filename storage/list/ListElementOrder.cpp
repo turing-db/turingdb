@@ -545,6 +545,27 @@ bool db::operator==(const ListElementView element, const EdgeID value) {
         && element.getAs<EdgeID>() == value;
 }
 
+bool db::operator==(const ListElementView element, const EntityList& path) {
+    if (element.getTag() != ListBufferTypeTag::Path) {
+        return false;
+    }
+
+    const ListView entities = element.getAs<PathView>().getEntities();
+    if (entities.size() != path.size()) {
+        return false;
+    }
+
+    const auto sameEntity = [](const ListElementView entity, const EntityList::Entry& entry) {
+        if (entry._type == EntityType::Node) {
+            return entity == NodeID(entry._id.getValue());
+        }
+
+        return entity == EdgeID(entry._id.getValue());
+    };
+
+    return std::equal(entities.begin(), entities.end(), path.begin(), sameEntity);
+}
+
 bool db::operator==(const ListElementView element, const ListView value) {
     return element.getTag() == ListBufferTypeTag::ListView
         && element.getAs<ListView>() == value;
