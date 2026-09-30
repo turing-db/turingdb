@@ -458,7 +458,7 @@ way: the arcs are counted in a table dense over (source label set, edge type), e
 holding the few target label sets it reaches, in place of a hash map keyed by the three,
 which took 20 ms off; and an edge end's label set is read from an array by node ID,
 filled range by range from the ranges each part keeps its nodes in per label set, in
-place of a read into the node array, which took the other 60 ms off.
+place of a read into the node array, which took the other 57 ms off.
 
 Step 5 is implemented on the same branch. `EdgeTypeAcyclicityCache` under
 `storage/metadata/` answers whether the edges of a set of types, over every part and the
@@ -503,7 +503,7 @@ through its fixed hop and keeps 3. Same machine, same protocol:
     (p:TopLevelPathway)-->(a)-->(b)-->(c)
                               1 of 3 kept, every type sorted    -        194,209  3.1 ms    194,209  2.3 ms
     (p:TopLevelPathway)--(b)--(c)
-                              kept, nothing sorted              -    125,684,994  220 ms  125,690,888  63 ms
+                              kept, nothing sorted              -    125,684,994  188 ms  125,690,888  60 ms
     (p:TopLevelPathway)--(b)--(c)--(d)
                               3 of 3 kept, nothing sorted       -  2,421,500,620  22.2 s  2,547,338,854  6.5 s
 
@@ -514,9 +514,9 @@ keep every pair, as the backtrack demands, and sort nothing; they run as they di
 step 2 (190 ms and 22.0 s then, against controls of 66 ms and 5.8 s). The sort of one type
 is paid once per commit, on the first query that asks for it, measured as that query's
 first run against its next once the summary was built: 87 against 23 ms for hasEvent, 106
-against 26 for hasComponent and 91 against 14 for precedingEvent, so 65 to 80 ms each. The
+against 26 for hasComponent and 91 against 14 for precedingEvent, so 64 to 80 ms each. The
 directed untyped chain asks for every type at once, since its second-cycle orientation
-embeds through precedingEvent: it pays 237 ms (239 against 3.1) and keeps its pair, the
+embeds through precedingEvent: it pays 236 ms (239 against 3.1) and keeps its pair, the
 graph being cyclic. Each sort is a pass over the 11.5M out-records and three arrays over
 the 3M nodes; sorting only the nodes the types touch would cut the arrays, and a persisted
 answer the pass.
@@ -532,7 +532,7 @@ Steps 1 to 5 are done. What the status above leaves open, by where it shows:
 
 1. **The in-edge order.** Sort a node's in-edges by target then edge ID at build time, so
    the backtrack among them is a binary search rather than a scan of every record. The
-   undirected walks pay that scan today: 220 ms against a 63 ms control for two hops,
+   undirected walks pay that scan today: 188 ms against a 60 ms control for two hops,
    22.2 s against 6.5 s for three. It changes what `edges-in` holds on disk and needs a
    raise of `UP_TO_DATE_VERSION`, which is the decision to take first. (step 2)
 2. **Pruning inside the cross product and the hash join.** The check stays a filter after
@@ -558,8 +558,8 @@ Steps 1 to 5 are done. What the status above leaves open, by where it shows:
 7. **`NLPendingEdgeHop`** walks its excluded edges one by one, which no measurement has
    reached. (step 2)
 8. **Persisting the answers.** The summary and the acyclicity of each type set are rebuilt
-   on the first query of every commit, 58 ms for the summary and 65 to 80 ms per type set
-   on reactome, 237 ms for every type at once. A persisted form in the part's dump removes
+   on the first query of every commit, 58 ms for the summary and 64 to 80 ms per type set
+   on reactome, 236 ms for every type at once. A persisted form in the part's dump removes
    both; before that, the sort's three arrays over the 3M nodes could shrink to the nodes
    the types touch. (steps 4, 5 and 6)
 9. **Later still.** A signature column for chains past six hops, and `shortestPath` beside
