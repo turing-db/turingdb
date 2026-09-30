@@ -18,7 +18,7 @@ namespace db {
 /**
  * @brief Orders two elements of a @ref ListByteBuffer, which need not share a type.
  *
- * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < DATETIME < DURATION <
+ * Follows Cypher's orderability across types - MAP < NODE < EDGE < LIST < PATH < DATETIME < DURATION <
  * STRING < BOOLEAN < NUMBER < NULL - so a null sorts after every value and two elements of one type compare
  * by their own order: entities by their ID, numbers numerically whatever they are tagged
  * as, strings lexicographically, lists element-wise. An embedding has no order, so <=>

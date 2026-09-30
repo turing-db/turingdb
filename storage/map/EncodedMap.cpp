@@ -83,6 +83,9 @@ void encodeValue(MapEntryView entry, std::vector<std::byte>& out) {
         case MapBufferTypeTag::MapView:
             encodeMap(entry.getValueAs<MapView>(), out);
         break;
+        case MapBufferTypeTag::Path:
+            throw FatalException("Cannot store a map holding a path: a path is not a property value");
+        break;
         case MapBufferTypeTag::INVALID:
             throw FatalException("Cannot encode a map entry with an invalid type tag");
         break;
@@ -217,6 +220,7 @@ private:
             case MapBufferTypeTag::MapView:
                 return decodeMap();
             break;
+            case MapBufferTypeTag::Path:
             case MapBufferTypeTag::INVALID:
             break;
         }

@@ -19,6 +19,7 @@ enum class MapBufferTypeTag : uint8_t {
     EdgeID,
     DateTime,
     Duration,
+    Path,
 
     INVALID,
 };

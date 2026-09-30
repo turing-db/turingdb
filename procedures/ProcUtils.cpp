@@ -159,6 +159,9 @@ void appendMapEntryValue(std::string& out, MapEntryView entry) {
         case MapBufferTypeTag::MapView:
             appendMapValue(out, entry.getValueAs<MapView>());
         break;
+        case MapBufferTypeTag::Path:
+            appendListValue(out, entry.getValueAs<PathView>().getEntities());
+        break;
         case MapBufferTypeTag::NodeID:
             out += fmt::format("{}", entry.getValueAs<NodeID>().getValue());
         break;

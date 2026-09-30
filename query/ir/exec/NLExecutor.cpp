@@ -2350,6 +2350,12 @@ void distinctAppendMapValueBytes(std::string& key, const MapEntryView entry) {
             return;
         break;
 
+        case MapBufferTypeTag::Path:
+            key.push_back(static_cast<char>(ListBufferTypeTag::Path));
+            distinctAppendListBytes(key, entry.getValueAs<PathView>().getEntities());
+            return;
+        break;
+
         case MapBufferTypeTag::Embedding:
             throw IRException("cannot dedup by an embedding map value");
         break;
@@ -4020,11 +4026,7 @@ Item taggedItem(const ListElementView element) {
         break;
 
         case ListBufferTypeTag::Path:
-            if constexpr (std::is_constructible_v<Item, PathView>) {
-                return Item {element.getAs<PathView>()};
-            } else {
-                throw IRException("A map cannot hold a path");
-            }
+            return Item {element.getAs<PathView>()};
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -7475,6 +7477,10 @@ NLMapValueReadFunction NLExecutor::selectNodeMapValueRead() {
 
 NLMapValueReadFunction NLExecutor::selectEdgeMapValueRead() {
     return &validIDItem<MapBuffer<>::MapItemVariant, EdgeID>;
+}
+
+NLMapValueReadFunction NLExecutor::selectPathMapValueRead() {
+    return &pathItem<MapBuffer<>::MapItemVariant>;
 }
 
 NLMapValueReadFunction NLExecutor::selectNestedListMapValueRead() {

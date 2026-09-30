@@ -3030,6 +3030,8 @@ NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
         return NLExecutor::selectNestedMapValueRead();
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLExecutor::selectNestedListMapValueRead();
+    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+        return NLExecutor::selectPathMapValueRead();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedMapValueRead(/*nullable=*/false);
     } else if (isNullableList(elementType)) {

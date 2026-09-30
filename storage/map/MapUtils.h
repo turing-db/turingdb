@@ -6,6 +6,7 @@
 
 #include "ID.h"
 #include "list/ListView.h"
+#include "list/PathView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -57,6 +58,9 @@ struct MapTagDispatcher {
             break;
             case MapBufferTypeTag::Duration:
                 return executor.template operator()<types::Duration::Primitive>(view);
+            break;
+            case MapBufferTypeTag::Path:
+                return executor.template operator()<PathView>(view);
             break;
             case MapBufferTypeTag::INVALID:
             break;
@@ -132,6 +136,11 @@ struct TypeToMapBufferTag<types::DateTime::Primitive> {
 template <>
 struct TypeToMapBufferTag<types::Duration::Primitive> {
     static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Duration;
+};
+
+template <>
+struct TypeToMapBufferTag<PathView> {
+    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Path;
 };
 
 }

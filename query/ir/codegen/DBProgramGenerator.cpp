@@ -1131,7 +1131,7 @@ mlir::Value DBProgramGenerator::singletonList(mlir::Value column) {
 mlir::Value DBProgramGenerator::translateListOfColumns(const ListLiteral* list) {
     llvm::SmallVector<mlir::Value> elementColumns;
     for (const Expr* item : list->items()) {
-        elementColumns.push_back(getOrTranslateExprColumn(item));
+        elementColumns.push_back(readWalkEntities(item, getOrTranslateExprColumn(item)));
     }
 
     const mlir::Type elementType = sharedColumnElement(_mlirCtxt, elementColumns);
@@ -1180,7 +1180,7 @@ mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
 
     for (const auto& [keyName, valueExpr] : entries) {
         keys.push_back(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())));
-        valueColumns.push_back(getOrTranslateExprColumn(valueExpr));
+        valueColumns.push_back(readWalkEntities(valueExpr, getOrTranslateExprColumn(valueExpr)));
     }
 
     mlir::db::MakeMap makeMap = _opBuilder.create<mlir::db::MakeMap>(_opBuilder.getUnknownLoc(),

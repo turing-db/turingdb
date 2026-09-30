@@ -45,14 +45,16 @@ db::ListElementView TuringSink::beginNestedList(size_t elementCount, size_t byte
 }
 
 db::ListElementView TuringSink::beginNestedPath(size_t entityCount, size_t byteSize) {
-    if (topContainerIsMap()) {
-        throw FatalException("A map cannot hold a path");
-    }
-
     const db::ListWriteCursor entitiesCursor = _listBuffer->reserveList(entityCount, byteSize);
     const db::PathView path {entitiesCursor.getView()};
 
-    const db::ListElementView elementView = listCursor().writeValue<db::PathView>(db::TypeToListBufferTag<db::PathView>::Tag, path);
+    db::ListElementView elementView;
+
+    if (topContainerIsMap()) {
+        mapCursor().writeValue<db::PathView>(db::TypeToMapBufferTag<db::PathView>::Tag, path);
+    } else {
+        elementView = listCursor().writeValue<db::PathView>(db::TypeToListBufferTag<db::PathView>::Tag, path);
+    }
 
     _containerStack.push_back(NestedContainerCursor::list(entitiesCursor));
 

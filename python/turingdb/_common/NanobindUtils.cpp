@@ -279,6 +279,8 @@ struct ValueToPyObject {
             return view(entry.getValueAs<T>());
         } else if constexpr (std::is_same_v<T, db::MapView>) {
             return view(entry.getValueAs<T>());
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            return path(entry.getValueAs<T>());
         } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
             return nb::none();
         } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
