@@ -2122,9 +2122,10 @@ bool matchExcludedHop(FilterOp filter, ExcludedHop& excluded) {
 
     // The subject is the hop's own edge column or the walk's own path column
     Operation* const op = subject.getOwner();
+    const bool takesExclusions = isEdgeHop(op) && !isa<GetOutEdgesByTypeAndLabel, GetInEdgesByTypeAndLabel>(op);
     size_t fixedResultCount = 0;
     unsigned subjectResult = 0;
-    if (isEdgeHop(op)) {
+    if (takesExclusions) {
         fixedResultCount = hopFixedResultCount;
         subjectResult = 1;
     } else if (isa<ExplorePaths>(op)) {
