@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <memory>
 #include <span>
+#include <vector>
 
 #include "EdgeRecord.h"
 
@@ -65,6 +66,8 @@ public:
         return &_outEdges[offset];
     }
 
+    std::span<const size_t> getSelfLoopOffsets() const { return _selfLoopOffsets; }
+
 private:
     friend EdgeIndexer;
     friend DataPartLoader;
@@ -77,6 +80,7 @@ private:
 
     EdgeRecords _outEdges;
     EdgeRecords _inEdges;
+    std::vector<size_t> _selfLoopOffsets;
 
     EdgeContainer(NodeID firstNodeID,
                   EdgeID firstEdgeID,
