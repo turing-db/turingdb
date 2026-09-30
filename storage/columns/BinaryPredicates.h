@@ -29,6 +29,10 @@ inline std::strong_ordering operator<=>(ListElementView element, ColumnMask::Boo
     return element <=> types::Bool::Primitive {predicate._value};
 }
 
+inline std::optional<std::partial_ordering> comparisonOrder(ListElementView element, ColumnMask::Bool_t predicate) {
+    return comparisonOrder(element, types::Bool::Primitive {predicate._value});
+}
+
 namespace {
 
 struct TuringEqual;
@@ -77,6 +81,50 @@ inline std::optional<ListView> taggedList(const C& cell) {
     }
 }
 
+template <typename T>
+concept TaggedCellOperand =
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
+
+// Every comparison of a cell but the IS NULL test, which reads the tag and always answers
+template <typename T, typename U>
+concept ComparesATaggedCell = (TaggedCellOperand<T> || TaggedCellOperand<U>) && !HoldsPropertyNull<T, U>;
+
+template <typename T>
+inline bool holdsAValue(const T& operand) {
+    if constexpr (TypeUtils::is_optional_v<T>) {
+        return operand.has_value() && holdsAValue(*operand);
+    } else if constexpr (std::is_same_v<T, ListElementView>) {
+        return operand.getTag() != ListBufferTypeTag::Null;
+    } else {
+        return true;
+    }
+}
+
+template <typename T>
+inline std::optional<ListView> heldList(const T& operand) {
+    if constexpr (std::is_same_v<T, ListView>) {
+        return operand;
+    } else if constexpr (std::is_same_v<T, ListElementView>) {
+        return taggedList(operand);
+    } else {
+        return std::nullopt;
+    }
+}
+
+template <typename T, typename U>
+inline std::optional<std::partial_ordering> cellComparisonOrder(const T& a, const U& b) {
+    if constexpr (std::is_same_v<T, ListElementView>) {
+        return comparisonOrder(a, b);
+    } else {
+        const std::optional<std::partial_ordering> order = comparisonOrder(b, a);
+        if (!order) {
+            return std::nullopt;
+        }
+
+        return 0 <=> *order;
+    }
+}
+
 template <typename F>
 concept TestsEquality =
     (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
@@ -92,6 +140,7 @@ concept MixedSignIntegers =
 template <typename Order>
 struct TuringOrder {
     template <typename T, typename U>
+        requires (!ComparesATaggedCell<T, U>)
     auto operator()(const T& a, const U& b) const -> decltype(Order {}(a, b)) {
         if constexpr (!MixedSignIntegers<T, U>) {
             return Order {}(a, b);
@@ -103,6 +152,29 @@ struct TuringOrder {
             return std::cmp_greater_equal(a, b);
         } else {
             return std::cmp_less_equal(a, b);
+        }
+    }
+
+    template <typename T, typename U>
+        requires ComparesATaggedCell<T, U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) const {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
+            return std::nullopt;
+        }
+
+        const std::optional<std::partial_ordering> order = cellComparisonOrder(TypeUtils::unwrap(a), TypeUtils::unwrap(b));
+        if (!order) {
+            return std::nullopt;
+        }
+
+        if constexpr (std::is_same_v<Order, std::greater<>>) {
+            return CustomBool {std::is_gt(*order)};
+        } else if constexpr (std::is_same_v<Order, std::less<>>) {
+            return CustomBool {std::is_lt(*order)};
+        } else if constexpr (std::is_same_v<Order, std::greater_equal<>>) {
+            return CustomBool {std::is_gteq(*order)};
+        } else {
+            return CustomBool {std::is_lteq(*order)};
         }
     }
 };
@@ -582,6 +654,26 @@ struct TuringEqual {
         return CustomBool {true};
     }
 
+    // A cell holding a list compares as that list, so its null elements answer as a list's do
+    template <typename T, typename U>
+        requires ComparesATaggedCell<T, U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
+            return std::nullopt;
+        }
+
+        const auto& lhs = TypeUtils::unwrap(a);
+        const auto& rhs = TypeUtils::unwrap(b);
+
+        const std::optional<ListView> lhsList = heldList(lhs);
+        const std::optional<ListView> rhsList = heldList(rhs);
+        if (lhsList && rhsList) {
+            return (*this)(*lhsList, *rhsList);
+        }
+
+        return CustomBool {lhs == rhs};
+    }
+
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
         const bool equal =
             (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());
@@ -619,7 +711,7 @@ struct TuringEqual {
 
     // Generalist fallback for all other types
     template <typename T, typename U>
-        requires (!ListOperand<T> || !ListOperand<U>)
+        requires (!ListOperand<T> || !ListOperand<U>) && (!ComparesATaggedCell<T, U>)
     bool operator()(const T& a, const U& b) {
         if constexpr (MixedSignIntegers<T, U>) {
             return std::cmp_equal(a, b);
@@ -631,7 +723,7 @@ struct TuringEqual {
 
 struct TuringNotEqual {
     template <typename T, typename U>
-        requires ListOperand<T> && ListOperand<U>
+        requires (ListOperand<T> && ListOperand<U>) || ComparesATaggedCell<T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) {
         const std::optional<CustomBool> equal = TuringEqual {}(a, b);
         if (!equal.has_value()) {
@@ -642,7 +734,7 @@ struct TuringNotEqual {
     }
 
     template <typename T, typename U>
-        requires (!ListOperand<T> || !ListOperand<U>)
+        requires (!ListOperand<T> || !ListOperand<U>) && (!ComparesATaggedCell<T, U>)
     bool operator()(T&& a, U&& b) {
         return !TuringEqual {}(std::forward<T>(a), std::forward<U>(b));
     }

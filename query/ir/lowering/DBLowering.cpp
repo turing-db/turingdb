@@ -1213,17 +1213,17 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else if (mlir::isa<mlir::db::PowOp>(operation)) {
         lowerBinaryOp<nl::Pow>(operation, BinaryResultKind::Double);
     } else if (mlir::isa<mlir::db::EqOp>(operation)) {
-        lowerBinaryOp<nl::Eq>(operation, BinaryResultKind::Boolean);
+        lowerBinaryOp<nl::Eq>(operation, BinaryResultKind::Comparison);
     } else if (mlir::isa<mlir::db::NeqOp>(operation)) {
-        lowerBinaryOp<nl::Neq>(operation, BinaryResultKind::Boolean);
+        lowerBinaryOp<nl::Neq>(operation, BinaryResultKind::Comparison);
     } else if (mlir::isa<mlir::db::GtOp>(operation)) {
-        lowerBinaryOp<nl::Gt>(operation, BinaryResultKind::Boolean);
+        lowerBinaryOp<nl::Gt>(operation, BinaryResultKind::Comparison);
     } else if (mlir::isa<mlir::db::LtOp>(operation)) {
-        lowerBinaryOp<nl::Lt>(operation, BinaryResultKind::Boolean);
+        lowerBinaryOp<nl::Lt>(operation, BinaryResultKind::Comparison);
     } else if (mlir::isa<mlir::db::GteOp>(operation)) {
-        lowerBinaryOp<nl::Gte>(operation, BinaryResultKind::Boolean);
+        lowerBinaryOp<nl::Gte>(operation, BinaryResultKind::Comparison);
     } else if (mlir::isa<mlir::db::LteOp>(operation)) {
-        lowerBinaryOp<nl::Lte>(operation, BinaryResultKind::Boolean);
+        lowerBinaryOp<nl::Lte>(operation, BinaryResultKind::Comparison);
     } else if (mlir::isa<mlir::db::StartsWithOp>(operation)) {
         lowerBinaryOp<nl::StartsWith>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::EndsWithOp>(operation)) {
@@ -4921,12 +4921,19 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                               && (isNullableChunk(lhsType) || isNullableChunk(rhsType));
 
     switch (kind) {
-        case BinaryResultKind::Boolean: {
+        case BinaryResultKind::Boolean:
+        case BinaryResultKind::Comparison: {
             const mlir::Type boolElement = _builder.getI1Type();
 
             // List comparison always nullable; either having a null element => null
             const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
-            const bool alwaysNullable = operandNullable || comparesTwoLists;
+
+            // A cell may hold a null, or a value of another type than the one it meets
+            const bool comparesATaggedCell = kind == BinaryResultKind::Comparison
+                                          && !testsATaggedCellForNull
+                                          && (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType));
+
+            const bool alwaysNullable = operandNullable || comparesTwoLists || comparesATaggedCell;
 
             return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
                                   : boolElement;
