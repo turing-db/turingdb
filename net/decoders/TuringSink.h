@@ -45,7 +45,6 @@ public:
 
     TuringSink(db::LocalMemory* localMemory,
                ChunkedBuffer<float>* embeddingBuffer,
-               ChunkedBuffer<char>* stringBuffer,
                db::ListBuffer<>* listBuffer,
                db::MapBuffer<>* mapBuffer);
     ~TuringSink();
@@ -53,8 +52,8 @@ public:
     float* allocEmbedding(size_t numFloats) { return _embeddingBuffer->alloc(numFloats); }
     std::span<const float> getEmbeddingView(float* data, size_t numFloats) { return _embeddingBuffer->getView(data, numFloats); }
 
-    char* allocString(size_t size) { return _stringBuffer->alloc(size); }
-    std::string_view getStringView(char* data, size_t size) { return _stringBuffer->getView(data, size); }
+    char* allocString(size_t size) { return _stringBuffer->allocUninit(size); }
+    static std::string_view getStringView(char* data, size_t size) { return {data, size}; }
 
     template <typename T>
     Column* alloc() { return _localMemory->alloc<T>(); }
@@ -106,7 +105,7 @@ public:
 private:
     db::LocalMemory* _localMemory {nullptr};
     ChunkedBuffer<float>* _embeddingBuffer {nullptr};
-    ChunkedBuffer<char>* _stringBuffer {nullptr};
+    db::StringBuffer* _stringBuffer {nullptr};
     db::QueryListBuffer* _listBuffer {nullptr};
     db::MapBuffer<>* _mapBuffer {nullptr};
 
