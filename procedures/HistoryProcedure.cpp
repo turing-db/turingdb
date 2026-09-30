@@ -110,10 +110,11 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("commit", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("partCount", ProcedureType::UINT_64);
+
+    for (const auto& [name, type] : _returnItems) {
+        proc->addReturnValue(name, type);
+    }
+
     ns->addProcedure(proc);
 }
 
