@@ -6,100 +6,90 @@ func.func @main() {
   %4 = nl.collect_buffer keys 1 aggregates [min]
   %5 = nl.constant("")
   %6 = nl.constant("")
-  %7 = nl.constant(["ProteinDrug", "ChemicalDrug"])
+  %7 = nl.constant(["Summation", "InstanceEdit", "Species", "Disease", "Compartment", "ReferenceDatabase", "DatabaseIdentifier", "EntityFunctionalStatus", "LiteratureReference", "Publication", "UndirectedInteraction", "ReferenceGeneProduct", "SimpleEntity", "GO_MolecularFunction", "FailedReaction", "ReviewStatus", "Deleted", "DeletedInstance", "DeletedControlledVocabulary", "UpdateTracker", "Release"])
   %8 = nl.constant("")
   %9 = nl.constant("")
-  %10 = nl.constant(["", "Homo sapiens"])
-  %11 = nl.constant("")
-  %12 = nl.constant("")
-  %13 = nl.constant(["Summation", "InstanceEdit", "Species", "Disease", "Compartment", "ReferenceDatabase", "DatabaseIdentifier", "EntityFunctionalStatus", "LiteratureReference", "Publication", "UndirectedInteraction", "ReferenceGeneProduct", "SimpleEntity", "GO_MolecularFunction", "FailedReaction", "ReviewStatus", "Deleted", "DeletedInstance", "DeletedControlledVocabulary", "UpdateTracker", "Release"])
+  %10 = nl.constant(["ATP [cytosol]", "ADP [cytosol]", "AMP [cytosol]", "H2O [cytosol]", "AdoMet [cytosol]", "AdoHcy [cytosol]", "gain_of_function via non_conservative_missense_variant", "lapatinib, neratinib, afatinib, AZ5104, tesevatinib, canertinib, sapitinib, CP-724714, AEE78 [cytosol]"])
+  %11 = nl.constant(0)
+  %12 = nl.get_property_type("schemaClass")
+  %13 = nl.constant("Homo sapiens")
   %14 = nl.constant("")
   %15 = nl.constant("")
-  %16 = nl.constant(["ATP [cytosol]", "ADP [cytosol]", "AMP [cytosol]", "H2O [cytosol]", "AdoMet [cytosol]", "AdoHcy [cytosol]", "gain_of_function via non_conservative_missense_variant", "lapatinib, neratinib, afatinib, AZ5104, tesevatinib, canertinib, sapitinib, CP-724714, AEE78 [cytosol]"])
-  %17 = nl.constant(["ProteinDrug", "ChemicalDrug"])
-  %18 = nl.constant(0)
-  %19 = nl.get_property_type("schemaClass")
-  %20 = nl.constant("Homo sapiens")
-  %21 = nl.get_property_type("speciesName")
-  %22 = nl.constant("STAT1")
-  %23 = nl.constant("STAT1 [")
-  %24 = nl.get_property_type("displayName")
-  %25 = nl.scan_nodes()
-  nl.for %arg0 in %25 {
-    %28 = nl.get_node_properties(%arg0, %24)
-    %29 = nl.eq %28, %22
-    %30 = nl.starts_with %28, %23
-    %31 = nl.or %29, %30
-    %32 = nl.filter %31, (%arg0)
-    %33 = nl.get_node_properties(%32, %21)
-    %34 = nl.eq %33, %20
-    %35 = nl.filter %34, (%32)
-    %36 = nl.explore_paths(%35, {}) both hops 1 to 5 {
+  %16 = nl.constant(["", "Homo sapiens"])
+  %17 = nl.get_property_type("speciesName")
+  %18 = nl.constant("STAT1")
+  %19 = nl.constant("STAT1 [")
+  %20 = nl.get_property_type("displayName")
+  %21 = nl.scan_nodes()
+  nl.for %arg0 in %21 {
+    %24 = nl.get_node_properties(%arg0, %20)
+    %25 = nl.eq %24, %18
+    %26 = nl.starts_with %24, %19
+    %27 = nl.or %25, %26
+    %28 = nl.filter %27, (%arg0)
+    %29 = nl.get_node_properties(%28, %17)
+    %30 = nl.eq %29, %13
+    %31 = nl.filter %30, (%28)
+    %32 = nl.explore_paths(%31, {}) both hops 1 to 5 end_labels ["Drug"] {
     ^bb0(%arg1, %arg2, %arg3):
-      %37 = nl.get_node_properties(%arg1, %19)
-      %38 = nl.neq %37, %6
-      %39 = nl.broadcast_constant %5, %38
-      %40 = nl.case({%38}, {%37}, %39)
-      %41 = nl.in %40, %7
-      %42 = nl.not %41
-      %43 = nl.get_node_properties(%arg3, %21)
-      %44 = nl.neq %43, %9
-      %45 = nl.broadcast_constant %8, %44
-      %46 = nl.case({%44}, {%43}, %45)
-      %47 = nl.in %46, %10
-      %48 = nl.get_node_properties(%arg3, %19)
-      %49 = nl.neq %48, %12
-      %50 = nl.broadcast_constant %11, %49
-      %51 = nl.case({%49}, {%48}, %50)
-      %52 = nl.in %51, %13
-      %53 = nl.not %52
-      %54 = nl.get_node_properties(%arg3, %24)
-      %55 = nl.neq %54, %15
-      %56 = nl.broadcast_constant %14, %55
-      %57 = nl.case({%55}, {%54}, %56)
-      %58 = nl.in %57, %16
-      %59 = nl.not %58
-      %60 = nl.and %42, %47
-      %61 = nl.and %60, %53
-      %62 = nl.and %61, %59
-      nl.yield %62
+      %33 = nl.get_node_label_set(%arg1)
+      %34 = nl.check_label_constraint(%33, ["Drug"])
+      %35 = nl.not %34
+      %36 = nl.get_node_properties(%arg3, %17)
+      %37 = nl.neq %36, %15
+      %38 = nl.broadcast_constant %14, %37
+      %39 = nl.case({%37}, {%36}, %38)
+      %40 = nl.in %39, %16
+      %41 = nl.get_node_properties(%arg3, %12)
+      %42 = nl.neq %41, %6
+      %43 = nl.broadcast_constant %5, %42
+      %44 = nl.case({%42}, {%41}, %43)
+      %45 = nl.in %44, %7
+      %46 = nl.not %45
+      %47 = nl.get_node_properties(%arg3, %20)
+      %48 = nl.neq %47, %9
+      %49 = nl.broadcast_constant %8, %48
+      %50 = nl.case({%48}, {%47}, %49)
+      %51 = nl.in %50, %10
+      %52 = nl.not %51
+      %53 = nl.and %35, %40
+      %54 = nl.and %53, %46
+      %55 = nl.and %54, %52
+      nl.yield %55
     }
-    nl.for %arg1, %arg2, %arg3 in %36 {
-      %37 = nl.get_node_properties(%arg2, %19)
-      %38 = nl.in %37, %17
-      %39:3 = nl.filter %38, (%arg2, %arg3, %arg1)
-      %40 = nl.path_length(%39#1)
-      %41 = nl.to_nullable %40
-      %42 = nl.expand_path(%39#1, %39#2) kind nodes
-      %43 = nl.to_nullable %42
-      %44 = nl.list_comprehension(%43, {%39#0, %39#1, %39#2}) {
+    nl.for %arg1, %arg2, %arg3 in %32 {
+      %33 = nl.path_length(%arg3)
+      %34 = nl.to_nullable %33
+      %35 = nl.expand_path(%arg3, %arg1) kind nodes
+      %36 = nl.to_nullable %35
+      %37 = nl.list_comprehension(%36, {%arg2, %arg3, %arg1}) {
       ^bb0(%arg4, %arg5, %arg6, %arg7, %arg8):
-        %46 = nl.get_node_properties(%arg4, %24)
-        nl.comprehension_yield %arg5, %46
+        %39 = nl.get_node_properties(%arg4, %20)
+        nl.comprehension_yield %arg5, %39
       }
-      %45 = nl.make_list(%41, %44)
-      nl.collect_update %4, (%39#0, %45, %41)
+      %38 = nl.make_list(%34, %37)
+      nl.collect_update %4, (%arg2, %38, %34)
     }
   }
-  %26 = nl.collect(%4)
-  nl.for %arg0, %arg1, %arg2 in %26 {
-    %28 = nl.list_comprehension(%arg1, {%arg1, %arg2, %arg0}) {
+  %22 = nl.collect(%4)
+  nl.for %arg0, %arg1, %arg2 in %22 {
+    %24 = nl.list_comprehension(%arg1, {%arg1, %arg2, %arg0}) {
     ^bb0(%arg3, %arg4, %arg5, %arg6, %arg7):
-      %35 = nl.list_index %arg3, %18
-      %36 = nl.eq %35, %arg6
-      %37:2 = nl.filter %36, (%arg3, %arg4)
-      nl.comprehension_yield %37#1, %37#0
+      %31 = nl.list_index %arg3, %11
+      %32 = nl.eq %31, %arg6
+      %33:2 = nl.filter %32, (%arg3, %arg4)
+      nl.comprehension_yield %33#1, %33#0
     }
-    %29 = nl.get_node_properties(%arg0, %19)
-    %30 = nl.get_node_properties(%arg0, %24)
-    %31 = nl.get_node_properties(%arg0, %3)
-    %32 = nl.size %28
-    %33 = nl.list_index %28, %1
-    %34 = nl.list_index %33, %2
-    nl.sort_collect %0, (%29, %30, %31, %arg2, %32, %34)
+    %25 = nl.get_node_properties(%arg0, %12)
+    %26 = nl.get_node_properties(%arg0, %20)
+    %27 = nl.get_node_properties(%arg0, %3)
+    %28 = nl.size %24
+    %29 = nl.list_index %24, %1
+    %30 = nl.list_index %29, %2
+    nl.sort_collect %0, (%25, %26, %27, %arg2, %28, %30)
   }
-  %27 = nl.sort(%0)
-  nl.for %arg0, %arg1, %arg2, %arg3, %arg4, %arg5 in %27 {
+  %23 = nl.sort(%0)
+  nl.for %arg0, %arg1, %arg2, %arg3, %arg4, %arg5 in %23 {
     nl.output(%arg0, %arg1, %arg2, %arg3, %arg4, %arg5) names ["t.schemaClass", "t.displayName", "t.stId", "distance", "shortestPaths", "path"]
   }
   return
