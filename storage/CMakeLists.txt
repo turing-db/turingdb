@@ -38,6 +38,7 @@ set(storage_sources
         metadata/DateTime.cpp
         metadata/Duration.cpp
         metadata/EdgeBranchingCache.cpp
+        metadata/EdgeTypeAcyclicityCache.cpp
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp
         metadata/LabelMap.cpp

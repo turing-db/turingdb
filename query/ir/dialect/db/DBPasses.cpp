@@ -6748,16 +6748,20 @@ bool buildMergedPattern(const ::db::GraphMetadata& metadata,
     return true;
 }
 
-// P3: the pair binding one edge merges the clause's pattern into a smaller one with a cycle
-// in it, and that pattern has to embed into the graph's summary by label set and edge type
-// for the data to hold a row of it; no orientation embedding proves the pair
-bool provenBySchema(const ::db::GraphView& view, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
+// Whether every orientation the pair's directions allow merges the clause into a pattern
+// the data cannot hold, by the test given; an orientation naming a label or a type the
+// graph lacks holds nothing either
+template <typename Impossible>
+bool everyOrientationImpossible(const ::db::GraphView& view,
+                                const RowFlow& flow,
+                                const PatternEdge& subject,
+                                const PatternEdge& other,
+                                Impossible impossible) {
     const bool bothFixedHops = !subject._isPath && !other._isPath && subject._near && other._near;
     if (!bothFixedHops) {
         return false;
     }
 
-    const ::db::SchemaGraph& schema = view.schemaGraph();
     const ::db::GraphMetadata& metadata = view.metadata();
 
     llvm::SmallVector<EdgeEnds, 2> subjectEnds;
@@ -6769,13 +6773,140 @@ bool provenBySchema(const ::db::GraphView& view, const RowFlow& flow, const Patt
         for (const EdgeEnds& second : otherEnds) {
             ::db::SchemaPattern pattern;
             const bool satisfiable = buildMergedPattern(metadata, flow, subject, other, first, second, pattern);
-            if (satisfiable && schema.embeds(pattern, metadata.labelsets())) {
+            if (satisfiable && !impossible(pattern)) {
                 return false;
             }
         }
     }
 
     return true;
+}
+
+// P3: the pair binding one edge merges the clause's pattern into a smaller one with a cycle
+// in it, and that pattern has to embed into the graph's summary by label set and edge type
+// for the data to hold a row of it; no orientation embedding proves the pair
+bool provenBySchema(const ::db::GraphView& view, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
+    const ::db::SchemaGraph& schema = view.schemaGraph();
+    const ::db::LabelSetMap& labelSets = view.metadata().labelsets();
+
+    return everyOrientationImpossible(view, flow, subject, other, [&schema, &labelSets](const ::db::SchemaPattern& pattern) {
+        return !schema.embeds(pattern, labelSets);
+    });
+}
+
+constexpr size_t cycleSearchStepBudget = 10000;
+
+// The directed cycles of a merged pattern, by a depth-first search from each node over the
+// nodes after it, carrying the types the way's edges may hold. An undirected edge runs
+// either way and is left out; an edge of any type widens the set to every type of the
+// graph. A search that outgrows its budget finds nothing.
+class PatternCycleSearch {
+public:
+    PatternCycleSearch(const ::db::GraphView& view, const ::db::SchemaPattern& pattern)
+        : _view(view),
+        _pattern(pattern)
+    {
+        _onWay.resize(pattern._nodes.size(), false);
+    }
+
+    // Whether some cycle runs over types the view's parts hold no cycle of
+    bool findsOneTheDataLacks() {
+        for (size_t start = 0; start < _pattern._nodes.size(); start++) {
+            _start = start;
+            if (extend(start)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+private:
+    const ::db::GraphView& _view;
+    const ::db::SchemaPattern& _pattern;
+    std::vector<bool> _onWay;
+    std::vector<::db::EdgeTypeID> _wayTypes;
+    size_t _anyTypeEdgesOnWay {0};
+    size_t _start {0};
+    size_t _steps {0};
+
+    void take(const ::db::SchemaPattern::Edge& edge) {
+        if (edge._types.empty()) {
+            _anyTypeEdgesOnWay++;
+        }
+
+        _wayTypes.insert(_wayTypes.end(), edge._types.begin(), edge._types.end());
+    }
+
+    void drop(const ::db::SchemaPattern::Edge& edge) {
+        if (edge._types.empty()) {
+            _anyTypeEdgesOnWay--;
+        }
+
+        _wayTypes.resize(_wayTypes.size() - edge._types.size());
+    }
+
+    bool closesOverAcyclicTypes() const {
+        if (_anyTypeEdgesOnWay == 0) {
+            return _view.isAcyclicOver(_wayTypes);
+        }
+
+        std::vector<::db::EdgeTypeID> everyType;
+        for (const ::db::EdgeTypeMap::Pair& pair : _view.metadata().edgeTypes()) {
+            everyType.push_back(pair._id);
+        }
+
+        return _view.isAcyclicOver(everyType);
+    }
+
+    bool extend(size_t node) {
+        _onWay[node] = true;
+
+        bool found = false;
+        for (const ::db::SchemaPattern::Edge& edge : _pattern._edges) {
+            const bool leavesNode = !edge._undirected && edge._source == node;
+            if (!leavesNode) {
+                continue;
+            } else if (++_steps > cycleSearchStepBudget) {
+                break;
+            }
+
+            take(edge);
+            if (edge._target == _start) {
+                found = closesOverAcyclicTypes();
+            } else if (edge._target > _start && !_onWay[edge._target]) {
+                found = extend(edge._target);
+            }
+            drop(edge);
+
+            if (found) {
+                break;
+            }
+        }
+
+        _onWay[node] = false;
+
+        return found;
+    }
+};
+
+// P4: the pair binding one edge can close the clause's pattern into a directed cycle, and
+// a cycle whose edges all carry types the parts hold no cycle of is a row the data cannot
+// hold; every orientation closing such a cycle proves the pair. An orientation the summary
+// rules out needs no sort, so only the ones it leaves open are searched.
+bool provenByAcyclicity(const ::db::GraphView& view, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
+    const ::db::SchemaGraph& schema = view.schemaGraph();
+    const ::db::LabelSetMap& labelSets = view.metadata().labelsets();
+
+    return everyOrientationImpossible(view, flow, subject, other, [&view, &schema, &labelSets](const ::db::SchemaPattern& pattern) {
+        if (!schema.embeds(pattern, labelSets)) {
+            return true;
+        }
+
+        PatternCycleSearch cycles(view, pattern);
+
+        return cycles.findsOneTheDataLacks();
+    });
 }
 
 // The check and the filter cutting the rows on it, the shape codegen leaves after a hop
@@ -6803,11 +6934,11 @@ llvm::StringRef pairName(ArrayAttr names, size_t index) {
     return cast<StringAttr>(names[index]).getValue();
 }
 
-// What the proofs may read of the graph: its label sets, and its summary when every edge
-// the query will see is in the parts
+// What the proofs may read of the graph: its label sets, and its parts' edges through the
+// summary and the sort by type, when every edge the query will see is in the parts
 struct ProofSources {
     const ::db::GraphView* _labels {nullptr};
-    const ::db::GraphView* _schema {nullptr};
+    const ::db::GraphView* _parts {nullptr};
 };
 
 llvm::StringRef proveDistinct(const ProofSources& sources, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
@@ -6815,8 +6946,10 @@ llvm::StringRef proveDistinct(const ProofSources& sources, const RowFlow& flow, 
         return "proven by types";
     } else if (sources._labels && provenByLabels(*sources._labels, subject, other)) {
         return "proven by labels";
-    } else if (sources._schema && provenBySchema(*sources._schema, flow, subject, other)) {
+    } else if (sources._parts && provenBySchema(*sources._parts, flow, subject, other)) {
         return "proven by schema";
+    } else if (sources._parts && provenByAcyclicity(*sources._parts, flow, subject, other)) {
+        return "proven by acyclicity";
     }
 
     return "kept";
@@ -6906,7 +7039,7 @@ struct ProveDistinctEdges : public impl::ProveDistinctEdgesBase<ProveDistinctEdg
         const DBPassContext& context = *_context;
         ProofSources sources;
         sources._labels = writesTheGraph(root) ? nullptr : context._view;
-        sources._schema = context._hasPendingWrites ? nullptr : sources._labels;
+        sources._parts = context._hasPendingWrites ? nullptr : sources._labels;
 
         llvm::SmallVector<DistinctnessFilter> matches;
         root->walk([&matches](FilterOp filter) {
