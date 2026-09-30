@@ -526,17 +526,60 @@ A directed walk of an acyclic type leaving the fixed hop's target can never take
 hop's edge, and the rule needs the walk's direction and start beside the hop's ends,
 which `PatternEdge` does not carry for a path.
 
+The undirected hop writer stopped scanning its runs on 2026-09-30. `GetEdgesChunkWriter`
+classifies a row's excluded edges once, on the node's first run. An edge is in the node's
+out-run when its offset in the part's out-edges falls in the node's out-range. It is in the
+node's in-run when its out-record's target is the node, or, if it is in the out-run, when
+it is a self-loop, which `EdgeContainer` lists per part. A hop that writes only indices
+drops that many rows from the run. A hop that writes columns copies the run in plain
+segments around the excluded edges, found by arithmetic on an out-run and by a scan on an
+in-run. The six other hop writers still call `ExcludedEdges::pruneRun`. Measured before and
+after, same machine, two fresh shells each, minimum over the shells; the control is the
+split-clause form:
+
+    query                                                       rows      before      after    control
+    three precedingEvent hops from every Reaction              91,706    13.9 ms    13.5 ms    12.8 ms
+    shared_input                                              198,362     182 ms     182 ms     153 ms
+    (tlp)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r:ReactionLikeEvent)
+                                                                6,371    1.39 ms    1.37 ms    1.37 ms
+    hub, one hop then a {1,3} walk                                  4    1.31 ms    1.27 ms    1.26 ms
+    (p:Pathway)-[:hasEvent]->(r:Reaction)-[:precedingEvent]->(r2)
+                                                               68,370    11.6 ms    11.7 ms    11.5 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)             121,323    13.1 ms    13.2 ms    13.0 ms
+    (p:TopLevelPathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)
+                                                               28,799    2.71 ms    2.67 ms    2.68 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)
+                                                              112,689    22.6 ms    22.5 ms    22.5 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)-[:hasEvent]->(d)
+                                                               85,898    31.2 ms    31.2 ms    31.2 ms
+    (x:Complex)-[:hasComponent]->(a)-[:hasComponent]->(b)-[:hasComponent]->(c)
+                                                              149,061    26.0 ms    26.3 ms    26.0 ms
+    (p:TopLevelPathway)-->(a)-->(b)-->(c)                     194,209    3.11 ms    3.05 ms    2.18 ms
+    (p:TopLevelPathway)--(b)--(c)             count(*)    125,684,994     185 ms    64.0 ms    57.3 ms
+    (p:TopLevelPathway)--(b)--(c)             count(c)    125,684,994     273 ms     169 ms     151 ms
+    (p:TopLevelPathway)--(b)--(c)--(d)        count(*)  2,421,500,620    21.97 s     6.93 s     5.87 s
+    (p:TopLevelPathway)--(b)--(c)--(d)        count(d)  2,421,500,620    24.96 s    18.57 s    15.18 s
+
+Only the undirected walks moved. Writing indices only, the two-hop walk runs as its
+control; writing a column, both walks still scan the in-run that holds the excluded edge.
+The directed untyped chain pays 0.9 ms in `GetOutEdgesChunkWriter`, which still scans, and
+`shared_input` pays its filter after the hash join. Timings of one query vary by up to 2x
+between shell processes and stay within 1 ms inside one, so each query and its control
+were run alternately in the same shells.
+
 ## Owed (2026-09-30)
 
 Steps 1 to 5 are done. What the status above leaves open, by where it shows:
 
-1. **The in-edge order.** Sort a node's in-edges by target then edge ID at build time, so
-   the backtrack among them is a binary search rather than a scan of every record. The
-   undirected walks pay that scan today: 188 ms against a 60 ms control for two hops,
-   22.2 s against 6.5 s for three. It changes what `edges-in` holds on disk and needs a
-   raise of `UP_TO_DATE_VERSION`, which is the decision to take first. (step 2)
+1. **The in-edge order.** The undirected writer finds an excluded edge in an in-run by a
+   scan, and the six other hop writers still scan every in-run. Sort a node's in-edges by
+   target then edge ID at build time, so both are a binary search. The undirected walks
+   that write a column pay the scan: 169 ms against a 151 ms control for two hops, 18.6 s
+   against 15.2 s for three. It changes what `edges-in` holds on disk and needs a raise of
+   `UP_TO_DATE_VERSION`, which is the decision to take first. Before it, the six writers
+   can take the undirected writer's out-range and self-loop classification. (step 2)
 2. **Pruning inside the cross product and the hash join.** The check stays a filter after
-   the product; `shared_input` pays 185 ms against 152 ms for it. `FuzzHangTest` reads
+   the product; `shared_input` pays 182 ms against 153 ms for it. `FuzzHangTest` reads
    12,697,896,960 rows in 150 s for the same reason, and checking each pair at the innermost
    product that carries both sides would cut that to 9,072 rows once the cascade orders the
    edge islands innermost. (steps 1 and 6)
