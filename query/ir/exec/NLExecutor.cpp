@@ -24,10 +24,12 @@
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
 #include "iterators/GetInEdgesByLabelIterator.h"
+#include "iterators/GetInEdgesByTypeAndLabelIterator.h"
 #include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetOutEdgesByLabelIterator.h"
+#include "iterators/GetOutEdgesByTypeAndLabelIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorator.h"
@@ -5959,6 +5961,54 @@ void NLExecutor::runGetInEdgesByLabelLoop(NLExecutionContext* context, NLFunctio
     chunkWriter.setSrcIDs(loopData->getSources());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
+    pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
+}
+
+void NLExecutor::runGetOutEdgesByTypeAndLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeByTypeAndLabelLoopData* loopData = static_cast<NLEdgeByTypeAndLabelLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    if (!loopData->isMatchable() || inputNodeIDs->empty()) {
+        return;
+    }
+
+    const std::span<const EdgeTypeID> requestedTypes = loopData->getRequestedTypes();
+    const LabelSetHandle labelset(loopData->getLabelSet());
+
+    GetOutEdgesByTypeAndLabelChunkWriter chunkWriter(*context->getView(), inputNodeIDs, requestedTypes, labelset);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
+
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
+    pendingEdges.setEdgeTypes(requestedTypes);
+    pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
+}
+
+void NLExecutor::runGetInEdgesByTypeAndLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeByTypeAndLabelLoopData* loopData = static_cast<NLEdgeByTypeAndLabelLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    if (!loopData->isMatchable() || inputNodeIDs->empty()) {
+        return;
+    }
+
+    const std::span<const EdgeTypeID> requestedTypes = loopData->getRequestedTypes();
+    const LabelSetHandle labelset(loopData->getLabelSet());
+
+    GetInEdgesByTypeAndLabelChunkWriter chunkWriter(*context->getView(), inputNodeIDs, requestedTypes, labelset);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setSrcIDs(loopData->getSources());
+
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
+    pendingEdges.setEdgeTypes(requestedTypes);
     pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());

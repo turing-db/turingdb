@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)<--(b)<-[:KNOWS_WELL]-(c:Founder) RETURN a.name, c.name ORDER BY a.name, c.name",
+  "expect": {
+    "result": "a.name,c.name\nAdam,Adam\nBio,Remy\nComputers,Adam\nCooking,Remy\nEighties,Adam\nGhosts,Adam\nRemy,Remy",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"c.name\"],\"column_types\":[\"String\",\"String\"]},\"data\":[[[\"Adam\",\"Bio\",\"Computers\",\"Cooking\",\"Eighties\",\"Ghosts\",\"Remy\"],[\"Adam\",\"Remy\",\"Adam\",\"Remy\",\"Adam\",\"Adam\",\"Remy\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "type",
+    "edges"
+  ],
+  "write-required": false
+}

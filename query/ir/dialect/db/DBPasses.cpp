@@ -154,11 +154,19 @@ bool isNodeSource(Operation* op) {
 }
 
 bool isEdgeHop(Operation* op) {
-    return isa<GetOutEdges, GetInEdges, GetEdges, GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByLabel, GetInEdgesByLabel>(op);
+    return isa<GetOutEdges,
+               GetInEdges,
+               GetEdges,
+               GetOutEdgesByType,
+               GetInEdgesByType,
+               GetOutEdgesByLabel,
+               GetInEdgesByLabel,
+               GetOutEdgesByTypeAndLabel,
+               GetInEdgesByTypeAndLabel>(op);
 }
 
 bool isReverseHop(Operation* op) {
-    return isa<GetInEdges, GetInEdgesByType, GetInEdgesByLabel>(op);
+    return isa<GetInEdges, GetInEdgesByType, GetInEdgesByLabel, GetInEdgesByTypeAndLabel>(op);
 }
 
 constexpr size_t hopFixedResultCount = 4;
@@ -1395,7 +1403,7 @@ struct TypeCheckOverRead {
 // value is matters as much as which op produced it.
 Operation* byTypeReadOf(Value column) {
     Operation* const producer = column.getDefiningOp();
-    if (!producer || !isa<ScanEdgesByType, GetOutEdgesByType, GetInEdgesByType>(producer)) {
+    if (!producer || !isa<ScanEdgesByType, GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByTypeAndLabel, GetInEdgesByTypeAndLabel>(producer)) {
         return nullptr;
     }
 
@@ -1711,7 +1719,7 @@ bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop)
 
     const Value labelledColumn = labelSet.getInputNodes();
     Operation* const hop = labelledColumn.getDefiningOp();
-    if (!hop || !isa<GetOutEdges, GetInEdges>(hop)) {
+    if (!hop || !isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType>(hop)) {
         return false;
     }
 
@@ -1776,17 +1784,47 @@ Operation* createByLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& b
     return byLabelHop.getOperation();
 }
 
+template <typename ByTypeAndLabelOp>
+Operation* createByTypeAndLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& builder) {
+    const Operation::result_range results = hop->getResults();
+    const ArrayAttr edgeTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
+
+    ByTypeAndLabelOp byTypeAndLabelHop = builder.create<ByTypeAndLabelOp>(hop->getLoc(),
+                                                                          results[0].getType(),
+                                                                          results[1].getType(),
+                                                                          results[2].getType(),
+                                                                          results[3].getType(),
+                                                                          results.drop_front(hopFixedResultCount).getTypes(),
+                                                                          hop->getOperand(0),
+                                                                          edgeTypes,
+                                                                          labels,
+                                                                          hop->getOperands().drop_front());
+
+    return byTypeAndLabelHop.getOperation();
+}
+
+Operation* createEndpointLabelledHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& builder) {
+    if (isa<GetOutEdges>(hop)) {
+        return createByLabelHop<GetOutEdgesByLabel>(hop, labels, builder);
+    } else if (isa<GetInEdges>(hop)) {
+        return createByLabelHop<GetInEdgesByLabel>(hop, labels, builder);
+    } else if (isa<GetOutEdgesByType>(hop)) {
+        return createByTypeAndLabelHop<GetOutEdgesByTypeAndLabel>(hop, labels, builder);
+    } else {
+        return createByTypeAndLabelHop<GetInEdgesByTypeAndLabel>(hop, labels, builder);
+    }
+}
+
 void fuseEdgesByEndpointLabel(FilterOp filter, const EndpointLabelledHop& labelledHop, mlir::OpBuilder& builder) {
     Operation* const hop = labelledHop._hop;
 
     builder.setInsertionPoint(hop);
 
     // A by-label hop declares the same four fixed results and the same carry set behind
-    // them, so the plain hop's results map onto it one for one. Which of the two it becomes
-    // is the hop the query wrote: an out-hop reaches its target, an in-hop its source.
-    Operation* const byLabelHop = isReverseHop(hop)
-                                      ? createByLabelHop<GetInEdgesByLabel>(hop, labelledHop._labels, builder)
-                                      : createByLabelHop<GetOutEdgesByLabel>(hop, labelledHop._labels, builder);
+    // them, so the plain hop's results map onto it one for one. Which one it becomes is the
+    // hop the query wrote: an out-hop reaches its target, an in-hop its source, and a by-type
+    // hop keeps its types.
+    Operation* const byLabelHop = createEndpointLabelledHop(hop, labelledHop._labels, builder);
 
     hop->replaceAllUsesWith(byLabelHop);
 
@@ -3944,13 +3982,20 @@ std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::Ca
         return RowMultiplier {uncountableRows, 1};
     }
 
-    const bool walksOneDirection = isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByLabel, GetInEdgesByLabel>(op);
+    const bool walksOneDirection = isa<GetOutEdges,
+                                       GetInEdges,
+                                       GetOutEdgesByType,
+                                       GetInEdgesByType,
+                                       GetOutEdgesByLabel,
+                                       GetInEdgesByLabel,
+                                       GetOutEdgesByTypeAndLabel,
+                                       GetInEdgesByTypeAndLabel>(op);
     const bool walksBoth = isa<GetEdges>(op);
     if (!walksOneDirection && !walksBoth) {
         return std::nullopt;
     }
 
-    const bool isByTypeHop = isa<GetOutEdgesByType, GetInEdgesByType>(op);
+    const bool isByTypeHop = isa<GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByTypeAndLabel, GetInEdgesByTypeAndLabel>(op);
     const bool walksNoEdge = isByTypeHop && op->getAttrOfType<ArrayAttr>("edge_types").empty();
     if (walksNoEdge) {
         return RowMultiplier {0, 1};

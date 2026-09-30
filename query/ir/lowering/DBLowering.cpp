@@ -826,6 +826,8 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::GetInEdgesByType,
                      mlir::db::GetOutEdgesByLabel,
                      mlir::db::GetInEdgesByLabel,
+                     mlir::db::GetOutEdgesByTypeAndLabel,
+                     mlir::db::GetInEdgesByTypeAndLabel,
                      mlir::db::ExplorePaths,
                      mlir::db::CallProcedure>(operation);
 }
@@ -1141,6 +1143,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetOutEdgesByLabel(getOutEdgesByLabel);
     } else if (mlir::db::GetInEdgesByLabel getInEdgesByLabel = mlir::dyn_cast<mlir::db::GetInEdgesByLabel>(operation)) {
         lowerGetInEdgesByLabel(getInEdgesByLabel);
+    } else if (mlir::db::GetOutEdgesByTypeAndLabel getOutEdgesByTypeAndLabel = mlir::dyn_cast<mlir::db::GetOutEdgesByTypeAndLabel>(operation)) {
+        lowerGetOutEdgesByTypeAndLabel(getOutEdgesByTypeAndLabel);
+    } else if (mlir::db::GetInEdgesByTypeAndLabel getInEdgesByTypeAndLabel = mlir::dyn_cast<mlir::db::GetInEdgesByTypeAndLabel>(operation)) {
+        lowerGetInEdgesByTypeAndLabel(getInEdgesByTypeAndLabel);
     } else if (mlir::db::ExplorePaths explorePaths = mlir::dyn_cast<mlir::db::ExplorePaths>(operation)) {
         lowerExplorePaths(explorePaths);
     } else if (mlir::db::ExpandPath expandPath = mlir::dyn_cast<mlir::db::ExpandPath>(operation)) {
@@ -2192,6 +2198,44 @@ void DBLowering::lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesBy
                                                                          getInEdgesByLabel.getLabelsAttr(),
                                                                          carriedChunks);
     buildLoopForSource(edges.getResult(), getInEdgesByLabel.getOperation());
+}
+
+void DBLowering::lowerGetOutEdgesByTypeAndLabel(mlir::db::GetOutEdgesByTypeAndLabel getOutEdgesByTypeAndLabel) {
+    const mlir::Value inputChunk = mapValue(getOutEdgesByTypeAndLabel.getInputNodes());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeSetHandle(getOutEdgesByTypeAndLabel.getEdgeTypes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getOutEdgesByTypeAndLabel.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    nl::GetOutEdgesByTypeAndLabel edges = _builder.create<nl::GetOutEdgesByTypeAndLabel>(_builder.getUnknownLoc(),
+                                                                                         inputChunk,
+                                                                                         edgeTypeHandle,
+                                                                                         getOutEdgesByTypeAndLabel.getLabelsAttr(),
+                                                                                         carriedChunks);
+    buildLoopForSource(edges.getResult(), getOutEdgesByTypeAndLabel.getOperation());
+}
+
+void DBLowering::lowerGetInEdgesByTypeAndLabel(mlir::db::GetInEdgesByTypeAndLabel getInEdgesByTypeAndLabel) {
+    const mlir::Value inputChunk = mapValue(getInEdgesByTypeAndLabel.getInputNodes());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeSetHandle(getInEdgesByTypeAndLabel.getEdgeTypes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getInEdgesByTypeAndLabel.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    nl::GetInEdgesByTypeAndLabel edges = _builder.create<nl::GetInEdgesByTypeAndLabel>(_builder.getUnknownLoc(),
+                                                                                       inputChunk,
+                                                                                       edgeTypeHandle,
+                                                                                       getInEdgesByTypeAndLabel.getLabelsAttr(),
+                                                                                       carriedChunks);
+    buildLoopForSource(edges.getResult(), getInEdgesByTypeAndLabel.getOperation());
 }
 
 void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties) {

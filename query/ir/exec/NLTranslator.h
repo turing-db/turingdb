@@ -56,6 +56,8 @@ private:
         GetInEdgesByType,
         GetOutEdgesByLabel,
         GetInEdgesByLabel,
+        GetOutEdgesByTypeAndLabel,
+        GetInEdgesByTypeAndLabel,
         ExplorePaths,
         Sort,
         GroupAggregate,
@@ -416,6 +418,9 @@ private:
     // and label list the same way.
     template <typename HopOp>
     void bindGetEdgesByLabel(HopOp hop, IteratorKind kind);
+
+    template <typename HopOp>
+    void bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind);
 
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,

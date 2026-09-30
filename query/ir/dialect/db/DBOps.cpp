@@ -721,6 +721,18 @@ void GetInEdgesByLabel::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     }
 }
 
+void GetOutEdgesByTypeAndLabel::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
+void GetInEdgesByTypeAndLabel::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
 // Builds the op from just the result types - the left factor's yielded columns
 // followed by the right factor's - and creates the two empty factor blocks. The
 // caller fills each region and terminates it with a db.yield whose operands
@@ -1099,6 +1111,22 @@ LogicalResult GetOutEdgesByLabel::verify() {
 }
 
 LogicalResult GetInEdgesByLabel::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
+LogicalResult GetOutEdgesByTypeAndLabel::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
+LogicalResult GetInEdgesByTypeAndLabel::verify() {
     if (getLabels().empty()) {
         return emitOpError("requires at least one label");
     }

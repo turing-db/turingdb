@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)-->(b)-[:INTERESTED_IN]->(c:Exotic) RETURN a.name, b.name, c.name ORDER BY a.name, b.name, c.name",
+  "expect": {
+    "result": "a.name,b.name,c.name\nAdam,Remy,Eighties\nAdam,Remy,Ghosts\nGhosts,Remy,Eighties\nGhosts,Remy,Ghosts",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"b.name\",\"c.name\"],\"column_types\":[\"String\",\"String\",\"String\"]},\"data\":[[[\"Adam\",\"Adam\",\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\",\"Remy\",\"Remy\"],[\"Eighties\",\"Ghosts\",\"Eighties\",\"Ghosts\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "type",
+    "edges"
+  ],
+  "write-required": false
+}

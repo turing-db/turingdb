@@ -800,6 +800,54 @@ def GetInEdgesByLabel : NLOp<"get_in_edges_by_label", [Pure, InferTypeOpAdaptor]
 }
 
 /**
+* GetOutEdgesByTypeAndLabel
+*/
+def GetOutEdgesByTypeAndLabel : NLOp<"get_out_edges_by_type_and_label", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the out-edges of the given types of a chunk of nodes arriving at the nodes carrying every given label";
+  let description = [{
+    Imperative counterpart of db.get_out_edges_by_type_and_label. It fills the same
+    chunks as nl.get_out_edges but keeps only the out-edges carrying one of
+    `edge_types` whose target's label set is a superset of `labels`:
+
+      %knows = nl.get_edge_type_set(["KNOWS"])
+      %edges = nl.get_out_edges_by_type_and_label(%a, %knows, ["Person"], {})
+
+    `edge_types` is the nl.get_edge_type_set handle nl.get_out_edges_by_type takes, and
+    `labels` the name list nl.get_out_edges_by_label takes. A set of types nothing
+    resolved into, or a label absent from the schema, yields no chunk.
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
+/**
+* GetInEdgesByTypeAndLabel
+*/
+def GetInEdgesByTypeAndLabel : NLOp<"get_in_edges_by_type_and_label", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the in-edges of the given types of a chunk of nodes leaving the nodes carrying every given label";
+  let description = [{
+    The reverse-direction sibling of nl.get_out_edges_by_type_and_label: it keeps only
+    the in-edges carrying one of `edge_types` whose source's label set is a superset of
+    `labels`. The chunks carry the edge as the graph stores it, as under
+    nl.get_in_edges.
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
+/**
 * NodeSetBuffer
 */
 def NodeSetBuffer : NLOp<"node_set_buffer", []> {

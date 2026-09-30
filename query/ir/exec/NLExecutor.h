@@ -94,6 +94,9 @@ public:
     static void runGetOutEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runGetOutEdgesByTypeAndLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runGetInEdgesByTypeAndLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+
     // The variable-length hop: drive a PathExplorator over the input chunk the way the
     // edge loops drive their chunk writers, the hop predicate - when the loop has one -
     // evaluated over each frame of candidates through the loop data's hop statements.

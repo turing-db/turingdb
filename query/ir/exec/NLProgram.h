@@ -1213,6 +1213,36 @@ private:
     bool _matchable {true};
 };
 
+// nl.get_out_edges_by_type_and_label / nl.get_in_edges_by_type_and_label loop data: the
+// requested types of NLEdgeByTypeLoopData and the label set of NLEdgeByLabelLoopData
+// together. The loop emits no row when no type resolved or a label is absent.
+class NLEdgeByTypeAndLabelLoopData : public NLEdgeLoopData {
+public:
+    NLEdgeByTypeAndLabelLoopData(const ColumnNodeIDs* input,
+                                 ColumnNodeIDs* sources,
+                                 ColumnEdgeIDs* edgeIDs,
+                                 ColumnEdgeTypes* edgeTypes,
+                                 ColumnNodeIDs* targets,
+                                 std::span<const EdgeTypeID> requestedTypes,
+                                 const LabelSet& labelset,
+                                 bool labelsMatchable)
+        : NLEdgeLoopData(input, sources, edgeIDs, edgeTypes, targets),
+        _requestedTypes(requestedTypes.begin(), requestedTypes.end()),
+        _labelset(labelset),
+        _labelsMatchable(labelsMatchable)
+    {
+    }
+
+    std::span<const EdgeTypeID> getRequestedTypes() const { return _requestedTypes; }
+    const LabelSet& getLabelSet() const { return _labelset; }
+    bool isMatchable() const { return _labelsMatchable && !_requestedTypes.empty(); }
+
+private:
+    std::vector<EdgeTypeID> _requestedTypes;
+    LabelSet _labelset;
+    bool _labelsMatchable {true};
+};
+
 // nl.get_node_properties / nl.get_edge_properties data: a with-null property
 // read that maps the input ID column to a nullable value column, one value per
 // input row (missing values are null, no row dropped). The node-vs-edge ID type
