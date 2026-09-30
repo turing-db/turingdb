@@ -14,9 +14,10 @@ using Rows = std::vector<StringRowSink::Row>;
 
 // The pairs of a clause the pattern proves distinct lose their check before any pass fuses
 // the hops: two edges typed apart are two edges, so are two whose coincidence needs a node
-// no label set of the graph allows, and so are two whose coincidence closes the pattern
-// into a cycle no arc of the graph's schema closes. The rows are the same with the check
-// and without, which the split-clause form, out of the rule's reach, pins.
+// no label set of the graph allows, two whose coincidence closes the pattern into a cycle
+// no arc of the graph's schema closes, and two whose coincidence closes it into a directed
+// cycle over types the data holds no cycle of. The rows are the same with the check and
+// without, which the split-clause form, out of the rule's reach, pins.
 class ProveDistinctEdgesTest : public CallV3Test {
 protected:
     void explain(std::string_view query, std::string& pairs, std::string& program) {
@@ -59,6 +60,15 @@ protected:
         StringRowSink sink;
         runQuery(query, sink);
         EXPECT_EQ(sink.getRows(), (Rows {{std::string(count)}})) << query;
+    }
+
+    // Luc reports to Suhas, Suhas to Cyrus and Cyrus to Nour, four engineers of one label
+    // set, and Cyrus mentors Luc: neither type closes a cycle on its own, the two together
+    // close one
+    void addReportingLines() {
+        runWrite("CREATE (n:Person:SoftwareEngineering {name: 'Nour'})");
+        runWrite("MATCH (luc {name: 'Luc'}), (suhas {name: 'Suhas'}), (cyrus {name: 'Cyrus'}), (nour {name: 'Nour'}) "
+                 "CREATE (luc)-[:REPORTS_TO]->(suhas), (suhas)-[:REPORTS_TO]->(cyrus), (cyrus)-[:REPORTS_TO]->(nour), (cyrus)-[:MENTORS]->(luc)");
     }
 
     static bool contains(std::string_view text, std::string_view part) {
@@ -258,4 +268,76 @@ TEST_F(ProveDistinctEdgesTest, keepsTheLabelProofOutOfAWritingQuery) {
     StringRowSink typed;
     runWrite("EXPLAIN (pairs) MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:INTERESTED_IN]->(c) SET c.seen = true", typed);
     EXPECT_EQ(typed.getRows(), (Rows {{"pairs", "e2 <> e1: proven by types\n"}}));
+}
+
+// The summary holds the arc from the engineers' label set to itself, so it cannot tell the
+// chain's ends apart; the sort of REPORTS_TO can, since no one reports to a subordinate
+TEST_F(ProveDistinctEdgesTest, provesTheEndsOfAChainOfATypeWithoutACycle) {
+    addReportingLines();
+
+    expectProven("MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:REPORTS_TO]->(d) RETURN count(*)",
+                 "e2 <> e1: proven by schema\ne3 <> e1: proven by acyclicity\ne3 <> e2: proven by schema\n",
+                 "1");
+}
+
+TEST_F(ProveDistinctEdgesTest, provesEveryPairOfALongerChainOfIt) {
+    addReportingLines();
+
+    expectProven("MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:REPORTS_TO]->(d)-[e4:REPORTS_TO]->(f) RETURN count(*)",
+                 "e2 <> e1: proven by schema\n"
+                 "e3 <> e1: proven by acyclicity\ne3 <> e2: proven by schema\n"
+                 "e4 <> e1: proven by acyclicity\ne4 <> e2: proven by acyclicity\ne4 <> e3: proven by schema\n",
+                 "0");
+}
+
+// Cyrus mentors Luc, who reports up to Cyrus: the cycle the ends of this chain would share
+// runs over both types, and the two together hold one, so the pair stays and the check
+// cuts the one row that walks Luc to Suhas twice
+TEST_F(ProveDistinctEdgesTest, keepsTheEndsOfAChainTwoAcyclicTypesCloseTogether) {
+    addReportingLines();
+
+    const std::string_view query = "MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:MENTORS]->(d)-[e4:REPORTS_TO]->(f) RETURN count(*)";
+
+    std::string pairs;
+    std::string program;
+    explain(query, pairs, program);
+
+    EXPECT_EQ(pairs, "e2 <> e1: proven by schema\n"
+                     "e3 <> e1: proven by types\ne3 <> e2: proven by types\n"
+                     "e4 <> e1: kept\ne4 <> e2: kept\ne4 <> e3: proven by types\n");
+    EXPECT_EQ(countOf(program, "distinct_from"), 1u) << program;
+
+    expectCount(query, "0");
+}
+
+// Untyped, the chain's ends can share an edge of any type, and KNOWS_WELL closes on Remy
+// and Adam
+TEST_F(ProveDistinctEdgesTest, keepsTheEndsOfAnUntypedChainSomeTypeCloses) {
+    expectKept("MATCH (a)-[e1]->(b)-[e2]->(c)-[e3]->(d) RETURN count(*)",
+               "e2 <> e1: proven by schema\ne3 <> e1: kept\ne3 <> e2: proven by schema\n",
+               "12");
+}
+
+// The edge a change has not committed is in no part, so neither the sort nor the summary
+// proves anything while the change holds it
+TEST_F(ProveDistinctEdgesTest, keepsTheAcyclicityProofOutOfAChangeWithPendingEdges) {
+    addReportingLines();
+
+    StringRowSink sink;
+    runWritesInOneChange("MATCH (nour {name: 'Nour'}), (luc {name: 'Luc'}) CREATE (nour)-[:REPORTS_TO]->(luc)",
+                         "EXPLAIN (pairs) MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:REPORTS_TO]->(d) RETURN count(*)",
+                         sink);
+
+    EXPECT_EQ(sink.getRows(), (Rows {{"pairs", "e2 <> e1: kept\ne3 <> e1: kept\ne3 <> e2: kept\n"}}));
+}
+
+// Once Nour reports to Luc the line is a ring: the sort over the new commit's parts finds
+// the cycle, the pair stays, and the four ways around the ring are the rows
+TEST_F(ProveDistinctEdgesTest, readsTheCycleACommitAdded) {
+    addReportingLines();
+    runWrite("MATCH (nour {name: 'Nour'}), (luc {name: 'Luc'}) CREATE (nour)-[:REPORTS_TO]->(luc)");
+
+    expectKept("MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:REPORTS_TO]->(d) RETURN count(*)",
+               "e2 <> e1: proven by schema\ne3 <> e1: kept\ne3 <> e2: proven by schema\n",
+               "4");
 }
