@@ -148,7 +148,7 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
     const size_t maxPayloadSize =
         std::transform_reduce(packets.begin(), packets.end(), size_t {0}, [](size_t lhs, size_t rhs) { return std::max(lhs, rhs); }, [](const FramedPacket& packet) { return packet._bytes.size() - net::proto::ProtoHeader::wireSize(); });
     net::proto::TuringProtoInBuf inBuf(maxPayloadSize);
-    net::proto::TuringSink sink(localMem, embeddingBuffer, stringBuffer, listBuffer, mapBuffer);
+    net::proto::TuringSink sink(localMem, embeddingBuffer, listBuffer, mapBuffer);
     net::proto::TuringSinkColumnContainer decodedContainer(decoded, dfMan);
     net::proto::TuringProtoDecoder<net::proto::TuringSink> decoder(&inBuf, &sink, *schemas);
     schemas->clear();
