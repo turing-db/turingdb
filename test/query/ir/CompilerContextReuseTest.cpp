@@ -95,6 +95,29 @@ TEST_F(CompilerContextReuseTest, answersLikeAFreshContextWhenRebuiltForEveryQuer
     expectRowsOfAFreshContext(&compilerContext, &_env->getMem());
 }
 
+TEST_F(CompilerContextReuseTest, rebuildsAfterACompileError) {
+    CompilerContext compilerContext;
+    QueryInterpreterV3 interpreter(&_env->getSystemManager(), &_env->getMem(), &compilerContext);
+
+    std::vector<StringRowSink::Row> rows;
+    runQuery(interpreter, "RETURN 1", rows);
+    const mlir::MLIRContext* const contextBeforeError = compilerContext.getContext();
+
+    StringRowSink sink;
+    QueryStatus status;
+    interpreter.execute(status,
+                        "MATCH (n) DELETE n.name",
+                        _graphName,
+                        CommitHash::head(),
+                        ChangeID::head(),
+                        &sink);
+    ASSERT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
+
+    runQuery(interpreter, "RETURN 1", rows);
+
+    EXPECT_NE(compilerContext.getContext(), contextBeforeError);
+}
+
 TEST_F(CompilerContextReuseTest, answersLikeAFreshContextOnEachThread) {
     std::vector<std::thread> threads;
 
