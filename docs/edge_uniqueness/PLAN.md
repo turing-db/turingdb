@@ -583,10 +583,10 @@ Steps 1 to 5 are done. What the status above leaves open, by where it shows:
    12,697,896,960 rows in 150 s for the same reason, and checking each pair at the innermost
    product that carries both sides would cut that to 9,072 rows once the cascade orders the
    edge islands innermost. (steps 1 and 6)
-3. **The benchmark table.** `samples/path_bench` has no table for the fixed-hop shapes,
-   each run with the check, with the writer prune and with the pair proven; the status
-   sections measured each step through the shell instead. The pass's own time is
-   unmeasured too, and the plan wants it in the microseconds. (step 3 and Benchmarks)
+3. **The benchmark table.** Measured on reactome against Memgraph and Neo4j on
+   2026-10-01 (Benchmarks). Still missing: the generated graph, the check, the writer
+   prune and the proof as three separate costs, and the pass's own time, which the plan
+   wants in the microseconds. (step 3 and Benchmarks)
 4. **The suite audit.** Every oracle with two or more edges in one clause is suspect, v2
    having generated them homomorphically. Step 1 moved 14 and step 5 the 10 that were
    failing; the fixtures that agree by luck have not been swept. `CascadedMergeJoinTest`,
@@ -651,3 +651,88 @@ with the pair proven, so the three costs are separate numbers:
 What to read off them: candidate checks per emitted row, rows gathered against rows
 emitted, and the proof pass's own time, which the harness times on its own and which must
 stay in the microseconds: the schema graph is tens of arcs and the pattern a dozen hops.
+
+Measured on 2026-10-01 at c7189c46c on reactome, on a 48-core machine with 251 GB, against
+Memgraph (`memgraph/memgraph:latest`, image of 2026-07-13, WAL and snapshots off) and Neo4j
+5.26.30 Community (slotted runtime, 32 GB heap). Each query is one `MATCH` clause returning
+`count(*)`. Its control is the same pattern split into one `MATCH` per hop, which the rule does
+not reach. Times are wall time at the client: HTTP for turingdb, Bolt for the other two.
+turingdb ran in three fresh server processes, each query alternating with its control after
+one warmup, 5 or 10 timed pairs per process. The table gives the median of the three
+per-process medians, and `check` the median over the processes of query over control. Memgraph
+and Neo4j ran one warmup and 5 timed runs; a query whose first run took over 20 s ran once. The
+first column is EXPLAIN's `pairs` stage:
+
+    query                                      rows   turingdb   control  check   memgraph      neo4j
+    (r:Reaction)-[:precedingEvent]->(b)-[:precedingEvent]->(c)-[:precedingEvent]->(d)
+    2 of 3 proven by schema                  91,706    13.1 ms   12.5 ms    +5%    76.7 ms     219 ms
+    (p:Pathway)-[:hasEvent]->(r:Reaction)-[:precedingEvent]->(r2)
+    proven by types                          68,370    15.9 ms   15.9 ms    -0%    64.7 ms     151 ms
+    (t:TopLevelPathway)-[:hasEvent]->(p:Pathway)-[:hasEvent]->(r:ReactionLikeEvent)
+    proven by labels                          6,371    1.31 ms   1.81 ms    -1%    3.51 ms    7.31 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)
+    proven by schema                        121,323    18.9 ms   19.3 ms    -1%    55.7 ms     175 ms
+    (p:TopLevelPathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)
+    3 of 3 proven by schema                  28,799    3.78 ms   3.69 ms    +2%    4.81 ms    20.5 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)
+    3 of 3 proven, schema and P4            112,689    22.6 ms   22.3 ms    +1%    94.5 ms     294 ms
+    (p:Pathway)-[:hasEvent]->(a)-[:hasEvent]->(b)-[:hasEvent]->(c)-[:hasEvent]->(d)
+    6 of 6 proven, schema and P4             85,898    30.1 ms   30.1 ms    +1%     126 ms     411 ms
+    (x:Complex)-[:hasComponent]->(a)-[:hasComponent]->(b)-[:hasComponent]->(c)
+    3 of 3 proven, schema and P4            149,061    27.8 ms   28.2 ms    -1%     107 ms     477 ms
+
+    (p:TopLevelPathway)-->(a)-->(b)-->(c)
+    2 of 3 proven by schema                 194,209    2.31 ms   2.55 ms   -14%    15.0 ms    45.8 ms
+    (p:TopLevelPathway)-->(b)<--(c)
+    kept                                105,791,834    66.1 ms   78.4 ms   -11%     5.06 s     7.99 s
+    (p:Pathway)--(b)--(p)
+    kept                                     11,728     527 ms    480 ms   +10%    75.7 ms     241 ms
+    (p:TopLevelPathway)--(b)--(c)
+    kept                                125,684,994    76.1 ms   76.8 ms    -1%     6.40 s     9.50 s
+    (p:TopLevelPathway)--(b)--(c)    RETURN count(c)
+    kept                                125,684,994     271 ms    220 ms   +23%     7.17 s     9.55 s
+    (p:TopLevelPathway)--(b)--(c)--(d)
+    3 of 3 kept                       2,421,500,620     8.92 s    7.52 s   +19%    169.7 s    340.0 s
+
+    (p:TopLevelPathway)-[:hasEvent]->(r), (p)-[:hasEvent]->(r2)
+    kept                                     14,678    1.58 ms   1.60 ms   +11%    4.09 ms    4.51 ms
+    (a:TopLevelPathway)-[:hasEvent]->(b), (c:TopLevelPathway)-[:hasEvent]->(d)
+    kept                                  4,262,160    4.98 ms   3.79 ms   +31%     520 ms     661 ms
+    shared_input
+    4 of 6 proven by types                  198,362     143 ms    125 ms   +15%     683 ms    169.4 s
+
+    (r:Reaction {stId: "R-HSA-2993780"})<-[:precedingEvent]-(b)<-[:precedingEvent*1..3]-(d:Reaction)
+    kept                                          4    1.71 ms   2.05 ms    +0%    0.57 ms    4.06 ms
+    (r:Reaction)-[:precedingEvent]->(b)-[:precedingEvent*1..3]->(d)
+    kept                                    297,318    28.7 ms   27.5 ms    +4%     140 ms     353 ms
+    (r:Reaction)-[:precedingEvent*1..3]->(b)-[:precedingEvent]->(d)
+    kept                                    297,318    41.1 ms   33.6 ms   +22%     170 ms     442 ms
+    (r:Reaction)-[:precedingEvent*1..2]->(b)-[:precedingEvent*1..2]->(d)
+    kept                                    389,024    46.1 ms   40.5 ms   +14%     188 ms     468 ms
+    (p:TopLevelPathway)-[:hasEvent]->(a)-[:hasEvent*1..3]->(b)
+    kept                                     80,441    7.68 ms   8.69 ms    +3%    32.1 ms    70.8 ms
+
+All three engines return the same count on all 22 queries, and on 12 of them the control
+returns more. Where every pair is proven, the query runs within 2 % of its control. Where a
+pair is kept, it costs 0 to 31 %: 31 % for the cross product, 19 and 23 % for the undirected
+walks that read a column, 22 % for a walk then a hop. The checks of the queries under 5 ms are
+noise: those switch between about 2.1 and 3.5 ms from one run to the next. The machine also
+drifted over the hour of the run: `(p:Pathway)-[:hasEvent]->(r:Reaction)-[:precedingEvent]->(r2)`
+ran 22, 10 and 16 ms in the three processes, and its control moved with it.
+
+turingdb is faster than Memgraph on 20 of the 22 queries, by 1.3x to 104x, and faster than
+Neo4j on 21, by 2.4x to 1,185x. Memgraph is faster on two. `(p:Pathway)--(b)--(p)` runs in
+527 ms against 76 ms; its control is as slow, 480 ms, and its plan starts from
+`db.scan_nodes()` over all 2,978,202 nodes. The hub hop then walk returns 4 rows in 1.71 ms
+against 0.57 ms. Neo4j's 169 s on `shared_input` is its plan: from each input entity it
+expands back to every reaction that uses it, a step the planner estimates at 87,684 rows and
+that hub inputs such as ATP make far larger.
+
+The first query of a commit builds what the proofs read. In a fresh server, the first run of
+the three-hop `precedingEvent` chain, the first query after the load, took 342 ms against
+13.1 ms warm. The first runs that sort `hasEvent` and `hasComponent` took 171 and 130 ms, and
+the untyped directed chain, which sorts every type, took 313 ms against 2.31 ms.
+
+Still not measured: the generated graph, the check, the writer prune and the proof as three
+separate costs, which needs builds with the prune and the pass turned off, and the pass's own
+time.
