@@ -17,11 +17,13 @@ the same data set.
 
 ```bash
 ./fetch_data.sh                       # clone the LDBC test data, convert it to data/ldbc.jsonl
-mkdir -p /tmp/ldbc/data && cp data/ldbc.jsonl /tmp/ldbc/data/
-echo 'LOAD JSONL "ldbc.jsonl" AS ldbc WITH DATETIMES ["birthday", "creationDate", "joinDate"]' \
-    | turingdb -turing-dir /tmp/ldbc
+./load_data.sh /tmp/ldbc              # load it as the graph ldbc, replacing an earlier load
 ./run_ldbc.py --turing-dir /tmp/ldbc --repeat 5
 ```
+
+Both `load_data.sh` and `run_ldbc.py` run `build/tools/turingdb/turingdb`, not the
+`turingdb` on the `PATH`. `load_data.sh` refuses a `data/ldbc.jsonl` older than
+`ldbc_to_jsonl.py`. Rerun `./fetch_data.sh` after the converter changes.
 
 ## The data set
 
