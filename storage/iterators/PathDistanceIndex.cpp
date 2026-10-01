@@ -46,10 +46,6 @@ constexpr size_t endSampleTarget = 256;
 // visits every node once, in an order unrelated to the one they were reached in
 constexpr size_t scatterStride = 2654435761;
 
-// Fewer than the fan-out sample takes: every node of this one costs an evaluation of the
-// query's hop predicate rather than a count of its adjacency
-constexpr size_t hopSampleTarget = 1024;
-
 void appendMatching(std::span<const EdgeRecord> edges,
                     std::span<const EdgeTypeID> edgeTypes,
                     std::vector<NodeID>& candidateNodes,
@@ -62,22 +58,6 @@ void appendMatching(std::span<const EdgeRecord> edges,
         candidateNodes.push_back(record._otherID);
         candidateEdges.push_back(record._edgeID);
     }
-}
-
-size_t appendMatchingNodes(std::span<const EdgeRecord> edges,
-                           std::span<const EdgeTypeID> edgeTypes,
-                           std::vector<NodeID>& nodes) {
-    size_t appended = 0;
-    for (const EdgeRecord& record : edges) {
-        if (!edgeTypes.empty() && !edgeTypeMatches(edgeTypes, record._edgeTypeID)) {
-            continue;
-        }
-
-        nodes.push_back(record._otherID);
-        appended++;
-    }
-
-    return appended;
 }
 
 double nodeTouch(const PartDirectory& parts, NodeID node, bool walksIns, bool walksOuts) {
@@ -456,7 +436,8 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
                                             PathExplorationDir direction,
                                             std::span<const EdgeTypeID> edgeTypes,
                                             std::span<const NodeID> seeds,
-                                            SeedExpansion& expansion) {
+                                            SeedExpansion& expansion,
+                                            PathHopFilter* hopFilter) {
     expansion = SeedExpansion {};
 
     if (seeds.empty() || parts.getAllocatedNodeCount() == 0) {
@@ -469,18 +450,25 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
     const size_t stride = std::max<size_t>(1, seeds.size() / seedSampleTarget);
 
     std::vector<NodeID> frontier;
+    std::vector<size_t> frontierRows;
     for (size_t seed = 0; seed < seeds.size(); seed += stride) {
         frontier.push_back(seeds[seed]);
+        frontierRows.push_back(seed);
     }
 
-    double frontierPerSeed = 1.0;
+    double survivorsPerSeed = 1.0;
 
     std::vector<NodeID> next;
+    std::vector<size_t> nextRows;
+    std::vector<NodeID> candidateNodes;
+    std::vector<EdgeID> candidateEdges;
     for (size_t level = 0; level < seedSampleLevels && !frontier.empty(); level++) {
         next.clear();
+        nextRows.clear();
 
         double arrivals = 0.0;
-        double continuations = 0.0;
+        double offered = 0.0;
+        double kept = 0.0;
 
         // A level lists its nodes parent by parent, so the part the budget lets through has to
         // be taken across the whole frontier, not from its front: its first parents need not
@@ -491,7 +479,8 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
                 break;
             }
 
-            const NodeID node = frontier[(visit * scatterStride) % frontierSize];
+            const size_t position = (visit * scatterStride) % frontierSize;
+            const NodeID node = frontier[position];
             const size_t owner = parts.ownerIndex(node);
             if (owner == parts.size()) {
                 continue;
@@ -499,42 +488,60 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
 
             const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
 
-            size_t continuing = 0;
+            candidateNodes.clear();
+            candidateEdges.clear();
             if (walksOuts) {
-                continuing += appendMatchingNodes(ownerIndexer.getNodeOutEdges(node), edgeTypes, next);
+                appendMatching(ownerIndexer.getNodeOutEdges(node), edgeTypes, candidateNodes, candidateEdges);
             }
             if (walksIns) {
-                continuing += appendMatchingNodes(ownerIndexer.getNodeInEdges(node), edgeTypes, next);
+                appendMatching(ownerIndexer.getNodeInEdges(node), edgeTypes, candidateNodes, candidateEdges);
             }
 
             for (const size_t patchIndex : parts.patchPartsAfter(owner)) {
                 const EdgeIndexer& patchIndexer = *parts.get(patchIndex)._indexer;
                 if (walksOuts) {
-                    continuing += appendMatchingNodes(patchIndexer.getNodeOutEdges(node), edgeTypes, next);
+                    appendMatching(patchIndexer.getNodeOutEdges(node), edgeTypes, candidateNodes, candidateEdges);
                 }
                 if (walksIns) {
-                    continuing += appendMatchingNodes(patchIndexer.getNodeInEdges(node), edgeTypes, next);
+                    appendMatching(patchIndexer.getNodeInEdges(node), edgeTypes, candidateNodes, candidateEdges);
                 }
             }
 
+            const size_t row = frontierRows[position];
+            const size_t candidateCount = candidateNodes.size();
+            size_t survivorCount = candidateCount;
+            if (hopFilter && candidateCount > 0) {
+                survivorCount = hopFilter->filter(row, node, candidateNodes, candidateEdges);
+            }
+
+            next.insert(next.end(), candidateNodes.begin(), candidateNodes.begin() + survivorCount);
+            nextRows.insert(nextRows.end(), survivorCount, row);
+
             arrivals += 1.0;
-            continuations += static_cast<double>(continuing);
+            offered += static_cast<double>(candidateCount);
+            kept += static_cast<double>(survivorCount);
         }
 
         if (arrivals == 0.0) {
             break;
         }
 
-        // A level's ratio is measured over the nodes of it the budget let through, so a
+        // A level's ratios are measured over the nodes of it the budget let through, so a
         // truncated level still reports what the frontier it sampled branched by
-        const double levelFanOut = continuations / arrivals;
+        const double levelFanOut = offered / arrivals;
+        const double checksPerSeed = survivorsPerSeed * levelFanOut;
 
-        frontierPerSeed = frontierPerSeed * levelFanOut;
-        expansion._frontierPerSeed[expansion._levels] = frontierPerSeed;
+        expansion._frontierPerSeed[expansion._levels] = checksPerSeed;
         expansion._levels++;
         expansion._tailFanOut = levelFanOut;
+        if (offered > 0.0) {
+            expansion._tailPassRate = kept / offered;
+        }
+
+        survivorsPerSeed = checksPerSeed * expansion._tailPassRate;
 
         std::swap(frontier, next);
+        std::swap(frontierRows, nextRows);
     }
 }
 
@@ -588,6 +595,7 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
     const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
     const uint64_t measured = std::min<uint64_t>(expansion._levels, levelCount);
     const double tailFanOut = std::max(1.0, expansion._tailFanOut);
+    const double tailPassRate = hopPassRate * expansion._tailPassRate;
 
     double candidatesPerSeed = 0.0;
     double frontier = 1.0;
@@ -597,7 +605,7 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
         const double checks = expansion._frontierPerSeed[level] * pass;
 
         candidatesPerSeed += checks;
-        frontier = checks * hopPassRate;
+        frontier = checks * tailPassRate;
         pass *= hopPassRate;
     }
 
@@ -605,61 +613,10 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
         const double checks = frontier * tailFanOut;
 
         candidatesPerSeed += checks;
-        frontier = checks * hopPassRate;
+        frontier = checks * tailPassRate;
     }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
-}
-
-double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
-                                            PathExplorationDir direction,
-                                            std::span<const EdgeTypeID> edgeTypes,
-                                            PathHopFilter& hopFilter) {
-    const size_t nodeCount = parts.getAllocatedNodeCount();
-    if (nodeCount == 0) {
-        return 1.0;
-    }
-
-    const size_t stride = std::max<size_t>(1, nodeCount / hopSampleTarget);
-
-    std::vector<NodeID> candidateNodes;
-    std::vector<EdgeID> candidateEdges;
-
-    size_t offered = 0;
-    size_t kept = 0;
-
-    for (size_t node = 0; node < nodeCount; node += stride) {
-        const NodeID sample(node);
-        const size_t owner = parts.ownerIndex(sample);
-        if (owner == parts.size()) {
-            continue;
-        }
-
-        const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
-
-        candidateNodes.clear();
-        candidateEdges.clear();
-
-        if (direction != PathExplorationDir::BACKWARD) {
-            appendMatching(ownerIndexer.getNodeOutEdges(sample), edgeTypes, candidateNodes, candidateEdges);
-        }
-        if (direction != PathExplorationDir::FORWARD) {
-            appendMatching(ownerIndexer.getNodeInEdges(sample), edgeTypes, candidateNodes, candidateEdges);
-        }
-
-        if (candidateNodes.empty()) {
-            continue;
-        }
-
-        offered += candidateNodes.size();
-        kept += hopFilter.filter(0, sample, candidateNodes, candidateEdges);
-    }
-
-    if (offered == 0) {
-        return 1.0;
-    }
-
-    return static_cast<double>(kept) / static_cast<double>(offered);
 }
 
 double PathDistanceIndex::estimatedBuildChecks(const PartDirectory& parts,

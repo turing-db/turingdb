@@ -5964,51 +5964,29 @@ private:
     ColumnVector<size_t> _indices;
 };
 
+// What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
+// walk does rather than what the average node carrying the type does
+void sampleSeedsOf(const GraphView& view,
+                   NLExplorePathsLoopData* loopData,
+                   PathHopFilter* hopFilter,
+                   PathDistanceIndex::SeedExpansion& expansion) {
+    std::span<const EdgeTypeID> edgeTypes;
+    if (loopData->filtersByType()) {
+        edgeTypes = loopData->getEdgeTypes();
+    }
+
+    const PartDirectory parts(view);
+
+    PathDistanceIndex::sampleSeedExpansion(parts, loopData->getDirection(), edgeTypes, loopData->getInput()->getRaw(), expansion, hopFilter);
+}
+
 // The distance index of an end-constrained exploration is built at most once per loop, the
 // first time the seeds seen over all its chunks make the enumeration costlier than the
 // index; null until then
-// Sampled off the graph once for the whole loop: the gates below run per chunk of seeds,
-// and the sample costs an evaluation of the query's hop predicate per node it visits
-double hopPassRateFor(const GraphView& view, NLExplorePathsLoopData* loopData, PathHopFilter* hopFilter) {
-    if (!hopFilter) {
-        return 1.0;
-    }
-
-    const std::optional<double>& measured = loopData->getHopPassRate();
-    if (measured) {
-        return *measured;
-    }
-
-    std::span<const EdgeTypeID> edgeTypes;
-    if (loopData->filtersByType()) {
-        edgeTypes = loopData->getEdgeTypes();
-    }
-
-    const PartDirectory parts(view);
-    const double rate = PathDistanceIndex::sampleHopPassRate(parts, loopData->getDirection(), edgeTypes, *hopFilter);
-    loopData->setHopPassRate(rate);
-
-    return rate;
-}
-
-// What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
-// walk does rather than what the average node carrying the type does
-void sampleSeedsOf(const GraphView& view, NLExplorePathsLoopData* loopData, PathDistanceIndex::SeedExpansion& expansion) {
-    std::span<const EdgeTypeID> edgeTypes;
-    if (loopData->filtersByType()) {
-        edgeTypes = loopData->getEdgeTypes();
-    }
-
-    const PartDirectory parts(view);
-
-    PathDistanceIndex::sampleSeedExpansion(parts, loopData->getDirection(), edgeTypes, loopData->getInput()->getRaw(), expansion);
-}
-
 const PathDistanceIndex* pruningIndexFor(const GraphView& view,
                                          NLExplorePathsLoopData* loopData,
                                          uint64_t maxHops,
-                                         const PathDistanceIndex::SeedExpansion& expansion,
-                                         double hopPassRate) {
+                                         const PathDistanceIndex::SeedExpansion& expansion) {
     PathDistanceIndex* index = loopData->getDistanceIndex();
     if (index->isBuilt()) {
         return index;
@@ -6021,7 +5999,7 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
 
     const PathExplorationDir direction = loopData->getDirection();
     const PartDirectory parts(view);
-    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, loopData->getSeedsSeen(), maxHops, hopPassRate);
+    const double walkChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, loopData->getSeedsSeen(), maxHops);
     const bool built = index->buildWithin(view, loopData->getEndLabels(), direction, edgeTypes, maxHops, walkChecks);
 
     return built ? index : nullptr;
@@ -6033,8 +6011,7 @@ const PathTargetIndex* endSetTargetIndexFor(const GraphView& view,
                                             NLExplorePathsLoopData* loopData,
                                             std::span<const NodeID> endNodes,
                                             uint64_t maxHops,
-                                            const PathDistanceIndex::SeedExpansion& expansion,
-                                            double hopPassRate) {
+                                            const PathDistanceIndex::SeedExpansion& expansion) {
     PathTargetIndex* index = loopData->getTargetIndex();
     if (index->isBuilt()) {
         return index;
@@ -6046,7 +6023,7 @@ const PathTargetIndex* endSetTargetIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathTargetIndex::isWorthBuildingSet(view, direction, edgeTypes, expansion, loopData->getSeedsSeen(), endNodes.size(), maxHops, hopPassRate);
+    const bool worthBuilding = PathTargetIndex::isWorthBuildingSet(view, direction, edgeTypes, expansion, loopData->getSeedsSeen(), endNodes.size(), maxHops);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -6061,8 +6038,7 @@ const PathTargetIndex* endSetTargetIndexFor(const GraphView& view,
 const PathTargetIndex* targetIndexFor(const GraphView& view,
                                       NLExplorePathsLoopData* loopData,
                                       uint64_t maxHops,
-                                      const PathDistanceIndex::SeedExpansion& expansion,
-                                      double hopPassRate) {
+                                      const PathDistanceIndex::SeedExpansion& expansion) {
     const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
 
     std::vector<NodeID> targets(endNodes.begin(), endNodes.end());
@@ -6075,7 +6051,7 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeTypes, expansion, endNodes.size(), targets.size(), maxHops, hopPassRate);
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeTypes, expansion, endNodes.size(), targets.size(), maxHops);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -6180,32 +6156,30 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     // The level search of the distinct mode prunes by no index
     const bool prunes = !explorator.searchesLevels() && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes() || endNodeSet);
 
-    const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter) : 1.0;
-
     PathDistanceIndex::SeedExpansion expansion;
     if (prunes) {
         loopData->addSeedsSeen(inputNodeIDs->size());
-        sampleSeedsOf(view, loopData, expansion);
+        sampleSeedsOf(view, loopData, hopFilter, expansion);
     }
 
     if (filtersByEndLabels) {
         explorator.setEndLabels(&loopData->getEndLabels());
         if (prunes) {
-            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, expansion, hopPassRate));
+            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, expansion));
         }
     }
 
     if (loopData->getEndNodes()) {
         explorator.setEndNodes(loopData->getEndNodes());
         if (prunes) {
-            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, expansion, hopPassRate));
+            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, expansion));
         }
     }
 
     if (endNodeSet) {
         explorator.setEndNodeSet(endNodes);
         if (prunes) {
-            explorator.setTargetIndex(endSetTargetIndexFor(view, loopData, endNodes, maxHops, expansion, hopPassRate));
+            explorator.setTargetIndex(endSetTargetIndexFor(view, loopData, endNodes, maxHops, expansion));
         }
     }
 
