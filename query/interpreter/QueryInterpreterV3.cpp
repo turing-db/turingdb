@@ -166,7 +166,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
 
     ExplainReport* const explain = explainRequest ? &explainReport.value() : nullptr;
 
-    _compilerContext->prepareForQuery(query);
+    _compilerContext->prepareForQuery();
     mlir::MLIRContext* const context = _compilerContext->getContext();
 
     mlir::OpBuilder builder(context);

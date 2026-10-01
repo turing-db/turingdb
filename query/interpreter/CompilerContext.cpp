@@ -10,32 +10,15 @@
 
 using namespace db;
 
-namespace {
-
-// Uniqued attributes are never freed, so every literal a query emits stays in the
-// context until it is rebuilt. The literals come from the query text, which bounds them.
-constexpr size_t defaultQueryBytesBudget = 64 * 1024 * 1024;
-
-}
-
 CompilerContext::CompilerContext()
-    : _queryBytesBudget(defaultQueryBytesBudget)
-{
-}
-
-CompilerContext::CompilerContext(size_t queryBytesBudget)
-    : _queryBytesBudget(queryBytesBudget)
 {
 }
 
 CompilerContext::~CompilerContext() {
 }
 
-void CompilerContext::prepareForQuery(std::string_view query) {
-    _retainedQueryBytes += query.size();
-
-    const bool overBudget = _retainedQueryBytes > _queryBytesBudget;
-    if (!_context || overBudget || _needsRebuild) {
+void CompilerContext::prepareForQuery() {
+    if (!_context || _needsRebuild) {
         _passPipeline.reset();
 
         _context = std::make_unique<mlir::MLIRContext>(mlir::MLIRContext::Threading::DISABLED);
@@ -46,7 +29,6 @@ void CompilerContext::prepareForQuery(std::string_view query) {
 
         _passPipeline = std::make_unique<DBPassPipeline>(_context.get());
 
-        _retainedQueryBytes = query.size();
         _needsRebuild = false;
     }
 }

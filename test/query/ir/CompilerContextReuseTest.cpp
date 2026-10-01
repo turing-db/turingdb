@@ -89,12 +89,6 @@ TEST_F(CompilerContextReuseTest, answersLikeAFreshContext) {
     expectRowsOfAFreshContext(&compilerContext, &_env->getMem());
 }
 
-TEST_F(CompilerContextReuseTest, answersLikeAFreshContextWhenRebuiltForEveryQuery) {
-    CompilerContext compilerContext(0);
-
-    expectRowsOfAFreshContext(&compilerContext, &_env->getMem());
-}
-
 TEST_F(CompilerContextReuseTest, rebuildsAfterACompileError) {
     CompilerContext compilerContext;
     QueryInterpreterV3 interpreter(&_env->getSystemManager(), &_env->getMem(), &compilerContext);
