@@ -7897,6 +7897,26 @@ void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* i
 
     const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
     const bool indexesAList = baseType == EvaluatedType::List || baseType == EvaluatedType::ListItem;
+    const bool indexesAMap = baseType == EvaluatedType::Map;
+
+    if (indexesAMap) {
+        const Expr* index = indexExpr->getIndexExpr();
+
+        translateExpr(base);
+        translateExpr(index);
+
+        bioassert(_part._exprMap.contains(base), "Dynamic map key with unknown base.");
+        bioassert(_part._exprMap.contains(index), "Dynamic map key with unknown key.");
+
+        // A list hands its elements back as tagged cells, and no map read yet pulls a map out
+        // of one, so the lowering would turn this away naming an op the query never wrote
+        if (base->getKind() == Expr::Kind::INDEX) {
+            throwError("Reading a key of a map held in a list is not supported yet.", expr);
+        }
+
+        _part._exprMap[expr] = emitDynamicMapKey(_part._exprMap.at(base), _part._exprMap.at(index));
+        return;
+    }
 
     if (indexesAPath || indexesAList) {
         const Expr* index = indexExpr->getIndexExpr();
@@ -8172,6 +8192,13 @@ mlir::Value DBProgramGenerator::emitStaticMapKey(mlir::Value map, std::string_vi
     const mlir::StringAttr keyAttr = _opBuilder.getStringAttr(llvm::StringRef(key.data(), key.size()));
 
     return _opBuilder.create<mlir::db::StaticMapKey>(loc, entryType, map, keyAttr).getResult();
+}
+
+mlir::Value DBProgramGenerator::emitDynamicMapKey(mlir::Value map, mlir::Value key) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType entryType = allocColumnType(mlir::storage::MapElementType::get(_mlirCtxt));
+
+    return _opBuilder.create<mlir::db::DynamicMapKey>(loc, entryType, map, key).getResult();
 }
 
 mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::Value instant) {

@@ -111,9 +111,9 @@ TEST_F(ListIndexAnalysisTest, rejectsANonIntegerIndex) {
 
 TEST_F(ListIndexAnalysisTest, rejectsAnIndexIntoAScalar) {
     expectRejected("MATCH (n:Person) RETURN 1[0]",
-                   "Index operator [] can only be applied to a list or a CSV row");
+                   "Index operator [] can only be applied to");
     expectRejected("MATCH (n:Person) RETURN n.name[0]",
-                   "Index operator [] can only be applied to a list or a CSV row");
+                   "Index operator [] can only be applied to");
 }
 
 TEST_F(ListIndexAnalysisTest, acceptsAChainedIndex) {

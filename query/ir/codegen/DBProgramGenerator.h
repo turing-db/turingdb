@@ -1126,6 +1126,7 @@ private:
     mlir::Value translatePropertyRead(const PropertyExpr* propExpr);
     mlir::Value translatePropertyLookupExpr(const PropertyLookupExpr* lookupExpr);
     mlir::Value emitStaticMapKey(mlir::Value map, std::string_view key);
+    mlir::Value emitDynamicMapKey(mlir::Value map, mlir::Value key);
     mlir::Value emitDateTimeComponent(DateTimePart part, mlir::Value instant);
     mlir::Value emitDurationComponent(DurationPart part, mlir::Value duration);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);

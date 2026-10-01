@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (:Tagged {name: 'a', attrs: {x: 1}}), (:Tagged {name: 'b'}) WITH 'x' AS k MATCH (t:Tagged) RETURN t.name, t.attrs[k]",
+  "expect": {
+    "result": "t.name,t.attrs[k]\na,1\nb,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "null"
+  ],
+  "write-required": true
+}

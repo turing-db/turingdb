@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND ['a', 'nosuch'] AS k WITH {a: 1} AS m, k RETURN m[k] IS NULL",
+  "expect": {
+    "result": "m[k] IS NULL\nfalse\ntrue"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "isnull"
+  ],
+  "write-required": false
+}

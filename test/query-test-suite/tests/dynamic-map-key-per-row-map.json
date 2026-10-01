@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (:Tagged {name: 'a', pick: 'x', attrs: {x: 1, y: 2}}), (:Tagged {name: 'b', pick: 'y', attrs: {x: 3, y: 4}}) WITH 1 AS seeded MATCH (t:Tagged) RETURN t.name, t.attrs[t.pick]",
+  "expect": {
+    "result": "t.name,t.attrs[t.pick]\na,1\nb,4"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "return"
+  ],
+  "write-required": true
+}

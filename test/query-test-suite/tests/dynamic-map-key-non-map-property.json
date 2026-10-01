@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) WITH n, 'year' AS k RETURN n.name[k]",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) WITH n, 'year' AS k RETURN n.name[k]\n       |                                             ^^^^^^^^^\n-------* Index operator [] can only be applied to a list, a map or a CSV row, not 'String'"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "fail"
+  ],
+  "write-required": false
+}

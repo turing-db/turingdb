@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND ['l', 'm'] AS k WITH {l: [1, 2], m: {k: 3}} AS outer, k RETURN outer[k]",
+  "expect": {
+    "result": "outer[k]\n\"[1, 2]\"\n{k: 3}"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "list"
+  ],
+  "write-required": false
+}

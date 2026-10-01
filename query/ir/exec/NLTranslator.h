@@ -1005,6 +1005,7 @@ private:
     void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);
     void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
     void translateStaticMapKey(mlir::nl::StaticMapKey mapKey, NLStmtContainer* body);
+    void translateDynamicMapKey(mlir::nl::DynamicMapKey mapKey, NLStmtContainer* body);
 
     // Translate an nl.list_comprehension: allocate the element chunk, one chunk per
     // carried column and the list column the step fills, pick the handlers that read the

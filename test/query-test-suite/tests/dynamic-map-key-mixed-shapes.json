@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (:Tagged {name: 'a', attrs: {x: 1}}), (:Tagged {name: 'b', attrs: {y: 'z'}}) WITH 1 AS seeded MATCH (t:Tagged) UNWIND ['x', 'y'] AS k RETURN t.name, k, t.attrs[k]",
+  "expect": {
+    "result": "t.name,k,t.attrs[k]\na,x,1\na,y,null\nb,x,null\nb,y,z"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "return"
+  ],
+  "write-required": true
+}

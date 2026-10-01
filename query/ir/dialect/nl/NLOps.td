@@ -2324,6 +2324,29 @@ def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThr
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of one value of a map chunk, by a key read per row";
+  let description = [{
+    Imperative counterpart of db.dynamic_map_key. Row r of the result views the entry row
+    r's map already holds under row r's key, so the read copies nothing:
+
+      %v = nl.dynamic_map_key %m, %k
+             : (!nl.chunk<!storage.nullable<!storage.map>>, !nl.chunk<!storage.string>)
+               -> !nl.chunk<!storage.map_element>
+
+    Either operand is nullable where a stored property fetched it and plain where a literal
+    built it, so both spellings are accepted on both. The result never is: a map value
+    carries its null in its own tag, so a map holding no such key, a row holding no map and
+    a row holding no key all read back as a Null-tagged entry.
+  }];
+
+  let arguments = (ins NLChunk:$map, NLChunk:$key);
+  let results   = (outs NLMapElementChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$map `,` $key attr-dict `:` functional-type(operands, results)";
+}
+
 def Sub : NLOp<"sub", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise subtraction of two value chunks";
   let description = [{

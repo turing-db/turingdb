@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: 1} AS m RETURN m[1]",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | WITH {a: 1} AS m RETURN m[1]\n       |                         ^^^^\n-------* A map is indexed by a string key, not by 'Integer'"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "fail"
+  ],
+  "write-required": false
+}

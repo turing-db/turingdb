@@ -198,7 +198,8 @@ def MapElement : StorageType<"MapElement", "map_element"> {
         !storage.list_element it is a fixed-width scalar rather than a container, and it
         carries its null in the tag rather than in a !storage.nullable around it, so a
         row whose map holds no such key - or no map at all - reads back as a Null-tagged
-        entry. Produced by db.static_map_key, and only ever passed through or rendered.
+        entry. Produced by db.static_map_key and db.dynamic_map_key, and only ever passed
+        through or rendered.
     }];
 }
 
