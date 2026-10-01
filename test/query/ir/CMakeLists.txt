@@ -124,6 +124,10 @@ target_link_libraries(test_query_ir_group_aggregate PRIVATE
         turing_db_ir_exec_s)
 add_ir_tests(test_query_ir_collect CollectTest.cpp)
 
+# A grouping key computed from constants alone, which the lowering has to lay out over
+# the rows it stands for before the group assignment reads it.
+add_ir_tests(test_query_ir_constant_grouping_key ConstantGroupingKeyTest.cpp)
+
 # The chunked collect tests force the collect fold to span chunk boundaries.
 add_ir_tests(test_query_ir_collect_chunked CollectChunkedTest.cpp)
 
