@@ -19,6 +19,8 @@ public:
 
     void run(mlir::ModuleOp module, const mlir::db::DBPassContext& passContext);
 
+    const mlir::db::DBPassContext& getPassContext() const { return _passContext; }
+
     static void fillPassNames(std::vector<std::string_view>& passNames);
     static std::unique_ptr<mlir::Pass> createPass(size_t passIndex, const mlir::db::DBPassContext* passContext);
 

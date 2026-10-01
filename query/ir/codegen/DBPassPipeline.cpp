@@ -69,7 +69,17 @@ DBPassPipeline::~DBPassPipeline() {
 void DBPassPipeline::run(mlir::ModuleOp module, const mlir::db::DBPassContext& passContext) {
     _passContext = passContext;
 
-    if (mlir::failed(_passManager.run(module))) {
+    mlir::LogicalResult result = mlir::failure();
+    try {
+        result = _passManager.run(module);
+    } catch (...) {
+        _passContext = mlir::db::DBPassContext {};
+        throw;
+    }
+
+    _passContext = mlir::db::DBPassContext {};
+
+    if (mlir::failed(result)) {
         throw FatalException("DB pass pipeline failed");
     }
 }
