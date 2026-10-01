@@ -13,9 +13,7 @@ module {
     // cost nothing to skip, and a field named twice is produced once.
     //
     // Every field is a string, since a CSV file carries no types: the query converts them
-    // itself, which is the db.to_integer below. The characters live in the column that
-    // parsed them rather than in the graph, so the columns own their strings -
-    // !storage.owned_string, not the !storage.string a property fetch borrows.
+    // itself, which is the db.to_integer below.
     //
     // Needs no -graph: nothing here is resolved against a schema. -exec cannot run it
     // either, though: the path is resolved against the session's data directory, which
@@ -28,12 +26,12 @@ module {
     // The positional form, and ON ERROR SKIP, which drops a malformed record instead of
     // failing the query:
     //   %r:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) skip_on_error
-    //     : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
-    %0:2 = db.load_csv("people.csv", ["name", "age"]) with_headers : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+    //     : !db.column<!storage.string>, !db.column<!storage.string>
+    %0:2 = db.load_csv("people.csv", ["name", "age"]) with_headers : !db.column<!storage.string>, !db.column<!storage.string>
 
-    %1 = db.to_integer(%0#1) : (!db.column<!storage.owned_string>) -> !db.column<none>
+    %1 = db.to_integer(%0#1) : (!db.column<!storage.string>) -> !db.column<none>
 
-    db.output(%0#0, %1) names ["row.name", "toInteger(row.age)"] : !db.column<!storage.owned_string>, !db.column<none>
+    db.output(%0#0, %1) names ["row.name", "toInteger(row.age)"] : !db.column<!storage.string>, !db.column<none>
 
     return
   }
