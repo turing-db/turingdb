@@ -1516,103 +1516,62 @@ void tileColumn(const Column* input, size_t factor, size_t position, size_t rowC
     }
 }
 
-// The pairs of a cross product that distinct_from leaves out, found in the order the
-// product walks them: outer row i with each inner row j holding i's edge in one of the
-// edge pairs, at position i*M + j. An outer row's inner rows are looked up once, when the
-// walk reaches it, in each pair's inner edges sorted with their rows.
+// The pairs of a cross product that distinct_from leaves out, as positions i*M + j in the
+// order the product walks them: outer row i with each inner row j holding i's edge in one
+// of the edge pairs. Each pair's columns are joined by sorting the smaller side's edges
+// with their rows and looking the larger side's up, so a run costs the larger side once.
 class CrossProductHoles {
 public:
     CrossProductHoles(NLCrossProductLoopData* loopData, size_t outerRowCount, size_t innerRowCount)
-        : _loopData(loopData),
-        _outerRowCount(outerRowCount),
-        _innerRowCount(innerRowCount)
+        : _holes(loopData->holes()),
+        _productRowCount(outerRowCount * innerRowCount)
     {
-        const NLCrossProductLoopData::EdgePairs& pairs = loopData->edgePairs();
-        std::vector<NLCrossProductLoopData::InnerEdgeIndex>& indices = loopData->innerEdgeIndices();
-        indices.resize(pairs.size());
+        _holes.clear();
 
-        for (size_t pairIndex = 0; pairIndex < pairs.size(); pairIndex++) {
-            const std::vector<EdgeID>& innerEdges = pairs[pairIndex]._inner->getRaw();
-            NLCrossProductLoopData::InnerEdgeIndex& index = indices[pairIndex];
+        NLCrossProductLoopData::EdgeIndex& index = loopData->edgeIndex();
+        for (const NLCrossEdgePair& pair : loopData->edgePairs()) {
+            const std::vector<EdgeID>& outerEdges = pair._outer->getRaw();
+            const std::vector<EdgeID>& innerEdges = pair._inner->getRaw();
+            const bool indexesTheOuterSide = outerEdges.size() <= innerEdges.size();
+            const std::vector<EdgeID>& indexed = indexesTheOuterSide ? outerEdges : innerEdges;
+            const std::vector<EdgeID>& probing = indexesTheOuterSide ? innerEdges : outerEdges;
 
-            index.resize(innerEdges.size());
-            for (size_t innerRow = 0; innerRow < innerEdges.size(); innerRow++) {
-                index[innerRow] = {innerEdges[innerRow], innerRow};
+            index.resize(indexed.size());
+            for (size_t row = 0; row < indexed.size(); row++) {
+                index[row] = {indexed[row], row};
             }
-
             std::sort(index.begin(), index.end());
+
+            for (size_t probeRow = 0; probeRow < probing.size(); probeRow++) {
+                const EdgeID edge = probing[probeRow];
+                auto match = std::lower_bound(index.begin(), index.end(), std::make_pair(edge, size_t {0}));
+
+                for (; match != index.end() && match->first == edge; match++) {
+                    const size_t outerRow = indexesTheOuterSide ? match->second : probeRow;
+                    const size_t innerRow = indexesTheOuterSide ? probeRow : match->second;
+                    _holes.push_back(outerRow * innerRowCount + innerRow);
+                }
+            }
         }
+
+        std::sort(_holes.begin(), _holes.end());
+        _holes.erase(std::unique(_holes.begin(), _holes.end()), _holes.end());
     }
 
-    // The first left-out position at or after @p position, or the product's row count.
-    // The walk only moves forward, so the hole found last answers every position up to it.
+    // The first left-out position at or after @p position, or the product's row count. The
+    // walk only moves forward, so the cursor does too.
     size_t next(size_t position) {
-        const size_t productRowCount = _outerRowCount * _innerRowCount;
-        if (_loopData->edgePairs().empty()) {
-            return productRowCount;
+        while (_cursor < _holes.size() && _holes[_cursor] < position) {
+            _cursor++;
         }
 
-        if (_foundHole && position >= _searchedFrom && position <= *_foundHole) {
-            return *_foundHole;
-        }
-
-        _searchedFrom = position;
-        _foundHole = findFrom(position);
-
-        return *_foundHole;
+        return _cursor < _holes.size() ? _holes[_cursor] : _productRowCount;
     }
 
 private:
-    NLCrossProductLoopData* _loopData {nullptr};
-    size_t _outerRowCount {0};
-    size_t _innerRowCount {0};
-    size_t _heldOuterRow {std::numeric_limits<size_t>::max()};
-    size_t _searchedFrom {0};
-    std::optional<size_t> _foundHole;
-
-    size_t findFrom(size_t position) {
-        size_t outerRow = position / _innerRowCount;
-        size_t innerRow = position % _innerRowCount;
-
-        while (outerRow < _outerRowCount) {
-            if (outerRow != _heldOuterRow) {
-                holdOuterRow(outerRow);
-            }
-
-            const std::vector<size_t>& rowHoles = _loopData->rowHoles();
-            const auto hole = std::lower_bound(rowHoles.begin(), rowHoles.end(), innerRow);
-            if (hole != rowHoles.end()) {
-                return outerRow * _innerRowCount + *hole;
-            }
-
-            outerRow++;
-            innerRow = 0;
-        }
-
-        return _outerRowCount * _innerRowCount;
-    }
-
-    void holdOuterRow(size_t outerRow) {
-        const NLCrossProductLoopData::EdgePairs& pairs = _loopData->edgePairs();
-        const std::vector<NLCrossProductLoopData::InnerEdgeIndex>& indices = _loopData->innerEdgeIndices();
-        std::vector<size_t>& rowHoles = _loopData->rowHoles();
-
-        rowHoles.clear();
-        for (size_t pairIndex = 0; pairIndex < pairs.size(); pairIndex++) {
-            const EdgeID edge = pairs[pairIndex]._outer->getRaw()[outerRow];
-            const NLCrossProductLoopData::InnerEdgeIndex& index = indices[pairIndex];
-
-            auto match = std::lower_bound(index.begin(), index.end(), std::make_pair(edge, size_t {0}));
-            for (; match != index.end() && match->first == edge; match++) {
-                rowHoles.push_back(match->second);
-            }
-        }
-
-        std::sort(rowHoles.begin(), rowHoles.end());
-        rowHoles.erase(std::unique(rowHoles.begin(), rowHoles.end()), rowHoles.end());
-
-        _heldOuterRow = outerRow;
-    }
+    std::vector<size_t>& _holes;
+    size_t _productRowCount {0};
+    size_t _cursor {0};
 };
 
 // Constant broadcast: the one value a ColumnConst holds is laid out over every row
