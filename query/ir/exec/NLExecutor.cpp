@@ -6246,10 +6246,17 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     // The level search of the distinct mode prunes by no index
     const bool prunes = !explorator.searchesLevels() && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes() || endNodeSet);
 
+    const bool gatesDistanceIndex = filtersByEndLabels && !loopData->getDistanceIndex()->isBuilt();
+    const bool gatesEndSetIndex = endNodeSet && !loopData->getTargetIndex()->isBuilt();
+    const bool gatesBoundEndIndex = loopData->getEndNodes() != nullptr;
+    const bool readsSample = gatesDistanceIndex || gatesEndSetIndex || gatesBoundEndIndex;
+
     PathDistanceIndex::SeedExpansion expansion;
     if (prunes) {
         loopData->addSeedsSeen(inputNodeIDs->size());
-        sampleSeedsOf(view, loopData, hopFilter, expansion);
+        if (readsSample) {
+            sampleSeedsOf(view, loopData, hopFilter, expansion);
+        }
     }
 
     if (filtersByEndLabels) {
