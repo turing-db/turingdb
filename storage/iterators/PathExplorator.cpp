@@ -37,6 +37,50 @@ uint64_t signatureBit(EdgeID edge) {
     return 1ull << ((edge.getValue() * 0x9E3779B97F4A7C15ull) >> 58);
 }
 
+// The words a node holds in the cycle search, each one bit per seed of the batch
+constexpr size_t seedsWord = 0;
+constexpr size_t firstArrivalWord = 1;
+constexpr size_t secondArrivalWord = 2;
+constexpr size_t firstFrontierWord = 3;
+constexpr size_t secondFrontierWord = 4;
+constexpr size_t firstGainedWord = 5;
+constexpr size_t secondGainedWord = 6;
+constexpr size_t identityWord = 7;
+
+bool hasGains(const uint64_t* words) {
+    return (words[firstGainedWord] | words[secondGainedWord]) != 0;
+}
+
+// An arrival over the seeds of the mask, each having left its seed by the edge the identity
+// words give: the first arrival of a seed is kept, a later one gives a second when it differs
+void offerFirstArrival(uint64_t* words, uint64_t mask, std::span<const uint64_t> identity) {
+    const uint64_t fresh = mask & ~words[firstArrivalWord];
+    const uint64_t held = mask & words[firstArrivalWord] & ~words[secondArrivalWord];
+
+    uint64_t differs = 0;
+    for (size_t plane = 0; plane < identity.size(); plane++) {
+        uint64_t& word = words[identityWord + plane];
+        differs |= word ^ identity[plane];
+        word = (word & ~fresh) | (identity[plane] & fresh);
+    }
+
+    const uint64_t second = held & differs;
+
+    words[firstArrivalWord] |= fresh;
+    words[firstGainedWord] |= fresh;
+    words[secondArrivalWord] |= second;
+    words[secondGainedWord] |= second;
+}
+
+// Arrivals over the seeds of the mask from a node two different edges out of each seed reach
+void offerSecondArrival(uint64_t* words, uint64_t mask, std::span<const uint64_t> identity) {
+    offerFirstArrival(words, mask & ~words[firstArrivalWord], identity);
+
+    const uint64_t second = mask & ~words[secondArrivalWord];
+    words[secondArrivalWord] |= second;
+    words[secondGainedWord] |= second;
+}
+
 }
 
 void PathExplorator::PathEdgeTable::push(std::span<const EdgeID> path) {
@@ -980,6 +1024,7 @@ void PathExplorator::startBatch() {
     // edge it left by would report it with no trail, so the bit is set as at a minimum of zero
     // and a cycle through the seed decides its row.
     const bool seedCycles = searchesSeedCycles();
+    uint64_t searchedSeeds = 0;
     for (size_t bit = 0; bit < count; bit++) {
         const size_t row = reach._batchFirstRow + bit;
         const NodeID seed = (*_input)[row];
@@ -1000,36 +1045,60 @@ void PathExplorator::startBatch() {
 
         slot._frontier |= mask;
 
-        if (seedCycles && isEnd(row, seed) && hasCycleThrough(seed)) {
-            reach._closedSeeds |= mask;
+        if (seedCycles && isEnd(row, seed)) {
+            searchedSeeds |= mask;
         }
+    }
+
+    if (searchedSeeds != 0) {
+        reach._closedSeeds = closedSeedsOf(searchedSeeds);
     }
 }
 
-// A search that finds no cycle has walked the seed's whole component when the hops are
-// unbounded, and so do the searches of the component's other seeds: one labelling answers
-// them all instead
-bool PathExplorator::hasCycleThrough(NodeID seed) {
+// A search that finds no cycle has walked the component of every seed it gave up on when the
+// hops are unbounded: one labelling answers the later seeds of those components instead
+uint64_t PathExplorator::closedSeedsOf(uint64_t seeds) {
     CycleSearch& search = _cycleSearch;
+    const size_t firstRow = _reach._batchFirstRow;
 
-    const auto labelled = search._components.find(seed.getValue());
-    if (labelled != search._components.end()) {
-        return labelled->second._onCycle;
+    uint64_t closed = 0;
+    uint64_t unknown = 0;
+    for (uint64_t remaining = seeds; remaining != 0; remaining &= remaining - 1) {
+        const uint64_t mask = remaining & -remaining;
+        const uint64_t seed = (*_input)[firstRow + std::countr_zero(remaining)].getValue();
+
+        const auto labelled = search._components.find(seed);
+        const auto searched = search._seeds.find(seed);
+        if (labelled != search._components.end()) {
+            closed |= labelled->second._onCycle ? mask : 0;
+        } else if (searched != search._seeds.end()) {
+            closed |= searched->second ? mask : 0;
+        } else {
+            unknown |= mask;
+        }
     }
 
-    const auto searched = search._seeds.find(seed.getValue());
-    if (searched != search._seeds.end()) {
-        return searched->second;
+    if (unknown == 0) {
+        return closed;
     }
 
-    const bool closes = searchCycleThrough(seed);
-    if (!closes && labelsComponents()) {
-        labelComponentOf(seed);
-    } else {
-        search._seeds.emplace(seed.getValue(), closes);
+    const uint64_t found = searchCycles(unknown);
+    const bool labels = labelsComponents();
+
+    for (uint64_t remaining = unknown; remaining != 0; remaining &= remaining - 1) {
+        const bool closes = (found & remaining & -remaining) != 0;
+        const NodeID seed = (*_input)[firstRow + std::countr_zero(remaining)];
+
+        if (!closes && labels) {
+            if (!search._components.contains(seed.getValue())) {
+                labelComponentOf(seed);
+            }
+        } else {
+            search._seeds.emplace(seed.getValue(), closes);
+        }
     }
 
-    return closes;
+    return closed | found;
 }
 
 bool PathExplorator::labelsComponents() const {
@@ -1107,50 +1176,154 @@ void PathExplorator::discoverComponentNode(NodeID node, EdgeID parentEdge) {
                                                           ._next = begin});
 }
 
-// A walk out of the seed that comes back by another edge than it left by shortens to a closed
-// trail, and every closed trail is such a walk. Two arrivals per node suffice: the edge back to
-// the seed can rule out the first edge of only one of them.
-bool PathExplorator::searchCycleThrough(NodeID seed) {
+// A walk out of a seed that comes back by another edge than it left by shortens to a closed
+// trail, and every closed trail is such a walk. Two arrivals per node and seed suffice: the edge
+// back to the seed can rule out the first edge of only one of them.
+uint64_t PathExplorator::searchCycles(uint64_t seeds) {
+    if (_maxHops == 0) {
+        return 0;
+    }
+
     CycleSearch& search = _cycleSearch;
-    std::unordered_map<uint64_t, CycleSearch::Arrivals>& arrivals = search._arrivals;
+    PathCycleTable& reached = search._reached;
     const std::vector<NodeID>& candidateNodes = _reach._candidateNodes;
     const std::vector<EdgeID>& candidateEdges = _reach._candidateEdges;
+    const size_t firstRow = _reach._batchFirstRow;
 
-    arrivals.clear();
-    search._frontier.assign(1, CycleSearch::Visit {._node = seed});
+    uint64_t closed = 0;
+    size_t widestDegree = 0;
+    for (uint64_t remaining = seeds; remaining != 0; remaining &= remaining - 1) {
+        const unsigned bit = std::countr_zero(remaining);
+        const NodeID seed = (*_input)[firstRow + bit];
+        std::vector<CycleSearch::FirstHop>& hops = search._firstHops[bit];
 
-    for (uint64_t depth = 0; !search._frontier.empty() && depth < _maxHops; depth++) {
+        hops.clear();
+        collectReachCandidates(seed);
+
+        for (size_t index = 0; index < candidateNodes.size(); index++) {
+            if (candidateNodes[index] == seed) {
+                closed |= 1ull << bit;
+            } else {
+                hops.push_back(CycleSearch::FirstHop {._edge = candidateEdges[index], ._node = candidateNodes[index]});
+            }
+        }
+
+        std::sort(hops.begin(), hops.end(), [](const CycleSearch::FirstHop& left, const CycleSearch::FirstHop& right) {
+            return left._edge < right._edge;
+        });
+
+        widestDegree = std::max(widestDegree, hops.size());
+    }
+
+    const size_t identityBits = std::bit_width(widestDegree > 0 ? widestDegree - 1 : 0);
+    std::array<uint64_t, 64> identityPlanes {};
+    const std::span<uint64_t> identity(identityPlanes.data(), identityBits);
+
+    reached.reset(identityWord + identityBits);
+    search._next.clear();
+
+    for (uint64_t remaining = seeds; remaining != 0; remaining &= remaining - 1) {
+        reached.reach((*_input)[firstRow + std::countr_zero(remaining)])[seedsWord] |= remaining & -remaining;
+    }
+
+    if (_maxHops > 1) {
+        for (uint64_t remaining = seeds & ~closed; remaining != 0; remaining &= remaining - 1) {
+            const uint64_t mask = remaining & -remaining;
+            const std::vector<CycleSearch::FirstHop>& hops = search._firstHops[std::countr_zero(remaining)];
+
+            for (size_t index = 0; index < hops.size(); index++) {
+                for (size_t plane = 0; plane < identityBits; plane++) {
+                    identity[plane] = ((index >> plane) & 1) != 0 ? mask : 0;
+                }
+
+                uint64_t* words = reached.reach(hops[index]._node);
+                const bool waiting = hasGains(words);
+                offerFirstArrival(words, mask & ~words[seedsWord], identity);
+
+                if (!waiting && hasGains(words)) {
+                    search._next.push_back(hops[index]._node);
+                }
+            }
+        }
+    }
+
+    for (uint64_t level = 2; level <= _maxHops && !search._next.empty() && (seeds & ~closed) != 0; level++) {
+        std::swap(search._frontier, search._next);
         search._next.clear();
 
-        for (const CycleSearch::Visit& visit : search._frontier) {
-            collectReachCandidates(visit._node);
+        for (const NodeID node : search._frontier) {
+            uint64_t* words = reached.reach(node);
+            words[firstFrontierWord] = words[firstGainedWord];
+            words[secondFrontierWord] = words[secondGainedWord];
+            words[firstGainedWord] = 0;
+            words[secondGainedWord] = 0;
+        }
+
+        const bool offers = level < _maxHops;
+        for (const NodeID node : search._frontier) {
+            const uint64_t* words = reached.reach(node);
+            const uint64_t first = words[firstFrontierWord] & ~closed;
+            const uint64_t second = words[secondFrontierWord] & ~closed;
+            if ((first | second) == 0) {
+                continue;
+            }
+
+            std::copy_n(words + identityWord, identityBits, identity.begin());
+            collectReachCandidates(node);
 
             for (size_t index = 0; index < candidateNodes.size(); index++) {
-                const EdgeID edge = candidateEdges[index];
                 const NodeID candidate = candidateNodes[index];
+                uint64_t* candidateWords = offers ? reached.reach(candidate) : reached.find(candidate);
+                if (!candidateWords) {
+                    continue;
+                }
 
-                if (candidate == seed) {
-                    if (edge != visit._firstEdge) {
-                        return true;
-                    }
-                } else if (depth + 2 <= _maxHops) {
-                    const EdgeID firstEdge = visit._firstEdge.isValid() ? visit._firstEdge : edge;
-                    CycleSearch::Arrivals& reached = arrivals[candidate.getValue()];
+                const uint64_t seedsThere = candidateWords[seedsWord];
+                const uint64_t returning = (first | second) & seedsThere;
+                if (returning != 0) {
+                    closed |= closingReturns(returning, second, identity, candidateEdges[index]);
+                }
 
-                    const bool newFirstEdge = reached._count == 0 || (reached._count == 1 && reached._firstEdges[0] != firstEdge);
-                    if (newFirstEdge) {
-                        reached._firstEdges[reached._count] = firstEdge;
-                        reached._count++;
-                        search._next.push_back(CycleSearch::Visit {._node = candidate, ._firstEdge = firstEdge});
+                if (offers) {
+                    const bool waiting = hasGains(candidateWords);
+                    offerFirstArrival(candidateWords, first & ~seedsThere, identity);
+                    offerSecondArrival(candidateWords, second & ~seedsThere, identity);
+
+                    if (!waiting && hasGains(candidateWords)) {
+                        search._next.push_back(candidate);
                     }
                 }
             }
         }
-
-        std::swap(search._frontier, search._next);
     }
 
-    return false;
+    return closed & seeds;
+}
+
+// The seeds among the returning ones that an arrival left by another edge than the one back
+uint64_t PathExplorator::closingReturns(uint64_t returning, uint64_t twice, std::span<const uint64_t> identity, EdgeID edge) const {
+    uint64_t closing = returning & twice;
+
+    for (uint64_t remaining = returning & ~twice; remaining != 0; remaining &= remaining - 1) {
+        const unsigned bit = std::countr_zero(remaining);
+
+        size_t firstIndex = 0;
+        for (size_t plane = 0; plane < identity.size(); plane++) {
+            firstIndex |= ((identity[plane] >> bit) & 1) << plane;
+        }
+
+        const std::vector<CycleSearch::FirstHop>& hops = _cycleSearch._firstHops[bit];
+        const auto back = std::lower_bound(hops.begin(), hops.end(), edge, [](const CycleSearch::FirstHop& hop, EdgeID value) {
+            return hop._edge < value;
+        });
+
+        const bool leftByAnotherEdge = back == hops.end() || back->_edge != edge || static_cast<size_t>(back - hops.begin()) != firstIndex;
+        if (leftByAnotherEdge) {
+            closing |= 1ull << bit;
+        }
+    }
+
+    return closing;
 }
 
 void PathExplorator::emitGainedRows(size_t maxCount) {
