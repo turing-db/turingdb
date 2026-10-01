@@ -60,7 +60,7 @@ open change, so the update queries run after `CHANGE NEW` / `checkout change-0`.
 
 ## Results
 
-Run on 2026-09-26 against main at c651fd852, release build.
+Run on 2026-10-01 against main at f14911858, release build.
 
 **34 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
 BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 34 of 45.
@@ -102,24 +102,20 @@ BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 34 o
 | bi-12 | 11 |
 | bi-18 | 0 |
 
-The 16 that run now and did not at 451e6f8a8 are IS 2, 6, IC 3, 4, 5, 6, 9, 11, 12 and
-BI 1, 3, 7, 8, 9, 12, 18. Main implemented what 14 of them stopped at: variable-length paths
-at 166c5f1e0, edge type disjunction at b1cae6bea, chained comparisons at ecc9143e7, pattern
-comprehensions at d4428fe0f and pattern predicates at e8f5e1004. BI 12 stopped at the
-parameter file, which spelled `$languages` as the string `'en'`. It is now `['ar', 'hu']`,
-the query's own default. No post in this data set has the language `en`. BI 1 stopped at
-`message.creationDate.year` on an integer. It runs now that the dates are loaded as
-`DateTime`, with the component access main implemented at a6365bfd1.
+It is the same 34 queries as at c651fd852, with the same row counts. Three of the queries
+that stop moved underneath the count. BI 2 no longer stops at `duration`, which main
+implemented at 1bd5bf0f1 and built from a map at f14911858, and stops at `abs` instead. With
+`abs` taken out, the rest of BI 2 runs. BI 13 no longer stops at `.year` on a function call,
+which main implemented at d4fd4c23f. BI 4's `WHERE` after `WITH` runs since 83441efe1. Both
+now stop at a runtime failure, written up below.
 
-The other 33 give the same answers on `DateTime` dates as on integer dates. Only the
-rendering of a date changes, from `1290673245079` to `2010-11-25T08:20:45.079000Z`.
+The answers are right, not just the row counts. IS 2, 3, 6, IC 3, 4, 5, 6, 8, 9, 11, 12 and
+BI 1, 3, 7, 8, 9, 11, 12, 18 were recomputed in Python from the CSVs and match row for row,
+in order. BI 11 counts 25 friend triangles in India. IC 8's top 20 replies match ids, names,
+dates and order. IS 3 returns 48 friends for person 4398046511333, its degree in
+`person_knows_person`.
 
-The answers are right, not just the row counts. The 16 new ones, BI 11, IC 8 and IS 3 were
-recomputed in Python from the CSVs and match row for row, in order. BI 11 counts 25 friend
-triangles in India. IC 8's top 20 replies match ids, names, dates and order. IS 3 returns
-48 friends for person 4398046511333, its degree in `person_knows_person`.
-
-Three of the new ones return 0 rows, and 0 is the answer on this data. IC 3's window holds
+Three of them return 0 rows, and 0 is the answer on this data. IC 3's window holds
 12 messages, all located in Sweden, so no friend has a message in Kazakhstan. BI 8 and BI 18
 take the tag Carl_Gustaf_Emil_Mannerheim, which no person has an interest in. BI 8's 30
 messages with that tag were created in September 2010, outside its June window. With the tag
@@ -148,21 +144,30 @@ from `s[1]` and `w[1]`, the two organisations from `s[0]` and `w[0]`.
 | IC 7, BI 14 | `collect` of a map literal, `collect({score: score})` |
 | IC 14 | `allShortestPaths` |
 | IC 10 | a datetime built from a map, `datetime({epochMillis: friend.birthday})` |
-| BI 2 | `duration` |
-| BI 13 | property access on a function call, `datetime('2010-11-25T08:20:45.079Z').year` |
+| BI 2 | `abs` |
+| BI 13 | the `ELSE` of a `CASE` evaluated on the rows its `WHEN` guards, dividing by zero |
 | BI 16 | property access on a map, `UNWIND [{letter: 'A'}] AS param` then `param.letter` |
 | BI 17 | a relationship with both arrowheads, `(forum1)<-[:HAS_MEMBER]->(person2)` |
-| BI 4 | the `WHERE` of a `WITH` reading a variable the `WITH` does not project |
+| BI 4 | an internal assertion on `IN` inside a `CALL { ... UNION ALL ... }` |
 
-The last one is not a missing feature. It is a query the engine has every piece to run and
-an analyzer rule turns away, so it is written up separately below.
+The last two are not missing features. Both queries reach the runtime and fail there, so
+they are written up separately below.
 
-### One rejection that looks too broad
+### Two runtime failures
 
-It was reduced to the smallest query that reproduces it.
+Each was reduced to the smallest query that reproduces it.
 
-**`WHERE` after `WITH`** (blocks BI 4). Inside BI 4's `CALL`, `WITH person, message,
-topForum2 WHERE topForum2 IN topForums` is rejected with `Variable 'topForums' not found`.
-The smallest query that shows it is `WITH 5 AS k MATCH (p:Person) WITH p WHERE p.id > k
-RETURN count(p)`. Projecting `k` as well runs. The Neo4j reference implementation runs BI 4
-as written, so Neo4j lets the `WHERE` of a `WITH` read the variables in scope before it.
+**Division by zero under `CASE`** (blocks BI 13). `UNWIND [0, 2] AS t RETURN CASE t WHEN 0
+THEN 0 ELSE 1 / t END` fails with `Attempted to divide by zero.` The `ELSE` is evaluated on
+the row where `t` is 0. Neo4j evaluates only the branch taken and returns 0 for both rows.
+BI 13 writes the float form, `CASE totalLikeCount WHEN 0 THEN 0.0 ELSE zombieLikeCount /
+toFloat(totalLikeCount) END`, and all 6 of its zombies have a `totalLikeCount` of 0. With the
+division taken out, BI 13 returns those 6 rows. `RETURN 1.0 / 0.0` fails the same way, where
+Neo4j returns `Infinity`.
+
+**`IN` inside a `UNION ALL` branch** (blocks BI 4). `WITH range(1, 2) AS ks CALL { WITH ks
+UNWIND ks AS k WITH k WHERE k IN ks RETURN k UNION ALL WITH ks UNWIND ks AS k RETURN k }
+RETURN count(k)` fails with `The assertion 'lhs->size() == rhs->size()' failed at
+storage/columns/BinaryPredicates.h:266`. It should return 4. With the literal `[1, 2]` in
+place of `range(1, 2)` it returns 4. Each branch of BI 4's `CALL` runs alone, returning 164
+and 1,369 rows.
