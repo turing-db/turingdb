@@ -71,7 +71,6 @@
 #include "expr/ExistsExpr.h"
 #include "expr/CountSubqueryExpr.h"
 
-#include "FunctionDecls.h"
 
 #include "BioAssert.h"
 #include "AnalyzeException.h"
@@ -118,8 +117,6 @@ CypherAnalyzer::~CypherAnalyzer() {
 }
 
 void CypherAnalyzer::analyze() {
-    _ast->getFunctionDecls()->initDefault();
-
     for (QueryCommand* query : _ast->queries()) {
         setScope(query->getDeclContext());
 

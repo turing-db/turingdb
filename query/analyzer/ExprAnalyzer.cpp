@@ -271,8 +271,7 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
         break;
         case Expr::Kind::FUNCTION_INVOCATION:
-            analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr),
-                                _ast->getFunctionDecls());
+            analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr), &FunctionDecls::getBuiltins());
         break;
         case Expr::Kind::INDEX:
             analyzeIndexExpr(static_cast<IndexExpr*>(expr));
@@ -1415,7 +1414,7 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
-void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver) {
+void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const FunctionResolver* resolver) {
     const FunctionInvocation* invoc = expr->getFunctionInvocation();
     const std::vector<Symbol*>& names = invoc->getName()->names();
 
@@ -1477,7 +1476,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
     const Expr* rowReadingArg = nullptr;
 
     // For each overload, check if the argument types match
-    for (FunctionSignature* signature : signatures) {
+    for (const FunctionSignature* signature : signatures) {
         const auto& expectedArgs = signature->argumentTypes();
 
         // A signature unifying its arguments declares none of them, so its arity is a

@@ -19,8 +19,8 @@ public:
     QualifiedName* getName() const { return _name; }
     ExprChain* getArguments() const { return _arguments; }
 
-    void setSignature(FunctionSignature* signature) { _signature = signature; }
-    FunctionSignature* getSignature() const { return _signature; }
+    void setSignature(const FunctionSignature* signature) { _signature = signature; }
+    const FunctionSignature* getSignature() const { return _signature; }
 
     // Whether the invocation is over the distinct values of its argument -
     // count(DISTINCT x) rather than count(x)
@@ -30,7 +30,7 @@ public:
 private:
     QualifiedName* _name {nullptr};
     ExprChain* _arguments {nullptr};
-    FunctionSignature* _signature {nullptr};
+    const FunctionSignature* _signature {nullptr};
     bool _distinct {false};
 
     FunctionInvocation(QualifiedName* name)

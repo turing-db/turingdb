@@ -14,6 +14,6 @@ FunctionInvocationExpr* FunctionInvocationExpr::create(CypherAST* ast, FunctionI
     return expr;
 }
 
-void FunctionInvocationExpr::setSignature(FunctionSignature* signature) {
+void FunctionInvocationExpr::setSignature(const FunctionSignature* signature) {
     _invocation->setSignature(signature);
 }

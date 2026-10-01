@@ -74,7 +74,7 @@ ProcedureLookup::ProcedureLookup(const ProcedureManager* manager)
 ProcedureLookup::~ProcedureLookup() {
 }
 
-FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_view fullName) {
+FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_view fullName) const {
     const auto it = _cacheMap.find(fullName);
     if (it != _cacheMap.end()) {
         return FunctionSignatureRange(&it->second, &it->second + 1);

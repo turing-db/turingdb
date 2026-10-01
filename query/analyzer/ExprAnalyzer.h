@@ -93,7 +93,7 @@ public:
     void analyzeCountSubqueryExpr(CountSubqueryExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
-    void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
+    void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const FunctionResolver* resolver);
     void analyzeIndexExpr(IndexExpr* expr);
     void analyzeListSliceExpr(ListSliceExpr* expr);
     void analyzePropertyLookupExpr(PropertyLookupExpr* expr);

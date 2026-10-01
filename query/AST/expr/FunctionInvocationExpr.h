@@ -15,7 +15,7 @@ public:
 
     FunctionInvocation* getFunctionInvocation() const { return _invocation; }
 
-    void setSignature(FunctionSignature* signature);
+    void setSignature(const FunctionSignature* signature);
 
 private:
     FunctionInvocation* _invocation {nullptr};
