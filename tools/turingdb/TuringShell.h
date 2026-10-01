@@ -11,6 +11,7 @@
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 
+#include "IRContext.h"
 #include "TuringClient.h"
 
 #include "ShellCompletion.h"
@@ -53,6 +54,7 @@ private:
     TuringDB& _turingDB;
     net::proto::TuringClient _client;
     LocalMemory* _mem {nullptr};
+    IRContext _irContext;
     std::string _graphName {"default"};
     CommitHash _hash {CommitHash::head()};
     ChangeID _changeID {ChangeID::head()};

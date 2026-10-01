@@ -3,19 +3,15 @@
 #include <optional>
 #include <sstream>
 
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OwningOpRef.h"
 
-#include "DBDialect.h"
 #include "DBDialectInterpreter.h"
 #include "DBProgramGenerator.h"
 #include "ExplainReport.h"
 #include "NLSystemContext.h"
-#include "NLDialect.h"
-#include "StorageDialect.h"
 #include "iterators/ChunkConfig.h"
 
 #include "CypherAST.h"
@@ -169,13 +165,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
 
     ExplainReport* const explain = explainRequest ? &explainReport.value() : nullptr;
 
-    mlir::MLIRContext context;
-    context.getOrLoadDialect<mlir::func::FuncDialect>();
-    context.getOrLoadDialect<mlir::storage::Storage>();
-    context.getOrLoadDialect<mlir::db::DB>();
-    context.getOrLoadDialect<mlir::nl::NL>();
+    _irContext->prepareForQuery(query);
+    mlir::MLIRContext* const context = _irContext->getContext();
 
-    mlir::OpBuilder builder(&context);
+    mlir::OpBuilder builder(context);
     mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
     mlir::ModuleOp module = owningModule.get();
 
@@ -234,7 +227,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     try {
         if (explain) {
             interpreter.explain(*explain);
-            reportExplain(*explain, &context, &view, mem, sink);
+            reportExplain(*explain, context, &view, mem, sink);
         } else {
             interpreter.run();
         }

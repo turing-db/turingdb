@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "IRContext.h"
 #include "QueryConfig.h"
 #include "TuringConfig.h"
 #include "versioning/ChangeID.h"
@@ -43,6 +44,7 @@ private:
     db::TuringConfig _config;
     db::QueryConfig _queryConfig;
     std::unique_ptr<db::LocalMemory> _localMem;
+    db::IRContext _irContext;
     std::unique_ptr<db::TuringDB> _db;
 
     std::string _graphName {"default"};
