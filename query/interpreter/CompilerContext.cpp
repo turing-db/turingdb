@@ -35,7 +35,7 @@ void CompilerContext::prepareForQuery(std::string_view query) {
     _retainedQueryBytes += query.size();
 
     const bool overBudget = _retainedQueryBytes > _queryBytesBudget;
-    if (!_context || overBudget) {
+    if (!_context || overBudget || _needsRebuild) {
         _passPipeline.reset();
 
         _context = std::make_unique<mlir::MLIRContext>(mlir::MLIRContext::Threading::DISABLED);
@@ -47,5 +47,10 @@ void CompilerContext::prepareForQuery(std::string_view query) {
         _passPipeline = std::make_unique<DBPassPipeline>(_context.get());
 
         _retainedQueryBytes = query.size();
+        _needsRebuild = false;
     }
+}
+
+void CompilerContext::handleCompileError() {
+    _needsRebuild = true;
 }

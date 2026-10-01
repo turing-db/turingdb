@@ -185,24 +185,29 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     try {
         generator.generate(&ast);
     } catch (const CompilerException& e) {
+        _compilerContext->handleCompileError();
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(e.what());
         return;
     } catch (const FatalException& e) {
+        _compilerContext->handleCompileError();
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
         return;
     } catch (const TuringException& e) {
         // The generator rejects unsupported constructs with a plain TuringException:
         // those are deliberate user-input rejections, not internal errors
+        _compilerContext->handleCompileError();
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(e.what());
         return;
     } catch (const std::exception& e) {
+        _compilerContext->handleCompileError();
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
         return;
     } catch (...) {
+        _compilerContext->handleCompileError();
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage("Unknown exception occurred");
         return;

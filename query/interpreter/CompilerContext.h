@@ -19,6 +19,7 @@ public:
     ~CompilerContext();
 
     void prepareForQuery(std::string_view query);
+    void handleCompileError();
 
     mlir::MLIRContext* getContext() { return _context.get(); }
     DBPassPipeline* getPassPipeline() { return _passPipeline.get(); }
@@ -28,6 +29,7 @@ private:
     std::unique_ptr<DBPassPipeline> _passPipeline;
     size_t _queryBytesBudget {0};
     size_t _retainedQueryBytes {0};
+    bool _needsRebuild {false};
 };
 
 }
