@@ -223,8 +223,9 @@ def summarize(lines):
     """Reads one query's output chunk into a status, a row count and a duration.
 
     An engine error spans several lines: the status code, the query with the offending
-    span underlined, then the reason on a trailing `-------*` line. The reason is the
-    part worth reporting, so it is preferred over the code that opened the block.
+    span underlined, then the reason on a trailing `-------*` line. A runtime error is one
+    line, the code then the reason. The reason is the part worth reporting, so it is
+    preferred over the code that opened the block.
     """
     rowCount = None
     duration = None
@@ -242,7 +243,10 @@ def summarize(lines):
 
         failure = ERROR_PATTERN.search(line)
         if failure and code is None:
-            code = failure.group(1).strip().split(":")[0]
+            code, _, inlineReason = failure.group(1).strip().partition(":")
+            inlineReason = inlineReason.strip()
+            if inlineReason and not inlineReason.startswith(REASON_PREFIX):
+                reason = inlineReason
             continue
 
         if code is not None and line.startswith(REASON_PREFIX):
