@@ -106,8 +106,7 @@ private:
 
 void explainDBProgram(std::string& mlirOutput,
                       QueryInterpreterV3& interpreter,
-                      const QueryTestSpec& spec,
-                      LocalMemory* mem) {
+                      const QueryTestSpec& spec) {
     const std::string explainQuery = "EXPLAIN(db) " + spec._query;
 
     std::vector<std::string> columnNames;
@@ -120,7 +119,6 @@ void explainDBProgram(std::string& mlirOutput,
                         spec._graphName,
                         CommitHash::head(),
                         ChangeID::head(),
-                        mem,
                         &sink);
 
     if (!status.isOk()) {
@@ -151,17 +149,17 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     SimpleGraph::createSimpleGraph(graph);
     TuringDB* db = &env->getDB();
 
-    QueryInterpreterV3 interpreter(&env->getSystemManager());
+    QueryInterpreterV3 interpreter(&env->getSystemManager(), &env->getMem(), &env->getCompilerContext());
 
     std::string mlirOutput;
-    explainDBProgram(mlirOutput, interpreter, spec, &env->getMem());
+    explainDBProgram(mlirOutput, interpreter, spec);
 
     QueryConfig queryConfig;
 
     ChangeID changeID = ChangeID::head();
     if (spec._writeRequired) {
         ChangeIDNLSink changeNewSink(changeID);
-        const QueryState changeNewState(spec._graphName, &env->getMem(), &queryConfig, &changeNewSink);
+        const QueryState changeNewState(spec._graphName, &env->getMem(), &env->getCompilerContext(), &queryConfig, &changeNewSink);
         db->query("CHANGE NEW", changeNewState);
     }
 
@@ -172,13 +170,13 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     QueryStatus status;
 
     const auto queryStart = Clock::now();
-    interpreter.execute(status, spec._query, spec._graphName, CommitHash::head(), changeID, &env->getMem(), &sink);
+    interpreter.execute(status, spec._query, spec._graphName, CommitHash::head(), changeID, &sink);
     const auto queryEnd = Clock::now();
 
     result._timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     if (spec._writeRequired) {
-        const QueryState submitState(spec._graphName, &env->getMem(), &queryConfig, nullptr,
+        const QueryState submitState(spec._graphName, &env->getMem(), &env->getCompilerContext(), &queryConfig, nullptr,
                                      CommitHash::head(), changeID);
         db->query("CHANGE SUBMIT", submitState);
     }

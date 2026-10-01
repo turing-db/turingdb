@@ -873,7 +873,7 @@ void TuringShell::processLine(std::string& line) {
 
     } else {
         TuringShellNLSink sink(table, rowCount, _quiet);
-        const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID, &_compilerContext);
+        const QueryState state(_graphName, _mem, &_compilerContext, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID);
         res = _turingDB.query(line, state);
     }
 

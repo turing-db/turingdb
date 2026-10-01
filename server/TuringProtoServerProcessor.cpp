@@ -78,7 +78,7 @@ void TuringProtoServerProcessor::handleQuery() {
     const TransactionInfo info = getTransactionInfo();
     const QueryConfig& queryConfig = _db.getDefaultQueryConfig();
 
-    const QueryState state(info.graphName, &mem, &queryConfig, &_protoNLSink, info.commit, info.change, &compilerContext);
+    const QueryState state(info.graphName, &mem, &compilerContext, &queryConfig, &_protoNLSink, info.commit, info.change);
     const QueryStatus status = _db.query(info.query, state);
 
     if (!status.isOk()) {

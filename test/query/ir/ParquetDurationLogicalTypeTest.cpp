@@ -33,7 +33,7 @@ public:
         Graph* graph = system.createGraph(_sessionGraph);
         SimpleGraph::createSimpleGraph(graph);
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         const FileUtils::Path dataDir {_env->getConfig().getDataDir().get()};
         const FileUtils::Path importDir = dataDir / "durations";
@@ -53,7 +53,6 @@ protected:
                               _sessionGraph,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
 
         ASSERT_FALSE(status.isOk()) << "accepted: " << query;

@@ -23,6 +23,7 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "NLOutputSink.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
@@ -180,6 +181,7 @@ int main(int argc, const char** argv) {
 
     TuringDB db(&config);
     LocalMemory mem;
+    CompilerContext compilerContext;
     QueryConfig queryConfig;
     db.init();
 
@@ -202,7 +204,7 @@ int main(int argc, const char** argv) {
                                  const LambdaNLSink::OnChunks& cb,
                                  ChangeID chg = ChangeID::head()) {
         LambdaNLSink sink(cb);
-        const QueryState state(graphName, &mem, &queryConfig, &sink, CommitHash::head(), chg);
+        const QueryState state(graphName, &mem, &compilerContext, &queryConfig, &sink, CommitHash::head(), chg);
         const auto res = db.query(q, state);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());
@@ -211,7 +213,7 @@ int main(int argc, const char** argv) {
     };
 
     const auto mustQuery = [&](std::string_view q, ChangeID chg = ChangeID::head()) {
-        const QueryState state(graphName, &mem, &queryConfig, nullptr, CommitHash::head(), chg);
+        const QueryState state(graphName, &mem, &compilerContext, &queryConfig, nullptr, CommitHash::head(), chg);
         const auto res = db.query(q, state);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());

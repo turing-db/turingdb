@@ -137,7 +137,7 @@ class CypherCollectDistinctEntityTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interp3 = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interp3 = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         SystemAccessor system = _env->getSystemManager().accessUnique();
         system.createGraph(_graphName);
@@ -155,10 +155,10 @@ protected:
 
         NullSink discardSink;
         QueryStatus createStatus;
-        _interp3->execute(createStatus, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &discardSink);
+        _interp3->execute(createStatus, query, _graphName, CommitHash::head(), changeID, &discardSink);
         ASSERT_TRUE(createStatus.isOk()) << "CREATE failed: " << createStatus.getError();
 
-        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+        const QueryState submitState(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << "CHANGE SUBMIT failed";
     }
@@ -166,7 +166,7 @@ protected:
     // Runs a read-only MATCH query against the committed head.
     void match(std::string_view query, NLOutputSink& sink) {
         QueryStatus status;
-        _interp3->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+        _interp3->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
         ASSERT_TRUE(status.isOk()) << "MATCH failed: " << status.getError();
     }
 

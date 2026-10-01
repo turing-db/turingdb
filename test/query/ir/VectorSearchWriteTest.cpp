@@ -56,7 +56,7 @@ public:
         _remy = SimpleGraph::findNodeID(graph, "Remy");
         _adam = SimpleGraph::findNodeID(graph, "Adam");
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -66,7 +66,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               change,
-                              &_env->getMem(),
                               &sink);
     }
 
@@ -84,7 +83,7 @@ protected:
     }
 
     void submitChange(ChangeID change) {
-        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), change);
+        const QueryState submitState(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), change);
 
         const QueryStatus status = _env->getDB().query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(status.isOk()) << status.getError();

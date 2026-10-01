@@ -30,7 +30,7 @@ class NullComparisonDisjunctionTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         SystemAccessor system = _env->getSystemManager().accessUnique();
         Graph* graph = system.createGraph(_graphName);
@@ -38,7 +38,7 @@ protected:
     }
 
     void runQuery(std::string_view query, StringRowSink& sink, QueryStatus& status) {
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+        _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
     }
 
     void expectRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {

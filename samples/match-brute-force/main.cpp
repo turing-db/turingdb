@@ -22,6 +22,7 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "reader/GraphReader.h"
 #include "datapart/EdgeRecord.h"
 #include "metadata/GraphMetadata.h"
@@ -802,7 +803,7 @@ void formatRow(std::string& text, const Row& row) {
 bool runV3(std::vector<Row>& rows, QueryInterpreterV3& interpreter, LocalMemory& memory, std::string_view query) {
     TextRowSink sink;
     QueryStatus status;
-    interpreter.execute(status, query, graphName, CommitHash::head(), ChangeID::head(), &memory, &sink);
+    interpreter.execute(status, query, graphName, CommitHash::head(), ChangeID::head(), &sink);
     memory.clear();
 
     if (!status.isOk()) {
@@ -1115,7 +1116,8 @@ int main(int argc, const char** argv) {
     readMatchGraph(matchGraph, graph);
 
     LocalMemory memory;
-    QueryInterpreterV3 interpreter(&db.getSystemManager());
+    CompilerContext compilerContext;
+    QueryInterpreterV3 interpreter(&db.getSystemManager(), &memory, &compilerContext);
 
     std::vector<Binding> bindings;
     RowCounts bruteForce;

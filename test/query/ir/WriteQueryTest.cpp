@@ -24,7 +24,7 @@ WriteQueryTest::~WriteQueryTest() {
 
 void WriteQueryTest::initialize() {
     _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-    _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+    _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
     SystemAccessor system = _env->getSystemManager().accessUnique();
     Graph* graph = system.createGraph(_graphName);
@@ -42,6 +42,7 @@ void WriteQueryTest::openChange(ChangeID& changeID) {
 void WriteQueryTest::submit(const ChangeID& changeID) {
     const QueryState submitState(_graphName,
                                  &_env->getMem(),
+                                 &_env->getCompilerContext(),
                                  &_queryConfig,
                                  nullptr,
                                  CommitHash::head(),
@@ -57,7 +58,6 @@ QueryStatus WriteQueryTest::runQuery(std::string_view query, NLOutputSink* sink)
                           _graphName,
                           CommitHash::head(),
                           ChangeID::head(),
-                          &_env->getMem(),
                           sink);
 
     return status;
@@ -71,7 +71,6 @@ QueryStatus WriteQueryTest::runWrite(std::string_view query, const ChangeID& cha
                           _graphName,
                           CommitHash::head(),
                           changeID,
-                          &_env->getMem(),
                           &sink);
 
     return status;
@@ -98,7 +97,6 @@ void WriteQueryTest::writeRows(std::string_view query, Rows& rows) {
                           _graphName,
                           CommitHash::head(),
                           changeID,
-                          &_env->getMem(),
                           &sink);
     ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
 

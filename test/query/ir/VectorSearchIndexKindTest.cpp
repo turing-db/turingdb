@@ -42,7 +42,7 @@ public:
         _remy = SimpleGraph::findNodeID(graph, "Remy");
         _adam = SimpleGraph::findNodeID(graph, "Adam");
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -52,7 +52,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
     }
 

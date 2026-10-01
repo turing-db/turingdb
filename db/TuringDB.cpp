@@ -36,13 +36,8 @@ void TuringDB::init() {
 }
 
 QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
-    QueryInterpreterV3 interp(_systemManager.get());
+    QueryInterpreterV3 interp(_systemManager.get(), state.getMemory(), state.getCompilerContext());
     interp.setChunkSize(state.getQueryConfig()->getChunkSize());
-
-    CompilerContext* const compilerContext = state.getCompilerContext();
-    if (compilerContext) {
-        interp.setCompilerContext(compilerContext);
-    }
 
     DiscardedOutputSink discardedSink;
     NLOutputSink* sink = state.getSink();
@@ -56,7 +51,6 @@ QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
                    state.getGraphName(),
                    state.getCommitHash(),
                    state.getChangeID(),
-                   state.getMemory(),
                    sink);
 
     return status;

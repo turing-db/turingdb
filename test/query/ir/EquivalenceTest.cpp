@@ -324,7 +324,7 @@ protected:
     void runViaPipeline(std::string_view query, Rows& rows) {
         EquivalenceSink sink(rows);
 
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &sink);
+        const QueryState state(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, &sink);
         const QueryStatus status = _db->query(query, state);
         ASSERT_TRUE(status.isOk()) << "Pipeline query failed: " << query;
     }

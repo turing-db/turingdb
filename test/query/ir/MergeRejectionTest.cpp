@@ -30,7 +30,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               changeID,
-                              &_env->getMem(),
                               &sink);
     }
 };

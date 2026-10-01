@@ -6,6 +6,7 @@
 #include "TuringDB.h"
 #include "SystemManager.h"
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "Path.h"
 
 using namespace db;
@@ -36,6 +37,8 @@ public:
 
     [[nodiscard]] LocalMemory& getMem() { return _mem; }
 
+    [[nodiscard]] CompilerContext& getCompilerContext() { return _compilerContext; }
+
     [[nodiscard]] SystemManager& getSystemManager() {
         return _db.getSystemManager();
     }
@@ -44,5 +47,6 @@ private:
     TuringConfig _config;
     TuringDB _db;
     LocalMemory _mem;
+    CompilerContext _compilerContext;
 };
 }

@@ -44,19 +44,19 @@ void CallV3Test::initialize() {
     Graph* graph = system.createGraph(_graphName);
     SimpleGraph::createSimpleGraph(graph);
 
-    _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+    _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 }
 
 void CallV3Test::runQuery(std::string_view query, NLOutputSink& sink) {
     QueryStatus status;
-    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
     ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 }
 
 void CallV3Test::runQueryExpectingError(std::string_view query, std::string_view reason) {
     NullSink sink;
     QueryStatus status;
-    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
     ASSERT_FALSE(status.isOk()) << "accepted: " << query;
 
     const std::string error = status.getError();
@@ -73,7 +73,7 @@ void CallV3Test::runWrite(std::string_view query, NLOutputSink& sink) {
     newChange(changeID);
 
     QueryStatus status;
-    _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
     ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 
     submitChange(changeID);
@@ -85,7 +85,7 @@ void CallV3Test::runWriteExpectingError(std::string_view query, std::string_view
 
     NullSink sink;
     QueryStatus status;
-    _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
     ASSERT_FALSE(status.isOk()) << "accepted: " << query;
 
     const std::string error = status.getError();
@@ -98,11 +98,11 @@ void CallV3Test::runWritesInOneChange(std::string_view first, std::string_view s
 
     NullSink staged;
     QueryStatus firstStatus;
-    _interpreter->execute(firstStatus, first, _graphName, CommitHash::head(), changeID, &_env->getMem(), &staged);
+    _interpreter->execute(firstStatus, first, _graphName, CommitHash::head(), changeID, &staged);
     ASSERT_TRUE(firstStatus.isOk()) << first << ": " << firstStatus.getError();
 
     QueryStatus secondStatus;
-    _interpreter->execute(secondStatus, second, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+    _interpreter->execute(secondStatus, second, _graphName, CommitHash::head(), changeID, &sink);
     ASSERT_TRUE(secondStatus.isOk()) << second << ": " << secondStatus.getError();
 
     submitChange(changeID);
@@ -114,7 +114,7 @@ void CallV3Test::runLegacyWrite(std::string_view query) {
     ChangeID changeID;
     newChange(changeID);
 
-    const QueryState writeState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+    const QueryState writeState(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
     const QueryStatus writeStatus = _env->getDB().query(query, writeState);
     ASSERT_TRUE(writeStatus.isOk()) << query << ": " << writeStatus.getError();
 
@@ -133,7 +133,7 @@ void CallV3Test::newChange(ChangeID& changeID) {
 }
 
 void CallV3Test::submitChange(ChangeID changeID) {
-    const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+    const QueryState submitState(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
     const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
     ASSERT_TRUE(submitStatus.isOk()) << submitStatus.getError();
 }

@@ -34,7 +34,7 @@ class CountNeo4jManualTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         SystemAccessor system = _env->getSystemManager().accessUnique();
         buildGraph(system.createGraph(_graphName));
@@ -100,7 +100,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               changeID,
-                              &_env->getMem(),
                               &sink);
 
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
@@ -153,6 +152,7 @@ protected:
 
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
+                                     &_env->getCompilerContext(),
                                      &_queryConfig,
                                      nullptr,
                                      CommitHash::head(),

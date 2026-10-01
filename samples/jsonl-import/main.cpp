@@ -13,6 +13,7 @@
 #include "JobSystem.h"
 #include "JsonlParser.h"
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "NLOutputSink.h"
 #include "SystemManager.h"
 #include "TuringConfig.h"
@@ -141,8 +142,9 @@ int main(int argc, char** argv) {
 
     if (!query.empty()) {
         LocalMemory mem;
+        CompilerContext compilerContext;
         DumpingNLSink sink(&mem);
-        QueryState state(graphName, &mem, &db.getDefaultQueryConfig(), &sink);
+        QueryState state(graphName, &mem, &compilerContext, &db.getDefaultQueryConfig(), &sink);
         const auto res = db.query(query, state);
         if (!res) {
             spdlog::error(res.getError());

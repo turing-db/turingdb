@@ -17,6 +17,7 @@
 #include "SystemManager.h"
 #include "Graph.h"
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "NLOutputSink.h"
 #include "columns/ColumnVector.h"
 #include "versioning/Change.h"
@@ -131,6 +132,7 @@ int main(int argc, const char** argv) {
 
     TuringDB db(&config);
     LocalMemory mem;
+    CompilerContext compilerContext;
     db.init();
 
     const std::string graphName = "tfl";
@@ -160,7 +162,7 @@ int main(int argc, const char** argv) {
     const auto runQuery = [&](std::string_view q,
                               NLOutputSink* sink,
                               ChangeID chg = ChangeID::head()) {
-        const QueryState state(graphName, &mem, &queryConfig, sink, CommitHash::head(), chg);
+        const QueryState state(graphName, &mem, &compilerContext, &queryConfig, sink, CommitHash::head(), chg);
         return db.query(q, state);
     };
 

@@ -145,7 +145,7 @@ public:
         SimpleGraph::createSimpleGraph(graph);
 
         _db = &_env->getDB();
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -154,7 +154,7 @@ protected:
                      Rows& rows) {
         SystemTableSink sink;
 
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &sink);
+        const QueryState state(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, &sink);
         const QueryStatus status = _db->query(query, state);
 
         columnNames = sink.getColumnNames();
@@ -170,7 +170,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
 
         ASSERT_TRUE(status.isOk()) << "the MLIR engine rejected '" << query << "': "
