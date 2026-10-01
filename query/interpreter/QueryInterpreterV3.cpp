@@ -165,8 +165,8 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
 
     ExplainReport* const explain = explainRequest ? &explainReport.value() : nullptr;
 
-    _irContext->prepareForQuery(query);
-    mlir::MLIRContext* const context = _irContext->getContext();
+    _compilerContext->prepareForQuery(query);
+    mlir::MLIRContext* const context = _compilerContext->getContext();
 
     mlir::OpBuilder builder(context);
     mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
@@ -180,7 +180,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     const mlir::db::DBPassContext passContext {._view = &view, ._hasPendingWrites = hasPendingWrites};
 
     DBProgramGenerator generator(&module, explain, passContext);
-    generator.setPassPipeline(_irContext->getPassPipeline());
+    generator.setPassPipeline(_compilerContext->getPassPipeline());
     try {
         generator.generate(&ast);
     } catch (const CompilerException& e) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AbstractThreadContext.h"
-#include "IRContext.h"
+#include "CompilerContext.h"
 #include "LocalMemory.h"
 
 namespace db {
@@ -18,11 +18,11 @@ public:
     DBThreadContext& operator=(DBThreadContext&&) = delete;
 
     LocalMemory& getLocalMemory() { return _localMem; }
-    IRContext& getIRContext() { return _irContext; }
+    CompilerContext& getCompilerContext() { return _compilerContext; }
 
 private:
     LocalMemory _localMem;
-    IRContext _irContext;
+    CompilerContext _compilerContext;
 };
 
 }
