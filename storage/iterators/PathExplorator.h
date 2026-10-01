@@ -176,19 +176,23 @@ private:
         bool _batchActive {false};
     };
 
-    // The search for a cycle through one seed of an undirected distinct walk: each node it
-    // reaches, with the edge and depth it was first reached at and the seed's neighbour whose
-    // branch reached it
+    // The search for a cycle through one seed of an undirected distinct walk. It walks out of
+    // the seed and never through it, and a node keeps the first edges of its two shortest
+    // arrivals that left the seed by different edges.
     struct CycleSearch {
-        struct Arrival {
-            NodeID _branch;
-            EdgeID _edge;
-            uint64_t _depth {0};
+        struct Arrivals {
+            std::array<EdgeID, 2> _firstEdges;
+            size_t _count {0};
         };
 
-        std::unordered_map<uint64_t, Arrival> _arrivals;
-        std::vector<NodeID> _frontier;
-        std::vector<NodeID> _next;
+        struct Visit {
+            NodeID _node;
+            EdgeID _firstEdge;
+        };
+
+        std::unordered_map<uint64_t, Arrivals> _arrivals;
+        std::vector<Visit> _frontier;
+        std::vector<Visit> _next;
     };
 
     GraphView _view;

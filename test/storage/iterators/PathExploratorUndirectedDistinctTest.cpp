@@ -56,6 +56,26 @@ void distinctPairs(const std::vector<PathRow>& rows, std::vector<PathRow>& pairs
     pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
 }
 
+bool everyHopPasses(uint64_t, uint64_t, uint64_t) {
+    return true;
+}
+
+bool evenEdgesOnly(uint64_t, uint64_t edge, uint64_t) {
+    return edge % 2 == 0;
+}
+
+bool towardsHigherNodes(uint64_t source, uint64_t, uint64_t end) {
+    return end > source;
+}
+
+bool towardsHigherNodesOrOddEdges(uint64_t source, uint64_t edge, uint64_t end) {
+    return end >= source || edge % 2 == 1;
+}
+
+bool intoEvenNodes(uint64_t, uint64_t, uint64_t end) {
+    return end % 2 == 0;
+}
+
 }
 
 // MATCH (s)-[*]-(m) WITH DISTINCT m: undirected with a minimum of one hop, every end but the
@@ -116,7 +136,8 @@ protected:
                                    const ColumnNodeIDs& input,
                                    uint64_t maxHops,
                                    ExplorationOptions options,
-                                   const std::vector<bool>* ends = nullptr) {
+                                   const std::vector<bool>* ends = nullptr,
+                                   HopPredicate predicate = nullptr) {
         SCOPED_TRACE("max hops " + std::to_string(maxHops) + " chunk " + std::to_string(options._maxCount));
 
         ReferenceEnumerator reference(adjacency, PathExplorationDir::BOTH, 1, maxHops);
@@ -124,6 +145,7 @@ protected:
             reference.setEdgeType(options._edgeType->getValue());
         }
         reference.setEnds(ends);
+        reference.setHopPredicate(predicate);
 
         std::vector<PathRow> rows;
         reference.enumerate(input, rows);
@@ -174,6 +196,38 @@ TEST_F(PathExploratorUndirectedDistinctTest, matchesTheDeduplicatedEnumerationOn
                 options._maxCount = maxCount;
 
                 expectDistinctRows(view, _adjacency, input, maxHops, options);
+            }
+        }
+    }
+}
+
+// A hop predicate can let an edge be crossed one way only, so a cycle back to the seed must be
+// one the predicate lets the walk go round
+TEST_F(PathExploratorUndirectedDistinctTest, matchesTheDeduplicatedEnumerationUnderHopPredicates) {
+    for (uint64_t seed = 1; seed <= 6; seed++) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+
+        std::vector<GeneratedArc> arcs;
+        randomArcs(9, seed % 2 == 0 ? 1 : 2, seed, arcs);
+        build(9, arcs);
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphReader reader = transaction.readGraph();
+        const GraphView& view = reader.getView();
+
+        ColumnNodeIDs input;
+        for (size_t node = 0; node < _nodeCount; node++) {
+            input.push_back(NodeID(node));
+        }
+
+        for (const HopPredicate predicate : {evenEdgesOnly, towardsHigherNodes, towardsHigherNodesOrOddEdges, intoEvenNodes}) {
+            PredicateHopFilter filter(predicate);
+
+            for (const uint64_t maxHops : {uint64_t {1}, uint64_t {2}, uint64_t {3}, uint64_t {4}, unbounded}) {
+                ExplorationOptions options;
+                options._hopFilter = &filter;
+
+                expectDistinctRows(view, _adjacency, input, maxHops, options, nullptr, predicate);
             }
         }
     }
@@ -259,8 +313,8 @@ TEST_F(PathExploratorUndirectedDistinctTest, endConstraintsAndTypeFilterAgreeWit
 }
 
 // The trails of a cyclic graph multiply with its size, its ends do not: the search reads each
-// node's edges once to reach them and at most once more to find a cycle back to the seed
-TEST_F(PathExploratorUndirectedDistinctTest, readsEachEdgeAtMostFourTimes) {
+// node's edges once to reach them and at most twice more to find a cycle back to the seed
+TEST_F(PathExploratorUndirectedDistinctTest, readsEachEdgeAtMostSixTimes) {
     const size_t nodeCount = 10;
 
     std::vector<GeneratedArc> arcs;
@@ -273,13 +327,17 @@ TEST_F(PathExploratorUndirectedDistinctTest, readsEachEdgeAtMostFourTimes) {
 
     const ColumnNodeIDs input {NodeID(0)};
 
-    ExplorationOptions options;
-    options._distinctEnds = true;
-    options._collectPaths = false;
+    PredicateHopFilter filter(everyHopPasses);
+    for (PathHopFilter* hopFilter : {static_cast<PathHopFilter*>(nullptr), static_cast<PathHopFilter*>(&filter)}) {
+        ExplorationOptions options;
+        options._hopFilter = hopFilter;
+        options._distinctEnds = true;
+        options._collectPaths = false;
 
-    std::vector<PathRow> rows;
-    const size_t checks = collectPaths(view, input, PathExplorationDir::BOTH, 1, unbounded, options, rows);
+        std::vector<PathRow> rows;
+        const size_t checks = collectPaths(view, input, PathExplorationDir::BOTH, 1, unbounded, options, rows);
 
-    EXPECT_GT(rows.size(), nodeCount / 2);
-    EXPECT_LE(checks, 4 * arcs.size()) << checks << " checks";
+        EXPECT_GT(rows.size(), nodeCount / 2);
+        EXPECT_LE(checks, 6 * arcs.size()) << checks << " checks";
+    }
 }

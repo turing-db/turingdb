@@ -363,15 +363,9 @@ void PathExplorator::setDistinctEnds(bool distinct) {
 }
 
 // The level search answers "reached within k", which coincides with "reached by a trail
-// within k" only when the walk may stop at its first hop; deeper minimums walk instead. The
-// cycle search through an undirected seed assumes every edge can be crossed both ways, which
-// a hop predicate does not promise.
+// within k" only when the walk may stop at its first hop; deeper minimums walk instead
 bool PathExplorator::searchesLevels() const {
-    if (!_distinctEnds || _minHops > 1) {
-        return false;
-    }
-
-    return !searchesSeedCycles() || !_hopFilter;
+    return _distinctEnds && _minHops <= 1;
 }
 
 bool PathExplorator::searchesSeedCycles() const {
@@ -1012,47 +1006,42 @@ void PathExplorator::startBatch() {
     }
 }
 
-// A non-tree edge between two branches of the search closes a cycle through the seed, and the
-// shortest such cycle is found that way: the seed is a closed trail's end exactly when one fits
+// A walk out of the seed that comes back by another edge than it left by shortens to a closed
+// trail, and every closed trail is such a walk. Two arrivals per node suffice: the edge back to
+// the seed can rule out the first edge of only one of them.
 bool PathExplorator::hasCycleThrough(NodeID seed) {
     CycleSearch& search = _cycleSearch;
-    std::unordered_map<uint64_t, CycleSearch::Arrival>& arrivals = search._arrivals;
+    std::unordered_map<uint64_t, CycleSearch::Arrivals>& arrivals = search._arrivals;
     const std::vector<NodeID>& candidateNodes = _reach._candidateNodes;
     const std::vector<EdgeID>& candidateEdges = _reach._candidateEdges;
 
     arrivals.clear();
-    arrivals.try_emplace(seed.getValue(), CycleSearch::Arrival {._branch = seed});
-    search._frontier.assign(1, seed);
+    search._frontier.assign(1, CycleSearch::Visit {._node = seed});
 
-    for (uint64_t depth = 0; !search._frontier.empty() && 2 * depth + 1 <= _maxHops; depth++) {
+    for (uint64_t depth = 0; !search._frontier.empty() && depth < _maxHops; depth++) {
         search._next.clear();
 
-        for (const NodeID node : search._frontier) {
-            const CycleSearch::Arrival arrival = arrivals.at(node.getValue());
-            collectReachCandidates(node);
+        for (const CycleSearch::Visit& visit : search._frontier) {
+            collectReachCandidates(visit._node);
 
             for (size_t index = 0; index < candidateNodes.size(); index++) {
                 const EdgeID edge = candidateEdges[index];
-                if (edge == arrival._edge) {
-                    continue;
-                }
-
                 const NodeID candidate = candidateNodes[index];
-                const NodeID branch = node == seed ? candidate : arrival._branch;
-                const CycleSearch::Arrival reached {._branch = branch, ._edge = edge, ._depth = depth + 1};
 
-                const auto [found, inserted] = arrivals.try_emplace(candidate.getValue(), reached);
-                if (inserted) {
-                    search._next.push_back(candidate);
-                    continue;
-                }
+                if (candidate == seed) {
+                    if (edge != visit._firstEdge) {
+                        return true;
+                    }
+                } else if (depth + 2 <= _maxHops) {
+                    const EdgeID firstEdge = visit._firstEdge.isValid() ? visit._firstEdge : edge;
+                    CycleSearch::Arrivals& reached = arrivals[candidate.getValue()];
 
-                const CycleSearch::Arrival& other = found->second;
-                const bool crossesTree = edge != other._edge;
-                const bool joinsBranches = node == seed || other._branch != arrival._branch;
-                const bool fits = arrival._depth + other._depth + 1 <= _maxHops;
-                if (crossesTree && joinsBranches && fits) {
-                    return true;
+                    const bool newFirstEdge = reached._count == 0 || (reached._count == 1 && reached._firstEdges[0] != firstEdge);
+                    if (newFirstEdge) {
+                        reached._firstEdges[reached._count] = firstEdge;
+                        reached._count++;
+                        search._next.push_back(CycleSearch::Visit {._node = candidate, ._firstEdge = firstEdge});
+                    }
                 }
             }
         }
