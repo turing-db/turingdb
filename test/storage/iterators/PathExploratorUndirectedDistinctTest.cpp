@@ -341,3 +341,74 @@ TEST_F(PathExploratorUndirectedDistinctTest, readsEachEdgeAtMostSixTimes) {
         EXPECT_LE(checks, 6 * arcs.size()) << checks << " checks";
     }
 }
+
+// In a tree no seed closes on itself, and finding that out walks the whole tree: the first
+// seed that does labels every node of its component, so the others cost a lookup each
+TEST_F(PathExploratorUndirectedDistinctTest, walksAComponentWithoutCyclesOnceForAllItsSeeds) {
+    const size_t nodeCount = 1023;
+
+    std::vector<GeneratedArc> arcs;
+    for (size_t node = 1; node < nodeCount; node++) {
+        arcs.push_back(GeneratedArc {._source = (node - 1) / 2, ._target = node});
+    }
+    build(nodeCount, arcs);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    ColumnNodeIDs input;
+    for (size_t node = 0; node < nodeCount; node++) {
+        input.push_back(NodeID(node));
+    }
+
+    ExplorationOptions options;
+    options._distinctEnds = true;
+    options._collectPaths = false;
+
+    std::vector<PathRow> searched;
+    const size_t searchChecks = collectPaths(view, input, PathExplorationDir::BOTH, 0, unbounded, options, searched);
+
+    std::vector<PathRow> rows;
+    const size_t checks = collectPaths(view, input, PathExplorationDir::BOTH, 1, unbounded, options, rows);
+
+    EXPECT_EQ(rows.size(), searched.size() - nodeCount);
+    EXPECT_LE(checks, searchChecks + 8 * arcs.size()) << checks << " checks against " << searchChecks;
+}
+
+TEST_F(PathExploratorUndirectedDistinctTest, labelsParallelEdgesSelfLoopsAndCyclesOfAComponent) {
+    // 0-1 is a bridge, 1=2 two parallel edges, 2-3 a bridge to a self-loop on 3, 3-4 a bridge to
+    // the triangle 4-5-6. The pendant 0 comes first, and its labelling decides every other seed.
+    const std::vector<GeneratedArc> arcs {
+        {0, 1}, {1, 2}, {2, 1}, {2, 3}, {3, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 4},
+    };
+    build(7, arcs);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    ColumnNodeIDs input;
+    for (size_t node = 0; node < _nodeCount; node++) {
+        input.push_back(NodeID(node));
+    }
+
+    expectDistinctRows(view, _adjacency, input, unbounded, ExplorationOptions {});
+
+    ExplorationOptions options;
+    options._distinctEnds = true;
+    options._collectPaths = false;
+
+    std::vector<PathRow> rows;
+    collectPaths(view, input, PathExplorationDir::BOTH, 1, unbounded, options, rows);
+
+    std::vector<uint64_t> closed;
+    for (const PathRow& row : rows) {
+        if (row._target == input[row._index].getValue()) {
+            closed.push_back(row._target);
+        }
+    }
+    std::sort(closed.begin(), closed.end());
+
+    EXPECT_EQ(closed, (std::vector<uint64_t> {1, 2, 3, 4, 5, 6}));
+}

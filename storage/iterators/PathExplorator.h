@@ -190,9 +190,30 @@ private:
             EdgeID _firstEdge;
         };
 
+        // A node of a component labelled in one depth-first walk: its discovery index, the
+        // lowest one its subtree reaches by an edge off the tree, and whether it is on a cycle
+        struct ComponentNode {
+            size_t _index {0};
+            size_t _low {0};
+            bool _onCycle {false};
+        };
+
+        struct ComponentFrame {
+            NodeID _node;
+            EdgeID _parentEdge;
+            size_t _candidateBegin {0};
+            size_t _candidateEnd {0};
+            size_t _next {0};
+        };
+
         std::unordered_map<uint64_t, Arrivals> _arrivals;
         std::vector<Visit> _frontier;
         std::vector<Visit> _next;
+        std::unordered_map<uint64_t, bool> _seeds;
+        std::unordered_map<uint64_t, ComponentNode> _components;
+        std::vector<ComponentFrame> _frames;
+        std::vector<NodeID> _candidateNodes;
+        std::vector<EdgeID> _candidateEdges;
     };
 
     GraphView _view;
@@ -305,6 +326,11 @@ private:
     void startBatch();
     bool searchesSeedCycles() const;
     bool hasCycleThrough(NodeID seed);
+    bool searchCycleThrough(NodeID seed);
+    // Whether any cycle closes a trail, however long, and every edge can be crossed both ways
+    bool labelsComponents() const;
+    void labelComponentOf(NodeID root);
+    void discoverComponentNode(NodeID node, EdgeID parentEdge);
     void emitGainedRows(size_t maxCount);
     void expandLevel();
     void collectReachCandidates(NodeID node);
