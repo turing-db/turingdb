@@ -4668,3 +4668,13 @@ target_link_libraries(test_query_ir_db_pass_pipeline_reuse PRIVATE
         turing_db_analyzer_s
         turing_db_ast_s
         turing_db_examples_s)
+
+add_turing_test(test_query_ir_node_in_integer_list NodeInIntegerListTest.cpp)
+target_link_libraries(test_query_ir_node_in_integer_list PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
