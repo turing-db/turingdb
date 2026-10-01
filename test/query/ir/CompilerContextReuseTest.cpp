@@ -112,6 +112,22 @@ TEST_F(CompilerContextReuseTest, rebuildsAfterACompileError) {
     EXPECT_NE(compilerContext.getContext(), contextBeforeError);
 }
 
+TEST_F(CompilerContextReuseTest, rebuildsEvery16kQueries) {
+    const size_t queriesPerContext = 16 * 1024;
+    CompilerContext compilerContext;
+
+    compilerContext.prepareForQuery();
+    const mlir::MLIRContext* const firstContext = compilerContext.getContext();
+
+    for (size_t query = 1; query < queriesPerContext; query++) {
+        compilerContext.prepareForQuery();
+    }
+    EXPECT_EQ(compilerContext.getContext(), firstContext);
+
+    compilerContext.prepareForQuery();
+    EXPECT_NE(compilerContext.getContext(), firstContext);
+}
+
 TEST_F(CompilerContextReuseTest, answersLikeAFreshContextOnEachThread) {
     std::vector<std::thread> threads;
 
