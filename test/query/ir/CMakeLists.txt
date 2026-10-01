@@ -128,6 +128,18 @@ add_ir_tests(test_query_ir_collect CollectTest.cpp)
 # the rows it stands for before the group assignment reads it.
 add_ir_tests(test_query_ir_constant_grouping_key ConstantGroupingKeyTest.cpp)
 
+# The same shape as the reported Cypher queries, end to end on the v3 engine.
+add_turing_test(test_query_ir_constant_grouping_key_query ConstantGroupingKeyQueryTest.cpp)
+target_sources(test_query_ir_constant_grouping_key_query PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_constant_grouping_key_query PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_constant_grouping_key_query PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # The chunked collect tests force the collect fold to span chunk boundaries.
 add_ir_tests(test_query_ir_collect_chunked CollectChunkedTest.cpp)
 
