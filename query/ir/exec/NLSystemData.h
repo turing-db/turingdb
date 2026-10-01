@@ -19,6 +19,8 @@
 
 namespace db {
 
+class StringBuffer;
+
 // Which change-management operation a change command performs. The runtime mirror
 // of mlir::storage::ChangeOperation, so an NLProgram stays free of the MLIR
 // dialect headers - the same split AggregateKind makes in NLProgram.h.
@@ -44,10 +46,8 @@ enum class NLIndexedEntity : uint8_t {
 };
 
 // The columns a system command reports its result table in. A name the command
-// was handed, or one it read out of a structure that outlives the query, is
-// emitted as a view; a name it built or was handed by value is owned.
+// built or was handed by value is copied into the query's string buffer first.
 using NLViewColumn = ColumnVector<types::String::Primitive>;
-using NLStringColumn = ColumnVector<std::string>;
 using NLBoolColumn = ColumnVector<types::Bool::Primitive>;
 using NLCountColumn = ColumnVector<types::UInt64::Primitive>;
 using NLChangeIDColumn = ColumnVector<ChangeID>;
@@ -128,19 +128,22 @@ private:
 // reported in.
 class NLListAvailableGraphsData : public NLFunctionData {
 public:
-    NLListAvailableGraphsData(NLStringColumn* graphs, NLBoolColumn* loaded, NLBoolColumn* loading)
-        : _graphs(graphs),
+    NLListAvailableGraphsData(StringBuffer* stringBuffer, NLViewColumn* graphs, NLBoolColumn* loaded, NLBoolColumn* loading)
+        : _stringBuffer(stringBuffer),
+        _graphs(graphs),
         _loaded(loaded),
         _loading(loading)
     {
     }
 
-    NLStringColumn* getGraphs() const { return _graphs; }
+    StringBuffer* getStringBuffer() const { return _stringBuffer; }
+    NLViewColumn* getGraphs() const { return _graphs; }
     NLBoolColumn* getLoaded() const { return _loaded; }
     NLBoolColumn* getLoading() const { return _loading; }
 
 private:
-    NLStringColumn* _graphs {nullptr};
+    StringBuffer* _stringBuffer {nullptr};
+    NLViewColumn* _graphs {nullptr};
     NLBoolColumn* _loaded {nullptr};
     NLBoolColumn* _loading {nullptr};
 };
@@ -230,21 +233,24 @@ private:
 
 // SHOW PROCEDURES: the two row-aligned columns each procedure is reported in. A
 // procedure's name outlives the query in the procedure manager, so it is emitted
-// as a view; its signature is rendered per row, so it is owned.
+// as a view; its signature is rendered per row into the query's string buffer.
 class NLShowProceduresData : public NLFunctionData {
 public:
-    NLShowProceduresData(NLViewColumn* names, NLStringColumn* signatures)
-        : _names(names),
+    NLShowProceduresData(StringBuffer* stringBuffer, NLViewColumn* names, NLViewColumn* signatures)
+        : _stringBuffer(stringBuffer),
+        _names(names),
         _signatures(signatures)
     {
     }
 
+    StringBuffer* getStringBuffer() const { return _stringBuffer; }
     NLViewColumn* getNames() const { return _names; }
-    NLStringColumn* getSignatures() const { return _signatures; }
+    NLViewColumn* getSignatures() const { return _signatures; }
 
 private:
+    StringBuffer* _stringBuffer {nullptr};
     NLViewColumn* _names {nullptr};
-    NLStringColumn* _signatures {nullptr};
+    NLViewColumn* _signatures {nullptr};
 };
 
 // INSTALL <name>: the extension to install, and the single-row column the command
@@ -331,17 +337,20 @@ private:
 // SHOW VECTOR INDEXES: the two row-aligned columns each library is reported in.
 class NLShowVectorIndexesData : public NLFunctionData {
 public:
-    NLShowVectorIndexesData(NLStringColumn* names, NLCountColumn* dimensions)
-        : _names(names),
+    NLShowVectorIndexesData(StringBuffer* stringBuffer, NLViewColumn* names, NLCountColumn* dimensions)
+        : _stringBuffer(stringBuffer),
+        _names(names),
         _dimensions(dimensions)
     {
     }
 
-    NLStringColumn* getNames() const { return _names; }
+    StringBuffer* getStringBuffer() const { return _stringBuffer; }
+    NLViewColumn* getNames() const { return _names; }
     NLCountColumn* getDimensions() const { return _dimensions; }
 
 private:
-    NLStringColumn* _names {nullptr};
+    StringBuffer* _stringBuffer {nullptr};
+    NLViewColumn* _names {nullptr};
     NLCountColumn* _dimensions {nullptr};
 };
 

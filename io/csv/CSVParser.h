@@ -11,6 +11,7 @@
 namespace db {
 
 class ColumnStringTable;
+class StringBuffer;
 
 class CSVParser {
 public:
@@ -26,15 +27,17 @@ public:
     CSVParser(const CSVParser&) = delete;
     CSVParser& operator=(const CSVParser&) = delete;
 
-    // Read up to maxRows into output. Returns number of rows read (0 at EOF).
-    size_t readChunk(size_t maxRows, ColumnStringTable* output);
+    // Read up to maxRows into output, the fields' characters copied into stringBuffer.
+    // Returns number of rows read (0 at EOF).
+    size_t readChunk(size_t maxRows, ColumnStringTable* output, StringBuffer* stringBuffer);
 
     // Read up to maxRows into output, keeping only the fields fieldIndices names:
     // field fieldIndices[i] of each record fills output's field column i, so output
     // holds one field column per entry of fieldIndices. Returns rows read (0 at EOF).
     size_t readChunk(size_t maxRows,
                      std::span<const size_t> fieldIndices,
-                     ColumnStringTable* output);
+                     ColumnStringTable* output,
+                     StringBuffer* stringBuffer);
 
     size_t getLinesRead() const { return _linesRead; }
     size_t getLinesSkipped() const { return _linesSkipped; }

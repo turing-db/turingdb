@@ -732,8 +732,6 @@ private:
     // nullable column, which the value and the list siblings above share
     mlir::Value toNullableChunk(mlir::Value chunk, mlir::Type valueElement);
 
-    mlir::Value ownedStringColumnChunk(mlir::Value chunk);
-
     // The chunk element type an unwind of @param sourceElement produces: a drained list
     // gives up the type its own elements carry, falling back to the type-erased
     // list_element when they share none, and any other source keeps its own element,

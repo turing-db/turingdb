@@ -13,7 +13,7 @@ namespace db {
 
 class ColumnStringTable : public Column {
 public:
-    using StringColumn = ColumnVector<std::string>;
+    using StringColumn = ColumnVector<std::string_view>;
     using Headers = std::vector<std::string>;
 
     ColumnStringTable();

@@ -46,7 +46,6 @@ static EvaluatedType procTypeToEvaluatedType(ProcedureType type) {
         break;
 
         case ProcedureType::STRING_VIEW:
-        case ProcedureType::STRING:
             return EvaluatedType::String;
         break;
 

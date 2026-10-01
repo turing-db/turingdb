@@ -47,6 +47,7 @@ class Procedure;
 class ProcedureContext;
 class ProcedureData;
 class LocalMemory;
+class StringBuffer;
 
 // Translation resolves every chunk SSA value
 // to a concrete ColumnVector type through this kind
@@ -54,8 +55,7 @@ class LocalMemory;
 // The first three are the ID columns a scan or a hop binds. The rest are what a CALL
 // yields: a procedure's declared return types map onto these, so a yielded column can be
 // crossed and carried like any other. Every one of them is a plain (never-null)
-// ColumnVector of the element type its name says - String is a borrowed string_view,
-// OwnedString a std::string the column owns.
+// ColumnVector of the element type its name says.
 enum class NLChunkKind {
     NodeID,
     EdgeID,
@@ -68,7 +68,6 @@ enum class NLChunkKind {
     Double,
     Bool,
     String,
-    OwnedString,
     List,
     Map,
     Path,
@@ -130,10 +129,6 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::String:
             return handler.template operator()<types::String::Primitive>();
-        break;
-
-        case NLChunkKind::OwnedString:
-            return handler.template operator()<std::string>();
         break;
 
         case NLChunkKind::List:
@@ -513,10 +508,12 @@ public:
     };
 
     NLLoadCSVLoopData(ColumnStringTable* row,
+                      StringBuffer* stringBuffer,
                       std::string_view path,
                       bool hasHeaders,
                       bool skipOnError)
         : _row(row),
+        _stringBuffer(stringBuffer),
         _path(path),
         _hasHeaders(hasHeaders),
         _skipOnError(skipOnError)
@@ -524,6 +521,7 @@ public:
     }
 
     ColumnStringTable* getRow() const { return _row; }
+    StringBuffer* getStringBuffer() const { return _stringBuffer; }
     std::string_view getPath() const { return _path; }
     bool hasHeaders() const { return _hasHeaders; }
     bool skipOnError() const { return _skipOnError; }
@@ -539,6 +537,7 @@ public:
 
 private:
     ColumnStringTable* _row {nullptr};
+    StringBuffer* _stringBuffer {nullptr};
     std::string_view _path;
     std::vector<Field> _fields;
     NLLimitState* _limit {nullptr};

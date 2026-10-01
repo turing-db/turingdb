@@ -8,7 +8,7 @@
 
 using namespace turing::test;
 
-// An OPTIONAL CALL pads every column the body returned, a column that owns its strings
+// An OPTIONAL CALL pads every column the body returned, a procedure string column
 // included: a missed row reads null there, not the empty string
 class OptionalSubqueryStringPaddingTest : public CallV3Test {
 protected:
@@ -26,9 +26,9 @@ protected:
     }
 };
 
-// db.procedures() writes its name through a column owning its strings. Only Remy and Adam
+// db.procedures() writes its name through a procedure string column. Only Remy and Adam
 // know anybody well, so the body yields for those two and the six others are padded
-TEST_F(OptionalSubqueryStringPaddingTest, padsAnOwnedStringColumnWithNull) {
+TEST_F(OptionalSubqueryStringPaddingTest, padsAProcedureStringColumnWithNull) {
     expectRows("MATCH (p:Person) "
                "OPTIONAL CALL (p) { MATCH (p)-[:KNOWS_WELL]->(k) "
                "CALL db.procedures() YIELD name WHERE name = 'db.labels' RETURN name AS n } "

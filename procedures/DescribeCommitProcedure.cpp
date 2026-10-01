@@ -77,16 +77,8 @@ void extractString(std::string& result, const T& val) {
 template <template <typename> class ColType, typename F>
 void dispatchStringInternal(const Column* col, const F& fn) {
     switch (col->getKind()) {
-        case ColType<std::string>::staticKind():
-            fn(static_cast<const ColType<std::string>*>(col));
-        break;
-
         case ColType<std::string_view>::staticKind():
             fn(static_cast<const ColType<std::string_view>*>(col));
-        break;
-
-        case ColType<std::optional<std::string>>::staticKind():
-            fn(static_cast<const ColType<std::optional<std::string>>*>(col));
         break;
 
         case ColType<std::optional<std::string_view>>::staticKind():
@@ -115,7 +107,7 @@ void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addArgument("commit", ProcedureType::STRING);
+    proc->addArgument("commit", ProcedureType::STRING_VIEW);
     proc->setHasIndices(true);
     proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
     proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
@@ -158,10 +150,8 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                        || containerKind == ContainerKind::code<ColumnConst<void>>(),
                       "db.describeCommit: commit hash must be a vector or const column");
             bioassert(internalKind == InternalKind::code<std::string_view>()
-                       || internalKind == InternalKind::code<std::string>()
-                       || internalKind == InternalKind::code<std::optional<std::string_view>>()
-                       || internalKind == InternalKind::code<std::optional<std::string>>(),
-                      "db.describeCommit: commit hash must be a string or string_view");
+                       || internalKind == InternalKind::code<std::optional<std::string_view>>(),
+                      "db.describeCommit: commit hash must be a string");
         }
         break;
 

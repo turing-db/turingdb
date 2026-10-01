@@ -209,7 +209,7 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
     from a literal list - one row per record of the file:
 
       %name, %age = db.load_csv("people.csv", [0 : ui64, 1 : ui64])
-        : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+        : !db.column<!storage.string>, !db.column<!storage.string>
 
     A record is many values, and an op has a fixed number of results, so the row is not
     one column: `fields` names the fields the query reads and the op produces one column
@@ -222,12 +222,12 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
     row set needs a column to ride, so the first field stands for them.
 
       %age = db.load_csv("people.csv", ["age"]) with_headers
-        : !db.column<!storage.owned_string>
+        : !db.column<!storage.string>
 
     Every field is a string: a CSV file carries no types, so a record's fields are the
     characters as written and a query converts them itself (`toInteger(row[1])`). The
-    characters live in the column that parsed them rather than in the graph, so the
-    columns own their strings.
+    characters are copied into the query's string buffer, so a row's view outlives the
+    chunk that parsed it.
 
     `with_headers` consumes the first record as the header line - it names the fields
     rather than holding a row - and is what lets a string entry of `fields` resolve.
@@ -248,7 +248,7 @@ def LoadCSV : TuringOp<"load_csv", [Pure]> {
                        ArrayAttr:$fields,
                        UnitAttr:$with_headers,
                        UnitAttr:$skip_on_error);
-  let results   = (outs Variadic<ColumnOwnedStrings>:$results);
+  let results   = (outs Variadic<ColumnStrings>:$results);
   let hasVerifier = 1;
 
   // The path and the field list print inside the parens, ahead of the colon, the same

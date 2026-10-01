@@ -23,10 +23,10 @@
 using namespace db;
 using namespace turing::test;
 
-// min() and max() reduce the string type() answers - one the engine owns - the same way
-// they reduce a stored string property. simpledb holds the two types INTERESTED_IN and
+// min() and max() reduce the string type() answers the same way they reduce a stored
+// string property. simpledb holds the two types INTERESTED_IN and
 // KNOWS_WELL, so the least and the greatest are one each.
-class OwnedStringReductionTest : public TuringTest {
+class EdgeTypeReductionTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -61,15 +61,15 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-TEST_F(OwnedStringReductionTest, reducesAnEdgeTypeToItsLeast) {
+TEST_F(EdgeTypeReductionTest, reducesAnEdgeTypeToItsLeast) {
     expectRows("MATCH ()-[e]->() RETURN min(type(e))", {{"INTERESTED_IN"}});
 }
 
-TEST_F(OwnedStringReductionTest, reducesAnEdgeTypeToItsGreatest) {
+TEST_F(EdgeTypeReductionTest, reducesAnEdgeTypeToItsGreatest) {
     expectRows("MATCH ()-[e]->() RETURN max(type(e))", {{"KNOWS_WELL"}});
 }
 
-TEST_F(OwnedStringReductionTest, reducesAnEdgeTypePerGroup) {
+TEST_F(EdgeTypeReductionTest, reducesAnEdgeTypePerGroup) {
     expectRows("MATCH (a:Person)-[e]->(b) RETURN a.name, max(type(e))",
                {{"Remy", "KNOWS_WELL"},
                 {"Adam", "KNOWS_WELL"},
@@ -81,7 +81,7 @@ TEST_F(OwnedStringReductionTest, reducesAnEdgeTypePerGroup) {
                 {"Doruk", "INTERESTED_IN"}});
 }
 
-TEST_F(OwnedStringReductionTest, reducesAStringProperty) {
+TEST_F(EdgeTypeReductionTest, reducesAStringProperty) {
     expectRows("MATCH (n:Person) RETURN min(n.name), max(n.name)", {{"Adam", "Suhas"}});
 }
 

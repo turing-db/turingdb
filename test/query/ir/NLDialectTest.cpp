@@ -554,9 +554,8 @@ TEST_F(NLDialectTest, unwindConstRoundTripsThroughTextualForm) {
 }
 
 // nl.load_csv spells its iterator type rather than inferring it - one chunk per field the
-// load produces, however many the query named - and every field rides an owning string
-// chunk, since the characters were parsed here rather than borrowed from the graph.
-TEST_F(NLDialectTest, loadCSVBuildsOneOwningStringChunkPerField) {
+// load produces, however many the query named - and every field rides a string chunk.
+TEST_F(NLDialectTest, loadCSVBuildsOneStringChunkPerField) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
 
@@ -565,7 +564,7 @@ TEST_F(NLDialectTest, loadCSVBuildsOneOwningStringChunkPerField) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::OwnedStringType::get(&_context));
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::StringType::get(&_context));
     const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType, chunkType});
 
     const mlir::ArrayAttr fields = builder.getArrayAttr({builder.getStringAttr("name"),
@@ -598,7 +597,7 @@ TEST_F(NLDialectTest, loadCSVRoundTripsThroughTextualForm) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::OwnedStringType::get(&_context));
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::StringType::get(&_context));
     const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType});
 
     const mlir::IntegerAttr position = mlir::IntegerAttr::get(builder.getIntegerType(64, /*isSigned=*/false), 2);
