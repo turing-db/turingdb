@@ -1463,7 +1463,7 @@ LogicalResult GetOutEdgesByTypeAndLabel::verify() {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult GetInEdgesByTypeAndLabel::verify() {
@@ -1471,7 +1471,7 @@ LogicalResult GetInEdgesByTypeAndLabel::verify() {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult CountScanRows::verify() {

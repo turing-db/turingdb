@@ -770,6 +770,7 @@ void NLTranslator::bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind) {
 
     resolveLabelNames(hop.getLabels(), config._labels);
 
+    readDistinctFrom(hop, config);
     _iteratorConfigs[hop.getResult()] = config;
 }
 
