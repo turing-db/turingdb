@@ -37,7 +37,7 @@ public:
         Graph* graph = system.createGraph(_sessionGraph);
         SimpleGraph::createSimpleGraph(graph);
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -59,7 +59,6 @@ protected:
                               graphName,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
 
         ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
@@ -73,7 +72,6 @@ protected:
                               _sessionGraph,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
 
         ASSERT_FALSE(status.isOk()) << "accepted: " << query;

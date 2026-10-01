@@ -19,6 +19,7 @@ protected:
     QueryStatus trySubmit(const ChangeID& changeID) {
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
+                                     &_env->getCompilerContext(),
                                      &_queryConfig,
                                      nullptr,
                                      CommitHash::head(),

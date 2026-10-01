@@ -36,7 +36,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               changeID,
-                              &_env->getMem(),
                               &sink);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
 

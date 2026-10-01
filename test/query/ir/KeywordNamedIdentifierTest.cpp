@@ -36,7 +36,7 @@ public:
         Graph* graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(graph);
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -48,7 +48,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
 
         EXPECT_TRUE(status.isOk()) << query << ": " << status.getError();

@@ -59,7 +59,7 @@ class ShortestPathStaleWeightTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         {
             SystemAccessor system = _env->getSystemManager().accessUnique();
@@ -75,7 +75,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               changeID,
-                              &_env->getMem(),
                               sink);
     }
 

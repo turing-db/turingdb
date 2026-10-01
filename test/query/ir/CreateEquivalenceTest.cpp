@@ -42,7 +42,7 @@ public:
         system.createGraph(_v3GraphName);
 
         _db = &_env->getDB();
-        _interp3 = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interp3 = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
@@ -56,11 +56,11 @@ protected:
             changeID = res.value()->id();
         }
 
-        const QueryState createState(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+        const QueryState createState(graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus createStatus = _db->query(createQuery, createState);
         ASSERT_TRUE(createStatus.isOk()) << "V2 CREATE failed: " << createQuery;
 
-        const QueryState submitState(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+        const QueryState submitState(graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _db->query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << "V2 CHANGE SUBMIT failed";
     }
@@ -77,10 +77,10 @@ protected:
 
         NullSink sink;
         QueryStatus createStatus;
-        _interp3->execute(createStatus, createQuery, graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+        _interp3->execute(createStatus, createQuery, graphName, CommitHash::head(), changeID, &sink);
         ASSERT_TRUE(createStatus.isOk()) << "V3 CREATE failed: " << createQuery << " — " << createStatus.getError();
 
-        const QueryState submitState(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+        const QueryState submitState(graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _db->query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << "V3 CHANGE SUBMIT failed";
     }
@@ -89,7 +89,7 @@ protected:
     void matchV2(std::string_view graphName, std::string_view matchQuery, Rows& rows) {
         RowSink sink;
 
-        const QueryState state(graphName, &_env->getMem(), &_queryConfig, &sink);
+        const QueryState state(graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, &sink);
         const QueryStatus status = _db->query(matchQuery, state);
         rows = sink.rows();
 

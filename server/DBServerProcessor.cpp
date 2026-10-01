@@ -135,7 +135,7 @@ void DBServerProcessor::queryImpl(std::string_view query,
 
     DBServerNlSink sink(&encoder);
 
-    const QueryState state(graphName, &mem, &_db.getDefaultQueryConfig(), &sink, commit, change, &compilerContext);
+    const QueryState state(graphName, &mem, &compilerContext, &_db.getDefaultQueryConfig(), &sink, commit, change);
     const QueryStatus status = _db.query(query, state);
 
     if (!status.isOk()) {

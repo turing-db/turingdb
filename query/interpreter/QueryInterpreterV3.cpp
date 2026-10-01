@@ -8,6 +8,7 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OwningOpRef.h"
 
+#include "CompilerContext.h"
 #include "DBDialectInterpreter.h"
 #include "DBProgramGenerator.h"
 #include "ExplainReport.h"
@@ -34,8 +35,10 @@
 
 using namespace db;
 
-QueryInterpreterV3::QueryInterpreterV3(SystemManager* sysMan)
-    : _sysMan(sysMan)
+QueryInterpreterV3::QueryInterpreterV3(SystemManager* sysMan, LocalMemory* mem, CompilerContext* compilerContext)
+    : _sysMan(sysMan),
+    _mem(mem),
+    _compilerContext(compilerContext)
 {
 }
 
@@ -47,10 +50,9 @@ void QueryInterpreterV3::execute(QueryStatus& status,
                                  std::string_view graphName,
                                  CommitHash hash,
                                  ChangeID changeID,
-                                 LocalMemory* mem,
                                  NLOutputSink* sink) {
     const TimePoint start = Clock::now();
-    executeImpl(status, query, graphName, hash, changeID, mem, sink);
+    executeImpl(status, query, graphName, hash, changeID, sink);
     const TimePoint end = Clock::now();
 
     status.setTotalTime(end - start);
@@ -61,7 +63,6 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      std::string_view graphName,
                                      CommitHash hash,
                                      ChangeID changeID,
-                                     LocalMemory* mem,
                                      NLOutputSink* sink) {
     SystemAccessor system = _sysMan->accessShared();
 
@@ -213,13 +214,13 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     procedureContext.setTransaction(&txRes.value());
     procedureContext.setProcedures(system.getProcedures());
     procedureContext.setChunkSize(_chunkSize);
-    procedureContext.setListBuffer(&mem->listBuffer());
-    procedureContext.setStringBuffer(&mem->stringBuffer());
+    procedureContext.setListBuffer(&_mem->listBuffer());
+    procedureContext.setStringBuffer(&_mem->stringBuffer());
 
     DBDialectInterpreter interpreter(module,
                                      &view,
                                      sink,
-                                     mem,
+                                     _mem,
                                      _chunkSize,
                                      writeBuffer,
                                      metadataBuilder,
@@ -228,7 +229,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     try {
         if (explain) {
             interpreter.explain(*explain);
-            reportExplain(*explain, context, &view, mem, sink);
+            reportExplain(*explain, context, &view, _mem, sink);
         } else {
             interpreter.run();
         }

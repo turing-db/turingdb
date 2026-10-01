@@ -61,7 +61,7 @@ public:
         Graph* graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(graph);
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         writeFile("nodes.csv", nodeFile);
         writeFile("headed_nodes.csv", headedNodeFile);
@@ -86,7 +86,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               change,
-                              &_env->getMem(),
                               &sink);
     }
 
@@ -101,6 +100,7 @@ protected:
     void submitChange(ChangeID change) {
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
+                                     &_env->getCompilerContext(),
                                      &_queryConfig,
                                      nullptr,
                                      CommitHash::head(),

@@ -37,7 +37,6 @@ public:
 
 protected:
     void runQuery(QueryInterpreterV3& interpreter,
-                  LocalMemory* memory,
                   std::string_view query,
                   std::vector<StringRowSink::Row>& rows) {
         StringRowSink sink;
@@ -48,7 +47,6 @@ protected:
                             _graphName,
                             CommitHash::head(),
                             ChangeID::head(),
-                            memory,
                             &sink);
 
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
@@ -57,17 +55,17 @@ protected:
     }
 
     void expectRowsOfAFreshContext(CompilerContext* compilerContext, LocalMemory* memory) {
-        QueryInterpreterV3 interpreter(&_env->getSystemManager());
-        interpreter.setCompilerContext(compilerContext);
+        QueryInterpreterV3 interpreter(&_env->getSystemManager(), memory, compilerContext);
 
         for (size_t round = 0; round < 2; round++) {
             for (const std::string_view query : _queries) {
-                QueryInterpreterV3 freshInterpreter(&_env->getSystemManager());
+                CompilerContext freshContext;
+                QueryInterpreterV3 freshInterpreter(&_env->getSystemManager(), memory, &freshContext);
                 std::vector<StringRowSink::Row> expected;
-                runQuery(freshInterpreter, memory, query, expected);
+                runQuery(freshInterpreter, query, expected);
 
                 std::vector<StringRowSink::Row> rows;
-                runQuery(interpreter, memory, query, rows);
+                runQuery(interpreter, query, rows);
 
                 EXPECT_EQ(rows, expected) << "query: " << query;
             }

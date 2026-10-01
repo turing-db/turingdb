@@ -45,13 +45,13 @@ public:
         Graph* graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(graph);
 
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
     }
 
 protected:
     void runQuery(std::string_view query, NLOutputSink& sink) {
         QueryStatus status;
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+        _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
         ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
     }
 
@@ -68,10 +68,10 @@ protected:
 
         NullSink sink;
         QueryStatus status;
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
         ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 
-        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+        const QueryState submitState(_graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << submitStatus.getError();
     }

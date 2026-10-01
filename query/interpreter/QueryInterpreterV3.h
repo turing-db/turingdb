@@ -2,7 +2,6 @@
 
 #include <string_view>
 
-#include "CompilerContext.h"
 #include "NLOutputSink.h"
 #include "QueryStatus.h"
 #include "iterators/ChunkConfig.h"
@@ -17,37 +16,35 @@ namespace db {
 
 class SystemManager;
 class LocalMemory;
+class CompilerContext;
 class ExplainReport;
 class GraphView;
 
 class QueryInterpreterV3 {
 public:
-    explicit QueryInterpreterV3(SystemManager* sysMan);
+    QueryInterpreterV3(SystemManager* sysMan, LocalMemory* mem, CompilerContext* compilerContext);
     ~QueryInterpreterV3();
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
-    void setCompilerContext(CompilerContext* compilerContext) { _compilerContext = compilerContext; }
 
     void execute(QueryStatus& status,
                  std::string_view query,
                  std::string_view graphName,
                  CommitHash hash,
                  ChangeID changeID,
-                 LocalMemory* mem,
                  NLOutputSink* sink);
 
 private:
     SystemManager* _sysMan {nullptr};
+    LocalMemory* _mem {nullptr};
+    CompilerContext* _compilerContext {nullptr};
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
-    CompilerContext _ownedCompilerContext;
-    CompilerContext* _compilerContext {&_ownedCompilerContext};
 
     void executeImpl(QueryStatus& status,
                      std::string_view query,
                      std::string_view graphName,
                      CommitHash hash,
                      ChangeID changeID,
-                     LocalMemory* mem,
                      NLOutputSink* sink);
 
     // Emits the dumps an explained query collected, by compiling and running the

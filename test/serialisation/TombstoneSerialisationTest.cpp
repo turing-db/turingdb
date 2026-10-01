@@ -149,7 +149,7 @@ public:
     }
 
     QueryStatus query(std::string_view q, ChangeID changeID, NLOutputSink* sink = nullptr) {
-        const QueryState state(_workingGraphName, &_env->getMem(), &_queryConfig, sink, CommitHash::head(), changeID);
+        const QueryState state(_workingGraphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, sink, CommitHash::head(), changeID);
         return _env->getDB().query(q, state);
     }
 

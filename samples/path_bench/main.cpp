@@ -47,6 +47,7 @@
 #include "writers/MetadataBuilder.h"
 
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "NLOutputSink.h"
 #include "Path.h"
 #include "TuringTime.h"
@@ -312,14 +313,13 @@ void appendRunCells(std::vector<std::string>& row, const ExplorationRun& run) {
 // Runs one Cypher query through the MLIR engine, returning its wall time and row count.
 double timeQuery(QueryInterpreterV3& interpreter,
                  const std::string& graphName,
-                 LocalMemory& memory,
                  const std::string& query,
                  size_t& rowCountOut) {
     CountingSink sink;
     QueryStatus status;
 
     const TimePoint start = Clock::now();
-    interpreter.execute(status, query, graphName, CommitHash::head(), ChangeID::head(), &memory, &sink);
+    interpreter.execute(status, query, graphName, CommitHash::head(), ChangeID::head(), &sink);
     const TimePoint end = Clock::now();
 
     if (!status.isOk()) {
@@ -613,7 +613,8 @@ int main(int argc, char** argv) {
         // --- The same shapes as Cypher, through the passes and the interpreter ---
         if (runsSection(section, "cypher")) {
             LocalMemory memory;
-            QueryInterpreterV3 interpreter(&db.getSystemManager());
+            CompilerContext compilerContext;
+            QueryInterpreterV3 interpreter(&db.getSystemManager(), &memory, &compilerContext);
 
             const std::string hops = "{1," + std::to_string(maxHops) + "}";
             const std::vector<std::string> queries {
@@ -628,11 +629,11 @@ int main(int argc, char** argv) {
             std::vector<std::vector<std::string>> rows;
             for (const std::string& query : queries) {
                 size_t rowCount = 0;
-                timeQuery(interpreter, graphName, memory, query, rowCount);
+                timeQuery(interpreter, graphName, query, rowCount);
 
                 std::vector<double> samples;
                 for (int iteration = 0; iteration < iterations; iteration++) {
-                    samples.push_back(timeQuery(interpreter, graphName, memory, query, rowCount));
+                    samples.push_back(timeQuery(interpreter, graphName, query, rowCount));
                 }
 
                 std::vector<std::string>& row = rows.emplace_back();

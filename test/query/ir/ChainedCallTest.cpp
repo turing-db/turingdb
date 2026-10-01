@@ -34,12 +34,13 @@ private:
 
 size_t countRows(TuringDB* db,
                  LocalMemory* mem,
+                 CompilerContext* compilerContext,
                  const QueryConfig* queryConfig,
                  std::string_view graphName,
                  std::string_view query) {
     CountingSink sink;
 
-    const QueryState state(graphName, mem, queryConfig, &sink);
+    const QueryState state(graphName, mem, compilerContext, queryConfig, &sink);
     const QueryStatus status = db->query(query, state);
     EXPECT_TRUE(status.isOk()) << query;
 
@@ -61,7 +62,7 @@ protected:
     }
 
     size_t run(std::string_view query) {
-        return countRows(_db, &_env->getMem(), &_queryConfig, _graphName, query);
+        return countRows(_db, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, _graphName, query);
     }
 
     const std::string _graphName = "simpledb";

@@ -29,7 +29,7 @@ class FuzzMaskBinaryOperationTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         SystemAccessor system = _env->getSystemManager().accessUnique();
         Graph* graph = system.createGraph(_graphName);
@@ -43,7 +43,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               sink);
 
         return status;

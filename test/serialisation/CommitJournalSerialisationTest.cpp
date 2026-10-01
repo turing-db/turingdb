@@ -66,7 +66,7 @@ protected:
     }
 
     QueryStatus query(std::string_view q, std::string_view graphName, ChangeID changeID) {
-        const QueryState state(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
+        const QueryState state(graphName, &_env->getMem(), &_env->getCompilerContext(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         return _env->getDB().query(q, state);
     }
 };

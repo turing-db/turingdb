@@ -15,6 +15,7 @@
 #include "TuringConfig.h"
 #include "TuringDB.h"
 #include "LocalMemory.h"
+#include "CompilerContext.h"
 #include "TuringShell.h"
 #include "TuringServer.h"
 #include "VisualizerProxy.h"
@@ -234,6 +235,7 @@ int StartCmd::execute() {
 
         // Run TuringDB
         LocalMemory mem;
+        CompilerContext compilerContext;
         TuringDB turingDB(&config);
 
         if (_authOn) {
@@ -277,7 +279,7 @@ int StartCmd::execute() {
         // Load graphs
         const auto& queryConfig = turingDB.getDefaultQueryConfig();
         for (const auto& graphName : _graphsToLoad) {
-            const QueryState state("", &mem, &queryConfig, nullptr);
+            const QueryState state("", &mem, &compilerContext, &queryConfig, nullptr);
             const QueryStatus res = turingDB.query("load graph " + graphName, state);
             if (!res.isOk()) {
                 spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError());

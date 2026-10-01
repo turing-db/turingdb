@@ -54,7 +54,7 @@ class SetEmbeddingNullTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager(), &_env->getMem(), &_env->getCompilerContext());
 
         SystemAccessor system = _env->getSystemManager().accessUnique();
         buildEmbeddingGraph(system.createGraph(_graphName));
@@ -71,6 +71,7 @@ protected:
     QueryStatus submit(const ChangeID& changeID) {
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
+                                     &_env->getCompilerContext(),
                                      &_queryConfig,
                                      nullptr,
                                      CommitHash::head(),
@@ -85,7 +86,7 @@ protected:
 
         NullSink sink;
         QueryStatus status;
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
 
         const QueryStatus submitStatus = submit(changeID);
@@ -98,7 +99,7 @@ protected:
 
         NullSink sink;
         QueryStatus status;
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+        _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
 
         const QueryStatus submitStatus = submit(changeID);
@@ -116,7 +117,6 @@ protected:
                               _graphName,
                               CommitHash::head(),
                               ChangeID::head(),
-                              &_env->getMem(),
                               &sink);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
 
