@@ -1252,7 +1252,8 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
     match get_out_edges.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1262,7 +1263,7 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1284,7 +1285,8 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
     as on get_in_edges_by_label.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1294,7 +1296,7 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }

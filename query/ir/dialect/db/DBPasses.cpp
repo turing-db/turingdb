@@ -2049,7 +2049,8 @@ Operation* createByTypeAndLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBui
                                                                           hop->getOperand(0),
                                                                           edgeTypes,
                                                                           labels,
-                                                                          hop->getOperands().drop_front());
+                                                                          hop->getOperands().drop_front(),
+                                                                          DenseI64ArrayAttr());
 
     return byTypeAndLabelHop.getOperation();
 }
@@ -2355,10 +2356,9 @@ bool matchExcludedHop(FilterOp filter, ExcludedHop& excluded) {
 
     // The subject is the hop's own edge column or the walk's own path column
     Operation* const op = subject.getOwner();
-    const bool takesExclusions = isEdgeHop(op) && !isa<GetOutEdgesByTypeAndLabel, GetInEdgesByTypeAndLabel>(op);
     size_t fixedResultCount = 0;
     unsigned subjectResult = 0;
-    if (takesExclusions) {
+    if (isEdgeHop(op)) {
         fixedResultCount = hopFixedResultCount;
         subjectResult = 1;
     } else if (isa<ExplorePaths>(op)) {

@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -12,8 +13,12 @@
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "iterators/ExcludedEdges.h"
+#include "iterators/GetInEdgesByTypeAndLabelIterator.h"
 #include "iterators/GetInEdgesIterator.h"
+#include "iterators/GetOutEdgesByTypeAndLabelIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
+#include "metadata/GraphMetadata.h"
+#include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
@@ -80,6 +85,41 @@ void collectInEdges(const GraphReader& reader,
         writer.fill(maxCount);
         for (size_t row = 0; row < indices.size(); row++) {
             out.push_back({indices[row], edgeIDs[row].getValue(), sources[row].getValue()});
+        }
+    }
+}
+
+// The same writers' typed and labelled siblings, asked for the LINK edges reaching a Node
+template <typename Writer>
+void collectTypedLabelledEdges(const GraphReader& reader,
+                               const ColumnNodeIDs* input,
+                               const ExcludedEdges& excluded,
+                               std::vector<CollectedEdge>& out) {
+    const GraphView view = reader.getView();
+    const GraphMetadata& metadata = view.metadata();
+    const std::vector<EdgeTypeID> types {metadata.edgeTypes().get("LINK").value()};
+    const LabelSet labels = LabelSet::fromList({metadata.labels().get("Node").value()});
+    const LabelSetHandle handle {labels};
+
+    ColumnVector<size_t> indices;
+    ColumnEdgeIDs edgeIDs;
+    ColumnNodeIDs neighbours;
+
+    Writer writer(view, input, types, handle);
+    writer.setIndices(&indices);
+    writer.setEdgeIDs(&edgeIDs);
+    if constexpr (std::is_same_v<Writer, GetOutEdgesByTypeAndLabelChunkWriter>) {
+        writer.setTgtIDs(&neighbours);
+    } else {
+        writer.setSrcIDs(&neighbours);
+    }
+    writer.setExcludedEdges(excluded);
+
+    out.clear();
+    while (writer.isValid()) {
+        writer.fill(ChunkConfig::CHUNK_SIZE);
+        for (size_t row = 0; row < indices.size(); row++) {
+            out.push_back({indices[row], edgeIDs[row].getValue(), neighbours[row].getValue()});
         }
     }
 }
@@ -185,6 +225,32 @@ TEST_F(ExcludedEdgesTest, leavesTheExcludedEdgeOutOfAnInRun) {
     std::vector<CollectedEdge> pruned;
     collectInEdges(reader, &input, ExcludedEdges {offsets, edges}, ChunkConfig::CHUNK_SIZE, pruned);
     expectSameContent({{0, 2}, {1, 0}}, pruned);
+}
+
+TEST_F(ExcludedEdgesTest, leavesTheExcludedEdgeOutOfATypedLabelledRun) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const ColumnNodeIDs input = {1, 1};
+
+    std::vector<CollectedEdge> outs;
+    collectTypedLabelledEdges<GetOutEdgesByTypeAndLabelChunkWriter>(reader, &input, {}, outs);
+    expectSameContent({{0, 0}, {0, 2}, {1, 0}, {1, 2}}, outs);
+
+    std::vector<CollectedEdge> ins;
+    collectTypedLabelledEdges<GetInEdgesByTypeAndLabelChunkWriter>(reader, &input, {}, ins);
+    expectSameContent({{0, 0}, {0, 2}, {1, 0}, {1, 2}}, ins);
+
+    const std::vector<size_t> offsets {0, 1, 2};
+    const std::vector<EdgeID> outEdges {EdgeID(edgeTo(outs, 0, 0)), EdgeID(edgeTo(outs, 1, 2))};
+    const std::vector<EdgeID> inEdges {EdgeID(edgeTo(ins, 0, 0)), EdgeID(edgeTo(ins, 1, 2))};
+
+    std::vector<CollectedEdge> prunedOuts;
+    collectTypedLabelledEdges<GetOutEdgesByTypeAndLabelChunkWriter>(reader, &input, ExcludedEdges {offsets, outEdges}, prunedOuts);
+    expectSameContent({{0, 2}, {1, 0}}, prunedOuts);
+
+    std::vector<CollectedEdge> prunedIns;
+    collectTypedLabelledEdges<GetInEdgesByTypeAndLabelChunkWriter>(reader, &input, ExcludedEdges {offsets, inEdges}, prunedIns);
+    expectSameContent({{0, 2}, {1, 0}}, prunedIns);
 }
 
 TEST_F(ExcludedEdgesTest, prunesARunSplitAcrossFills) {

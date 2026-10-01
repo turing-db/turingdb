@@ -2208,7 +2208,8 @@ void DBLowering::lowerGetOutEdgesByTypeAndLabel(mlir::db::GetOutEdgesByTypeAndLa
                                                                                          inputChunk,
                                                                                          edgeTypeHandle,
                                                                                          getOutEdgesByTypeAndLabel.getLabelsAttr(),
-                                                                                         carriedChunks);
+                                                                                         carriedChunks,
+                                                                                         getOutEdgesByTypeAndLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByTypeAndLabel.getOperation());
 }
 
@@ -2227,7 +2228,8 @@ void DBLowering::lowerGetInEdgesByTypeAndLabel(mlir::db::GetInEdgesByTypeAndLabe
                                                                                        inputChunk,
                                                                                        edgeTypeHandle,
                                                                                        getInEdgesByTypeAndLabel.getLabelsAttr(),
-                                                                                       carriedChunks);
+                                                                                       carriedChunks,
+                                                                                       getInEdgesByTypeAndLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByTypeAndLabel.getOperation());
 }
 

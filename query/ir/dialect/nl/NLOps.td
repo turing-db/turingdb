@@ -839,11 +839,11 @@ def GetOutEdgesByTypeAndLabel : NLOp<"get_out_edges_by_type_and_label", [Pure, I
     resolved into, or a label absent from the schema, yields no chunk.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
@@ -860,11 +860,11 @@ def GetInEdgesByTypeAndLabel : NLOp<"get_in_edges_by_type_and_label", [Pure, Inf
     nl.get_in_edges.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict
     ( `:` qualified(type($columns_to_filter))^ )?
   }];
 }
