@@ -46,7 +46,7 @@ void writeChunk(Data* data,
                 StringBuffer* stringBuffer) {
     size_t count = 0;
 
-    auto* commitCol = static_cast<ColumnVector<std::string_view>*>(data->getReturnColumn(0));
+    auto* commitCol = HistoryProcedure::getReturnColumn<0>(data);
     auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
     auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
     auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));

@@ -4,6 +4,9 @@
 #include <vector>
 #include <stdint.h>
 
+#include "ID.h"
+#include "metadata/PropertyType.h"
+
 #include "EnumToString.h"
 
 namespace db {
@@ -25,6 +28,26 @@ enum class ProcedureType : uint8_t {
     MAP,
     _SIZE,
 };
+
+template <ProcedureType P>
+struct ProcedureTypeType;
+
+template <> struct ProcedureTypeType<ProcedureType::NODE> { using type = NodeID; };
+template <> struct ProcedureTypeType<ProcedureType::EDGE> { using type = EdgeID; };
+template <> struct ProcedureTypeType<ProcedureType::LABEL_ID> { using type = LabelSetID; };
+template <> struct ProcedureTypeType<ProcedureType::EDGE_TYPE_ID> { using type = EdgeTypeID; };
+template <> struct ProcedureTypeType<ProcedureType::PROPERTY_TYPE_ID> { using type = PropertyTypeID; };
+template <> struct ProcedureTypeType<ProcedureType::VALUE_TYPE> { using type = ValueType; };
+template <> struct ProcedureTypeType<ProcedureType::UINT_64> { using type = types::UInt64::Primitive; };
+template <> struct ProcedureTypeType<ProcedureType::INT64> { using type = types::Int64::Primitive; };
+template <> struct ProcedureTypeType<ProcedureType::DOUBLE> { using type = types::Double::Primitive; };
+template <> struct ProcedureTypeType<ProcedureType::BOOL> { using type = types::Bool::Primitive; };
+template <> struct ProcedureTypeType<ProcedureType::STRING_VIEW> { using type = types::String::Primitive; };
+template <> struct ProcedureTypeType<ProcedureType::STRING> { using type = types::String::OwningPrimitive; };
+template <> struct ProcedureTypeType<ProcedureType::LIST> { using type = ListView; };
+
+template <ProcedureType T>
+using ProcedureTypeType_t = typename ProcedureTypeType<T>::type;
 
 using ProcedureTypeName = EnumToString<ProcedureType>::Create<
     EnumStringPair<ProcedureType::INVALID, "INVALID">,
