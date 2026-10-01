@@ -91,6 +91,19 @@ TEST_F(DBPassPipelineReuseTest, readsTheContextOfEachRun) {
     EXPECT_NE(program.find("db.hash_join"), std::string::npos) << program;
 }
 
+TEST_F(DBPassPipelineReuseTest, dropsTheViewOfARunWhenItEnds) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext passContext {._view = &view};
+
+    std::string program;
+    generate("MATCH (n:Person) RETURN count(n)", passContext, program);
+
+    const mlir::db::DBPassContext& retainedContext = _passPipeline->getPassContext();
+    EXPECT_EQ(retainedContext._view, nullptr);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
