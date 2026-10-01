@@ -87,6 +87,7 @@
 - @feedback_explicit_ci_runner_labels.md — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
 - @feedback_no_build_during_iteration.md — don't build after every micro-edit; wait until the user asks
 - @feedback_no_redundant_cmake.md — don't run `cmake ..` before `make`; make reconfigures itself
+- @feedback_work_in_build_dir.md — keep build logs, bench scripts and probe outputs under build/, not the /tmp scratchpad
 - @feedback_pr_body_plain_sentence.md — PR body is a bare imperative sentence ("Implement X."), not a one-sentence summary of scope or design
 - @feedback_pr_title_ticket_code.md — PR title starts with the Linear ticket code ("TUR-124: ...") when there is one; commit subjects stay area-prefixed
 
@@ -105,3 +106,8 @@
 - @reference_v3_cross_product_chunked.md — v3 nl.cross_product is an iterator driving its own nl.for; one chunk of pairs per step, like v2's cursor
 - @reference_change_visibility.md — within a change MATCH sees the COMMITted tip (read-your-own-writes works after COMMIT); after SUBMIT the change is gone, checkout head to see committed data
 - @reference_regress_not_v3.md — regress does not exercise the v3 MLIR engine; verify v3 work with ctest, not run_regress
+- @reference_adhoc_query_cli.md — run one Cypher query on simpledb via query_test_suite_cli + a throwaway JSON; prints rows and the MLIR program
+- @reference_suite_oracle_regeneration.md — regenerate a suite oracle from the CLI's resultOutput and rebuild resultJson under its header; ten comma-pattern oracles stayed homomorphic until 2026-09-30
+- @reference_reactome_copies_outdated.md — old reactome copies fail "File outdated"; a loadable one is in ~/.turing-uniq; rebuild from the parquet dump via JSONL; `make turingdb` before measuring
+- @reference_bench_same_shell.md — reactome timings vary up to 2x between shell processes; alternate query and control in one shell
+- @reference_build_error_filter.md — filter make output with 'error:|Error [0-9]'; a missed build failure leaves stale test binaries that still pass
