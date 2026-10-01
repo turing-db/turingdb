@@ -1000,16 +1000,117 @@ void PathExplorator::startBatch() {
 
         slot._frontier |= mask;
 
-        if (seedCycles && hasCycleThrough(seed)) {
+        if (seedCycles && isEnd(row, seed) && hasCycleThrough(seed)) {
             reach._closedSeeds |= mask;
         }
     }
 }
 
+// A search that finds no cycle has walked the seed's whole component when the hops are
+// unbounded, and so do the searches of the component's other seeds: one labelling answers
+// them all instead
+bool PathExplorator::hasCycleThrough(NodeID seed) {
+    CycleSearch& search = _cycleSearch;
+
+    const auto labelled = search._components.find(seed.getValue());
+    if (labelled != search._components.end()) {
+        return labelled->second._onCycle;
+    }
+
+    const auto searched = search._seeds.find(seed.getValue());
+    if (searched != search._seeds.end()) {
+        return searched->second;
+    }
+
+    const bool closes = searchCycleThrough(seed);
+    if (!closes && labelsComponents()) {
+        labelComponentOf(seed);
+    } else {
+        search._seeds.emplace(seed.getValue(), closes);
+    }
+
+    return closes;
+}
+
+bool PathExplorator::labelsComponents() const {
+    const uint64_t hopCeiling = std::max<uint64_t>(_parts.getAllocatedEdgeCount(), _pendingEdgeIDBound);
+
+    return _maxHops >= hopCeiling && !_hopFilter;
+}
+
+// Tarjan's bridges: a node is on a cycle when it carries an edge off the depth-first tree, a
+// self-loop among them, or a tree edge that is no bridge
+void PathExplorator::labelComponentOf(NodeID root) {
+    CycleSearch& search = _cycleSearch;
+    std::unordered_map<uint64_t, CycleSearch::ComponentNode>& components = search._components;
+    std::vector<CycleSearch::ComponentFrame>& frames = search._frames;
+
+    discoverComponentNode(root, EdgeID {});
+
+    while (!frames.empty()) {
+        CycleSearch::ComponentFrame& frame = frames.back();
+
+        if (frame._next < frame._candidateEnd) {
+            const size_t index = frame._next++;
+            const NodeID node = frame._node;
+            const EdgeID edge = search._candidateEdges[index];
+            const NodeID other = search._candidateNodes[index];
+
+            if (edge == frame._parentEdge) {
+                continue;
+            }
+
+            const auto found = components.find(other.getValue());
+            if (found == components.end()) {
+                discoverComponentNode(other, edge);
+            } else {
+                CycleSearch::ComponentNode& current = components.at(node.getValue());
+                current._low = std::min(current._low, found->second._index);
+                current._onCycle = true;
+                found->second._onCycle = true;
+            }
+        } else {
+            const NodeID finished = frame._node;
+            search._candidateNodes.resize(frame._candidateBegin);
+            search._candidateEdges.resize(frame._candidateBegin);
+            frames.pop_back();
+
+            if (!frames.empty()) {
+                CycleSearch::ComponentNode& child = components.at(finished.getValue());
+                CycleSearch::ComponentNode& parent = components.at(frames.back()._node.getValue());
+                parent._low = std::min(parent._low, child._low);
+
+                if (child._low <= parent._index) {
+                    child._onCycle = true;
+                    parent._onCycle = true;
+                }
+            }
+        }
+    }
+}
+
+void PathExplorator::discoverComponentNode(NodeID node, EdgeID parentEdge) {
+    CycleSearch& search = _cycleSearch;
+    const size_t index = search._components.size();
+    search._components.emplace(node.getValue(), CycleSearch::ComponentNode {._index = index, ._low = index});
+
+    collectReachCandidates(node);
+
+    const size_t begin = search._candidateNodes.size();
+    search._candidateNodes.insert(search._candidateNodes.end(), _reach._candidateNodes.begin(), _reach._candidateNodes.end());
+    search._candidateEdges.insert(search._candidateEdges.end(), _reach._candidateEdges.begin(), _reach._candidateEdges.end());
+
+    search._frames.push_back(CycleSearch::ComponentFrame {._node = node,
+                                                          ._parentEdge = parentEdge,
+                                                          ._candidateBegin = begin,
+                                                          ._candidateEnd = search._candidateNodes.size(),
+                                                          ._next = begin});
+}
+
 // A walk out of the seed that comes back by another edge than it left by shortens to a closed
 // trail, and every closed trail is such a walk. Two arrivals per node suffice: the edge back to
 // the seed can rule out the first edge of only one of them.
-bool PathExplorator::hasCycleThrough(NodeID seed) {
+bool PathExplorator::searchCycleThrough(NodeID seed) {
     CycleSearch& search = _cycleSearch;
     std::unordered_map<uint64_t, CycleSearch::Arrivals>& arrivals = search._arrivals;
     const std::vector<NodeID>& candidateNodes = _reach._candidateNodes;
