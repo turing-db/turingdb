@@ -1,5 +1,5 @@
 // Run on reactome (2,978,202 nodes, 11,537,843 edges) with seed STAT1:
-// 116 ms, 27,141 nodes visited, 15 drugs found.
+// 126 ms, 27,141 nodes visited, 15 drugs found.
 //
 // distance 4: heparin [cytosol]
 // distance 5: baricitinib [cytosol]
