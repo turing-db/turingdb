@@ -657,6 +657,7 @@ void NLTranslator::bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind) {
         config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
     }
 
+    readDistinctFrom(hop, config);
     _iteratorConfigs[hop.getResult()] = config;
 }
 
