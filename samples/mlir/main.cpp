@@ -486,6 +486,7 @@ private:
             break;
 
             case ListBufferTypeTag::MapView:
+            case ListBufferTypeTag::Path:
             case ListBufferTypeTag::INVALID:
                 std::cout << "?";
             break;

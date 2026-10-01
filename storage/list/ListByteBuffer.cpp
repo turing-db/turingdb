@@ -5,6 +5,7 @@
 
 #include "ListElementView.h"
 #include "ListView.h"
+#include "PathView.h"
 #include "map/MapView.h"
 
 #include "metadata/PropertyNull.h"
@@ -126,4 +127,5 @@ template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const EdgeID
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::DateTime::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Duration::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const MapView&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const PathView&);
 }

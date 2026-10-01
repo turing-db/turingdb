@@ -63,6 +63,7 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
 
     { sink.beginList(count, count) } -> std::same_as<typename Sink::ListView>;
     { sink.beginNestedList(count, count) } -> std::same_as<typename Sink::ListElementView>;
+    { sink.beginNestedPath(count, count) } -> std::same_as<typename Sink::ListElementView>;
     { sink.writeListValue(stringValue) } -> std::same_as<typename Sink::ListElementView>;
     { sink.writeListValue(embeddingValue) } -> std::same_as<typename Sink::ListElementView>;
     { sink.writeListElementBytes(bytes, count) } -> std::same_as<typename Sink::ListElementView>;

@@ -15,6 +15,7 @@
 #include "metadata/PropertyTypeMap.h"
 #include "metadata/PropertyType.h"
 #include "list/ListView.h"
+#include "list/PathView.h"
 #include "list/ListElementView.h"
 #include "list/ListBufferTypeTag.h"
 #include "map/MapBufferTypeTag.h"
@@ -94,6 +95,9 @@ void appendListElement(std::string& out, ListElementView element) {
         break;
         case ListBufferTypeTag::MapView:
             appendMapValue(out, element.getAs<MapView>());
+        break;
+        case ListBufferTypeTag::Path:
+            appendListValue(out, element.getAs<PathView>().getEntities());
         break;
         case ListBufferTypeTag::Null:
         case ListBufferTypeTag::INVALID:

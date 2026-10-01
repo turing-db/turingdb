@@ -1104,6 +1104,7 @@ private:
     // where a string property column borrows the graph's
     static bool isOwnedStringElement(mlir::Type elementType);
     static bool isOwnedStringChunk(mlir::Type chunkType);
+    static bool isEntityListChunk(mlir::Type chunkType);
 
     // The per-step variant reserves a full chunk; the sized one is what an accumulator
     // holding a single row takes.

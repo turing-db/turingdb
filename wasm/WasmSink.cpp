@@ -104,6 +104,13 @@ ListElementView WasmSink::beginNestedList(size_t elementCount, size_t byteSize) 
     return element;
 }
 
+ListElementView WasmSink::beginNestedPath(size_t entityCount, size_t byteSize) {
+    const ListElementView element = appendNestedHeader(db::ListBufferTypeTag::Path, entityCount);
+    _containerStack.push_back({._expectedCount = static_cast<uint32_t>(entityCount)});
+
+    return element;
+}
+
 ListElementView WasmSink::writeListValue(std::string_view value) {
     const db::ListBufferTypeTag tag = db::ListBufferTypeTag::String;
     const ListElementView element {appendBytes(&tag, sizeof(tag))};

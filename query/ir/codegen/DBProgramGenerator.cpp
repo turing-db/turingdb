@@ -959,6 +959,14 @@ void DBProgramGenerator::rebindYieldedColumn(const VarDecl* decl, mlir::TypedVal
     }
 }
 
+void DBProgramGenerator::rebindNamedPath(const VarDecl* decl, mlir::Value column) {
+    const bool namesAWalk = _part._namedPathWalks.erase(decl) > 0;
+
+    if (namesAWalk || _part._namedPaths.contains(decl)) {
+        _part._namedPaths[decl] = column;
+    }
+}
+
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_part._varMap.contains(var), "ScanNodes for registered variable");
 
@@ -1711,10 +1719,6 @@ mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Valu
 }
 
 mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    bioassert(columnType && mlir::isa<mlir::storage::EntityListType>(columnType.getType()),
-              "A named path is read off the entity sequence its element built");
-
     const mlir::Type resultType = pathElementsType(_mlirCtxt, kind);
     const mlir::db::ColumnType nullableType =
         allocColumnType(mlir::storage::NullableType::get(_mlirCtxt, resultType));
@@ -8553,17 +8557,7 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
     return collectOp;
 }
 
-void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
-    llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
-    for (const Projection::ReturnItem& returnItem : projection->items()) {
-        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
-        if (!itemPtr) {
-            continue;
-        }
-
-        collectAggregateInvocations(*itemPtr, aggregateExprs);
-    }
-
+void DBProgramGenerator::generateKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs) {
     llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
     for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
         if (isCollectInvocation(aggregateExpr)) {
@@ -8610,17 +8604,8 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
     }
 }
 
-void DBProgramGenerator::generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp) {
-    llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
-    for (const Projection::ReturnItem& returnItem : projection->items()) {
-        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
-        if (!itemPtr) {
-            continue;
-        }
-
-        collectAggregateInvocations(*itemPtr, aggregateExprs);
-    }
-
+void DBProgramGenerator::generateKeylessAggregates(llvm::ArrayRef<const FunctionInvocationExpr*> aggregateExprs,
+                                                   mlir::Operation* inputAggregateOp) {
     for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
         mlir::Operation* const lastAggregateOp = _part._aggregateOp;
         _part._aggregateOp = inputAggregateOp;
@@ -8633,15 +8618,63 @@ void DBProgramGenerator::generateKeylessAggregates(const Projection* projection,
     }
 }
 
+void DBProgramGenerator::generateKeylessGroup(const Projection* projection) {
+    mlir::Operation* const inputAggregateOp = _part._aggregateOp;
+
+    llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
+        if (!itemPtr) {
+            continue;
+        }
+
+        collectAggregateInvocations(*itemPtr, aggregateExprs);
+    }
+
+    appendOrderByAggregates(projection, aggregateExprs);
+
+    generateKeylessCollect(aggregateExprs);
+    generateKeylessAggregates(aggregateExprs, inputAggregateOp);
+
+    GroupedColumns groupedColumns;
+    for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
+        groupedColumns.emplace_back(aggregateExpr, _part._exprMap.at(aggregateExpr));
+    }
+
+    bindOrderByKeyColumns(projection, groupedColumns);
+}
+
+void DBProgramGenerator::appendOrderByAggregates(const Projection* projection,
+                                                 llvm::SmallVectorImpl<const FunctionInvocationExpr*>& invocations) {
+    if (!projection->hasOrderBy()) {
+        return;
+    }
+
+    llvm::SmallVector<const FunctionInvocationExpr*> keyInvocations;
+    for (const OrderByItem* orderByItem : projection->getOrderBy()->getItems()) {
+        collectAggregateInvocations(orderByItem->getExpr(), keyInvocations);
+    }
+
+    for (const FunctionInvocationExpr* keyInvocation : keyInvocations) {
+        const bool alreadyReduced = std::any_of(invocations.begin(),
+                                                invocations.end(),
+                                                [keyInvocation](const FunctionInvocationExpr* collected) {
+                                                    return StructuralExpressionComparator::equal(collected, keyInvocation);
+                                                });
+
+        if (!alreadyReduced) {
+            invocations.push_back(keyInvocation);
+        }
+    }
+}
+
 void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     if (!projection->isAggregate()) {
         return;
     }
 
     if (!projection->hasGroupingKeys()) {
-        mlir::Operation* const inputAggregateOp = _part._aggregateOp;
-        generateKeylessCollect(projection);
-        generateKeylessAggregates(projection, inputAggregateOp);
+        generateKeylessGroup(projection);
         return;
     }
 
@@ -8759,34 +8792,11 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     // projection is the one keyless group, whichever way it spells its key - RETURN 1 AS
     // x, count(n) counts the whole match, as RETURN count(n) does
     if (keyColumns.empty()) {
-        mlir::Operation* const inputAggregateOp = _part._aggregateOp;
-        generateKeylessCollect(projection);
-        generateKeylessAggregates(projection, inputAggregateOp);
+        generateKeylessGroup(projection);
         return;
     }
 
-    // A key may order the groups by an aggregate the projection does not return -
-    // RETURN a.name ORDER BY count(b) - which the aggregation has to compute all the same.
-    // Its result column is then read by the sort alone, and no db.output reads it, which is
-    // what keeps it out of the rows
-    if (projection->hasOrderBy()) {
-        llvm::SmallVector<const FunctionInvocationExpr*> keyInvocations;
-        for (const OrderByItem* orderByItem : projection->getOrderBy()->getItems()) {
-            collectAggregateInvocations(orderByItem->getExpr(), keyInvocations);
-        }
-
-        for (const FunctionInvocationExpr* keyInvocation : keyInvocations) {
-            const bool alreadyReduced = std::any_of(itemInvocations.begin(),
-                                                    itemInvocations.end(),
-                                                    [keyInvocation](const FunctionInvocationExpr* collected) {
-                                                        return StructuralExpressionComparator::equal(collected, keyInvocation);
-                                                    });
-
-            if (!alreadyReduced) {
-                itemInvocations.push_back(keyInvocation);
-            }
-        }
-    }
+    appendOrderByAggregates(projection, itemInvocations);
 
     for (const FunctionInvocationExpr* funcExpr : itemInvocations) {
         const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
@@ -8904,6 +8914,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             // A YIELD can bind onto a variable a pattern already carries, which leaves the
             // one declaration on both a variable and a yielded column, so both are rebound.
             rebindYieldedColumn(keyVarDeclAtPos[i], results[i]);
+            rebindNamedPath(keyVarDeclAtPos[i], results[i]);
             continue;
         }
 
@@ -8923,6 +8934,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const VarDecl* symDecl = sym->getDecl();
 
         rebindYieldedColumn(symDecl, results[i]);
+        rebindNamedPath(symDecl, results[i]);
 
         const auto identityIt = edgeIdentityVars.find(symDecl);
 

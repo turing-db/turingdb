@@ -1385,6 +1385,8 @@ NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkT
         return NLExecutor::selectListUnwindNodeEmit(sourceIsNullable);
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLExecutor::selectListUnwindEdgeEmit(sourceIsNullable);
+    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+        return NLExecutor::selectListUnwindPathEmit(sourceIsNullable);
     }
 
     return NLExecutor::selectListUnwindElementEmit(sourceIsNullable);
@@ -2854,11 +2856,14 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
     const auto resultChunk = mlir::cast<nl::ChunkType>(index.getResult().getType());
     const mlir::Type resultElement = resultChunk.getElementType();
     const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
+    const bool readsAPath = mlir::isa<storage::EntityListType>(resultElement);
 
     Column* result = nullptr;
     NLBinaryFn fn = nullptr;
 
-    if (readsAnEntity) {
+    if (readsAPath) {
+        fn = NLExecutor::selectPathListIndex(lhs, rhs, _memory, result);
+    } else if (readsAnEntity) {
         fn = NLExecutor::selectEntityListIndex(chunkKindFromElementType(resultElement),
                                                lhs,
                                                rhs,
@@ -2971,6 +2976,8 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
         return NLExecutor::selectNestedListItemRead();
     } else if (mlir::isa<storage::MapType>(elementType)) {
         return NLExecutor::selectNestedMapListItemRead();
+    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+        return NLExecutor::selectPathListItemRead();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedListItemRead(/*nullable=*/false);
     } else if (isNullableList(elementType)) {
@@ -4550,6 +4557,9 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     if (isOwnedStringElement(accumulatorElement)) {
         accumulator = allocOptOwnedStringColumn(1);
         reset = NLExecutor::selectOptOwnedStringAggregateReset();
+    } else if (mlir::isa<storage::EntityListType>(accumulatorElement)) {
+        accumulator = allocEntityListColumn();
+        reset = NLExecutor::selectPathAggregateReset();
     } else {
         const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
         accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
@@ -4595,6 +4605,9 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     if (isOwnedStringChunk(resultChunk.getType())) {
         output = allocOptOwnedStringColumn();
         emit = NLExecutor::selectOptOwnedStringAggregateResult();
+    } else if (isEntityListChunk(resultChunk.getType())) {
+        output = allocEntityListColumn();
+        emit = NLExecutor::selectPathAggregateResult();
     } else {
         const ValueType resultType = nullableChunkValueType(resultChunk.getType());
         output = allocOptColumnForValueType(resultType);
@@ -4734,6 +4747,15 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 aggregate._grow = NLExecutor::selectOptOwnedStringGroupAggregateGrow();
                 aggregate._emit = NLExecutor::selectOptOwnedStringGroupAggregateEmit();
                 aggregate._fold = NLExecutor::selectOptOwnedStringGroupAggregateFold(kind);
+
+                break;
+            }
+
+            if (isEntityListChunk(chunkType)) {
+                aggregate._accumulator = allocEntityListColumn();
+                aggregate._grow = NLExecutor::selectPathGroupAggregateGrow();
+                aggregate._emit = NLExecutor::selectPathGroupAggregateEmit();
+                aggregate._fold = NLExecutor::selectPathGroupAggregateFold(kind);
 
                 break;
             }
@@ -5030,6 +5052,14 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             NLExecutor::selectCollectTaggedHandlers(isDistinct, fold, listEmit);
 
             value._buffer = allocListElementColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (mlir::isa<storage::EntityListType>(element)) {
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectPathHandlers(isDistinct, fold, listEmit);
+
+            value._buffer = allocEntityListColumn();
             value._fold = fold;
             value._listEmit = listEmit;
         } else {
@@ -5972,6 +6002,8 @@ NLAggregateUpdateFunction NLTranslator::selectAggregateUpdateForChunkType(Aggreg
         return NLExecutor::selectTaggedAggregateUpdate(kind);
     } else if (isOwnedStringChunk(chunkType)) {
         return NLExecutor::selectOptOwnedStringAggregateUpdate(kind);
+    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+        return NLExecutor::selectPathAggregateUpdate(kind);
     }
 
     return NLExecutor::selectAggregateUpdate(kind, nullableChunkValueType(chunkType));
@@ -6476,6 +6508,12 @@ Column* NLTranslator::allocOptListColumn() {
     column->reserve(_program->getChunkSize());
 
     return column;
+}
+
+bool NLTranslator::isEntityListChunk(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+
+    return mlir::isa<storage::EntityListType>(chunk.getElementType());
 }
 
 Column* NLTranslator::allocEntityListColumn() {

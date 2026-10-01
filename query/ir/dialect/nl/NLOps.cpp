@@ -51,7 +51,13 @@ Type aggregateValueType(Type chunkType) {
         return Type();
     }
 
-    const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
+    // A path an OPTIONAL MATCH missed is empty, so a path chunk holds its own nulls
+    const Type element = chunk.getElementType();
+    if (isa<storage::EntityListType>(element)) {
+        return element;
+    }
+
+    const auto nullable = dyn_cast<storage::NullableType>(element);
     if (!nullable) {
         return Type();
     }

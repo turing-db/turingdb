@@ -19,6 +19,7 @@
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
+#include "list/PathView.h"
 #include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
@@ -126,6 +127,28 @@ void renderListElement(const ListElementView& element, std::string& out) {
         case ListBufferTypeTag::MapView:
             renderMap(element.getAs<MapView>(), out);
             return;
+        break;
+
+        case ListBufferTypeTag::Path: {
+            out += '<';
+
+            bool first = true;
+            for (const ListElementView& entity : element.getAs<PathView>().getEntities()) {
+                if (!first) {
+                    out += ", ";
+                }
+                first = false;
+
+                if (entity.getTag() == ListBufferTypeTag::NodeID) {
+                    out += "(" + std::to_string(entity.getAs<NodeID>().getValue()) + ")";
+                } else {
+                    out += "[" + std::to_string(entity.getAs<EdgeID>().getValue()) + "]";
+                }
+            }
+
+            out += '>';
+            return;
+        }
         break;
 
         case ListBufferTypeTag::Embedding:

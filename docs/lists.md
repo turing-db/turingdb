@@ -83,3 +83,11 @@ A view cannot leave the buffers that built it, so a list that has to outlive the
 (`storage/list/EncodedList.h`): a self-describing byte sequence carrying the whole value, nested lists and
 payloads included. It is the owning form the write buffer stages a `CREATE` / `SET` value in until the commit
 builds its datapart, and the same encoding the dumper writes to disk and the loader reads back.
+
+## Paths
+
+A list built by a query may hold paths: `collect(p)`, `[p]`. A path element is tagged `Path` and its
+value is a `PathView` (`storage/list/PathView.h`), a view of a list of `NodeID` and `EdgeID` elements
+alternating in the order the path runs through them. An index, `head()`, `last()`, an `UNWIND` or a
+comprehension reads it back as a path. A path is not a property value, so `EncodedList` and
+`ListContainer` refuse a list holding one.

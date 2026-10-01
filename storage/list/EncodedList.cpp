@@ -83,6 +83,9 @@ void encodeElement(ListElementView element, std::vector<std::byte>& out) {
             appendBytes(out, map.bytes().data(), map.byteSize());
         }
         break;
+        case ListBufferTypeTag::Path:
+            throw FatalException("Cannot store a list holding a path: a path is not a property value");
+        break;
         case ListBufferTypeTag::INVALID:
             throw FatalException("Cannot encode a list element with an invalid type tag");
         break;
@@ -198,6 +201,7 @@ private:
             case ListBufferTypeTag::MapView:
                 return decodeMap();
             break;
+            case ListBufferTypeTag::Path:
             case ListBufferTypeTag::INVALID:
             break;
         }

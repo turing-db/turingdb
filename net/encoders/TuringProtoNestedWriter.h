@@ -160,6 +160,19 @@ struct ElementWriteVisitor {
             _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
             _stack->emplace(NestedContainerIterator::list(value.elements()));
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            const db::ListView entities = Policy::template valueAs<T>(view).getEntities();
+
+            bioassert(entities.size() <= MAX_WIRE_SIZE, "Path entity count exceeds maximum wire size");
+            const WireSize entityCount = static_cast<WireSize>(entities.size());
+            const WireSize entitiesByteSize = computeListByteSize(entities.elements());
+
+            _outBuf->checkRemainingAndFlush(tagSize + sizeof(entityCount) + sizeof(entitiesByteSize));
+            _outBuf->copyFixedLenData(&tag, tagSize);
+            _outBuf->copyFixedLenData(&entityCount, sizeof(entityCount));
+            _outBuf->copyFixedLenData(&entitiesByteSize, sizeof(entitiesByteSize));
+
+            _stack->emplace(NestedContainerIterator::list(entities.elements()));
         } else if constexpr (db::IsMap<T>) {
             const T value = Policy::template valueAs<T>(view);
 

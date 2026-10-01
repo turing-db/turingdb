@@ -128,6 +128,7 @@ public:
 
     ListView beginList(size_t elementCount, size_t byteSize);
     ListElementView beginNestedList(size_t elementCount, size_t byteSize);
+    ListElementView beginNestedPath(size_t entityCount, size_t byteSize);
     ListElementView writeListValue(std::string_view value);
     ListElementView writeListValue(std::span<const float> value);
     ListElementView writeListElementBytes(const char* bytes, size_t byteSize);

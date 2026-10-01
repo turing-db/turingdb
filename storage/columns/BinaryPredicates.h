@@ -880,6 +880,10 @@ struct TuringIn {
             if (!scalar.isValid()) {
                 return std::nullopt;
             }
+        } else if constexpr (std::is_same_v<Scalar, EntityList>) {
+            if (scalar.empty()) {
+                return std::nullopt;
+            }
         }
 
         bool unknown = false;

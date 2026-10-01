@@ -1432,9 +1432,12 @@ def PathElements : TuringOp<"path_elements", [Pure]> {
     null, so the results are nullable. Over the path of one node and one walk,
     fuse_path_elements answers from the walk's handles instead: db.path_length for the
     length and db.expand_path for the two lists.
+
+    The path may also be one read back out of a list - an aggregate's, an UNWIND's, an
+    index's - whose column is typed during lowering, as the value of each of those is.
   }];
 
-  let arguments = (ins ColumnEntityList:$path, PathElementsKind:$kind);
+  let arguments = (ins Column:$path, PathElementsKind:$kind);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{

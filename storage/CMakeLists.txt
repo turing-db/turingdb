@@ -26,6 +26,7 @@ set(storage_sources
         list/ListElementViewBuffer.cpp
         list/ListWriteCursor.cpp
         list/PathTrie.cpp
+        list/PathView.cpp
 
         map/EncodedMap.cpp
         map/MapByteBuffer.cpp

@@ -64,6 +64,7 @@ public:
     // before any of its contents land.
     db::ListView beginList(size_t elementCount, size_t byteSize);
     db::ListElementView beginNestedList(size_t elementCount, size_t byteSize);
+    db::ListElementView beginNestedPath(size_t entityCount, size_t byteSize);
 
     db::ListElementView writeListValue(std::string_view value) {
         return listCursor().writeValue<db::types::String::Primitive>(db::TypeToListBufferTag<db::types::String::Primitive>::Tag, value);

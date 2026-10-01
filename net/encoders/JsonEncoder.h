@@ -228,6 +228,29 @@ private:
         _writer.write("]");
     }
 
+    void encodeValue(const PathView path) {
+        _writer.write('[');
+
+        bool first = true;
+        for (const ListElementView entity : path.getEntities()) {
+            if (!first) {
+                _writer.write(',');
+            }
+            first = false;
+
+            const bool isNode = entity.getTag() == ListBufferTypeTag::NodeID;
+            const uint64_t id = isNode ? entity.getAs<NodeID>().getValue() : entity.getAs<EdgeID>().getValue();
+
+            _writer.write("{\"type\":\"");
+            _writer.write(isNode ? "node" : "edge");
+            _writer.write("\",\"id\":");
+            _writer.write(std::to_string(id));
+            _writer.write('}');
+        }
+
+        _writer.write(']');
+    }
+
     void encodeValue(const ListElementView ele) {
         const auto writeTyped = [this]<typename T>(const ListElementView ele) {
             const T typed = ele.getAs<T>();

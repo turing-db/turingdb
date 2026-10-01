@@ -151,13 +151,14 @@ bool computesOverListItem(TypePairBitset pair) {
         || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double);
 }
 
-// The types a list is homogeneous in: the scalars a value column holds, the entities a
-// pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
-// nesting is made of.
+// The types a list is homogeneous in: the scalars a value column holds, the entities and
+// paths a pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the
+// lists a nesting is made of.
 bool namesAListElementType(EvaluatedType type) {
     return convertibleToValueType(type)
         || type == EvaluatedType::NodePattern
         || type == EvaluatedType::EdgePattern
+        || type == EvaluatedType::GraphPath
         || type == EvaluatedType::List;
 }
 
@@ -1272,7 +1273,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         const bool readsAValue = convertibleToValueType(elementType);
         const bool readsAnEntity = elementType == EvaluatedType::NodePattern
                                 || elementType == EvaluatedType::EdgePattern;
-        const bool readsTheElementType = readsAValue || readsAnEntity;
+        const bool readsAPath = elementType == EvaluatedType::GraphPath;
+        const bool readsTheElementType = readsAValue || readsAnEntity || readsAPath;
         const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
 
         expr->setType(indexedType);

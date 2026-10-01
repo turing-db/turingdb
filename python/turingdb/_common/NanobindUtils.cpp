@@ -236,6 +236,8 @@ struct ValueToPyObject {
             return view(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::MapView>) {
             return view(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::PathView>) {
+            return path(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
             return nb::none();
         } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
@@ -245,6 +247,20 @@ struct ValueToPyObject {
         } else {
             return nb::cast(element.getAs<T>());
         }
+    }
+
+    // A path reads as a path column's row does: one {"type", "id"} dict per entity
+    nb::object path(const db::PathView& path) const {
+        nb::list out;
+        for (const db::ListElementView entity : path.getEntities()) {
+            const bool isNode = entity.getTag() == db::ListBufferTypeTag::NodeID;
+
+            nb::dict d;
+            d["type"] = nb::cast(isNode ? "node" : "edge");
+            d["id"] = nb::cast(isNode ? entity.getAs<db::NodeID>().getValue() : entity.getAs<db::EdgeID>().getValue());
+            out.append(d);
+        }
+        return out;
     }
 
     template <typename T>

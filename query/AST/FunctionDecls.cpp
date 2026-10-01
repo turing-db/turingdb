@@ -168,6 +168,12 @@ void FunctionDecls::initDefault() {
     collectEdges->setIsAggregate(true);
     collectEdges->setCollectsItsArgument(true);
 
+    FunctionSignature* collectPaths = createFunction("collect");
+    collectPaths->setArguments({EvaluatedType::GraphPath});
+    collectPaths->setReturnTypes({{EvaluatedType::List}});
+    collectPaths->setIsAggregate(true);
+    collectPaths->setCollectsItsArgument(true);
+
     // A list collects into a list of lists: one level deeper over the same innermost
     // elements, so unwinding it twice hands those elements back with their own type.
     FunctionSignature* collectLists = createFunction("collect");
@@ -312,6 +318,16 @@ void FunctionDecls::initDefault() {
     maxDuration->setArguments({EvaluatedType::Duration});
     maxDuration->setReturnTypes({{EvaluatedType::Duration}});
     maxDuration->setIsAggregate(true);
+
+    FunctionSignature* minPath = createFunction("min");
+    minPath->setArguments({EvaluatedType::GraphPath});
+    minPath->setReturnTypes({{EvaluatedType::GraphPath}});
+    minPath->setIsAggregate(true);
+
+    FunctionSignature* maxPath = createFunction("max");
+    maxPath->setArguments({EvaluatedType::GraphPath});
+    maxPath->setReturnTypes({{EvaluatedType::GraphPath}});
+    maxPath->setIsAggregate(true);
 
     // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
     // null, so a column that is null on every row - a name no property in the graph carries,

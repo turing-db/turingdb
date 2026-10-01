@@ -9,6 +9,7 @@
 
 #include "ID.h"
 #include "ListBufferTypeTag.h"
+#include "PathView.h"
 
 #include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
@@ -28,6 +29,7 @@ enum class ListElementOrderClass {
     Node,
     Edge,
     List,
+    Path,
     DateTime,
     Duration,
     String,
@@ -82,6 +84,10 @@ ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
 
         case ListBufferTypeTag::MapView:
             return ListElementOrderClass::Map;
+        break;
+
+        case ListBufferTypeTag::Path:
+            return ListElementOrderClass::Path;
         break;
 
         case ListBufferTypeTag::INVALID:
@@ -241,6 +247,10 @@ std::strong_ordering compareValues(const View lhs, const View rhs) {
 
         case ListElementOrderClass::List:
             return valueOf<ListView>(lhs) <=> valueOf<ListView>(rhs);
+        break;
+
+        case ListElementOrderClass::Path:
+            return valueOf<PathView>(lhs).getEntities() <=> valueOf<PathView>(rhs).getEntities();
         break;
 
         case ListElementOrderClass::String:
@@ -533,6 +543,27 @@ bool db::operator==(const ListElementView element, const NodeID value) {
 bool db::operator==(const ListElementView element, const EdgeID value) {
     return element.getTag() == ListBufferTypeTag::EdgeID
         && element.getAs<EdgeID>() == value;
+}
+
+bool db::operator==(const ListElementView element, const EntityList& path) {
+    if (element.getTag() != ListBufferTypeTag::Path) {
+        return false;
+    }
+
+    const ListView entities = element.getAs<PathView>().getEntities();
+    if (entities.size() != path.size()) {
+        return false;
+    }
+
+    const auto sameEntity = [](const ListElementView entity, const EntityList::Entry& entry) {
+        if (entry._type == EntityType::Node) {
+            return entity == NodeID(entry._id.getValue());
+        }
+
+        return entity == EdgeID(entry._id.getValue());
+    };
+
+    return std::equal(entities.begin(), entities.end(), path.begin(), sameEntity);
 }
 
 bool db::operator==(const ListElementView element, const ListView value) {

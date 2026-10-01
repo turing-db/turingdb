@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "ListBufferTypeTag.h"
+#include "PathView.h"
 
 #include "ID.h"
 #include "map/MapHash.h"
@@ -80,6 +81,9 @@ size_t db::hashListElement(ListElementView element) {
         break;
         case ListBufferTypeTag::MapView:
             return combine(seed, hashMap(element.getAs<MapView>()));
+        break;
+        case ListBufferTypeTag::Path:
+            return combine(seed, hashList(element.getAs<PathView>().getEntities()));
         break;
         case ListBufferTypeTag::Null:
         case ListBufferTypeTag::INVALID:
