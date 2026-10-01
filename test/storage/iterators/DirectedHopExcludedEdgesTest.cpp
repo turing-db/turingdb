@@ -14,9 +14,11 @@
 #include "iterators/ChunkConfig.h"
 #include "iterators/ExcludedEdges.h"
 #include "iterators/GetInEdgesByLabelIterator.h"
+#include "iterators/GetInEdgesByTypeAndLabelIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesByLabelIterator.h"
+#include "iterators/GetOutEdgesByTypeAndLabelIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "metadata/GraphMetadata.h"
@@ -313,6 +315,18 @@ TEST_F(DirectedHopExcludedEdgesTest, leavesOutEveryExcludedEdgeInEveryDirectedWr
         expectLeavesOutExcluded([&]() { return std::make_unique<GetOutEdgesByLabelChunkWriter>(view, &input, otherLabel); },
                                 &GetOutEdgesByLabelChunkWriter::setTgtIDs,
                                 outExcluded);
+    }
+    {
+        SCOPED_TRACE("GetOutEdgesByTypeAndLabelChunkWriter");
+        expectLeavesOutExcluded([&]() { return std::make_unique<GetOutEdgesByTypeAndLabelChunkWriter>(view, &input, linkType, otherLabel); },
+                                &GetOutEdgesByTypeAndLabelChunkWriter::setTgtIDs,
+                                outExcluded);
+    }
+    {
+        SCOPED_TRACE("GetInEdgesByTypeAndLabelChunkWriter");
+        expectLeavesOutExcluded([&]() { return std::make_unique<GetInEdgesByTypeAndLabelChunkWriter>(view, &input, linkType, otherLabel); },
+                                &GetInEdgesByTypeAndLabelChunkWriter::setSrcIDs,
+                                inExcluded);
     }
     {
         SCOPED_TRACE("GetInEdgesByLabelChunkWriter");

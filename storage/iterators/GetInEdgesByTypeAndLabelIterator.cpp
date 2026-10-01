@@ -3,6 +3,8 @@
 #include <iterator>
 
 #include "columns/ColumnIDs.h"
+#include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
 #include "reader/GraphReader.h"
 #include "EdgeTypeMatch.h"
 #include "IteratorUtils.h"
@@ -67,9 +69,17 @@ void GetInEdgesByTypeAndLabelChunkWriter::fill(size_t maxCount) {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
             const std::span<const EdgeID> rowExcluded = _excluded.isSet() ? _excluded.rowEdges(index) : std::span<const EdgeID> {};
+            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
+                const DataPart* part = _partIt.get();
+                _heldInRun = ExcludedEdges::countInInRun(rowExcluded, part->edges(), *_nodeIt);
+            }
 
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
-                const bool excluded = ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
+                const bool excluded = _heldInRun > 0 && ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
+                if (excluded) {
+                    _heldInRun--;
+                }
+
                 if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID) && !excluded) {
                     const LabelSetHandle sourceLabels = reader.getNodeLabelSet(_edgeIt->_otherID);
 
