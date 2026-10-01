@@ -14,24 +14,22 @@ module {
       %5 = db.scan_nodes() : !db.column<!storage.node_id>
       db.yield %5 : !db.column<!storage.node_id>
     } factor {
-      %5:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
-      db.yield %5#0, %5#1 : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+      %5:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) : !db.column<!storage.string>, !db.column<!storage.string>
+      db.yield %5#0, %5#1 : !db.column<!storage.string>, !db.column<!storage.string>
     }
 
     // The pattern's {name: row[0]} constraint: a property of the node against a field of
-    // the record. The property rides a borrowed string and the field an owned one, so the
-    // comparison meets the two kinds - either way round, since which side the query wrote
-    // the field on is its own choice.
+    // the record.
     %1 = db.get_node_properties(%0#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %2 = db.eq %1, %0#1 : (!db.column<none>, !db.column<!storage.owned_string>) -> !db.column<!storage.bool>
+    %2 = db.eq %1, %0#1 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
 
     // Every column in flight goes through the filter - the node and both fields - so they
     // stay row-aligned with each other.
-    %3:3 = db.filter(%2, {%0#0, %0#1, %0#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.owned_string>, !db.column<!storage.owned_string>) -> (!db.column<!storage.node_id>, !db.column<!storage.owned_string>, !db.column<!storage.owned_string>)
+    %3:3 = db.filter(%2, {%0#0, %0#1, %0#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.string>, !db.column<!storage.string>) -> (!db.column<!storage.node_id>, !db.column<!storage.string>, !db.column<!storage.string>)
 
     %4 = db.get_node_properties(%3#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    db.output(%4, %3#2) names ["n.name", "row[2]"] : !db.column<none>, !db.column<!storage.owned_string>
+    db.output(%4, %3#2) names ["n.name", "row[2]"] : !db.column<none>, !db.column<!storage.string>
 
     return
   }

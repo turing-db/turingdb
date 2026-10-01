@@ -10,14 +10,14 @@
 //
 // The path and the field list are forwarded as-is: the path is resolved against the
 // session's data directory, and a header name against the file's header line, when the
-// loop runs. Every field rides an owning string chunk, which is what a conversion reads
+// loop runs. Every field rides a string chunk, which is what a conversion reads
 // and what a write stores a String property from.
 module {
   func.func @main() {
-    %0 = nl.load_csv("people.csv", ["name", "age"]) with_headers : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>>
-    nl.for %arg0, %arg1 in %0 : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>> {
-      %1 = nl.to_integer %arg1 : (!nl.chunk<!storage.owned_string>) -> !nl.chunk<!storage.nullable<i64>>
-      nl.output(%arg0, %1) names ["row.name", "toInteger(row.age)"] : !nl.chunk<!storage.owned_string>, !nl.chunk<!storage.nullable<i64>>
+    %0 = nl.load_csv("people.csv", ["name", "age"]) with_headers : !nl.iter<!nl.chunk<!storage.string>, !nl.chunk<!storage.string>>
+    nl.for %arg0, %arg1 in %0 : !nl.iter<!nl.chunk<!storage.string>, !nl.chunk<!storage.string>> {
+      %1 = nl.to_integer %arg1 : (!nl.chunk<!storage.string>) -> !nl.chunk<!storage.nullable<i64>>
+      nl.output(%arg0, %1) names ["row.name", "toInteger(row.age)"] : !nl.chunk<!storage.string>, !nl.chunk<!storage.nullable<i64>>
     }
     return
   }
