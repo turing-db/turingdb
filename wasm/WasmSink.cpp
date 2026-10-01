@@ -47,6 +47,7 @@ db::ListBufferTypeTag listTagOf(db::MapBufferTypeTag tag) {
         case db::MapBufferTypeTag::Embedding:
         case db::MapBufferTypeTag::ListView:
         case db::MapBufferTypeTag::MapView:
+        case db::MapBufferTypeTag::Path:
         case db::MapBufferTypeTag::INVALID:
         break;
     }

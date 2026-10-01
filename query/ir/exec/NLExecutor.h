@@ -841,6 +841,7 @@ public:
     static NLMapValueReadFunction selectValueMapValueRead(ValueType valueType);
     static NLMapValueReadFunction selectNodeMapValueRead();
     static NLMapValueReadFunction selectEdgeMapValueRead();
+    static NLMapValueReadFunction selectPathMapValueRead();
     static NLMapValueReadFunction selectNestedListMapValueRead();
     static NLMapValueReadFunction selectOptNestedListMapValueRead();
     static NLMapValueReadFunction selectNestedMapValueRead();

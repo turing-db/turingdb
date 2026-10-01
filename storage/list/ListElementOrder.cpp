@@ -139,6 +139,9 @@ ListBufferTypeTag listTagOf(MapBufferTypeTag tag) {
         case MapBufferTypeTag::Duration:
             return ListBufferTypeTag::Duration;
         break;
+        case MapBufferTypeTag::Path:
+            return ListBufferTypeTag::Path;
+        break;
         case MapBufferTypeTag::INVALID:
             return ListBufferTypeTag::INVALID;
         break;

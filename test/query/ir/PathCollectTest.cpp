@@ -123,6 +123,11 @@ TEST_F(PathCollectTest, listsAPath) {
                {{"<(0), [0], (1)>, 1"}, {"<(1), [4], (0)>, 1"}});
 }
 
+TEST_F(PathCollectTest, listsAWalk) {
+    expectRows("MATCH p = (n:Person {name: 'Maxime'})-[*]->(m) RETURN [p]",
+               {{"<(8), [8], (4)>"}, {"<(8), [9], (7)>"}});
+}
+
 TEST_F(PathCollectTest, unwindsAListedPathAsAPath) {
     expectRows("MATCH p = (n:Person)-[e]->(m:Person) UNWIND [p] AS q RETURN length(q), relationships(q)",
                {{"1", "0"}, {"1", "4"}});

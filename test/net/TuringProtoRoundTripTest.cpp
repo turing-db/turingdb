@@ -1619,6 +1619,65 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingNestedLists) {
     EXPECT_EQ(entry->getValueAs<Int64>(), 3);
 }
 
+// A map holding a path, with a chunk size small enough that the path's entities span packets
+TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingAPath) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    std::vector<db::ListBuffer<>::ListItemVariant> entities;
+    entities.emplace_back(db::NodeID {0});
+    entities.emplace_back(db::EdgeID {4});
+    entities.emplace_back(db::NodeID {1});
+    const db::PathView path {localMem.listBuffer().insert(entities)};
+
+    std::vector<db::MapBuffer<>::MapKeyValuePair> entries;
+    entries.emplace_back("n", Int64 {3});
+    entries.emplace_back("route", path);
+
+    auto* mapCol = localMem.alloc<db::ColumnConst<db::MapView>>();
+    mapCol->set(localMem.mapBuffer().insert(entries));
+    addColumn(&dfMan, &source, "my_map", mapCol);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+    const auto* decodedMap = decoded.cols().at(0)->as<db::ColumnConst<db::MapView>>();
+    ASSERT_NE(decodedMap, nullptr);
+
+    const db::MapView view = decodedMap->at(0);
+    ASSERT_EQ(view.size(), 2u);
+
+    auto entry = view.begin();
+    EXPECT_EQ(entry->getKey(), "n");
+    EXPECT_EQ(entry->getValueAs<Int64>(), 3);
+
+    ++entry;
+    EXPECT_EQ(entry->getKey(), "route");
+    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Path);
+
+    const db::ListView decodedEntities = entry->getValueAs<db::PathView>().getEntities();
+    ASSERT_EQ(decodedEntities.size(), 3u);
+
+    auto entityIt = decodedEntities.begin();
+    EXPECT_EQ(entityIt->getTag(), db::ListBufferTypeTag::NodeID);
+    EXPECT_EQ(entityIt->getAs<db::NodeID>(), db::NodeID {0});
+    ++entityIt;
+    EXPECT_EQ(entityIt->getTag(), db::ListBufferTypeTag::EdgeID);
+    EXPECT_EQ(entityIt->getAs<db::EdgeID>(), db::EdgeID {4});
+    ++entityIt;
+    EXPECT_EQ(entityIt->getTag(), db::ListBufferTypeTag::NodeID);
+    EXPECT_EQ(entityIt->getAs<db::NodeID>(), db::NodeID {1});
+}
+
 // An empty map: [entryCount] of 0 and nothing after it.
 TEST(TuringProtoRoundTripTest, RoundTripsAnEmptyMapColumn) {
     db::LocalMemory localMem;

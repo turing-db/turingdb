@@ -14,6 +14,7 @@
 #include "list/EncodedList.h"
 #include "list/ListHash.h"
 #include "list/ListView.h"
+#include "list/PathView.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -75,6 +76,9 @@ size_t hashMapValue(MapEntryView entry) {
         case MapBufferTypeTag::MapView:
             return combine(seed, hashMap(entry.getValueAs<MapView>()));
         break;
+        case MapBufferTypeTag::Path:
+            return combine(seed, hashList(entry.getValueAs<PathView>().getEntities()));
+        break;
         case MapBufferTypeTag::Null:
         case MapBufferTypeTag::INVALID:
             return seed;
@@ -132,6 +136,9 @@ bool sameMapValue(MapEntryView lhs, MapEntryView rhs) {
         break;
         case MapBufferTypeTag::MapView:
             return sameMap(lhs.getValueAs<MapView>(), rhs.getValueAs<MapView>());
+        break;
+        case MapBufferTypeTag::Path:
+            return EncodedList(lhs.getValueAs<PathView>().getEntities()) == EncodedList(rhs.getValueAs<PathView>().getEntities());
         break;
         case MapBufferTypeTag::Null:
         case MapBufferTypeTag::INVALID:

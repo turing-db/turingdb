@@ -39,3 +39,10 @@ A `ListContainer` keeps the map elements of its lists in a `MapContainer` of its
 first use (`ListContainer::getMaps`). A `MapContainer` holds its list values in a `ListContainer`
 by value, so the two types nest, but the objects form a tree. `EncodedList` encodes a map element
 as `[u64 length][EncodedMap bytes]`.
+
+## Paths
+
+A map built by a query may hold a path as a value: `{route: p}`. A path value is tagged `Path` and
+its value is a `PathView` (`storage/list/PathView.h`), the same view a list element holding a path
+carries. A path is not a property value, so `EncodedMap` and `MapContainer` refuse a map holding
+one.

@@ -67,6 +67,26 @@ bool renderOptEntityCell(const Column* column, size_t row, std::string& out) {
 void renderList(const ListView& list, std::string& out);
 void renderMap(const MapView& map, std::string& out);
 
+void renderPath(const PathView& path, std::string& out) {
+    out += '<';
+
+    bool first = true;
+    for (const ListElementView& entity : path.getEntities()) {
+        if (!first) {
+            out += ", ";
+        }
+        first = false;
+
+        if (entity.getTag() == ListBufferTypeTag::NodeID) {
+            out += "(" + std::to_string(entity.getAs<NodeID>().getValue()) + ")";
+        } else {
+            out += "[" + std::to_string(entity.getAs<EdgeID>().getValue()) + "]";
+        }
+    }
+
+    out += '>';
+}
+
 void renderListElement(const ListElementView& element, std::string& out) {
     switch (element.getTag()) {
         case ListBufferTypeTag::Int:
@@ -129,26 +149,9 @@ void renderListElement(const ListElementView& element, std::string& out) {
             return;
         break;
 
-        case ListBufferTypeTag::Path: {
-            out += '<';
-
-            bool first = true;
-            for (const ListElementView& entity : element.getAs<PathView>().getEntities()) {
-                if (!first) {
-                    out += ", ";
-                }
-                first = false;
-
-                if (entity.getTag() == ListBufferTypeTag::NodeID) {
-                    out += "(" + std::to_string(entity.getAs<NodeID>().getValue()) + ")";
-                } else {
-                    out += "[" + std::to_string(entity.getAs<EdgeID>().getValue()) + "]";
-                }
-            }
-
-            out += '>';
+        case ListBufferTypeTag::Path:
+            renderPath(element.getAs<PathView>(), out);
             return;
-        }
         break;
 
         case ListBufferTypeTag::Embedding:
@@ -234,6 +237,11 @@ void renderMapValue(const MapEntryView& entry, std::string& out) {
 
         case MapBufferTypeTag::Duration:
             Duration::format(out, entry.getValueAs<types::Duration::Primitive>());
+            return;
+        break;
+
+        case MapBufferTypeTag::Path:
+            renderPath(entry.getValueAs<PathView>(), out);
             return;
         break;
 

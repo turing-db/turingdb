@@ -8,6 +8,7 @@
 #include "MapView.h"
 #include "ID.h"
 #include "list/ListView.h"
+#include "list/PathView.h"
 
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -131,4 +132,5 @@ template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag,
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const EdgeID&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::DateTime::Primitive&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Duration::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const PathView&);
 }

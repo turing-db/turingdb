@@ -76,6 +76,8 @@ MapView MapContainer::copy(MapView map) {
             return copy(view.getValueAs<MapView>());
         } else if constexpr (std::same_as<T, ListView>) {
             return _lists.copy(view.getValueAs<ListView>());
+        } else if constexpr (std::same_as<T, PathView>) {
+            throw FatalException("Cannot store a map holding a path: a path is not a property value");
         } else {
             return view.getValueAs<T>();
         }
