@@ -76,17 +76,6 @@ public:
                                 std::span<const EdgeTypeID> edgeTypes,
                                 TypeBranching& branching);
 
-    // The share of a strided sample's candidates the hop predicate keeps. The branching
-    // sampled off the edge type is what the walk would do with no predicate on its hops;
-    // scaling it by this is what the walk actually does, and a selective predicate is the
-    // difference between an enumeration that dwarfs an index and one that costs nothing.
-    // Costs a pass over the sample's adjacency and an evaluation of the predicate on it,
-    // so the gates take it only once the cheap estimate has said the index is worth it.
-    static double sampleHopPassRate(const PartDirectory& parts,
-                                    PathExplorationDir direction,
-                                    std::span<const EdgeTypeID> edgeTypes,
-                                    PathHopFilter& hopFilter);
-
     // What a sample of a walk's own seeds expanded to, level by level, and the ratio the last
     // measured level grew by. A walk's frontier is not one fan-out held constant: seeds that
     // die at once hold the early levels down while the region the survivors reach decides
@@ -98,16 +87,21 @@ public:
         std::array<double, maxLevels> _frontierPerSeed {};
         size_t _levels {0};
         double _tailFanOut {1.0};
+        double _tailPassRate {1.0};
     };
 
     // Expands a sample of the seeds along the walk's direction, one level at a time. What a
     // walk costs turns on the fan-out of where it starts, and an average over every node
     // carrying the type misses that by the exponent of the bound.
+    // A hop predicate is applied as the walk applies it, so only the candidates it keeps are
+    // expanded: a predicate that rejects the hubs keeps the walk off the fan-out they carry,
+    // and no pass rate averaged over the graph says which candidates those are.
     static void sampleSeedExpansion(const PartDirectory& parts,
                                     PathExplorationDir direction,
                                     std::span<const EdgeTypeID> edgeTypes,
                                     std::span<const NodeID> seeds,
-                                    SeedExpansion& expansion);
+                                    SeedExpansion& expansion,
+                                    PathHopFilter* hopFilter = nullptr);
 
     // The candidate checks one search from each source is expected to make: its frontier is
     // distinct nodes, so it cannot grow past the nodes the type reaches and holds at the
@@ -122,9 +116,9 @@ public:
     // measured as measured, and past them the frontier growing by the last ratio it saw. Its
     // frontier is partial paths, not nodes - a trail reaches the same node as often as a path
     // arrives at it - so nothing caps it at the nodes the type carries.
-    // hopPassRate is the share of each level's candidates the query's hop predicate lets
-    // through: they all cost a check, and the ones that pass are all that reach the next
-    // level, so it shrinks the frontier rather than the candidates.
+    // hopPassRate is the share of each level's candidates a hop predicate the sample was not
+    // filtered by lets through: they all cost a check, and the ones that pass are all that
+    // reach the next level, so it shrinks the frontier rather than the candidates.
     static double estimatedEnumerationChecks(const PartDirectory& parts,
                                              const SeedExpansion& expansion,
                                              size_t seedCount,
