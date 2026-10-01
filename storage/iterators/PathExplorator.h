@@ -10,6 +10,7 @@
 
 #include "ChunkWriter.h"
 #include "PartDirectory.h"
+#include "PathCycleTable.h"
 #include "PathExplorationDir.h"
 #include "PathReachTable.h"
 #include "PathTargetIndex.h"
@@ -176,18 +177,14 @@ private:
         bool _batchActive {false};
     };
 
-    // The search for a cycle through one seed of an undirected distinct walk. It walks out of
-    // the seed and never through it, and a node keeps the first edges of its two shortest
-    // arrivals that left the seed by different edges.
+    // The search for a cycle through every seed of a batch of an undirected distinct walk, one
+    // bit per seed, walking out of each seed and never through it. A node keeps, for each seed,
+    // whether two arrivals left the seed by different edges, and the index of the first one's
+    // edge among the seed's, bit-sliced over the identity words.
     struct CycleSearch {
-        struct Arrivals {
-            std::array<EdgeID, 2> _firstEdges;
-            size_t _count {0};
-        };
-
-        struct Visit {
+        struct FirstHop {
+            EdgeID _edge;
             NodeID _node;
-            EdgeID _firstEdge;
         };
 
         // A node of a component labelled in one depth-first walk: its discovery index, the
@@ -206,9 +203,10 @@ private:
             size_t _next {0};
         };
 
-        std::unordered_map<uint64_t, Arrivals> _arrivals;
-        std::vector<Visit> _frontier;
-        std::vector<Visit> _next;
+        PathCycleTable _reached;
+        std::array<std::vector<FirstHop>, PathTargetIndex::targetsPerBatch> _firstHops;
+        std::vector<NodeID> _frontier;
+        std::vector<NodeID> _next;
         std::unordered_map<uint64_t, bool> _seeds;
         std::unordered_map<uint64_t, ComponentNode> _components;
         std::vector<ComponentFrame> _frames;
@@ -325,8 +323,10 @@ private:
     void fillDistinct(size_t maxCount);
     void startBatch();
     bool searchesSeedCycles() const;
-    bool hasCycleThrough(NodeID seed);
-    bool searchCycleThrough(NodeID seed);
+    // The seeds of the batch, as bits, that a closed trail of at most _maxHops edges returns to
+    uint64_t closedSeedsOf(uint64_t seeds);
+    uint64_t searchCycles(uint64_t seeds);
+    uint64_t closingReturns(uint64_t returning, uint64_t twice, std::span<const uint64_t> identity, EdgeID edge) const;
     // Whether any cycle closes a trail, however long, and every edge can be crossed both ways
     bool labelsComponents() const;
     void labelComponentOf(NodeID root);

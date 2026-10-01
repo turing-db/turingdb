@@ -412,3 +412,67 @@ TEST_F(PathExploratorUndirectedDistinctTest, labelsParallelEdgesSelfLoopsAndCycl
 
     EXPECT_EQ(closed, (std::vector<uint64_t> {1, 2, 3, 4, 5, 6}));
 }
+
+// Every leaf of a star reaches every other through the center, and none lies on a cycle: a
+// search per leaf would read the center's edges once per leaf, a search per batch once per batch
+TEST_F(PathExploratorUndirectedDistinctTest, sharesABoundedSearchAcrossTheSeedsOfABatch) {
+    const size_t leafCount = 2000;
+
+    std::vector<GeneratedArc> arcs;
+    for (size_t leaf = 1; leaf <= leafCount; leaf++) {
+        arcs.push_back(GeneratedArc {._source = 0, ._target = leaf});
+    }
+    build(leafCount + 1, arcs);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    ColumnNodeIDs input;
+    for (size_t leaf = 1; leaf <= leafCount; leaf++) {
+        input.push_back(NodeID(leaf));
+    }
+
+    ExplorationOptions options;
+    options._distinctEnds = true;
+    options._collectPaths = false;
+
+    std::vector<PathRow> searched;
+    const size_t searchChecks = collectPaths(view, input, PathExplorationDir::BOTH, 0, 3, options, searched);
+
+    std::vector<PathRow> rows;
+    const size_t checks = collectPaths(view, input, PathExplorationDir::BOTH, 1, 3, options, rows);
+
+    EXPECT_EQ(rows.size(), searched.size() - leafCount);
+    EXPECT_LE(checks, 3 * searchChecks) << checks << " checks against " << searchChecks;
+}
+
+TEST_F(PathExploratorUndirectedDistinctTest, matchesTheDeduplicatedEnumerationOfBoundedWalksFromManySeeds) {
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+
+        std::vector<GeneratedArc> arcs;
+        randomArcs(40, seed % 2 == 0 ? 2 : 3, seed, arcs);
+        build(40, arcs);
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphReader reader = transaction.readGraph();
+        const GraphView& view = reader.getView();
+
+        ColumnNodeIDs input;
+        repeatedNodes(_nodeCount, input);
+        ASSERT_GT(input.size(), PathTargetIndex::targetsPerBatch);
+
+        for (const uint64_t maxHops : {uint64_t {2}, uint64_t {3}, uint64_t {4}}) {
+            expectDistinctRows(view, _adjacency, input, maxHops, ExplorationOptions {});
+
+            for (const HopPredicate predicate : {towardsHigherNodesOrOddEdges, intoEvenNodes}) {
+                PredicateHopFilter filter(predicate);
+
+                ExplorationOptions options;
+                options._hopFilter = &filter;
+                expectDistinctRows(view, _adjacency, input, maxHops, options, nullptr, predicate);
+            }
+        }
+    }
+}

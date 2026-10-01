@@ -79,6 +79,7 @@ set(storage_sources
         iterators/ScanOutEdgesBySourceLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp
         iterators/NeighbourhoodSampleIterator.cpp
+        iterators/PathCycleTable.cpp
         iterators/PathDistanceIndex.cpp
         iterators/PathExplorator.cpp
         iterators/PathHopFilter.cpp
