@@ -1433,7 +1433,7 @@ class NLCrossProductLoopData : public NLFunctionData {
 public:
     using Columns = std::vector<NLCrossColumn>;
     using EdgePairs = std::vector<NLCrossEdgePair>;
-    using InnerEdgeIndex = std::vector<std::pair<EdgeID, size_t>>;
+    using EdgeIndex = std::vector<std::pair<EdgeID, size_t>>;
 
     const Columns& outerColumns() const { return _outerColumns; }
     const Columns& innerColumns() const { return _innerColumns; }
@@ -1455,10 +1455,10 @@ public:
     const EdgePairs& edgePairs() const { return _edgePairs; }
     void addEdgePair(const NLCrossEdgePair& pair) { _edgePairs.push_back(pair); }
 
-    // Scratch the loop reuses from one run to the next: each pair's inner edges sorted
-    // with their rows, and the inner rows one outer row may not pair with
-    std::vector<InnerEdgeIndex>& innerEdgeIndices() { return _innerEdgeIndices; }
-    std::vector<size_t>& rowHoles() { return _rowHoles; }
+    // Scratch the loop reuses from one run to the next: one side's edges sorted with their
+    // rows, and the positions of the pairs left out
+    EdgeIndex& edgeIndex() { return _edgeIndex; }
+    std::vector<size_t>& holes() { return _holes; }
 
     // The governing limit counter, or null for an unbounded loop. The loop stops
     // once it reaches zero and a step lays out at most that many pairs; it never
@@ -1475,8 +1475,8 @@ private:
     const Column* _outerRows {nullptr};
     const Column* _innerRows {nullptr};
     EdgePairs _edgePairs;
-    std::vector<InnerEdgeIndex> _innerEdgeIndices;
-    std::vector<size_t> _rowHoles;
+    EdgeIndex _edgeIndex;
+    std::vector<size_t> _holes;
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };
