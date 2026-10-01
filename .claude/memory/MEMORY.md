@@ -40,7 +40,7 @@
 
 ## Build
 - Always build from `build/` directory: `make -j8`
-- Regression tests: `make run_regress` (classic pipeline only -- proves nothing about v3/MLIR work)
+- Regression tests: `make run_regress` (runs through v3; its native pass cannot run on this machine, see @reference_regress_runs_v3.md)
 - Unit tests: `ctest` or `ctest --output-on-failure`
 
 ## Code Style Feedback
@@ -104,7 +104,7 @@
 - @reference_no_string_predicates.md — no CONTAINS / STARTS WITH / ENDS WITH; StringOperator existing in the AST does NOT imply support
 - @reference_v3_cross_product_chunked.md — v3 nl.cross_product is an iterator driving its own nl.for; one chunk of pairs per step, like v2's cursor
 - @reference_change_visibility.md — within a change MATCH sees the COMMITted tip (read-your-own-writes works after COMMIT); after SUBMIT the change is gone, checkout head to see committed data
-- @reference_regress_not_v3.md — regress does not exercise the v3 MLIR engine; verify v3 work with ctest, not run_regress
+- @reference_regress_runs_v3.md — regress goes through the v3 engine (v2 is gone) and can catch MLIR regressions; this machine still cannot run its native pass, so verify locally with ctest
 - @reference_adhoc_query_cli.md — run one Cypher query on simpledb via query_test_suite_cli + a throwaway JSON; prints rows and the MLIR program
 - @reference_suite_oracle_regeneration.md — regenerate a suite oracle from the CLI's resultOutput and rebuild resultJson under its header; ten comma-pattern oracles stayed homomorphic until 2026-09-30
 - @reference_reactome_copies_outdated.md — old reactome copies fail "File outdated"; a loadable one is in ~/.turing-uniq; rebuild from the parquet dump via JSONL; `make turingdb` before measuring
