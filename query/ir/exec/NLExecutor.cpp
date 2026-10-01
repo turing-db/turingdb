@@ -471,15 +471,6 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
         return;
     }
 
-    // The same fallback functionVectorKernel keeps: a function taking a string may be
-    // handed a constant std::string rather than a view
-    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
-        if (const auto* ownedInput = dynamic_cast<const ColumnConst<types::String::OwningPrimitive>*>(input)) {
-            output->set(functor(ownedInput->getRaw()));
-            return;
-        }
-    }
-
     bioassert(false, "Function operand has an unexpected column type.");
 }
 
@@ -526,28 +517,12 @@ void functionNullableConstKernel(NLExecutionContext* context, Column* result, co
         return;
     }
 
-    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
-        if (const auto* ownedInput = dynamic_cast<const ColumnConst<std::optional<types::String::OwningPrimitive>>*>(input)) {
-            applyFunctionOverNullableConst(functor, ownedInput, output);
-            return;
-        }
-    }
-
     bioassert(false, "Function operand has an unexpected column type.");
 }
 
-// Whether a column is a constant that can be null, of the function's argument or - for a
-// function taking a string - of the owned strings a conversion answers
 template <typename Arg>
 bool isNullableConstantOf(const Column* input) {
-    const ColumnKind::Code kind = input->getKind();
-
-    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
-        return kind == ColumnConst<std::optional<Arg>>::staticKind()
-            || kind == ColumnConst<std::optional<types::String::OwningPrimitive>>::staticKind();
-    } else {
-        return kind == ColumnConst<std::optional<Arg>>::staticKind();
-    }
+    return input->getKind() == ColumnConst<std::optional<Arg>>::staticKind();
 }
 
 // A null constant argument converts to a null result whatever the function; the
@@ -592,15 +567,6 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     if (const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input)) {
         applyFunctionOverVector(functor, typedInput, output);
         return;
-    }
-
-    // Fallback for functions which take a string, but which may be provdied a column of
-    // std::strings or std::string_views
-    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
-        if (const auto* ownedInput = dynamic_cast<const ColumnVector<types::String::OwningPrimitive>*>(input)) {
-            applyFunctionOverVector(functor, ownedInput, output);
-            return;
-        }
     }
 
     bioassert(false, "Function operand has an unexpected column type.");
@@ -746,15 +712,6 @@ void functionOptKernel(NLExecutionContext* context, Column* result, const Column
     if (const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input)) {
         applyFunctionOverOptVector(functor, typedInput, output);
         return;
-    }
-
-    // The same fallback functionVectorKernel keeps: a function taking a string may be
-    // handed a column of std::strings rather than of views
-    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
-        if (const auto* ownedInput = dynamic_cast<const ColumnOptVector<types::String::OwningPrimitive>*>(input)) {
-            applyFunctionOverOptVector(functor, ownedInput, output);
-            return;
-        }
     }
 
     bioassert(false, "Function operand has an unexpected column type.");
@@ -1602,18 +1559,6 @@ void toNullableColumn(Column* result, const Column* operand) {
     std::copy(values.begin(), values.end(), nullables.begin());
 }
 
-// Copy a string column into a nullable one owning its characters (nl.to_owned_string).
-// @param SourceColumn is any of the four shapes a string column takes, and the result is
-// the one column type for all of them.
-template <typename SourceColumn>
-void toOwnedStringColumn(Column* result, const Column* operand) {
-    const auto& values = static_cast<const SourceColumn*>(operand)->getRaw();
-    auto& owned = static_cast<ColumnOptVector<types::String::OwningPrimitive>*>(result)->getRaw();
-
-    owned.resize(values.size());
-    std::copy(values.begin(), values.end(), owned.begin());
-}
-
 // Read an entity column as a nullable column of its IDs' integers: a node or an edge an
 // OPTIONAL MATCH did not match carries an invalid ID, which is the null. The entity
 // sibling of toNullableColumn, for the column family whose null is not an absent optional.
@@ -1989,13 +1934,6 @@ void distinctAppendValueBytes(std::string& key, std::string_view value) {
     const size_t length = value.size();
     key.append(reinterpret_cast<const char*>(&length), sizeof(length));
     key.append(value.data(), value.size());
-}
-
-// An owned string would otherwise pick the trivially-copyable template and key on the
-// object's own bytes - a pointer into its buffer - so two equal strings at different
-// addresses would count as two.
-void distinctAppendValueBytes(std::string& key, const std::string& value) {
-    distinctAppendValueBytes(key, std::string_view(value));
 }
 
 // Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
@@ -2470,10 +2408,6 @@ uint64_t hashKeyValue(double value) {
 
 uint64_t hashKeyValue(std::string_view value) {
     return std::hash<std::string_view> {}(value);
-}
-
-uint64_t hashKeyValue(const std::string& value) {
-    return hashKeyValue(std::string_view(value));
 }
 
 uint64_t hashKeyValue(MapView map) {
@@ -4149,33 +4083,6 @@ Item optTaggedColumnItem(const Column* input, size_t row, LocalMemory*) {
     return taggedItem<Item>(*element);
 }
 
-// The sibling of valueItem for a column that owns its characters - a CSV field's. A list or
-// a map stores a view rather than the characters, and the column refills on the next step,
-// so they are copied into the query's string buffer for the view to span.
-template <typename Item>
-Item ownedStringItem(const Column* input, size_t row, LocalMemory* memory) {
-    const std::string& owned = (*static_cast<const ColumnVector<std::string>*>(input))[row];
-    StringBuffer& strBuf = memory->stringBuffer();
-
-    const std::string_view bufferSV = strBuf.insert(owned);
-
-    return Item {bufferSV};
-}
-
-template <typename Item>
-Item optOwnedStringItem(const Column* input, size_t row, LocalMemory* memory) {
-    const std::optional<std::string>& owned = (*static_cast<const ColumnOptVector<std::string>*>(input))[row];
-    if (!owned.has_value()) {
-        return Item {PropertyNull {}};
-    }
-
-    StringBuffer& strBuf = memory->stringBuffer();
-
-    const std::string_view bufferSV = strBuf.insert(owned.value());
-
-    return Item {bufferSV};
-}
-
 // The fold and the list emit an entity collect of this ID reads. The list emits through
 // the value path's template - its elements are the IDs the fold appended - so there is
 // no entity emit of its own.
@@ -5486,6 +5393,7 @@ void NLExecutor::runLoadCSVLoop(NLExecutionContext* context, NLFunctionData* dat
     NLLoadCSVLoopData* loopData = static_cast<NLLoadCSVLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnStringTable* row = loopData->getRow();
+    StringBuffer* const stringBuffer = loopData->getStringBuffer();
     const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded, exactly as in runConstScanNodesLoop.
@@ -5524,7 +5432,7 @@ void NLExecutor::runLoadCSVLoop(NLExecutionContext* context, NLFunctionData* dat
     bool exhausted = false;
 
     const auto runIteration = [&]() {
-        const size_t rows = parser.readChunk(chunkSize, fieldIndices, row);
+        const size_t rows = parser.readChunk(chunkSize, fieldIndices, row, stringBuffer);
 
         if (rows == 0) {
             exhausted = true;
@@ -7100,10 +7008,6 @@ NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {
     return nullable ? &optTaggedColumnItem<ListBuffer<>::ListItemVariant> : &taggedColumnItem<ListBuffer<>::ListItemVariant>;
 }
 
-NLListItemReadFunction NLExecutor::selectOwnedStringListItemRead(bool nullable) {
-    return nullable ? &optOwnedStringItem<ListBuffer<>::ListItemVariant> : &ownedStringItem<ListBuffer<>::ListItemVariant>;
-}
-
 NLMapValueReadFunction NLExecutor::selectValueMapValueRead(ValueType valueType) {
     NLMapValueReadFunction selected = nullptr;
 
@@ -7137,10 +7041,6 @@ NLMapValueReadFunction NLExecutor::selectNestedMapValueRead() {
 
 NLMapValueReadFunction NLExecutor::selectTaggedMapValueRead(bool nullable) {
     return nullable ? &optTaggedColumnItem<MapBuffer<>::MapItemVariant> : &taggedColumnItem<MapBuffer<>::MapItemVariant>;
-}
-
-NLMapValueReadFunction NLExecutor::selectOwnedStringMapValueRead(bool nullable) {
-    return nullable ? &optOwnedStringItem<MapBuffer<>::MapItemVariant> : &ownedStringItem<MapBuffer<>::MapItemVariant>;
 }
 
 NLCellAbsentFunction NLExecutor::selectPresentCell() {
@@ -7323,24 +7223,6 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
     }
 
     return nullptr;
-}
-
-NLUnaryFn NLExecutor::selectToOwnedString(const Column* operand, LocalMemory* memory, Column*& result) {
-    result = memory->alloc<ColumnOptVector<types::String::OwningPrimitive>>();
-
-    const ColumnKind::Code kind = operand->getKind();
-
-    if (kind == ColumnOptVector<types::String::Primitive>::staticKind()) {
-        return &toOwnedStringColumn<ColumnOptVector<types::String::Primitive>>;
-    } else if (kind == ColumnVector<types::String::Primitive>::staticKind()) {
-        return &toOwnedStringColumn<ColumnVector<types::String::Primitive>>;
-    } else if (kind == ColumnOptVector<types::String::OwningPrimitive>::staticKind()) {
-        return &toOwnedStringColumn<ColumnOptVector<types::String::OwningPrimitive>>;
-    } else if (kind == ColumnVector<types::String::OwningPrimitive>::staticKind()) {
-        return &toOwnedStringColumn<ColumnVector<types::String::OwningPrimitive>>;
-    } else {
-        throw IRException("Only a string column can be read as an owned string column");
-    }
 }
 
 template <ColumnOperator Op>
@@ -7528,10 +7410,7 @@ NLUnaryFunctionKernel NLExecutor::selectDurationConversion(const Column* input, 
 }
 
 NLUnaryFunctionKernel NLExecutor::selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
-    const bool holdsAString = columnHoldsElement<types::String::Primitive>(input)
-                              || columnHoldsElement<types::String::OwningPrimitive>(input);
-
-    if (holdsAString) {
+    if (columnHoldsElement<types::String::Primitive>(input)) {
         return selectFunction<StringSizeFunction>(input, inputNullable, memory, result);
     }
 
@@ -8733,17 +8612,6 @@ void NLExecutor::selectCollectOptTaggedHandlers(bool distinctValues,
     listEmit = &collectTaggedListEmit;
 }
 
-void NLExecutor::selectCollectOptOwnedStringHandlers(bool distinctValues,
-                                                     NLCollectFoldFunction& fold,
-                                                     NLUnwindCollectValueEmitFunction& unwindCollectEmit,
-                                                     NLCollectListEmitFunction& listEmit) {
-    using OwnedString = types::String::OwningPrimitive;
-
-    fold = distinctValues ? &collectFoldDistinct<OwnedString> : &collectFold<OwnedString>;
-    unwindCollectEmit = &unwindCollectValueEmit<OwnedString>;
-    listEmit = &collectListEmit<OwnedString>;
-}
-
 void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLUnwindCollectLoopData* loopData = static_cast<NLUnwindCollectLoopData*>(data);
     NLCollectState* state = loopData->getState();
@@ -8955,10 +8823,6 @@ NLFillNullFunction NLExecutor::selectOptListElementFillNull() {
 
 NLFillNullFunction NLExecutor::selectListElementFillNull() {
     return &fillNullColumn<ListElementView>;
-}
-
-NLFillNullFunction NLExecutor::selectOptOwnedStringFillNull() {
-    return &fillNullColumn<std::optional<types::String::OwningPrimitive>>;
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
@@ -9229,85 +9093,6 @@ NLCopyFunction NLExecutor::selectConstCopyFunction() {
 
 // A nullable value chunk gathers the same way an ID chunk does - copy the indexed
 // rows - on the ColumnOptVector<Primitive> instantiation of the gather template.
-// The owned-string members of the nullable handler families. A nullable chunk of owned
-// strings wraps a value type of String, but its rows own their characters rather than
-// borrowing them from the graph, so it takes the std::string handlers where a property
-// column takes the std::string_view ones. Zero-argument, like the list-element family.
-NLGatherFunction NLExecutor::selectOptOwnedStringGather() {
-    return &gatherColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-NLAppendFunction NLExecutor::selectOptOwnedStringAppend() {
-    return &appendColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-NLCopyFunction NLExecutor::selectOptOwnedStringCopy() {
-    return &copyRangeColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-NLGroupKeyGatherFunction NLExecutor::selectOptOwnedStringGroupKeyGather() {
-    return &groupGatherAppendColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-NLCompareFunction NLExecutor::selectOptOwnedStringCompare() {
-    return &compareOptColumn<types::String::OwningPrimitive>;
-}
-
-NLKeyAppendFunction NLExecutor::selectOptOwnedStringKeyAppend() {
-    return &distinctKeyAppendOptColumn<types::String::OwningPrimitive>;
-}
-
-NLCountFunction NLExecutor::selectOptOwnedStringCount() {
-    return &countPresentColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-NLBroadcastFunction NLExecutor::selectOptOwnedStringBlockRepeat() {
-    return &blockRepeatColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-NLBroadcastFunction NLExecutor::selectOptOwnedStringTile() {
-    return &tileColumn<std::optional<types::String::OwningPrimitive>>;
-}
-
-// The owned-string reductions. Only min and max read a string, and they order the
-// characters the rows own exactly as they order a property's borrowed ones, so each
-// handler is the std::string instantiation of the one a string property takes.
-NLAggregateResetFunction NLExecutor::selectOptOwnedStringAggregateReset() {
-    return &aggregateResetNull<types::String::OwningPrimitive>;
-}
-
-NLAggregateUpdateFunction NLExecutor::selectOptOwnedStringAggregateUpdate(AggregateKind kind) {
-    if (kind == AggregateKind::Min) {
-        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
-    } else if (kind == AggregateKind::Max) {
-        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
-    }
-
-    throw IRException("only min/max reduce a column of strings");
-}
-
-NLAggregateResultFunction NLExecutor::selectOptOwnedStringAggregateResult() {
-    return &aggregateResultCopy<types::String::OwningPrimitive>;
-}
-
-NLGroupAggregateGrowFunction NLExecutor::selectOptOwnedStringGroupAggregateGrow() {
-    return &groupGrowNull<types::String::OwningPrimitive>;
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind) {
-    if (kind == GroupAggregateKind::Min) {
-        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
-    } else if (kind == GroupAggregateKind::Max) {
-        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
-    }
-
-    throw IRException("only min/max reduce a column of strings");
-}
-
-NLGroupAggregateEmitFunction NLExecutor::selectOptOwnedStringGroupAggregateEmit() {
-    return &groupEmitCopy<types::String::OwningPrimitive>;
-}
-
 NLGatherFunction NLExecutor::selectMaskGather() {
     return &gatherColumn<ColumnMask::Bool_t, ColumnMask>;
 }
@@ -9507,10 +9292,6 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
             return &distinctKeyAppendPlainColumn<types::String::Primitive>;
         break;
 
-        case NLChunkKind::OwnedString:
-            return &distinctKeyAppendPlainColumn<std::string>;
-        break;
-
         case NLChunkKind::List:
             return &distinctKeyAppendListColumn;
         break;
@@ -9682,10 +9463,6 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::String:
             return joinKeyFunctions<types::String::Primitive>();
-        break;
-
-        case NLChunkKind::OwnedString:
-            return joinKeyFunctions<std::string>();
         break;
 
         case NLChunkKind::List:
@@ -10130,10 +9907,6 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
             return &groupFoldCountDistinctValue<types::String::Primitive>;
         break;
 
-        case NLChunkKind::OwnedString:
-            return &groupFoldCountDistinctValue<std::string>;
-        break;
-
         case NLChunkKind::List:
             return &groupFoldCountDistinctList;
         break;
@@ -10329,11 +10102,6 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
             return &mergeKeyAppendPlainColumn<types::String::Primitive>;
         break;
 
-        case NLChunkKind::OwnedString:
-            throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
-            return &mergeKeyAppendPlainColumn<std::string>;
-        break;
-
         case NLChunkKind::NodeID:
         case NLChunkKind::EdgeID:
         case NLChunkKind::EdgeTypeID:
@@ -10438,12 +10206,6 @@ NLKeyAppendFunction NLExecutor::selectOptMergeKeyAppendFunction(ValueType valueT
             return selectOptKeyAppendFunction(valueType);
         break;
     }
-}
-
-NLKeyAppendFunction NLExecutor::selectOptOwnedStringMergeKeyAppend(ValueType keyType) {
-    throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
-
-    return selectOptOwnedStringKeyAppend();
 }
 
 NLKeyAppendFunction NLExecutor::selectNullMergeKeyAppendFunction() {
@@ -10574,10 +10336,6 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::String:
             return &compareColumn<types::String::Primitive>;
-        break;
-
-        case NLChunkKind::OwnedString:
-            return &compareColumn<std::string>;
         break;
 
         case NLChunkKind::List:

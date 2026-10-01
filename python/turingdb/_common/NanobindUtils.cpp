@@ -407,12 +407,6 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "String";
                 break;
             }
-            case db::ColumnVector<std::string>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<std::string>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "String";
-                break;
-            }
             case db::ColumnVector<db::EntityList>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnVector<db::EntityList>*>(col)->getRaw();
                 nb::list lst;
@@ -492,12 +486,6 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             }
             case db::ColumnOptVector<db::types::String::Primitive>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnOptVector<db::types::String::Primitive>*>(col)->getRaw();
-                value = vectorAsList(src);
-                dtypeName = "String";
-                break;
-            }
-            case db::ColumnOptVector<std::string>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnOptVector<std::string>*>(col)->getRaw();
                 value = vectorAsList(src);
                 dtypeName = "String";
                 break;
@@ -665,12 +653,6 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             }
             case db::ColumnConst<db::types::String::Primitive>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::types::String::Primitive>*>(col)->getRaw();
-                value = repeatValueAsList(v, rowCount);
-                dtypeName = "String";
-                break;
-            }
-            case db::ColumnConst<std::string>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<std::string>*>(col)->getRaw();
                 value = repeatValueAsList(v, rowCount);
                 dtypeName = "String";
                 break;

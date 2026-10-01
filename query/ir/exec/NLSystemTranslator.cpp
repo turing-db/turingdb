@@ -242,7 +242,8 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         body->emplaceStmt(&NLSystemExecutor::runListGraphs, data);
     } else if (nl::ListAvailableGraphs available = mlir::dyn_cast<nl::ListAvailableGraphs>(operation)) {
         NLListAvailableGraphsData* data =
-            _program->allocFunctionData<NLListAvailableGraphsData>(allocResult<NLStringColumn>(available.getGraphs()),
+            _program->allocFunctionData<NLListAvailableGraphsData>(&_memory->stringBuffer(),
+                                                                    allocResult<NLViewColumn>(available.getGraphs()),
                                                                     allocResult<NLBoolColumn>(available.getLoaded()),
                                                                     allocResult<NLBoolColumn>(available.getLoading()));
         body->emplaceStmt(&NLSystemExecutor::runListAvailableGraphs, data);
@@ -275,8 +276,9 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         body->emplaceStmt(&NLSystemExecutor::runS3Transfer, data);
     } else if (nl::ShowProcedures showProcedures = mlir::dyn_cast<nl::ShowProcedures>(operation)) {
         NLShowProceduresData* data =
-            _program->allocFunctionData<NLShowProceduresData>(allocResult<NLViewColumn>(showProcedures.getNames()),
-                                                              allocResult<NLStringColumn>(showProcedures.getSignatures()));
+            _program->allocFunctionData<NLShowProceduresData>(&_memory->stringBuffer(),
+                                                              allocResult<NLViewColumn>(showProcedures.getNames()),
+                                                              allocResult<NLViewColumn>(showProcedures.getSignatures()));
         body->emplaceStmt(&NLSystemExecutor::runShowProcedures, data);
     } else if (nl::InstallExtension install = mlir::dyn_cast<nl::InstallExtension>(operation)) {
         NLInstallExtensionData* data =
@@ -302,7 +304,8 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         body->emplaceStmt(&NLSystemExecutor::runDeleteVectorIndex, data);
     } else if (nl::ShowVectorIndexes showIndexes = mlir::dyn_cast<nl::ShowVectorIndexes>(operation)) {
         NLShowVectorIndexesData* data =
-            _program->allocFunctionData<NLShowVectorIndexesData>(allocResult<NLStringColumn>(showIndexes.getNames()),
+            _program->allocFunctionData<NLShowVectorIndexesData>(&_memory->stringBuffer(),
+                                                                 allocResult<NLViewColumn>(showIndexes.getNames()),
                                                                  allocResult<NLCountColumn>(showIndexes.getDimensions()));
         body->emplaceStmt(&NLSystemExecutor::runShowVectorIndexes, data);
     } else if (nl::LoadVector loadVector = mlir::dyn_cast<nl::LoadVector>(operation)) {

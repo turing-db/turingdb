@@ -488,24 +488,15 @@ bool isNullableList(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListType>(nullableType.getValueType());
 }
 
-// The property value type a chunk writes, which is not quite the shape it holds: a
-// column that owns its strings - a loaded CSV field - writes a String property like a
-// borrowed one, so it is recognised here and not in valueTypeFromElementType, which
-// answers what nullable value column a chunk needs.
+// The property value type a chunk writes, which is not quite the shape it holds: a mask
+// writes a Bool property, so it is recognised here and not in valueTypeFromElementType,
+// which answers what nullable value column a chunk needs.
 ValueType valueTypeFromChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (mlir::isa<storage::OwnedStringType>(nullableType.getValueType())) {
-            return ValueType::String;
-        }
-
         return valueTypeFromElementType(nullableType.getValueType());
-    }
-
-    if (mlir::isa<storage::OwnedStringType>(elementType)) {
-        return ValueType::String;
     }
 
     if (mlir::isa<storage::BoolType>(elementType)) {
@@ -872,8 +863,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateNot(notOp, body);
         } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
             translateToNullable(toNullable, body);
-        } else if (nl::ToOwnedString toOwnedString = mlir::dyn_cast<nl::ToOwnedString>(operation)) {
-            translateToOwnedString(toOwnedString, body);
         } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
             translateCase(caseOp, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
@@ -1315,7 +1304,7 @@ void NLTranslator::translateLoadCSVLoop(const IteratorConfig& config,
                                         mlir::Block& loopBody,
                                         NLLimitState* limit,
                                         NLStmtContainer* body) {
-    // A CSV load binds one owning string chunk per field it produces. The parser fills a
+    // A CSV load binds one string chunk per field it produces. The parser fills a
     // row of field columns, so the chunks are gathered into one - the chunk a downstream
     // op reads is the very column the parser wrote.
     ColumnStringTable* const row = _memory->alloc<ColumnStringTable>();
@@ -1328,6 +1317,7 @@ void NLTranslator::translateLoadCSVLoop(const IteratorConfig& config,
     const std::string_view path {config._csvPath.data(), config._csvPath.size()};
 
     NLLoadCSVLoopData* loopData = _program->allocFunctionData<NLLoadCSVLoopData>(row,
+                                                                                &_memory->stringBuffer(),
                                                                                 path,
                                                                                 config._csvHasHeaders,
                                                                                 config._csvSkipOnError);
@@ -2947,19 +2937,6 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
-void NLTranslator::translateToOwnedString(nl::ToOwnedString toOwnedString, NLStmtContainer* body) {
-    const Column* operand = getColumn(toOwnedString.getOperand());
-
-    Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectToOwnedString(operand, _memory, result);
-    bioassert(result, "Failed to allocate the owned string column of nl.to_owned_string.");
-
-    _valueSlots[toOwnedString.getResult()] = result;
-
-    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
-    body->emplaceStmt(&NLExecutor::runUnary, data);
-}
-
 NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
@@ -2977,8 +2954,6 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
         return NLExecutor::selectOptNestedListItemRead();
     } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectTaggedListItemRead(/*nullable=*/true);
-    } else if (isOwnedStringElement(elementType)) {
-        return NLExecutor::selectOwnedStringListItemRead(/*nullable=*/false);
     }
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
@@ -2987,10 +2962,6 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
     }
 
     const mlir::Type valueElement = nullableType.getValueType();
-    if (isOwnedStringElement(valueElement)) {
-        return NLExecutor::selectOwnedStringListItemRead(/*nullable=*/true);
-    }
-
     return NLExecutor::selectValueListItemRead(valueTypeFromElementType(valueElement));
 }
 
@@ -3029,8 +3000,6 @@ NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
         return NLExecutor::selectOptNestedListMapValueRead();
     } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectTaggedMapValueRead(/*nullable=*/true);
-    } else if (isOwnedStringElement(elementType)) {
-        return NLExecutor::selectOwnedStringMapValueRead(/*nullable=*/false);
     }
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
@@ -3039,10 +3008,6 @@ NLMapValueReadFunction NLTranslator::selectMapValueRead(mlir::Type chunkType) {
     }
 
     const mlir::Type valueElement = nullableType.getValueType();
-    if (isOwnedStringElement(valueElement)) {
-        return NLExecutor::selectOwnedStringMapValueRead(/*nullable=*/true);
-    }
-
     return NLExecutor::selectValueMapValueRead(valueTypeFromElementType(valueElement));
 }
 
@@ -3561,14 +3526,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         output = allocOptListElementColumn();
         copyPrefix = NLExecutor::selectOptListElementBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
-            output = allocOptOwnedStringColumn();
-            copyPrefix = NLExecutor::selectOptOwnedStringBlockRepeat();
-        } else {
-            const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
-            output = allocOptColumnForValueType(valueType);
-            copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
-        }
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        output = allocOptColumnForValueType(valueType);
+        copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
     } else if (isMaskElementType(elementType)) {
         output = allocMaskColumn();
         copyPrefix = NLExecutor::selectMaskBlockRepeat();
@@ -3673,10 +3633,7 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         copySuffix = NLExecutor::selectOptListElementCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            output = allocOptOwnedStringColumn();
-            copySuffix = NLExecutor::selectOptOwnedStringCopy();
-        } else if (isIDElement(wrappedType)) {
+        if (isIDElement(wrappedType)) {
             const NLChunkKind kind = chunkKindFromElementType(wrappedType);
 
             output = allocOptIDColumn(kind);
@@ -4545,16 +4502,9 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     const mlir::Type accumulatorElement = stateType.getElementType();
     const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
 
-    Column* accumulator = nullptr;
-    NLAggregateResetFunction reset = nullptr;
-    if (isOwnedStringElement(accumulatorElement)) {
-        accumulator = allocOptOwnedStringColumn(1);
-        reset = NLExecutor::selectOptOwnedStringAggregateReset();
-    } else {
-        const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
-        accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
-        reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
-    }
+    const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
+    Column* accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
+    const NLAggregateResetFunction reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
 
     state->setAccumulator(accumulator);
 
@@ -4590,16 +4540,9 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     const mlir::Value resultChunk = result.getResult();
     const AggregateKind kind = toRuntimeAggregateKind(result.getKind());
 
-    Column* output = nullptr;
-    NLAggregateResultFunction emit = nullptr;
-    if (isOwnedStringChunk(resultChunk.getType())) {
-        output = allocOptOwnedStringColumn();
-        emit = NLExecutor::selectOptOwnedStringAggregateResult();
-    } else {
-        const ValueType resultType = nullableChunkValueType(resultChunk.getType());
-        output = allocOptColumnForValueType(resultType);
-        emit = NLExecutor::selectAggregateResult(kind, resultType);
-    }
+    const ValueType resultType = nullableChunkValueType(resultChunk.getType());
+    Column* output = allocOptColumnForValueType(resultType);
+    const NLAggregateResultFunction emit = NLExecutor::selectAggregateResult(kind, resultType);
 
     _valueSlots[resultChunk] = output;
 
@@ -4726,18 +4669,6 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
         case GroupAggregateKind::Max:
         case GroupAggregateKind::Avg:
         case GroupAggregateKind::AvgDistinct: {
-            // A column whose rows own their characters - what type() and labels() answer
-            // - reduces into a std::string accumulator, which its value type of String
-            // does not say on its own.
-            if (isOwnedStringChunk(chunkType)) {
-                aggregate._accumulator = allocOptOwnedStringColumn();
-                aggregate._grow = NLExecutor::selectOptOwnedStringGroupAggregateGrow();
-                aggregate._emit = NLExecutor::selectOptOwnedStringGroupAggregateEmit();
-                aggregate._fold = NLExecutor::selectOptOwnedStringGroupAggregateFold(kind);
-
-                break;
-            }
-
             // sum/min/max/avg reduce the values themselves, so the input must be a
             // nullable value chunk; avg accumulates as f64, the rest in the input's
             // own type. nullableChunkValueType rejects an ID chunk here. The distinct
@@ -4999,15 +4930,6 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             value._buffer = allocColumnForKind(kind);
             value._fold = fold;
             value._listEmit = listEmit;
-        } else if (const auto nullableElement = mlir::dyn_cast<storage::NullableType>(element);
-                   nullableElement && isOwnedStringElement(nullableElement.getValueType())) {
-            // The lists the drain emits view the strings copied into this buffer, which
-            // lives as long as the list buffer of the same collect state
-            value._buffer = _memory->alloc<ColumnVector<types::String::OwningPrimitive>>();
-            NLExecutor::selectCollectOptOwnedStringHandlers(isDistinct,
-                                                            value._fold,
-                                                            value._unwindCollectEmit,
-                                                            value._listEmit);
         } else if (mlir::isa<storage::NullableType>(element)) {
             const ValueType valueType = nullableChunkValueType(column.getType());
 
@@ -5636,10 +5558,6 @@ Column* NLTranslator::allocColumnForProcedureType(const NamedProcedureType& retu
             return allocProcedureChunkColumn<types::String::Primitive>(_memory, chunkSize, nullable);
         break;
 
-        case ProcedureType::STRING:
-            return allocProcedureChunkColumn<std::string>(_memory, chunkSize, nullable);
-        break;
-
         case ProcedureType::LIST:
             return allocProcedureChunkColumn<ListView>(_memory, chunkSize, nullable);
         break;
@@ -5672,9 +5590,6 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return allocOptOwnedStringColumn();
-        }
 
         if (isIDElement(wrappedType)) {
             return allocOptIDColumn(chunkKindFromElementType(wrappedType));
@@ -5707,9 +5622,6 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringAppend();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptAppendFunction(chunkKindFromElementType(wrappedType));
@@ -5756,9 +5668,6 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringGather();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptGatherFunction(chunkKindFromElementType(wrappedType));
@@ -5791,9 +5700,6 @@ NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringFillNull();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptFillNullFunction(chunkKindFromElementType(wrappedType));
@@ -5826,9 +5732,6 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringCompare();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptCompareFunction(chunkKindFromElementType(wrappedType));
@@ -5875,10 +5778,6 @@ NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
-            return NLExecutor::selectOptOwnedStringMergeKeyAppend(keyType);
-        }
-
         const ValueType nullableValueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptMergeKeyAppendFunction(nullableValueType, keyType);
     } else if (isMaskElementType(elementType)) {
@@ -5900,9 +5799,6 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringKeyAppend();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptKeyAppendFunction(chunkKindFromElementType(wrappedType));
@@ -5970,8 +5866,6 @@ NLAggregateUpdateFunction NLTranslator::selectAggregateUpdateForChunkType(Aggreg
         return NLExecutor::selectOptTaggedAggregateUpdate(kind);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedAggregateUpdate(kind);
-    } else if (isOwnedStringChunk(chunkType)) {
-        return NLExecutor::selectOptOwnedStringAggregateUpdate(kind);
     }
 
     return NLExecutor::selectAggregateUpdate(kind, nullableChunkValueType(chunkType));
@@ -5989,9 +5883,6 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringCount();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptCountFunction(chunkKindFromElementType(wrappedType));
@@ -6028,9 +5919,6 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringGroupKeyGather();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptGroupKeyGather(chunkKindFromElementType(wrappedType));
@@ -6063,9 +5951,6 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return NLExecutor::selectOptOwnedStringCopy();
-        }
 
         if (isIDElement(wrappedType)) {
             return NLExecutor::selectOptCopyFunction(chunkKindFromElementType(wrappedType));
@@ -6102,9 +5987,6 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            return allocOptOwnedStringColumn();
-        }
 
         if (isIDElement(wrappedType)) {
             return allocOptIDColumn(chunkKindFromElementType(wrappedType));
@@ -6228,11 +6110,7 @@ void NLTranslator::allocBroadcastColumn(mlir::Value inputValue,
                             : NLExecutor::selectOptListElementTileFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
-        if (isOwnedStringElement(wrappedType)) {
-            output = allocOptOwnedStringColumn();
-            broadcast = isOuter ? NLExecutor::selectOptOwnedStringBlockRepeat()
-                                : NLExecutor::selectOptOwnedStringTile();
-        } else if (isIDElement(wrappedType)) {
+        if (isIDElement(wrappedType)) {
             const NLChunkKind kind = chunkKindFromElementType(wrappedType);
             output = allocOptIDColumn(kind);
             broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(kind)
@@ -6331,31 +6209,6 @@ Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
 // tally is one (a ui64 that is never null) and so is an expression over it (a signed
 // i64, or an f64 once a double takes part). A width-1 integer is a mask, not one of
 // these, and an ID or list element is its own family.
-// A nullable chunk whose rows own their characters - what labels() and type() produce
-// - rather than borrowing them from the graph, as a string property column does. Its value
-// type is String either way, so the handler families need this beside it.
-bool NLTranslator::isOwnedStringElement(mlir::Type elementType) {
-    return mlir::isa<storage::OwnedStringType>(elementType);
-}
-
-bool NLTranslator::isOwnedStringChunk(mlir::Type chunkType) {
-    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
-
-    return nullableType && isOwnedStringElement(nullableType.getValueType());
-}
-
-Column* NLTranslator::allocOptOwnedStringColumn() {
-    return allocOptOwnedStringColumn(_program->getChunkSize());
-}
-
-Column* NLTranslator::allocOptOwnedStringColumn(size_t reserveSize) {
-    auto* column = _memory->alloc<ColumnOptVector<types::String::OwningPrimitive>>();
-    column->reserve(reserveSize);
-
-    return column;
-}
-
 bool NLTranslator::isMaskElementType(mlir::Type elementType) {
     return mlir::isa<storage::BoolType>(elementType);
 }
@@ -6552,8 +6405,6 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::ValueTypeCode;
     } else if (mlir::isa<storage::StringType>(elementType)) {
         return NLChunkKind::String;
-    } else if (mlir::isa<storage::OwnedStringType>(elementType)) {
-        return NLChunkKind::OwnedString;
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLChunkKind::List;
     } else if (mlir::isa<storage::MapType>(elementType)) {

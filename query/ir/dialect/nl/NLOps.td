@@ -141,7 +141,7 @@ def LoadCSV : NLOp<"load_csv", [Pure]> {
     next chunk of records, filling one chunk per field the load produces:
 
       %name, %age = nl.load_csv("people.csv", [0 : ui64, 1 : ui64])
-        : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>>
+        : !nl.iter<!nl.chunk<!storage.string>, !nl.chunk<!storage.string>>
 
     The path, the field list and the two flags are the ones db.load_csv carried,
     forwarded as-is; the path is resolved against the data directory, and a header name
@@ -149,8 +149,8 @@ def LoadCSV : NLOp<"load_csv", [Pure]> {
     a loop of this family reads outside the graph. Like nl.unwind_const it reads no
     input chunk and carries nothing: it opens the dataflow.
 
-    Every field rides an owning string chunk - the characters were parsed here, not
-    borrowed from the graph, and a record carries no type to read them as. The number of
+    Every field rides a string chunk viewing characters copied into the query's string
+    buffer - a record carries no type to read them as. The number of
     chunks is the number of fields, so the iterator type is spelled after the colon
     rather than inferred.
   }];
@@ -2489,21 +2489,6 @@ def ToNullable : NLOp<"to_nullable", [Pure, ConstantThroughOperands, RowAlignedT
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
-// A string column is spelled two ways: one borrowing its characters from the graph, one
-// owning them. This brings either to the owned one, which a union needs because a view
-// into a chunk the next step refills outlives nothing.
-def ToOwnedString : NLOp<"to_owned_string", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Read a string chunk as a nullable chunk owning its characters";
-  let description = [{
-      %r = nl.to_owned_string %x : (!nl.chunk<!storage.nullable<!storage.string>>) -> !nl.chunk<!storage.nullable<!storage.owned_string>>
-  }];
-
-  let arguments = (ins NLChunk:$operand);
-  let results   = (outs NLChunk:$result);
-
-  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
-}
-
 class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
     : NLOp<mnemonic, !listconcat([Pure, RowAlignedThroughOperands], extraTraits)> {
   let summary = "Apply a unary scalar function row-wise to a value chunk";
@@ -3617,7 +3602,7 @@ def UnionCollect : NLOp<"union_collect", []> {
     branch has its own nl.union_collect on the same handle, with the same column
     types, so the buffers hold the rows of one branch and then of the next.
 
-      nl.union_collect %state, (%name) : !nl.chunk<!storage.nullable<!storage.owned_string>>
+      nl.union_collect %state, (%name) : !nl.chunk<!storage.nullable<!storage.string>>
   }];
 
   let arguments = (ins NLUnionStateHandle:$state, Variadic<NLChunk>:$columns);

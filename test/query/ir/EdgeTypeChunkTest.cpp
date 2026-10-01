@@ -23,11 +23,9 @@
 using namespace db;
 using namespace turing::test;
 
-// type() is the one function whose rows own the characters they hold, where a string
-// property column borrows them from the graph. That makes its chunk a nullable of owned
-// strings, an element type every step carrying a chunk on has to know: a limit, a skip, a
-// grouping key, a cross product.
-class OwnedStringChunkTest : public TuringTest {
+// type() answers a column of strings, which every step carrying a chunk on has to
+// handle: a limit, a skip, a grouping key, a cross product.
+class EdgeTypeChunkTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -82,22 +80,22 @@ protected:
 };
 
 // simpledb holds 18 edges
-TEST_F(OwnedStringChunkTest, limitsAColumnOfEdgeTypes) {
+TEST_F(EdgeTypeChunkTest, limitsAColumnOfEdgeTypes) {
     expectRowCount("MATCH ()-[e]->() RETURN type(e) LIMIT 3", 3);
 }
 
-TEST_F(OwnedStringChunkTest, skipsAColumnOfEdgeTypes) {
+TEST_F(EdgeTypeChunkTest, skipsAColumnOfEdgeTypes) {
     expectRowCount("MATCH ()-[e]->() RETURN type(e) SKIP 2", 16);
 }
 
-TEST_F(OwnedStringChunkTest, dedupsAColumnOfEdgeTypes) {
+TEST_F(EdgeTypeChunkTest, dedupsAColumnOfEdgeTypes) {
     expectRows("MATCH ()-[e]->() RETURN DISTINCT type(e)",
                {{"KNOWS_WELL"}, {"INTERESTED_IN"}});
 }
 
 // Remy's edge type crossed with the ten interests: the one row the WITH published is
 // repeated once per interest, carrying its string along
-TEST_F(OwnedStringChunkTest, carriesAColumnOfEdgeTypesAcrossACrossProduct) {
+TEST_F(EdgeTypeChunkTest, carriesAColumnOfEdgeTypesAcrossACrossProduct) {
     expectRows("MATCH (p:Person {name: 'Remy'})-[e:KNOWS_WELL]->() WITH type(e) AS kind "
                "MATCH (i:Interest) RETURN kind, i.name",
                {{"KNOWS_WELL", "Animals"},
@@ -114,7 +112,7 @@ TEST_F(OwnedStringChunkTest, carriesAColumnOfEdgeTypesAcrossACrossProduct) {
 
 // An edge the pattern missed is null, so the grouping key it holds is one too: the two
 // edges Remy and Adam walk form the named group, the six padded rows the null one
-TEST_F(OwnedStringChunkTest, groupsOnTheEdgeTypeOfAnOptionalMatch) {
+TEST_F(EdgeTypeChunkTest, groupsOnTheEdgeTypeOfAnOptionalMatch) {
     expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[e:KNOWS_WELL]->(f) "
                "RETURN type(e), count(*)",
                {{"KNOWS_WELL", "2"}, {"null", "6"}});

@@ -23,10 +23,10 @@
 using namespace db;
 using namespace turing::test;
 
-// type() answers a string the engine owns rather than one borrowed from the store, and it
-// orders lexicographically against any other string exactly as a stored property does.
+// type() answers a string that orders lexicographically against any other string exactly
+// as a stored property does.
 // simpledb holds 3 KNOWS_WELL edges and 15 INTERESTED_IN ones, so "J" separates the two.
-class OwnedStringOrderingTest : public TuringTest {
+class EdgeTypeOrderingTest : public TuringTest {
 protected:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -61,27 +61,27 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-TEST_F(OwnedStringOrderingTest, ordersAnEdgeTypeAgainstALiteral) {
+TEST_F(EdgeTypeOrderingTest, ordersAnEdgeTypeAgainstALiteral) {
     expectRows("MATCH ()-[e]->() WHERE type(e) > 'J' RETURN count(*)", {{"3"}});
 }
 
-TEST_F(OwnedStringOrderingTest, ordersALiteralAgainstAnEdgeType) {
+TEST_F(EdgeTypeOrderingTest, ordersALiteralAgainstAnEdgeType) {
     expectRows("MATCH ()-[e]->() WHERE 'J' < type(e) RETURN count(*)", {{"3"}});
 }
 
-TEST_F(OwnedStringOrderingTest, ordersAnEdgeTypeInclusively) {
+TEST_F(EdgeTypeOrderingTest, ordersAnEdgeTypeInclusively) {
     expectRows("MATCH ()-[e]->() WHERE type(e) >= 'KNOWS_WELL' RETURN count(*)", {{"3"}});
 }
 
-TEST_F(OwnedStringOrderingTest, ordersTwoEdgeTypesAgainstEachOther) {
+TEST_F(EdgeTypeOrderingTest, ordersTwoEdgeTypesAgainstEachOther) {
     expectRows("MATCH (a)-[e1]->(b)-[e2]->(c) WHERE type(e1) > type(e2) RETURN count(*)", {{"8"}});
 }
 
-TEST_F(OwnedStringOrderingTest, ordersAnEdgeTypeAgainstAStringProperty) {
+TEST_F(EdgeTypeOrderingTest, ordersAnEdgeTypeAgainstAStringProperty) {
     expectRows("MATCH (a)-[e]->(b) WHERE type(e) > e.name RETURN count(*)", {{"7"}});
 }
 
-TEST_F(OwnedStringOrderingTest, comparesAnEdgeTypeForEquality) {
+TEST_F(EdgeTypeOrderingTest, comparesAnEdgeTypeForEquality) {
     expectRows("MATCH ()-[e]->() WHERE type(e) = 'KNOWS_WELL' RETURN count(*)", {{"3"}});
 }
 

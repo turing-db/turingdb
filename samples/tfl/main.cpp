@@ -37,7 +37,7 @@ struct Connection {
     double _time = 0.0;
 };
 
-using StringColumn = ColumnVector<std::string>;
+using StringColumn = ColumnVector<std::string_view>;
 
 class ConnectionNLSink : public NLOutputSink {
 public:
@@ -55,14 +55,14 @@ public:
 
         for (size_t row = offset; row < offset + rowCount; row++) {
             _connections.push_back({
-                (*station1Column)[row],
-                (*station2Column)[row],
-                (*lineColumn)[row],
-                std::stod((*timeColumn)[row]),
+                std::string((*station1Column)[row]),
+                std::string((*station2Column)[row]),
+                std::string((*lineColumn)[row]),
+                std::stod(std::string((*timeColumn)[row])),
             });
 
-            _stations.insert((*station1Column)[row]);
-            _stations.insert((*station2Column)[row]);
+            _stations.emplace((*station1Column)[row]);
+            _stations.emplace((*station2Column)[row]);
         }
     }
 

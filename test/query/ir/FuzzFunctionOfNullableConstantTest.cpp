@@ -120,7 +120,7 @@ TEST_F(FuzzFunctionOfNullableConstantTest, ReturnSizeOfFailedConversion) {
     expectRows("RETURN size(toString(toInteger('x')))", {{"null"}});
 }
 
-// toString answers an owned string, which a function taking a string reads all the same
+// toString answers a string, which a function taking a string reads
 TEST_F(FuzzFunctionOfNullableConstantTest, ReturnSizeOfConvertedString) {
     expectRows("RETURN size(toString(10))", {{"2"}});
 }

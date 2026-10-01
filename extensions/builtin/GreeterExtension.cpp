@@ -23,7 +23,7 @@ void helloDealloc(ProcedureData* data) {
 void helloExecute(ProcedureState* proc) {
     HelloData& data = proc->data<HelloData>();
     Column* col = data.getReturnColumn(0);
-    auto* msgCol = static_cast<ColumnVector<std::string>*>(col);
+    auto* msgCol = static_cast<ColumnVector<std::string_view>*>(col);
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE:
@@ -46,7 +46,7 @@ void initGreeter(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&helloExecute);
     proc->setAllocCallback(&helloAlloc);
     proc->setDeallocCallback(&helloDealloc);
-    proc->addReturnValue("message", ProcedureType::STRING);
+    proc->addReturnValue("message", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 

@@ -30,6 +30,7 @@
 #include "VectorDatabase.h"
 
 #include "Graph.h"
+#include "buffers/StringBuffer.h"
 #include "indexes/Index.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
@@ -216,7 +217,8 @@ void NLSystemExecutor::runListAvailableGraphs(NLExecutionContext* context, NLFun
     const NLListAvailableGraphsData* command = static_cast<NLListAvailableGraphsData*>(data);
     const SystemAccessor& accessor = requireAccessor(context);
 
-    NLStringColumn* const graphs = command->getGraphs();
+    StringBuffer* const stringBuffer = command->getStringBuffer();
+    NLViewColumn* const graphs = command->getGraphs();
     NLBoolColumn* const loaded = command->getLoaded();
     NLBoolColumn* const loading = command->getLoading();
 
@@ -227,10 +229,10 @@ void NLSystemExecutor::runListAvailableGraphs(NLExecutionContext* context, NLFun
     std::vector<std::string> names;
     accessor.listAvailableGraphs(names);
 
-    for (std::string& name : names) {
+    for (const std::string& name : names) {
         loaded->push_back(accessor.getGraph(name) != nullptr);
         loading->push_back(accessor.isGraphLoading(name));
-        graphs->push_back(std::move(name));
+        graphs->push_back(stringBuffer->insert(name));
     }
 }
 
@@ -411,8 +413,9 @@ void NLSystemExecutor::runShowProcedures(NLExecutionContext* context, NLFunction
         throwMissingFacility("a procedure manager");
     }
 
+    StringBuffer* const stringBuffer = command->getStringBuffer();
     NLViewColumn* const names = command->getNames();
-    NLStringColumn* const signatures = command->getSignatures();
+    NLViewColumn* const signatures = command->getSignatures();
 
     names->clear();
     signatures->clear();
@@ -428,7 +431,7 @@ void NLSystemExecutor::runShowProcedures(NLExecutionContext* context, NLFunction
         for (const Procedure* procedure : procedures) {
             names->push_back(procedure->getFullName());
             procedure->buildSignature(signature);
-            signatures->push_back(signature);
+            signatures->push_back(stringBuffer->insert(signature));
         }
     }
 }
@@ -498,7 +501,8 @@ void NLSystemExecutor::runShowVectorIndexes(NLExecutionContext* context, NLFunct
     const NLShowVectorIndexesData* command = static_cast<NLShowVectorIndexesData*>(data);
     vec::VectorDatabase& vectorDatabase = requireVectorDatabase(context);
 
-    NLStringColumn* const names = command->getNames();
+    StringBuffer* const stringBuffer = command->getStringBuffer();
+    NLViewColumn* const names = command->getNames();
     NLCountColumn* const dimensions = command->getDimensions();
 
     names->clear();
@@ -507,14 +511,14 @@ void NLSystemExecutor::runShowVectorIndexes(NLExecutionContext* context, NLFunct
     std::vector<std::string> libraryNames;
     vectorDatabase.listLibraryNames(libraryNames);
 
-    for (std::string& name : libraryNames) {
+    for (const std::string_view name : libraryNames) {
         const vec::VecLibAccessor accessor = vectorDatabase.getLibrary(name);
         if (!accessor.isValid()) {
             continue;
         }
 
         dimensions->push_back(accessor.metadata()->_dimension);
-        names->push_back(std::move(name));
+        names->push_back(stringBuffer->insert(name));
     }
 }
 

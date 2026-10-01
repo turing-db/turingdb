@@ -55,7 +55,7 @@ void describeColumnType(mlir::Type chunkType, std::string& out) {
         element = nullable.getValueType();
     }
 
-    if (mlir::isa<storage::StringType>(element) || mlir::isa<storage::OwnedStringType>(element)) {
+    if (mlir::isa<storage::StringType>(element)) {
         out = "String";
     } else if (mlir::isa<storage::BoolType>(element)) {
         out = "Bool";
@@ -144,7 +144,7 @@ void throwIfNotAListInput(mlir::Type inputElement) {
 
 mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     const bool readsAList = llvm::isa<storage::ListType, storage::ListElementType>(inputElement);
-    const bool readsAString = llvm::isa<storage::StringType, storage::OwnedStringType>(inputElement);
+    const bool readsAString = mlir::isa<storage::StringType>(inputElement);
 
     if (!readsAList && !readsAString) {
         throw IRException("size() and length() read a list column or a string column");
@@ -356,10 +356,6 @@ mlir::Type procedureElementType(mlir::OpBuilder& builder, ProcedureType procedur
             return storage::StringType::get(context);
         break;
 
-        case ProcedureType::STRING:
-            return storage::OwnedStringType::get(context);
-        break;
-
         case ProcedureType::LIST:
             return storage::ListType::get(context, mlir::NoneType::get(context));
         break;
@@ -408,7 +404,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isBool = integerType && integerType.getWidth() == 1;
     const bool isInteger = integerType && !isBool;
     const bool isNumeric = isFloat || isInteger;
-    const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
+    const bool isString = mlir::isa<storage::StringType>(inputElement);
     const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
     const bool isDuration = mlir::isa<storage::DurationType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
@@ -1402,12 +1398,12 @@ void DBLowering::lowerLoadCSV(mlir::db::LoadCSV loadCSV) {
     // The file sibling of lowerUnwindConst: a source reads no column, so its loop sits at
     // the top of the current root block. The path, the field list and the flags are
     // forwarded as-is; the path and the header names are resolved when the loop runs. One
-    // owning string chunk per field, so - like nl.unwind_const - the iterator type is
+    // string chunk per field, so - like nl.unwind_const - the iterator type is
     // spelled here rather than inferred.
     setInsertionInto(_rootBlock);
 
     mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType chunk = nl::ChunkType::get(context, storage::OwnedStringType::get(context));
+    const nl::ChunkType chunk = nl::ChunkType::get(context, storage::StringType::get(context));
 
     const llvm::SmallVector<mlir::Type> chunks(loadCSV.getResults().size(), chunk);
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunks);
@@ -1630,16 +1626,15 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
     mlir::Operation* const placeholderYield =
         lowerElementBody(comprehension.getBody().front(), bodyBlock, rowTagChunk, valueChunk);
 
-    // An entity ID, a list, a tagged cell and a CSV field's owned characters are present
-    // in every row and go into the list as they stand; only a scalar value column is read
-    // as nullable, the way lowerMakeList reads the columns it builds from
+    // An entity ID, a list and a tagged cell are present in every row and go into the list
+    // as they stand; only a scalar value column is read as nullable, the way lowerMakeList
+    // reads the columns it builds from
     const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
     const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                        storage::EdgeIDType,
                                                        storage::ListType,
                                                        storage::MapType,
-                                                       storage::ListElementType,
-                                                       storage::OwnedStringType>(valueElement);
+                                                       storage::ListElementType>(valueElement);
 
     if (!holdsCellsPresentInEveryRow) {
         valueChunk = nullableValueChunk(valueChunk);
@@ -1760,15 +1755,14 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     // WHERE has cut both together
     valueChunk = rowAlignedChunk(valueChunk, rowTagChunk ? rowTagChunk : _innermostCardinality);
 
-    // An entity ID, a list, a tagged cell and a CSV field's owned characters are present
-    // in every row and go into the list as they stand; only a scalar value column is read
-    // as nullable, the way lowerMakeList reads the columns it builds from
+    // An entity ID, a list and a tagged cell are present in every row and go into the list
+    // as they stand; only a scalar value column is read as nullable, the way lowerMakeList
+    // reads the columns it builds from
     const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
     const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                        storage::EdgeIDType,
                                                        storage::ListType,
-                                                       storage::ListElementType,
-                                                       storage::OwnedStringType>(valueElement);
+                                                       storage::ListElementType>(valueElement);
 
     if (!holdsCellsPresentInEveryRow) {
         valueChunk = nullableValueChunk(valueChunk);
@@ -1816,12 +1810,6 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
             continue;
         }
 
-        // A column owning its characters puts a view of them in the list, the same string
-        // a borrowed column puts there, so the two agree
-        if (mlir::isa<storage::OwnedStringType>(element)) {
-            element = storage::StringType::get(context);
-        }
-
         if (!shared) {
             shared = element;
         } else if (shared != element) {
@@ -1848,16 +1836,15 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
     for (mlir::Value& chunk : chunks) {
         chunk = rowAlignedChunk(chunk, cardinality);
 
-        // An entity ID, a list, a map, a tagged cell and a CSV field's owned characters are
-        // present in every row and go into the container as they stand; only a scalar value
-        // column is read as nullable, the way lowerCollect reads the column it gathers.
+        // An entity ID, a list, a map and a tagged cell are present in every row and go
+        // into the container as they stand; only a scalar value column is read as nullable,
+        // the way lowerCollect reads the column it gathers.
         const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
         const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                            storage::EdgeIDType,
                                                            storage::ListType,
                                                            storage::MapType,
-                                                           storage::ListElementType,
-                                                           storage::OwnedStringType>(element);
+                                                           storage::ListElementType>(element);
 
         if (!holdsCellsPresentInEveryRow) {
             chunk = nullableValueChunk(chunk);
@@ -3999,12 +3986,6 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
             listElement = nullable.getValueType();
         }
 
-        // A list holds a view of each string, whether its column owned it or not, as
-        // nl.make_list's element type says too
-        if (mlir::isa<storage::OwnedStringType>(listElement)) {
-            listElement = storage::StringType::get(context);
-        }
-
         chunkTypes.push_back(nl::ChunkType::get(context, storage::ListType::get(context, listElement)));
     }
 
@@ -5990,16 +5971,12 @@ mlir::Value DBLowering::toNullableChunk(mlir::Value chunk, mlir::Type valueEleme
 mlir::Value DBLowering::unionColumnChunk(mlir::Value chunk) {
     const mlir::Type element = chunkValueElement(_builder, chunk.getType());
 
-    const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(element);
+    const bool isString = mlir::isa<storage::StringType>(element);
     const bool isDouble = mlir::isa<mlir::Float64Type>(element);
     const mlir::IntegerType integerType = mlir::dyn_cast<mlir::IntegerType>(element);
 
     if (!isString && !isDouble && !integerType) {
         return chunk;
-    }
-
-    if (isString) {
-        return ownedStringColumnChunk(chunk);
     }
 
     // Wrapped before it is converted, and not instead: the kernel a conversion selects
@@ -6022,29 +5999,9 @@ mlir::Value DBLowering::unionColumnChunk(mlir::Value chunk) {
     return _builder.create<nl::ToInteger>(_builder.getUnknownLoc(), signedChunk, nullableChunk).getResult();
 }
 
-// One branch reads a string property, borrowing its characters from the graph, and another
-// builds its own - type(e), a CSV field, a procedure's yield. The column carries the owned
-// form, since a view into a chunk the next step refills is not what a dedup keys on, a sort
-// buffers or a sink reads.
-mlir::Value DBLowering::ownedStringColumnChunk(mlir::Value chunk) {
-    mlir::MLIRContext* const context = _builder.getContext();
-    const storage::OwnedStringType ownedElement = storage::OwnedStringType::get(context);
-    const storage::NullableType nullableElement = storage::NullableType::get(context, ownedElement);
-    const nl::ChunkType resultType = nl::ChunkType::get(context, nullableElement);
-
-    if (chunk.getType() == resultType) {
-        return chunk;
-    }
-
-    mlir::OpBuilder::InsertionGuard guard(_builder);
-    setInsertionForUnaryOp(chunk);
-
-    return _builder.create<nl::ToOwnedString>(_builder.getUnknownLoc(), resultType, chunk).getResult();
-}
-
 // The chunk shape a drain can pad a missed row of. A mask holds a bit and a number a zero,
 // which the query cannot tell from a value it was given, so those are read as nullable
-// value chunks, and a string as the owned nullable one nl.to_owned_string produces. An ID
+// value chunks. An ID
 // column needs none of it: it spells its null as the invalid ID.
 mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
     const nl::ChunkType chunkType = mlir::dyn_cast<nl::ChunkType>(chunk.getType());
@@ -6054,9 +6011,7 @@ mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
 
     const mlir::Type element = chunkType.getElementType();
 
-    if (mlir::isa<storage::OwnedStringType>(element)) {
-        return ownedStringColumnChunk(chunk);
-    } else if (mlir::isa<storage::ListType>(element)) {
+    if (mlir::isa<storage::ListType>(element)) {
         return nullableListChunk(chunk);
     } else if (mlir::isa<storage::BoolType, storage::StringType, mlir::Float64Type, mlir::IntegerType>(element)) {
         return nullableValueChunk(chunk);

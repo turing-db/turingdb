@@ -73,19 +73,6 @@ def ValueType : StorageType<"ValueType", "value_type"> {
     }];
 }
 
-def OwnedString : StorageType<"OwnedString", "owned_string"> {
-    let summary = "A string value owned by the column";
-    let description = [{
-        The owning counterpart of !storage.string. A !storage.string row is a
-        string_view borrowed from the graph, so it may only name characters that
-        live in storage; a row of this type owns its characters, which is what a
-        producer that formats its own text needs (a procedure yielding a STRING
-        column, e.g. db.procedures' `signature`). The two are distinct types
-        because they are distinct columns - a view column and an owning one - and
-        a chunk must say which one it is.
-    }];
-}
-
 def Embedding : StorageType<"Embedding", "embedding"> {
     let summary = "An embedding property value";
     let description = [{

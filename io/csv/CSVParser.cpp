@@ -13,6 +13,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "buffers/StringBuffer.h"
 #include "columns/ColumnStringTable.h"
 
 #include "TuringException.h"
@@ -71,16 +72,6 @@ void skipBOMInline(const char*& cursor, const char* end) {
         && static_cast<unsigned char>(cursor[1]) == 0xBB
         && static_cast<unsigned char>(cursor[2]) == 0xBF) {
         cursor += 3;
-    }
-}
-
-void markLastFieldReaders(std::span<const size_t> fieldIndices, std::vector<bool>& lastReaders) {
-    lastReaders.assign(fieldIndices.size(), true);
-
-    for (size_t column = 0; column + 1 < fieldIndices.size(); column++) {
-        const std::span<const size_t> laterColumns = fieldIndices.subspan(column + 1);
-
-        lastReaders[column] = std::ranges::find(laterColumns, fieldIndices[column]) == laterColumns.end();
     }
 }
 
@@ -419,7 +410,7 @@ CSVParser::RecordStatus CSVParser::readRecord() {
     return RecordStatus::Read;
 }
 
-size_t CSVParser::readChunk(size_t maxRows, ColumnStringTable* output) {
+size_t CSVParser::readChunk(size_t maxRows, ColumnStringTable* output, StringBuffer* stringBuffer) {
     if (!_opened) {
         openFile();
     }
@@ -440,7 +431,7 @@ size_t CSVParser::readChunk(size_t maxRows, ColumnStringTable* output) {
         }
 
         for (size_t i = 0; i < _fields.size(); i++) {
-            output->getFieldColumn(i)->push_back(std::move(_fields[i]));
+            output->getFieldColumn(i)->push_back(stringBuffer->insert(_fields[i]));
         }
         rowsRead++;
     }
@@ -450,7 +441,8 @@ size_t CSVParser::readChunk(size_t maxRows, ColumnStringTable* output) {
 
 size_t CSVParser::readChunk(size_t maxRows,
                             std::span<const size_t> fieldIndices,
-                            ColumnStringTable* output) {
+                            ColumnStringTable* output,
+                            StringBuffer* stringBuffer) {
     if (!_opened) {
         openFile();
     }
@@ -459,11 +451,6 @@ size_t CSVParser::readChunk(size_t maxRows,
     }
 
     output->clear();
-
-    // Two accesses to one field - row[0] beside row.name - resolve to the same index, so
-    // a column takes the field's characters only when no later column reads it too.
-    std::vector<bool> lastReaders;
-    markLastFieldReaders(fieldIndices, lastReaders);
 
     size_t rowsRead = 0;
 
@@ -476,14 +463,7 @@ size_t CSVParser::readChunk(size_t maxRows,
         }
 
         for (size_t i = 0; i < fieldIndices.size(); i++) {
-            std::string& field = _fields[fieldIndices[i]];
-            ColumnStringTable::StringColumn* const column = output->getFieldColumn(i);
-
-            if (lastReaders[i]) {
-                column->push_back(std::move(field));
-            } else {
-                column->push_back(field);
-            }
+            output->getFieldColumn(i)->push_back(stringBuffer->insert(_fields[fieldIndices[i]]));
         }
         rowsRead++;
     }

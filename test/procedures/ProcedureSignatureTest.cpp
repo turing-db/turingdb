@@ -40,8 +40,8 @@ TEST_F(ProcedureSignatureTest, rendersAProcedureThatTakesNothing) {
 
 TEST_F(ProcedureSignatureTest, rendersArgumentsBeforeReturnValues) {
     Procedure* const procedure = addProcedure("describeCommit");
-    procedure->addArgument("commit", ProcedureType::STRING);
-    procedure->addReturnValue("hash", ProcedureType::STRING);
+    procedure->addArgument("commit", ProcedureType::STRING_VIEW);
+    procedure->addReturnValue("hash", ProcedureType::STRING_VIEW);
     procedure->addReturnValue("nodeCount", ProcedureType::UINT_64);
 
     procedure->buildSignature(_signature);

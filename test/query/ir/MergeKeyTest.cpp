@@ -51,8 +51,7 @@ TEST_F(MergeKeyTest, bindsAPendingNodeAnIntegerAndADoubleBothConstrain) {
     expectRows("MATCH (s:Score) RETURN count(s)", {{"2"}});
 }
 
-// A key read from a function of a matched entity rather than from a property: type()
-// owns the characters it hands the merge
+// A key read from a function of a matched entity rather than from a property
 TEST_F(MergeKeyTest, keysANodeOnTheTypeOfAMatchedEdge) {
     expectWriteRowCount("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->() "
                         "MERGE (t:Tag {name: type(e)})",

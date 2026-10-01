@@ -252,9 +252,8 @@ TEST_F(LoadCSVSourceTest, readsAFileSpanningSeveralChunks) {
                {{std::to_string(chunkedRecordCount - 1)}});
 }
 
-// A field owns its characters and the chunk is cleared for the next records, so anything
-// buffering rows across steps - a sort, a seen-set, a collect - has to keep a copy of its
-// own rather than a view into the chunk it read.
+// The chunk is cleared for the next records, so anything buffering rows across steps - a
+// sort, a seen-set, a collect - must still read the fields of earlier chunks.
 TEST_F(LoadCSVSourceTest, buffersFieldsAcrossChunkBoundaries) {
     writeFile("names.csv", chunkedFile());
 

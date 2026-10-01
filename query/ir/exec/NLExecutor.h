@@ -369,11 +369,6 @@ public:
 
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
-    // Read a string column - borrowing its characters or owning them, nullable or not - as
-    // a nullable column that owns them. The result is one column type whichever of the four
-    // @param operand is, which is what makes it the string a union carries.
-    static NLUnaryFn selectToOwnedString(const Column* operand, LocalMemory* memory, Column*& result);
-
     // Write each row of a CASE (nl.case): the value of the first branch whose condition
     // holds, the default when none does, and an absent value when there is no default.
     static void runCase(NLExecutionContext* context, NLFunctionData* data);
@@ -468,30 +463,6 @@ public:
 
     static NLUnaryFunctionKernel selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
-    // The owned-string members of the nullable handler families, for the chunk kind
-    // labels() and type() produce: a nullable value whose rows own their characters
-    // rather than borrowing them, so the value type alone does not pick the handler.
-    static NLGatherFunction selectOptOwnedStringGather();
-    static NLAppendFunction selectOptOwnedStringAppend();
-    static NLCopyFunction selectOptOwnedStringCopy();
-    static NLGroupKeyGatherFunction selectOptOwnedStringGroupKeyGather();
-    static NLCompareFunction selectOptOwnedStringCompare();
-    static NLKeyAppendFunction selectOptOwnedStringKeyAppend();
-    static NLCountFunction selectOptOwnedStringCount();
-    static NLBroadcastFunction selectOptOwnedStringBlockRepeat();
-    static NLBroadcastFunction selectOptOwnedStringTile();
-
-    // The owned-string members of the reduction families. min and max order the strings
-    // labels() and type() answer as they order a property's, so they fold into a
-    // std::string accumulator; no other reduction reads a string, and the lowering
-    // rejects those before the selection reaches here.
-    static NLAggregateResetFunction selectOptOwnedStringAggregateReset();
-    static NLAggregateUpdateFunction selectOptOwnedStringAggregateUpdate(AggregateKind kind);
-    static NLAggregateResultFunction selectOptOwnedStringAggregateResult();
-    static NLGroupAggregateGrowFunction selectOptOwnedStringGroupAggregateGrow();
-    static NLGroupAggregateFoldFunction selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind);
-    static NLGroupAggregateEmitFunction selectOptOwnedStringGroupAggregateEmit();
-
     // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
     // what a label test, an edge type test and a merge produce - where an i1 value chunk
     // is a ColumnVector<CustomBool>.
@@ -521,7 +492,6 @@ public:
     static NLFillNullFunction selectOptListFillNull();
     static NLFillNullFunction selectOptListElementFillNull();
     static NLFillNullFunction selectListElementFillNull();
-    static NLFillNullFunction selectOptOwnedStringFillNull();
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);
@@ -576,7 +546,6 @@ public:
     static NLKeyAppendFunction selectPlainMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType);
     static NLKeyAppendFunction selectConstMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
     static NLKeyAppendFunction selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
-    static NLKeyAppendFunction selectOptOwnedStringMergeKeyAppend(ValueType keyType);
     static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
     static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 
@@ -822,7 +791,6 @@ public:
     static NLListItemReadFunction selectNestedMapListItemRead();
     static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
-    static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
 
     // The reads an nl.make_map takes one value out of a column with, one per column kind as
     // for nl.make_list, plus a nested map as the cell it holds in every row.
@@ -833,7 +801,6 @@ public:
     static NLMapValueReadFunction selectOptNestedListMapValueRead();
     static NLMapValueReadFunction selectNestedMapValueRead();
     static NLMapValueReadFunction selectTaggedMapValueRead(bool nullable);
-    static NLMapValueReadFunction selectOwnedStringMapValueRead(bool nullable);
 
     // The read an nl.range takes one bound out of a column with, which is a nullable
     // integer one however the query wrote the bound.
@@ -878,13 +845,6 @@ public:
     static void selectCollectOptTaggedHandlers(bool distinctValues,
                                                NLCollectFoldFunction& fold,
                                                NLCollectListEmitFunction& listEmit);
-
-    // The handlers a collect of a column owning its strings reads: the flat buffer keeps a
-    // copy of each present string, which the lists and the unwound rows it emits then read
-    static void selectCollectOptOwnedStringHandlers(bool distinctValues,
-                                                    NLCollectFoldFunction& fold,
-                                                    NLUnwindCollectValueEmitFunction& unwindCollectEmit,
-                                                    NLCollectListEmitFunction& listEmit);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization

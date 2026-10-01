@@ -1166,11 +1166,11 @@ func.func @main() {
 )mlir";
 
 // LOAD CSV 'people.csv' AS row RETURN row[0], row[2]: a source over the records of a
-// file, one owning string column per field the query names.
+// file, one string column per field the query names.
 const char* const loadCSVProgram = R"mlir(
 func.func @main() {
-  %0:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
-  db.output(%0#0, %0#1) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+  %0:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) : !db.column<!storage.string>, !db.column<!storage.string>
+  db.output(%0#0, %0#1) : !db.column<!storage.string>, !db.column<!storage.string>
   return
 }
 )mlir";
@@ -1179,8 +1179,8 @@ func.func @main() {
 // and dropping a malformed record rather than failing.
 const char* const headedLoadCSVProgram = R"mlir(
 func.func @main() {
-  %0 = db.load_csv("people.csv", ["city"]) with_headers skip_on_error : !db.column<!storage.owned_string>
-  db.output(%0) : !db.column<!storage.owned_string>
+  %0 = db.load_csv("people.csv", ["city"]) with_headers skip_on_error : !db.column<!storage.string>
+  db.output(%0) : !db.column<!storage.string>
   return
 }
 )mlir";
@@ -1189,8 +1189,8 @@ func.func @main() {
 // verifier rejects it.
 const char* const headerlessLoadCSVProgram = R"mlir(
 func.func @main() {
-  %0 = db.load_csv("people.csv", ["city"]) : !db.column<!storage.owned_string>
-  db.output(%0) : !db.column<!storage.owned_string>
+  %0 = db.load_csv("people.csv", ["city"]) : !db.column<!storage.string>
+  db.output(%0) : !db.column<!storage.string>
   return
 }
 )mlir";
@@ -1199,8 +1199,8 @@ func.func @main() {
 // must agree.
 const char* const mismatchedLoadCSVProgram = R"mlir(
 func.func @main() {
-  %0:2 = db.load_csv("people.csv", [0 : ui64]) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
-  db.output(%0#0, %0#1) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+  %0:2 = db.load_csv("people.csv", [0 : ui64]) : !db.column<!storage.string>, !db.column<!storage.string>
+  db.output(%0#0, %0#1) : !db.column<!storage.string>, !db.column<!storage.string>
   return
 }
 )mlir";
@@ -1552,16 +1552,16 @@ TEST_F(DBDialectTest, parsesLoadCSV) {
     ASSERT_TRUE(load);
 
     // The path and the two positions come back as written, both flags absent, and each
-    // field is an owning string column - the characters were parsed, not borrowed.
+    // field is a string column.
     EXPECT_EQ(load.getPath(), "people.csv");
     ASSERT_EQ(load.getFields().size(), 2u);
     EXPECT_FALSE(load.getWithHeaders());
     EXPECT_FALSE(load.getSkipOnError());
 
-    const mlir::Type ownedStringColumnType =
-        mlir::db::ColumnType::get(&_context, mlir::storage::OwnedStringType::get(&_context));
-    EXPECT_EQ(load.getResult(0).getType(), ownedStringColumnType);
-    EXPECT_EQ(load.getResult(1).getType(), ownedStringColumnType);
+    const mlir::Type stringColumnType =
+        mlir::db::ColumnType::get(&_context, mlir::storage::StringType::get(&_context));
+    EXPECT_EQ(load.getResult(0).getType(), stringColumnType);
+    EXPECT_EQ(load.getResult(1).getType(), stringColumnType);
 }
 
 TEST_F(DBDialectTest, parsesLoadCSVFlagsAndHeaderFields) {

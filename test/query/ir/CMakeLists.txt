@@ -2752,8 +2752,8 @@ target_link_libraries(test_query_ir_label_list_chunk PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_label_list_chunk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_turing_test(test_query_ir_owned_string_chunk OwnedStringChunkTest.cpp)
-target_link_libraries(test_query_ir_owned_string_chunk PRIVATE
+add_turing_test(test_query_ir_edge_type_chunk EdgeTypeChunkTest.cpp)
+target_link_libraries(test_query_ir_edge_type_chunk PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_examples_s
@@ -2761,7 +2761,7 @@ target_link_libraries(test_query_ir_owned_string_chunk PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
-target_include_directories(test_query_ir_owned_string_chunk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(test_query_ir_edge_type_chunk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_create_then_delete CreateThenDeleteTest.cpp)
 target_link_libraries(test_query_ir_create_then_delete PRIVATE
@@ -2897,29 +2897,29 @@ target_link_libraries(test_query_ir_shortest_path_endpoint_predicate PRIVATE
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_shortest_path_endpoint_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Ordering a string type() owns against another string, run end to end against simpledb.
-add_turing_test(test_query_ir_owned_string_ordering OwnedStringOrderingTest.cpp)
-target_sources(test_query_ir_owned_string_ordering PRIVATE StringRowSink.cpp)
-target_link_libraries(test_query_ir_owned_string_ordering PRIVATE
+# Ordering the string type() answers against another string, run end to end against simpledb.
+add_turing_test(test_query_ir_edge_type_ordering EdgeTypeOrderingTest.cpp)
+target_sources(test_query_ir_edge_type_ordering PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_edge_type_ordering PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
         turing_db_ir_exec_s)
-target_include_directories(test_query_ir_owned_string_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(test_query_ir_edge_type_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# min() and max() over a string type() owns, run end to end against simpledb.
-add_turing_test(test_query_ir_owned_string_reduction OwnedStringReductionTest.cpp)
-target_sources(test_query_ir_owned_string_reduction PRIVATE StringRowSink.cpp)
-target_link_libraries(test_query_ir_owned_string_reduction PRIVATE
+# min() and max() over the string type() answers, run end to end against simpledb.
+add_turing_test(test_query_ir_edge_type_reduction EdgeTypeReductionTest.cpp)
+target_sources(test_query_ir_edge_type_reduction PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_edge_type_reduction PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
         turing_db_ir_exec_s)
-target_include_directories(test_query_ir_owned_string_reduction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(test_query_ir_edge_type_reduction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # coalesce over an argument list holding a literal, run end to end against simpledb.
 add_turing_test(test_query_ir_coalesce_literal_argument CoalesceLiteralArgumentTest.cpp)
@@ -3370,7 +3370,7 @@ target_include_directories(test_query_ir_optional_subquery_nullable_yield PRIVAT
 # A constant a CALL subquery body returns beside a column of rows.
 add_call_v3_test(test_query_ir_subquery_constant_return SubqueryConstantReturnTest.cpp)
 
-# OPTIONAL CALL over a body returning a column that owns its strings.
+# OPTIONAL CALL over a body returning a procedure string column.
 add_call_v3_test(test_query_ir_optional_subquery_string_padding OptionalSubqueryStringPaddingTest.cpp)
 
 # Which CALL subqueries may follow an updating clause.

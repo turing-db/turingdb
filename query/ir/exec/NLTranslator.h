@@ -985,7 +985,6 @@ private:
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
-    void translateToOwnedString(mlir::nl::ToOwnedString toOwnedString, NLStmtContainer* body);
 
     void translateCase(mlir::nl::Case caseOp, NLStmtContainer* body);
 
@@ -1099,17 +1098,6 @@ private:
     // A count result is a ui64 tally, the pipeline's one non-nullable value chunk, so
     // it is neither an ID chunk nor a !storage.nullable<...> one and takes a plain
     // ColumnVector<uint64_t>.
-    // Whether a nullable chunk's value type is one whose rows own their characters, which
-    // the value type alone does not say: labels() and type() format their own text
-    // where a string property column borrows the graph's
-    static bool isOwnedStringElement(mlir::Type elementType);
-    static bool isOwnedStringChunk(mlir::Type chunkType);
-
-    // The per-step variant reserves a full chunk; the sized one is what an accumulator
-    // holding a single row takes.
-    Column* allocOptOwnedStringColumn();
-    Column* allocOptOwnedStringColumn(size_t reserveSize);
-
     static bool isMaskElementType(mlir::Type elementType);
 
     Column* allocMaskColumn();

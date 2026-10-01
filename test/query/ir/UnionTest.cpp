@@ -216,8 +216,8 @@ TEST_F(UnionTest, dedupsACountAgainstAnIntegerProperty) {
                expected);
 }
 
-// One branch owns the characters of its strings and the other borrows them from the graph.
-// Both are one Cypher STRING, so the result carries them as one column.
+// One branch reads type() and the other a string property. Both are one Cypher STRING, so
+// the result carries them as one column.
 TEST_F(UnionTest, unionsAnEdgeTypeWithAStringProperty) {
     const Rows expected {{"KNOWS_WELL"}, {"INTERESTED_IN"}, {"Remy"}, {"Adam"}};
 

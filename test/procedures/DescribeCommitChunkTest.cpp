@@ -61,7 +61,7 @@ protected:
 
     // Drives the procedure over the given commit hashes until it declares itself finished,
     // recording every step's rows and how many of them there were.
-    void runDescribe(const ColumnVector<std::string>& commits, size_t chunkSize, DescribeRun& run) {
+    void runDescribe(const ColumnVector<std::string_view>& commits, size_t chunkSize, DescribeRun& run) {
         const Procedure* procedure = _procedures.getProcedure("db.describeCommit");
         ASSERT_NE(procedure, nullptr);
 
@@ -131,7 +131,7 @@ TEST_F(DescribeCommitChunkTest, describesEveryHashOfAnInputLongerThanTheChunk) {
     constexpr size_t rowCount = 10;
     constexpr size_t chunkSize = 4;
 
-    ColumnVector<std::string> commits;
+    ColumnVector<std::string_view> commits;
     for (size_t row = 0; row < rowCount; row++) {
         commits.push_back(hash);
     }
@@ -158,7 +158,7 @@ TEST_F(DescribeCommitChunkTest, endsOnTheLastFullStep) {
     std::string hash;
     headCommitHash(hash);
 
-    ColumnVector<std::string> commits;
+    ColumnVector<std::string_view> commits;
     for (size_t row = 0; row < 4; row++) {
         commits.push_back(hash);
     }

@@ -31,7 +31,6 @@ using namespace turing::test;
 namespace {
 
 using ViewColumn = ColumnVector<types::String::Primitive>;
-using StringColumn = ColumnVector<std::string>;
 using BoolColumn = ColumnVector<types::Bool::Primitive>;
 using ChangeIDColumn = ColumnVector<ChangeID>;
 using CountColumn = ColumnVector<types::UInt64::Primitive>;
@@ -88,11 +87,6 @@ void readViewColumn(std::span<const Column* const> chunks, size_t row, SystemRes
     sink.addString((*names)[row]);
 }
 
-void readStringColumn(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
-    const StringColumn* const names = static_cast<const StringColumn*>(chunks.front());
-    sink.addString((*names)[row]);
-}
-
 void readChangeIDColumn(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
     const ChangeIDColumn* const changes = static_cast<const ChangeIDColumn*>(chunks.front());
     sink.addNumber((*changes)[row].get());
@@ -100,7 +94,7 @@ void readChangeIDColumn(std::span<const Column* const> chunks, size_t row, Syste
 
 void readProcedure(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
     const ViewColumn* const names = static_cast<const ViewColumn*>(chunks[0]);
-    const StringColumn* const signatures = static_cast<const StringColumn*>(chunks[1]);
+    const ViewColumn* const signatures = static_cast<const ViewColumn*>(chunks[1]);
 
     sink.addString((*names)[row]);
     sink.addString((*signatures)[row]);
@@ -112,7 +106,7 @@ void readCountColumn(std::span<const Column* const> chunks, size_t row, SystemRe
 }
 
 void readAvailableGraph(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
-    const StringColumn* const names = static_cast<const StringColumn*>(chunks[0]);
+    const ViewColumn* const names = static_cast<const ViewColumn*>(chunks[0]);
     const BoolColumn* const loaded = static_cast<const BoolColumn*>(chunks[1]);
 
     sink.addString((*names)[row]);
@@ -334,7 +328,7 @@ TEST_F(SystemCommandTest, vectorIndexIsCreatedListedAndDeleted) {
     EXPECT_EQ(createSink.getStrings().front(), "vectors");
 
     QueryStatus listStatus;
-    SystemResultSink listSink(&readStringColumn);
+    SystemResultSink listSink(&readViewColumn);
     runQuery("SHOW VECTOR INDEXES", listStatus, listSink);
 
     ASSERT_TRUE(listStatus.isOk()) << listStatus.getError();
@@ -348,7 +342,7 @@ TEST_F(SystemCommandTest, vectorIndexIsCreatedListedAndDeleted) {
     ASSERT_TRUE(deleteStatus.isOk()) << deleteStatus.getError();
 
     QueryStatus emptyStatus;
-    SystemResultSink emptySink(&readStringColumn);
+    SystemResultSink emptySink(&readViewColumn);
     runQuery("SHOW VECTOR INDEXES", emptyStatus, emptySink);
 
     ASSERT_TRUE(emptyStatus.isOk()) << emptyStatus.getError();

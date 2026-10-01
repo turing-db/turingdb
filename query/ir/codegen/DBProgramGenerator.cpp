@@ -3792,7 +3792,7 @@ void DBProgramGenerator::generateLoadCSV(const LoadCSVStmt* loadCSVStmt) {
     const mlir::StringAttr pathAttr = _opBuilder.getStringAttr(llvm::StringRef {path.data(), path.size()});
     const mlir::ArrayAttr fieldsAttr = _opBuilder.getArrayAttr(fieldAttrs);
 
-    const mlir::db::ColumnType fieldType = allocColumnType(mlir::storage::OwnedStringType::get(_mlirCtxt));
+    const mlir::db::ColumnType fieldType = allocColumnType(mlir::storage::StringType::get(_mlirCtxt));
     const llvm::SmallVector<mlir::Type> fieldTypes(fieldAttrs.size(), fieldType);
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
