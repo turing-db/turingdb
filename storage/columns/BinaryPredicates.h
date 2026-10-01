@@ -902,6 +902,10 @@ struct TuringIn {
                 } else if (equal->_boolean) {
                     return CustomBool {true};
                 }
+            } else if constexpr (TypedInternalID<Scalar>) {
+                if (elementIsID(element, scalar)) {
+                    return CustomBool {true};
+                }
             } else if (element == scalar) {
                 return CustomBool {true};
             }
@@ -928,6 +932,17 @@ struct TuringIn {
         throw FatalException("IN operands in incorrect order");
     }
 
+    template <TypedInternalID IDT>
+    static bool elementIsID(const ListElementView element, const IDT id) {
+        const ListBufferTypeTag tag = element.getTag();
+        const bool holdsAnInteger = tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+        if (holdsAnInteger) {
+            const types::UInt64::Primitive value = id.getValue();
+            return element == value;
+        }
+
+        return element == id;
+    }
 };
 
 }
