@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: 1, b: 'x'} AS m, 'a' AS k RETURN m[k]",
+  "expect": {
+    "result": "m[k]\n1"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "return"
+  ],
+  "write-required": false
+}

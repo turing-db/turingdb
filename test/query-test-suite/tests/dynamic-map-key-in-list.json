@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH [{a: 1}, {a: 2}] AS xs, 'a' AS k RETURN xs[0][k]",
+  "expect": {
+    "result": "PLAN ERROR\n-------* Query error\n     1 | WITH [{a: 1}, {a: 2}] AS xs, 'a' AS k RETURN xs[0][k]\n       |                                              ^^^^^^^^\n-------* Reading a key of a map held in a list is not supported yet."
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "list",
+    "fail"
+  ],
+  "write-required": false
+}

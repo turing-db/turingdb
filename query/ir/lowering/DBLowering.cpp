@@ -1111,6 +1111,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerMakeMap(makeMap);
     } else if (mlir::db::StaticMapKey mapKey = mlir::dyn_cast<mlir::db::StaticMapKey>(operation)) {
         lowerStaticMapKey(mapKey);
+    } else if (mlir::db::DynamicMapKey dynamicMapKey = mlir::dyn_cast<mlir::db::DynamicMapKey>(operation)) {
+        lowerDynamicMapKey(dynamicMapKey);
     } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
         lowerRange(range);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
@@ -1847,6 +1849,45 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
     }
 
     return shared;
+}
+
+void DBLowering::lowerDynamicMapKey(mlir::db::DynamicMapKey mapKey) {
+    const mlir::Value mapChunk = mapValue(mapKey.getMap());
+    const mlir::Value keyChunk = mapValue(mapKey.getKey());
+
+    const mlir::Type mapElement = mlir::cast<nl::ChunkType>(mapChunk.getType()).getElementType();
+    const auto nullableMap = mlir::dyn_cast<storage::NullableType>(mapElement);
+    const mlir::Type map = nullableMap ? nullableMap.getValueType() : mapElement;
+
+    if (!mlir::isa<storage::MapType>(map)) {
+        throw IRException("db.dynamic_map_key reads from a map column");
+    }
+
+    const mlir::Type keyElement = mlir::cast<nl::ChunkType>(keyChunk.getType()).getElementType();
+    const auto nullableKey = mlir::dyn_cast<storage::NullableType>(keyElement);
+    const mlir::Type key = nullableKey ? nullableKey.getValueType() : keyElement;
+
+    const bool readsAStringKey = mlir::isa<storage::StringType>(key);
+    const bool readsANullKey = mlir::isa<mlir::NoneType>(key);
+
+    if (!readsAStringKey && !readsANullKey) {
+        throw IRException("db.dynamic_map_key reads its key out of a string column");
+    }
+
+    // The entry carries its own null in its tag, so the result is never wrapped in a
+    // nullable: a missing key, an absent map and a null key all read back as a Null-tagged
+    // entry
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(),
+                                                        storage::MapElementType::get(_builder.getContext()));
+
+    setInsertionForBinaryOp(mapChunk, keyChunk);
+
+    nl::DynamicMapKey value = _builder.create<nl::DynamicMapKey>(_builder.getUnknownLoc(),
+                                                                 resultType,
+                                                                 mapChunk,
+                                                                 keyChunk);
+
+    _valueMap[mapKey.getResult()] = value.getResult();
 }
 
 void DBLowering::lowerStaticMapKey(mlir::db::StaticMapKey mapKey) {

@@ -3991,6 +3991,11 @@ private:
 // none. One per map column shape, selected during translation.
 using NLMapReadFunction = std::optional<MapView> (*)(const Column* input, size_t row);
 
+// The key one column of an nl.dynamic_map_key holds at @param row, or nothing where the
+// row holds none. One per string column shape, selected during translation.
+using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const Column* input,
+                                                                        size_t row);
+
 // Row-wise map key read (nl.static_map_key): row r of the result views the entry row r's map
 // holds under the key, or the null entry where it holds none.
 class NLStaticMapKeyData : public NLFunctionData {
@@ -4024,6 +4029,50 @@ private:
     std::string_view _key {};
     MapEntryView _absent;
 };
+
+// Row-wise map key read (nl.dynamic_map_key): row r of the result views the entry row r's
+// map holds under row r's key, or a null entry where it holds none.
+class NLDynamicMapKeyData : public NLFunctionData {
+public:
+    NLDynamicMapKeyData(const Column* input,
+                        Column* result,
+                        NLMapReadFunction mapRead,
+                        const Column* key,
+                        NLStringReadFunction keyRead,
+                        MapEntryView absent,
+                        LocalMemory* memory)
+        : _input(input),
+        _result(result),
+        _mapRead(mapRead),
+        _key(key),
+        _keyRead(keyRead),
+        _absent(absent),
+        _memory(memory)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getResult() const { return _result; }
+    NLMapReadFunction getMapRead() const { return _mapRead; }
+    const Column* getKey() const { return _key; }
+    NLStringReadFunction getKeyRead() const { return _keyRead; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    // The entry a row holding no key reads: no key to name it by, so one keyless null entry
+    // serves every such row. A row whose key the map does not hold is named by that key, so
+    // its entry is written as the row is read.
+    MapEntryView getAbsentEntry() const { return _absent; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _result {nullptr};
+    NLMapReadFunction _mapRead {nullptr};
+    const Column* _key {nullptr};
+    NLStringReadFunction _keyRead {nullptr};
+    MapEntryView _absent;
+    LocalMemory* _memory {nullptr};
+};
+
 
 // Read the bound one column of an nl.range holds at @param row, or nothing where the row
 // has no bound. One per integer column kind, selected during translation the way the list

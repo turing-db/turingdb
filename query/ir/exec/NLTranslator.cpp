@@ -899,6 +899,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakeMap(makeMap, body);
         } else if (nl::StaticMapKey mapKey = mlir::dyn_cast<nl::StaticMapKey>(operation)) {
             translateStaticMapKey(mapKey, body);
+        } else if (nl::DynamicMapKey dynamicMapKey = mlir::dyn_cast<nl::DynamicMapKey>(operation)) {
+            translateDynamicMapKey(dynamicMapKey, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
             translateRange(range, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
@@ -3124,6 +3126,34 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
                                                                    absent);
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);
+}
+
+void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContainer* body) {
+    const mlir::Value resultValue = mapKey.getResult();
+
+    const Column* input = getColumn(mapKey.getMap());
+    const Column* key = getColumn(mapKey.getKey());
+
+    Column* const result = yieldsConstantColumn(resultValue) ? allocConstMapEntryColumn()
+                                                             : allocMapEntryColumn();
+    _valueSlots[resultValue] = result;
+
+    // A row holding no key has no key to name its null entry by, so one keyless entry
+    // serves every such row and is written into the query's map buffer once, here. The
+    // entry for a key the map does not hold carries that key, so the executor writes it.
+    MapWriteCursor keylessCursor = _memory->mapBuffer().reserveMap(1, sizeof(PropertyNull));
+    keylessCursor.writeKey(std::string_view {});
+    const MapEntryView keyless = keylessCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+
+    NLDynamicMapKeyData* data = _program->allocFunctionData<NLDynamicMapKeyData>(input,
+                                                                                 result,
+                                                                                 NLExecutor::selectMapRead(input),
+                                                                                 key,
+                                                                                 NLExecutor::selectStringRead(key),
+                                                                                 keyless,
+                                                                                 _memory);
+
+    body->emplaceStmt(&NLExecutor::runDynamicMapKey, data);
 }
 
 NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType) {

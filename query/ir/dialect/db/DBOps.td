@@ -2720,6 +2720,26 @@ def ListIndex : BinaryOp<"list_index", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
+  let summary = "Row-wise read of one value of a map column, by a key computed per row";
+
+  let description = [{
+    `m[k]`. The key is an expression rather than a name spelled in the query, so it rides a
+    column rather than the attribute db.static_map_key carries:
+
+      %v = db.dynamic_map_key %m, %k : (!db.column<none>, !db.column<none>) -> !db.column<map_element>
+
+    Row r of the result is the entry row r's map holds under row r's key. A row whose map
+    holds no such key - and a row holding no map at all - reads back as a null entry, as
+    db.static_map_key's does.
+  }];
+
+  let arguments = (ins Column:$map, Column:$key);
+  let results   = (outs ColumnMapElements:$result);
+
+  let assemblyFormat = "$map`,` $key attr-dict `:` functional-type(operands, results)";
+}
+
 def SubOp : BinaryOp<"sub", [Pure]> {
   let summary = "Row-wise subtraction of two value columns";
 

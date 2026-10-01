@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) CREATE (a)-[e:TAGGED {attrs: {w: 7, s: 'z'}}]->(b) WITH 1 AS seeded MATCH ()-[r:TAGGED]->() UNWIND ['w', 's', 'nosuch'] AS k RETURN r.attrs[k]",
+  "expect": {
+    "result": "r.attrs[k]\n7\nz\nnull"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "edge"
+  ],
+  "write-required": true
+}

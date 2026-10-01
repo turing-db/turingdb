@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "UNWIND ['i', 'd', 'b', 's', 'n'] AS k WITH {i: 1, d: 2.5, b: true, s: 'x', n: null} AS m, k RETURN m[k]",
+  "expect": {
+    "result": "m[k]\n1\n2.5\ntrue\nx\nnull"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "return"
+  ],
+  "write-required": false
+}

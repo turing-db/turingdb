@@ -736,6 +736,29 @@ LogicalResult StaticMapKey::verify() {
     return success();
 }
 
+LogicalResult DynamicMapKey::verify() {
+    const Type mapElement = llvm::cast<ChunkType>(getMap().getType()).getElementType();
+    const auto mapNullable = llvm::dyn_cast<storage::NullableType>(mapElement);
+    const Type map = mapNullable ? mapNullable.getValueType() : mapElement;
+
+    if (!llvm::isa<storage::MapType>(map)) {
+        return emitOpError("reads a chunk of maps, optionally nullable");
+    }
+
+    const Type keyElement = llvm::cast<ChunkType>(getKey().getType()).getElementType();
+    const auto keyNullable = llvm::dyn_cast<storage::NullableType>(keyElement);
+    const Type key = keyNullable ? keyNullable.getValueType() : keyElement;
+
+    const bool readsAStringKey = llvm::isa<storage::StringType>(key);
+    const bool readsANullKey = llvm::isa<mlir::NoneType>(key);
+
+    if (!readsAStringKey && !readsANullKey) {
+        return emitOpError("reads its key out of a chunk of strings, optionally nullable");
+    }
+
+    return success();
+}
+
 LogicalResult MakeMap::verify() {
     const size_t valueCount = getValues().size();
     if (valueCount == 0) {

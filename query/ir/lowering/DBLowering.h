@@ -778,6 +778,8 @@ private:
 
     void lowerStaticMapKey(mlir::db::StaticMapKey mapKey);
 
+    void lowerDynamicMapKey(mlir::db::DynamicMapKey mapKey);
+
     // The chunks a container build reads its cells from: every operand laid out over the
     // same rows, and a scalar value read as nullable
     void containerCellChunks(mlir::ValueRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);

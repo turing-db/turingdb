@@ -4170,6 +4170,18 @@ std::optional<MapView> mapRead(const Column* input, size_t row) {
     return (*static_cast<const ColumnT*>(input))[row];
 }
 
+// The key one column of a dynamic map key read holds at @param row, or nothing where the
+// row holds none.
+template <typename ColumnT>
+std::optional<types::String::Primitive> stringRead(const Column* input, size_t row) {
+    return (*static_cast<const ColumnT*>(input))[row];
+}
+
+// A key spelled null in the query holds no value to name an entry by, on any row
+std::optional<types::String::Primitive> nullStringRead(const Column*, size_t) {
+    return std::nullopt;
+}
+
 // The list a type-erased cell holds, absent where the cell holds anything else
 std::optional<ListView> cellListRead(const ListElementView cell) {
     if (cell.getTag() != ListBufferTypeTag::ListView) {
@@ -7265,6 +7277,26 @@ NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
     throw IRException("a map key read reads a map column");
 }
 
+NLStringReadFunction NLExecutor::selectStringRead(const Column* input) {
+    using String = types::String::Primitive;
+
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<String>::staticKind()) {
+        return &stringRead<ColumnVector<String>>;
+    } else if (kind == ColumnOptVector<String>::staticKind()) {
+        return &stringRead<ColumnOptVector<String>>;
+    } else if (kind == ColumnConst<String>::staticKind()) {
+        return &stringRead<ColumnConst<String>>;
+    } else if (kind == ColumnConst<std::optional<String>>::staticKind()) {
+        return &stringRead<ColumnConst<std::optional<String>>>;
+    } else if (kind == ColumnConst<PropertyNull>::staticKind()) {
+        return &nullStringRead;
+    }
+
+    throw IRException("a dynamic map key read reads its key out of a string column");
+}
+
 // Row r of the result views the entry row r's map already holds under the key, so the
 // read copies nothing. A row holding no map, and a map holding no such key, read back as
 // an entry under the same key whose tag is null: every row of the column names the key
@@ -7298,6 +7330,66 @@ void NLExecutor::runStaticMapKey(NLExecutionContext*, NLFunctionData* data) {
 
     std::vector<MapEntryView>& outputRaw = static_cast<ColumnVector<MapEntryView>*>(result)->getRaw();
     const size_t rowCount = input->size();
+
+    outputRaw.resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        outputRaw[row] = entryAt(row);
+    }
+}
+
+// Row r of the result views the entry row r's map already holds under row r's key, so the
+// read copies nothing. A map holding no such key is answered by an entry written under that
+// row's key and tagged null, so the reader sees the key it asked for; a row holding no key
+// at all has none to name, and reads the one keyless entry translation wrote.
+void NLExecutor::runDynamicMapKey(NLExecutionContext*, NLFunctionData* data) {
+    const NLDynamicMapKeyData* dynamicMapKey = static_cast<NLDynamicMapKeyData*>(data);
+
+    const Column* input = dynamicMapKey->getInput();
+    const Column* keyColumn = dynamicMapKey->getKey();
+
+    const NLMapReadFunction readMap = dynamicMapKey->getMapRead();
+    const NLStringReadFunction readKey = dynamicMapKey->getKeyRead();
+
+    const MapEntryView keyless = dynamicMapKey->getAbsentEntry();
+    MapBuffer<>& mapBuffer = dynamicMapKey->getMemory()->mapBuffer();
+
+    const auto entryAt = [input, keyColumn, readMap, readKey, keyless, &mapBuffer](size_t row) {
+        const std::optional<types::String::Primitive> key = readKey(keyColumn, row);
+        if (!key) {
+            return keyless;
+        }
+
+        const std::optional<MapView> map = readMap(input, row);
+
+        MapEntryView entry;
+        if (map && findMapEntry(*map, *key, entry)) {
+            return entry;
+        }
+
+        MapWriteCursor absentCursor = mapBuffer.reserveMap(1, sizeof(PropertyNull));
+        absentCursor.writeKey(*key);
+
+        return absentCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+    };
+
+    Column* result = dynamicMapKey->getResult();
+
+    if (result->getKind() == ColumnConst<MapEntryView>::staticKind()) {
+        *static_cast<ColumnConst<MapEntryView>*>(result) = entryAt(0);
+        return;
+    }
+
+    const size_t mapRows = input->size();
+    const size_t keyRows = keyColumn->size();
+    const size_t rowCount = std::max(mapRows, keyRows);
+
+    bioassert(mapRows == rowCount || mapRows == 1,
+              "Map column of a dynamic map key is not row-aligned with its key column.");
+    bioassert(keyRows == rowCount || keyRows == 1,
+              "Key column of a dynamic map key is not row-aligned with its map column.");
+
+    std::vector<MapEntryView>& outputRaw = static_cast<ColumnVector<MapEntryView>*>(result)->getRaw();
 
     outputRaw.resize(rowCount);
 

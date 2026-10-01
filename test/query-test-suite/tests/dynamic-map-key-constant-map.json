@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) WHERE n.name IN ['Remy', 'Adam'] WITH {Remy: 1, Adam: 2} AS m, n RETURN n.name, m[n.name]",
+  "expect": {
+    "result": "n.name,m[n.name]\nRemy,1\nAdam,2"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "return"
+  ],
+  "write-required": false
+}

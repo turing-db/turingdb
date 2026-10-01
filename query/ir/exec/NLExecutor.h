@@ -394,6 +394,7 @@ public:
     // value column holds at r, as one contiguous run of the query's map buffer.
     static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
     static void runStaticMapKey(NLExecutionContext* context, NLFunctionData* data);
+    static void runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one list per row (nl.range): row r counts from its start bound to its end
     // bound by its step, as one contiguous run of the query's list buffer.
@@ -406,6 +407,7 @@ public:
     // Read the list one column holds at a row, for the slice that reads it
     static NLListReadFunction selectListRead(const Column* input);
     static NLMapReadFunction selectMapRead(const Column* input);
+    static NLStringReadFunction selectStringRead(const Column* input);
 
     // Build one list per row (nl.list_comprehension): the body runs over the elements of
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own

@@ -1340,21 +1340,33 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
     const bool indexesAList = baseType == EvaluatedType::List
                            || baseType == EvaluatedType::ListItem;
+    const bool indexesAMap = baseType == EvaluatedType::Map;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
-    if (!indexesAPath && !indexesAList && !indexesACSVRow) {
-        throwError(fmt::format("Index operator [] can only be applied to a list or a CSV row, not '{}'",
+    if (!indexesAPath && !indexesAList && !indexesAMap && !indexesACSVRow) {
+        throwError(fmt::format("Index operator [] can only be applied to a list, a map or a CSV row, not '{}'",
                                EvaluatedTypeName::value(baseType)), expr);
     }
 
     const EvaluatedType indexType = indexExpr->getType();
 
-    const bool indexesByPosition = indexType == EvaluatedType::Integer;
-    const bool indexesByNull = (indexesAPath || indexesAList) && indexType == EvaluatedType::Null;
+    const bool indexesByNull = (indexesAPath || indexesAList || indexesAMap)
+                            && indexType == EvaluatedType::Null;
 
-    if (!indexesByPosition && !indexesByNull) {
-        throwError(fmt::format("Index expression must be an integer, not '{}'",
-                               EvaluatedTypeName::value(indexType)), expr);
+    if (indexesAMap) {
+        const bool indexesByKey = indexType == EvaluatedType::String;
+
+        if (!indexesByKey && !indexesByNull) {
+            throwError(fmt::format("A map is indexed by a string key, not by '{}'",
+                                   EvaluatedTypeName::value(indexType)), expr);
+        }
+    } else {
+        const bool indexesByPosition = indexType == EvaluatedType::Integer;
+
+        if (!indexesByPosition && !indexesByNull) {
+            throwError(fmt::format("Index expression must be an integer, not '{}'",
+                                   EvaluatedTypeName::value(indexType)), expr);
+        }
     }
 
     if (indexesAPath || indexesAList) {
@@ -1376,6 +1388,29 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         }
 
         expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, indexedType));
+
+        return;
+    }
+
+    if (indexesAMap) {
+        const bool indexesByLiteralKey = indexExpr->getKind() == Expr::Kind::LITERAL
+                                      && indexType == EvaluatedType::String;
+
+        if (indexesByLiteralKey) {
+            throwError("A map key known in the query is written m.key, not m['key']", expr);
+        }
+
+        expr->setType(EvaluatedType::MapValue);
+
+        if (base->isDynamic() || indexExpr->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        if (base->isAggregate() || indexExpr->isAggregate()) {
+            expr->setAggregate();
+        }
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
 
         return;
     }
