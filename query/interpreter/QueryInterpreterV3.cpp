@@ -180,6 +180,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     const mlir::db::DBPassContext passContext {._view = &view, ._hasPendingWrites = hasPendingWrites};
 
     DBProgramGenerator generator(&module, explain, passContext);
+    generator.setPassPipeline(_irContext->getPassPipeline());
     try {
         generator.generate(&ast);
     } catch (const CompilerException& e) {

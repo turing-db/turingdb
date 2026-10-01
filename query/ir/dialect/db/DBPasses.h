@@ -30,7 +30,7 @@ struct DBPassContext {
     bool _hasPendingWrites {false};
 };
 
-std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext& context);
-std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext& context);
+std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context);
+std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context);
 
 }

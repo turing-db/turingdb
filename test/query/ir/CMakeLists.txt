@@ -4659,3 +4659,12 @@ target_link_libraries(test_query_ir_ir_context_reuse PRIVATE
         turing_db_memory_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_ir_context_reuse PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_ir_tests(test_query_ir_db_pass_pipeline_reuse DBPassPipelineReuseTest.cpp)
+target_link_libraries(test_query_ir_db_pass_pipeline_reuse PRIVATE
+        turing_db_ir_codegen_s
+        turing_db_frontend_cypher_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_ast_s
+        turing_db_examples_s)
