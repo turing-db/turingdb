@@ -22,12 +22,12 @@ public:
     ProcedureLookup& operator=(const ProcedureLookup&) = delete;
     ProcedureLookup& operator=(ProcedureLookup&&) = delete;
 
-    FunctionSignatureRange lookup(std::string_view fullName) override;
+    FunctionSignatureRange lookup(std::string_view fullName) const override;
 
 private:
     const ProcedureManager* _manager {nullptr};
-    std::vector<std::unique_ptr<FunctionSignature>> _cacheOwned;
-    std::unordered_map<std::string_view, FunctionSignature*> _cacheMap;
+    mutable std::vector<std::unique_ptr<FunctionSignature>> _cacheOwned;
+    mutable std::unordered_map<std::string_view, FunctionSignature*> _cacheMap;
 };
 
 }

@@ -10,7 +10,7 @@ class FunctionResolver {
 public:
     class FunctionSignatureRange {
     public:
-        using Iterator = FunctionSignature**;
+        using Iterator = const FunctionSignature* const*;
 
         FunctionSignatureRange() = default;
 
@@ -31,7 +31,7 @@ public:
 
     virtual ~FunctionResolver() = default;
 
-    virtual FunctionSignatureRange lookup(std::string_view fullName) = 0;
+    virtual FunctionSignatureRange lookup(std::string_view fullName) const = 0;
 };
 
 }

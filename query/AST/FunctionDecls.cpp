@@ -4,9 +4,15 @@ using namespace db;
 
 FunctionDecls::FunctionDecls()
 {
+    initDefault();
 }
 
 FunctionDecls::~FunctionDecls() {
+}
+
+const FunctionDecls& FunctionDecls::getBuiltins() {
+    static const FunctionDecls builtins;
+    return builtins;
 }
 
 void FunctionDecls::initDefault() {
@@ -577,12 +583,12 @@ FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
     return ptr;
 }
 
-FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(std::string_view fullName) {
+FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(std::string_view fullName) const {
     const auto it = _nameMap.find(fullName);
     if (it == _nameMap.end()) {
         return FunctionSignatureRange();
     }
 
-    FunctionSignatures& sigs = it->second;
+    const FunctionSignatures& sigs = it->second;
     return FunctionSignatureRange(sigs.data(), sigs.data() + sigs.size());
 }

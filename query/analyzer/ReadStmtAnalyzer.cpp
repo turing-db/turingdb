@@ -235,7 +235,7 @@ void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {
 void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {
     bioassert(func.getSignature(), "Analyzed a yield function that has no signature");
 
-    FunctionSignature* signature = func.getSignature();
+    const FunctionSignature* signature = func.getSignature();
     YieldItems* yieldItems = yield->getItems();
 
     // Step 2. Create the decls for the yield items

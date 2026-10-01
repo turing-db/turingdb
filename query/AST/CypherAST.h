@@ -86,7 +86,6 @@ class YCypherParser;
 class ListGraphQuery;
 class ListAvailableGraphsQuery;
 class CreateGraphQuery;
-class FunctionDecls;
 class ProcedureLookup;
 class ProcedureManager;
 class LoadGraphQuery;
@@ -230,9 +229,6 @@ public:
     const std::vector<Expr*>& getExpressions() const { return _expressions; }
     const std::vector<EntityPattern*>& getEntityPatterns() const { return _entityPatterns; }
 
-    FunctionDecls& functionDecls() { return *_functionDecls; }
-    const FunctionDecls& functionDecls() const { return *_functionDecls; }
-
     std::string* createString();
 
     SourceManager* getSourceManager() { return _sourceManager; }
@@ -240,9 +236,6 @@ public:
 
     DiagnosticsManager* getDiagnosticsManager() { return _diagnosticsManager; }
     const DiagnosticsManager* getDiagnosticsManager() const { return _diagnosticsManager; }
-
-    FunctionDecls* getFunctionDecls() { return _functionDecls.get(); }
-    const FunctionDecls* getFunctionDecls() const { return _functionDecls.get(); }
 
     ProcedureLookup* getProcedureLookup() { return _procedureLookup.get(); }
     const ProcedureLookup* getProcedureLookup() const { return _procedureLookup.get(); }
@@ -290,7 +283,6 @@ private:
     std::vector<EdgePatternData*> _edgePatternDatas;
     std::vector<std::string*> _unnamedVarIdentifiers;
 
-    std::unique_ptr<FunctionDecls> _functionDecls;
     std::unique_ptr<ProcedureLookup> _procedureLookup;
     std::unique_ptr<ExplainRequest> _explainRequest;
 

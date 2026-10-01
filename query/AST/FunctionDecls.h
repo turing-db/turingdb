@@ -14,7 +14,6 @@ class FunctionDecls : public FunctionResolver {
 public:
     using FunctionSignatures = std::vector<FunctionSignature*>;
 
-    FunctionDecls();
     ~FunctionDecls() override;
 
     FunctionDecls(const FunctionDecls&) = delete;
@@ -22,15 +21,19 @@ public:
     FunctionDecls& operator=(const FunctionDecls&) = delete;
     FunctionDecls& operator=(FunctionDecls&&) = delete;
 
-    void initDefault();
+    static const FunctionDecls& getBuiltins();
 
-    FunctionSignature* createFunction(std::string_view fullName);
-
-    FunctionSignatureRange lookup(std::string_view fullName) override;
+    FunctionSignatureRange lookup(std::string_view fullName) const override;
 
 private:
     std::vector<std::unique_ptr<FunctionSignature>> _owned;
     std::unordered_map<std::string_view, FunctionSignatures> _nameMap;
+
+    FunctionDecls();
+
+    void initDefault();
+
+    FunctionSignature* createFunction(std::string_view fullName);
 };
 
 }
