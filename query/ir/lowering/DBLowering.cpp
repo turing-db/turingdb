@@ -3812,6 +3812,11 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
         throw IRException("db.group_aggregate requires at least one column");
     }
 
+    // The group assignment reads one row of every key per row of the step, which a constant
+    // key - one value standing for every row - has none of. The keys are laid out first, so
+    // that the aggregate inputs behind them are laid out over a key chunk holding rows.
+    rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value>(chunks).take_front(keyCount));
+
     // A constant aggregate input is reduced over the rows of the group it falls in,
     // not over the single row it is, so it is laid out over the chunk the grouping
     // keys are read from - the same rows the group assignment is computed for. A
@@ -3915,6 +3920,10 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     }
 
     const size_t valueCount = chunks.size() - keyCount - kinds.size();
+
+    // The grouping keys are laid out first, as lowerGroupAggregate lays its own: the group
+    // assignment reads a row of every key per row of the step, which a constant key has none of.
+    rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value>(chunks).take_front(keyCount));
 
     // A constant collected column is folded over the rows of the group it falls in, not
     // over the single row it is, so it is laid out over the chunk the grouping keys are
@@ -5870,7 +5879,7 @@ void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks
 // instead, so what an accumulator would append is a column with no rows in it. The
 // constants are laid out first: over the relation driving the step, or - where none drives
 // it - over the single row the projection is.
-void DBLowering::rowAlignBufferedChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
+void DBLowering::rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunks) {
     mlir::Value cardinality = _innermostCardinality;
     for (const mlir::Value chunk : chunks) {
         if (!yieldsConstantColumn(chunk)) {

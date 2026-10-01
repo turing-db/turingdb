@@ -679,7 +679,7 @@ private:
     // Lays the constants among the chunks an accumulator buffers over the rows of the
     // driving relation, or over the single row they stand for where none drives the step.
     // A buffer appends rows, and a constant carries none of its own.
-    void rowAlignBufferedChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
+    void rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunks);
 
     // Lays the constants among the chunks a cut is charged to over the rows of the
     // driving relation. A cut walks rows and a constant carries none of its own - it
