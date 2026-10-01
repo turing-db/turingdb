@@ -121,6 +121,7 @@ void DBServerProcessor::queryImpl(std::string_view query,
                                   CommitHash commit,
                                   ChangeID change) {
     LocalMemory& mem = _threadContext->getLocalMemory();
+    IRContext& irContext = _threadContext->getIRContext();
 
     const auto header = _writer.startHeader(net::HTTP::Status::OK,
                                             !_connection.isCloseRequired());
@@ -134,7 +135,7 @@ void DBServerProcessor::queryImpl(std::string_view query,
 
     DBServerNlSink sink(&encoder);
 
-    const QueryState state(graphName, &mem, &_db.getDefaultQueryConfig(), &sink, commit, change);
+    const QueryState state(graphName, &mem, &_db.getDefaultQueryConfig(), &sink, commit, change, &irContext);
     const QueryStatus status = _db.query(query, state);
 
     if (!status.isOk()) {

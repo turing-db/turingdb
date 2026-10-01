@@ -92,7 +92,8 @@ nb::dict PyTuringEmbedded::query(const std::string& cypher) {
                                &_queryConfig,
                                &sink,
                                _commitHash,
-                               _changeID);
+                               _changeID,
+                               &_irContext);
 
     const db::QueryStatus status = _db->query(cypher, state);
     if (!status.isOk()) {

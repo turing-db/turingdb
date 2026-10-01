@@ -10,6 +10,7 @@ namespace db {
 
 class LocalMemory;
 class NLOutputSink;
+class IRContext;
 
 class QueryState {
 public:
@@ -18,13 +19,15 @@ public:
                const QueryConfig* queryConfig,
                NLOutputSink* sink,
                CommitHash hash = CommitHash::head(),
-               ChangeID change = ChangeID::head())
+               ChangeID change = ChangeID::head(),
+               IRContext* irContext = nullptr)
         : _graphName(graphName),
         _mem(mem),
         _queryConfig(queryConfig),
         _sink(sink),
         _hash(hash),
-        _change(change)
+        _change(change),
+        _irContext(irContext)
     {
     }
 
@@ -34,6 +37,7 @@ public:
     NLOutputSink* getSink() const { return _sink; }
     CommitHash getCommitHash() const { return _hash; }
     ChangeID getChangeID() const { return _change; }
+    IRContext* getIRContext() const { return _irContext; }
 
 private:
     std::string_view _graphName;
@@ -42,6 +46,7 @@ private:
     NLOutputSink* _sink {nullptr};
     CommitHash _hash {CommitHash::head()};
     ChangeID _change {ChangeID::head()};
+    IRContext* _irContext {nullptr};
 };
 
 }

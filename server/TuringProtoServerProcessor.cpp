@@ -74,10 +74,11 @@ void TuringProtoServerProcessor::process(net::AbstractThreadContext* threadConte
 void TuringProtoServerProcessor::handleQuery() {
     auto& writer = _connection.getWriter<net::proto::TuringProtoWriter>();
     auto& mem = _threadContext->getLocalMemory();
+    IRContext& irContext = _threadContext->getIRContext();
     const TransactionInfo info = getTransactionInfo();
     const QueryConfig& queryConfig = _db.getDefaultQueryConfig();
 
-    const QueryState state(info.graphName, &mem, &queryConfig, &_protoNLSink, info.commit, info.change);
+    const QueryState state(info.graphName, &mem, &queryConfig, &_protoNLSink, info.commit, info.change, &irContext);
     const QueryStatus status = _db.query(info.query, state);
 
     if (!status.isOk()) {

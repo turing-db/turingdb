@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "IRContext.h"
 #include "NLOutputSink.h"
 #include "QueryStatus.h"
 #include "iterators/ChunkConfig.h"
@@ -25,6 +26,7 @@ public:
     ~QueryInterpreterV3();
 
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
+    void setIRContext(IRContext* irContext) { _irContext = irContext; }
 
     void execute(QueryStatus& status,
                  std::string_view query,
@@ -37,6 +39,8 @@ public:
 private:
     SystemManager* _sysMan {nullptr};
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
+    IRContext _ownedIRContext;
+    IRContext* _irContext {&_ownedIRContext};
 
     void executeImpl(QueryStatus& status,
                      std::string_view query,
