@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <limits.h>
+#include <unordered_map>
 #include <vector>
 
 #include "ChunkWriter.h"
@@ -171,7 +172,23 @@ private:
         uint64_t _level {0};
         size_t _emitNode {0};
         uint64_t _emitBits {0};
+        uint64_t _closedSeeds {0};
         bool _batchActive {false};
+    };
+
+    // The search for a cycle through one seed of an undirected distinct walk: each node it
+    // reaches, with the edge and depth it was first reached at and the seed's neighbour whose
+    // branch reached it
+    struct CycleSearch {
+        struct Arrival {
+            NodeID _branch;
+            EdgeID _edge;
+            uint64_t _depth {0};
+        };
+
+        std::unordered_map<uint64_t, Arrival> _arrivals;
+        std::vector<NodeID> _frontier;
+        std::vector<NodeID> _next;
     };
 
     GraphView _view;
@@ -204,6 +221,7 @@ private:
     bool _filterTombstones {false};
 
     Reachability _reach;
+    CycleSearch _cycleSearch;
 
     // The depth-first walk leaving the seed of row _seedRow: the edges and nodes it stands
     // on, and the candidates of every node it descended through
@@ -281,6 +299,8 @@ private:
 
     void fillDistinct(size_t maxCount);
     void startBatch();
+    bool searchesSeedCycles() const;
+    bool hasCycleThrough(NodeID seed);
     void emitGainedRows(size_t maxCount);
     void expandLevel();
     void collectReachCandidates(NodeID node);

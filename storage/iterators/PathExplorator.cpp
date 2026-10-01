@@ -363,13 +363,19 @@ void PathExplorator::setDistinctEnds(bool distinct) {
 }
 
 // The level search answers "reached within k", which coincides with "reached by a trail
-// within k" only when the walk may stop at its first hop; deeper minimums walk instead
+// within k" only when the walk may stop at its first hop; deeper minimums walk instead. The
+// cycle search through an undirected seed assumes every edge can be crossed both ways, which
+// a hop predicate does not promise.
 bool PathExplorator::searchesLevels() const {
     if (!_distinctEnds || _minHops > 1) {
         return false;
     }
 
-    return _minHops == 0 || _direction != PathExplorationDir::BOTH;
+    return !searchesSeedCycles() || !_hopFilter;
+}
+
+bool PathExplorator::searchesSeedCycles() const {
+    return _minHops == 1 && _direction == PathExplorationDir::BOTH;
 }
 
 uint64_t PathExplorator::expansionKey(NodeID node, uint64_t budget) const {
@@ -971,13 +977,15 @@ void PathExplorator::startBatch() {
     reach._next.clear();
     reach._emitNode = 0;
     reach._emitBits = 0;
+    reach._closedSeeds = 0;
     reach._batchActive = true;
     _seedCursor += count;
 
-    // A seed's own bit is left out of its seen word when the minimum is one hop, so a
-    // closed trail back to the seed is reported once at the level of its shortest cycle,
-    // which in a directed walk is a simple cycle; at a minimum of zero the seed is its own
-    // zero-length end and the bit stays set
+    // A seed's own bit stays out of its seen word at a minimum of one hop, so a directed walk
+    // reports the seed at the level of its shortest cycle. Undirected, stepping back along the
+    // edge it left by would report it with no trail, so the bit is set as at a minimum of zero
+    // and a cycle through the seed decides its row.
+    const bool seedCycles = searchesSeedCycles();
     for (size_t bit = 0; bit < count; bit++) {
         const size_t row = reach._batchFirstRow + bit;
         const NodeID seed = (*_input)[row];
@@ -988,7 +996,7 @@ void PathExplorator::startBatch() {
         const uint64_t mask = 1ull << bit;
         PathReachTable::Slot& slot = reach._reached.reach(seed);
 
-        if (_minHops == 0) {
+        if (_minHops == 0 || seedCycles) {
             slot._seen |= mask;
         }
 
@@ -997,7 +1005,62 @@ void PathExplorator::startBatch() {
         }
 
         slot._frontier |= mask;
+
+        if (seedCycles && hasCycleThrough(seed)) {
+            reach._closedSeeds |= mask;
+        }
     }
+}
+
+// A non-tree edge between two branches of the search closes a cycle through the seed, and the
+// shortest such cycle is found that way: the seed is a closed trail's end exactly when one fits
+bool PathExplorator::hasCycleThrough(NodeID seed) {
+    CycleSearch& search = _cycleSearch;
+    std::unordered_map<uint64_t, CycleSearch::Arrival>& arrivals = search._arrivals;
+    const std::vector<NodeID>& candidateNodes = _reach._candidateNodes;
+    const std::vector<EdgeID>& candidateEdges = _reach._candidateEdges;
+
+    arrivals.clear();
+    arrivals.try_emplace(seed.getValue(), CycleSearch::Arrival {._branch = seed});
+    search._frontier.assign(1, seed);
+
+    for (uint64_t depth = 0; !search._frontier.empty() && 2 * depth + 1 <= _maxHops; depth++) {
+        search._next.clear();
+
+        for (const NodeID node : search._frontier) {
+            const CycleSearch::Arrival arrival = arrivals.at(node.getValue());
+            collectReachCandidates(node);
+
+            for (size_t index = 0; index < candidateNodes.size(); index++) {
+                const EdgeID edge = candidateEdges[index];
+                if (edge == arrival._edge) {
+                    continue;
+                }
+
+                const NodeID candidate = candidateNodes[index];
+                const NodeID branch = node == seed ? candidate : arrival._branch;
+                const CycleSearch::Arrival reached {._branch = branch, ._edge = edge, ._depth = depth + 1};
+
+                const auto [found, inserted] = arrivals.try_emplace(candidate.getValue(), reached);
+                if (inserted) {
+                    search._next.push_back(candidate);
+                    continue;
+                }
+
+                const CycleSearch::Arrival& other = found->second;
+                const bool crossesTree = edge != other._edge;
+                const bool joinsBranches = node == seed || other._branch != arrival._branch;
+                const bool fits = arrival._depth + other._depth + 1 <= _maxHops;
+                if (crossesTree && joinsBranches && fits) {
+                    return true;
+                }
+            }
+        }
+
+        std::swap(search._frontier, search._next);
+    }
+
+    return false;
 }
 
 void PathExplorator::emitGainedRows(size_t maxCount) {
@@ -1014,7 +1077,8 @@ void PathExplorator::emitGainedRows(size_t maxCount) {
         reach._emitBits &= reach._emitBits - 1;
 
         const size_t row = reach._batchFirstRow + bit;
-        if (reach._level >= _minHops && isEnd(row, node)) {
+        const bool closesOnSeed = reach._level == 0 && ((reach._closedSeeds >> bit) & 1) != 0;
+        if ((reach._level >= _minHops || closesOnSeed) && isEnd(row, node)) {
             emit(row, node, PathTrie::ROOT);
         }
 
@@ -1150,5 +1214,6 @@ void PathExplorator::finishBatch() {
     reach._next.clear();
     reach._emitNode = 0;
     reach._emitBits = 0;
+    reach._closedSeeds = 0;
     reach._batchActive = false;
 }

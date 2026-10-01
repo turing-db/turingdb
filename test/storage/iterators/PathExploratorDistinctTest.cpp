@@ -32,12 +32,6 @@ bool nothingPasses(uint64_t, uint64_t, uint64_t) {
     return false;
 }
 
-// The configurations the distinct mode is exact for: a minimum of one hop only when the
-// walk is directed, since undirected the one-edge backtrack is a closed walk with no trail
-bool exactDistinct(PathExplorationDir direction, uint64_t minHops) {
-    return minHops == 0 || direction != PathExplorationDir::BOTH;
-}
-
 // The (seed row, end) pairs of the enumerated rows, each once and without a path: what the
 // distinct mode must emit
 void distinctPairs(const std::vector<PathRow>& rows, std::vector<PathRow>& pairs) {
@@ -132,7 +126,7 @@ TEST_F(PathExploratorDistinctTest, matchesTheDeduplicatedEnumeration) {
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t minHops : {uint64_t {0}, uint64_t {1}}) {
             for (const uint64_t maxHops : {uint64_t {0}, uint64_t {1}, uint64_t {2}, uint64_t {4}, unbounded}) {
-                if (maxHops < minHops || !exactDistinct(direction, minHops)) {
+                if (maxHops < minHops) {
                     continue;
                 }
 
@@ -158,10 +152,6 @@ TEST_F(PathExploratorDistinctTest, typeFilterAgreesWithTheDeduplicatedEnumeratio
     for (const EdgeTypeID edgeType : {_hubGraph._typeA, _hubGraph._typeB}) {
         for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BOTH}) {
             for (const uint64_t minHops : {uint64_t {0}, uint64_t {1}}) {
-                if (!exactDistinct(direction, minHops)) {
-                    continue;
-                }
-
                 ExplorationOptions options;
                 options._edgeType = edgeType;
 
@@ -182,10 +172,6 @@ TEST_F(PathExploratorDistinctTest, hopFilterAgreesWithTheDeduplicatedEnumeration
     PredicateHopFilter evenFilter(evenEdgesOnly);
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t minHops : {uint64_t {0}, uint64_t {1}}) {
-            if (!exactDistinct(direction, minHops)) {
-                continue;
-            }
-
             ExplorationOptions options;
             options._hopFilter = &evenFilter;
             options._maxCount = 1;
@@ -225,10 +211,6 @@ TEST_F(PathExploratorDistinctTest, endLabelsAndEndNodesGateTheEmission) {
 
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t minHops : {uint64_t {0}, uint64_t {1}}) {
-            if (!exactDistinct(direction, minHops)) {
-                continue;
-            }
-
             ExplorationOptions labelled;
             labelled._endLabels = &endLabels;
             expectDistinctRows(view, input, direction, minHops, unbounded, labelled);
