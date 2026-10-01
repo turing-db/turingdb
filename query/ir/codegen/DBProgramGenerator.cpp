@@ -35,6 +35,7 @@
 
 #include "DBDialect.h"
 #include "DBOps.h"
+#include "DBPassPipeline.h"
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "DBSystemProgramGenerator.h"
@@ -265,49 +266,6 @@ mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::stri
     return builder.getStrArrayAttr(refs);
 }
 
-using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext&);
-
-constexpr size_t dbPassCount = 31;
-
-// The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
-// reporting on a pass walks the same table one pass at a time, which is what keeps the
-// pipeline it reports on and the pipeline that runs the same one. Every factory is handed
-// the context; only the join's cost model and the metadata count read it, the rewrites
-// beside them answering off the IR alone.
-const std::array<DBPassFactory, dbPassCount> dbPassPipeline = {
-    [](const mlir::db::DBPassContext&) { return mlir::db::createSinkMakePath(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByLabel(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createPushDownFilters(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseUnwindEquality(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByNodeIDs(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByPropertyValue(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdges(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgeTypePredicates(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByType(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByType(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createNarrowEdgeTypeReads(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanOutEdgesByLabel(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanInEdgesByLabel(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByEndpointLabel(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createRemoveRedundantLabelChecks(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndConstraint(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreHopLabels(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFusePathElements(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndNodes(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndFactor(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndSet(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createPushDownFilters(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByPropertyValue(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createReusePropertyReads(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createCountPathRows(); },
-    [](const mlir::db::DBPassContext& context) { return mlir::db::createFuseHashJoin(context); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
-    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreDistinctEnds(); },
-    [](const mlir::db::DBPassContext& context) { return mlir::db::createCountFromMetadata(context); },
-};
-
 // The stage a dump of one pass is reported under: "after fuse_scan_edges", or "after
 // trim_unread_columns 2" for a run of a pass the pipeline runs more than once
 void makePassLabel(std::string_view selector, std::string_view passName, size_t run, std::string& label) {
@@ -317,14 +275,6 @@ void makePassLabel(std::string_view selector, std::string_view passName, size_t 
     if (run > 0) {
         label += ' ';
         label += std::to_string(run);
-    }
-}
-
-void fillPipelinePassNames(std::vector<std::string_view>& passNames) {
-    const mlir::db::DBPassContext context;
-    for (const DBPassFactory factory : dbPassPipeline) {
-        const std::unique_ptr<mlir::Pass> pass = factory(context);
-        passNames.push_back(toStringView(pass->getArgument()));
     }
 }
 
@@ -2021,17 +1971,11 @@ bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
 void DBProgramGenerator::runPasses() {
     if (explainsPasses()) {
         runExplainedPasses();
-        return;
-    }
-
-    mlir::PassManager passManager(_mlirCtxt);
-    passManager.enableVerifier(false);
-    for (const DBPassFactory factory : dbPassPipeline) {
-        passManager.addPass(factory(_passContext));
-    }
-
-    if (mlir::failed(passManager.run(*_module))) {
-        throw FatalException("DB pass pipeline failed");
+    } else if (_passPipeline) {
+        _passPipeline->run(*_module, _passContext);
+    } else {
+        DBPassPipeline passPipeline(_mlirCtxt);
+        passPipeline.run(*_module, _passContext);
     }
 }
 
@@ -2049,13 +1993,13 @@ void DBProgramGenerator::runExplainedPasses() {
     const bool printsEveryPass = _explain->isRequested(ExplainStage::PASSES);
 
     std::vector<std::string_view> pipelinePasses;
-    fillPipelinePassNames(pipelinePasses);
+    DBPassPipeline::fillPassNames(pipelinePasses);
 
     std::string module;
     ExplainReport::renderModule(*_module, module);
 
-    for (size_t passIndex = 0; passIndex < dbPassPipeline.size(); passIndex++) {
-        std::unique_ptr<mlir::Pass> pass = dbPassPipeline[passIndex](_passContext);
+    for (size_t passIndex = 0; passIndex < pipelinePasses.size(); passIndex++) {
+        std::unique_ptr<mlir::Pass> pass = DBPassPipeline::createPass(passIndex, &_passContext);
         const std::string_view passName = pipelinePasses[passIndex];
         const size_t run = passRunNumber(pipelinePasses, passIndex);
 
@@ -2091,7 +2035,7 @@ void DBProgramGenerator::runExplainedPasses() {
 
 void DBProgramGenerator::throwOnUnknownExplainPass() const {
     std::vector<std::string_view> pipelinePasses;
-    fillPipelinePassNames(pipelinePasses);
+    DBPassPipeline::fillPassNames(pipelinePasses);
 
     const std::string_view unknownPass = _explain->findUnknownPass(pipelinePasses);
     if (unknownPass.empty()) {

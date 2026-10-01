@@ -4,6 +4,7 @@
 #include "mlir/IR/MLIRContext.h"
 
 #include "DBDialect.h"
+#include "DBPassPipeline.h"
 #include "NLDialect.h"
 #include "StorageDialect.h"
 
@@ -35,11 +36,15 @@ void IRContext::prepareForQuery(std::string_view query) {
 
     const bool overBudget = _retainedQueryBytes > _queryBytesBudget;
     if (!_context || overBudget) {
+        _passPipeline.reset();
+
         _context = std::make_unique<mlir::MLIRContext>(mlir::MLIRContext::Threading::DISABLED);
         _context->getOrLoadDialect<mlir::func::FuncDialect>();
         _context->getOrLoadDialect<mlir::storage::Storage>();
         _context->getOrLoadDialect<mlir::db::DB>();
         _context->getOrLoadDialect<mlir::nl::NL>();
+
+        _passPipeline = std::make_unique<DBPassPipeline>(_context.get());
 
         _retainedQueryBytes = query.size();
     }

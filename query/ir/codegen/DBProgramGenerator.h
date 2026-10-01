@@ -35,6 +35,7 @@ class Region;
 namespace db {
 
 class BinaryExpr;
+class DBPassPipeline;
 class ExplainReport;
 class FunctionInvocationExpr;
 class FunctionInvocation;
@@ -135,6 +136,8 @@ public:
                                 const mlir::db::DBPassContext& passContext = mlir::db::DBPassContext {});
     ~DBProgramGenerator();
 
+    void setPassPipeline(DBPassPipeline* passPipeline) { _passPipeline = passPipeline; }
+
     void generate(const CypherAST* ast);
 
     // Emits the program that reports a finished EXPLAIN: the db.explain holding the
@@ -148,6 +151,7 @@ private:
 
     ExplainReport* _explain {nullptr};
     mlir::db::DBPassContext _passContext;
+    DBPassPipeline* _passPipeline {nullptr};
 
     // How many query parts have had their dependency graph dumped, which numbers the
     // graphs a multi-part query reports

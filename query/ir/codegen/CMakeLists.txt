@@ -1,4 +1,5 @@
 set(cg_sources
+  DBPassPipeline.cpp
   DBProgramGenerator.cpp
   DBSystemProgramGenerator.cpp
 )

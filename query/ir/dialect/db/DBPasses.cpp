@@ -64,6 +64,8 @@ namespace mlir::db {
 
 namespace {
 
+const DBPassContext defaultPassContext;
+
 struct LabelScanChain {
     ScanNodes scan;
     GetNodeLabelSet labelSet;
@@ -4368,7 +4370,7 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
 struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
     FuseHashJoin() {}
 
-    FuseHashJoin(const DBPassContext& context)
+    FuseHashJoin(const DBPassContext* context)
         : _context(context)
     {
     }
@@ -4377,7 +4379,7 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
         Operation* const root = getOperation();
 
         // Collect the matches first: fusing erases ops, which would invalidate the walk.
-        const DBPassContext& context = _context;
+        const DBPassContext& context = *_context;
         llvm::SmallVector<EqualityCross, 2> matches;
         root->walk([&matches, &context](FilterOp filter) {
             EqualityCross match;
@@ -4396,7 +4398,7 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
     }
 
 private:
-    DBPassContext _context;
+    const DBPassContext* _context {&defaultPassContext};
 };
 
 // The node scans a column's rows come off, in factor order. A cross product's rows are its
@@ -4579,13 +4581,13 @@ bool writesTheGraph(Operation* root) {
 struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
     CountFromMetadata() {}
 
-    CountFromMetadata(const DBPassContext& context)
+    CountFromMetadata(const DBPassContext* context)
         : _context(context)
     {
     }
 
     void runOnOperation() override {
-        if (_context._hasPendingWrites || writesTheGraph(getOperation())) {
+        if (_context->_hasPendingWrites || writesTheGraph(getOperation())) {
             return;
         }
 
@@ -4607,16 +4609,16 @@ struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata>
     }
 
 private:
-    DBPassContext _context;
+    const DBPassContext* _context {&defaultPassContext};
 };
 
 }
 
-std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext& context) {
+std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context) {
     return std::make_unique<FuseHashJoin>(context);
 }
 
-std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext& context) {
+std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context) {
     return std::make_unique<CountFromMetadata>(context);
 }
 
