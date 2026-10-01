@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 
-#include "IRContext.h"
+#include "CompilerContext.h"
 #include "LocalMemory.h"
 #include "QueryInterpreterV3.h"
 #include "QueryStatus.h"
@@ -25,7 +25,7 @@
 using namespace db;
 using namespace turing::test;
 
-class IRContextReuseTest : public TuringTest {
+class CompilerContextReuseTest : public TuringTest {
 public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -56,9 +56,9 @@ protected:
         rows = sink.getRows();
     }
 
-    void expectRowsOfAFreshContext(IRContext* irContext, LocalMemory* memory) {
+    void expectRowsOfAFreshContext(CompilerContext* compilerContext, LocalMemory* memory) {
         QueryInterpreterV3 interpreter(&_env->getSystemManager());
-        interpreter.setIRContext(irContext);
+        interpreter.setCompilerContext(compilerContext);
 
         for (size_t round = 0; round < 2; round++) {
             for (const std::string_view query : _queries) {
@@ -85,27 +85,27 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
 };
 
-TEST_F(IRContextReuseTest, answersLikeAFreshContext) {
-    IRContext irContext;
+TEST_F(CompilerContextReuseTest, answersLikeAFreshContext) {
+    CompilerContext compilerContext;
 
-    expectRowsOfAFreshContext(&irContext, &_env->getMem());
+    expectRowsOfAFreshContext(&compilerContext, &_env->getMem());
 }
 
-TEST_F(IRContextReuseTest, answersLikeAFreshContextWhenRebuiltForEveryQuery) {
-    IRContext irContext(0);
+TEST_F(CompilerContextReuseTest, answersLikeAFreshContextWhenRebuiltForEveryQuery) {
+    CompilerContext compilerContext(0);
 
-    expectRowsOfAFreshContext(&irContext, &_env->getMem());
+    expectRowsOfAFreshContext(&compilerContext, &_env->getMem());
 }
 
-TEST_F(IRContextReuseTest, answersLikeAFreshContextOnEachThread) {
+TEST_F(CompilerContextReuseTest, answersLikeAFreshContextOnEachThread) {
     std::vector<std::thread> threads;
 
     for (size_t threadIndex = 0; threadIndex < 2; threadIndex++) {
         threads.emplace_back([this] {
             LocalMemory memory;
-            IRContext irContext;
+            CompilerContext compilerContext;
 
-            expectRowsOfAFreshContext(&irContext, &memory);
+            expectRowsOfAFreshContext(&compilerContext, &memory);
         });
     }
 

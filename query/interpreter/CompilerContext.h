@@ -12,11 +12,11 @@ namespace db {
 
 class DBPassPipeline;
 
-class IRContext {
+class CompilerContext {
 public:
-    IRContext();
-    explicit IRContext(size_t queryBytesBudget);
-    ~IRContext();
+    CompilerContext();
+    explicit CompilerContext(size_t queryBytesBudget);
+    ~CompilerContext();
 
     void prepareForQuery(std::string_view query);
 

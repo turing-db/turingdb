@@ -1,4 +1,4 @@
-#include "IRContext.h"
+#include "CompilerContext.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -18,20 +18,20 @@ constexpr size_t defaultQueryBytesBudget = 64 * 1024 * 1024;
 
 }
 
-IRContext::IRContext()
+CompilerContext::CompilerContext()
     : _queryBytesBudget(defaultQueryBytesBudget)
 {
 }
 
-IRContext::IRContext(size_t queryBytesBudget)
+CompilerContext::CompilerContext(size_t queryBytesBudget)
     : _queryBytesBudget(queryBytesBudget)
 {
 }
 
-IRContext::~IRContext() {
+CompilerContext::~CompilerContext() {
 }
 
-void IRContext::prepareForQuery(std::string_view query) {
+void CompilerContext::prepareForQuery(std::string_view query) {
     _retainedQueryBytes += query.size();
 
     const bool overBudget = _retainedQueryBytes > _queryBytesBudget;

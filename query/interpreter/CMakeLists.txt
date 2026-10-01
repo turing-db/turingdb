@@ -1,5 +1,5 @@
 set(interpreter_sources
-    IRContext.cpp
+    CompilerContext.cpp
     QueryInterpreterV3.cpp)
 
 add_library(turing_db_interpreter_s STATIC ${interpreter_sources})

@@ -39,9 +39,9 @@ QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
     QueryInterpreterV3 interp(_systemManager.get());
     interp.setChunkSize(state.getQueryConfig()->getChunkSize());
 
-    IRContext* const irContext = state.getIRContext();
-    if (irContext) {
-        interp.setIRContext(irContext);
+    CompilerContext* const compilerContext = state.getCompilerContext();
+    if (compilerContext) {
+        interp.setCompilerContext(compilerContext);
     }
 
     DiscardedOutputSink discardedSink;
