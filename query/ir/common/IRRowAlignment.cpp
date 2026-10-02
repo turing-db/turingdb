@@ -35,6 +35,10 @@ bool sameRowSource(mlir::Value column, mlir::Value reference) {
 mlir::Value rowSource(mlir::Value column) {
     mlir::Operation* const definingOp = column.getDefiningOp();
 
+    if (definingOp && definingOp->hasTrait<mlir::OpTrait::RowAlignedWithFirstOperand>()) {
+        return rowSource(definingOp->getOperand(0));
+    }
+
     const bool computedRowByRow = definingOp
                                && definingOp->hasTrait<mlir::OpTrait::RowAlignedThroughOperands>();
 

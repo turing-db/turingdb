@@ -24,6 +24,12 @@ template <typename ConcreteType>
 class RowAlignedThroughOperands
     : public TraitBase<ConcreteType, RowAlignedThroughOperands> {};
 
+// An op computing one row of its result per row of its first operand, whatever rows the
+// others hold
+template <typename ConcreteType>
+class RowAlignedWithFirstOperand
+    : public TraitBase<ConcreteType, RowAlignedWithFirstOperand> {};
+
 }
 
 namespace db {

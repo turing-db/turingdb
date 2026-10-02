@@ -1215,6 +1215,35 @@ LogicalResult Case::verify() {
     return success();
 }
 
+LogicalResult LazyCase::verify() {
+    const MutableArrayRef<Region> branches = getBranches();
+    const OperandRange carried = getColumnsToFilter();
+
+    if (branches.size() < 2) {
+        return emitOpError("requires at least one condition and its value");
+    }
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        Block& block = branches[branchIndex].front();
+
+        if (!dyn_cast_or_null<CaseYield>(block.empty() ? nullptr : &block.back())) {
+            return emitOpError("region ") << branchIndex << " must end with a db.case_yield";
+        } else if (block.getNumArguments() != carried.size()) {
+            return emitOpError("region ") << branchIndex << " takes one argument per carried column, expected "
+                                          << carried.size() << " but has " << block.getNumArguments();
+        }
+
+        for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+            if (block.getArgument(carriedIndex).getType() != carried[carriedIndex].getType()) {
+                return emitOpError("region ") << branchIndex << " argument " << carriedIndex
+                                              << " must have the type of carried column " << carriedIndex;
+            }
+        }
+    }
+
+    return success();
+}
+
 LogicalResult ToNullable::verify() {
     const Type operandType = cast<ColumnType>(getOperand().getType()).getType();
     const Type resultType = cast<ColumnType>(getResult().getType()).getType();

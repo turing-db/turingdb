@@ -2687,16 +2687,16 @@ def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
   let summary = "Row-wise selection of the first branch whose condition holds";
 
   let description = [{
-    A Cypher CASE. `conditions` and `values` are parallel: a row takes the value of the
-    first branch whose condition is true, the default when none is, and null when there
-    is no default.
+    A selection between columns computed for every row, which is what coalesce() emits.
+    `conditions` and `values` are parallel: a row takes the value of the first branch
+    whose condition is true, the default when none is, and null when there is no default.
 
       %r = db.case({%c0, %c1}, {%v0, %v1}, %d)
              : (!db.column<!storage.bool>, !db.column<!storage.bool>,
                 !db.column<i64>, !db.column<i64>, !db.column<i64>) -> !db.column<none>
 
-    The simple form `CASE s WHEN v THEN ...` is emitted as the generic one, with a db.eq
-    of the subject against each WHEN value as the condition.
+    A Cypher CASE is a db.lazy_case instead, which computes a branch only over the rows
+    that reach it.
 
     The result element type is resolved during lowering, as for the arithmetic ops: the
     branches promote against each other into one nullable value column, or - when they are
@@ -2716,6 +2716,63 @@ def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
   let assemblyFormat = [{
     `(` `{` $conditions `}` `,` `{` $values `}` (`,` $defaultValue^)? `)`
     attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def LazyCase : TuringOp<"lazy_case", [Pure]> {
+  let summary = "A Cypher CASE, whose conditions and values are computed only over the rows reaching them";
+
+  let description = [{
+    The branches are regions rather than operands, so that what a row does not reach is
+    never computed for it: `CASE WHEN t = 0 THEN 0 ELSE 10 / t END` divides by no zero.
+    The regions alternate condition and value, one pair per WHEN, and end with the ELSE
+    when there is one:
+
+      %r = db.lazy_case({%t}) ({
+        ^bb0(%tIn: !db.column<i64>):
+          %c = db.eq %tIn, %zero : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+          db.case_yield %c : !db.column<!storage.bool>
+      }, {
+        ^bb0(%tIn: !db.column<i64>):
+          db.case_yield %zero : !db.column<i64>
+      }, {
+        ^bb0(%tIn: !db.column<i64>):
+          %q = db.div %ten, %tIn : (!db.column<i64>, !db.column<i64>) -> !db.column<none>
+          db.case_yield %q : !db.column<none>
+      }) : (!db.column<i64>) -> !db.column<none>
+
+    Every region takes one argument per carried column: the rows in flight, as
+    db.list_comprehension carries them. A condition region sees the rows no earlier
+    condition held for, a value region the rows its condition held for, and the ELSE the
+    rows no condition held for. A row takes the first branch whose condition is true and
+    null when none is and there is no ELSE. A constant needs no carrying.
+
+    The simple form `CASE s WHEN v THEN ...` is the generic one, with a db.eq of the
+    subject against each WHEN value as the condition. The subject is computed once over
+    every row and, unless it is a constant, carried as the last column.
+
+    The result element type is resolved during lowering, as db.case's is.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$result);
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$branches);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` `{` $columns_to_filter `}` `)` $branches attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def CaseYield : TuringOp<"case_yield", [Pure, Terminator, HasParent<"LazyCase">]> {
+  let summary = "Name the condition or the value a region of a db.lazy_case computes";
+
+  let arguments = (ins Column:$value);
+
+  let assemblyFormat = [{
+    $value attr-dict `:` qualified(type($value))
   }];
 }
 

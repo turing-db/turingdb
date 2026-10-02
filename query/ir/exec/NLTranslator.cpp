@@ -884,7 +884,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
             translateToNullable(toNullable, body);
         } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
-            translateCase(caseOp, body);
+            translateCase(caseOp, &NLExecutor::runCase, body);
+        } else if (nl::CaseMerge caseMerge = mlir::dyn_cast<nl::CaseMerge>(operation)) {
+            translateCase(caseMerge, &NLExecutor::runCaseMerge, body);
+        } else if (nl::IsNotTrue isNotTrue = mlir::dyn_cast<nl::IsNotTrue>(operation)) {
+            translateIsNotTrue(isNotTrue, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
             translateMakeList(makeList, body);
         } else if (nl::ListSlice listSlice = mlir::dyn_cast<nl::ListSlice>(operation)) {
@@ -3241,7 +3245,8 @@ void NLTranslator::translateListPredicate(nl::ListPredicate predicate, NLStmtCon
     body->emplaceStmt(&NLExecutor::runListPredicate, data);
 }
 
-void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
+template <typename CaseOp>
+void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtContainer* body) {
     const mlir::Value resultValue = caseOp.getResult();
     const mlir::Type resultChunkType = resultValue.getType();
 
@@ -3251,8 +3256,7 @@ void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
     const mlir::OperandRange conditions = caseOp.getConditions();
     const mlir::OperandRange values = caseOp.getValues();
 
-    // Every branch was laid out over the driving relation during lowering, so any of them
-    // gives the rows this step writes
+    // The first condition holds one row per row this step writes
     NLCaseData* data = _program->allocFunctionData<NLCaseData>(getColumn(conditions.front()),
                                                                result,
                                                                selectCaseResetForChunkType(resultChunkType));
@@ -3281,7 +3285,23 @@ void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
                          selectCaseWriteForChunkType(resultChunkType, defaultColumn, defaultType));
     }
 
-    body->emplaceStmt(&NLExecutor::runCase, data);
+    body->emplaceStmt(run, data);
+}
+
+void NLTranslator::translateIsNotTrue(nl::IsNotTrue isNotTrue, NLStmtContainer* body) {
+    const mlir::Value operandValue = isNotTrue.getOperand();
+    const Column* operand = getColumn(operandValue);
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectIsNotTrue(operand,
+                                                     isUntypedNullChunk(operandValue.getType()),
+                                                     _memory,
+                                                     result);
+
+    _valueSlots[isNotTrue.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
 NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {

@@ -3817,10 +3817,10 @@ private:
 // condition never does, so its rows fall through to the next branch.
 using NLCaseTestFn = bool (*)(const Column* condition, size_t row);
 
-// Copies row @param row of a CASE branch's value column into the same row of the result.
-// Every column a selection reads carries rows, so a row of the result is written from the
-// row of the branch that produced it.
-using NLCaseWriteFn = void (*)(Column* result, const Column* value, size_t row);
+// Copies row @param valueRow of a CASE branch's value column into row @param resultRow of
+// the result. nl.case reads its values at the row it writes; nl.case_merge reads each at
+// the row its cursor reached, since a value holds only the rows that took its branch.
+using NLCaseWriteFn = void (*)(Column* result, size_t resultRow, const Column* value, size_t valueRow);
 
 // Sizes a CASE result to @param rowCount rows, all absent: the value a row unmatched by
 // every branch of a defaultless CASE holds
@@ -3838,6 +3838,11 @@ public:
         NLCaseWriteFn _write {nullptr};
     };
 
+    struct BranchCursor {
+        size_t _conditionRow {0};
+        size_t _valueRow {0};
+    };
+
     NLCaseData(const Column* cardinality, Column* result, NLCaseResetFn reset)
         : _cardinality(cardinality),
         _result(result),
@@ -3853,9 +3858,11 @@ public:
     NLCaseWriteFn getWriteDefault() const { return _writeDefault; }
 
     const std::vector<Branch>& branches() const { return _branches; }
+    std::vector<BranchCursor>& cursors() { return _cursors; }
 
     void addBranch(const Branch& branch) {
         _branches.push_back(branch);
+        _cursors.emplace_back();
     }
 
     void setDefault(const Column* defaultValue, NLCaseWriteFn writeDefault) {
@@ -3868,6 +3875,7 @@ private:
     Column* _result {nullptr};
     NLCaseResetFn _reset {nullptr};
     std::vector<Branch> _branches;
+    std::vector<BranchCursor> _cursors;
     const Column* _defaultValue {nullptr};
     NLCaseWriteFn _writeDefault {nullptr};
 };

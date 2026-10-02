@@ -361,6 +361,9 @@ public:
     static void runFillNull(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
+
+    // Whether each row of a CASE condition is false or null (nl.is_not_true), as a mask
+    static NLUnaryFn selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result);
     // Read a node or edge column as a nullable column of its IDs' integers, an invalid ID
     // - what an OPTIONAL MATCH leaves - reading as the null. The entity sibling of
     // selectToNullable, which reads a scalar value column.
@@ -375,6 +378,10 @@ public:
     // Write each row of a CASE (nl.case): the value of the first branch whose condition
     // holds, the default when none does, and an absent value when there is no default.
     static void runCase(NLExecutionContext* context, NLFunctionData* data);
+
+    // Write each row of a lazily evaluated CASE (nl.case_merge): as nl.case, reading each
+    // condition and value through a cursor over the rows that reached it
+    static void runCaseMerge(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one list per row (nl.make_list): row r takes the cell each element column
     // holds at r, in operand order, as one contiguous run of the query's list buffer.

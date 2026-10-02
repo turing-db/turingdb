@@ -514,6 +514,23 @@ private:
     // where every condition and value it reads is bound.
     void lowerCase(mlir::db::Case caseOp);
 
+    // Lower a db.lazy_case: each condition is computed over the rows no earlier one held
+    // for and each value over the rows its condition held for, cut by nl.filter, and an
+    // nl.case_merge writes the values back in the order of the rows
+    void lowerLazyCase(mlir::db::LazyCase caseOp);
+
+    // Lowers one region of a db.lazy_case over @param chunks, whose rows @param cardinality
+    // counts, and returns what it yields laid out over them
+    mlir::Value lowerCaseRegion(mlir::Region& region, llvm::ArrayRef<mlir::Value> chunks, mlir::Value cardinality);
+
+    // The rows of @param chunks for which @param mask holds: the cut mask first, which
+    // counts them whether or not there are chunks, then the chunks
+    void filterCaseRows(mlir::Value mask, llvm::ArrayRef<mlir::Value> chunks, llvm::SmallVectorImpl<mlir::Value>& filtered);
+
+    // The chunk a CASE over @param resultElement lands in: the entity chunk for nodes and
+    // edges, which holds the null of an unmatched row in its ID, and a nullable one otherwise
+    mlir::nl::ChunkType caseResultChunkType(mlir::Type resultElement);
+
     // The value element type a CASE's branches share: the one they all carry, the
     // promotion of their numbers when they carry two, and an i64 when every branch is
     // null. A branch no value column can hold is rejected here.
