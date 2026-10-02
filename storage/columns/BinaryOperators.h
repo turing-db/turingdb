@@ -356,7 +356,7 @@ struct BinaryOp {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
 
         return visitArithmeticOperand(a, [this, &b](const auto lhs) {
-            return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<ListElementView> {
+            return visitArithmeticOperand(b, [&](const auto rhs) -> std::optional<ListElementView> {
                 if constexpr (requires { F {}(lhs, rhs); }) {
                     return stagedCell(F {}(lhs, rhs));
                 } else {
