@@ -2960,7 +2960,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     // read row by row for validity instead of copied straight across
     const auto operandChunk = mlir::cast<nl::ChunkType>(operandValue.getType());
     const mlir::Type operandElement = operandChunk.getElementType();
-    const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(operandElement);
+    const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathRefType>(operandElement);
     const bool readsAPath = mlir::isa<storage::EntityListType>(operandElement);
     const bool readsAMask = isMaskElementType(operandElement);
 

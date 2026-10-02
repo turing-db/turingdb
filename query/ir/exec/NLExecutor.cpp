@@ -7316,15 +7316,17 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
 }
 
 NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
-    const bool readsIDs = kind == NLChunkKind::NodeID || kind == NLChunkKind::EdgeID;
+    const bool readsIDs = kind == NLChunkKind::NodeID || kind == NLChunkKind::EdgeID || kind == NLChunkKind::PathRef;
     if (!readsIDs) {
-        throw IRException("Only a node or an edge column can be read as a nullable ID column");
+        throw IRException("Only a node, an edge or a walk column can be read as a nullable ID column");
     }
 
     result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
 
     if (kind == NLChunkKind::NodeID) {
         return &entityToNullableColumn<NodeID>;
+    } else if (kind == NLChunkKind::PathRef) {
+        return &entityToNullableColumn<PathRef>;
     }
 
     return &entityToNullableColumn<EdgeID>;
