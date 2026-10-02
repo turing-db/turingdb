@@ -29,25 +29,22 @@ enum class ProcedureType : uint8_t {
     _SIZE,
 };
 
-template <ProcedureType P>
-struct ProcedureTypeType;
+template <typename T>
+struct ProcedureTypeOf;
 
-template <> struct ProcedureTypeType<ProcedureType::NODE> { using type = NodeID; };
-template <> struct ProcedureTypeType<ProcedureType::EDGE> { using type = EdgeID; };
-template <> struct ProcedureTypeType<ProcedureType::LABEL_ID> { using type = LabelSetID; };
-template <> struct ProcedureTypeType<ProcedureType::EDGE_TYPE_ID> { using type = EdgeTypeID; };
-template <> struct ProcedureTypeType<ProcedureType::PROPERTY_TYPE_ID> { using type = PropertyTypeID; };
-template <> struct ProcedureTypeType<ProcedureType::VALUE_TYPE> { using type = ValueType; };
-template <> struct ProcedureTypeType<ProcedureType::UINT_64> { using type = types::UInt64::Primitive; };
-template <> struct ProcedureTypeType<ProcedureType::INT64> { using type = types::Int64::Primitive; };
-template <> struct ProcedureTypeType<ProcedureType::DOUBLE> { using type = types::Double::Primitive; };
-template <> struct ProcedureTypeType<ProcedureType::BOOL> { using type = types::Bool::Primitive; };
-template <> struct ProcedureTypeType<ProcedureType::STRING_VIEW> { using type = types::String::Primitive; };
-template <> struct ProcedureTypeType<ProcedureType::STRING> { using type = types::String::OwningPrimitive; };
-template <> struct ProcedureTypeType<ProcedureType::LIST> { using type = ListView; };
-
-template <ProcedureType T>
-using ProcedureTypeType_t = typename ProcedureTypeType<T>::type;
+template <> struct ProcedureTypeOf<NodeID> { static constexpr ProcedureType value = ProcedureType::NODE; };
+template <> struct ProcedureTypeOf<EdgeID> { static constexpr ProcedureType value = ProcedureType::EDGE; };
+template <> struct ProcedureTypeOf<LabelID> { static constexpr ProcedureType value = ProcedureType::LABEL_ID; };
+template <> struct ProcedureTypeOf<EdgeTypeID> { static constexpr ProcedureType value = ProcedureType::EDGE_TYPE_ID; };
+template <> struct ProcedureTypeOf<PropertyTypeID> { static constexpr ProcedureType value = ProcedureType::PROPERTY_TYPE_ID; };
+template <> struct ProcedureTypeOf<ValueType> { static constexpr ProcedureType value = ProcedureType::VALUE_TYPE; };
+template <> struct ProcedureTypeOf<types::UInt64::Primitive> { static constexpr ProcedureType value = ProcedureType::UINT_64; };
+template <> struct ProcedureTypeOf<types::Int64::Primitive> { static constexpr ProcedureType value = ProcedureType::INT64; };
+template <> struct ProcedureTypeOf<types::Double::Primitive> { static constexpr ProcedureType value = ProcedureType::DOUBLE; };
+template <> struct ProcedureTypeOf<types::Bool::Primitive> { static constexpr ProcedureType value = ProcedureType::BOOL; };
+template <> struct ProcedureTypeOf<types::String::Primitive> { static constexpr ProcedureType value = ProcedureType::STRING_VIEW; };
+template <> struct ProcedureTypeOf<types::String::OwningPrimitive> { static constexpr ProcedureType value = ProcedureType::STRING; };
+template <> struct ProcedureTypeOf<ListView> { static constexpr ProcedureType value = ProcedureType::LIST; };
 
 using ProcedureTypeName = EnumToString<ProcedureType>::Create<
     EnumStringPair<ProcedureType::INVALID, "INVALID">,

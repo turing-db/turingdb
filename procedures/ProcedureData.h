@@ -41,6 +41,8 @@ public:
         _returnColumns[i] = col;
     }
 
+    void clearReturnColumns();
+
 private:
     std::vector<const Column*> _inputColumns;
     std::vector<Column*> _returnColumns;
