@@ -2294,7 +2294,14 @@ bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
         ? definingOp->getBlock()
         : mlir::cast<mlir::BlockArgument>(column).getOwner();
 
-    return definingBlock == _opBuilder.getInsertionBlock();
+    mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
+    if (definingBlock == insertionBlock) {
+        return true;
+    }
+
+    const auto rowBlockIt = _unionBranchRowBlocks.find(insertionBlock);
+
+    return rowBlockIt != _unionBranchRowBlocks.end() && rowBlockIt->second == definingBlock;
 }
 
 // Whether @param column holds the rows in flight here: the rows of the block the insertion
@@ -5606,6 +5613,8 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
             _part._writtenEntities[decl] = std::move(written);
         }
 
+        _unionBranchRowBlocks[block] = bodyBlock;
+
         _opBuilder.setInsertionPointToStart(block);
         generateQueryParts(query);
         publishProjection(query->getReturnStmt()->getProjection());
@@ -5628,6 +5637,7 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
         }
 
         _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
+        _unionBranchRowBlocks.erase(block);
 
         if (branchIndex == 0) {
             resultColumns = branchColumns;
