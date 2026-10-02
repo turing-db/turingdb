@@ -1,137 +1,48 @@
 name: CI Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 
 jobs:
-  matrix:
-    uses: ./.github/workflows/ci_release_matrix.yml
-
-  setup:
-    needs: matrix
-    runs-on: ubuntu-24.04-turing
-    outputs:
-      os_list: ${{ needs.matrix.outputs.os_list }}
-      python_version_list: ${{ needs.matrix.outputs.python_version_list }}
-      dev_version_suffix: ${{ steps.suffix.outputs.value }}
-    steps:
-      - run: echo "Defining matrix"
-      - name: Compute dev version suffix for nightly builds
-        id: suffix
-        if: "!startsWith(github.ref, 'refs/tags/v')"
-        run: echo "value=$(date -u +%Y%m%d%H%M)" >> "$GITHUB_OUTPUT"
-
   build-release:
-    needs: setup
     uses: ./.github/workflows/ci_build.yml
     with:
-      os_list: ${{ needs.setup.outputs.os_list }}
-      python_version_list: ${{ needs.setup.outputs.python_version_list }}
-      dev_version_suffix: ${{ needs.setup.outputs.dev_version_suffix }}
+      os_list: '["macos15", "macos26"]'
+      python_version_list: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+      version_override: '3.0'
     secrets: inherit
 
   publish:
-    name: Publish to PyPI
+    name: Publish macOS wheels of v3.0 to PyPI
     needs: build-release
-    # GitHub-hosted, not the self-hosted ubuntu-*-turing runners: pypa/gh-action-pypi-publish
-    # is a Docker action, and on the containerized turing runners its nested
-    # `docker run -v <workspace>:/github/workspace` mounts a path the host daemon
-    # can't see, so wheel/ is empty inside the container ("Cannot find file 'wheel/*'").
-    # This job only downloads artifacts and uploads, so it needs no self-hosted resources.
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get-version.outputs.version }}
     environment:
       name: pypi
       url: https://pypi.org/p/turingdb
     permissions:
-      contents: write
       id-token: write
     steps:
-      - name: Download all wheel artifacts
+      - name: Download macOS wheel artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: turingdb-wheel-*
+          pattern: turingdb-wheel-macos*
           path: wheel/
           merge-multiple: true
 
-      - name: Extract version from wheel filename
-        id: get-version
+      - name: Check the wheels
         run: |
-          WHEEL=$(ls wheel/*.whl | head -1)
-          VERSION=$(basename "$WHEEL" | sed 's/^turingdb-\([^-]*\)-.*/\1/')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Detected version: $VERSION"
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: wheel/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ls -la wheel/
+          COUNT=$(ls wheel/ | wc -l)
+          MATCHING=$(ls wheel/ | grep -cE '^turingdb-3\.0-cp3(10|11|12|13|14)-cp3(10|11|12|13|14)-macosx_[0-9]+_[0-9]+_arm64\.whl$')
+          if [ "$COUNT" != "10" ] || [ "$MATCHING" != "10" ]; then
+            echo "ERROR: expected 10 turingdb-3.0 macOS arm64 wheels, found $COUNT files, $MATCHING matching"
+            exit 1
+          fi
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           packages-dir: wheel/
           verbose: true
-          # Tolerate files already on PyPI so a partial upload can be safely re-run.
           skip-existing: true
-
-  docker:
-    needs: publish
-    uses: ./.github/workflows/ci_docker.yaml
-    with:
-      image_tag: ${{ needs.publish.outputs.version }}
-    secrets: inherit
-
-  test-published-wheel:
-    name: Test published wheel 
-    needs: [publish, setup]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJson(needs.setup.outputs.os_list) }}
-        python_version: ${{ fromJson(needs.setup.outputs.python_version_list) }}
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-
-      - name: Setup Python
-        run: uv python install ${{ matrix.python_version }}
-
-      - name: Install turingdb from PyPI
-        run: |
-          # --clear: the self-hosted runners reuse their workspace between jobs,
-          # so a stale .venv from a previous run makes `uv venv` error out
-          # ("A virtual environment already exists"). Recreate it cleanly.
-          uv venv .venv --clear --python ${{ matrix.python_version }}
-          sleep 120
-          for i in 1 2 3 4 5; do
-            uv pip install turingdb==${{ needs.publish.outputs.version }} --prerelease allow --refresh --python .venv/bin/python && break
-            echo "Attempt $i failed, retrying in 120s..."
-            sleep 120
-          done
-          .venv/bin/python -c "import turingdb" || { echo "ERROR: turingdb failed to install after 5 attempts"; exit 1; }
-
-      - name: Verify installed version matches
-        run: |
-          INSTALLED=$(.venv/bin/python -c "import importlib.metadata; print(importlib.metadata.version('turingdb'))")
-          EXPECTED="${{ needs.publish.outputs.version }}"
-          echo "Installed: $INSTALLED"
-          echo "Expected:  $EXPECTED"
-          if [ "$INSTALLED" != "$EXPECTED" ]; then
-            echo "ERROR: Version mismatch!"
-            exit 1
-          fi
-
-      - name: Verify turingdb launches
-        timeout-minutes: 3
-        run: .venv/bin/turingdb --help
