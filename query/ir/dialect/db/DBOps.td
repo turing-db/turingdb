@@ -426,6 +426,29 @@ def MakeMap : TuringOp<"make_map", [Pure]> {
 }
 
 /**
+* MapKey
+*/
+def MapKey : TuringOp<"map_key", [Pure, ConstantThroughOperands]> {
+  let summary = "Row-wise read of one value of a map column, by a key known at plan time";
+
+  let description = [{
+    `m.name`, or `n.attrs.name`. The key is spelled in the query, so it rides an attribute
+    rather than a column:
+
+      %v = db.map_key %m key "name" : (!db.column<none>) -> !db.column<map_element>
+
+    Row r of the result is the entry row r's map holds under the key. A row whose map holds
+    no such key - and a row holding no map at all - reads back as a null entry, since a map
+    value carries its null in its own tag.
+  }];
+
+  let arguments = (ins Column:$map, StrAttr:$key);
+  let results   = (outs ColumnMapElements:$result);
+
+  let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
+}
+
+/**
 * Range
 */
 def Range : TuringOp<"range", [Pure]> {

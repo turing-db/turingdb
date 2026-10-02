@@ -1764,7 +1764,7 @@ void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
     // empty/invalid decl is fine.
     _exprAnalyzer->registerNodePatternDeclaration(node);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
-    _exprAnalyzer->throwIfReadsAComponent(propertyExpr);
+    _exprAnalyzer->throwIfReadsPartOfAProperty(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
     const std::string_view propName = propertyExpr->getPropName();
@@ -1802,7 +1802,7 @@ void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
     // empty/invalid decl is fine.
     _exprAnalyzer->registerEdgePatternDeclaration(edge);
     _exprAnalyzer->analyzePropertyExpr(propertyExpr);
-    _exprAnalyzer->throwIfReadsAComponent(propertyExpr);
+    _exprAnalyzer->throwIfReadsPartOfAProperty(propertyExpr);
 
     const PropertyTypeMap& propTypes = _graphMetadata.propTypes();
     const std::string_view propName = propertyExpr->getPropName();

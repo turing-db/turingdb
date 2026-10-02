@@ -631,7 +631,15 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
 
 bool isTaggedCellChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    return chunk && mlir::isa<storage::ListElementType>(chunk.getElementType());
+    return chunk && mlir::isa<storage::ListElementType, storage::MapElementType>(chunk.getElementType());
+}
+
+// A list element's null rides the column's optional, so a plain list_element column holds
+// none. A map value's null rides the entry's own tag, so even a plain column can answer
+// one - which is what makes comparing it three-valued whatever the column's shape.
+bool isMapElementChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    return chunk && mlir::isa<storage::MapElementType>(chunk.getElementType());
 }
 
 // The same cell behind the nullable an index wraps it in: reading an element out of a list
@@ -1098,6 +1106,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerMakeList(makeList);
     } else if (mlir::db::MakeMap makeMap = mlir::dyn_cast<mlir::db::MakeMap>(operation)) {
         lowerMakeMap(makeMap);
+    } else if (mlir::db::MapKey mapKey = mlir::dyn_cast<mlir::db::MapKey>(operation)) {
+        lowerMapKey(mapKey);
     } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
         lowerRange(range);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
@@ -1830,6 +1840,32 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
     }
 
     return shared;
+}
+
+void DBLowering::lowerMapKey(mlir::db::MapKey mapKey) {
+    const mlir::Value mapChunk = mapValue(mapKey.getMap());
+
+    const mlir::Type element = mlir::cast<nl::ChunkType>(mapChunk.getType()).getElementType();
+    const auto nullableElement = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type mapElement = nullableElement ? nullableElement.getValueType() : element;
+
+    if (!mlir::isa<storage::MapType>(mapElement)) {
+        throw IRException("db.map_key reads from a map column");
+    }
+
+    // The entry carries its own null in its tag, so the result is never wrapped in a
+    // nullable: a missing key and an absent map both read back as a Null-tagged entry
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(),
+                                                        storage::MapElementType::get(_builder.getContext()));
+
+    setInsertionForUnaryOp(mapChunk);
+
+    nl::MapKey value = _builder.create<nl::MapKey>(_builder.getUnknownLoc(),
+                                                   resultType,
+                                                   mapChunk,
+                                                   mapKey.getKeyAttr());
+
+    _valueMap[mapKey.getResult()] = value.getResult();
 }
 
 void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks) {
@@ -4989,7 +5025,10 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                           && !testsATaggedCellForNull
                                           && (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType));
 
-            const bool alwaysNullable = operandNullable || comparesTwoLists || comparesATaggedCell;
+            const bool comparesAMapValue = !testsATaggedCellForNull
+                                        && (isMapElementChunk(lhsType) || isMapElementChunk(rhsType));
+
+            const bool alwaysNullable = operandNullable || comparesTwoLists || comparesATaggedCell || comparesAMapValue;
 
             return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
                                   : boolElement;

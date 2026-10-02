@@ -348,6 +348,13 @@ def NLMapChunk : Type<
     BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
                   "::mlir::storage::MapType::get($_builder.getContext()))">;
 
+def NLMapElementChunk : Type<
+        CPred<"::llvm::isa<::mlir::nl::ChunkType>($_self) && "
+              "::llvm::isa<::mlir::storage::MapElementType>(::llvm::cast<::mlir::nl::ChunkType>($_self).getElementType())">,
+        "chunk of map entries", "::mlir::nl::ChunkType">,
+    BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
+                  "::mlir::storage::MapElementType::get($_builder.getContext()))">;
+
 // Constrains an operand to a resolved !nl.property_type handle, the same way
 // NLNodeIDChunk constrains a chunk operand. The single concrete type - there is
 // only ever !nl.property_type - is what lets the property fetches omit the

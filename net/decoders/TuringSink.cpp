@@ -33,7 +33,7 @@ db::ListElementView TuringSink::beginNestedList(size_t elementCount, size_t byte
     db::ListElementView elementView;
 
     if (topContainerIsMap()) {
-        mapCursor().writeValue<db::ListView>(db::TypeToMapBufferTag<db::ListView>::Tag, childView);
+        _lastMapEntry = mapCursor().writeValue<db::ListView>(db::TypeToMapBufferTag<db::ListView>::Tag, childView);
     } else {
         elementView = listCursor().writeValue<db::ListView>(db::TypeToListBufferTag<db::ListView>::Tag, childView);
     }
@@ -55,7 +55,7 @@ db::ListElementView TuringSink::beginNestedMap(size_t entryCount, size_t byteSiz
 
     db::ListElementView elementView;
     if (topContainerIsMap()) {
-        mapCursor().writeValue<db::MapView>(db::TypeToMapBufferTag<db::MapView>::Tag, childView);
+        _lastMapEntry = mapCursor().writeValue<db::MapView>(db::TypeToMapBufferTag<db::MapView>::Tag, childView);
     } else {
         elementView = listCursor().writeValue<db::MapView>(db::TypeToListBufferTag<db::MapView>::Tag, childView);
     }
@@ -71,4 +71,5 @@ bool TuringSink::topContainerComplete() const {
 
 void TuringSink::reset() {
     _containerStack.clear();
+    _lastMapEntry = db::MapEntryView {};
 }

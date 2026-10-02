@@ -390,6 +390,7 @@ public:
     // Build one map per row (nl.make_map): row r of the result maps each key to what its
     // value column holds at r, as one contiguous run of the query's map buffer.
     static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
+    static void runMapKey(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one list per row (nl.range): row r counts from its start bound to its end
     // bound by its step, as one contiguous run of the query's list buffer.
@@ -401,6 +402,7 @@ public:
 
     // Read the list one column holds at a row, for the slice that reads it
     static NLListReadFunction selectListRead(const Column* input);
+    static NLMapReadFunction selectMapRead(const Column* input);
 
     // Build one list per row (nl.list_comprehension): the body runs over the elements of
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own
@@ -622,6 +624,12 @@ public:
     // heterogeneous unwind's cells can be a grouping key rather than only a counted column.
     static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
     static NLCopyFunction selectListElementCopyFunction();
+
+    static NLBroadcastFunction selectMapEntryBlockRepeatFunction();
+    static NLBroadcastFunction selectMapEntryTileFunction();
+    static NLAppendFunction selectMapEntryAppendFunction();
+    static NLGatherFunction selectMapEntryGatherFunction();
+    static NLCopyFunction selectMapEntryCopyFunction();
 
     static NLBroadcastFunction selectOptListElementBlockRepeatFunction();
     static NLBroadcastFunction selectOptListElementTileFunction();

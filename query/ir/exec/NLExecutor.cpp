@@ -55,6 +55,7 @@
 #include "list/ListElementOrder.h"
 #include "list/ListUtils.h"
 #include "map/MapHash.h"
+#include "map/MapUtils.h"
 #include "list/PathTrie.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -4042,6 +4043,13 @@ std::optional<ListView> optConstListRead(const Column* input, size_t) {
     return static_cast<const ColumnConst<std::optional<ListView>>*>(input)->getRaw();
 }
 
+// The map sibling of the list reads above: one cell of a map column, or nothing where the
+// row holds no map.
+template <typename ColumnT>
+std::optional<MapView> mapRead(const Column* input, size_t row) {
+    return (*static_cast<const ColumnT*>(input))[row];
+}
+
 // The list a type-erased cell holds, absent where the cell holds anything else
 std::optional<ListView> cellListRead(const ListElementView cell) {
     if (cell.getTag() != ListBufferTypeTag::ListView) {
@@ -7079,6 +7087,63 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
     return selected;
 }
 
+NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnVector<MapView>::staticKind()) {
+        return &mapRead<ColumnVector<MapView>>;
+    } else if (kind == ColumnOptVector<MapView>::staticKind()) {
+        return &mapRead<ColumnOptVector<MapView>>;
+    } else if (kind == ColumnConst<MapView>::staticKind()) {
+        return &mapRead<ColumnConst<MapView>>;
+    } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
+        return &mapRead<ColumnConst<std::optional<MapView>>>;
+    }
+
+    throw IRException("a map key read reads a map column");
+}
+
+// Row r of the result views the entry row r's map already holds under the key, so the
+// read copies nothing. A row holding no map, and a map holding no such key, read back as
+// an entry under the same key whose tag is null: every row of the column names the key
+// the query read it under, so one entry per chunk serves all of them.
+void NLExecutor::runMapKey(NLExecutionContext*, NLFunctionData* data) {
+    const NLMapKeyData* mapKey = static_cast<NLMapKeyData*>(data);
+
+    const Column* input = mapKey->getInput();
+    const NLMapReadFunction read = mapKey->getMapRead();
+    const std::string_view key = mapKey->getKey();
+
+    const MapEntryView absent = mapKey->getAbsentEntry();
+
+    const auto entryAt = [input, read, key, absent](size_t row) {
+        const std::optional<MapView> map = read(input, row);
+
+        MapEntryView entry = absent;
+        if (map) {
+            findMapEntry(*map, key, entry);
+        }
+
+        return entry;
+    };
+
+    Column* result = mapKey->getResult();
+
+    if (result->getKind() == ColumnConst<MapEntryView>::staticKind()) {
+        *static_cast<ColumnConst<MapEntryView>*>(result) = entryAt(0);
+        return;
+    }
+
+    std::vector<MapEntryView>& outputRaw = static_cast<ColumnVector<MapEntryView>*>(result)->getRaw();
+    const size_t rowCount = input->size();
+
+    outputRaw.resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        outputRaw[row] = entryAt(row);
+    }
+}
+
 NLListReadFunction NLExecutor::selectListRead(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
@@ -9137,6 +9202,30 @@ NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {
 
 NLCopyFunction NLExecutor::selectListElementCopyFunction() {
     return &copyRangeColumn<ListElementView>;
+}
+
+// A map_element chunk is a ColumnVector<MapEntryView> of fixed-width entries, so the
+// same templates carry each entry's key and tag along with its value. Only the passing
+// -through families are selected here: ordering, keying and joining a map value are not
+// supported, and their selectors reject it rather than silently misreading the entry.
+NLBroadcastFunction NLExecutor::selectMapEntryBlockRepeatFunction() {
+    return &blockRepeatColumn<MapEntryView>;
+}
+
+NLBroadcastFunction NLExecutor::selectMapEntryTileFunction() {
+    return &tileColumn<MapEntryView>;
+}
+
+NLAppendFunction NLExecutor::selectMapEntryAppendFunction() {
+    return &appendColumn<MapEntryView>;
+}
+
+NLGatherFunction NLExecutor::selectMapEntryGatherFunction() {
+    return &gatherColumn<MapEntryView>;
+}
+
+NLCopyFunction NLExecutor::selectMapEntryCopyFunction() {
+    return &copyRangeColumn<MapEntryView>;
 }
 
 NLBroadcastFunction NLExecutor::selectOptListElementBlockRepeatFunction() {

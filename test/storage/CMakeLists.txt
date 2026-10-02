@@ -29,6 +29,9 @@ target_link_libraries(test_storage_local_memory_clear PRIVATE turing_db_memory_s
 # A map value compares the way the same value does as a list element.
 add_storage_tests(test_storage_map_value_equality MapValueEqualityTest.cpp)
 target_link_libraries(test_storage_map_value_equality PRIVATE turing_db_memory_s)
+
+add_storage_tests(test_storage_map_entry_lookup MapEntryLookupTest.cpp)
+target_link_libraries(test_storage_map_entry_lookup PRIVATE turing_db_memory_s)
 add_storage_tests(test_storage_map_embedding_equality MapEmbeddingEqualityTest.cpp)
 add_storage_tests(test_storage_nested_embedding_equality NestedEmbeddingEqualityTest.cpp)
 add_storage_tests(test_storage_map_property_comparator MapPropertyComparatorTest.cpp)

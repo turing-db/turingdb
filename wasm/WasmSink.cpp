@@ -143,7 +143,7 @@ ListElementView WasmSink::beginNestedMap(size_t entryCount, size_t byteSize) {
 
 void WasmSink::writeMapKey(std::string_view key) {
     const uint32_t keyIndex = static_cast<uint32_t>(_nestedStrings.size());
-    appendBytes(&keyIndex, sizeof(keyIndex));
+    _lastMapEntry = MapEntryView {appendBytes(&keyIndex, sizeof(keyIndex))};
     _nestedStrings.push_back(key);
 
     _containerStack.back()._keyPending = true;
@@ -217,6 +217,7 @@ void WasmSink::reset() {
     _nestedStrings.clear();
     _containerStack.clear();
     _deferredPayloads.clear();
+    _lastMapEntry = MapEntryView {};
 }
 
 uint32_t WasmSink::appendBytes(const void* bytes, size_t byteSize) {

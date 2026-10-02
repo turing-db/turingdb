@@ -1002,6 +1002,7 @@ private:
     // column's cells go into the list buffer through
     void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);
     void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
+    void translateMapKey(mlir::nl::MapKey mapKey, NLStmtContainer* body);
 
     // Translate an nl.list_comprehension: allocate the element chunk, one chunk per
     // carried column and the list column the step fills, pick the handlers that read the
@@ -1130,6 +1131,8 @@ private:
 
     Column* allocListElementColumn();
     Column* allocOptListElementColumn();
+    Column* allocMapEntryColumn();
+    Column* allocConstMapEntryColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
 

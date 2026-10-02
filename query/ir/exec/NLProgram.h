@@ -3952,6 +3952,44 @@ private:
     std::vector<Entry> _entries;
 };
 
+// The map one column of an nl.map_key holds at @param row, or nothing where the row holds
+// none. One per map column shape, selected during translation.
+using NLMapReadFunction = std::optional<MapView> (*)(const Column* input, size_t row);
+
+// Row-wise map key read (nl.map_key): row r of the result views the entry row r's map
+// holds under the key, or the null entry where it holds none.
+class NLMapKeyData : public NLFunctionData {
+public:
+    NLMapKeyData(const Column* input,
+                 Column* result,
+                 NLMapReadFunction mapRead,
+                 std::string_view key,
+                 MapEntryView absent)
+        : _input(input),
+        _result(result),
+        _mapRead(mapRead),
+        _key(key),
+        _absent(absent)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getResult() const { return _result; }
+    NLMapReadFunction getMapRead() const { return _mapRead; }
+    std::string_view getKey() const { return _key; }
+
+    // The entry a row whose map holds no such key reads: the key the statement reads under,
+    // tagged null. Fixed by the key, so one serves every row of every chunk.
+    MapEntryView getAbsentEntry() const { return _absent; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _result {nullptr};
+    NLMapReadFunction _mapRead {nullptr};
+    std::string_view _key {};
+    MapEntryView _absent;
+};
+
 // Read the bound one column of an nl.range holds at @param row, or nothing where the row
 // has no bound. One per integer column kind, selected during translation the way the list
 // item reads are.

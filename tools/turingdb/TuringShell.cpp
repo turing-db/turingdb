@@ -651,20 +651,22 @@ void asString(std::string& out, const ListView lv) {
     out += ']';
 }
 
+// The value of one entry, which is what a map value column's cell is. The key is added by
+// entryAsString, for an entry read as a member of its map rather than alone.
 void asString(std::string& out, MapEntryView v) {
     const auto writeTyped = [&out]<typename T>(const MapEntryView ele) {
         const T typed = ele.getValueAs<T>();
         asString(out, typed);
     };
 
-    const std::string_view key = v.getKey();
+    dispatchMapEntry(writeTyped, v);
+}
 
-    out += key;
+void entryAsString(std::string& out, MapEntryView v) {
+    out += v.getKey();
     out += " : ";
 
-    const MapBufferTypeTag tag = v.getValueTag();
-    MapTagDispatcher writer {._tag = tag};
-    writer.execute(writeTyped, v);
+    asString(out, v);
 }
 
 void asString(std::string& out, const MapView mv) {
@@ -676,11 +678,11 @@ void asString(std::string& out, const MapView mv) {
     out += '{';
 
     const MapEntryView fst = mv.front();
-    asString(out, fst);
+    entryAsString(out, fst);
 
     for (const MapEntryView ele : mv.entries() | rv::drop(1)) {
         out += ", ";
-        asString(out, ele);
+        entryAsString(out, ele);
     }
 
     out += '}';

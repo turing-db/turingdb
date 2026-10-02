@@ -19,6 +19,7 @@
 #include "ColumnVector.h"
 #include "ListElementView.h"
 #include "ListView.h"
+#include "MapEntryView.h"
 
 namespace wasm {
 
@@ -64,6 +65,8 @@ consteval ColumnType wireCodeOfElement() {
         return ColumnType::LIST_ELEMENT_VIEW;
     } else if constexpr (std::is_same_v<Element, MapView>) {
         return ColumnType::MAP_VIEW;
+    } else if constexpr (std::is_same_v<Element, MapEntryView>) {
+        return ColumnType::MAP_ENTRY_VIEW;
     } else if constexpr (std::is_same_v<Element, db::ValueType>) {
         return ColumnType::VALUE_TYPE;
     } else if constexpr (std::is_same_v<Element, db::PropertyNull>) {
@@ -113,6 +116,7 @@ public:
     using ListView = wasm::ListView;
     using ListElementView = wasm::ListElementView;
     using MapView = wasm::MapView;
+    using MapEntryView = wasm::MapEntryView;
 
     WasmSink();
     ~WasmSink();
@@ -148,6 +152,10 @@ public:
     }
 
     void writeMapValueBytes(const char* bytes, size_t byteSize);
+
+    // The entry the open map last opened a key for, which is where the entry starts. A map
+    // entry column stores one per row.
+    MapEntryView lastMapEntry() const { return _lastMapEntry; }
 
     bool topMapExpectsValue() const;
 
@@ -185,6 +193,7 @@ private:
     std::vector<char> _nestedBytes;
     std::vector<std::string_view> _nestedStrings;
     std::vector<OpenContainer> _containerStack;
+    MapEntryView _lastMapEntry;
     std::vector<DeferredPayload> _deferredPayloads;
 
     uint32_t appendBytes(const void* bytes, size_t byteSize);

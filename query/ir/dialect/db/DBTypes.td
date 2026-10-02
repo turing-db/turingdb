@@ -76,6 +76,8 @@ def ColumnMaps : Type<
     BuildableType<"::mlir::db::ColumnType::get($_builder.getContext(), "
                   "::mlir::storage::MapType::get($_builder.getContext()))">;
 
+def ColumnMapElements : ColumnOf<"::mlir::storage::MapElementType", "map_element">;
+
 // The seen-set several db.remove_duplicates share, so that one dedup spans dataflows
 // that never meet: the branches of a UNION, whose rows reach the result through one
 // db.output each and are still deduped against one another.

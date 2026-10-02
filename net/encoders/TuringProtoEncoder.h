@@ -200,6 +200,8 @@ public:
             // One element per row: the row count (already written above) is the element
             // count, so only [listByteSize] + the elements follow.
             _nestedWriter.writeListElements(values);
+        } else if constexpr (db::IsMapEntry<T>) {
+            _nestedWriter.writeMapEntries(values);
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "TuringProtoEncoder can't encode a non trivial element in a trivial manner");
@@ -323,6 +325,9 @@ public:
         } else if constexpr (db::IsListElement<T>) {
             const db::ListElementView element = col->at(0);
             _nestedWriter.writeListElements(std::span<const db::ListElementView>(&element, 1));
+        } else if constexpr (db::IsMapEntry<T>) {
+            const db::MapEntryView entry = col->at(0);
+            _nestedWriter.writeMapEntries(std::span<const db::MapEntryView>(&entry, 1));
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {

@@ -258,18 +258,22 @@ private:
         _writer.write(']');
     }
 
+    // The value of one entry, which is what a map_element column's cell is. The key is
+    // written by encodeEntry, for an entry read as a member of its map rather than alone.
     void encodeValue(const MapEntryView entry) {
-        encodeValue(entry.getKey());
-        _writer.write(": ");
-
         const auto writeTyped = [this]<typename T>(const MapEntryView entry) {
             const T typed = entry.getValueAs<T>();
             this->encodeValue(typed);
         };
 
-        const MapBufferTypeTag tag = entry.getValueTag();
-        MapTagDispatcher writer {._tag = tag};
-        writer.execute(writeTyped, entry);
+        dispatchMapEntry(writeTyped, entry);
+    }
+
+    void encodeEntry(const MapEntryView entry) {
+        encodeValue(entry.getKey());
+        _writer.write(": ");
+
+        encodeValue(entry);
     }
 
     void encodeValue(const MapView mv) {
@@ -281,11 +285,11 @@ private:
         _writer.write('{');
 
         const MapEntryView fst = mv.front();
-        encodeValue(fst);
+        encodeEntry(fst);
 
         for (const MapEntryView entry : mv.entries() | rv::drop(1)) {
             _writer.write(", ");
-            encodeValue(entry);
+            encodeEntry(entry);
         }
 
         _writer.write('}');

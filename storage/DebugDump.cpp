@@ -104,9 +104,7 @@ void DebugDump::dump(std::ostream& out, MapEntryView view, bool isInMap) {
         out << dumped;
     };
 
-    const MapBufferTypeTag tag = view.getValueTag();
-    MapTagDispatcher dumper {._tag = tag};
-    dumper.execute(dumpTyped, view);
+    dispatchMapEntry(dumpTyped, view);
 }
 
 void DebugDump::dump(std::ostream& out, MapView map) {

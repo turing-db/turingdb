@@ -189,6 +189,19 @@ def Map : StorageType<"Map", "map"> {
         }];
 }
 
+def MapElement : StorageType<"MapElement", "map_element"> {
+    let summary = "A single key-tagged scalar value read out of a map";
+    let description = [{
+        The element type of a chunk holding one map entry per row - storage's
+        ColumnVector<MapEntryView>. Each cell views the entry the map already holds: its
+        key, its own MapBufferTypeTag and its value, so a key read copies nothing. Like
+        !storage.list_element it is a fixed-width scalar rather than a container, and it
+        carries its null in the tag rather than in a !storage.nullable around it, so a
+        row whose map holds no such key - or no map at all - reads back as a Null-tagged
+        entry. Produced by db.map_key, and only ever passed through or rendered.
+    }];
+}
+
 // One string array per entity of a MERGE pattern: the label set of each chain node,
 // or the property names of each node and each hop. Both db.merge and nl.merge carry
 // these lists, so the constraint lives beside the types the two dialects share.

@@ -7927,6 +7927,8 @@ mlir::Value DBProgramGenerator::emitComponentOf(const PropertyExpr* propExpr, ml
 
     if (readsNull) {
         return value;
+    } else if (propExpr->readsAMapKey()) {
+        return emitMapKey(value, propExpr->getMapKey());
     } else if (propExpr->readsADateTimeComponent()) {
         return emitDateTimeComponent(propExpr->getDateTimePart(), value);
     } else if (propExpr->readsADurationComponent()) {
@@ -7947,6 +7949,10 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
     bioassert(_part._exprMap.contains(base), "Property lookup with unknown base.");
 
     const mlir::Value baseColumn = _part._exprMap.at(base);
+
+    if (lookupExpr->readsAMapKey()) {
+        return emitMapKey(baseColumn, lookupExpr->getPropName());
+    }
 
     if (lookupExpr->readsADateTimeComponent()) {
         return emitDateTimeComponent(lookupExpr->getDateTimePart(), baseColumn);
@@ -7975,6 +7981,14 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
                                                                  false);
         return op.getResult();
     }
+}
+
+mlir::Value DBProgramGenerator::emitMapKey(mlir::Value map, std::string_view key) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType entryType = allocColumnType(mlir::storage::MapElementType::get(_mlirCtxt));
+    const mlir::StringAttr keyAttr = _opBuilder.getStringAttr(llvm::StringRef(key.data(), key.size()));
+
+    return _opBuilder.create<mlir::db::MapKey>(loc, entryType, map, keyAttr).getResult();
 }
 
 mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::Value instant) {
@@ -8104,16 +8118,21 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
 
-    // d.year and d.hours name no property: the value the component is read off is the
-    // column the variable itself was bound to
+    // d.year, d.hours and m.key name no property: the value the component or the key is
+    // read off is the column the variable itself was bound to
     const EvaluatedType entityType = entityDecl->getType();
-    if (entityType == EvaluatedType::DateTime || entityType == EvaluatedType::Duration) {
+
+    const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
+                                        || entityType == EvaluatedType::Duration
+                                        || entityType == EvaluatedType::Map;
+
+    if (readsOffTheVariableItself) {
         const auto projectedIt = _part._projectedColumns.find(entityDecl);
         const mlir::Value boundColumn = projectedIt != end(_part._projectedColumns)
                                       ? projectedIt->second
                                       : resolveEntityColumn(entityDecl);
 
-        bioassert(boundColumn, "Component read on unknown variable: {}", varName);
+        bioassert(boundColumn, "Dotted read on unknown variable: {}", varName);
 
         return boundColumn;
     }

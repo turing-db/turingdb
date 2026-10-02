@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <cstring>
+#include <type_traits>
 
 #include "DecodeContext.h"
 #include "DecodeUtils.h"
@@ -38,7 +39,7 @@ constexpr size_t tagSizeOf() {
 /**
  * @brief Reads one value off the wire and appends it to the container on top of the sink's
  * stack, dispatched on the value's tag via @ref db::ListTagDispatcher or
- * @ref db::MapTagDispatcher.
+ * @ref db::dispatchMapTag.
  *
  * The tag is glanced (not yet consumed) by the caller; this visitor consumes the tag
  * together with its value once enough is buffered. Returns true if the value was fully
@@ -50,13 +51,20 @@ constexpr size_t tagSizeOf() {
  * [tag][value] is copied straight into the reserved slot. In a map that slot sits after the
  * key's string_view, which the entry's key wrote before the value arrived.
  */
+// What one value of this container kind is viewed by: a list hands out element views, a
+// map entry views, and the column families that store one per row take the matching one.
+template <ProtoDecodeSink Sink, NestedContainerKind Kind>
+using OutViewOf = std::conditional_t<Kind == NestedContainerKind::Map,
+                                     SinkMapEntryView<Sink>,
+                                     SinkListElementView<Sink>>;
+
 template <ProtoDecodeSink Sink, NestedContainerKind Kind>
 struct NestedValueReadVisitor {
     DecodeContext* _context {nullptr};
     Sink* _sink {nullptr};
-    // Optional: if set, receives the view of each element appended to the list buffer
-    // (used by the ListElementView columns, which store one view per row).
-    SinkListElementView<Sink>* _outView {nullptr};
+    // Optional: if set, receives the view of each value appended to the container (used by
+    // the ListElementView and MapEntryView columns, which store one view per row).
+    OutViewOf<Sink, Kind>* _outView {nullptr};
 
     template <typename T>
     bool operator()(const typename ContainerViewOf<Kind>::Type unusedView) const {
@@ -143,6 +151,7 @@ private:
             captureOutView(_sink->writeListValue(value));
         } else {
             _sink->writeMapValue(value);
+            captureOutView({});
         }
     }
 
@@ -152,14 +161,22 @@ private:
             captureOutView(_sink->writeListElementBytes(bytes, numBytes));
         } else {
             _sink->writeMapValueBytes(bytes, numBytes);
+            captureOutView({});
         }
     }
 
-    // If a caller asked for it (the ListElementView columns, which store one view per row),
-    // hands back the view of the element just written.
+    // If a caller asked for it, hands back the view of the value just written. A list's
+    // writers return it; a map's entry is recorded on the sink, since the two nested
+    // openers hand back the element view of a list even when a map is what they filled.
     void captureOutView(const SinkListElementView<Sink> view) const {
-        if (_outView) {
+        if (!_outView) {
+            return;
+        }
+
+        if constexpr (Kind == NestedContainerKind::List) {
             *_outView = view;
+        } else {
+            *_outView = _sink->lastMapEntry();
         }
     }
 };
@@ -215,13 +232,20 @@ inline void closeCompletedContainers(Sink* sink) {
  *
  * return false if we have an incomplete value in the input buffer.
  */
-template <ProtoDecodeSink Sink, typename OnTopLevelElement>
+struct IgnoreTopLevelValue {
+    template <typename View>
+    void operator()(size_t, const View&) const {}
+};
+
+template <ProtoDecodeSink Sink, typename OnTopLevelElement, typename OnTopLevelEntry = IgnoreTopLevelValue>
 inline bool drainContainerStack(DecodeContext* context,
                                 Sink* sink,
-                                const OnTopLevelElement& onTopLevelElement) {
-    SinkListElementView<Sink> view;
-    const NestedValueReadVisitor<Sink, NestedContainerKind::List> listVisitor {context, sink, &view};
-    const NestedValueReadVisitor<Sink, NestedContainerKind::Map> mapVisitor {context, sink, &view};
+                                const OnTopLevelElement& onTopLevelElement,
+                                const OnTopLevelEntry& onTopLevelEntry = {}) {
+    SinkListElementView<Sink> elementView;
+    SinkMapEntryView<Sink> entryView;
+    const NestedValueReadVisitor<Sink, NestedContainerKind::List> listVisitor {context, sink, &elementView};
+    const NestedValueReadVisitor<Sink, NestedContainerKind::Map> mapVisitor {context, sink, &entryView};
 
     while (sink->hasOpenContainer()) {
         if (sink->topContainerComplete()) {
@@ -241,7 +265,18 @@ inline bool drainContainerStack(DecodeContext* context,
             db::MapBufferTypeTag tag {};
             memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));
 
-            if (!db::MapTagDispatcher {tag}.execute(mapVisitor, db::MapEntryView {})) {
+            const bool topLevelEntry = (sink->openContainerCount() == 1);
+            const size_t entryIndex = sink->topLevelValuesWritten();
+
+            const bool entryComplete = db::dispatchMapTag(tag, mapVisitor, db::MapEntryView {});
+
+            // As for a list element: a map entry column's rows are the top-level entries,
+            // and onTopLevelEntry is what writes each one into its row
+            if (topLevelEntry && sink->topLevelValuesWritten() > entryIndex) {
+                onTopLevelEntry(entryIndex, entryView);
+            }
+
+            if (!entryComplete) {
                 // The value's bytes are still streaming, but its view is recorded, so every
                 // container it completed can close. There is nothing left to drain once they
                 // all have — the payload finishes through _bufferState on its own.
@@ -269,7 +304,7 @@ inline bool drainContainerStack(DecodeContext* context,
             // container column row - onTopLevelElement is used to write the value into the
             // column
             if (topLevel && sink->topLevelValuesWritten() > elementIndex) {
-                onTopLevelElement(elementIndex, view);
+                onTopLevelElement(elementIndex, elementView);
             }
             if (!elementComplete) {
                 closeCompletedContainers(sink);
