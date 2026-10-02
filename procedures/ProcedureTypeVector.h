@@ -4,6 +4,9 @@
 #include <vector>
 #include <stdint.h>
 
+#include "ID.h"
+#include "metadata/PropertyType.h"
+
 #include "EnumToString.h"
 
 namespace db {
@@ -25,6 +28,23 @@ enum class ProcedureType : uint8_t {
     MAP,
     _SIZE,
 };
+
+template <typename T>
+struct ProcedureTypeOf;
+
+template <> struct ProcedureTypeOf<NodeID> { static constexpr ProcedureType value = ProcedureType::NODE; };
+template <> struct ProcedureTypeOf<EdgeID> { static constexpr ProcedureType value = ProcedureType::EDGE; };
+template <> struct ProcedureTypeOf<LabelID> { static constexpr ProcedureType value = ProcedureType::LABEL_ID; };
+template <> struct ProcedureTypeOf<EdgeTypeID> { static constexpr ProcedureType value = ProcedureType::EDGE_TYPE_ID; };
+template <> struct ProcedureTypeOf<PropertyTypeID> { static constexpr ProcedureType value = ProcedureType::PROPERTY_TYPE_ID; };
+template <> struct ProcedureTypeOf<ValueType> { static constexpr ProcedureType value = ProcedureType::VALUE_TYPE; };
+template <> struct ProcedureTypeOf<types::UInt64::Primitive> { static constexpr ProcedureType value = ProcedureType::UINT_64; };
+template <> struct ProcedureTypeOf<types::Int64::Primitive> { static constexpr ProcedureType value = ProcedureType::INT64; };
+template <> struct ProcedureTypeOf<types::Double::Primitive> { static constexpr ProcedureType value = ProcedureType::DOUBLE; };
+template <> struct ProcedureTypeOf<types::Bool::Primitive> { static constexpr ProcedureType value = ProcedureType::BOOL; };
+template <> struct ProcedureTypeOf<types::String::Primitive> { static constexpr ProcedureType value = ProcedureType::STRING_VIEW; };
+template <> struct ProcedureTypeOf<types::String::OwningPrimitive> { static constexpr ProcedureType value = ProcedureType::STRING; };
+template <> struct ProcedureTypeOf<ListView> { static constexpr ProcedureType value = ProcedureType::LIST; };
 
 using ProcedureTypeName = EnumToString<ProcedureType>::Create<
     EnumStringPair<ProcedureType::INVALID, "INVALID">,

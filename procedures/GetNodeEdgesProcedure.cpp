@@ -10,6 +10,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "ProcUtils.h"
 #include "ProcedureException.h"
 #include "columns/ColumnVector.h"
@@ -28,9 +29,6 @@ using namespace db;
 
 namespace {
 
-using NodeIDCol = ColumnVector<NodeID>;
-using ListColumn = ColumnVector<ListView>;
-using StringColumn = ColumnVector<std::string_view>;
 using ItemVariant = ListBuffer<>::ListItemVariant;
 using LimitMap = std::unordered_map<EdgeTypeID, size_t>;
 // Ordered so the JSON emitted by countsToJson has a deterministic key order
@@ -101,11 +99,11 @@ void executeImpl(ProcedureState* proc) {
     const Column* inputInValues = data.getInputColumn(5);
     const Column* inputReturnOnlyIds= data.getInputColumn(6);
 
-    auto* idCol = static_cast<NodeIDCol*>(data.getReturnColumn(0));
-    auto* outCol = static_cast<ListColumn*>(data.getReturnColumn(1));
-    auto* inCol = static_cast<ListColumn*>(data.getReturnColumn(2));
-    auto* outCountsCol = static_cast<StringColumn*>(data.getReturnColumn(3));
-    auto* inCountsCol = static_cast<StringColumn*>(data.getReturnColumn(4));
+    auto* idCol = getReturnColumn<GetNodeEdgesProcedure, 0>(&data);
+    auto* outCol = getReturnColumn<GetNodeEdgesProcedure, 1>(&data);
+    auto* inCol = getReturnColumn<GetNodeEdgesProcedure, 2>(&data);
+    auto* outCountsCol = getReturnColumn<GetNodeEdgesProcedure, 3>(&data);
+    auto* inCountsCol = getReturnColumn<GetNodeEdgesProcedure, 4>(&data);
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -132,21 +130,7 @@ void executeImpl(ProcedureState* proc) {
     LimitMap inLimits;
     buildLimitMap(inputInTypes, inputInValues, inLimits);
 
-    if (idCol) {
-        idCol->clear();
-    }
-    if (outCol) {
-        outCol->clear();
-    }
-    if (inCol) {
-        inCol->clear();
-    }
-    if (outCountsCol) {
-        outCountsCol->clear();
-    }
-    if (inCountsCol) {
-        inCountsCol->clear();
-    }
+    data.clearReturnColumns();
 
     ColumnNodeIDs singleNodeID(1);
     std::vector<ItemVariant> edgeItems;
@@ -241,19 +225,8 @@ void executeImpl(ProcedureState* proc) {
 
 }
 
-ProcedureData* GetNodeEdgesProcedure::allocData() {
-    return new Data();
-}
-
-void GetNodeEdgesProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void GetNodeEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("getNodeEdges");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
+    Procedure* proc = createTypedProcedure<GetNodeEdgesProcedure, Data>("getNodeEdges");
     proc->addConstantArgument("nodeIDs", ProcedureType::LIST);
     proc->addConstantArgument("defaultLimit", ProcedureType::INT64);
     proc->addConstantArgument("outLimitTypes", ProcedureType::LIST);
@@ -261,11 +234,6 @@ void GetNodeEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addConstantArgument("inLimitTypes", ProcedureType::LIST);
     proc->addConstantArgument("inLimitValues", ProcedureType::LIST);
     proc->addConstantArgument("returnOnlyIDs", ProcedureType::BOOL);
-    proc->addReturnValue("id", ProcedureType::NODE);
-    proc->addReturnValue("outgoingEdges", ProcedureType::LIST);
-    proc->addReturnValue("incomingEdges", ProcedureType::LIST);
-    proc->addReturnValue("outEdgeCounts", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("inEdgeCounts", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 

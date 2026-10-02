@@ -4,6 +4,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "iterators/ScanPropertyTypesIterator.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
@@ -18,23 +19,8 @@ struct Data : public ProcedureData {
 
 }
 
-ProcedureData* PropertyTypesProcedure::allocData() {
-    return new Data();
-}
-
-void PropertyTypesProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void PropertyTypesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("propertyTypes");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("id", ProcedureType::PROPERTY_TYPE_ID);
-    proc->addReturnValue("propertyType", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("valueType", ProcedureType::VALUE_TYPE);
-    ns->addProcedure(proc);
+    ns->addProcedure(createTypedProcedure<PropertyTypesProcedure, Data>("propertyTypes"));
 }
 
 void PropertyTypesProcedure::execute(ProcedureState* proc) {
@@ -42,13 +28,9 @@ void PropertyTypesProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    Column* rawIdsCol = data.getReturnColumn(0);
-    Column* rawNamesCol = data.getReturnColumn(1);
-    Column* rawValueTypesCol = data.getReturnColumn(2);
-
-    auto* idsCol = static_cast<ColumnVector<PropertyTypeID>*>(rawIdsCol);
-    auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
-    auto* valueTypesCol = static_cast<ColumnVector<ValueType>*>(rawValueTypesCol);
+    auto* idsCol = getReturnColumn<PropertyTypesProcedure, 0>(&data);
+    auto* namesCol = getReturnColumn<PropertyTypesProcedure, 1>(&data);
+    auto* valueTypesCol = getReturnColumn<PropertyTypesProcedure, 2>(&data);
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

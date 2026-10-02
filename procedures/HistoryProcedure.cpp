@@ -4,6 +4,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "Graph.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -14,8 +15,6 @@
 using namespace db;
 
 namespace {
-
-using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 struct Data : public ProcedureData {
     // The commit the walk starts from - the one the query reads - resolved once when the
@@ -46,23 +45,12 @@ void writeChunk(Data* data,
                 StringBuffer* stringBuffer) {
     size_t count = 0;
 
-    auto* commitCol = static_cast<ColumnVector<std::string_view>*>(data->getReturnColumn(0));
-    auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
-    auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
-    auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
+    auto* commitCol = getReturnColumn<HistoryProcedure, 0>(data);
+    auto* nodeCountCol = getReturnColumn<HistoryProcedure, 1>(data);
+    auto* edgeCountCol = getReturnColumn<HistoryProcedure, 2>(data);
+    auto* partCountCol = getReturnColumn<HistoryProcedure, 3>(data);
 
-    if (commitCol) {
-        commitCol->clear();
-    }
-    if (nodeCountCol) {
-        nodeCountCol->clear();
-    }
-    if (edgeCountCol) {
-        edgeCountCol->clear();
-    }
-    if (partCountCol) {
-        partCountCol->clear();
-    }
+    data->clearReturnColumns();
 
     // Traverse through the commit history chain until we reach the root commit or
     // we have outputed a chunksize worth of commits.
@@ -97,24 +85,8 @@ void writeChunk(Data* data,
 }
 }
 
-ProcedureData* HistoryProcedure::allocData() {
-    return new Data();
-}
-
-void HistoryProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("history");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("commit", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("partCount", ProcedureType::UINT_64);
-    ns->addProcedure(proc);
+    ns->addProcedure(createTypedProcedure<HistoryProcedure, Data>("history"));
 }
 
 void HistoryProcedure::execute(ProcedureState* proc) {
