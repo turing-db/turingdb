@@ -5,22 +5,86 @@ on:
 
 
 jobs:
-  delete-tag:
-    name: Delete the nightly docker tag
+  docker:
+    name: Publish the arm64 docker image of v3.0
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      actions: read
+      contents: read
+    env:
+      IMAGE: turingdbai/turingdb:3.0-arm64
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download arm py3.14 wheel artifact of run 36955304971
+        uses: actions/download-artifact@v4
+        with:
+          name: turingdb-wheel-ubuntu-24.04-arm-py3.14
+          path: wheel/
+          run-id: 36955304971
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check the wheel
+        run: |
+          ls -la wheel/
+          COUNT=$(ls wheel/ | wc -l)
+          if [ "$COUNT" != "1" ] || ! ls wheel/ | grep -qE '^turingdb-3\.0-cp314-cp314-manylinux_2_39_aarch64\.whl$'; then
+            echo "ERROR: expected the turingdb-3.0 cp314 aarch64 wheel only"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          load: true
+          platforms: linux/arm64
+          tags: ${{ env.IMAGE }}
+
+      - name: Test Docker image
+        run: docker run --rm $IMAGE turingdb --help
+
+  manifest:
+    name: Create the multi-arch 3.0 tag
+    needs: docker
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Delete turingdbai/turingdb:nightly
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
         run: |
-          JWT=$(curl -sf -H 'Content-Type: application/json' \
-            -d "{\"username\": \"$DOCKERHUB_USERNAME\", \"password\": \"$DOCKERHUB_TOKEN\"}" \
-            https://hub.docker.com/v2/users/login/ | jq -r .token)
-          echo "::add-mask::$JWT"
-          STATUS=$(curl -s -o response.txt -w '%{http_code}' -X DELETE -H "Authorization: JWT $JWT" \
-            https://hub.docker.com/v2/repositories/turingdbai/turingdb/tags/nightly/)
-          echo "DELETE status: $STATUS"
-          cat response.txt
-          [ "$STATUS" = "204" ]
+          docker buildx imagetools create -t turingdbai/turingdb:3.0 \
+            turingdbai/turingdb:3.0-amd64 \
+            turingdbai/turingdb:3.0-arm64
+          docker buildx imagetools inspect turingdbai/turingdb:3.0
