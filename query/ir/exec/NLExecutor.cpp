@@ -1637,6 +1637,62 @@ bool caseTestNever(const Column* condition, size_t row) {
     return false;
 }
 
+void applyIsNotTrueOnMask(Column* result, const Column* operand) {
+    const std::vector<ColumnMask::Bool_t>& operandRaw = static_cast<const ColumnMask*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ColumnMask::Bool_t value) {
+        return ColumnMask::Bool_t {!value};
+    });
+}
+
+void applyIsNotTrueOnOptMask(Column* result, const Column* operand) {
+    const std::vector<std::optional<CustomBool>>& operandRaw = static_cast<const ColumnOptMask*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CustomBool> value) {
+        return ColumnMask::Bool_t {!value.value_or(false)};
+    });
+}
+
+void applyIsNotTrueOnBoolColumn(Column* result, const Column* operand) {
+    const std::vector<types::Bool::Primitive>& operandRaw =
+        static_cast<const ColumnVector<types::Bool::Primitive>*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](types::Bool::Primitive value) {
+        return ColumnMask::Bool_t {!value};
+    });
+}
+
+void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
+    const std::vector<ListElementView>& operandRaw = static_cast<const ColumnVector<ListElementView>*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ListElementView cell) {
+        return ColumnMask::Bool_t {!cellTruth(cell).value_or(false)};
+    });
+}
+
+void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
+    const std::vector<std::optional<ListElementView>>& operandRaw =
+        static_cast<const ColumnOptVector<ListElementView>*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<ListElementView> cell) {
+        return ColumnMask::Bool_t {!(cell.has_value() && cellTruth(*cell).value_or(false))};
+    });
+}
+
+void applyIsNotTrueOnNull(Column* result, const Column* operand) {
+    static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), ColumnMask::Bool_t {true});
+}
+
 std::optional<bool> readMaskTruth(const Column* mask, size_t row) {
     return static_cast<bool>(static_cast<const ColumnMask*>(mask)->getRaw()[row]);
 }
@@ -1775,31 +1831,31 @@ void runElementBody(NLExecutionContext* context, NLElementBodyData* data, NLElem
 }
 
 template <typename Primitive>
-void caseWriteOptCell(Column* result, const Column* value, size_t row) {
+void caseWriteOptCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
-    results[row] = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw()[row];
+    results[resultRow] = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw()[valueRow];
 }
 
 template <typename Primitive>
-void caseWritePlainCell(Column* result, const Column* value, size_t row) {
+void caseWritePlainCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
-    results[row] = static_cast<const ColumnVector<Primitive>*>(value)->getRaw()[row];
+    results[resultRow] = static_cast<const ColumnVector<Primitive>*>(value)->getRaw()[valueRow];
 }
 
-void caseWriteMaskCell(Column* result, const Column* value, size_t row) {
+void caseWriteMaskCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     std::vector<std::optional<CustomBool>>& results = static_cast<ColumnOptMask*>(result)->getRaw();
-    results[row] = CustomBool {static_cast<const ColumnMask*>(value)->getRaw()[row]};
+    results[resultRow] = CustomBool {static_cast<const ColumnMask*>(value)->getRaw()[valueRow]};
 }
 
 // The reset already left the row absent, which is what a branch of null gives it; the
 // write is only what claims the row against the branches behind it
-void caseWriteNullCell(Column* result, const Column* value, size_t row) {
+void caseWriteNullCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
 }
 
 template <typename ID>
-void caseWriteEntityCell(Column* result, const Column* value, size_t row) {
+void caseWriteEntityCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
-    results[row] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[row];
+    results[resultRow] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[valueRow];
 }
 
 template <typename Primitive>
@@ -6603,13 +6659,57 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
                 continue;
             }
 
-            branch._write(result, branch._value, row);
+            branch._write(result, row, branch._value, row);
             matched = true;
             break;
         }
 
         if (!matched && writeDefault) {
-            writeDefault(result, defaultValue, row);
+            writeDefault(result, row, defaultValue, row);
+        }
+    }
+}
+
+void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
+    NLCaseData* caseData = static_cast<NLCaseData*>(data);
+
+    Column* const result = caseData->getResult();
+    const size_t rowCount = caseData->getCardinality()->size();
+
+    caseData->getReset()(result, rowCount);
+
+    const std::vector<NLCaseData::Branch>& branches = caseData->branches();
+    const Column* const defaultValue = caseData->getDefaultValue();
+    const NLCaseWriteFn writeDefault = caseData->getWriteDefault();
+
+    std::vector<NLCaseData::BranchCursor>& cursors = caseData->cursors();
+    std::fill(cursors.begin(), cursors.end(), NLCaseData::BranchCursor {});
+
+    size_t defaultRow = 0;
+
+    for (size_t row = 0; row < rowCount; row++) {
+        bool matched = false;
+
+        for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+            const NLCaseData::Branch& branch = branches[branchIndex];
+            NLCaseData::BranchCursor& cursor = cursors[branchIndex];
+
+            const bool holds = branch._test(branch._condition, cursor._conditionRow);
+            cursor._conditionRow++;
+
+            if (!holds) {
+                continue;
+            }
+
+            branch._write(result, row, branch._value, cursor._valueRow);
+            cursor._valueRow++;
+            matched = true;
+            break;
+        }
+
+        if (!matched && writeDefault) {
+            writeDefault(result, row, defaultValue, defaultRow);
+            defaultRow++;
         }
     }
 }
@@ -7127,6 +7227,26 @@ NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, 
     }
 
     return nullable ? &caseTestOptMask : &caseTestBoolColumn;
+}
+
+NLUnaryFn NLExecutor::selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result) {
+    result = memory->alloc<ColumnMask>();
+
+    const ContainerKind::Code kind = operand->getContainerKind();
+
+    if (untypedNull) {
+        return &applyIsNotTrueOnNull;
+    } else if (kind == ContainerKind::code<ColumnMask>()) {
+        return &applyIsNotTrueOnMask;
+    } else if (kind == ContainerKind::code<ColumnOptMask>()) {
+        return &applyIsNotTrueOnOptMask;
+    } else if (kind == ContainerKind::code<ColumnVector<ListElementView>>()) {
+        return &applyIsNotTrueOnTaggedCells;
+    } else if (kind == ContainerKind::code<ColumnOptVector<ListElementView>>()) {
+        return &applyIsNotTrueOnOptTaggedCells;
+    }
+
+    return &applyIsNotTrueOnBoolColumn;
 }
 
 NLCaseResetFn NLExecutor::selectEntityCaseReset(NLChunkKind kind) {

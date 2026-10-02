@@ -4682,3 +4682,6 @@ target_link_libraries(test_query_ir_node_in_integer_list PRIVATE
 # The imports of a CALL body read by the branches of its UNION.
 add_turing_test(test_query_ir_call_subquery_union_import CallSubqueryUnionImportTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_union_import PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_case_lazy_branch CaseLazyBranchTest.cpp)
+target_link_libraries(test_query_ir_case_lazy_branch PRIVATE turing_ir_test_write_query_s)

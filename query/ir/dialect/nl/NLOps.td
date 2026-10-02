@@ -2658,6 +2658,47 @@ def Case : NLOp<"case", [Pure, RowAlignedThroughOperands, AttrSizedOperandSegmen
   }];
 }
 
+def CaseMerge : NLOp<"case_merge", [Pure, RowAlignedWithFirstOperand, AttrSizedOperandSegments]> {
+  let summary = "Row-wise selection of the first branch whose condition holds, out of branches computed only over the rows reaching them";
+  let description = [{
+      The lowered db.lazy_case. Its operands are cut down the way the CASE reads its rows:
+      the first condition holds one row per row of the CASE, each later one a row per row
+      no earlier condition held for, each value a row per row its condition held for, and
+      the default a row per row no condition held for. The kernel walks the rows of the
+      first condition, with a cursor into every other operand.
+
+      %r = nl.case_merge({%c0, %c1}, {%v0, %v1}, %d) : (!nl.chunk<i1>, !nl.chunk<i1>,
+                                                        !nl.chunk<!storage.nullable<i64>>,
+                                                        !nl.chunk<!storage.nullable<i64>>,
+                                                        !nl.chunk<!storage.nullable<i64>>)
+                                                        -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$conditions,
+                       Variadic<NLChunk>:$values,
+                       Optional<NLChunk>:$defaultValue);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` `{` $conditions `}` `,` `{` $values `}` (`,` $defaultValue^)? `)`
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def IsNotTrue : NLOp<"is_not_true", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether a condition is false or null";
+  let description = [{
+      The rows a CASE condition lets through to the next branch.
+
+      %r = nl.is_not_true %c : (!nl.chunk<!storage.nullable<i1>>) -> !nl.chunk<!storage.bool>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 def Filter : NLOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask chunk is true, as freshly cut chunks";
   let description = [{

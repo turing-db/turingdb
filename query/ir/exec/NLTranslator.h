@@ -991,7 +991,12 @@ private:
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
 
-    void translateCase(mlir::nl::Case caseOp, NLStmtContainer* body);
+    // The selection of an nl.case or an nl.case_merge, run by @param run: the two are read
+    // alike and differ only in the rows their kernels read each branch at
+    template <typename CaseOp>
+    void translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtContainer* body);
+
+    void translateIsNotTrue(mlir::nl::IsNotTrue isNotTrue, NLStmtContainer* body);
 
     // Allocates the list column an nl.make_list writes, and binds the read each element
     // column's cells go into the list buffer through

@@ -96,6 +96,7 @@ public:
     using EdgeTypeColumnMap = std::unordered_map<const VariableDependency*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
     using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
+    using CaseRegionGenerator = llvm::function_ref<mlir::Value(mlir::Value)>;
 
     // Maps a Cypher variable to the last column defined for it, the one the projection
     // and its ORDER BY read
@@ -1033,6 +1034,15 @@ private:
     // own, ending on what each match contributes to the list of the row it came from
     void translatePatternComprehensionExpr(const Expr* expr,
                                            const PatternComprehensionExpr* comprehension);
+
+    // Generates one region of a db.lazy_case: its block takes @param carried, the carry set
+    // and the subject when it is carried, and yields what @param generateValue computes
+    // over them, handed the subject as the region sees it
+    void generateCaseRegion(mlir::Region& region,
+                            llvm::ArrayRef<mlir::Value> carried,
+                            const CarrySet& carrySet,
+                            mlir::Value subject,
+                            CaseRegionGenerator generateValue);
 
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one

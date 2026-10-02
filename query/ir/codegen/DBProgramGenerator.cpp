@@ -7297,43 +7297,96 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
         subject = _part._exprMap.at(subjectExpr);
     }
 
-    llvm::SmallVector<mlir::Value, 4> conditions;
-    llvm::SmallVector<mlir::Value, 4> values;
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
 
-    for (const CaseExpr::Branch& branch : caseExpr->getBranches()) {
-        mlir::Value condition;
-
-        for (const CaseExpr::Test& test : branch._tests) {
-            const mlir::Value tested = translateCaseTest(subjectExpr, subject, test);
-
-            if (condition) {
-                condition = _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, tested).getResult();
-            } else {
-                condition = tested;
-            }
-        }
-
-        translateExpr(branch._then);
-        bioassert(_part._exprMap.contains(branch._then), "CASE branch with no value column.");
-
-        conditions.push_back(condition);
-        values.push_back(_part._exprMap.at(branch._then));
+    llvm::SmallVector<mlir::Value> carried(carrySet._columns.begin(), carrySet._columns.end());
+    if (subject && !yieldsConstantColumn(subject)) {
+        carried.push_back(subject);
     }
 
+    const CaseExpr::Branches& branches = caseExpr->getBranches();
     const Expr* const elseExpr = caseExpr->getElseExpr();
-    mlir::Value defaultValue;
-    if (elseExpr) {
-        translateExpr(elseExpr);
-        bioassert(_part._exprMap.contains(elseExpr), "CASE default with no column.");
-        defaultValue = _part._exprMap.at(elseExpr);
+    const size_t regionCount = 2 * branches.size() + (elseExpr ? 1 : 0);
+
+    auto caseOp = _opBuilder.create<mlir::db::LazyCase>(loc,
+                                                        noneType,
+                                                        carried,
+                                                        static_cast<unsigned>(regionCount));
+
+    const mlir::MutableArrayRef<mlir::Region> regions = caseOp.getBranches();
+
+    const auto translateValue = [this](const Expr* valueExpr) {
+        translateExpr(valueExpr);
+        bioassert(_part._exprMap.contains(valueExpr), "CASE branch with no value column.");
+
+        return _part._exprMap.at(valueExpr);
+    };
+
+    size_t regionIndex = 0;
+    for (const CaseExpr::Branch& branch : branches) {
+        generateCaseRegion(regions[regionIndex], carried, carrySet, subject, [&](mlir::Value regionSubject) {
+            mlir::Value condition;
+
+            for (const CaseExpr::Test& test : branch._tests) {
+                const mlir::Value tested = translateCaseTest(subjectExpr, regionSubject, test);
+
+                if (condition) {
+                    condition = _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, tested).getResult();
+                } else {
+                    condition = tested;
+                }
+            }
+
+            return condition;
+        });
+
+        generateCaseRegion(regions[regionIndex + 1], carried, carrySet, subject, [&](mlir::Value) {
+            return translateValue(branch._then);
+        });
+
+        regionIndex += 2;
     }
 
-    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
-                                                             noneType,
-                                                             conditions,
-                                                             values,
-                                                             defaultValue)
-                               .getResult();
+    if (elseExpr) {
+        generateCaseRegion(regions[regionIndex], carried, carrySet, subject, [&](mlir::Value) {
+            return translateValue(elseExpr);
+        });
+    }
+
+    _part._exprMap[expr] = caseOp.getResult();
+}
+
+void DBProgramGenerator::generateCaseRegion(mlir::Region& region,
+                                            llvm::ArrayRef<mlir::Value> carried,
+                                            const CarrySet& carrySet,
+                                            mlir::Value subject,
+                                            CaseRegionGenerator generateValue) {
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    llvm::SmallVector<mlir::Location> argumentLocations;
+
+    for (const mlir::Value column : carried) {
+        argumentTypes.push_back(column.getType());
+        argumentLocations.push_back(_opBuilder.getUnknownLoc());
+    }
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    mlir::Block* const block = _opBuilder.createBlock(&region, {}, argumentTypes, argumentLocations);
+    const mlir::Block::BlockArgListType arguments = block->getArguments();
+
+    const PartScope outerPart = _part;
+
+    _part._exprMap.clear();
+    rebindCarrySet(arguments, /*firstColumn=*/0, carrySet);
+    rebindProjectedColumns(carrySet._columns, arguments.take_front(carrySet._columns.size()));
+
+    const bool carriesSubject = carried.size() > carrySet._columns.size();
+    const mlir::Value regionSubject = carriesSubject ? mlir::Value(arguments.back()) : subject;
+
+    const mlir::Value value = generateValue(regionSubject);
+    _opBuilder.create<mlir::db::CaseYield>(_opBuilder.getUnknownLoc(), value);
+
+    _part = outerPart;
 }
 
 mlir::Value DBProgramGenerator::disjointComparison(mlir::Value lhs, mlir::Value rhs, bool equality) {

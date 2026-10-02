@@ -1264,6 +1264,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerNot(notOp);
     } else if (mlir::db::Case caseOp = mlir::dyn_cast<mlir::db::Case>(operation)) {
         lowerCase(caseOp);
+    } else if (mlir::db::LazyCase lazyCase = mlir::dyn_cast<mlir::db::LazyCase>(operation)) {
+        lowerLazyCase(lazyCase);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
@@ -5287,16 +5289,7 @@ void DBLowering::lowerCase(mlir::db::Case caseOp) {
 
     gatherOperands(operands);
 
-    // A row matching no branch of a defaultless CASE is absent, and so is one taking a
-    // null branch, so the selection always lands in a column that can hold an absent row.
-    // An entity column already can - it carries its null in the ID an OPTIONAL MATCH left
-    // invalid - so entities land in a plain ID chunk and every scalar in a nullable one.
-    mlir::MLIRContext* const context = _builder.getContext();
-    const bool selectsEntities = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
-    const mlir::Type resultChunkElement = selectsEntities
-        ? resultElement
-        : storage::NullableType::get(context, resultElement);
-    const nl::ChunkType resultType = nl::ChunkType::get(context, resultChunkElement);
+    const nl::ChunkType resultType = caseResultChunkType(resultElement);
 
     setInsertionForNaryOp(operands);
 
@@ -5306,6 +5299,169 @@ void DBLowering::lowerCase(mlir::db::Case caseOp) {
                                                 values,
                                                 defaultValue);
     _valueMap[caseOp.getResult()] = nlCase.getResult();
+}
+
+nl::ChunkType DBLowering::caseResultChunkType(mlir::Type resultElement) {
+    // A row matching no branch of a defaultless CASE is absent, and so is one taking a
+    // null branch, so the selection always lands in a column that can hold an absent row.
+    // An entity column already can - it carries its null in the ID an OPTIONAL MATCH left
+    // invalid - so entities land in a plain ID chunk and every scalar in a nullable one.
+    mlir::MLIRContext* const context = _builder.getContext();
+    const bool selectsEntities = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
+    const mlir::Type resultChunkElement = selectsEntities
+        ? resultElement
+        : storage::NullableType::get(context, resultElement);
+
+    return nl::ChunkType::get(context, resultChunkElement);
+}
+
+void DBLowering::lowerLazyCase(mlir::db::LazyCase caseOp) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
+
+    llvm::SmallVector<mlir::Value, 8> reaching;
+    for (const mlir::Value column : caseOp.getColumnsToFilter()) {
+        reaching.push_back(mapValue(column));
+    }
+
+    mlir::Value reachingCardinality = cardinalityDriver(reaching);
+
+    const mlir::MutableArrayRef<mlir::Region> regions = caseOp.getBranches();
+    const size_t branchCount = regions.size() / 2;
+    const bool hasDefault = regions.size() % 2 == 1;
+
+    llvm::SmallVector<mlir::Value, 4> conditions;
+    llvm::SmallVector<mlir::Value, 4> values;
+
+    for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
+        const mlir::Value condition = lowerCaseRegion(regions[2 * branchIndex], reaching, reachingCardinality);
+        conditions.push_back(condition);
+
+        llvm::SmallVector<mlir::Value, 8> taken;
+        filterCaseRows(condition, reaching, taken);
+
+        const llvm::ArrayRef<mlir::Value> takenChunks = llvm::ArrayRef<mlir::Value>(taken).drop_front();
+        values.push_back(lowerCaseRegion(regions[2 * branchIndex + 1], takenChunks, taken.front()));
+
+        const bool rowsFallThrough = hasDefault || branchIndex + 1 < branchCount;
+        if (!rowsFallThrough) {
+            break;
+        }
+
+        setInsertionForUnaryOp(condition);
+        const mlir::Value fallsThrough = _builder.create<nl::IsNotTrue>(loc, maskType, condition).getResult();
+
+        llvm::SmallVector<mlir::Value, 8> rest;
+        filterCaseRows(fallsThrough, reaching, rest);
+
+        reachingCardinality = rest.front();
+        reaching.assign(rest.begin() + 1, rest.end());
+    }
+
+    mlir::Value defaultValue;
+    if (hasDefault) {
+        defaultValue = lowerCaseRegion(regions.back(), reaching, reachingCardinality);
+    }
+
+    llvm::SmallVector<mlir::Value, 5> valueChunks(values.begin(), values.end());
+    if (defaultValue) {
+        valueChunks.push_back(defaultValue);
+    }
+
+    const mlir::Type resultElement = caseResultElement(valueChunks);
+
+    for (mlir::Value& value : values) {
+        value = chunkAsElement(value, resultElement);
+    }
+
+    if (defaultValue) {
+        defaultValue = chunkAsElement(defaultValue, resultElement);
+    }
+
+    llvm::SmallVector<mlir::Value, 8> operands(conditions.begin(), conditions.end());
+    operands.append(values.begin(), values.end());
+    if (defaultValue) {
+        operands.push_back(defaultValue);
+    }
+
+    setInsertionForNaryOp(operands);
+
+    nl::CaseMerge merge = _builder.create<nl::CaseMerge>(loc,
+                                                         caseResultChunkType(resultElement),
+                                                         conditions,
+                                                         values,
+                                                         defaultValue);
+    _valueMap[caseOp.getResult()] = merge.getResult();
+}
+
+mlir::Value DBLowering::lowerCaseRegion(mlir::Region& region,
+                                        llvm::ArrayRef<mlir::Value> chunks,
+                                        mlir::Value cardinality) {
+    mlir::Block& block = region.front();
+
+    for (size_t argumentIndex = 0; argumentIndex < chunks.size(); argumentIndex++) {
+        _valueMap[block.getArgument(static_cast<unsigned>(argumentIndex))] = chunks[argumentIndex];
+    }
+
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostCardinality = cardinality;
+
+    mlir::Value value;
+    for (mlir::Operation& operation : block) {
+        if (mlir::db::CaseYield yield = mlir::dyn_cast<mlir::db::CaseYield>(operation)) {
+            value = mapValue(yield.getValue());
+            continue;
+        }
+
+        const bool computesFromConstantsAlone = cardinality
+                                             && operation.getNumResults() == 1
+                                             && !operation.hasTrait<mlir::OpTrait::ConstantLike>()
+                                             && yieldsConstantColumn(operation.getResult(0));
+
+        if (!computesFromConstantsAlone) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        // Computed once from constants, `ELSE 10 / $d` would divide whether or not a row
+        // takes the branch, so it is computed over the rows that do
+        llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> constantChunks;
+        for (const mlir::Value operand : operation.getOperands()) {
+            const mlir::Value chunk = mapValue(operand);
+            constantChunks.emplace_back(operand, chunk);
+            _valueMap[operand] = rowAlignedChunk(chunk, cardinality);
+        }
+
+        lowerOperation(operation);
+
+        for (const auto& [operand, chunk] : llvm::reverse(constantChunks)) {
+            _valueMap[operand] = chunk;
+        }
+    }
+
+    _innermostCardinality = previousInnermostCardinality;
+
+    return rowAlignedChunk(value, cardinality);
+}
+
+void DBLowering::filterCaseRows(mlir::Value mask,
+                                llvm::ArrayRef<mlir::Value> chunks,
+                                llvm::SmallVectorImpl<mlir::Value>& filtered) {
+    llvm::SmallVector<mlir::Value, 8> columns {mask};
+    columns.append(chunks.begin(), chunks.end());
+
+    llvm::SmallVector<mlir::Type, 8> types;
+    for (const mlir::Value column : columns) {
+        types.push_back(column.getType());
+    }
+
+    setInsertionForNaryOp(columns);
+
+    nl::Filter filter = _builder.create<nl::Filter>(_builder.getUnknownLoc(), types, mask, columns);
+
+    const mlir::ResultRange results = filter.getResults();
+    filtered.assign(results.begin(), results.end());
 }
 
 void DBLowering::lowerNot(mlir::db::NotOp notOp) {
