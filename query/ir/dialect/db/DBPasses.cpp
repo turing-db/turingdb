@@ -3332,9 +3332,73 @@ void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     replaceWithTrimmedFactors(joinOp, trimmed.getOperation(), keep, leftCount);
 }
 
+// A lazy case hands its carried columns to every region as block arguments, so a column no
+// region reads leaves the operands and the arguments of every region together. A column
+// carried twice - the subject of `CASE t WHEN ...` beside the variable t - is read through
+// its first argument. One row-carrying column stays for the lowering to size the CASE by.
+void trimLazyCase(LazyCase caseOp) {
+    const OperandRange carried = caseOp.getColumnsToFilter();
+    const MutableArrayRef<Region> regions = caseOp.getBranches();
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const auto firstIt = llvm::find(carried, carried[carriedIndex]);
+        const size_t firstIndex = static_cast<size_t>(firstIt - carried.begin());
+
+        if (firstIndex == carriedIndex) {
+            continue;
+        }
+
+        for (Region& region : regions) {
+            Block& block = region.front();
+            block.getArgument(carriedIndex).replaceAllUsesWith(block.getArgument(firstIndex));
+        }
+    }
+
+    llvm::SmallBitVector keep(carried.size());
+    for (Region& region : regions) {
+        const Block::BlockArgListType arguments = region.front().getArguments();
+
+        for (size_t argumentIndex = 0; argumentIndex < arguments.size(); argumentIndex++) {
+            if (!arguments[argumentIndex].use_empty()) {
+                keep.set(argumentIndex);
+            }
+        }
+    }
+
+    keepRowCarryingColumn(carried, 0, keep);
+
+    if (keep.all()) {
+        return;
+    }
+
+    llvm::BitVector erased(carried.size());
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        if (!keep[carriedIndex]) {
+            erased.set(carriedIndex);
+        }
+    }
+
+    for (Region& region : regions) {
+        region.front().eraseArguments(erased);
+    }
+
+    caseOp->eraseOperands(erased);
+}
+
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
     void runOnOperation() override {
         Operation* const root = getOperation();
+
+        // The walk visits a nested case before the one holding it, so the inner one drops
+        // the outer one's arguments it alone read before the outer one is trimmed.
+        llvm::SmallVector<LazyCase> lazyCases;
+        root->walk([&lazyCases](LazyCase caseOp) {
+            lazyCases.push_back(caseOp);
+        });
+
+        for (LazyCase caseOp : lazyCases) {
+            trimLazyCase(caseOp);
+        }
 
         llvm::SmallVector<Operation*> carriers;
         root->walk([&](Operation* op) {
