@@ -420,7 +420,9 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map);
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::NodePattern)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::EdgePattern);
 
             // A stored list compares against another list, and against null for
             // IS (NOT) NULL

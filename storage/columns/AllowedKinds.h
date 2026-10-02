@@ -180,6 +180,8 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
         ListElementKindPairs<ListView>::Pairs,
         ListElementKindPairs<MapView>::Pairs,
+        ListElementKindPairs<NodeID>::Pairs,
+        ListElementKindPairs<EdgeID>::Pairs,
 
         // A loaded CSV field owns its characters, so a comparison against a string
         // property meets a borrowed view on one side and an owned string on the other -
