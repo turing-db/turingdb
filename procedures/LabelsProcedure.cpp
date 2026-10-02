@@ -4,6 +4,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "iterators/ScanLabelsIterator.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
@@ -18,22 +19,8 @@ struct Data : public ProcedureData {
 
 }
 
-ProcedureData* LabelsProcedure::allocData() {
-    return new Data();
-}
-
-void LabelsProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void LabelsProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("labels");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("id", ProcedureType::LABEL_ID);
-    proc->addReturnValue("label", ProcedureType::STRING_VIEW);
-    ns->addProcedure(proc);
+    ns->addProcedure(createTypedProcedure<LabelsProcedure, Data>("labels"));
 }
 
 void LabelsProcedure::execute(ProcedureState* proc) {
@@ -41,11 +28,8 @@ void LabelsProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    Column* rawIdsCol = data.getReturnColumn(0);
-    Column* rawNamesCol = data.getReturnColumn(1);
-
-    auto* idsCol = static_cast<ColumnVector<LabelID>*>(rawIdsCol);
-    auto* namesCol = static_cast<ColumnVector<std::string_view>*>(rawNamesCol);
+    auto* idsCol = getReturnColumn<LabelsProcedure, 0>(&data);
+    auto* namesCol = getReturnColumn<LabelsProcedure, 1>(&data);
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

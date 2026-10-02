@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -15,6 +16,7 @@
 #include "ProcedureContext.h"
 #include "ProcedureData.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "ProcedureState.h"
 #include "ProcedureTypeVector.h"
 
@@ -46,14 +48,9 @@ constexpr std::string_view seedErr = "graphSAGE() seed must be a constant int";
 
 constexpr size_t returnValuesPerHop = 3;
 
-constexpr std::array<std::string_view, GraphSAGEProcedure::numHops * returnValuesPerHop> returnValueNames {
-    "dst_nodes0", "src_nodes0", "tgt_nodes0",
-    "dst_nodes1", "src_nodes1", "tgt_nodes1",
-    "dst_nodes2", "src_nodes2", "tgt_nodes2",
-};
-static_assert(GraphSAGEProcedure::numHops == 3, "Update above table");
+static_assert(GraphSAGEProcedure::numHops == 3, "Update the return values");
 
-struct Data final : public IndexedProcedureData {
+struct Data final : public ProcedureData {
     std::unique_ptr<GraphSAGESampler> sampler;
 };
 
@@ -97,13 +94,20 @@ void validateInput(Data& data) {
     }
 }
 
-GraphSAGESampler::NodeCol* nodeColumn(Data& data, size_t index) {
-    Column* col = data.getReturnColumn(index);
-    if (!col) {
-        return nullptr;
-    }
+template <size_t Hop>
+void setHopData(Data& data, const GraphSAGESampler::Fanouts& fanouts) {
+    constexpr size_t base = Hop * returnValuesPerHop;
 
-    return col->cast<GraphSAGESampler::NodeCol>();
+    data.sampler->setHopData(Hop,
+                             getReturnColumn<GraphSAGEProcedure, base + 1>(&data),
+                             getReturnColumn<GraphSAGEProcedure, base + 2>(&data),
+                             getReturnColumn<GraphSAGEProcedure, base>(&data),
+                             fanouts[Hop]);
+}
+
+template <size_t... Hops>
+void setHopsData(Data& data, const GraphSAGESampler::Fanouts& fanouts, std::index_sequence<Hops...>) {
+    (setHopData<Hops>(data, fanouts), ...);
 }
 
 // The seeds are a constant argument, so they are read the same way whether the call is
@@ -154,15 +158,7 @@ void prepareImpl(ProcedureState* state) {
 
     data.sampler = std::make_unique<GraphSAGESampler>(view, seed);
 
-    for (size_t hop = 0; hop < GraphSAGESampler::hops; hop++) {
-        const size_t base = hop * returnValuesPerHop;
-
-        GraphSAGESampler::NodeCol* dst = nodeColumn(data, base);
-        GraphSAGESampler::NodeCol* srcs = nodeColumn(data, base + 1);
-        GraphSAGESampler::NodeCol* tgts = nodeColumn(data, base + 2);
-
-        data.sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
-    }
+    setHopsData(data, fanouts, std::make_index_sequence<GraphSAGESampler::hops> {});
 
     seedSampler(data);
 }
@@ -183,28 +179,12 @@ void executeImpl(ProcedureState* state) {
 
 }
 
-ProcedureData* GraphSAGEProcedure::allocData() {
-    return new Data();
-}
-
-void GraphSAGEProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("graphSAGE");
-
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
+    Procedure* proc = createTypedProcedure<GraphSAGEProcedure, Data>("graphSAGE");
 
     proc->addConstantArgument("seeds", ProcedureType::LIST);
     proc->addConstantArgument("fanouts", ProcedureType::LIST);
     proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
-
-    for (const std::string_view name : returnValueNames) {
-        proc->addNullableReturnValue(name, ProcedureType::NODE);
-    }
 
     ns->addProcedure(proc);
 }

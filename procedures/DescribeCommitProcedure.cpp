@@ -6,6 +6,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "Graph.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
@@ -17,8 +18,6 @@
 using namespace db;
 
 namespace {
-
-using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 struct Data : public IndexedProcedureData {
     size_t _i {0};
@@ -94,24 +93,9 @@ void dispatchStringInternal(const Column* col, const F& fn) {
 
 }
 
-ProcedureData* DescribeCommitProcedure::allocData() {
-    return new Data();
-}
-
-void DescribeCommitProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("describeCommit");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
+    Procedure* proc = createTypedProcedure<DescribeCommitProcedure, Data>("describeCommit");
     proc->addArgument("commit", ProcedureType::STRING_VIEW);
-    proc->setHasIndices(true);
-    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("partCount", ProcedureType::UINT_64);
     ns->addProcedure(proc);
 }
 
@@ -120,9 +104,9 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
 
     const Column* rawCommitCol = data.getInputColumn(0);
-    auto* nodeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(0));
-    auto* edgeCountCol = static_cast<UInt64Col*>(data.getReturnColumn(1));
-    auto* partCountCol = static_cast<UInt64Col*>(data.getReturnColumn(2));
+    auto* nodeCountCol = getReturnColumn<DescribeCommitProcedure, 0>(&data);
+    auto* edgeCountCol = getReturnColumn<DescribeCommitProcedure, 1>(&data);
+    auto* partCountCol = getReturnColumn<DescribeCommitProcedure, 2>(&data);
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

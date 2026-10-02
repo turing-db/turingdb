@@ -12,8 +12,6 @@ class ProcedureState;
 class ProcedureNamespace;
 
 struct HistoryProcedure {
-    struct Data;
-
     static void execute(ProcedureState* proc);
     static void registerProcedure(ProcedureNamespace* ns);
 

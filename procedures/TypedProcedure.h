@@ -9,7 +9,6 @@
 
 #include "Procedure.h"
 #include "ProcedureData.h"
-#include "ProcedureNamespace.h"
 #include "ProcedureTypeVector.h"
 #include "columns/ColumnVector.h"
 
@@ -38,12 +37,12 @@ ProcedureReturnColumn<P, I>* getReturnColumn(ProcedureData* data) {
     return static_cast<ProcedureReturnColumn<P, I>*>(data->getReturnColumn(I));
 }
 
-template <typename P>
+template <ProcedureDataType D>
 ProcedureData* allocProcedureData() {
-    return new typename P::Data();
+    return new D();
 }
 
-template <typename P>
+template <ProcedureDataType D>
 void deallocProcedureData(ProcedureData* data) {
     delete data;
 }
@@ -64,17 +63,17 @@ void addProcedureReturnValues(Procedure* proc, std::index_sequence<I...>) {
     (addProcedureReturnValue<ProcedureReturnColumn<P, I>>(proc, P::_returnNames[I]), ...);
 }
 
-template <typename P>
-void registerTypedProcedure(ProcedureNamespace* ns, std::string_view name) {
+template <typename P, ProcedureDataType D>
+Procedure* createTypedProcedure(std::string_view name) {
     Procedure* proc = new Procedure(name);
     proc->setExecuteCallback(&P::execute);
-    proc->setAllocCallback(&allocProcedureData<P>);
-    proc->setDeallocCallback(&deallocProcedureData<P>);
-    proc->setHasIndices(std::is_base_of_v<IndexedProcedureData, typename P::Data>);
+    proc->setAllocCallback(&allocProcedureData<D>);
+    proc->setDeallocCallback(&deallocProcedureData<D>);
+    proc->setHasIndices(std::is_base_of_v<IndexedProcedureData, D>);
 
-    addProcedureReturnValues<P>(proc, std::make_index_sequence<std::tuple_size_v<typename P::Returns>> {});
+    addProcedureReturnValues<P>(proc, std::make_index_sequence<P::numReturns> {});
 
-    ns->addProcedure(proc);
+    return proc;
 }
 
 }
