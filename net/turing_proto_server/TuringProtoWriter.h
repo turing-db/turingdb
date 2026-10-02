@@ -66,6 +66,8 @@ private:
     bool _errorOccured {false};
     bool _hasPendingPacket {false};
     bool _wroteNonEmptyChunk {false};
+    bool _wroteColumnHeaders {false};
+    bool _wroteChunkFooter {false};
 
     // HTTP chunk size line: "XXXXXXXX\r\n", rewritten per packet.
     std::array<char, net::http::CHUNK_HEADER_LINE_SIZE> _chunkSizeLineBuffer {};

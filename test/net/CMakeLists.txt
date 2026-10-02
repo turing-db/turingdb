@@ -38,3 +38,10 @@ target_link_libraries(test_net_turing_proto_endtoend PRIVATE
     turing_db_server_s
     turing_db_proto_client_s
     turing_testenv_s)
+
+add_turing_test(test_net_turing_proto_empty_result TuringProtoEmptyResultTest.cpp)
+target_link_libraries(test_net_turing_proto_empty_result PRIVATE
+    turing_db_server_s
+    turing_db_proto_client_s
+    turing_testenv_s
+    turing_db_examples_s)

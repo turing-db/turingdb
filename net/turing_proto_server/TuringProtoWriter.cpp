@@ -73,6 +73,7 @@ void TuringProtoWriter::writeColumnHeaders(std::span<const std::string_view> nam
     _encoder.writeColumnHeaders(names, columns);
 
     writePacket(MessageTypes::CHUNK_HEADER);
+    _wroteColumnHeaders = true;
 }
 
 void TuringProtoWriter::writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount) {
@@ -90,6 +91,7 @@ void TuringProtoWriter::writeColumns(std::span<const db::Column* const> columns,
 
     _encoder.writeChunkFooter(rowCount);
     writePacket(MessageTypes::END_CHUNK);
+    _wroteChunkFooter = true;
 }
 
 void TuringProtoWriter::writeError(const db::QueryStatus* status) {
@@ -129,6 +131,10 @@ void TuringProtoWriter::writeAnalyzeError(int32_t) {
 }
 
 void TuringProtoWriter::writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds) {
+    if (_wroteColumnHeaders && !_wroteChunkFooter) {
+        writeColumns({}, 0, 0);
+    }
+
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::END);
     };
@@ -231,5 +237,7 @@ void TuringProtoWriter::reset() {
     _pendingBytes = 0;
     _hasPendingPacket = false;
     _wroteNonEmptyChunk = false;
+    _wroteColumnHeaders = false;
+    _wroteChunkFooter = false;
     _errorOccured = false;
 }
