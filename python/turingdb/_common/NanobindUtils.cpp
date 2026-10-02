@@ -34,33 +34,9 @@
 
 namespace pybindings {
 
-void allocColumns(const db::Dataframe* incomingDf,
-                  db::Dataframe* bufferedDf,
-                  db::DataframeManager* dfMan,
-                  db::LocalMemory* localMem,
-                  std::vector<std::string>* nameStorage) {
-    const auto& srcCols = incomingDf->cols();
-    nameStorage->reserve(srcCols.size());
-    for (const db::NamedColumn* namedCol : srcCols) {
-        const db::Column* srcCol = namedCol->getColumn();
-        db::Column* newCol = localMem->allocSame(srcCol);
-        db::NamedColumn* newNamedCol = db::NamedColumn::create(dfMan, newCol, dfMan->allocTag());
-        // Copy the name into our own storage; the source view points into the
-        // chunk buffer which is reused for subsequent chunks.
-        nameStorage->emplace_back(namedCol->getName());
-        newNamedCol->rename(nameStorage->back());
-        bufferedDf->addColumn(newNamedCol);
-
-        // We just need to copy the value over at alloc time for constants
-        if (srcCol->getContainerKind() == db::ContainerKind::code<db::ColumnConst>()) {
-            newCol->assign(srcCol);
-        }
-    }
-}
-
 void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount) {
-    // ColumnConst columns are handled once in allocColumns via assign() and
-    // skipped in appendDfs, so only ColumnVector kinds reach here. Const/Set/Mask
+    // ColumnConst columns are assigned whole by appendChunkColumns, so only
+    // ColumnVector kinds reach here. Const/Set/Mask
     // containers are excluded from the dispatcher below, so any non-vector column
     // hits the dispatcher's unsupported() path and throws a FatalException — an
     // unsupported column type still produces a clear failure.
@@ -78,27 +54,6 @@ void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_
                                                   ExcludedNonVector>;
 
     Dispatcher::dispatch(col, appendCol);
-}
-
-void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
-    const auto& srcCols = src->cols();
-    const auto& dstCols = dst->cols();
-
-    // A chunk of constants alone grows no column, so the running total has to be carried
-    // rather than read back off the buffered columns.
-    dst->setDeclaredRowCount(dst->getDeclaredRowCount() + src->getLogicalRowCount());
-
-    for (size_t i = 0; i < srcCols.size(); ++i) {
-        db::Column* dstCol = dstCols[i]->getColumn();
-
-        // ColumnConsts are copied once - at column alloc time
-        if (dstCol->getContainerKind() == db::ContainerKind::code<db::ColumnConst>()) {
-            continue;
-        }
-
-        const db::Column* srcCol = srcCols[i]->getColumn();
-        addToColumn(srcCol, dstCol, 0, srcCol->size());
-    }
 }
 
 void allocChunkColumns(std::span<const std::string_view> names,
@@ -168,113 +123,114 @@ nb::object embeddingToNdarray(std::span<const float> s) {
     return wrapVectorAsNdarray(std::move(buf));
 }
 
-namespace {
-
-// Converts a list or map value (or a single list element / map entry) to plain Python
-// objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
-// Deliberately plain objects, not ndarrays, so the result compares equal to the JSON-parsed
-// expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
-// them as members of one struct lets them call each other without a forward declaration.
-struct ValueToPyObject {
-    mutable nb::object _timedelta;
-    mutable nb::object _epoch;
-
-    nb::object duration(db::Duration value) const {
-        if (!_timedelta.is_valid()) {
-            _timedelta = nb::module_::import_("datetime").attr("timedelta");
+template <typename T>
+nb::object ValueToPyObject::operator()(const db::ListElementView element) const {
+    if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
+        return nb::cast(element.getAs<T>()._boolean);
+    } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
+        return nb::cast(element.getAs<T>());
+    } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
+        nb::list floats;
+        for (const float value : element.getAs<T>()) {
+            floats.append(nb::cast(value));
         }
-
-        return _timedelta(nb::arg("microseconds") = value.getMicroseconds());
+        return floats;
+    } else if constexpr (std::is_same_v<T, db::ListView>) {
+        return view(element.getAs<T>());
+    } else if constexpr (std::is_same_v<T, db::MapView>) {
+        return view(element.getAs<T>());
+    } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
+        return nb::none();
+    } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
+        return duration(element.getAs<T>());
+    } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
+        return dateTime(element.getAs<T>());
+    } else {
+        return nb::cast(element.getAs<T>());
     }
+}
 
-    nb::object dateTime(db::DateTime value) const {
-        if (!_epoch.is_valid()) {
-            const nb::module_ datetime = nb::module_::import_("datetime");
-            _epoch = datetime.attr("datetime")(1970, 1, 1, nb::arg("tzinfo") = datetime.attr("timezone").attr("utc"));
+template <typename T>
+nb::object ValueToPyObject::operator()(const db::MapEntryView entry) const {
+    if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
+        return nb::cast(entry.getValueAs<T>()._boolean);
+    } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
+        return nb::cast(entry.getValueAs<T>());
+    } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
+        nb::list floats;
+        for (const float value : entry.getValueAs<T>()) {
+            floats.append(nb::cast(value));
         }
+        return floats;
+    } else if constexpr (std::is_same_v<T, db::ListView>) {
+        return view(entry.getValueAs<T>());
+    } else if constexpr (std::is_same_v<T, db::MapView>) {
+        return view(entry.getValueAs<T>());
+    } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
+        return nb::none();
+    } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
+        return duration(entry.getValueAs<T>());
+    } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
+        return dateTime(entry.getValueAs<T>());
+    } else {
+        return nb::cast(entry.getValueAs<T>());
+    }
+}
 
-        return _epoch + duration(db::Duration {value.getMicroseconds()});
+nb::object entityListToPy(const db::EntityList& entityList) {
+    if (entityList.empty()) {
+        return nb::none();
     }
 
-    nb::object view(const db::ListView& listView) const {
-        nb::list out;
-        for (const db::ListElementView element : listView.elements()) {
-            out.append(this->element(element));
-        }
-        return out;
+    nb::list rowList;
+    for (const db::EntityList::Entry& entry : entityList.getEntries()) {
+        nb::dict d;
+        d["type"] = nb::cast(entry._type == db::EntityType::Node ? "node" : "edge");
+        d["id"] = nb::cast(entry._id.getValue());
+        rowList.append(d);
+    }
+    return rowList;
+}
+
+nb::object ValueToPyObject::duration(db::Duration value) const {
+    if (!_timedelta.is_valid()) {
+        _timedelta = nb::module_::import_("datetime").attr("timedelta");
     }
 
-    nb::object element(const db::ListElementView element) const {
-        return db::ListTagDispatcher {element.getTag()}.execute(*this, element);
+    return _timedelta(nb::arg("microseconds") = value.getMicroseconds());
+}
+
+nb::object ValueToPyObject::dateTime(db::DateTime value) const {
+    if (!_epoch.is_valid()) {
+        const nb::module_ datetime = nb::module_::import_("datetime");
+        _epoch = datetime.attr("datetime")(1970, 1, 1, nb::arg("tzinfo") = datetime.attr("timezone").attr("utc"));
     }
 
-    nb::object view(const db::MapView& mapView) const {
-        nb::dict out;
-        for (const db::MapEntryView entry : mapView.entries()) {
-            out[nb::cast(entry.getKey())] = this->entry(entry);
-        }
-        return out;
-    }
+    return _epoch + duration(db::Duration {value.getMicroseconds()});
+}
 
-    nb::object entry(const db::MapEntryView entry) const {
-        return db::MapTagDispatcher {entry.getValueTag()}.execute(*this, entry);
+nb::object ValueToPyObject::view(const db::ListView& listView) const {
+    nb::list out;
+    for (const db::ListElementView element : listView.elements()) {
+        out.append(this->element(element));
     }
+    return out;
+}
 
-    template <typename T>
-    nb::object operator()(const db::ListElementView element) const {
-        if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
-            return nb::cast(element.getAs<T>()._boolean);
-        } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            return nb::cast(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
-            nb::list floats;
-            for (const float value : element.getAs<T>()) {
-                floats.append(nb::cast(value));
-            }
-            return floats;
-        } else if constexpr (std::is_same_v<T, db::ListView>) {
-            return view(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::MapView>) {
-            return view(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
-            return nb::none();
-        } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
-            return duration(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
-            return dateTime(element.getAs<T>());
-        } else {
-            return nb::cast(element.getAs<T>());
-        }
+nb::object ValueToPyObject::element(const db::ListElementView element) const {
+    return db::ListTagDispatcher {element.getTag()}.execute(*this, element);
+}
+
+nb::object ValueToPyObject::view(const db::MapView& mapView) const {
+    nb::dict out;
+    for (const db::MapEntryView entry : mapView.entries()) {
+        out[nb::cast(entry.getKey())] = this->entry(entry);
     }
+    return out;
+}
 
-    template <typename T>
-    nb::object operator()(const db::MapEntryView entry) const {
-        if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
-            return nb::cast(entry.getValueAs<T>()._boolean);
-        } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            return nb::cast(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
-            nb::list floats;
-            for (const float value : entry.getValueAs<T>()) {
-                floats.append(nb::cast(value));
-            }
-            return floats;
-        } else if constexpr (std::is_same_v<T, db::ListView>) {
-            return view(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::MapView>) {
-            return view(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
-            return nb::none();
-        } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
-            return duration(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
-            return dateTime(entry.getValueAs<T>());
-        } else {
-            return nb::cast(entry.getValueAs<T>());
-        }
-    }
-};
-
+nb::object ValueToPyObject::entry(const db::MapEntryView entry) const {
+    return db::MapTagDispatcher {entry.getValueTag()}.execute(*this, entry);
 }
 
 nb::dict dataframeToNumpy(db::Dataframe* df) {
@@ -411,19 +367,7 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 const auto& src = static_cast<const db::ColumnVector<db::EntityList>*>(col)->getRaw();
                 nb::list lst;
                 for (const db::EntityList& entityList : src) {
-                    if (entityList.empty()) {
-                        lst.append(nb::none());
-                        continue;
-                    }
-
-                    nb::list rowList;
-                    for (const db::EntityList::Entry& entry : entityList.getEntries()) {
-                        nb::dict d;
-                        d["type"] = nb::cast(entry._type == db::EntityType::Node ? "node" : "edge");
-                        d["id"] = nb::cast(entry._id.getValue());
-                        rowList.append(d);
-                    }
-                    lst.append(rowList);
+                    lst.append(entityListToPy(entityList));
                 }
                 value = lst;
                 dtypeName = "EntityList";

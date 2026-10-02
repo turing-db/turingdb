@@ -22,7 +22,12 @@
 namespace db {
 class Dataframe;
 class DataframeManager;
+class EntityList;
+class ListElementView;
+class ListView;
 class LocalMemory;
+class MapEntryView;
+class MapView;
 class NamedColumn;
 }
 
@@ -147,33 +152,15 @@ nb::object repeatValueAsList(const T& v, size_t n) {
     return out;
 }
 
-// Allocates a destination column for every column in incomingDf and registers
-// them with bufferedDf. ColumnConst sources have their value copied here once,
-// since constants don't get appended to row-by-row.
-//
-// The `nameStorage` parameter is owning storage for column names — the
-// ColumnTagManager (`ColumnTagManager.h:33`) only stores string_views, so we
-// need to keep the underlying bytes alive ourselves. The caller reserves
-// nameStorage to exactly the column count so subsequent push_backs can't
-// trigger reallocation and invalidate the views.
-void allocColumns(const db::Dataframe* incomingDf,
-                  db::Dataframe* bufferedDf,
-                  db::DataframeManager* dfMan,
-                  db::LocalMemory* localMem,
-                  std::vector<std::string>* nameStorage);
-
 // Runtime dispatcher that appends rows [offset, offset + rowCount) of a single
 // column of unknown kind onto its destination. Wraps copyColumnVector with a
 // switch over the column-kind enum.
 void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount);
 
-// Appends every column of src onto the corresponding column of dst, skipping
-// ColumnConst columns (already handled by allocColumns).
-void appendDfs(const db::Dataframe* src, db::Dataframe* dst);
-
-// The chunk siblings of allocColumns and appendDfs, for a result arriving through
-// an NLOutputSink rather than a dataframe. names is either empty or holds one name
-// per chunk, and a chunk a query leaves unnamed gets none.
+// Allocates a destination column for each chunk of a result arriving through an
+// NLOutputSink, and appends rows of the chunks onto them. names is either empty or holds
+// one name per chunk, and a chunk a query leaves unnamed gets none. nameStorage owns the
+// names, since NamedColumn only keeps a string_view of its name.
 void allocChunkColumns(std::span<const std::string_view> names,
                        std::span<const db::Column* const> chunks,
                        db::Dataframe* bufferedDf,
@@ -191,6 +178,33 @@ void appendChunkColumns(std::span<const db::Column* const> chunks,
 // Python list of 1D float arrays rather than a single 2D array — embedding
 // dimensions can differ row-to-row.
 nb::object embeddingToNdarray(std::span<const float> s);
+
+// None for an empty entity list, else a list of {"type", "id"} dicts.
+nb::object entityListToPy(const db::EntityList& entityList);
+
+// Converts a list or map value (or a single list element / map entry) to plain Python
+// objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
+// Deliberately plain objects, not ndarrays, so the result compares equal to the JSON-parsed
+// expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
+// them as members of one struct lets them call each other without a forward declaration.
+struct ValueToPyObject {
+    mutable nb::object _timedelta;
+    mutable nb::object _epoch;
+
+    nb::object duration(db::Duration value) const;
+    nb::object dateTime(db::DateTime value) const;
+
+    nb::object view(const db::ListView& listView) const;
+    nb::object element(const db::ListElementView element) const;
+    nb::object view(const db::MapView& mapView) const;
+    nb::object entry(const db::MapEntryView entry) const;
+
+    template <typename T>
+    nb::object operator()(const db::ListElementView element) const;
+
+    template <typename T>
+    nb::object operator()(const db::MapEntryView entry) const;
+};
 
 // Top-level dispatcher: walks every column of the dataframe and picks the
 // right converter based on the column's runtime kind. The output is a

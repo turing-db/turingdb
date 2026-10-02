@@ -136,17 +136,41 @@ class BinaryClient(CypherHelpersMixin):
     def query(self, cypher: str) -> DataFrame:
         import pandas as pd
 
-        from .protocol import DTYPE_MAP
-
         raw = self._timed_query(cypher)
         data = raw["data"]
         dtypes = raw["dtypes"]
         return pd.DataFrame(
             {
-                col: pd.Series(values, dtype=DTYPE_MAP.get(dtypes[col], "object"))
+                col: self._to_series(values, dtypes[col])
                 for col, values in data.items()
-            }
+            },
+            copy=False,
         )
+
+    @staticmethod
+    def _to_series(values, dtype_name: str):
+        import numpy as np
+        import pandas as pd
+
+        from .protocol import DTYPE_MAP
+
+        # Built from the values and the mask directly: pandas' generic MaskedArray path
+        # goes through float64 and corrupts integers above 2**53.
+        if isinstance(values, np.ma.MaskedArray):
+            mask = np.ma.getmaskarray(values)
+            if dtype_name == "Double":
+                return pd.Series(values.filled(np.nan), copy=False)
+            elif dtype_name == "Bool":
+                return pd.Series(pd.arrays.BooleanArray(values.data.view(bool), mask), copy=False)
+            else:
+                return pd.Series(pd.arrays.IntegerArray(values.data, mask), copy=False)
+        elif isinstance(values, np.ndarray) and values.ndim == 2:
+            return pd.Series(list(values), dtype="object", copy=False)
+        elif isinstance(values, np.ndarray) and dtype_name == "Bool":
+            mask = np.zeros(len(values), dtype=bool)
+            return pd.Series(pd.arrays.BooleanArray(values.view(bool), mask), copy=False)
+        else:
+            return pd.Series(values, dtype=DTYPE_MAP.get(dtype_name, "object"), copy=False)
 
     def query_raw(self, cypher: str) -> dict:
         return self._timed_query(cypher)

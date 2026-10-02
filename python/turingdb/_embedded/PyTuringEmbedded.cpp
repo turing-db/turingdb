@@ -48,7 +48,7 @@ private:
     db::Dataframe* _bufferedDf {nullptr};
     db::DataframeManager* _dfMan {nullptr};
     db::LocalMemory* _localMem {nullptr};
-    // Owning storage for column names - see allocColumns docs.
+    // Owning storage for column names - see allocChunkColumns docs.
     std::vector<std::string> _nameStorage;
 };
 

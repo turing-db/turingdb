@@ -62,6 +62,16 @@ public:
     db::CommitHash getCommitHash() const { return _commitHash; }
     db::ChangeID getChangeID() const { return _changeID; }
 
+    // The transport steps of sendQuery, for callers that decode the response with their
+    // own sink.
+    void sendRequest(const std::string& query);
+    void recvHttpResponseHeaders();
+    size_t recvChunkSizeLine();
+    void recvChunkBody(size_t chunkSize, net::proto::ProtoHeader* outHeader);
+    void recvCrlf();
+
+    net::proto::TuringProtoInBuf& getInBuf() { return _inBuf; }
+
 private:
     static constexpr size_t HTTP_SCRATCH_CAPACITY = 1024;
 
@@ -92,12 +102,6 @@ private:
     net::proto::ChunkedBuffer<char> _stringBuffer;
     db::ListBuffer<> _listBuffer;
     db::MapBuffer<> _mapBuffer;
-
-    void sendRequest(const std::string& query);
-    void recvHttpResponseHeaders();
-    size_t recvChunkSizeLine();
-    void recvChunkBody(size_t chunkSize, net::proto::ProtoHeader* outHeader);
-    void recvCrlf();
 
     // Lower-level recv that drains _httpScratch first and then reads from the socket
     // until exactly len bytes have been written to dst.

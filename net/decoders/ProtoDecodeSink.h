@@ -41,7 +41,7 @@ concept OptionalConstColumn = ConstColumn<Column, std::optional<T>>;
 // decoded columns land in.
 template <typename Sink>
 concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint64_t>, uint64_t>
-&& OptionalVectorColumn<typename Sink::template ColumnOptVector<uint64_t>, uint64_t>
+&& OptionalVectorColumn<typename Sink::template ColumnOptVector<std::string_view>, std::string_view>
 && ConstColumn<typename Sink::template ColumnConst<uint64_t>, uint64_t>
 && OptionalConstColumn<typename Sink::template ColumnOptConst<uint64_t>, uint64_t>
 && requires(Sink sink,

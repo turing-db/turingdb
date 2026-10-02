@@ -6,7 +6,11 @@
 
 #include <nanobind/nanobind.h>
 
+#include "ChunkedBuffer.h"
+#include "QueryStatus.h"
 #include "TuringClient.h"
+#include "list/ListBuffer.h"
+#include "map/MapBuffer.h"
 
 namespace db {
 class LocalMemory;
@@ -15,6 +19,8 @@ class LocalMemory;
 namespace pybindings {
 
 namespace nb = nanobind;
+
+class NumpyColumnContainer;
 
 class PyTuringClient {
 public:
@@ -41,6 +47,11 @@ public:
 private:
     std::unique_ptr<db::LocalMemory> _localMem;
     std::unique_ptr<net::proto::TuringClient> _client;
+    net::proto::ChunkedBuffer<float> _embeddingBuffer;
+    db::ListBuffer<> _listBuffer;
+    db::MapBuffer<> _mapBuffer;
+
+    db::QueryStatus receiveQuery(const std::string& cypher, NumpyColumnContainer* container);
 };
 
 }

@@ -197,7 +197,7 @@ struct TuringProtoDecoder<Sink>::DecodeColumnFn {
             case ColumnKind::OPTIONAL_VECTOR: {
                 if constexpr (SupportedColumnOptVectorTypes<T, Sink>) {
                     auto* typedColumn = static_cast<SinkColumnOptVector<T, Sink>*>(_column);
-                    return _decoder->decodeColumn(typedColumn, _columnState);
+                    return _decoder->template decodeColumn<T>(typedColumn, _columnState);
                 } else {
                     throw TuringException("Unsupported type for Optional Vector");
                 }

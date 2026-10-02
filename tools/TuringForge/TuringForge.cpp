@@ -225,7 +225,10 @@ void runClientThread(std::stop_token stop,
                     continue;
                 }
 
-                if (client->isRecvComplete()) {
+                // sendQuery attempts the next exchange inline, so on a fast link the
+                // response it issued may already be complete: keep advancing, or the
+                // re-arm below would wait on nothing.
+                while (client->isRecvComplete()) {
                     connection->advanceCycle();
                 }
 
