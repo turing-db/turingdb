@@ -172,3 +172,5 @@ add_call_v3_test(test_query_ir_quantified_group_key QuantifiedGroupKeyTest.cpp)
 add_ir_tests(test_query_ir_hoist_hop_conjuncts HoistHopConjunctsTest.cpp)
 
 add_call_v3_test(test_query_ir_path_edge_uniqueness PathEdgeUniquenessTest.cpp)
+
+add_call_v3_test(test_query_ir_hop_and_path_edge_uniqueness HopAndPathEdgeUniquenessTest.cpp)
