@@ -14,7 +14,9 @@
 
 using namespace db;
 
-struct HistoryProcedure::Data : public ProcedureData {
+namespace {
+
+struct Data : public ProcedureData {
     // The commit the walk starts from - the one the query reads - resolved once when the
     // call is prepared, so a rewind restarts from it without asking the transaction again.
     const Commit* _headCommit {nullptr};
@@ -22,10 +24,6 @@ struct HistoryProcedure::Data : public ProcedureData {
     // The walk's cursor, stepped back one commit per emitted row until it runs past the root.
     const Commit* _commit {nullptr};
 };
-
-namespace {
-
-using Data = HistoryProcedure::Data;
 
 // Resolve the commit the history is walked back from: the one the query reads.
 void resolveHeadCommit(Data* data, const ProcedureContext* ctxt, const VersionController& controller) {
@@ -88,7 +86,7 @@ void writeChunk(Data* data,
 }
 
 void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
-    registerTypedProcedure<HistoryProcedure>(ns, "history");
+    ns->addProcedure(createTypedProcedure<HistoryProcedure, Data>("history"));
 }
 
 void HistoryProcedure::execute(ProcedureState* proc) {

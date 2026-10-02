@@ -12,6 +12,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "ProcUtils.h"
 #include "ProcedureException.h"
 #include "columns/ColumnVector.h"
@@ -39,10 +40,6 @@
 using namespace db;
 
 namespace {
-
-using NodeIDCol = ColumnVector<NodeID>;
-using ListColumn = ColumnVector<ListView>;
-using StringColumn = ColumnVector<std::string_view>;
 
 constexpr std::string_view labelsErr = "listNodes: labels must be a constant list";
 constexpr std::string_view propertiesErr = "listNodes: properties must be a constant map";
@@ -125,9 +122,9 @@ void executeImpl(ProcedureState* proc) {
     const Column* inputLabelNames = data.getInputColumn(0);
     const Column* inputProperties = data.getInputColumn(1);
 
-    auto* idCol = static_cast<NodeIDCol*>(data.getReturnColumn(0));
-    auto* labelsCol = static_cast<ListColumn*>(data.getReturnColumn(1));
-    auto* propsCol = static_cast<StringColumn*>(data.getReturnColumn(2));
+    auto* idCol = getReturnColumn<ListNodesProcedure, 0>(&data);
+    auto* labelsCol = getReturnColumn<ListNodesProcedure, 1>(&data);
+    auto* propsCol = getReturnColumn<ListNodesProcedure, 2>(&data);
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -174,15 +171,7 @@ void executeImpl(ProcedureState* proc) {
     std::vector<PropertyFilter> filters;
     readPropertyFilters(&propertiesMap, propTypes, filters);
 
-    if (idCol) {
-        idCol->clear();
-    }
-    if (labelsCol) {
-        labelsCol->clear();
-    }
-    if (propsCol) {
-        propsCol->clear();
-    }
+    data.clearReturnColumns();
 
     const size_t cap = skip + limit;
 
@@ -292,26 +281,12 @@ void executeImpl(ProcedureState* proc) {
 
 }
 
-ProcedureData* ListNodesProcedure::allocData() {
-    return new Data();
-}
-
-void ListNodesProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void ListNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("listNodes");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
+    Procedure* proc = createTypedProcedure<ListNodesProcedure, Data>("listNodes");
     proc->addConstantArgument("labels", ProcedureType::LIST);
     proc->addConstantArgument("properties", ProcedureType::MAP);
     proc->addConstantArgument("skip", ProcedureType::INT64);
     proc->addConstantArgument("limit", ProcedureType::INT64);
-    proc->addReturnValue("id", ProcedureType::NODE);
-    proc->addReturnValue("labels", ProcedureType::LIST);
-    proc->addReturnValue("properties", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 

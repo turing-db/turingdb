@@ -1,8 +1,16 @@
 #pragma once
 
+#include <array>
+#include <string_view>
+#include <tuple>
+
+#include "ID.h"
+#include "columns/ColumnVector.h"
+#include "list/ListView.h"
+#include "metadata/PropertyType.h"
+
 namespace db {
 
-class ProcedureData;
 class ProcedureState;
 class ProcedureNamespace;
 
@@ -22,10 +30,26 @@ class ProcedureNamespace;
 // type limits arrive as parallel (types, values) list args; defaultLimit applies
 // to types with no explicit limit. Unknown / deleted node ids are skipped.
 struct GetNodeEdgesProcedure {
-    static ProcedureData* allocData();
-    static void deallocData(ProcedureData* data);
     static void execute(ProcedureState* proc);
     static void registerProcedure(ProcedureNamespace* ns);
+
+    using Returns = std::tuple<
+        ColumnVector<NodeID>,
+        ColumnVector<ListView>,
+        ColumnVector<ListView>,
+        ColumnVector<types::String::Primitive>,
+        ColumnVector<types::String::Primitive>
+    >;
+
+    static constexpr size_t numReturns = std::tuple_size_v<Returns>;
+    using ReturnNames = std::array<std::string_view, numReturns>;
+    static constexpr ReturnNames _returnNames {
+        "id",
+        "outgoingEdges",
+        "incomingEdges",
+        "outEdgeCounts",
+        "inEdgeCounts",
+    };
 };
 
 }

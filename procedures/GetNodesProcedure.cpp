@@ -8,6 +8,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "ProcUtils.h"
 #include "ProcedureException.h"
 #include "columns/ColumnVector.h"
@@ -31,11 +32,6 @@ using namespace db;
 
 namespace {
 
-using NodeIDCol = ColumnVector<NodeID>;
-using ListColumn = ColumnVector<ListView>;
-using UInt64Col = ColumnVector<types::UInt64::Primitive>;
-using StringColumn = ColumnVector<std::string_view>;
-
 constexpr std::string_view nodeIDsErr = "getNodes: nodeIDs must be a constant list";
 
 struct Data : public ProcedureData {};
@@ -46,11 +42,11 @@ void executeImpl(ProcedureState* proc) {
 
     const Column* inputNodeIDs = data.getInputColumn(0);
 
-    auto* idCol = static_cast<NodeIDCol*>(data.getReturnColumn(0));
-    auto* labelsCol = static_cast<ListColumn*>(data.getReturnColumn(1));
-    auto* inCol = static_cast<UInt64Col*>(data.getReturnColumn(2));
-    auto* outCol = static_cast<UInt64Col*>(data.getReturnColumn(3));
-    auto* propsCol = static_cast<StringColumn*>(data.getReturnColumn(4));
+    auto* idCol = getReturnColumn<GetNodesProcedure, 0>(&data);
+    auto* labelsCol = getReturnColumn<GetNodesProcedure, 1>(&data);
+    auto* inCol = getReturnColumn<GetNodesProcedure, 2>(&data);
+    auto* outCol = getReturnColumn<GetNodesProcedure, 3>(&data);
+    auto* propsCol = getReturnColumn<GetNodesProcedure, 4>(&data);
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -66,21 +62,7 @@ void executeImpl(ProcedureState* proc) {
     const auto& nodeIDList = ProcUtils::constArg<ListView>(inputNodeIDs, nodeIDsErr);
     ProcUtils::readIntList(&nodeIDList, nodeIDs);
 
-    if (idCol) {
-        idCol->clear();
-    }
-    if (labelsCol) {
-        labelsCol->clear();
-    }
-    if (inCol) {
-        inCol->clear();
-    }
-    if (outCol) {
-        outCol->clear();
-    }
-    if (propsCol) {
-        propsCol->clear();
-    }
+    data.clearReturnColumns();
 
     std::vector<LabelID> labelIDs;
     std::vector<ListBuffer<4096>::ListItemVariant> items;
@@ -133,25 +115,9 @@ void executeImpl(ProcedureState* proc) {
 
 }
 
-ProcedureData* GetNodesProcedure::allocData() {
-    return new Data();
-}
-
-void GetNodesProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void GetNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("getNodes");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
+    Procedure* proc = createTypedProcedure<GetNodesProcedure, Data>("getNodes");
     proc->addConstantArgument("nodeIDs", ProcedureType::LIST);
-    proc->addReturnValue("id", ProcedureType::NODE);
-    proc->addReturnValue("labels", ProcedureType::LIST);
-    proc->addReturnValue("inEdgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("outEdgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("properties", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
 
