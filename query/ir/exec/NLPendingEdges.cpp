@@ -116,6 +116,11 @@ void NLPendingEdgeHop::setEndpointLabelSet(const LabelSet& labelset) {
     _endpointLabels = LabelSetHandle(labelset);
 }
 
+void NLPendingEdgeHop::setExcludedEdges(const ExcludedEdges& excluded) {
+    _excluded = excluded;
+    beginRun();
+}
+
 void NLPendingEdgeHop::fill(size_t maxCount) {
     clearChunks();
 
