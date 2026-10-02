@@ -182,3 +182,9 @@ target_include_directories(test_query_ir_component_name_resolution PRIVATE ${IR_
 add_call_v3_test(test_query_ir_double_dash DoubleDashTest.cpp)
 
 add_call_v3_test(test_query_ir_edge_uniqueness EdgeUniquenessTest.cpp)
+
+add_call_v3_test(test_query_ir_edge_uniqueness_scope EdgeUniquenessScopeTest.cpp)
+
+add_call_v3_test(test_query_ir_edge_uniqueness_shapes EdgeUniquenessShapesTest.cpp)
+
+add_call_v3_test(test_query_ir_edge_uniqueness_writes EdgeUniquenessWritesTest.cpp)
