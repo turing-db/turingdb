@@ -226,3 +226,5 @@ target_include_directories(test_query_ir_count_distinct_path PRIVATE ${IR_TEST_D
 
 add_call_v3_test(test_query_ir_sum_over_path_relationships SumOverPathRelationshipsTest.cpp)
 add_call_v3_test(test_query_ir_path_edge_uniqueness PathEdgeUniquenessTest.cpp)
+
+add_call_v3_test(test_query_ir_hop_and_path_edge_uniqueness HopAndPathEdgeUniquenessTest.cpp)
