@@ -364,7 +364,7 @@ public:
 
     // Whether each row of a CASE condition is false or null (nl.is_not_true), as a mask
     static NLUnaryFn selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result);
-    // Read a node or edge column as a nullable column of its IDs' integers, an invalid ID
+    // Read a node, edge or walk handle column as a nullable column of its IDs' integers, an invalid ID
     // - what an OPTIONAL MATCH leaves - reading as the null. The entity sibling of
     // selectToNullable, which reads a scalar value column.
     static NLUnaryFn selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
