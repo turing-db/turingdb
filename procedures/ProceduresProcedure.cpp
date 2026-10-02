@@ -4,6 +4,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
 #include "columns/ColumnVector.h"
@@ -59,13 +60,7 @@ void writeProcedures(Data* data,
     ProcedureManager::Namespaces namespaces;
     manager->getNamespaces(namespaces);
 
-    if (nameCol) {
-        nameCol->clear();
-    }
-
-    if (signatureCol) {
-        signatureCol->clear();
-    }
+    data->clearReturnColumns();
 
     size_t remaining = chunkSize;
     std::string signature;
@@ -107,22 +102,8 @@ void writeProcedures(Data* data,
 
 }
 
-ProcedureData* ProceduresProcedure::allocData() {
-    return new Data();
-}
-
-void ProceduresProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("procedures");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("name", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("signature", ProcedureType::STRING_VIEW);
-    ns->addProcedure(proc);
+    ns->addProcedure(createTypedProcedure<ProceduresProcedure, Data>("procedures"));
 }
 
 void ProceduresProcedure::execute(ProcedureState* proc) {
@@ -130,11 +111,8 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const ProcedureManager* manager = ctxt->getProcedures();
 
-    Column* rawNameCol = data.getReturnColumn(0);
-    Column* rawSignatureCol = data.getReturnColumn(1);
-
-    auto* nameCol = static_cast<ColumnVector<std::string_view>*>(rawNameCol);
-    auto* signatureCol = static_cast<ColumnVector<std::string_view>*>(rawSignatureCol);
+    auto* nameCol = getReturnColumn<ProceduresProcedure, 0>(&data);
+    auto* signatureCol = getReturnColumn<ProceduresProcedure, 1>(&data);
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

@@ -6,6 +6,7 @@
 #include "ID.h"
 #include "ProcedureData.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 #include "Procedure.h"
@@ -27,16 +28,11 @@ struct Data : public ProcedureData {
 };
 
 void writeChunk(Data* data, ProcedureState* procedure, size_t chunkSize) {
-    auto* names = dynamic_cast<ColumnVector<std::string_view>*>(data->getReturnColumn(0));
-    auto* sizes = dynamic_cast<ColumnVector<types::UInt64::Primitive>*>(data->getReturnColumn(1));
+    auto* names = getReturnColumn<ShowIndexesProcedure, 0>(data);
+    auto* sizes = getReturnColumn<ShowIndexesProcedure, 1>(data);
 
     // Not all columns may be YIELDed, only fill those which are
-    if (names) {
-        names->clear();
-    }
-    if (sizes) {
-        sizes->clear();
-    }
+    data->clearReturnColumns();
 
     const Commit* commit = data->_commit;
     bioassert(commit, "Invalid commit.");
@@ -107,25 +103,8 @@ void prepare(ProcedureState* proc) {
 
 }
 
-ProcedureData* ShowIndexesProcedure::allocData() {
-    return new Data();
-}
-
-void ShowIndexesProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void ShowIndexesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("showIndexes");
-
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
-
-    proc->addReturnValue("name", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("size", ProcedureType::UINT_64);
-
-    ns->addProcedure(proc);
+    ns->addProcedure(createTypedProcedure<ShowIndexesProcedure, Data>("showIndexes"));
 }
 
 void ShowIndexesProcedure::execute(ProcedureState* proc) {

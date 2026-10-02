@@ -4,6 +4,7 @@
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
+#include "TypedProcedure.h"
 #include "ProcUtils.h"
 #include "columns/ColumnVector.h"
 #include "views/GraphView.h"
@@ -19,9 +20,6 @@
 using namespace db;
 
 namespace {
-
-using StringViewCol = ColumnVector<std::string_view>;
-using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 constexpr std::string_view currentLabelsErr = "hierarchicalLabelCounts: currentLabels must be a constant list";
 
@@ -47,8 +45,8 @@ void executeImpl(ProcedureState* proc) {
     Data& data = proc->data<Data>();
     const ProcedureContext* ctxt = proc->getContext();
 
-    auto* namesCol = static_cast<StringViewCol*>(data.getReturnColumn(0));
-    auto* countCol = static_cast<UInt64Col*>(data.getReturnColumn(1));
+    auto* namesCol = getReturnColumn<HierarchicalLabelCountsProcedure, 0>(&data);
+    auto* countCol = getReturnColumn<HierarchicalLabelCountsProcedure, 1>(&data);
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -58,12 +56,7 @@ void executeImpl(ProcedureState* proc) {
     const auto& currentLabels = ProcUtils::constArg<ListView>(data.getInputColumn(0), currentLabelsErr);
     readSelectedLabels(&currentLabels, labels, selected);
 
-    if (namesCol) {
-        namesCol->clear();
-    }
-    if (countCol) {
-        countCol->clear();
-    }
+    data.clearReturnColumns();
 
     // For every label not already selected, count the nodes matching
     // (selected ∪ {label}).
@@ -98,22 +91,9 @@ void executeImpl(ProcedureState* proc) {
 
 }
 
-ProcedureData* HierarchicalLabelCountsProcedure::allocData() {
-    return new Data();
-}
-
-void HierarchicalLabelCountsProcedure::deallocData(ProcedureData* data) {
-    delete data;
-}
-
 void HierarchicalLabelCountsProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("hierarchicalLabelCounts");
-    proc->setExecuteCallback(&execute);
-    proc->setAllocCallback(&allocData);
-    proc->setDeallocCallback(&deallocData);
+    Procedure* proc = createTypedProcedure<HierarchicalLabelCountsProcedure, Data>("hierarchicalLabelCounts");
     proc->addConstantArgument("currentLabels", ProcedureType::LIST);
-    proc->addReturnValue("label", ProcedureType::STRING_VIEW);
-    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
     ns->addProcedure(proc);
 }
 

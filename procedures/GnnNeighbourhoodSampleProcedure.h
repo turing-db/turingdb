@@ -1,8 +1,14 @@
 #pragma once
 
+#include <array>
+#include <string_view>
+#include <tuple>
+
+#include "ID.h"
+#include "columns/ColumnVector.h"
+
 namespace db {
 
-class ProcedureData;
 class ProcedureState;
 class ProcedureNamespace;
 
@@ -18,10 +24,24 @@ class ProcedureNamespace;
 //   edgeType  EDGE_TYPE_ID  - edge type ID
 //   dst       NODE          - destination node ID
 struct GnnNeighbourhoodSampleProcedure {
-    static ProcedureData* allocData();
-    static void deallocData(ProcedureData* data);
     static void execute(ProcedureState* proc);
     static void registerProcedure(ProcedureNamespace* ns);
+
+    using Returns = std::tuple<
+        ColumnVector<NodeID>,
+        ColumnVector<EdgeID>,
+        ColumnVector<EdgeTypeID>,
+        ColumnVector<NodeID>
+    >;
+
+    static constexpr size_t numReturns = std::tuple_size_v<Returns>;
+    using ReturnNames = std::array<std::string_view, numReturns>;
+    static constexpr ReturnNames _returnNames {
+        "src",
+        "edge",
+        "edgeType",
+        "tgt",
+    };
 };
 
 }
