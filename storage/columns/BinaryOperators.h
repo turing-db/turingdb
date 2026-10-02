@@ -358,7 +358,7 @@ struct BinaryOp {
         return visitArithmeticOperand(a, [this, &b](const auto lhs) {
             return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<ListElementView> {
                 if constexpr (requires { F {}(lhs, rhs); }) {
-                    return stagedCell(F {}(lhs, rhs));
+                    return this->stagedCell(F {}(lhs, rhs));
                 } else {
                     throw TuringException("Operands are not valid and compatible types");
                 }
