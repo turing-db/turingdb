@@ -3609,7 +3609,7 @@ void DBLowering::throwOnDisagreeingBranchTypes(mlir::Type branchType,
 // in the type the branches saying what the column holds resolved it to.
 mlir::Value DBLowering::typedNullChunk(mlir::Value chunk, mlir::Type chunkType) {
     mlir::OpBuilder::InsertionGuard guard(_builder);
-    setInsertionForUnaryOp(chunk);
+    _builder.setInsertionPointAfterValue(chunk);
 
     return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), chunkType, chunk).getResult();
 }

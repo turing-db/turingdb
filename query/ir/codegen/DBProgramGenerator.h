@@ -288,6 +288,10 @@ private:
     // names the span of the query it came from
     const CypherAST* _ast {nullptr};
 
+    // The branches of a union in a subquery body start from the rows of that body, so each
+    // branch block being generated maps to the body block whose columns are in flight in it
+    std::unordered_map<mlir::Block*, mlir::Block*> _unionBranchRowBlocks;
+
     struct TranslatedComponent {
         std::unique_ptr<mlir::Region> _region;
         std::vector<const VariableDependency*> _vars;
