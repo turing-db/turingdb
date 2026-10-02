@@ -5,38 +5,57 @@ on:
 
 
 jobs:
-  publish:
-    name: Publish Linux ARM wheels of v3.0 to PyPI
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/turingdb
+  docker:
+    name: Publish the x86 docker image of v3.0
+    runs-on: ubuntu-24.04-turing
     permissions:
       actions: read
-      id-token: write
+      contents: read
+    env:
+      IMAGE: turingdbai/turingdb:3.0-amd64
     steps:
-      - name: Download Linux ARM wheel artifacts of run 36955304971
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download x86 py3.14 wheel artifact of run 36955304971
         uses: actions/download-artifact@v4
         with:
-          pattern: turingdb-wheel-ubuntu-*-arm-*
+          name: turingdb-wheel-ubuntu-24.04-turing-py3.14
           path: wheel/
-          merge-multiple: true
           run-id: 36955304971
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check the wheels
+      - name: Check the wheel
         run: |
           ls -la wheel/
           COUNT=$(ls wheel/ | wc -l)
-          MATCHING=$(ls wheel/ | grep -cE '^turingdb-3\.0-cp3(10|11|12|13|14)-cp3(10|11|12|13|14)-manylinux_2_(35|39)_aarch64\.whl$')
-          if [ "$COUNT" != "10" ] || [ "$MATCHING" != "10" ]; then
-            echo "ERROR: expected 10 turingdb-3.0 aarch64 wheels, found $COUNT files, $MATCHING matching"
+          if [ "$COUNT" != "1" ] || ! ls wheel/ | grep -qE '^turingdb-3\.0-cp314-cp314-manylinux_2_39_x86_64\.whl$'; then
+            echo "ERROR: expected the turingdb-3.0 cp314 x86_64 wheel only"
             exit 1
           fi
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
         with:
-          packages-dir: wheel/
-          verbose: true
-          skip-existing: true
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          load: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE }}
+
+      - name: Test Docker image
+        run: docker run --rm $IMAGE turingdb --help
+
+      - name: Reclaim disk (self-hosted)
+        if: always()
+        uses: ./.github/actions/clean-self-hosted-runner
