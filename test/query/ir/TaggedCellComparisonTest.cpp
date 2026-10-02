@@ -80,6 +80,44 @@ TEST_F(TaggedCellComparisonTest, answersNullForAListCellHoldingANull) {
     expectRows("UNWIND [[1, null], 1] AS x RETURN x = [1, null]", {{"false"}, {"null"}});
 }
 
+TEST_F(TaggedCellComparisonTest, matchesANodeAgainstACellHoldingItsID) {
+    expectRows("UNWIND [[0, [0.5]]] AS r MATCH (n) WHERE n = r[0] RETURN n", {{"0"}});
+}
+
+TEST_F(TaggedCellComparisonTest, matchesANodeAgainstACellOfAListMixingAString) {
+    expectRows("UNWIND [[0, 'a']] AS r MATCH (n) WHERE n = r[0] RETURN n", {{"0"}});
+}
+
+TEST_F(TaggedCellComparisonTest, matchesANodeAgainstACellOfAListBoundByWith) {
+    expectRows("WITH [0, [0.5]] AS r MATCH (n) WHERE n = r[0] RETURN n", {{"0"}});
+}
+
+TEST_F(TaggedCellComparisonTest, matchesNoNodeAgainstACellHoldingAString) {
+    expectRows("UNWIND [[0, 'a']] AS r MATCH (n) WHERE n = r[1] RETURN n", {});
+}
+
+TEST_F(TaggedCellComparisonTest, matchesNoNodeAgainstANullCell) {
+    expectRows("UNWIND [[0, 'a', null]] AS r MATCH (n) WHERE n = r[2] RETURN n", {});
+}
+
+TEST_F(TaggedCellComparisonTest, keepsTheNodeACellDiffersFrom) {
+    expectRows("UNWIND [[0, 'a']] AS r MATCH (n) WHERE n.name = 'Adam' AND n <> r[0] RETURN n", {{"1"}});
+}
+
+TEST_F(TaggedCellComparisonTest, dropsTheNodeACellIsEqualTo) {
+    expectRows("UNWIND [[0, 'a']] AS r MATCH (n) WHERE n.name = 'Remy' AND n <> r[0] RETURN n", {});
+}
+
+TEST_F(TaggedCellComparisonTest, matchesANodeAgainstACellHoldingTheNodeItself) {
+    expectRows("MATCH (n) WHERE n = 0 UNWIND [n, 'a'] AS x MATCH (m) WHERE m = x RETURN m", {{"0"}});
+}
+
+TEST_F(TaggedCellComparisonTest, matchesAnEdgeAgainstACellHoldingTheEdgeItself) {
+    expectRows("MATCH ()-[e]->() WHERE e.name = 'Remy -> Adam' UNWIND [e, 'a'] AS x "
+               "MATCH ()-[f]->() WHERE f = x RETURN f.name",
+               {{"Remy -> Adam"}});
+}
+
 TEST_F(TaggedCellComparisonTest, comparesTwoCells) {
     expectRows("UNWIND [1, 'a', null] AS x UNWIND [1, 'b', null] AS y RETURN x, y, x < y, x = y",
                {{"1", "1", "false", "true"},

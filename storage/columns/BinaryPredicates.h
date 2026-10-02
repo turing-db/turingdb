@@ -98,9 +98,24 @@ inline bool holdsAValue(const T& operand) {
         return operand.has_value() && holdsAValue(*operand);
     } else if constexpr (std::is_same_v<T, ListElementView>) {
         return operand.getTag() != ListBufferTypeTag::Null;
+    } else if constexpr (TypedInternalID<T>) {
+        return operand.isValid();
     } else {
         return true;
     }
+}
+
+template <TypedInternalID IDT>
+inline bool elementIsID(const ListElementView element, const IDT id) {
+    const ListBufferTypeTag tag = element.getTag();
+    const bool holdsAnInteger = tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+
+    if (holdsAnInteger) {
+        const types::UInt64::Primitive value = id.getValue();
+        return element == value;
+    }
+
+    return element == id;
 }
 
 template <typename T>
@@ -674,7 +689,16 @@ struct TuringEqual {
             return (*this)(*lhsList, *rhsList);
         }
 
-        return CustomBool {lhs == rhs};
+        using Lhs = std::decay_t<decltype(lhs)>;
+        using Rhs = std::decay_t<decltype(rhs)>;
+
+        if constexpr (TypedInternalID<Lhs>) {
+            return CustomBool {elementIsID(rhs, lhs)};
+        } else if constexpr (TypedInternalID<Rhs>) {
+            return CustomBool {elementIsID(lhs, rhs)};
+        } else {
+            return CustomBool {lhs == rhs};
+        }
     }
 
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
@@ -930,18 +954,6 @@ struct TuringIn {
         requires TaggedListOperand<C> && (!TaggedListOperand<T>) && (!ListOperand<T>)
     std::optional<CustomBool> operator()(const C& cell, const T& value) const {
         throw FatalException("IN operands in incorrect order");
-    }
-
-    template <TypedInternalID IDT>
-    static bool elementIsID(const ListElementView element, const IDT id) {
-        const ListBufferTypeTag tag = element.getTag();
-        const bool holdsAnInteger = tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
-        if (holdsAnInteger) {
-            const types::UInt64::Primitive value = id.getValue();
-            return element == value;
-        }
-
-        return element == id;
     }
 };
 
