@@ -42,7 +42,7 @@ generated as one `db.exists_subquery` per branch, ORed together. A branch needs 
 but if one branch has a RETURN every branch must return the same columns.
 
 Out of scope: the conditional `WHEN ... THEN { } ELSE { }` body, which the grammar has no
-clause for at all. `test/query/ir/ExistsNeo4jManualTest.cpp` holds it, skipping with what is
+clause for at all. `test/query/ir/subquery/ExistsNeo4jManualTest.cpp` holds it, skipping with what is
 missing and keeping the rows the manual documents, so it is the test to make pass when its
 clause lands.
 
@@ -88,7 +88,7 @@ row.
 
 ## 4. Tests
 
-`test/query/ir/ExistsSubqueryTest.cpp` runs the queries over the shared SimpleGraph fixture.
-`test/query/ir/ExistsSubqueryCodegenTest.cpp` reads the emitted db op and the lowered nl
+`test/query/ir/subquery/ExistsSubqueryTest.cpp` runs the queries over the shared SimpleGraph fixture.
+`test/query/ir/subquery/ExistsSubqueryCodegenTest.cpp` reads the emitted db op and the lowered nl
 program, because both paths answer the same rows when both are right: it is what says which
 one a body took.

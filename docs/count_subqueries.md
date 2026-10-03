@@ -74,7 +74,7 @@ dominate this use".
 
 ## 5. Tests
 
-`test/query/ir/CountSubqueryTest.cpp` runs the queries over SimpleGraph.
-`test/query/ir/CountSubqueryCodegenTest.cpp` reads which path each body took.
-`test/query/ir/CountNeo4jManualTest.cpp` holds every example of the Neo4j manual's COUNT
+`test/query/ir/subquery/CountSubqueryTest.cpp` runs the queries over SimpleGraph.
+`test/query/ir/subquery/CountSubqueryCodegenTest.cpp` reads which path each body took.
+`test/query/ir/subquery/CountNeo4jManualTest.cpp` holds every example of the Neo4j manual's COUNT
 page, over the graph that page builds.

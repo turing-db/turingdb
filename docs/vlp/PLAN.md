@@ -859,11 +859,11 @@ New:
 - `test/storage/iterators/PathExploratorTest.cpp` (`add_storage_tests`), modeled on
   `GetEdgesByTypeIteratorTest.cpp`'s fixture and collector, with a graph submitted in two
   commits so second-commit edges between first-commit nodes are patch edges.
-- `test/query/ir/ExplorePathsDialectTest.cpp` (`add_ir_tests`): parse/print round trip,
+- `test/query/ir/path/ExplorePathsDialectTest.cpp` (`add_ir_tests`): parse/print round trip,
   verifier rejections (including `hop` region mask type and outside values), lowering shape
   with and without the region, trim keeps attrs and drops unread carries, pushdown
   placement, hand-written `type "NOPE" hops 0` executed on SimpleGraph → 8 zero-length rows.
-- `test/query/ir/ExplorePathsCypherTest.cpp` (`add_call_v3_test`): the eight
+- `test/query/ir/path/ExplorePathsCypherTest.cpp` (`add_call_v3_test`): the eight
   `variable-length-paths-*.json` queries with rows ported (`[[0],[4]]` → `"0, 4"`, `[]` →
   `""`), sorted comparison; `SKIP 50 LIMIT 5` asserts count 5 only; v3-only cases:
   `-[e:KNOWS_WELL]->+`, `RETURN count(*)`, `WHERE m.name = ...` after the exploration,

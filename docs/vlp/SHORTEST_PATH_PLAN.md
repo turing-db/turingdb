@@ -502,7 +502,7 @@ span reads).
 
 Phase 0:
 
-- New: `test/query/ir/NamedPathFunctionsTest.cpp`, `test/query/ir/ListPredicateTest.cpp`.
+- New: `test/query/ir/path/NamedPathFunctionsTest.cpp`, `test/query/ir/list/ListPredicateTest.cpp`.
 - Modified: `CypherParser.y`, the list-predicate expression in `query/AST/expr/`,
   `FunctionDecls.cpp`, `ExprAnalyzer.cpp`, `DBProgramGenerator.h/.cpp` (codegen and the pass
   table), `DBOps.td/.cpp` (`db.path_elements`, `db.list_predicate`), `DBPasses.td/.cpp`

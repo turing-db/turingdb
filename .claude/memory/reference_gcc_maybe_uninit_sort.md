@@ -5,7 +5,7 @@ metadata:
   type: reference
 ---
 
-`test/query/ir/DBLoweringTest.cpp` builds with `-Werror=maybe-uninitialized` under GCC 13. `CollectingNodeEmbeddingPropSink` holds rows of `std::pair<uint64_t, std::optional<std::vector<float>>>`. `std::sort`-ing that vector directly instantiates `__insertion_sort`, whose `__val = move(*__last)` trips a spurious `maybe-uninitialized` on the moved `optional<vector<float>>`. Its appearance is sensitive to total TU complexity, so adding unrelated `TEST_F` cases can flip it on.
+`test/query/ir/engine/DBLoweringTest.cpp` builds with `-Werror=maybe-uninitialized` under GCC 13. `CollectingNodeEmbeddingPropSink` holds rows of `std::pair<uint64_t, std::optional<std::vector<float>>>`. `std::sort`-ing that vector directly instantiates `__insertion_sort`, whose `__val = move(*__last)` trips a spurious `maybe-uninitialized` on the moved `optional<vector<float>>`. Its appearance is sensitive to total TU complexity, so adding unrelated `TEST_F` cases can flip it on.
 
 **Key fact:** `-Wmaybe-uninitialized` is a *middle-end* (optimization-time) warning; its location is inside the std header, so a `#pragma GCC diagnostic ignored` at the call site does NOT suppress it. Don't waste time on the pragma.
 

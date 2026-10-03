@@ -35,5 +35,5 @@ product in one step, so two 64Ki-row sides meant 4.29e9 rows - 64 GiB for two id
 and reliable OOM kills. Measured after the change on reactome: `MATCH (a:Reaction),
 (b:Reaction) RETURN a, b` (6.97e9 rows) runs in 1.76 s holding 1.9 MiB, against 3.8 s /
 8.3 GiB for the 542M-row `Pathway x Pathway` before it. `test/query/ir/
-CrossProductChunkedTest.cpp` pins that no chunk exceeds the chunk size.
+join/CrossProductChunkedTest.cpp` pins that no chunk exceeds the chunk size.
 `samples/cartesian_bench/` measured those numbers and was removed with v2.
