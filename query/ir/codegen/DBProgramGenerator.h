@@ -293,6 +293,10 @@ private:
     // branch block being generated maps to the body block whose columns are in flight in it
     std::unordered_map<mlir::Block*, mlir::Block*> _unionBranchRowBlocks;
 
+    // The row each loaded field is read off, so a subquery body importing the row is
+    // handed the field's column with it
+    std::unordered_map<const VarDecl*, std::string_view> _csvFieldRows;
+
     struct TranslatedComponent {
         std::unique_ptr<mlir::Region> _region;
         std::vector<const VariableDependency*> _vars;
@@ -774,6 +778,9 @@ private:
 
     // The column a yielded variable holds, or a null Value when no CALL yielded it.
     mlir::Value findYieldedColumn(const VarDecl* decl) const;
+
+    // The name of the row a loaded field is read off; empty for any other declaration
+    std::string_view findCSVFieldRow(const VarDecl* decl) const;
 
     void generateWith(const WithStmt* with);
 

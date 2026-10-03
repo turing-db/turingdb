@@ -2436,6 +2436,15 @@ mlir::Value DBProgramGenerator::findYieldedColumn(const VarDecl* decl) const {
     return mlir::Value();
 }
 
+std::string_view DBProgramGenerator::findCSVFieldRow(const VarDecl* decl) const {
+    const auto foundIt = _csvFieldRows.find(decl);
+    if (foundIt == end(_csvFieldRows)) {
+        return {};
+    }
+
+    return foundIt->second;
+}
+
 void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
     InFlightColumns inFlight;
     collectInFlightColumns(inFlight);
@@ -3807,13 +3816,19 @@ void DBProgramGenerator::publishLoadCSVFields(const LoadCSVStmt* loadCSVStmt,
                                               mlir::ResultRange fields) {
     bioassert(fieldDecls.size() == fields.size(), "One declaration per loaded field expected");
 
-    // The row a load bound has no column of its own, so the field columns are named after
-    // it: what the projection prints for an unaliased row[0] is the item's own text, so
-    // these names are only what a standalone load and a WITH read them under.
+    // A scope rebind tells its columns apart by name, so each field goes under its own
+    // declaration's rather than under the row's, which every field shares
     const std::string_view alias = loadCSVStmt->getAliasDecl()->getName();
 
     for (size_t index = 0; index < fieldDecls.size(); index++) {
-        _part._yieldedColumns.push_back({fieldDecls[index], alias, fields[index]});
+        const VarDecl* fieldDecl = fieldDecls[index];
+        const std::string_view name = fieldDecl ? fieldDecl->getName() : alias;
+
+        _part._yieldedColumns.push_back({fieldDecl, name, fields[index]});
+
+        if (fieldDecl) {
+            _csvFieldRows[fieldDecl] = alias;
+        }
     }
 }
 
@@ -5555,6 +5570,11 @@ void DBProgramGenerator::collectSubqueryBranchScope(const CallSubqueryStmt::Bran
             }
         }
 
+        const std::string_view fieldRow = findCSVFieldRow(input._decl);
+        if (!fieldRow.empty() && importedDecl(fieldRow)) {
+            scope.push_back({input._decl, input._name, argument});
+        }
+
         const std::string_view inputName = input._name;
         const bool masksAnImport = inputName.starts_with(pendingMaskPrefix)
                                 && importedDecl(inputName.substr(pendingMaskPrefix.size()));
@@ -7211,6 +7231,11 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
             if (const VarDecl* correlated = importedDecl(input._name)) {
                 scope.push_back({correlated, input._name, argument});
             }
+
+            const std::string_view fieldRow = findCSVFieldRow(input._decl);
+            if (!fieldRow.empty() && importedDecl(fieldRow)) {
+                scope.push_back({input._decl, input._name, argument});
+            }
         }
 
         if (tagsRows) {
@@ -7736,7 +7761,7 @@ void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* i
         return;
     }
 
-    const mlir::Value fieldColumn = findYieldedColumn(indexExpr->getCSVFieldDecl());
+    const mlir::Value fieldColumn = findVariableColumn(indexExpr->getCSVFieldDecl());
 
     if (!fieldColumn) {
         throwError("Only a constant index selects a CSV field: "
@@ -8121,7 +8146,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     // A header access reads a field of a loaded record rather than a property of an
     // entity: the load published its column under the declaration the access carries
     if (propExpr->isStringTableHeaderAccess()) {
-        const mlir::Value fieldColumn = findYieldedColumn(propExpr->getCSVFieldDecl());
+        const mlir::Value fieldColumn = findVariableColumn(propExpr->getCSVFieldDecl());
         bioassert(fieldColumn, "CSV header access on a row no load published: {}.{}", varName, propName);
 
         return fieldColumn;

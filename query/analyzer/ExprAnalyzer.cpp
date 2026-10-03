@@ -1325,6 +1325,13 @@ void ExprAnalyzer::registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV)
     _csvSources[alias] = loadCSV;
 }
 
+void ExprAnalyzer::importCSVSource(const VarDecl* imported, const VarDecl* source) {
+    LoadCSVStmt* const loadCSV = findCSVSource(source);
+    if (loadCSV) {
+        registerCSVSource(imported, loadCSV);
+    }
+}
+
 LoadCSVStmt* ExprAnalyzer::findCSVSource(const VarDecl* alias) const {
     const auto foundIt = _csvSources.find(alias);
     if (foundIt == end(_csvSources)) {
@@ -1340,7 +1347,17 @@ VarDecl* ExprAnalyzer::declareCSVField(LoadCSVStmt& loadCSV, size_t slot) {
         return decl;
     }
 
-    decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+    const LoadCSVStmt::Field& field = loadCSV.getField(slot);
+    const std::string_view alias = loadCSV.getAliasDecl()->getName();
+
+    // Named after the access rather than v0, v1, ...: codegen tells columns apart by name,
+    // and a subquery body numbers its unnamed variables from v0 again
+    std::string* name = _ast->createString();
+    *name = field._byHeader ? fmt::format("{}.{}", alias, field._header)
+                            : fmt::format("{}[{}]", alias, field._index);
+
+    decl = VarDecl::create(_ast, _ctxt, *name, EvaluatedType::String);
+    decl->setIsUnnamed(true);
     loadCSV.setFieldDecl(slot, decl);
 
     return decl;
