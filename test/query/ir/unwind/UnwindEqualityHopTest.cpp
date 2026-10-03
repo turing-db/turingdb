@@ -152,3 +152,64 @@ TEST_F(UnwindEqualityHopTest, countStarOverTheHopOpensWithAConstScan) {
 TEST_F(UnwindEqualityHopTest, countStarOverTheHopCountsItsEdges) {
     expectRows("UNWIND [2, 0] AS x MATCH (n)--(m) WHERE n = x RETURN count(*)", {{"8"}});
 }
+
+TEST_F(UnwindEqualityHopTest, projectedElementsOverTheHopOpenWithAConstScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [2, 0] AS x MATCH (n)--(m) WHERE n = x RETURN x, m");
+
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+}
+
+TEST_F(UnwindEqualityHopTest, projectsTheElementsBesideTheEdgesTheyOpen) {
+    expectRows("UNWIND [2, 0] AS x MATCH (n)--(m) WHERE n = x RETURN x, m.name",
+               {{"0", "Adam"},
+                {"0", "Adam"},
+                {"0", "Computers"},
+                {"0", "Eighties"},
+                {"0", "Ghosts"},
+                {"0", "Ghosts"},
+                {"2", "Luc"},
+                {"2", "Remy"}});
+}
+
+TEST_F(UnwindEqualityHopTest, projectedElementsOverALabelledInHopOpenWithAConstScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("UNWIND [0, 1] AS x MATCH (c:Person)<-[r:KNOWS_WELL]-(b) WHERE c = x RETURN x, b");
+
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+}
+
+TEST_F(UnwindEqualityHopTest, projectsTheElementsBesideALabelledInHop) {
+    expectRows("UNWIND [0, 1] AS x MATCH (c:Person)<-[r:KNOWS_WELL]-(b) WHERE c = x RETURN x, b.name",
+               {{"0", "Adam"}, {"0", "Ghosts"}, {"1", "Remy"}});
+}
+
+TEST_F(UnwindEqualityHopTest, projectedElementsOverASecondMatchOpenWithAConstScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("UNWIND [2, 0] AS x MATCH (n) WHERE n = x MATCH (n)--(m) RETURN x, m");
+
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+}
+
+TEST_F(UnwindEqualityHopTest, projectsTheElementsBesideASecondMatch) {
+    expectRows("UNWIND [2, 0] AS x MATCH (n) WHERE n = x MATCH (n)--(m) RETURN x, m.name",
+               {{"0", "Adam"},
+                {"0", "Adam"},
+                {"0", "Computers"},
+                {"0", "Eighties"},
+                {"0", "Ghosts"},
+                {"0", "Ghosts"},
+                {"2", "Luc"},
+                {"2", "Remy"}});
+}
+
+TEST_F(UnwindEqualityHopTest, projectsTheElementsBesideTheEdgesTheyName) {
+    expectRows("UNWIND [1, 0] AS x MATCH (a)-[r]->(b) WHERE r = x RETURN x, a.name, b.name",
+               {{"0", "Remy", "Adam"}, {"1", "Remy", "Ghosts"}});
+}

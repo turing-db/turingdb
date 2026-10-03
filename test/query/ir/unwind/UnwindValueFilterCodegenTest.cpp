@@ -229,15 +229,15 @@ TEST_F(UnwindValueFilterCodegenTest, scansTheListedNodes) {
 }
 
 // A node equals a node ID by the number it carries, not by type, so a projection of the
-// element cannot read the node column that matched it: the elements stay, and each row
-// fetches the node it names.
-TEST_F(UnwindValueFilterCodegenTest, projectedNodeIDElementsFetchTheirNodes) {
+// element reads id() of the node that matched it rather than the node itself.
+TEST_F(UnwindValueFilterCodegenTest, projectedNodeIDElementsFuseIntoAConstScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("UNWIND [0, 1] AS x MATCH (n) WHERE n = x RETURN n.name, x");
 
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::ListFetchNode>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ListFetchNode>(*module), 0u);
 }
 
 TEST_F(UnwindValueFilterCodegenTest, projectsTheNodeIDElementsBesideWhatTheyMatched) {
