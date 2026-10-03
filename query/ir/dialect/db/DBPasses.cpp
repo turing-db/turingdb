@@ -8,6 +8,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/ValueRange.h"
 
 #include "llvm/ADT/BitVector.h"
@@ -125,6 +126,77 @@ void runFilterPass(Operation* root,
         }
 
         rewriteFilter(filter, match, builder);
+    }
+}
+
+// The filters a pass has left to try. It listens to the rewriter, so it queues every filter
+// a rewrite creates and drops every op a rewrite erases.
+class FilterWorklist : public mlir::RewriterBase::Listener {
+public:
+    explicit FilterWorklist(Operation* root) {
+        root->walk([this](FilterOp filter) {
+            push(filter.getOperation());
+        });
+    }
+
+    FilterOp pop() {
+        while (_next < _filters.size()) {
+            Operation* const op = _filters[_next++];
+            if (op) {
+                _positions.erase(op);
+                return cast<FilterOp>(op);
+            }
+        }
+
+        return nullptr;
+    }
+
+    void notifyOperationInserted(Operation* op, mlir::OpBuilder::InsertPoint previous) override {
+        if (isa<FilterOp>(op)) {
+            push(op);
+        }
+    }
+
+    void notifyOperationErased(Operation* op) override {
+        const auto found = _positions.find(op);
+        if (found != _positions.end()) {
+            _filters[found->second] = nullptr;
+            _positions.erase(found);
+        }
+    }
+
+private:
+    std::vector<Operation*> _filters;
+    llvm::DenseMap<Operation*, size_t> _positions;
+    size_t _next {0};
+
+    void push(Operation* op) {
+        if (_positions.try_emplace(op, _filters.size()).second) {
+            _filters.push_back(op);
+        }
+    }
+};
+
+// A match can read IR far above its filter, so a rewrite can make a filter it never touched
+// match. The worklist runs again until a round rewrites nothing, as MLIR's greedy driver does.
+template <typename Match>
+void runFilterWorklist(Operation* root,
+                       bool (*matchFilter)(FilterOp, Match&),
+                       void (*rewriteFilter)(Match&, mlir::RewriterBase&)) {
+    bool rewritten = true;
+    while (rewritten) {
+        rewritten = false;
+
+        FilterWorklist worklist(root);
+        mlir::IRRewriter rewriter(root->getContext(), &worklist);
+
+        while (FilterOp filter = worklist.pop()) {
+            Match match;
+            if (matchFilter(filter, match)) {
+                rewriteFilter(match, rewriter);
+                rewritten = true;
+            }
+        }
     }
 }
 
@@ -477,8 +549,6 @@ void bypassFilter(FilterOp filter) {
     for (size_t index = 0; index < filtered.size(); index++) {
         filtered[index].replaceAllUsesWith(carried[index]);
     }
-
-    filter.erase();
 }
 
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {
@@ -527,6 +597,7 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
 
     // Remove original filter
     bypassFilter(filter);
+    filter.erase();
 
     for (Operation* const coneOp : llvm::reverse(cone._ops)) {
         eraseIfUnused(coneOp);
@@ -1134,6 +1205,7 @@ void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBu
 
     const MaskCone cone = collectMaskCone(filter.getMask());
     bypassFilter(filter);
+    filter.erase();
 
     for (Operation* const coneOp : llvm::reverse(cone._ops)) {
         eraseIfUnused(coneOp);
@@ -3394,8 +3466,6 @@ void trimCarrySet(Operation* op, const CarrySetLayout& layout, llvm::ArrayRef<si
         Value carried = results[layout._resultOffset + kept[keptIndex]];
         carried.replaceAllUsesWith(trimmed->getResult(layout._resultOffset + keptIndex));
     }
-
-    op->erase();
 }
 
 void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t firstIndex) {
@@ -3491,8 +3561,6 @@ void replaceWithTrimmedFactors(Operation* op,
             results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
         }
     }
-
-    op->erase();
 }
 
 // A product's results are the columns its two factors yield; a result nobody reads leaves
@@ -3514,6 +3582,7 @@ void trimCrossProduct(CrossProduct product, mlir::OpBuilder& builder) {
     CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), trimmedTypes);
 
     replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep, leftCount);
+    productOp->erase();
 }
 
 // The product's sibling, with the two key columns kept on top of what is read and each
@@ -3537,6 +3606,7 @@ void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
     HashJoin trimmed = builder.create<HashJoin>(join.getLoc(), trimmedTypes, leftKey, rightKey);
 
     replaceWithTrimmedFactors(joinOp, trimmed.getOperation(), keep, leftCount);
+    joinOp->erase();
 }
 
 // A lazy case hands its carried columns to every region as block arguments, so a column no
@@ -3638,6 +3708,7 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
             }
 
             trimCarrySet(op, layout, kept, builder);
+            op->erase();
         }
     }
 };
@@ -4833,7 +4904,7 @@ bool matchFetchNodes(FilterOp filter, FetchNodesChain& chain) {
     return matchFetchNodesChain(lhs, rhs, chain) || matchFetchNodesChain(rhs, lhs, chain);
 }
 
-CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::OpBuilder& builder) {
+CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::RewriterBase& rewriter) {
     Operation* const productOp = product.getOperation();
     const size_t leftCount = factorYield(productOp, 0).getNumOperands();
 
@@ -4843,15 +4914,16 @@ CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::O
     llvm::SmallVector<Type> keptTypes;
     keptResultTypes(productOp, keep, keptTypes);
 
-    builder.setInsertionPoint(product);
-    CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), keptTypes);
+    rewriter.setInsertionPoint(product);
+    CrossProduct trimmed = rewriter.create<CrossProduct>(product.getLoc(), keptTypes);
 
     replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep, leftCount);
+    rewriter.eraseOp(productOp);
 
     return trimmed;
 }
 
-void dropCarriedColumn(Operation* op, size_t resultIndex, mlir::OpBuilder& builder) {
+void dropCarriedColumn(Operation* op, size_t resultIndex, mlir::RewriterBase& rewriter) {
     CarrySetLayout layout;
     const bool carries = matchCarrySetLayout(op, layout);
     bioassert(carries, "A fetch chain link without a carry set");
@@ -4865,11 +4937,12 @@ void dropCarriedColumn(Operation* op, size_t resultIndex, mlir::OpBuilder& build
         }
     }
 
-    trimCarrySet(op, layout, kept, builder);
+    trimCarrySet(op, layout, kept, rewriter);
+    rewriter.eraseOp(op);
 }
 
 // A product one of whose factors yields nothing makes the other factor's rows alone
-void inlineTheFactorLeft(CrossProduct product) {
+void inlineTheFactorLeft(CrossProduct product, mlir::RewriterBase& rewriter) {
     Operation* const productOp = product.getOperation();
     const bool leftIsEmpty = factorYield(productOp, 0).getNumOperands() == 0;
     const bool rightIsEmpty = factorYield(productOp, 1).getNumOperands() == 0;
@@ -4893,10 +4966,10 @@ void inlineTheFactorLeft(CrossProduct product) {
         product.getResult(index).replaceAllUsesWith(yielded[index]);
     }
 
-    product.erase();
+    rewriter.eraseOp(product);
 }
 
-void fuseFetchNodes(FetchNodesChain& chain, mlir::OpBuilder& builder) {
+void fuseFetchNodes(FetchNodesChain& chain, mlir::RewriterBase& rewriter) {
     FilterOp filter = chain._filter;
     const Location loc = filter.getLoc();
 
@@ -4912,12 +4985,12 @@ void fuseFetchNodes(FetchNodesChain& chain, mlir::OpBuilder& builder) {
         }
     }
 
-    builder.setInsertionPoint(filter);
-    FetchNodes fetch = builder.create<FetchNodes>(loc, fetchTypes, chain._ids, fetchCarried);
+    rewriter.setInsertionPoint(filter);
+    FetchNodes fetch = rewriter.create<FetchNodes>(loc, fetchTypes, chain._ids, fetchCarried);
 
     llvm::SmallVector<Value> fetched(fetch->getResults().begin(), fetch->getResults().end());
     if (chain._labels) {
-        keepLabelledRows(fetched, chain._labels, loc, builder);
+        keepLabelledRows(fetched, chain._labels, loc, rewriter);
     }
 
     size_t fetchedIndex = 1;
@@ -4926,8 +4999,8 @@ void fuseFetchNodes(FetchNodesChain& chain, mlir::OpBuilder& builder) {
         filtered[index].replaceAllUsesWith(holdsTheNodes ? fetched.front() : fetched[fetchedIndex++]);
     }
 
-    filter.erase();
-    chain._equality.erase();
+    rewriter.eraseOp(filter);
+    rewriter.eraseOp(chain._equality);
 
     llvm::SmallVector<CrossProduct> products;
     for (const OpResult link : chain._links) {
@@ -4935,35 +5008,22 @@ void fuseFetchNodes(FetchNodesChain& chain, mlir::OpBuilder& builder) {
         const size_t resultIndex = link.getResultNumber();
 
         if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
-            products.push_back(dropProductColumn(product, resultIndex, builder));
+            products.push_back(dropProductColumn(product, resultIndex, rewriter));
         } else {
-            dropCarriedColumn(op, resultIndex, builder);
+            dropCarriedColumn(op, resultIndex, rewriter);
         }
     }
 
-    chain._scan->erase();
+    rewriter.eraseOp(chain._scan);
 
     for (CrossProduct product : llvm::reverse(products)) {
-        inlineTheFactorLeft(product);
+        inlineTheFactorLeft(product, rewriter);
     }
 }
 
 struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-
-        while (true) {
-            FetchNodesChain chain;
-            const WalkResult walked = getOperation()->walk([&chain](FilterOp filter) {
-                return matchFetchNodes(filter, chain) ? WalkResult::interrupt() : WalkResult::advance();
-            });
-
-            if (!walked.wasInterrupted()) {
-                return;
-            }
-
-            fuseFetchNodes(chain, builder);
-        }
+        runFilterWorklist<FetchNodesChain>(getOperation(), matchFetchNodes, fuseFetchNodes);
     }
 };
 
@@ -5657,18 +5717,19 @@ private:
 };
 
 // Drops the equality from the filter's mask: the rebuilt rows hold it on every row
-void dropSeedEquality(FilterOp filter, EqOp equality) {
+void dropSeedEquality(FilterOp filter, EqOp equality, mlir::RewriterBase& rewriter) {
     const Value mask = filter.getMask();
     const Value equal = equality.getResult();
 
     if (mask == equal) {
         bypassFilter(filter);
+        rewriter.eraseOp(filter);
     } else {
         AndOp conjunction = cast<AndOp>(*equal.getUsers().begin());
         const Value other = conjunction.getLhs() == equal ? conjunction.getRhs() : conjunction.getLhs();
 
         conjunction.getResult().replaceAllUsesWith(other);
-        conjunction.erase();
+        rewriter.eraseOp(conjunction);
     }
 
     llvm::SmallVector<Operation*> dead {equality.getOperation()};
@@ -5688,7 +5749,7 @@ void dropSeedEquality(FilterOp filter, EqOp equality) {
         }
 
         erased.insert(op);
-        op->erase();
+        rewriter.eraseOp(op);
         dead.append(operandDefs.begin(), operandDefs.end());
     }
 }
@@ -5720,12 +5781,12 @@ Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& see
     return clonedIDs;
 }
 
-void reroot(PatternSeed& seed, mlir::OpBuilder& builder) {
+void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
     SeedJunction& junction = seed._junction;
     Operation* const junctionOp = junction._op;
     const Location loc = junctionOp->getLoc();
 
-    builder.setInsertionPoint(junctionOp);
+    rewriter.setInsertionPoint(junctionOp);
 
     // The seed's rows on their own: the other factor's body, or the list unwound again
     // without the pattern's columns
@@ -5742,7 +5803,7 @@ void reroot(PatternSeed& seed, mlir::OpBuilder& builder) {
     } else {
         Unwind unwind = cast<Unwind>(junctionOp);
         const llvm::SmallVector<Type> types {unwind.getElement().getType()};
-        Unwind seedUnwind = builder.create<Unwind>(loc, types, unwind.getSource(), ValueRange());
+        Unwind seedUnwind = rewriter.create<Unwind>(loc, types, unwind.getSource(), ValueRange());
         seedColumns.push_back(seedUnwind.getElement());
     }
 
@@ -5751,16 +5812,16 @@ void reroot(PatternSeed& seed, mlir::OpBuilder& builder) {
         seedMapping.map(junction._seedResults[index], seedColumns[index]);
     }
 
-    const Value ids = cloneSeedIDs(seed._ids, junction, seedMapping, builder);
+    const Value ids = cloneSeedIDs(seed._ids, junction, seedMapping, rewriter);
 
     llvm::SmallVector<Type> fetchTypes {seed._seeded.getType()};
     for (const Value column : seedColumns) {
         fetchTypes.push_back(column.getType());
     }
 
-    FetchNodes fetch = builder.create<FetchNodes>(loc, fetchTypes, ids, seedColumns);
+    FetchNodes fetch = rewriter.create<FetchNodes>(loc, fetchTypes, ids, seedColumns);
 
-    PatternReplay replay(seed._pattern, builder, loc);
+    PatternReplay replay(seed._pattern, rewriter, loc);
     for (size_t index = 0; index < seedColumns.size(); index++) {
         replay.bind(junction._seedResults[index], fetch->getResult(index + 1));
     }
@@ -5776,10 +5837,10 @@ void reroot(PatternSeed& seed, mlir::OpBuilder& builder) {
         seedResult.replaceAllUsesWith(replay.currentOf(seedResult));
     }
 
-    dropSeedEquality(seed._filter, seed._equality);
+    dropSeedEquality(seed._filter, seed._equality, rewriter);
 
     if (junction._seedFactor) {
-        junctionOp->erase();
+        rewriter.eraseOp(junctionOp);
         return;
     }
 
@@ -5790,29 +5851,16 @@ void reroot(PatternSeed& seed, mlir::OpBuilder& builder) {
         }
     }
 
-    junctionOp->erase();
+    rewriter.eraseOp(junctionOp);
     for (Operation* const op : llvm::reverse(patternOps)) {
         op->dropAllUses();
-        op->erase();
+        rewriter.eraseOp(op);
     }
 }
 
 struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternAtSeed> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-
-        while (true) {
-            PatternSeed seed;
-            const WalkResult walked = getOperation()->walk([&seed](FilterOp filter) {
-                return matchPatternSeed(filter, seed) ? WalkResult::interrupt() : WalkResult::advance();
-            });
-
-            if (!walked.wasInterrupted()) {
-                return;
-            }
-
-            reroot(seed, builder);
-        }
+        runFilterWorklist<PatternSeed>(getOperation(), matchPatternSeed, reroot);
     }
 };
 
