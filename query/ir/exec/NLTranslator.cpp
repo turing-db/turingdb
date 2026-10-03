@@ -907,8 +907,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryFunction(&operation, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
             translateFilter(filter, body);
-        } else if (nl::ListFetchNode fetch = mlir::dyn_cast<nl::ListFetchNode>(operation)) {
-            translateListFetchNode(fetch, body);
+        } else if (nl::FetchNodes fetch = mlir::dyn_cast<nl::FetchNodes>(operation)) {
+            translateFetchNodes(fetch, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -3409,7 +3409,7 @@ void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
     body->emplaceStmt(&NLExecutor::runFilter, data);
 }
 
-void NLTranslator::translateListFetchNode(nl::ListFetchNode fetch, NLStmtContainer* body) {
+void NLTranslator::translateFetchNodes(nl::FetchNodes fetch, NLStmtContainer* body) {
     const mlir::Value idsValue = fetch.getIds();
     const Column* ids = getColumn(idsValue);
 
@@ -3417,8 +3417,8 @@ void NLTranslator::translateListFetchNode(nl::ListFetchNode fetch, NLStmtContain
     ColumnNodeIDs* nodes = static_cast<ColumnNodeIDs*>(allocColumnForChunkType(nodesValue.getType()));
     _valueSlots[nodesValue] = nodes;
 
-    const NLListFetchNodeFunction fetchFunction = selectFetchForChunkType(idsValue.getType());
-    NLListFetchNodeData* data = _program->allocFunctionData<NLListFetchNodeData>(ids, fetchFunction, nodes);
+    const NLFetchNodesFunction fetchFunction = selectFetchForChunkType(idsValue.getType());
+    NLFetchNodesData* data = _program->allocFunctionData<NLFetchNodesData>(ids, fetchFunction, nodes);
 
     data->getIndices()->reserve(_program->getChunkSize());
 
@@ -3434,7 +3434,7 @@ void NLTranslator::translateListFetchNode(nl::ListFetchNode fetch, NLStmtContain
         data->addColumn(NLFilterData::FilterColumn {input, output, selectGatherForChunkType(columnType)});
     }
 
-    body->emplaceStmt(&NLExecutor::runListFetchNode, data);
+    body->emplaceStmt(&NLExecutor::runFetchNodes, data);
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
@@ -5780,7 +5780,7 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
 }
 
-NLListFetchNodeFunction NLTranslator::selectFetchForChunkType(mlir::Type chunkType) {
+NLFetchNodesFunction NLTranslator::selectFetchForChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
 

@@ -83,8 +83,13 @@ def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
-def FuseListFetchNode : Pass<"fuse_list_fetch_node"> {
+def FuseFetchNodes : Pass<"fuse_fetch_nodes"> {
     let summary = "Replace a whole node scan bound by an equality to a column of IDs with a fetch of those IDs";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def RerootPatternAtSeed : Pass<"reroot_pattern_at_seed"> {
+    let summary = "Walk a pattern out from the nodes an equality binds one of its nodes to, fetched from the bound column, instead of crossing the whole pattern with that column";
     let dependentDialects = ["mlir::db::DB"];
 }
 

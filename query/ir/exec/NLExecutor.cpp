@@ -1324,18 +1324,51 @@ std::optional<NodeID> namedNode(const std::optional<Cell>& cell) {
     return namedNode(*cell);
 }
 
+// The nodes a node scan produces: the ones the view holds and did not delete, and the ones
+// the running query created and did not delete
+class ScannedNodes {
+public:
+    explicit ScannedNodes(const NLExecutionContext* context)
+        : _reader(context->getView()->read()),
+        _writeBuffer(context->getWriteBuffer()),
+        _committedCount(committedNodeCount(context->getView())),
+        _firstQueryNode(context->getFirstQueryNode()),
+        _pendingCount(_writeBuffer ? _writeBuffer->numPendingNodes() : 0)
+    {
+    }
+
+    bool contains(NodeID node) const {
+        const uint64_t id = node.getValue();
+        if (id < _committedCount) {
+            return _reader.graphHasNode(node);
+        }
+
+        const uint64_t offset = id - _committedCount;
+        const bool createdByThisQuery = offset >= _firstQueryNode && offset < _pendingCount;
+
+        return createdByThisQuery && !_writeBuffer->deletedPendingNodes().contains(offset);
+    }
+
+private:
+    const GraphReader _reader;
+    const CommitWriteBuffer* _writeBuffer {nullptr};
+    size_t _committedCount {0};
+    size_t _firstQueryNode {0};
+    size_t _pendingCount {0};
+};
+
 template <typename Cell>
-void fetchListedNodes(const Column* ids, const GraphView* view, ColumnVector<size_t>* indices, ColumnNodeIDs* nodes) {
+void fetchNamedNodes(const Column* ids, const NLExecutionContext* context, ColumnVector<size_t>* indices, ColumnNodeIDs* nodes) {
     const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(ids)->getRaw();
     std::vector<size_t>& rows = indices->getRaw();
     std::vector<NodeID>& fetched = nodes->getRaw();
 
-    const GraphReader reader = view->read();
+    const ScannedNodes scanned(context);
 
     for (size_t row = 0; row < cells.size(); row++) {
         const std::optional<NodeID> node = namedNode(cells[row]);
 
-        if (node.has_value() && reader.graphHasNode(*node)) {
+        if (node.has_value() && scanned.contains(*node)) {
             rows.push_back(row);
             fetched.push_back(*node);
         }
@@ -8221,8 +8254,8 @@ void NLExecutor::runFilter(NLExecutionContext* context, NLFunctionData* data) {
     }
 }
 
-void NLExecutor::runListFetchNode(NLExecutionContext* context, NLFunctionData* data) {
-    NLListFetchNodeData* fetch = static_cast<NLListFetchNodeData*>(data);
+void NLExecutor::runFetchNodes(NLExecutionContext* context, NLFunctionData* data) {
+    NLFetchNodesData* fetch = static_cast<NLFetchNodesData*>(data);
 
     ColumnVector<size_t>* indices = fetch->getIndices();
     ColumnNodeIDs* nodes = fetch->getNodes();
@@ -8230,7 +8263,7 @@ void NLExecutor::runListFetchNode(NLExecutionContext* context, NLFunctionData* d
     indices->getRaw().clear();
     nodes->getRaw().clear();
 
-    fetch->getFetch()(fetch->getIDs(), context->getView(), indices, nodes);
+    fetch->getFetch()(fetch->getIDs(), context, indices, nodes);
 
     for (const NLFilterData::FilterColumn& column : fetch->columns()) {
         column._gather(column._input, indices, column._output);
@@ -9100,28 +9133,28 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, boo
     return &collectMaskSurvivors;
 }
 
-NLListFetchNodeFunction NLExecutor::selectNodeFetchFunction(bool nullable) {
-    return nullable ? &fetchListedNodes<std::optional<NodeID>> : &fetchListedNodes<NodeID>;
+NLFetchNodesFunction NLExecutor::selectNodeFetchFunction(bool nullable) {
+    return nullable ? &fetchNamedNodes<std::optional<NodeID>> : &fetchNamedNodes<NodeID>;
 }
 
-NLListFetchNodeFunction NLExecutor::selectIntegerFetchFunction(ValueType valueType, bool nullable) {
+NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(ValueType valueType, bool nullable) {
     switch (valueType) {
         case ValueType::Int64:
-            return nullable ? &fetchListedNodes<std::optional<types::Int64::Primitive>> : &fetchListedNodes<types::Int64::Primitive>;
+            return nullable ? &fetchNamedNodes<std::optional<types::Int64::Primitive>> : &fetchNamedNodes<types::Int64::Primitive>;
         break;
 
         case ValueType::UInt64:
-            return nullable ? &fetchListedNodes<std::optional<types::UInt64::Primitive>> : &fetchListedNodes<types::UInt64::Primitive>;
+            return nullable ? &fetchNamedNodes<std::optional<types::UInt64::Primitive>> : &fetchNamedNodes<types::UInt64::Primitive>;
         break;
 
         default:
-            throw IRException("nl.list_fetch_node reads node IDs out of nodes, integers or tagged cells");
+            throw IRException("nl.fetch_nodes reads node IDs out of nodes, integers or tagged cells");
         break;
     }
 }
 
-NLListFetchNodeFunction NLExecutor::selectTaggedFetchFunction(bool nullable) {
-    return nullable ? &fetchListedNodes<std::optional<ListElementView>> : &fetchListedNodes<ListElementView>;
+NLFetchNodesFunction NLExecutor::selectTaggedFetchFunction(bool nullable) {
+    return nullable ? &fetchNamedNodes<std::optional<ListElementView>> : &fetchNamedNodes<ListElementView>;
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {

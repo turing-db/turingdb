@@ -326,13 +326,24 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(FuseScanByNodeIDsTest, leavesFilterCarryingAnotherColumnAlone) {
+TEST_F(FuseScanByNodeIDsTest, fusesFilterCarryingAnotherColumn) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filterCarryingProperty);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    expectUntouched(*module);
+    llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+    ASSERT_EQ(constScans.size(), 1u);
+    const std::vector<int64_t> expected {3};
+    EXPECT_EQ(std::vector<int64_t>(constScans.front().getNodeIDs().begin(), constScans.front().getNodeIDs().end()), expected);
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_EQ(reads.front().getInputNodes().getDefiningOp(), constScans.front().getOperation());
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 0u);
 }
 
 // MATCH (n), (m) WHERE n = 4 OR n = 2 RETURN n, m, once the filter sank into its factor
