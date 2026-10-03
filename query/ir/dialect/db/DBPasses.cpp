@@ -589,12 +589,7 @@ void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source, co
     eraseIfUnused(source);
 }
 
-bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
-    if (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
-        return collectNodeIDDisjunction(disjunction.getLhs(), scanColumn, nodeIDs)
-            && collectNodeIDDisjunction(disjunction.getRhs(), scanColumn, nodeIDs);
-    }
-
+bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
         return false;
@@ -622,12 +617,32 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImp
         return false;
     }
 
-    const int64_t nodeID = literal.getInt();
-    if (nodeID < 0) {
-        return false;
+    nodeID = literal.getInt();
+
+    return nodeID >= 0;
+}
+
+// An UNWIND of N elements folds into a chain of N - 1 ORs, so the walk keeps its own stack:
+// recursing once per OR overflows the thread's stack on a list of a few thousand.
+bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
+    llvm::SmallVector<Value> pending {mask};
+    while (!pending.empty()) {
+        const Value disjunct = pending.pop_back_val();
+
+        if (OrOp disjunction = disjunct.getDefiningOp<OrOp>()) {
+            pending.push_back(disjunction.getRhs());
+            pending.push_back(disjunction.getLhs());
+            continue;
+        }
+
+        int64_t nodeID = 0;
+        if (!matchNodeIDEquality(disjunct, scanColumn, nodeID)) {
+            return false;
+        }
+
+        nodeIDs.push_back(nodeID);
     }
 
-    nodeIDs.push_back(nodeID);
     return true;
 }
 
