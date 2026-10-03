@@ -16,7 +16,7 @@ class GraphView;
 class NLExecutionContext;
 
 // Runs one nl.merge over the rows its input chunks hold: each looked up against the
-// graph and against the entities this query already wrote, then written where the
+// graph and against the entities this change already wrote, then written where the
 // pattern is missing.
 class NLMergeExecutor {
 public:

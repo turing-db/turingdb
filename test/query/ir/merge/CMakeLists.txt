@@ -45,3 +45,6 @@ target_link_libraries(test_query_ir_merge_after_indexed_write PRIVATE turing_ir_
 # An entity a MERGE wrote, carried past a WITH with the mask saying which rows it wrote.
 add_turing_test(test_query_ir_merge_with MergeWithTest.cpp)
 target_link_libraries(test_query_ir_merge_with PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_after_earlier_statement MergeAfterEarlierStatementTest.cpp)
+target_link_libraries(test_query_ir_merge_after_earlier_statement PRIVATE turing_ir_test_write_query_s)
