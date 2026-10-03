@@ -1,0 +1,47 @@
+# The db.merge / nl.merge textual form and the shape rules the two ops share.
+add_ir_tests(test_query_ir_merge_dialect MergeDialectTest.cpp)
+target_link_libraries(test_query_ir_merge_dialect PRIVATE turing_db_ir_nldialect_s)
+
+add_turing_test(test_query_ir_merge_node MergeNodeTest.cpp)
+target_link_libraries(test_query_ir_merge_node PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_rejection MergeRejectionTest.cpp)
+target_link_libraries(test_query_ir_merge_rejection PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_edge MergeEdgeTest.cpp)
+target_link_libraries(test_query_ir_merge_edge PRIVATE turing_ir_test_write_query_s)
+
+# What the rows around a merge look like once it has fanned them out over the matches it
+# bound, and where an update statement beside it writes.
+add_turing_test(test_query_ir_merge_fan_out MergeFanOutTest.cpp)
+target_link_libraries(test_query_ir_merge_fan_out PRIVATE turing_ir_test_write_query_s)
+
+# The matches a merge chain enumerates when several paths share a node, and when a hop is
+# a self-loop taken either way round.
+add_turing_test(test_query_ir_merge_chain_match MergeChainMatchTest.cpp)
+target_link_libraries(test_query_ir_merge_chain_match PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_key MergeKeyTest.cpp)
+target_link_libraries(test_query_ir_merge_key PRIVATE turing_ir_test_write_query_s)
+
+# Where a merge's rows read a property: off the graph for a row it bound, out of the
+# change for a row it wrote.
+add_turing_test(test_query_ir_merge_property_read MergePropertyReadTest.cpp)
+target_link_libraries(test_query_ir_merge_property_read PRIVATE turing_ir_test_write_query_s)
+
+# The relationship-isomorphism rule a merge chain binds under.
+add_turing_test(test_query_ir_merge_relationship_uniqueness MergeRelationshipUniquenessTest.cpp)
+target_link_libraries(test_query_ir_merge_relationship_uniqueness PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_after_set MergeAfterSetTest.cpp)
+target_link_libraries(test_query_ir_merge_after_set PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_after_create MergeAfterCreateTest.cpp)
+target_link_libraries(test_query_ir_merge_after_create PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_merge_after_indexed_write MergeAfterIndexedWriteTest.cpp)
+target_link_libraries(test_query_ir_merge_after_indexed_write PRIVATE turing_ir_test_write_query_s)
+
+# An entity a MERGE wrote, carried past a WITH with the mask saying which rows it wrote.
+add_turing_test(test_query_ir_merge_with MergeWithTest.cpp)
+target_link_libraries(test_query_ir_merge_with PRIVATE turing_ir_test_write_query_s)

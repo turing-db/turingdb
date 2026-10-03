@@ -201,12 +201,12 @@ prune or test, and the executor takes it with the numbers in hand.
 ## State
 
 `end_nodes` is implemented through the db and nl dialects, lowering, the translator, the
-executor and `PathExplorator`; `test/query/ir/ExploreEndNodeSetTest.cpp` covers it. The set-mode
+executor and `PathExplorator`; `test/query/ir/path/ExploreEndNodeSetTest.cpp` covers it. The set-mode
 index, the per-batch pricing and `fuse_explore_end_set` landed on 2026-09-21. That pass turns
 the post-filter codegen emits for a property-pinned end - `explore_paths`,
 `get_node_properties` on `tgtids`, `eq` against a literal, `filter` - into a
 `scan_nodes_by_property_value` of its own at the head of the function, the end's labels
-folded into it, and an `end_nodes` operand on the walk. `test/query/ir/ExploreEndPropertyTest.cpp`
+folded into it, and an `end_nodes` operand on the walk. `test/query/ir/path/ExploreEndPropertyTest.cpp`
 covers it, down to the Cypher query over simpledb. On reactome the query of the first table
 now runs through Cypher in 2.6 ms at three hops, 2.8 at five and 4.8 at eight, against 1.12,
 23.5 and 5,074 for the post-filter it replaces.
@@ -218,4 +218,4 @@ rebuilt one column narrower, and the walk rebuilt with `end_nodes` and the end c
 from its carry set. It peels the end out of a product nested inside the factor too, which is
 what `MATCH (a), (b), (c) WITH a, b, c MATCH (a)-[e*]->(b)` compiles to; an end drawn from
 the seed's own factor, or yielded beside a hop off it, stays per row.
-`test/query/ir/ExploreEndFactorTest.cpp` covers it, down to the Cypher queries over simpledb.
+`test/query/ir/path/ExploreEndFactorTest.cpp` covers it, down to the Cypher queries over simpledb.

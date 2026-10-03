@@ -166,12 +166,13 @@ Make up the number to 4 tests either way.
 
 ## 5. Write the tests
 
-One bug, one file, one target. Follow `test/query/ir/AnonymousPatternPropertyTest.cpp`
+One bug, one file, one target. Follow `test/query/ir/match/AnonymousPatternPropertyTest.cpp`
 exactly: `TuringTest` + `TuringTestEnv` + `QueryInterpreterV3` + `SimpleGraph` +
 `StringRowSink`, with `expectRows` / `expectError` helpers.
 
-- New `test/query/ir/<Behaviour>Test.cpp`, plus `add_ir_tests(test_query_ir_<behaviour>
-  <Behaviour>Test.cpp)` in `test/query/ir/CMakeLists.txt`. Add
+- New `test/query/ir/<feature>/<Behaviour>Test.cpp`, plus `add_ir_tests(test_query_ir_<behaviour>
+  <Behaviour>Test.cpp)` in `test/query/ir/<feature>/CMakeLists.txt`, where `<feature>` is the
+  existing directory for the Cypher feature the test exercises. Add
   `target_link_libraries(... turing_db_examples_s)` when the test uses SimpleGraph.
 - Never append to an existing test file.
 - Name the test for the behaviour it asserts, never for the bug or the engine.
@@ -188,7 +189,7 @@ assertion holds. The PR body reports it instead.
 
 ```bash
 make -j8 test_query_ir_<name>          # from build/, one target at a time. No cmake ..
-./build/test/query/ir/test_query_ir_<name>
+./build/test/query/ir/<feature>/test_query_ir_<name>
 ```
 
 Every test must compile and every assertion must be a real comparison. Capture the failure

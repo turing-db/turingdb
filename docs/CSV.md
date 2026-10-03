@@ -954,7 +954,7 @@ Layers: `LoadCSVStmt` (fields resolved by `ExprAnalyzer`), `DBProgramGenerator::
 `DBLowering::lowerLoadCSV`, `NLTranslator::translateLoadCSVLoop`, `NLExecutor::runLoadCSVLoop`,
 `CSVParser::readChunk` with a field selection.
 
-Tested by `test/query/ir/LoadCSVSourceTest.cpp` (the source), `LoadCSVMatchTest.cpp` (the
+Tested by `test/query/ir/load/LoadCSVSourceTest.cpp` (the source), `LoadCSVMatchTest.cpp` (the
 join against the graph), `LoadCSVWriteTest.cpp` (the imports), plus the dialect cases in
 `DBDialectTest.cpp` / `NLDialectTest.cpp` and the `samples/mlir/load_csv*.mlir` pairs.
 

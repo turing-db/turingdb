@@ -326,7 +326,7 @@ name.
 
 # Testing
 
-`test/query/ir/NLExecutorTest.cpp`, following the `ScanNodesIteratorTest`
+`test/query/ir/engine/NLExecutorTest.cpp`, following the `ScanNodesIteratorTest`
 fixture pattern (`TuringTest` + `JobSystem`; `Graph::create()` →
 `newChange()` → datapart builder → `submit`). Programs are parsed from string
 with `mlir::parseSourceString<ModuleOp>` (the file-based `IRAssembler` stays
