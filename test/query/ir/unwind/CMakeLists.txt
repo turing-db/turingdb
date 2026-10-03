@@ -171,3 +171,5 @@ target_link_libraries(test_query_ir_unwind_equality_hop PRIVATE
         turing_db_storage_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_unwind_equality_hop PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_unwind_many_elements UnwindManyElementsTest.cpp)
