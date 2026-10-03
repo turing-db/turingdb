@@ -63,6 +63,18 @@ TEST_F(EdgeUniquenessWritesTest, joinsAPatternWithTheWalkThatContainsItOverAPara
                 {"Ghosts", "Remy", "Adam"}});
 }
 
+TEST_F(EdgeUniquenessWritesTest, joinsFourPatternsThroughAParallelEdge) {
+    addParallelKnowsWell();
+
+    expectRows("MATCH (a)-->(b),(c)-->(d)-->(e),(a)-->(f)-->(g),(c)-->(g) RETURN count(*)", {{"4"}});
+    expectRows("MATCH (a)-->(b),(c)-->(d)-->(e),(a)-->(f)-->(g),(c)-->(g) "
+               "RETURN a.name, b.name, c.name, d.name, e.name, f.name, g.name ORDER BY b.name",
+               {{"Adam", "Bio", "Remy", "Ghosts", "Remy", "Remy", "Adam"},
+                {"Adam", "Bio", "Remy", "Ghosts", "Remy", "Remy", "Adam"},
+                {"Adam", "Cooking", "Remy", "Ghosts", "Remy", "Remy", "Adam"},
+                {"Adam", "Cooking", "Remy", "Ghosts", "Remy", "Remy", "Adam"}});
+}
+
 TEST_F(EdgeUniquenessWritesTest, bindsThreeParallelEdgesOncePerOrder) {
     addParallelKnowsWell();
     addParallelKnowsWell();
