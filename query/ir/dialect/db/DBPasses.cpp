@@ -3664,7 +3664,9 @@ struct NodeColumnScanCross {
     bool _scanOnTheLeft {false};
     ArrayAttr _labels;
     Value _scannedColumn;
+    Value _comparedColumn;
     EqOp _equality {nullptr};
+    unsigned _comparedOperand {0};
 };
 
 // The scan a factor is nothing but, null for any other factor
@@ -3709,14 +3711,70 @@ FilterOp findRequiringFilter(Value conjunct) {
     }
 }
 
-bool isRelationNodeColumn(Value column, CrossProduct product, Value scannedColumn) {
-    const OpResult result = dyn_cast<OpResult>(column);
-    if (!result || result.getOwner() != product.getOperation() || column == scannedColumn) {
-        return false;
-    }
+// The product result @param column is carried from through filters, null when it comes from
+// anywhere else. The filters it crosses are added to @param crossed.
+Value traceToProductResult(Value column, CrossProduct product, llvm::SmallSetVector<Operation*, 4>& crossed) {
+    for (;;) {
+        const OpResult result = dyn_cast<OpResult>(column);
+        if (!result) {
+            return {};
+        }
 
+        Operation* const owner = result.getOwner();
+        if (owner == product.getOperation()) {
+            return column;
+        }
+
+        FilterOp filter = dyn_cast<FilterOp>(owner);
+        if (!filter) {
+            return {};
+        }
+
+        crossed.insert(filter);
+        column = filter.getColumnsToFilter()[result.getResultNumber()];
+    }
+}
+
+bool isNodeColumn(Value column) {
     const ColumnType type = dyn_cast<ColumnType>(column.getType());
     return type && isa<storage::NodeIDType>(type.getType());
+}
+
+// The equality after @param product of its scanned column with a node column of the other
+// factor, both carried to it through the same filters
+EqOp findScanEquality(CrossProduct product, Value scannedColumn, NodeColumnScanCross& match, llvm::SmallSetVector<Operation*, 4>& crossed) {
+    Block* const block = product->getBlock();
+    for (Operation& op : llvm::make_range(std::next(product->getIterator()), block->end())) {
+        EqOp equality = dyn_cast<EqOp>(op);
+        if (!equality) {
+            continue;
+        }
+
+        llvm::SmallSetVector<Operation*, 4> lhsCrossed;
+        llvm::SmallSetVector<Operation*, 4> rhsCrossed;
+        const Value lhs = traceToProductResult(equality.getLhs(), product, lhsCrossed);
+        const Value rhs = traceToProductResult(equality.getRhs(), product, rhsCrossed);
+        if (!lhs || !rhs || lhs == rhs) {
+            continue;
+        }
+
+        const bool scannedOnTheLhs = lhs == scannedColumn;
+        const Value compared = scannedOnTheLhs ? rhs : lhs;
+        const bool comparesTheScan = scannedOnTheLhs || rhs == scannedColumn;
+        const bool crossesTheSameFilters = lhsCrossed.size() == rhsCrossed.size()
+                                        && llvm::all_of(lhsCrossed, [&rhsCrossed](Operation* filter) { return rhsCrossed.contains(filter); });
+        if (!comparesTheScan || !isNodeColumn(compared) || !crossesTheSameFilters) {
+            continue;
+        }
+
+        match._comparedColumn = compared;
+        match._comparedOperand = scannedOnTheLhs ? 1 : 0;
+        crossed = lhsCrossed;
+
+        return equality;
+    }
+
+    return nullptr;
 }
 
 bool matchNodeColumnScanCross(CrossProduct product, bool scanOnTheLeft, NodeColumnScanCross& match) {
@@ -3729,40 +3787,43 @@ bool matchNodeColumnScanCross(CrossProduct product, bool scanOnTheLeft, NodeColu
     const size_t scannedIndex = scanOnTheLeft ? 0 : product.getNumResults() - 1;
     const Value scannedColumn = product.getResult(scannedIndex);
 
-    EqOp equality;
-    for (Operation* const user : scannedColumn.getUsers()) {
-        EqOp candidate = dyn_cast<EqOp>(user);
-        if (!candidate) {
-            continue;
-        }
-
-        const Value lhs = candidate.getLhs();
-        const Value other = lhs == scannedColumn ? candidate.getRhs() : lhs;
-        if (isRelationNodeColumn(other, product, scannedColumn)) {
-            equality = candidate;
-            break;
-        }
-    }
-
+    llvm::SmallSetVector<Operation*, 4> filters;
+    EqOp equality = findScanEquality(product, scannedColumn, match, filters);
     if (!equality) {
         return false;
     }
 
     FilterOp filter = findRequiringFilter(equality.getResult());
-    if (!filter || filter->getBlock() != product->getBlock()) {
+    if (!filter || filter->getBlock() != product->getBlock() || filters.contains(filter)) {
         return false;
     }
 
-    // The scanned node is the compared column only on the rows the filter keeps, so nothing
-    // but the mask may read the product's rows before it.
-    const MaskCone cone = collectMaskCone(filter.getMask());
-    if (!maskConeIsPrivateTo(cone, filter)) {
+    filters.insert(filter);
+
+    // The scanned node is the compared column only on the rows the equality's filter keeps,
+    // so up to it the product's rows may only be read by these filters and their masks.
+    llvm::SmallPtrSet<Operation*, 16> readers;
+    for (Operation* const filterOp : filters) {
+        FilterOp crossed = cast<FilterOp>(filterOp);
+        const MaskCone cone = collectMaskCone(crossed.getMask());
+        if (!maskConeIsPrivateTo(cone, crossed)) {
+            return false;
+        }
+
+        readers.insert(filterOp);
+        readers.insert(cone._ops.begin(), cone._ops.end());
+    }
+
+    const auto readOnlyByTheFilters = [&readers](Operation* op) {
+        return llvm::all_of(op->getUsers(), [&readers](Operation* user) { return readers.contains(user); });
+    };
+
+    if (!readOnlyByTheFilters(product.getOperation())) {
         return false;
     }
 
-    for (Operation* const user : product->getUsers()) {
-        const bool readByTheMask = llvm::is_contained(cone._ops, user);
-        if (user != filter.getOperation() && !readByTheMask) {
+    for (Operation* const filterOp : filters) {
+        if (filterOp != filter.getOperation() && !readOnlyByTheFilters(filterOp)) {
             return false;
         }
     }
@@ -3781,11 +3842,11 @@ bool matchNodeColumnScanCross(CrossProduct product, bool scanOnTheLeft, NodeColu
 }
 
 void fuseScanByNodeColumn(NodeColumnScanCross& match, mlir::OpBuilder& builder) {
+    match._scannedColumn.replaceAllUsesWith(match._comparedColumn);
     inlineRelationFactor(match._product, *match._relationFactor, match._scanOnTheLeft);
 
     EqOp equality = match._equality;
-    const Value lhs = equality.getLhs();
-    const Value compared = lhs == match._scannedColumn ? equality.getRhs() : lhs;
+    const Value compared = equality->getOperand(match._comparedOperand);
     const mlir::Location loc = equality.getLoc();
     const Type boolColumnType = equality.getResult().getType();
 
@@ -3800,7 +3861,6 @@ void fuseScanByNodeColumn(NodeColumnScanCross& match, mlir::OpBuilder& builder) 
     equality.getResult().replaceAllUsesWith(check);
     equality.erase();
 
-    match._scannedColumn.replaceAllUsesWith(compared);
     match._product.erase();
 }
 

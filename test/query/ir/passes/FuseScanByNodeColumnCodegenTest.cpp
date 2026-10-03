@@ -129,6 +129,23 @@ TEST_F(FuseScanByNodeColumnCodegenTest, equalityWithOtherConjunctsKeepsThem) {
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
 }
 
+TEST_F(FuseScanByNodeColumnCodegenTest, inlinePropertyMapIsCheckedOnTheSearchedNodes) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate(std::string(searchTwo) + "MATCH (n:Person {age: 32}) WHERE n = ids RETURN n.name");
+
+    llvm::SmallVector<mlir::db::CheckNodeExists> existenceChecks = collect<mlir::db::CheckNodeExists>(*module);
+    ASSERT_EQ(existenceChecks.size(), 1u);
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 2u);
+    EXPECT_EQ(reads.front().getProperty(), "age");
+
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 0u);
+}
+
 TEST_F(FuseScanByNodeColumnCodegenTest, matchOnAnEarlierClauseVariableDropsTheSecondScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("MATCH (a:Interest) WITH a MATCH (n:Person) WHERE n = a RETURN n.name");

@@ -172,6 +172,17 @@ TEST_F(FuseScanByNodeColumnTest, otherConjunctsStillCutTheRows) {
                {{"Remy"}});
 }
 
+TEST_F(FuseScanByNodeColumnTest, inlinePropertyMapCutsTheNeighbours) {
+    expectRows(std::string(searchThree) + "YIELD ids MATCH (n:Person {age: 32}) WHERE n = ids RETURN n.name",
+               {{"Remy"}});
+
+    expectRows(std::string(searchThree) + "YIELD ids MATCH (n {name: 'Ghosts'}) WHERE n = ids RETURN n.name",
+               {{"Ghosts"}});
+
+    expectRows(std::string(searchThree) + "YIELD ids MATCH (n:Person {age: 99}) WHERE n = ids RETURN n.name",
+               {});
+}
+
 TEST_F(FuseScanByNodeColumnTest, matchDropsADeletedNeighbour) {
     runWrite("MATCH (n {name: 'Ghosts'}) DETACH DELETE n");
 
