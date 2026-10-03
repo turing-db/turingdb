@@ -6,6 +6,7 @@
 #include "JsonEncoder.h"
 #include "LocalMemory.h"
 #include "QueryStatus.h"
+#include "ID.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
 
@@ -68,4 +69,31 @@ TEST(JsonEncoderTest, ReplacesInvalidUtf8InColumnNamesAndStrings) {
                                  "]]]}";
 
     EXPECT_EQ(writer.getOutput(), expected);
+}
+
+TEST(JsonEncoderTest, WritesInvalidEntityIDsAsNull) {
+    db::LocalMemory localMem;
+
+    auto* nodes = localMem.alloc<db::ColumnVector<db::NodeID>>();
+    nodes->push_back(db::NodeID {2});
+    nodes->push_back(db::NodeID {});
+
+    auto* edges = localMem.alloc<db::ColumnVector<db::EdgeID>>();
+    edges->push_back(db::EdgeID {});
+    edges->push_back(db::EdgeID {7});
+
+    const std::string_view columnNames[] = {"c", "e"};
+    const db::Column* columns[] = {nodes, edges};
+
+    StringWriter writer;
+    db::JsonEncoder<StringWriter> encoder(writer);
+
+    encoder.start();
+    encoder.writeColumnHeaders(columnNames, columns);
+    encoder.writeColumns(columns, 0, nodes->size());
+    encoder.finish();
+
+    EXPECT_EQ(writer.getOutput(), "{\"header\":{\"column_names\":[\"c\",\"e\"],"
+                                  "\"column_types\":[\"UInt64\",\"UInt64\"]},"
+                                  "\"data\":[[[2,null],[null,7]]]}");
 }

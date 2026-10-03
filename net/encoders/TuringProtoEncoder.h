@@ -98,7 +98,9 @@ struct ColumnHeaderWriter {
     template <typename T>
     void operator()(const db::ColumnVector<T>* col) {
         const auto typeCode = ColInternalKindToProtoEnum::map<T>();
-        writeColumnSchema(typeCode, net::proto::ColumnKind::VECTOR);
+        const net::proto::ColumnKind encoding = db::EntityIDLike<T> ? net::proto::ColumnKind::OPTIONAL_VECTOR
+                                                                    : net::proto::ColumnKind::VECTOR;
+        writeColumnSchema(typeCode, encoding);
     }
 
     template <typename T>
@@ -152,7 +154,16 @@ public:
 
         writeRowCount(values.size());
 
-        if constexpr (db::StringLike<T>) {
+        if constexpr (db::EntityIDLike<T>) {
+            DynamicLargeBitMask<uint64_t> mask(values.size());
+            for (size_t row = 0; row < values.size(); row++) {
+                mask.set(row, values[row].isValid());
+            }
+            _outBuf->copyVarLenData(mask.data(), mask.byteSize());
+
+            const size_t columnByteSize = sizeof(T) * values.size();
+            _outBuf->copyVector<T>(values.data(), columnByteSize);
+        } else if constexpr (db::StringLike<T>) {
             for (const auto& val : values) {
                 bioassert(val.size() * sizeof(char) <= MAX_WIRE_SIZE, "String length exceeds maximum wire size");
                 const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(char));

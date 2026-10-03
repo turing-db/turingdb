@@ -321,13 +321,13 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
             }
             case db::ColumnVector<db::NodeID>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnVector<db::NodeID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::NodeID& v) { return v.getValue(); });
+                value = vectorAsList(src);
                 dtypeName = "UInt64";
                 break;
             }
             case db::ColumnVector<db::EdgeID>::staticKind(): {
                 const auto& src = static_cast<const db::ColumnVector<db::EdgeID>*>(col)->getRaw();
-                value = transformVectorAsNdarray<uint64_t>(src, [](const db::EdgeID& v) { return v.getValue(); });
+                value = vectorAsList(src);
                 dtypeName = "UInt64";
                 break;
             }
