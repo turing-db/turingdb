@@ -436,17 +436,12 @@ void TuringShell::startLoop() {
         errno = 0;
 
         // Async Lineoise API
-        linenoiseEditStart(_lineNoiseHandle->getState(), -1, -1,
-                           _lineNoiseHandle->getBuffer(),
-                           LineNoiseHandle::BUFSIZE,
-                           shellPrompt.c_str());
-        _lineNoiseHandle->setActive();
+        _lineNoiseHandle->startEditing(shellPrompt.c_str());
 
         line = linenoiseEditMore;
         while ((line = linenoiseEditFeed(_lineNoiseHandle->getState())) == linenoiseEditMore) { }
 
-        _lineNoiseHandle->setInactive();
-        linenoiseEditStop(_lineNoiseHandle->getState());
+        _lineNoiseHandle->stopEditing();
 
         if (line == nullptr) {
             if (errno == EAGAIN) {

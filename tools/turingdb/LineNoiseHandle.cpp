@@ -13,6 +13,20 @@ LineNoiseHandle::LineNoiseHandle()
 LineNoiseHandle::~LineNoiseHandle(){
 }
 
+void LineNoiseHandle::startEditing(const char* prompt) {
+    // Without a terminal on stdin linenoise draws no prompt and leaves the width at 0,
+    // which makes hiding the prompt before a log line loop forever
+    const int started = linenoiseEditStart(&_lineNoiseState, -1, -1, _lineNoiseBuffer, BUFSIZE, prompt);
+    if (started == 0) {
+        _lineNoiseActive.store(true);
+    }
+}
+
+void LineNoiseHandle::stopEditing() {
+    _lineNoiseActive.store(false);
+    linenoiseEditStop(&_lineNoiseState);
+}
+
 void LineNoiseHandle::initProtectedLogger(const std::shared_ptr<LogSetup::ConsoleSink>& consoleSink) {
     // Install spdlog guard sink so log messages hide/restore the prompt
     auto guardSink = std::make_shared<ProtectedLineNoiseSink>(_lineNoiseState,
