@@ -910,6 +910,17 @@ void DBProgramGenerator::rebindYieldedColumn(const VarDecl* decl, mlir::TypedVal
     }
 }
 
+void DBProgramGenerator::rebindNamedPath(const VarDecl* decl, mlir::Value column) {
+    const bool namesAPath = _part._namedPaths.contains(decl) || _part._namedPathWalks.contains(decl);
+    if (!namesAPath) {
+        return;
+    }
+
+    // The column is a built path now, no longer the walk's handle
+    _part._namedPathWalks.erase(decl);
+    _part._namedPaths[decl] = column;
+}
+
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_part._varMap.contains(var), "ScanNodes for registered variable");
 
@@ -8942,6 +8953,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             // A YIELD can bind onto a variable a pattern already carries, which leaves the
             // one declaration on both a variable and a yielded column, so both are rebound.
             rebindYieldedColumn(keyVarDeclAtPos[i], results[i]);
+            rebindNamedPath(keyVarDeclAtPos[i], results[i]);
             continue;
         }
 
@@ -8961,6 +8973,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const VarDecl* symDecl = sym->getDecl();
 
         rebindYieldedColumn(symDecl, results[i]);
+        rebindNamedPath(symDecl, results[i]);
 
         const auto identityIt = edgeIdentityVars.find(symDecl);
 

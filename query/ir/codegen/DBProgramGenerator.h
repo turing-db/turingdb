@@ -1258,6 +1258,7 @@ private:
     mlir::db::ColumnType allocColumnType(mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
     void rebindYieldedColumn(const VarDecl* decl, mlir::TypedValue<mlir::Type> val);
+    void rebindNamedPath(const VarDecl* decl, mlir::Value column);
 };
 
 }
