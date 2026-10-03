@@ -479,6 +479,7 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
         imported->setListShape(decl->getListShape());
         imported->setIsQuantifiedPath(decl->isQuantifiedPath());
         _declSources[imported] = decl;
+        _exprAnalyzer->importCSVSource(imported, decl);
     }
 
     // What the scope clause names is readable everywhere in the body. A body importing
@@ -584,6 +585,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
         imported->setIsQuantifiedPath(decl->isQuantifiedPath());
         imported->setImportSource(decl);
         _declSources[imported] = decl;
+        _exprAnalyzer->importCSVSource(imported, decl);
 
         correlated.push_back(name);
     };

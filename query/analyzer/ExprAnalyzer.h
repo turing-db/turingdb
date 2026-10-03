@@ -77,6 +77,10 @@ public:
     // resolve to fields of that statement rather than to accesses of their own
     void registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV);
 
+    // A subquery body reads an imported row through a declaration of its own, which reads
+    // the fields of the load the source was bound by
+    void importCSVSource(const VarDecl* imported, const VarDecl* source);
+
     // Expressions
     void analyzeRootExpr(Expr* expr);
     void analyzeExpr(Expr* expr);
