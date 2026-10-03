@@ -176,6 +176,7 @@ private:
         // The edges the batch's seeds exclude, sorted by edge, each with the seeds excluding it
         std::vector<std::pair<EdgeID, uint64_t>> _excluded;
         uint64_t _excludedSignature {0};
+        uint64_t _excludingSeeds {0};
         size_t _batchFirstRow {0};
         uint64_t _level {0};
         size_t _emitNode {0};

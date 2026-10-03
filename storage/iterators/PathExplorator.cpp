@@ -1069,6 +1069,7 @@ void PathExplorator::startBatch() {
 uint64_t PathExplorator::closedSeedsOf(uint64_t seeds) {
     CycleSearch& search = _cycleSearch;
     const size_t firstRow = _reach._batchFirstRow;
+    const uint64_t excludingSeeds = _reach._excludingSeeds;
 
     uint64_t closed = 0;
     uint64_t unknown = 0;
@@ -1078,7 +1079,9 @@ uint64_t PathExplorator::closedSeedsOf(uint64_t seeds) {
 
         const auto labelled = search._components.find(seed);
         const auto searched = search._seeds.find(seed);
-        if (labelled != search._components.end()) {
+        if ((excludingSeeds & mask) != 0) {
+            unknown |= mask;
+        } else if (labelled != search._components.end()) {
             closed |= labelled->second._onCycle ? mask : 0;
         } else if (searched != search._seeds.end()) {
             closed |= searched->second ? mask : 0;
@@ -1095,10 +1098,13 @@ uint64_t PathExplorator::closedSeedsOf(uint64_t seeds) {
     const bool labels = labelsComponents();
 
     for (uint64_t remaining = unknown; remaining != 0; remaining &= remaining - 1) {
-        const bool closes = (found & remaining & -remaining) != 0;
+        const uint64_t mask = remaining & -remaining;
+        const bool closes = (found & mask) != 0;
         const NodeID seed = (*_input)[firstRow + std::countr_zero(remaining)];
 
-        if (!closes && labels) {
+        if ((excludingSeeds & mask) != 0) {
+            continue;
+        } else if (!closes && labels) {
             if (!search._components.contains(seed.getValue())) {
                 labelComponentOf(seed);
             }
@@ -1210,7 +1216,9 @@ uint64_t PathExplorator::searchCycles(uint64_t seeds) {
         collectReachCandidates(seed);
 
         for (size_t index = 0; index < candidateNodes.size(); index++) {
-            if (candidateNodes[index] == seed) {
+            if ((excludedSeedMask(candidateEdges[index]) & (1ull << bit)) != 0) {
+                continue;
+            } else if (candidateNodes[index] == seed) {
                 closed |= 1ull << bit;
             } else {
                 hops.push_back(CycleSearch::FirstHop {._edge = candidateEdges[index], ._node = candidateNodes[index]});
@@ -1287,16 +1295,17 @@ uint64_t PathExplorator::searchCycles(uint64_t seeds) {
                     continue;
                 }
 
+                const uint64_t allowed = ~excludedSeedMask(candidateEdges[index]);
                 const uint64_t seedsThere = candidateWords[seedsWord];
-                const uint64_t returning = (first | second) & seedsThere;
+                const uint64_t returning = (first | second) & seedsThere & allowed;
                 if (returning != 0) {
                     closed |= closingReturns(returning, second, identity, candidateEdges[index]);
                 }
 
                 if (offers) {
                     const bool waiting = hasGains(candidateWords);
-                    offerFirstArrival(candidateWords, first & ~seedsThere, identity);
-                    offerSecondArrival(candidateWords, second & ~seedsThere, identity);
+                    offerFirstArrival(candidateWords, first & ~seedsThere & allowed, identity);
+                    offerSecondArrival(candidateWords, second & ~seedsThere & allowed, identity);
 
                     if (!waiting && hasGains(candidateWords)) {
                         search._next.push_back(candidate);
@@ -1339,6 +1348,7 @@ void PathExplorator::collectBatchExclusions(size_t firstRow, size_t count) {
     Reachability& reach = _reach;
     reach._excluded.clear();
     reach._excludedSignature = 0;
+    reach._excludingSeeds = 0;
 
     if (!_excluded.isSet()) {
         return;
@@ -1369,6 +1379,7 @@ void PathExplorator::collectBatchExclusions(size_t firstRow, size_t count) {
 
     for (const auto& [edge, mask] : reach._excluded) {
         reach._excludedSignature |= signatureBit(edge);
+        reach._excludingSeeds |= mask;
     }
 }
 

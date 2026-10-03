@@ -108,3 +108,28 @@ TEST_F(PathEdgeUniquenessTest, distinctSearchExcludesThePathBeforeIt) {
 
     expectCount("MATCH (a)-[*1..2]->(b)-[*1..2]->(c) WITH DISTINCT a, b, c RETURN count(*)", "43");
 }
+
+TEST_F(PathEdgeUniquenessTest, undirectedDistinctSearchClosesNoCycleThroughTheHopBeforeIt) {
+    std::string dump;
+    optimisedDump("EXPLAIN (db) MATCH (a)-[e1]-(b)-[*1..2]-(c) WITH DISTINCT a, b, c RETURN count(*)", dump);
+    ASSERT_TRUE(contains(dump, "distinct")) << dump;
+
+    expectCount("MATCH (a)-[e1]-(b)-[*1..2]-(c) WITH DISTINCT a, b, c RETURN count(*)", "94");
+
+    StringRowSink sink;
+    run("MATCH (a)-[e1]-(b)-[*1..2]-(c) WITH DISTINCT a, b, c WHERE b = c RETURN a.name, b.name ORDER BY a.name, b.name", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Adam", "Remy"},
+                                                    {"Bio", "Adam"},
+                                                    {"Computers", "Remy"},
+                                                    {"Cooking", "Adam"},
+                                                    {"Eighties", "Remy"},
+                                                    {"Ghosts", "Remy"}};
+    EXPECT_EQ(sink.getRows(), expected);
+
+    expectCount("MATCH (a)-[e1]-(b)-[*]-(c) WITH DISTINCT a, b, c RETURN count(*)", "160");
+
+    StringRowSink unbounded;
+    run("MATCH (a)-[e1]-(b)-[*]-(c) WITH DISTINCT a, b, c WHERE b = c RETURN a.name, b.name ORDER BY a.name, b.name", unbounded);
+    EXPECT_EQ(unbounded.getRows(), expected);
+}
