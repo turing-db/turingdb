@@ -50,7 +50,7 @@ TEST_F(HashJoinTest, sinksTheKeyIntoBothFactors) {
 // yielded rather than adding one.
 TEST_F(HashJoinTest, joinsOnTheColumnItselfWhenTheKeyIsTheVariable) {
     std::string program;
-    dbProgram("MATCH (n), (m) WHERE n = m RETURN n", program);
+    dbProgram("MATCH ()-[e]->(), ()-[f]->() WHERE e = f RETURN e", program);
 
     EXPECT_TRUE(contains(program, "db.hash_join")) << program;
     EXPECT_TRUE(contains(program, "on 0, 0")) << program;
@@ -150,11 +150,11 @@ TEST_F(HashJoinTest, cutsTheJoinedRowsWithALimit) {
 }
 
 // Two columns whose types the db level cannot tell apart are left to the cross product:
-// the join matches keys by the bytes they serialize to, and a node ID beside a number
+// the join matches keys by the bytes they serialize to, and an edge ID beside a number
 // would answer a comparison the equality did not.
 TEST_F(HashJoinTest, keepsTheProductWhenTheKeysNeedNotShareAType) {
     std::string program;
-    dbProgram("MATCH (n), (m) WHERE n = m.age RETURN n, m", program);
+    dbProgram("MATCH ()-[e]->(), (m) WHERE e = m.age RETURN e, m", program);
 
     EXPECT_TRUE(contains(program, "db.cross_product")) << program;
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;

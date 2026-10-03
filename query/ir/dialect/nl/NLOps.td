@@ -237,6 +237,28 @@ def Unwind : NLOp<"unwind", [Pure]> {
 }
 
 /**
+* ListFetchNode
+*/
+def ListFetchNode : NLOp<"list_fetch_node", [Pure]> {
+  let summary = "Keep the rows whose ID cell names a node, with that node, as freshly cut chunks";
+  let description = [{
+    Imperative counterpart of db.list_fetch_node. Each step reads the chunk of ID cells, keeps
+    the rows naming a node the graph holds, and cuts the carry set to them:
+
+      %a, %i2 = nl.list_fetch_node(%ids, {%i})
+                  : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>)
+                  -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>)
+  }];
+
+  let arguments = (ins NLChunk:$ids, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLChunk:$nodes, Variadic<NLChunk>:$carried);
+
+  let assemblyFormat = [{
+    `(` $ids `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * MakeList
 */
 def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {

@@ -562,6 +562,8 @@ private:
     // Applies a mask to a carry set
     void lowerFilter(mlir::db::FilterOp filter);
 
+    void lowerListFetchNode(mlir::db::ListFetchNode fetch);
+
     // Lower a db.group_aggregate: the grouped, multi-row sibling of lowerAggregate,
     // modeled on lowerSort. Hoist an nl.group_aggregate_buffer accumulator (carrying
     // keyCount and the aggregate kinds) to the top of the entry block, place an

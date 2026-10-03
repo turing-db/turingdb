@@ -869,6 +869,7 @@ private:
     static NLListAppendFunction selectOwnedListAppendForChunkType(mlir::Type chunkType);
 
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
+    static NLListFetchNodeFunction selectFetchForChunkType(mlir::Type chunkType);
     static NLFillNullFunction selectFillNullForChunkType(mlir::Type chunkType);
 
     // The appender that keys one row of a merge's property value column, chosen from the
@@ -1045,6 +1046,8 @@ private:
     void translateBinaryFunction(mlir::Operation* op, NLStmtContainer* body);
 
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);
+
+    void translateListFetchNode(mlir::nl::ListFetchNode fetch, NLStmtContainer* body);
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 

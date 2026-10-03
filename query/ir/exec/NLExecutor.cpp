@@ -1273,6 +1273,75 @@ void collectOptTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* ind
     }
 }
 
+std::optional<NodeID> namedNode(NodeID node) {
+    return node;
+}
+
+std::optional<NodeID> namedNode(types::Int64::Primitive id) {
+    if (id < 0) {
+        throw TuringException("Cannot compare ID with negative integer.");
+    }
+
+    return NodeID(static_cast<uint64_t>(id));
+}
+
+std::optional<NodeID> namedNode(types::UInt64::Primitive id) {
+    return NodeID(id);
+}
+
+std::optional<NodeID> namedNode(ListElementView cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Int: {
+            const types::Int64::Primitive id = cell.getAs<types::Int64::Primitive>();
+            if (id < 0) {
+                return std::nullopt;
+            }
+
+            return namedNode(id);
+        }
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return namedNode(cell.getAs<types::UInt64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::NodeID:
+            return cell.getAs<NodeID>();
+        break;
+
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+template <typename Cell>
+std::optional<NodeID> namedNode(const std::optional<Cell>& cell) {
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return namedNode(*cell);
+}
+
+template <typename Cell>
+void fetchListedNodes(const Column* ids, const GraphView* view, ColumnVector<size_t>* indices, ColumnNodeIDs* nodes) {
+    const std::vector<Cell>& cells = static_cast<const ColumnVector<Cell>*>(ids)->getRaw();
+    std::vector<size_t>& rows = indices->getRaw();
+    std::vector<NodeID>& fetched = nodes->getRaw();
+
+    const GraphReader reader = view->read();
+
+    for (size_t row = 0; row < cells.size(); row++) {
+        const std::optional<NodeID> node = namedNode(cells[row]);
+
+        if (node.has_value() && reader.graphHasNode(*node)) {
+            rows.push_back(row);
+            fetched.push_back(*node);
+        }
+    }
+}
+
 bool isMaskConstant(const Column* mask) {
     return mask->getContainerKind() == ContainerKind::code<ColumnConst<CustomBool>>();
 }
@@ -8138,6 +8207,22 @@ void NLExecutor::runFilter(NLExecutionContext* context, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runListFetchNode(NLExecutionContext* context, NLFunctionData* data) {
+    NLListFetchNodeData* fetch = static_cast<NLListFetchNodeData*>(data);
+
+    ColumnVector<size_t>* indices = fetch->getIndices();
+    ColumnNodeIDs* nodes = fetch->getNodes();
+
+    indices->getRaw().clear();
+    nodes->getRaw().clear();
+
+    fetch->getFetch()(fetch->getIDs(), context->getView(), indices, nodes);
+
+    for (const NLFilterData::FilterColumn& column : fetch->columns()) {
+        column._gather(column._input, indices, column._output);
+    }
+}
+
 void NLExecutor::runCountReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLCountResetData* reset = static_cast<NLCountResetData*>(data);
     reset->getState()->reset();
@@ -8999,6 +9084,30 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, boo
     }
 
     return &collectMaskSurvivors;
+}
+
+NLListFetchNodeFunction NLExecutor::selectNodeFetchFunction(bool nullable) {
+    return nullable ? &fetchListedNodes<std::optional<NodeID>> : &fetchListedNodes<NodeID>;
+}
+
+NLListFetchNodeFunction NLExecutor::selectIntegerFetchFunction(ValueType valueType, bool nullable) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return nullable ? &fetchListedNodes<std::optional<types::Int64::Primitive>> : &fetchListedNodes<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return nullable ? &fetchListedNodes<std::optional<types::UInt64::Primitive>> : &fetchListedNodes<types::UInt64::Primitive>;
+        break;
+
+        default:
+            throw IRException("nl.list_fetch_node reads node IDs out of nodes, integers or tagged cells");
+        break;
+    }
+}
+
+NLListFetchNodeFunction NLExecutor::selectTaggedFetchFunction(bool nullable) {
+    return nullable ? &fetchListedNodes<std::optional<ListElementView>> : &fetchListedNodes<ListElementView>;
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {

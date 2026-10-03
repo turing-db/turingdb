@@ -49,6 +49,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
+#define GEN_PASS_DEF_FUSELISTFETCHNODE
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
 #define GEN_PASS_DEF_SINKMAKEPATH
@@ -2936,7 +2937,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     } else if (isa<FilterOp>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
         return true;
-    } else if (isa<Unwind>(op)) {
+    } else if (isa<Unwind, ListFetchNode>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
         return true;
     } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
@@ -4473,6 +4474,289 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
 
 private:
     const DBPassContext* _context {&defaultPassContext};
+};
+
+// A whole node scan whose column reaches an equality filter through ops that only hand it
+// on, the other side of the equality being the IDs to fetch. Each link is the result an op
+// hands the column on as, from the one the equality reads back to the scan.
+struct ListFetchNodeChain {
+    FilterOp _filter {nullptr};
+    EqOp _equality {nullptr};
+    Value _nodes;
+    Value _ids;
+    Operation* _scan {nullptr};
+    ArrayAttr _labels;
+    llvm::SmallVector<OpResult> _links;
+};
+
+// The column a result is, as handed on by its op: a column carried through a filter, an
+// unwind or a list fetch, or one a product's factor yields. Null for any other result.
+Value handedOnFrom(OpResult result) {
+    Operation* const op = result.getOwner();
+    const size_t resultIndex = result.getResultNumber();
+
+    if (isa<FilterOp>(op)) {
+        return op->getOperand(resultIndex + 1);
+    } else if (isa<Unwind, ListFetchNode>(op)) {
+        return resultIndex == 0 ? Value() : op->getOperand(resultIndex);
+    } else if (isa<CrossProduct>(op)) {
+        Yield leftYield = factorYield(op, 0);
+        const size_t leftCount = leftYield.getNumOperands();
+
+        if (resultIndex < leftCount) {
+            return leftYield.getOperand(resultIndex);
+        }
+
+        return factorYield(op, 1).getOperand(resultIndex - leftCount);
+    }
+
+    return {};
+}
+
+bool isFactorOfTheScanAlone(Block* block) {
+    const bool inAProduct = isa_and_nonnull<CrossProduct>(block->getParentOp());
+
+    return inAProduct
+        && block->getOperations().size() == 2
+        && cast<Yield>(block->getTerminator()).getNumOperands() == 1;
+}
+
+// A factor yielding the scanned column alone is left empty once the column is dropped,
+// which only its product going away can account for - so the scan must be all it holds.
+// A filter carrying the scanned column alone would be left a filter of nothing.
+bool keepsAColumnOnceDropped(OpResult link, Value handedOn) {
+    Operation* const op = link.getOwner();
+
+    if (isa<CrossProduct>(op)) {
+        Block* const factor = cast<Yield>(*handedOn.getUsers().begin())->getBlock();
+        const bool yieldsOtherColumns = factor->getTerminator()->getNumOperands() > 1;
+        const bool holdsTheScanAlone = isa_and_nonnull<ScanNodes, ScanNodesByLabel>(handedOn.getDefiningOp())
+                                       && isFactorOfTheScanAlone(factor);
+
+        return yieldsOtherColumns || holdsTheScanAlone;
+    } else if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+        return filter.getColumnsToFilter().size() > 1;
+    }
+
+    return true;
+}
+
+bool matchListFetchNodeChain(Value nodes, Value ids, ListFetchNodeChain& chain) {
+    if (nodes == ids) {
+        return false;
+    }
+
+    for (OpOperand& use : nodes.getUses()) {
+        Operation* const user = use.getOwner();
+        const bool readByTheEquality = user == chain._equality.getOperation();
+        const bool carriedByTheFilter = user == chain._filter.getOperation() && use.getOperandNumber() > 0;
+
+        if (!readByTheEquality && !carriedByTheFilter) {
+            return false;
+        }
+    }
+
+    chain._links.clear();
+
+    Value column = nodes;
+    while (!isa_and_nonnull<ScanNodes, ScanNodesByLabel>(column.getDefiningOp())) {
+        const OpResult link = dyn_cast<OpResult>(column);
+        if (!link) {
+            return false;
+        }
+
+        const Value handedOn = handedOnFrom(link);
+        if (!handedOn || !handedOn.hasOneUse() || !keepsAColumnOnceDropped(link, handedOn)) {
+            return false;
+        }
+
+        chain._links.push_back(link);
+        column = handedOn;
+    }
+
+    Operation* const scan = column.getDefiningOp();
+    Block* const scanBlock = scan->getBlock();
+
+    const bool scanStandsBesideTheFilter = scanBlock == chain._filter->getBlock();
+    if (!scanStandsBesideTheFilter && !isFactorOfTheScanAlone(scanBlock)) {
+        return false;
+    }
+
+    chain._nodes = nodes;
+    chain._ids = ids;
+    chain._scan = scan;
+
+    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(scan)) {
+        chain._labels = scanByLabel.getLabels();
+    }
+
+    return true;
+}
+
+bool matchListFetchNode(FilterOp filter, ListFetchNodeChain& chain) {
+    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+    if (!equality || !equality.getResult().hasOneUse() || equality->getBlock() != filter->getBlock()) {
+        return false;
+    }
+
+    chain._filter = filter;
+    chain._equality = equality;
+
+    const Value lhs = equality.getLhs();
+    const Value rhs = equality.getRhs();
+
+    return matchListFetchNodeChain(lhs, rhs, chain) || matchListFetchNodeChain(rhs, lhs, chain);
+}
+
+// Cuts the columns to the rows whose first column holds a node carrying every label
+void keepLabelledRows(llvm::SmallVectorImpl<Value>& columns, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
+    MLIRContext* const context = builder.getContext();
+    const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
+    const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
+
+    GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, columns.front());
+    CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), labels);
+
+    const ValueRange columnRange(columns);
+    FilterOp labelFilter = builder.create<FilterOp>(loc, columnRange.getTypes(), check.getResult(), columnRange);
+
+    columns.assign(labelFilter.getResults().begin(), labelFilter.getResults().end());
+}
+
+CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::OpBuilder& builder) {
+    Operation* const productOp = product.getOperation();
+    const size_t leftCount = factorYield(productOp, 0).getNumOperands();
+
+    llvm::SmallBitVector keep(productOp->getNumResults(), true);
+    keep.reset(resultIndex);
+
+    llvm::SmallVector<Type> keptTypes;
+    keptResultTypes(productOp, keep, keptTypes);
+
+    builder.setInsertionPoint(product);
+    CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), keptTypes);
+
+    replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep, leftCount);
+
+    return trimmed;
+}
+
+void dropCarriedColumn(Operation* op, size_t resultIndex, mlir::OpBuilder& builder) {
+    CarrySetLayout layout;
+    const bool carries = matchCarrySetLayout(op, layout);
+    bioassert(carries, "A fetch chain link without a carry set");
+
+    const size_t droppedIndex = resultIndex - layout._resultOffset;
+
+    llvm::SmallVector<size_t> kept;
+    for (size_t carriedIndex = 0; carriedIndex < carriedCount(op, layout); carriedIndex++) {
+        if (carriedIndex != droppedIndex) {
+            kept.push_back(carriedIndex);
+        }
+    }
+
+    trimCarrySet(op, layout, kept, builder);
+}
+
+// A product one of whose factors yields nothing makes the other factor's rows alone
+void inlineTheFactorLeft(CrossProduct product) {
+    Operation* const productOp = product.getOperation();
+    const bool leftIsEmpty = factorYield(productOp, 0).getNumOperands() == 0;
+    const bool rightIsEmpty = factorYield(productOp, 1).getNumOperands() == 0;
+
+    if (!leftIsEmpty && !rightIsEmpty) {
+        return;
+    }
+
+    Region& keptFactor = leftIsEmpty ? product.getRightFactor() : product.getLeftFactor();
+    Block& keptBlock = keptFactor.front();
+    Yield keptYield = cast<Yield>(keptBlock.getTerminator());
+
+    const llvm::SmallVector<Value> yielded(keptYield.getColumns().begin(), keptYield.getColumns().end());
+
+    product->getBlock()->getOperations().splice(Block::iterator(productOp),
+                                                keptBlock.getOperations(),
+                                                keptBlock.begin(),
+                                                Block::iterator(keptYield));
+
+    for (size_t index = 0; index < yielded.size(); index++) {
+        product.getResult(index).replaceAllUsesWith(yielded[index]);
+    }
+
+    product.erase();
+}
+
+void fuseListFetchNode(ListFetchNodeChain& chain, mlir::OpBuilder& builder) {
+    FilterOp filter = chain._filter;
+    const Location loc = filter.getLoc();
+
+    const Operation::operand_range carried = filter.getColumnsToFilter();
+    const ResultRange filtered = filter.getFilteredColumns();
+
+    llvm::SmallVector<Value> fetchCarried;
+    llvm::SmallVector<Type> fetchTypes {chain._nodes.getType()};
+    for (const Value column : carried) {
+        if (column != chain._nodes) {
+            fetchCarried.push_back(column);
+            fetchTypes.push_back(column.getType());
+        }
+    }
+
+    builder.setInsertionPoint(filter);
+    ListFetchNode fetch = builder.create<ListFetchNode>(loc, fetchTypes, chain._ids, fetchCarried);
+
+    llvm::SmallVector<Value> fetched(fetch->getResults().begin(), fetch->getResults().end());
+    if (chain._labels) {
+        keepLabelledRows(fetched, chain._labels, loc, builder);
+    }
+
+    size_t fetchedIndex = 1;
+    for (size_t index = 0; index < carried.size(); index++) {
+        const bool holdsTheNodes = carried[index] == chain._nodes;
+        filtered[index].replaceAllUsesWith(holdsTheNodes ? fetched.front() : fetched[fetchedIndex++]);
+    }
+
+    filter.erase();
+    chain._equality.erase();
+
+    llvm::SmallVector<CrossProduct> products;
+    for (const OpResult link : chain._links) {
+        Operation* const op = link.getOwner();
+        const size_t resultIndex = link.getResultNumber();
+
+        if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+            products.push_back(dropProductColumn(product, resultIndex, builder));
+        } else {
+            dropCarriedColumn(op, resultIndex, builder);
+        }
+    }
+
+    chain._scan->erase();
+
+    for (CrossProduct product : llvm::reverse(products)) {
+        inlineTheFactorLeft(product);
+    }
+}
+
+struct FuseListFetchNode : public impl::FuseListFetchNodeBase<FuseListFetchNode> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        // A fetch rewrites the ops the next one's chain runs through, so each is matched
+        // over the IR the one before it left.
+        while (true) {
+            ListFetchNodeChain chain;
+            const WalkResult walked = getOperation()->walk([&chain](FilterOp filter) {
+                return matchListFetchNode(filter, chain) ? WalkResult::interrupt() : WalkResult::advance();
+            });
+
+            if (!walked.wasInterrupted()) {
+                return;
+            }
+
+            fuseListFetchNode(chain, builder);
+        }
+    }
 };
 
 // The node scans a column's rows come off, in factor order. A cross product's rows are its

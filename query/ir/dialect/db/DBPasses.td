@@ -83,6 +83,11 @@ def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseListFetchNode : Pass<"fuse_list_fetch_node"> {
+    let summary = "Replace a whole node scan bound by an equality to a column of IDs with a fetch of those IDs";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseHashJoin : Pass<"fuse_hash_join"> {
     let summary = "Fuse a cross product and the equality filter over it into a hash_join";
     let dependentDialects = ["mlir::db::DB"];
