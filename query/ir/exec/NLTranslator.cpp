@@ -2381,7 +2381,7 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
 void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
     if (!_metadataBuilder) {
-        throw IRException("nl.merge requires a MetadataBuilder (write transaction)");
+        throw IRException("Cannot perform MERGE outside of a write transaction.");
     }
 
     const mlir::ArrayAttr nodeLabels = merge.getNodeLabels();
