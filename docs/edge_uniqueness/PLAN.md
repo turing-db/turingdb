@@ -590,9 +590,12 @@ Steps 1 to 5 are done. What the status above leaves open, by where it shows:
    wants in the microseconds. (step 3 and Benchmarks)
 4. **The suite audit.** Every oracle with two or more edges in one clause is suspect, v2
    having generated them homomorphically. Step 1 moved 14 and step 5 the 10 that were
-   failing; the fixtures that agree by luck have not been swept. `CascadedMergeJoinTest`,
-   `MultiPatternJoinTest` and `CommaPatternJoinKeysTest` match nothing on simpledb and
-   want a fixture with a parallel edge. (step 1)
+   failing; the fixtures that agree by luck have not been swept. `CascadedMergeJoinTest`
+   and `MultiPatternJoinTest` match nothing on simpledb, which has no parallel edge;
+   `EdgeUniquenessWritesTest` adds one and pins their shapes: three patterns on one pair
+   match 6 rows over three parallel edges, and `(b)-->(c), (a)-->(b)-->(c)` 4 rows over
+   two. The four-pattern query of `CommaPatternJoinKeysTest` still matches nothing and has
+   no parallel-edge case. (step 1)
 5. **P4 beside a walk.** A directed walk of an acyclic type leaving the fixed hop's target
    can never take that hop's edge. `PatternEdge` carries no direction or start for a path,
    so a hop beside a walk is proven by types only. (step 5)
