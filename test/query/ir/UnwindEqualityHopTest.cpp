@@ -139,3 +139,16 @@ TEST_F(UnwindEqualityHopTest, hopFromTheComparedNodeReturnsItsEdges) {
                 {"Remy", "Ghosts"},
                 {"Remy", "Ghosts"}});
 }
+
+TEST_F(UnwindEqualityHopTest, countStarOverTheHopOpensWithAConstScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [2, 0] AS x MATCH (n)--(m) WHERE n = x RETURN count(*)");
+
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 0u);
+}
+
+TEST_F(UnwindEqualityHopTest, countStarOverTheHopCountsItsEdges) {
+    expectRows("UNWIND [2, 0] AS x MATCH (n)--(m) WHERE n = x RETURN count(*)", {{"8"}});
+}

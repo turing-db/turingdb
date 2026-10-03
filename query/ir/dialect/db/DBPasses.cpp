@@ -694,6 +694,15 @@ bool standsInForTheElements(Value comparedColumn) {
     return !isa<storage::NodeIDType, storage::EdgeIDType>(column.getType());
 }
 
+// A count(*) reads how many rows a column has, never what it holds, so any column of the
+// same rows stands in for the one it counts.
+bool onlyCountsRows(Value column) {
+    return llvm::all_of(column.getUsers(), [](Operation* user) {
+        Count count = dyn_cast<Count>(user);
+        return count && count.getRows();
+    });
+}
+
 // A clause reading the rows through a region of its own spells the type of every column it
 // takes in the block argument standing for it, and in the results it hands back, so a
 // column of another type cannot be put in its place.
@@ -801,10 +810,11 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
         if (holdsTheElements) {
             const Value elements = filtered[index];
             const bool changesTheType = elements.getType() != match._comparedColumn.getType();
+            const bool readsTheValues = !onlyCountsRows(elements);
 
             if (elements.use_empty()) {
                 continue;
-            } else if (!standsInForTheElements(match._comparedColumn)) {
+            } else if (readsTheValues && !standsInForTheElements(match._comparedColumn)) {
                 return false;
             } else if (changesTheType && readThroughABlockArgument(elements)) {
                 return false;
