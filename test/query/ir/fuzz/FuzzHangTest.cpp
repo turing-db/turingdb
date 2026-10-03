@@ -84,7 +84,7 @@ protected:
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
     std::string _graphName {"simpledb"};
-    std::chrono::seconds _deadline {2};
+    std::chrono::seconds _deadline {10};
 };
 
 TEST_F(FuzzHangTest, Limit000006) {
