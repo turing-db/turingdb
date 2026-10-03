@@ -299,6 +299,7 @@ private:
     void lowerGetNodeLabelSet(mlir::db::GetNodeLabelSet getNodeLabelSet);
     void lowerGetEdgeTypes(mlir::db::GetEdgeTypes getEdgeTypes);
     void lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint);
+    void lowerCheckNodeExists(mlir::db::CheckNodeExists checkNodeExists);
     void lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint);
     void lowerCreateNode(mlir::db::CreateNode createNode);
     void lowerCreateEdge(mlir::db::CreateEdge createEdge);

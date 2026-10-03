@@ -23,6 +23,11 @@ def FuseScanByNodeIDs : Pass<"fuse_scan_by_node_ids"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseScanByNodeColumn : Pass<"fuse_scan_by_node_column"> {
+    let summary = "Replace a node scan crossed into an equality with a node column of the other factor by that column";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseScanByPropertyValue : Pass<"fuse_scan_by_property_value"> {
     let summary = "Fuse a node scan and its property-equality filter into a scan_nodes_by_property_value";
     let dependentDialects = ["mlir::db::DB"];

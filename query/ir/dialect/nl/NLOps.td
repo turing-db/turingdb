@@ -1219,6 +1219,27 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThrou
   }];
 }
 
+def CheckNodeExists : NLOp<"check_node_exists", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Test whether each node ID in a chunk names a node of the graph";
+  let description = [{
+    Imperative counterpart of db.check_node_exists. For each node ID in the input
+    chunk, emits true if a node scan would produce it: a node of the view that is not
+    deleted, or one the running query created and did not delete.
+
+      nl.for %ids in %search {
+        %ok = nl.check_node_exists(%ids) : !nl.chunk<!storage.bool>
+        ...
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `)` attr-dict `:` qualified(type($result))
+  }];
+}
+
 def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure, RowAlignedThroughOperands]> {
   let summary = "Test each edge type ID against an allowed-type constraint";
   let description = [{

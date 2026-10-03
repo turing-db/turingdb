@@ -1158,6 +1158,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetEdgeTypes(getEdgeTypes);
     } else if (mlir::db::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<mlir::db::CheckLabelConstraint>(operation)) {
         lowerCheckLabelConstraint(checkLabelConstraint);
+    } else if (mlir::db::CheckNodeExists checkNodeExists = mlir::dyn_cast<mlir::db::CheckNodeExists>(operation)) {
+        lowerCheckNodeExists(checkNodeExists);
     } else if (mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<mlir::db::CheckEdgeTypeConstraint>(operation)) {
         lowerCheckEdgeTypeConstraint(checkEdgeTypeConstraint);
     } else if (mlir::db::CreateNode createNode = mlir::dyn_cast<mlir::db::CreateNode>(operation)) {
@@ -2311,6 +2313,23 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
         checkLabelConstraint.getLabels());
 
     _valueMap[checkLabelConstraint.getResult()] = check.getResult();
+}
+
+void DBLowering::lowerCheckNodeExists(mlir::db::CheckNodeExists checkNodeExists) {
+    const mlir::Value inputChunk = mapValue(checkNodeExists.getInputNodes());
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    const mlir::Type boolChunkType = nl::ChunkType::get(
+        _builder.getContext(),
+        storage::BoolType::get(_builder.getContext()));
+
+    nl::CheckNodeExists check = _builder.create<nl::CheckNodeExists>(
+        _builder.getUnknownLoc(),
+        boolChunkType,
+        inputChunk);
+
+    _valueMap[checkNodeExists.getResult()] = check.getResult();
 }
 
 void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint) {

@@ -1323,6 +1323,22 @@ private:
     std::unordered_set<uint32_t> _matchingIDs;
 };
 
+class NLCheckNodeExistsData : public NLFunctionData {
+public:
+    NLCheckNodeExistsData(const ColumnNodeIDs* input, ColumnMask* output)
+        : _input(input),
+        _output(output)
+    {
+    }
+
+    const ColumnNodeIDs* getInput() const { return _input; }
+    ColumnMask* getOutput() const { return _output; }
+
+private:
+    const ColumnNodeIDs* _input {nullptr};
+    ColumnMask* _output {nullptr};
+};
+
 class NLCheckEdgeTypeConstraintData : public NLFunctionData {
 public:
     NLCheckEdgeTypeConstraintData(const ColumnEdgeTypes* input, ColumnMask* output)

@@ -193,6 +193,35 @@ target_link_libraries(test_query_ir_fuse_scan_by_node_ids_codegen PRIVATE
         turing_db_storage_s)
 target_include_directories(test_query_ir_fuse_scan_by_node_ids_codegen PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_fuse_scan_by_node_column_codegen FuseScanByNodeColumnCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_by_node_column_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_scan_by_node_column_codegen PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_fuse_scan_by_node_column FuseScanByNodeColumnTest.cpp)
+target_sources(test_query_ir_fuse_scan_by_node_column PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_fuse_scan_by_node_column PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_fuse_scan_by_node_column PRIVATE ${IR_TEST_DIR})
+
 add_turing_test(test_query_ir_fuse_scan_by_property_value_codegen FuseScanByPropertyValueCodegenTest.cpp)
 target_link_libraries(test_query_ir_fuse_scan_by_property_value_codegen PRIVATE
         turing_db_s

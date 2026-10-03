@@ -36,6 +36,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
+#define GEN_PASS_DEF_FUSESCANBYNODECOLUMN
 #define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
@@ -560,18 +561,23 @@ bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
     return true;
 }
 
-Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
+Value checkLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
     MLIRContext* const context = builder.getContext();
-    const Type nodeColumnType = nodes.getType();
     const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
     const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
 
     GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, nodes);
     CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), labels);
 
-    const llvm::SmallVector<Type> resultTypes {nodeColumnType};
+    return check.getResult();
+}
+
+Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
+    const Value check = checkLabels(nodes, labels, loc, builder);
+
+    const llvm::SmallVector<Type> resultTypes {nodes.getType()};
     const llvm::SmallVector<Value> columns {nodes};
-    FilterOp labelFilter = builder.create<FilterOp>(loc, resultTypes, check.getResult(), columns);
+    FilterOp labelFilter = builder.create<FilterOp>(loc, resultTypes, check, columns);
 
     return labelFilter.getResult(0);
 }
@@ -2779,7 +2785,7 @@ struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet>
 // deduplicated before it yields the same set after it.
 bool isRowWiseOp(Operation* op) {
     return isMaskComputeOp(op)
-        || isa<GetNodeLabelSet, CheckLabelConstraint, CheckEdgeTypeConstraint,
+        || isa<GetNodeLabelSet, CheckLabelConstraint, CheckNodeExists, CheckEdgeTypeConstraint,
                Labels, EdgeType, ToInteger, ToFloat, ToBoolean,
                CosineSimilarity, EuclideanDistance>(op);
 }
@@ -3645,6 +3651,183 @@ struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseSc
                                               matchPropertyValueScanChain,
                                               fuseScanByPropertyValue,
                                               builder);
+    }
+};
+
+// A product of a node scan with another factor, whose rows a filter keeps only where the
+// scanned node is a node column of the other factor. The scanned node is then that column,
+// so the other factor's rows are all the product needs, kept where the column names a node
+// the scan would have produced.
+struct NodeColumnScanCross {
+    CrossProduct _product {nullptr};
+    Region* _relationFactor {nullptr};
+    bool _scanOnTheLeft {false};
+    ArrayAttr _labels;
+    Value _scannedColumn;
+    EqOp _equality {nullptr};
+};
+
+// The scan a factor is nothing but, null for any other factor
+Operation* matchScanFactor(Region& factor) {
+    Block& block = factor.front();
+    if (block.getOperations().size() != 2) {
+        return nullptr;
+    }
+
+    const Operation::operand_range yielded = factorYieldColumns(factor);
+    if (yielded.size() != 1) {
+        return nullptr;
+    }
+
+    Operation* const scan = yielded.front().getDefiningOp();
+    if (!scan || !isa<ScanNodes, ScanNodesByLabel>(scan)) {
+        return nullptr;
+    }
+
+    return scan;
+}
+
+// The filter whose mask is @param conjunct or an `and` tree requiring it
+FilterOp findRequiringFilter(Value conjunct) {
+    Value value = conjunct;
+    for (;;) {
+        if (!value.hasOneUse()) {
+            return nullptr;
+        }
+
+        Operation* const user = *value.getUsers().begin();
+        if (FilterOp filter = dyn_cast<FilterOp>(user)) {
+            return filter.getMask() == value ? filter : nullptr;
+        }
+
+        AndOp conjunction = dyn_cast<AndOp>(user);
+        if (!conjunction) {
+            return nullptr;
+        }
+
+        value = conjunction.getResult();
+    }
+}
+
+bool isRelationNodeColumn(Value column, CrossProduct product, Value scannedColumn) {
+    const OpResult result = dyn_cast<OpResult>(column);
+    if (!result || result.getOwner() != product.getOperation() || column == scannedColumn) {
+        return false;
+    }
+
+    const ColumnType type = dyn_cast<ColumnType>(column.getType());
+    return type && isa<storage::NodeIDType>(type.getType());
+}
+
+bool matchNodeColumnScanCross(CrossProduct product, bool scanOnTheLeft, NodeColumnScanCross& match) {
+    Region& scanFactor = scanOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
+    Operation* const scan = matchScanFactor(scanFactor);
+    if (!scan) {
+        return false;
+    }
+
+    const size_t scannedIndex = scanOnTheLeft ? 0 : product.getNumResults() - 1;
+    const Value scannedColumn = product.getResult(scannedIndex);
+
+    EqOp equality;
+    for (Operation* const user : scannedColumn.getUsers()) {
+        EqOp candidate = dyn_cast<EqOp>(user);
+        if (!candidate) {
+            continue;
+        }
+
+        const Value lhs = candidate.getLhs();
+        const Value other = lhs == scannedColumn ? candidate.getRhs() : lhs;
+        if (isRelationNodeColumn(other, product, scannedColumn)) {
+            equality = candidate;
+            break;
+        }
+    }
+
+    if (!equality) {
+        return false;
+    }
+
+    FilterOp filter = findRequiringFilter(equality.getResult());
+    if (!filter || filter->getBlock() != product->getBlock()) {
+        return false;
+    }
+
+    // The scanned node is the compared column only on the rows the filter keeps, so nothing
+    // but the mask may read the product's rows before it.
+    const MaskCone cone = collectMaskCone(filter.getMask());
+    if (!maskConeIsPrivateTo(cone, filter)) {
+        return false;
+    }
+
+    for (Operation* const user : product->getUsers()) {
+        const bool readByTheMask = llvm::is_contained(cone._ops, user);
+        if (user != filter.getOperation() && !readByTheMask) {
+            return false;
+        }
+    }
+
+    match._product = product;
+    match._relationFactor = scanOnTheLeft ? &product.getRightFactor() : &product.getLeftFactor();
+    match._scanOnTheLeft = scanOnTheLeft;
+    match._scannedColumn = scannedColumn;
+    match._equality = equality;
+
+    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(scan)) {
+        match._labels = scanByLabel.getLabels();
+    }
+
+    return true;
+}
+
+void fuseScanByNodeColumn(NodeColumnScanCross& match, mlir::OpBuilder& builder) {
+    inlineRelationFactor(match._product, *match._relationFactor, match._scanOnTheLeft);
+
+    EqOp equality = match._equality;
+    const Value lhs = equality.getLhs();
+    const Value compared = lhs == match._scannedColumn ? equality.getRhs() : lhs;
+    const mlir::Location loc = equality.getLoc();
+    const Type boolColumnType = equality.getResult().getType();
+
+    builder.setInsertionPoint(equality);
+    Value check = builder.create<CheckNodeExists>(loc, boolColumnType, compared).getResult();
+
+    if (match._labels) {
+        const Value labelCheck = checkLabels(compared, match._labels, loc, builder);
+        check = builder.create<AndOp>(loc, boolColumnType, check, labelCheck).getResult();
+    }
+
+    equality.getResult().replaceAllUsesWith(check);
+    equality.erase();
+
+    match._scannedColumn.replaceAllUsesWith(compared);
+    match._product.erase();
+}
+
+struct FuseScanByNodeColumn : public impl::FuseScanByNodeColumnBase<FuseScanByNodeColumn> {
+    void runOnOperation() override {
+        // Collect first: fusing erases the product, which would invalidate the walk.
+        llvm::SmallVector<CrossProduct> products;
+        getOperation()->walk([&products](CrossProduct product) {
+            products.push_back(product);
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (CrossProduct product : products) {
+            // Of two scans, the one over every node is the one not to run.
+            Operation* const leftScan = matchScanFactor(product.getLeftFactor());
+            Operation* const rightScan = matchScanFactor(product.getRightFactor());
+            const bool rightScansEveryNode = leftScan && rightScan && isa<ScanNodes>(rightScan);
+            const bool scanOnTheLeftFirst = !rightScansEveryNode;
+
+            NodeColumnScanCross match;
+            const bool matched = matchNodeColumnScanCross(product, scanOnTheLeftFirst, match)
+                              || matchNodeColumnScanCross(product, !scanOnTheLeftFirst, match);
+
+            if (matched) {
+                fuseScanByNodeColumn(match, builder);
+            }
+        }
     }
 };
 

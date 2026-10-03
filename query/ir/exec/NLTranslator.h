@@ -921,6 +921,7 @@ private:
     void translateGetEdgeTypes(mlir::nl::GetEdgeTypes op, NLStmtContainer* body);
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
+    void translateCheckNodeExists(mlir::nl::CheckNodeExists op, NLStmtContainer* body);
     void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);
 
     void translateCreateNode(mlir::nl::CreateNode createNode, NLStmtContainer* body);

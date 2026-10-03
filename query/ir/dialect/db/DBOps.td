@@ -1660,6 +1660,25 @@ def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
   }];
 }
 
+def CheckNodeExists : TuringOp<"check_node_exists", [Pure]> {
+  let summary = "Test whether each node ID names a node of the graph";
+
+  let description = [{
+    For each node ID in the input column, emits true if a node scan would produce it:
+    a node of the graph that is not deleted, or one this query created. A null row and
+    an ID naming no node, such as one a vector index holds, are false.
+
+      %ok = db.check_node_exists(%ids) : (!db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$input_nodes);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
   let summary = "Test each edge type ID against a required-type constraint";
 

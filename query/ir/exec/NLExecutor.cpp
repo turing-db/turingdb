@@ -10746,6 +10746,38 @@ void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunction
     }
 }
 
+void NLExecutor::runCheckNodeExists(NLExecutionContext* context, NLFunctionData* data) {
+    NLCheckNodeExistsData* checkData = static_cast<NLCheckNodeExistsData*>(data);
+
+    const ColumnNodeIDs* input = checkData->getInput();
+    ColumnMask* output = checkData->getOutput();
+
+    const GraphView* view = context->getView();
+    const size_t committedCount = committedNodeCount(view);
+    const bool hasDeletedNodes = committedCount > 0 && view->hasDeletedNodes();
+
+    const CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    const size_t pendingCount = writeBuffer ? writeBuffer->numPendingNodes() : 0;
+    const size_t firstQueryNode = context->getFirstQueryNode();
+
+    const size_t rowCount = input->size();
+    output->resize(rowCount);
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const NodeID nodeID = (*input)[rowIndex];
+        const uint64_t id = nodeID.getValue();
+
+        if (id < committedCount) {
+            (*output)[rowIndex] = !hasDeletedNodes || !view->isDeleted(nodeID);
+        } else {
+            const uint64_t offset = id - committedCount;
+            const bool writtenByThisQuery = offset >= firstQueryNode && offset < pendingCount;
+
+            (*output)[rowIndex] = writtenByThisQuery && !writeBuffer->deletedPendingNodes().contains(offset);
+        }
+    }
+}
+
 void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data) {
     NLCheckEdgeTypeConstraintData* checkData = static_cast<NLCheckEdgeTypeConstraintData*>(data);
 

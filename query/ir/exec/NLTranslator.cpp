@@ -937,6 +937,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateGetEdgeTypes(getEdgeTypes, body);
         } else if (nl::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<nl::CheckLabelConstraint>(operation)) {
             translateCheckLabelConstraint(checkLabelConstraint, body);
+        } else if (nl::CheckNodeExists checkNodeExists = mlir::dyn_cast<nl::CheckNodeExists>(operation)) {
+            translateCheckNodeExists(checkNodeExists, body);
         } else if (nl::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<nl::CheckEdgeTypeConstraint>(operation)) {
             translateCheckEdgeTypeConstraint(checkEdgeTypeConstraint, body);
         } else if (nl::EachRow eachRow = mlir::dyn_cast<nl::EachRow>(operation)) {
@@ -2245,6 +2247,17 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     }
 
     body->emplaceStmt(&NLExecutor::runCheckLabelConstraint, data);
+}
+
+void NLTranslator::translateCheckNodeExists(nl::CheckNodeExists op, NLStmtContainer* body) {
+    const ColumnNodeIDs* input = static_cast<const ColumnNodeIDs*>(getColumn(op.getInputNodes()));
+
+    ColumnMask* output = _memory->alloc<ColumnMask>();
+    output->reserve(_program->getChunkSize());
+    _valueSlots[op.getResult()] = output;
+
+    NLCheckNodeExistsData* data = _program->allocFunctionData<NLCheckNodeExistsData>(input, output);
+    body->emplaceStmt(&NLExecutor::runCheckNodeExists, data);
 }
 
 void NLTranslator::collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const {

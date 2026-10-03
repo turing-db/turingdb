@@ -50,7 +50,7 @@ TEST_F(HashJoinTest, sinksTheKeyIntoBothFactors) {
 // yielded rather than adding one.
 TEST_F(HashJoinTest, joinsOnTheColumnItselfWhenTheKeyIsTheVariable) {
     std::string program;
-    dbProgram("MATCH (n), (m) WHERE n = m RETURN n", program);
+    dbProgram("MATCH (n)-->(a), (m)-->(b) WHERE a = b RETURN a", program);
 
     EXPECT_TRUE(contains(program, "db.hash_join")) << program;
     EXPECT_TRUE(contains(program, "on 0, 0")) << program;
