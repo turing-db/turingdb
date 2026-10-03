@@ -1,0 +1,5 @@
+In `query/ir/dialect/db/DBPasses.cpp` (and any MLIR pass), write IR walks - use-def chains, OR/AND trees, user chains, nested cross products - with an explicit worklist (`llvm::SmallVector` + `pop_back_val`), not by recursing once per op.
+
+**Why:** TUR-183: an UNWIND of ~5,500 node ids folded into a 5,500-deep OR chain and `collectNodeIDDisjunction` overflowed the 512 KB macOS thread stack. Remy then said "for passes a worklist implementation is always preferred", and on 2026-10-03 all six recursive helpers in DBPasses.cpp were converted, even the ones bounded by query nesting.
+
+**How to apply:** For a new pass helper that follows a chain, use a worklist from the start. Push the rhs before the lhs to keep the left-first order. For a walk that modifies on the way back (like `hoistFactorColumn`, `propertyColumnOf`), collect the levels while climbing, then apply the changes in reverse. Parser-built boolean chains stop at 256 levels ("Expression nested deeper than 256 levels"), so long chains only come from passes (FuseUnwindEquality's OR chain). Pass-level depth tests go in `test/query/ir/passes/DeepChainPassesTest.cpp`, which generates 250k-op MLIR text.

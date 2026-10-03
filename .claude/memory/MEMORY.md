@@ -78,6 +78,7 @@
 - @feedback_minimal_comments.md — write almost no comments; default is none, hard cap 2-4 lines when one is justified
 - @feedback_plain_prose.md — write plainly: one claim per sentence, concrete numbers, no ornament
 - @feedback_no_optimisation_in_codegen.md — no liveness/dead-column/use-later analysis in DBProgramGenerator; optimisation belongs in an MLIR pass
+- @feedback_worklist_in_passes.md — MLIR pass helpers walk IR with an explicit worklist, never by recursing once per op
 
 ## Workflow Preferences
 - @feedback_test_first.md — write failing test before fix
