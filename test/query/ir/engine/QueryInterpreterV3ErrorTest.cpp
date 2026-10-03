@@ -107,3 +107,11 @@ TEST_F(QueryInterpreterV3ErrorTest, createOutsideWrite) {
     EXPECT_EQ(status.getError(), "Cannot perform CREATE outside of a write transaction.");
 }
 
+TEST_F(QueryInterpreterV3ErrorTest, mergeOutsideWrite) {
+    QueryStatus status;
+    runQuery("MERGE (n:P {k: 1})", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(status.getError(), "Cannot perform MERGE outside of a write transaction.");
+}
+
