@@ -2475,30 +2475,35 @@ void locateFactorColumn(CrossProduct product, size_t resultIndex, FactorColumn& 
 // Whether the result can be taken out of the product as a set: its factor yields it alone,
 // or yields it off a product of its own that nothing but the yield reads, and so on down
 bool canHoistFactorColumn(CrossProduct product, size_t resultIndex) {
-    FactorColumn column;
-    locateFactorColumn(product, resultIndex, column);
+    CrossProduct current = product;
+    size_t currentIndex = resultIndex;
+    while (true) {
+        FactorColumn column;
+        locateFactorColumn(current, currentIndex, column);
 
-    const Operation::operand_range yielded = factorYieldColumns(*column._factor);
-    if (yielded.size() == 1) {
-        return true;
-    }
+        const Operation::operand_range yielded = factorYieldColumns(*column._factor);
+        if (yielded.size() == 1) {
+            return true;
+        }
 
-    const Value value = yielded[column._position];
-    CrossProduct inner = value.getDefiningOp<CrossProduct>();
-    if (!inner || inner->getParentRegion() != column._factor) {
-        return false;
-    }
+        const Value value = yielded[column._position];
+        CrossProduct inner = value.getDefiningOp<CrossProduct>();
+        if (!inner || inner->getParentRegion() != column._factor) {
+            return false;
+        }
 
-    Operation* const yield = column._factor->front().getTerminator();
-    for (const Value result : inner.getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            if (user != yield) {
-                return false;
+        Operation* const yield = column._factor->front().getTerminator();
+        for (const Value result : inner.getResults()) {
+            for (Operation* const user : result.getUsers()) {
+                if (user != yield) {
+                    return false;
+                }
             }
         }
-    }
 
-    return canHoistFactorColumn(inner, cast<OpResult>(value).getResultNumber());
+        current = inner;
+        currentIndex = cast<OpResult>(value).getResultNumber();
+    }
 }
 
 bool matchFactorEndExploration(ExplorePaths exploration, FactorEndExploration& match) {
@@ -2547,35 +2552,39 @@ void moveFactorBody(Region& factor, Block* target, Block::iterator position) {
     target->getOperations().splice(position, block.getOperations(), block.begin(), Block::iterator(block.getTerminator()));
 }
 
-// Takes the result out of the product as a value at the head of the function and leaves the
-// product without it: collapsed to its other factor when the result was all its factor
-// yielded, rebuilt one column narrower otherwise
-Value hoistFactorColumn(CrossProduct product, size_t resultIndex, Block* head, mlir::OpBuilder& builder) {
-    FactorColumn column;
-    locateFactorColumn(product, resultIndex, column);
+// One product on the way down to the factor yielding a hoisted result alone
+struct FactorColumnLevel {
+    CrossProduct _product {nullptr};
+    size_t _resultIndex {0};
+    FactorColumn _column;
+};
+
+Value collapseFactorColumn(const FactorColumnLevel& level, Block* head) {
+    CrossProduct product = level._product;
+    const FactorColumn& column = level._column;
 
     const llvm::SmallVector<Value> yielded(factorYieldColumns(*column._factor));
-    if (yielded.size() == 1) {
-        const llvm::SmallVector<Value> otherYielded(factorYieldColumns(*column._other));
+    const llvm::SmallVector<Value> otherYielded(factorYieldColumns(*column._other));
 
-        moveFactorBody(*column._factor, head, head->begin());
-        moveFactorBody(*column._other, product->getBlock(), Block::iterator(product));
+    moveFactorBody(*column._factor, head, head->begin());
+    moveFactorBody(*column._other, product->getBlock(), Block::iterator(product));
 
-        const size_t firstOtherResult = column._left ? 1 : 0;
-        for (size_t index = 0; index < otherYielded.size(); index++) {
-            product.getResult(firstOtherResult + index).replaceAllUsesWith(otherYielded[index]);
-        }
-
-        const Value hoisted = yielded.front();
-        product.getResult(resultIndex).replaceAllUsesWith(hoisted);
-        product.erase();
-
-        return hoisted;
+    const size_t firstOtherResult = column._left ? 1 : 0;
+    for (size_t index = 0; index < otherYielded.size(); index++) {
+        product.getResult(firstOtherResult + index).replaceAllUsesWith(otherYielded[index]);
     }
 
-    const Value value = yielded[column._position];
-    CrossProduct inner = value.getDefiningOp<CrossProduct>();
-    const Value hoisted = hoistFactorColumn(inner, cast<OpResult>(value).getResultNumber(), head, builder);
+    const Value hoisted = yielded.front();
+    product.getResult(level._resultIndex).replaceAllUsesWith(hoisted);
+    product.erase();
+
+    return hoisted;
+}
+
+void narrowFactorColumn(const FactorColumnLevel& level, Value hoisted, mlir::OpBuilder& builder) {
+    CrossProduct product = level._product;
+    const FactorColumn& column = level._column;
+    const size_t resultIndex = level._resultIndex;
 
     Yield yield = cast<Yield>(column._factor->front().getTerminator());
     yield.getColumnsMutable().erase(static_cast<unsigned>(column._position));
@@ -2603,6 +2612,34 @@ Value hoistFactorColumn(CrossProduct product, size_t resultIndex, Block* head, m
     }
 
     product.erase();
+}
+
+// Takes the result out of the product as a value at the head of the function and leaves the
+// product without it: collapsed to its other factor when the result was all its factor
+// yielded, rebuilt one column narrower otherwise
+Value hoistFactorColumn(CrossProduct product, size_t resultIndex, Block* head, mlir::OpBuilder& builder) {
+    llvm::SmallVector<FactorColumnLevel> levels;
+    CrossProduct current = product;
+    size_t currentIndex = resultIndex;
+    while (true) {
+        FactorColumnLevel level {._product = current, ._resultIndex = currentIndex};
+        locateFactorColumn(current, currentIndex, level._column);
+        levels.push_back(level);
+
+        const Operation::operand_range yielded = factorYieldColumns(*level._column._factor);
+        if (yielded.size() == 1) {
+            break;
+        }
+
+        const Value value = yielded[level._column._position];
+        current = value.getDefiningOp<CrossProduct>();
+        currentIndex = cast<OpResult>(value).getResultNumber();
+    }
+
+    const Value hoisted = collapseFactorColumn(levels.back(), head);
+    for (const FactorColumnLevel& level : llvm::reverse(llvm::ArrayRef(levels).drop_back())) {
+        narrowFactorColumn(level, hoisted, builder);
+    }
 
     return hoisted;
 }
@@ -2822,28 +2859,7 @@ bool aggregatesDistinctly(GroupAggregate groupAggregate) {
     return true;
 }
 
-// Whether every row the op ever emits is only ever read as a member of a set: a dedup or a
-// distinct aggregate settles it, a row-wise op, a filter or a further hop passes the question
-// on to its own users, and anything counting, cutting or outputting rows refuses.
-bool readsRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited);
-
-bool usersReadRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited) {
-    for (const Value result : op->getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            if (!readsRowsAsASet(user, visited)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-bool readsRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited) {
-    if (!visited.insert(op).second) {
-        return true;
-    }
-
+bool readsRowsAsASet(Operation* op, llvm::SmallVectorImpl<Operation*>& passedOn) {
     if (isa<RemoveDuplicates>(op)) {
         return true;
     } else if (Count count = dyn_cast<Count>(op)) {
@@ -2851,10 +2867,31 @@ bool readsRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited) 
     } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
         return aggregatesDistinctly(groupAggregate);
     } else if (isRowWiseOp(op) || isa<FilterOp, ExplorePaths>(op) || isEdgeHop(op)) {
-        return usersReadRowsAsASet(op, visited);
+        passedOn.push_back(op);
+        return true;
     }
 
     return false;
+}
+
+// Whether every row the op ever emits is only ever read as a member of a set: a dedup or a
+// distinct aggregate settles it, a row-wise op, a filter or a further hop passes the question
+// on to its own users, and anything counting, cutting or outputting rows refuses.
+bool usersReadRowsAsASet(Operation* op) {
+    llvm::SmallPtrSet<Operation*, 16> visited;
+    llvm::SmallVector<Operation*> passedOn {op};
+    while (!passedOn.empty()) {
+        Operation* const producer = passedOn.pop_back_val();
+
+        for (Operation* const user : producer->getUsers()) {
+            const bool firstVisit = visited.insert(user).second;
+            if (firstVisit && !readsRowsAsASet(user, passedOn)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 bool matchDistinctEnds(ExplorePaths exploration) {
@@ -2868,9 +2905,7 @@ bool matchDistinctEnds(ExplorePaths exploration) {
         return false;
     }
 
-    llvm::SmallPtrSet<Operation*, 16> visited;
-
-    return usersReadRowsAsASet(exploration.getOperation(), visited);
+    return usersReadRowsAsASet(exploration.getOperation());
 }
 
 struct FuseExploreDistinctEnds : public impl::FuseExploreDistinctEndsBase<FuseExploreDistinctEnds> {
@@ -3506,13 +3541,17 @@ bool matchPropertyEquality(EqOp equality, Value scanColumn, PropertyValueScanCha
 // The conjuncts of a mask, as an `and` tree spells them: the predicates that all have to
 // hold, one of which can become the fused scan while the others stay a filter.
 void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts) {
-    if (AndOp conjunction = mask.getDefiningOp<AndOp>()) {
-        collectConjuncts(conjunction.getLhs(), conjuncts);
-        collectConjuncts(conjunction.getRhs(), conjuncts);
-        return;
-    }
+    llvm::SmallVector<Value> pending {mask};
+    while (!pending.empty()) {
+        const Value conjunct = pending.pop_back_val();
 
-    conjuncts.push_back(mask);
+        if (AndOp conjunction = conjunct.getDefiningOp<AndOp>()) {
+            pending.push_back(conjunction.getRhs());
+            pending.push_back(conjunction.getLhs());
+        } else {
+            conjuncts.push_back(conjunct);
+        }
+    }
 }
 
 bool maskConeIsPrivateTo(const MaskCone& cone, FilterOp filter) {
@@ -3748,10 +3787,7 @@ Value appendCarriedColumn(Operation* op, Value column, mlir::OpBuilder& builder)
     return widened->getResults().back();
 }
 
-// The column holding `property` for the rows of `column`, taken from a read already
-// standing before `useSite` and carried down through the ops in between when that read was
-// taken further up the chain. Null when there is none: this adds no read of its own.
-Value propertyColumnOf(Value column, StringAttr property, bool nodeProperty, Operation* useSite, mlir::OpBuilder& builder) {
+Value readStandingBefore(Value column, StringAttr property, bool nodeProperty, Operation* useSite) {
     for (Operation* const user : column.getUsers()) {
         StringAttr userProperty;
         bool userReadsNodes = false;
@@ -3767,35 +3803,58 @@ Value propertyColumnOf(Value column, StringAttr property, bool nodeProperty, Ope
         }
     }
 
-    Operation* const def = column.getDefiningOp();
-    if (!def || !mapsRowsThrough(def)) {
-        return {};
-    }
+    return {};
+}
 
+Value carryThrough(Operation* op, Value column, mlir::OpBuilder& builder) {
     CarrySetLayout layout;
-    const bool carries = matchCarrySetLayout(def, layout);
+    const bool carries = matchCarrySetLayout(op, layout);
     bioassert(carries, "A row-mapping op has a carry set");
 
-    size_t sourceOperandIndex = 0;
-    const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-    if (!matchRowSourceOperand(def, layout, resultIndex, sourceOperandIndex)) {
-        return {};
-    }
-
-    const Value source = def->getOperand(sourceOperandIndex);
-    const Value sourceProperty = propertyColumnOf(source, property, nodeProperty, def, builder);
-    if (!sourceProperty) {
-        return {};
-    }
-
-    const size_t carriedColumnCount = carriedCount(def, layout);
+    const size_t carriedColumnCount = carriedCount(op, layout);
     for (size_t carriedIndex = 0; carriedIndex < carriedColumnCount; carriedIndex++) {
-        if (def->getOperand(layout._operandOffset + carriedIndex) == sourceProperty) {
-            return def->getResult(layout._resultOffset + carriedIndex);
+        if (op->getOperand(layout._operandOffset + carriedIndex) == column) {
+            return op->getResult(layout._resultOffset + carriedIndex);
         }
     }
 
-    return appendCarriedColumn(def, sourceProperty, builder);
+    return appendCarriedColumn(op, column, builder);
+}
+
+// The column holding `property` for the rows of `column`, taken from a read already
+// standing before `useSite` and carried down through the ops in between when that read was
+// taken further up the chain. Null when there is none: this adds no read of its own.
+Value propertyColumnOf(Value column, StringAttr property, bool nodeProperty, Operation* useSite, mlir::OpBuilder& builder) {
+    llvm::SmallVector<Operation*> carriers;
+    Value rows = column;
+
+    Value propertyColumn = readStandingBefore(rows, property, nodeProperty, useSite);
+    while (!propertyColumn) {
+        Operation* const def = rows.getDefiningOp();
+        if (!def || !mapsRowsThrough(def)) {
+            return {};
+        }
+
+        CarrySetLayout layout;
+        const bool carries = matchCarrySetLayout(def, layout);
+        bioassert(carries, "A row-mapping op has a carry set");
+
+        size_t sourceOperandIndex = 0;
+        const size_t resultIndex = cast<OpResult>(rows).getResultNumber();
+        if (!matchRowSourceOperand(def, layout, resultIndex, sourceOperandIndex)) {
+            return {};
+        }
+
+        carriers.push_back(def);
+        rows = def->getOperand(sourceOperandIndex);
+        propertyColumn = readStandingBefore(rows, property, nodeProperty, def);
+    }
+
+    for (Operation* const carrier : llvm::reverse(carriers)) {
+        propertyColumn = carryThrough(carrier, propertyColumn, builder);
+    }
+
+    return propertyColumn;
 }
 
 struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyReads> {
@@ -4779,30 +4838,30 @@ struct FuseListFetchNode : public impl::FuseListFetchNodeBase<FuseListFetchNode>
 // through the column it yields first. Anything else a column can come off - a filter, a hop,
 // a property read - has a row count only the engine can reach, so the match fails.
 bool collectScans(Value column, llvm::SmallVectorImpl<Operation*>& scans) {
-    Operation* const def = column.getDefiningOp();
-    if (!def) {
-        return false;
-    }
-
-    if (isa<ScanNodes, ScanNodesByLabel>(def)) {
-        scans.push_back(def);
-
-        return true;
-    } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
-        const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
-        const Operation::operand_range rightColumns = factorYieldColumns(product.getRightFactor());
-        if (leftColumns.empty() || rightColumns.empty()) {
+    llvm::SmallVector<Value> pending {column};
+    while (!pending.empty()) {
+        Operation* const def = pending.pop_back_val().getDefiningOp();
+        if (!def) {
             return false;
         }
 
-        if (!collectScans(leftColumns.front(), scans)) {
+        if (isa<ScanNodes, ScanNodesByLabel>(def)) {
+            scans.push_back(def);
+        } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+            const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
+            const Operation::operand_range rightColumns = factorYieldColumns(product.getRightFactor());
+            if (leftColumns.empty() || rightColumns.empty()) {
+                return false;
+            }
+
+            pending.push_back(rightColumns.front());
+            pending.push_back(leftColumns.front());
+        } else {
             return false;
         }
-
-        return collectScans(rightColumns.front(), scans);
     }
 
-    return false;
+    return true;
 }
 
 // The one scan a column carries the nodes of. Unlike collectScans this follows the result a
