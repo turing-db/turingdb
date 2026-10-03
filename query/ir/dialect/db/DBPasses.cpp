@@ -7155,9 +7155,9 @@ struct ProveDistinctEdges : public impl::ProveDistinctEdgesBase<ProveDistinctEdg
         }
 
         ::db::ExplainReport* const explain = context._explain;
-        const bool reports = explain && explain->isRequested(::db::ExplainStage::PAIRS) && !report.empty();
+        const bool reports = explain && explain->isRequested(::db::ExplainStage::EDGES) && !report.empty();
         if (reports) {
-            explain->addText(::db::ExplainRequest::getStageName(::db::ExplainStage::PAIRS), report);
+            explain->addText(::db::ExplainRequest::getStageName(::db::ExplainStage::EDGES), report);
         }
     }
 

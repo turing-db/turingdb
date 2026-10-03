@@ -112,8 +112,8 @@ TEST_F(ExplainTest, reportsTheEdgePairsByDefault) {
 
     std::vector<std::string> stages;
     collectStages(sink, stages);
-    EXPECT_EQ(stages, (std::vector<std::string> {"pairs", "db", "nl"}));
-    EXPECT_EQ(dumpOf(sink, "pairs"), "e2 <> e1: kept\n");
+    EXPECT_EQ(stages, (std::vector<std::string> {"edges", "db", "nl"}));
+    EXPECT_EQ(dumpOf(sink, "edges"), "e2 <> e1: kept\n");
 }
 
 TEST_F(ExplainTest, reportsOnlyTheStagesTheOptionsName) {
