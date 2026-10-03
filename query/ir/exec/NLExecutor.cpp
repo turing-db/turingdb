@@ -2467,6 +2467,20 @@ void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& k
     distinctAppendMapBytes(key, raw[row]);
 }
 
+// A null path is an empty one, so it keys as length 0, apart from every path
+void distinctKeyAppendEntityListColumn(const Column* column, size_t row, std::string& key) {
+    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(column)->getRaw();
+    const EntityList& path = raw[row];
+
+    const size_t size = path.size();
+    key.append(reinterpret_cast<const char*>(&size), sizeof(size));
+
+    for (const EntityList::Entry& entry : path) {
+        key.push_back(static_cast<char>(entry._type));
+        distinctAppendValueBytes(key, entry._id.getValue());
+    }
+}
+
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
     const std::vector<std::optional<ListView>>& raw =
         static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
@@ -9579,7 +9593,7 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::EntityList:
-            throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
+            return &distinctKeyAppendEntityListColumn;
         break;
     }
 
