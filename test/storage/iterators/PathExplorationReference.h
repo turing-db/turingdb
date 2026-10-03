@@ -10,6 +10,7 @@
 
 #include "columns/ColumnIDs.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/ExcludedEdges.h"
 #include "iterators/PathExplorationDir.h"
 #include "iterators/PathHopFilter.h"
 #include "metadata/LabelSet.h"
@@ -67,6 +68,9 @@ public:
     // Only the rows ending on a node the flag marks are kept, as an end constraint does
     void setEnds(const std::vector<bool>* ends) { _ends = ends; }
 
+    // The edges no path of a seed row may take, one list per input row
+    void setExcludedEdges(const std::vector<std::vector<uint64_t>>* excluded) { _excluded = excluded; }
+
     void enumerate(const db::ColumnNodeIDs& seeds, std::vector<PathRow>& rows);
 
 private:
@@ -77,6 +81,7 @@ private:
     std::optional<uint64_t> _edgeType;
     HopPredicate _predicate {nullptr};
     const std::vector<bool>* _ends {nullptr};
+    const std::vector<std::vector<uint64_t>>* _excluded {nullptr};
 
     void walk(size_t seedRow, uint64_t node, std::vector<uint64_t>& path, std::vector<PathRow>& rows);
     void descend(size_t seedRow,
@@ -103,6 +108,7 @@ struct ExplorationOptions {
     size_t _lookahead {1};
     std::optional<db::EdgeTypeID> _edgeType;
     db::PathHopFilter* _hopFilter {nullptr};
+    db::ExcludedEdges _excludedEdges;
     const db::LabelSet* _endLabels {nullptr};
     const db::ColumnNodeIDs* _endNodes {nullptr};
     std::span<const db::NodeID> _endNodeSet;
