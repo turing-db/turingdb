@@ -905,6 +905,7 @@ bool dropsRows(mlir::Operation* operation) {
     }
 
     return mlir::isa<mlir::db::FilterOp,
+                     mlir::db::ListFetchNode,
                      mlir::db::HashJoin,
                      mlir::db::Skip,
                      mlir::db::Limit,
@@ -1268,6 +1269,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerLazyCase(lazyCase);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
+    } else if (mlir::db::ListFetchNode fetch = mlir::dyn_cast<mlir::db::ListFetchNode>(operation)) {
+        lowerListFetchNode(fetch);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
         lowerGroupAggregate(groupAggregate);
     } else if (mlir::db::Collect collect = mlir::dyn_cast<mlir::db::Collect>(operation)) {
@@ -5644,6 +5647,38 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
     }
 
     followCardinalityThrough(columnChunks, nlFilter.getResults());
+}
+
+void DBLowering::lowerListFetchNode(mlir::db::ListFetchNode fetch) {
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    llvm::SmallVector<mlir::Type, 4> resultTypes {nl::ChunkType::get(context, storage::NodeIDType::get(context))};
+    for (const mlir::Value column : fetch.getColumnsToFilter()) {
+        const mlir::Value columnChunk = mapValue(column);
+
+        carriedChunks.push_back(columnChunk);
+        resultTypes.push_back(columnChunk.getType());
+    }
+
+    const mlir::Value idsChunk = rowAlignedChunk(mapValue(fetch.getIds()), cardinalityDriver(carriedChunks));
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks {idsChunk};
+    llvm::append_range(inputChunks, carriedChunks);
+
+    setInsertionInto(ownerBlock(deepestBoundChunk(inputChunks)));
+
+    nl::ListFetchNode nlFetch = _builder.create<nl::ListFetchNode>(_builder.getUnknownLoc(),
+                                                          resultTypes,
+                                                          idsChunk,
+                                                          carriedChunks);
+
+    const mlir::ResultRange results = fetch->getResults();
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        _valueMap[results[resultIndex]] = nlFetch->getResult(resultIndex);
+    }
+
+    followCardinalityThrough(inputChunks, nlFetch->getResults());
 }
 
 mlir::Value DBLowering::deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks) {

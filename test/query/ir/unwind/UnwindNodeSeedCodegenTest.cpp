@@ -199,7 +199,8 @@ TEST_F(UnwindNodeSeedCodegenTest, aProjectedValueUnwindStaysAnUnwindConst) {
 
     EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ListFetchNode>(*module), 1u);
 }
 
 // The call carries every column in flight, the unwound values among them, and nothing
@@ -224,7 +225,8 @@ TEST_F(UnwindNodeSeedCodegenTest, aValueUnwindReadPastACallStaysAnUnwindConst) {
 
     EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ListFetchNode>(*module), 1u);
 }
 
 TEST_F(UnwindNodeSeedCodegenTest, unwindWithoutAMatchStaysAnUnwindConst) {

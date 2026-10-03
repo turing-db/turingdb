@@ -291,3 +291,5 @@ add_ir_tests(test_query_ir_shared_edge_type_check SharedEdgeTypeCheckTest.cpp)
 add_ir_tests(test_query_ir_two_filters_over_one_read TwoFiltersOverOneReadTest.cpp)
 
 add_ir_tests(test_query_ir_trim_lazy_case TrimLazyCaseTest.cpp)
+
+add_call_v3_test(test_query_ir_list_fetch_node ListFetchNodeTest.cpp)

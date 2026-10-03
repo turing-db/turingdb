@@ -46,6 +46,7 @@ class NLShortestPathLoopData;
 class Procedure;
 class ProcedureContext;
 class ProcedureData;
+class GraphView;
 class LocalMemory;
 class StringBuffer;
 
@@ -2163,6 +2164,42 @@ private:
     std::vector<FilterColumn> _columns;
 
     // Scratch for this step's surviving row indices, fed to gather
+    ColumnVector<size_t> _indices;
+};
+
+// Type of handle that appends the index of every row whose ID cell names a node the view
+// holds, and that node. One per kind of cell an ID is read from.
+using NLListFetchNodeFunction = void (*)(const Column* ids,
+                                     const GraphView* view,
+                                     ColumnVector<size_t>* indices,
+                                     ColumnNodeIDs* nodes);
+
+class NLListFetchNodeData : public NLFunctionData {
+public:
+    NLListFetchNodeData(const Column* ids, NLListFetchNodeFunction fetch, ColumnNodeIDs* nodes)
+        : _ids(ids),
+        _fetch(fetch),
+        _nodes(nodes)
+    {
+    }
+
+    const Column* getIDs() const { return _ids; }
+    NLListFetchNodeFunction getFetch() const { return _fetch; }
+    ColumnNodeIDs* getNodes() const { return _nodes; }
+
+    const std::vector<NLFilterData::FilterColumn>& columns() const { return _columns; }
+
+    void addColumn(const NLFilterData::FilterColumn& column) {
+        _columns.push_back(column);
+    }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+private:
+    const Column* _ids {nullptr};
+    NLListFetchNodeFunction _fetch {nullptr};
+    ColumnNodeIDs* _nodes {nullptr};
+    std::vector<NLFilterData::FilterColumn> _columns;
     ColumnVector<size_t> _indices;
 };
 
