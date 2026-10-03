@@ -34,6 +34,9 @@ template <typename T>
 concept IDLike = IsID<T>::value;
 
 template <typename T>
+concept EntityIDLike = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
+
+template <typename T>
 concept IsUInt64 = IsID<TypeUtils::unwrap_optional_t<T>>::value
                 || std::unsigned_integral<T>
                 || IsHash<T>::value

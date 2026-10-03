@@ -113,7 +113,11 @@ private:
 
     template <IDLike T>
     void encodeValue(const T& value) {
-        _writer.write(std::to_string(value.getValue()));
+        if (!value.isValid()) {
+            _writer.write("null");
+        } else {
+            _writer.write(std::to_string(value.getValue()));
+        }
     }
 
     template <Hash T>

@@ -55,6 +55,9 @@ inline PyObj toPy(const std::string& v) {
 
 template <typename T, int I>
 PyObj toPy(const db::ID<T, I>& v) {
+    if (!v.isValid()) {
+        return nb::none();
+    }
     return nb::cast(v.getValue());
 }
 

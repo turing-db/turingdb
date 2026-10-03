@@ -319,6 +319,66 @@ TEST(TuringProtoRoundTripTest, RoundTripsDateTimeColumnsAcrossChunkSizes) {
     }
 }
 
+// An invalid ID is how an unmatched OPTIONAL MATCH entity is spelled, so an entity column
+// always goes out as an optional vector whose mask is the IDs' validity
+TEST(TuringProtoRoundTripTest, RoundTripsEntityIDColumnsAsOptionalVectors) {
+    using OptionalNodeID = std::optional<db::NodeID>;
+    using OptionalEdgeID = std::optional<db::EdgeID>;
+
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        auto* nodes = localMem.alloc<db::ColumnVector<db::NodeID>>();
+        nodes->push_back(db::NodeID {2});
+        nodes->push_back(db::NodeID {});
+        nodes->push_back(db::NodeID {0});
+        nodes->push_back(db::NodeID {});
+        addColumn(&dfMan, &source, "c", nodes);
+
+        auto* edges = localMem.alloc<db::ColumnVector<db::EdgeID>>();
+        edges->push_back(db::EdgeID {});
+        edges->push_back(db::EdgeID {5});
+        edges->push_back(db::EdgeID {0});
+        edges->push_back(db::EdgeID {});
+        addColumn(&dfMan, &source, "e", edges);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::MapBuffer<> mapBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 2u);
+        EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+
+        const auto* decodedNodes = decoded.cols().at(0)->as<db::ColumnOptVector<db::NodeID>>();
+        const auto* decodedEdges = decoded.cols().at(1)->as<db::ColumnOptVector<db::EdgeID>>();
+        ASSERT_NE(decodedNodes, nullptr);
+        ASSERT_NE(decodedEdges, nullptr);
+
+        EXPECT_EQ(decodedNodes->getRaw(),
+                  (std::vector<OptionalNodeID> {db::NodeID {2},
+                                                std::nullopt,
+                                                db::NodeID {0},
+                                                std::nullopt}));
+
+        EXPECT_EQ(decodedEdges->getRaw(),
+                  (std::vector<OptionalEdgeID> {std::nullopt,
+                                                db::EdgeID {5},
+                                                db::EdgeID {0},
+                                                std::nullopt}));
+    }
+}
+
 // A duration is eight bytes on the wire like a datetime and an integer, under a type code
 // of its own
 TEST(TuringProtoRoundTripTest, RoundTripsDurationColumnsAcrossChunkSizes) {

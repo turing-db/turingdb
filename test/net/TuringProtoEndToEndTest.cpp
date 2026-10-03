@@ -436,3 +436,36 @@ TEST_F(TuringProtoEndToEndTest, SkipLimitWindow) {
 
     EXPECT_EQ(received, expected);
 }
+
+TEST_F(TuringProtoEndToEndTest, UnmatchedOptionalMatchEntitiesAreNull) {
+    db::NodeID company;
+    db::EdgeID worksAt;
+
+    auto seeder = [&](db::Graph* graph, db::JobSystem* jobSystem) {
+        db::GraphWriter writer(graph, jobSystem);
+        const auto employed = writer.addNode({"Person"});
+        writer.addNodeProperty<db::types::String>(employed, "name", std::string_view("employed"));
+
+        const auto unemployed = writer.addNode({"Person"});
+        writer.addNodeProperty<db::types::String>(unemployed, "name", std::string_view("unemployed"));
+
+        company = writer.addNode({"Company"});
+        worksAt = writer.addEdge("WORKS_AT", employed, company)._edgeID;
+        ASSERT_TRUE(writer.commit());
+        ASSERT_TRUE(writer.submit());
+    };
+
+    const auto result = runEndToEnd(_outDir,
+                                    /*queryChunkRows=*/net::proto::DEFAULT_BUFFER_CAPACITY,
+                                    /*bufferCapacity=*/net::proto::DEFAULT_BUFFER_CAPACITY,
+                                    seeder,
+                                    "MATCH (a:Person) OPTIONAL MATCH (a)-[e:WORKS_AT]->(c:Company) "
+                                    "RETURN a.name AS name, c, e ORDER BY name");
+
+    const std::vector<std::vector<std::string>> expected = {
+        {"employed", std::to_string(company.getValue()), std::to_string(worksAt.getValue())},
+        {"unemployed", "null", "null"},
+    };
+
+    EXPECT_EQ(result.rows, expected);
+}
