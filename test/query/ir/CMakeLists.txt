@@ -4700,3 +4700,23 @@ add_turing_test(test_query_ir_case_lazy_branch CaseLazyBranchTest.cpp)
 target_link_libraries(test_query_ir_case_lazy_branch PRIVATE turing_ir_test_write_query_s)
 
 add_ir_tests(test_query_ir_trim_lazy_case TrimLazyCaseTest.cpp)
+
+add_turing_test(test_query_ir_unwind_equality_hop UnwindEqualityHopTest.cpp)
+target_link_libraries(test_query_ir_unwind_equality_hop PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_ir_exec_s
+        turing_db_storage_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_unwind_equality_hop PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
