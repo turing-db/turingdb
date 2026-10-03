@@ -340,8 +340,9 @@ rows and compacts them, 66 to 609 ms; in the writer the backtrack is one compare
 candidate against a register and no row is built. The typed two-hop chain, the shape
 steps 3 to 5 prove away, costs nothing measurable at 6,371 rows.
 
-Still owed from the step: the exclusion set in the explorator's random reference sweep,
-which `PathEdgeUniquenessTest` covers at the query level only.
+The explorator's random reference sweep covers the exclusion set since 2026-10-03:
+`PathExploratorExcludedEdgesTest` gives every input row its own excluded edges, with rows of
+one node excluding different edges inside one batch of the distinct search.
 
 Step 2 is implemented on the same branch. `distinct_from` names carried columns by index on
 the seven hop ops and on `explore_paths`, in both dialects; `fuse_distinct_edges` folds the
@@ -595,17 +596,14 @@ Steps 1 to 5 are done. What the status above leaves open, by where it shows:
 5. **P4 beside a walk.** A directed walk of an acyclic type leaving the fixed hop's target
    can never take that hop's edge. `PatternEdge` carries no direction or start for a path,
    so a hop beside a walk is proven by types only. (step 5)
-6. **The explorator's reference sweep.** `PathExplorationReference.cpp` has no exclusion
-   set, so the per-seed exclusions and the batch mask of the distinct search are covered
-   by `PathEdgeUniquenessTest` at the query level only. (step 1)
-7. **`NLPendingEdgeHop`** walks its excluded edges one by one, which no measurement has
+6. **`NLPendingEdgeHop`** walks its excluded edges one by one, which no measurement has
    reached. (step 2)
-8. **Persisting the answers.** The summary and the acyclicity of each type set are rebuilt
+7. **Persisting the answers.** The summary and the acyclicity of each type set are rebuilt
    on the first query of every commit, 58 ms for the summary and 64 to 80 ms per type set
    on reactome, 236 ms for every type at once. A persisted form in the part's dump removes
    both; before that, the sort's three arrays over the 3M nodes could shrink to the nodes
    the types touch. (steps 4, 5 and 6)
-9. **Later still.** A signature column for chains past six hops, and `shortestPath` beside
+8. **Later still.** A signature column for chains past six hops, and `shortestPath` beside
    a hop in one clause, which is neither checked nor proven. (step 6)
 
 ## Steps
