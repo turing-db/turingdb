@@ -127,6 +127,44 @@ Corollary: a rejection rule must reject *exactly* the invalid set. Probe the eng
 the shapes on both sides of the line before writing the check, so a rule aimed at the
 invalid ones does not also turn away queries that already work.
 
+## Optimisation passes: ALWAYS use a worklist
+
+**Every optimisation pass over the db or nl dialect drives its rewrites from a worklist.
+Never restart a walk of the whole function after each rewrite.** This is the standard
+design from decades of compiler work (LLVM's InstCombine, MLIR's greedy pattern driver,
+the classic dataflow solvers), and it applies to every new pass and every pass you touch.
+
+Forbidden shape:
+
+```cpp
+while (true) {
+    Match match;
+    const WalkResult walked = getOperation()->walk([&match](FilterOp filter) {
+        return matchX(filter, match) ? WalkResult::interrupt() : WalkResult::advance();
+    });
+    if (!walked.wasInterrupted()) {
+        return;
+    }
+    rewriteX(match);
+}
+```
+
+Each rewrite re-walks and re-matches every op, so K rewrites over F candidates cost K × F
+match attempts: quadratic. Required shape:
+- Seed the worklist once with every candidate op.
+- Pop an op, skip it if a rewrite erased it, match it, rewrite it.
+- After a rewrite, push only the ops it can have changed the answer for: the users of the
+  values it replaced and the ops it created. Nothing else is re-matched.
+- Track erased ops (an erased set, or an `mlir::RewriterBase` listener) so the worklist
+  never touches a freed op.
+
+When a rewrite fits `mlir::RewritePattern`, use `mlir::applyPatternsGreedily`, which is
+this worklist already. Collecting all matches first and then rewriting them is fine only
+when no rewrite can touch another's match.
+
+Known violations to convert: `FuseFetchNodes` and `RerootPatternAtSeed` in
+`query/ir/dialect/db/DBPasses.cpp`.
+
 ## C++ Coding Style
 
 Please read `CODING_STYLE.md` for guidelines before any new work.
