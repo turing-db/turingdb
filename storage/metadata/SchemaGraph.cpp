@@ -24,36 +24,20 @@ struct TargetCounts {
     size_t _selfLoopCount {0};
 };
 
-// The label set of every node by node ID, filled range by range from the ranges each
-// part keeps its nodes in per label set, so an edge end costs one read
-class NodeLabelSets {
-public:
-    explicit NodeLabelSets(DataPartSpan parts) {
-        size_t nodeCount = 0;
-        for (const WeakArc<DataPart>& arc : parts) {
-            const DataPart* part = arc.get();
-            nodeCount = part->getFirstNodeID().getValue() + part->getNodeContainerSize();
-        }
+LabelSetID findNodeLabelSet(DataPartSpan parts, NodeID node) {
+    const auto startsAtOrBefore = [node](const WeakArc<DataPart>& arc) {
+        return arc.get()->getFirstNodeID() <= node;
+    };
 
-        _labelSets.resize(nodeCount);
-        for (const WeakArc<DataPart>& arc : parts) {
-            const DataPart* part = arc.get();
-            for (const auto& [labelSet, nodeRange] : part->nodes().getLabelSetIndexer()) {
-                std::fill_n(_labelSets.begin() + nodeRange._first.getValue(), nodeRange._count, labelSet.getID());
-            }
-        }
-    }
+    const DataPartIterator next = std::ranges::partition_point(parts, startsAtOrBefore);
+    bioassert(next != parts.begin(), "Node {} is in no part", node.getValue());
 
-    LabelSetID get(NodeID node) const {
-        const LabelSetID labelSet = _labelSets[node.getValue()];
-        bioassert(labelSet.isValid(), "Node {} is in no range of its part", node.getValue());
+    const DataPart* part = std::prev(next)->get();
+    const LabelSetHandle labelSet = part->nodes().getNodeLabelSet(node);
+    bioassert(labelSet.isValid(), "Node {} is in no part", node.getValue());
 
-        return labelSet;
-    }
-
-private:
-    std::vector<LabelSetID> _labelSets;
-};
+    return labelSet.getID();
+}
 
 constexpr size_t embeddingArcVisitBudget = 200000;
 
@@ -61,19 +45,22 @@ constexpr size_t embeddingArcVisitBudget = 200000;
 // with the most ends already placed so that each step scans the arcs at a placed node
 class SchemaEmbedding {
 public:
-    SchemaEmbedding(std::span<const SchemaArc> arcs, const SchemaPattern& pattern, const LabelSetMap& labelSets)
+    SchemaEmbedding(std::span<const SchemaArc> arcs, const SchemaPattern& pattern)
         : _arcs(arcs),
         _pattern(pattern)
     {
-        const size_t nodeCount = pattern._nodes.size();
+    }
+
+    void build(const LabelSetMap& labelSets) {
+        const size_t nodeCount = _pattern._nodes.size();
         _candidates.resize(nodeCount);
         _placed.resize(nodeCount, LabelSetID {0});
         _isPlaced.resize(nodeCount, false);
-        _done.resize(pattern._edges.size(), false);
+        _done.resize(_pattern._edges.size(), false);
 
         for (size_t node = 0; node < nodeCount; node++) {
             for (const LabelSetMap::Pair& pair : labelSets) {
-                if (pair._value->hasAtLeastLabels(pattern._nodes[node]._labels)) {
+                if (pair._value->hasAtLeastLabels(_pattern._nodes[node]._labels)) {
                     _candidates[node].push_back(pair._id);
                 }
             }
@@ -238,7 +225,6 @@ void SchemaGraph::refresh(DataPartSpan parts, const GraphMetadata& metadata) {
 // A table dense over (source label set, edge type), the IDs of both running from zero,
 // whose cells hold the few target label sets each reaches
 void SchemaGraph::build(DataPartSpan parts, const GraphMetadata& metadata) {
-    const NodeLabelSets labelSets(parts);
     const size_t labelSetCount = metadata.labelsets().getCount();
     const size_t edgeTypeCount = metadata.edgeTypes().getCount();
 
@@ -253,10 +239,10 @@ void SchemaGraph::build(DataPartSpan parts, const GraphMetadata& metadata) {
         for (const EdgeRecord& edge : part->edges().getOuts()) {
             if (edge._nodeID != sourceNode) {
                 sourceNode = edge._nodeID;
-                source = labelSets.get(sourceNode);
+                source = findNodeLabelSet(parts, sourceNode);
             }
 
-            const LabelSetID target = labelSets.get(edge._otherID);
+            const LabelSetID target = findNodeLabelSet(parts, edge._otherID);
             const size_t cell = source.getValue() * edgeTypeCount + edge._edgeTypeID.getValue();
             bioassert(cell < cells.size(), "Edge {} runs over a label set or a type the metadata lacks", edge._edgeID.getValue());
 
@@ -292,7 +278,8 @@ void SchemaGraph::build(DataPartSpan parts, const GraphMetadata& metadata) {
 }
 
 bool SchemaGraph::embeds(const SchemaPattern& pattern, const LabelSetMap& labelSets) const {
-    SchemaEmbedding embedding(_arcs, pattern, labelSets);
+    SchemaEmbedding embedding(_arcs, pattern);
+    embedding.build(labelSets);
 
     return embedding.run();
 }
