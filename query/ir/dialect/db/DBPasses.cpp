@@ -653,6 +653,7 @@ struct UnwindEqualityCross {
     UnwindConst _unwind {nullptr};
     Region* _relationFactor {nullptr};
     bool _unwindOnTheLeft {false};
+    bool _readsTheIDs {false};
     Value _unwoundColumn;
     Value _comparedColumn;
     EqOp _equality {nullptr};
@@ -700,14 +701,19 @@ bool elementsCompareDistinctly(UnwindConst unwind) {
     return true;
 }
 
-// Whether the rows can go on reading the elements through the column they were compared
-// to. On every row the filter keeps the two hold the same value, so a property column
-// stands in for the elements it matched; an entity column does not, since a node equals a
-// node ID by the number it carries and a projection would print the node instead.
-bool standsInForTheElements(Value comparedColumn) {
+// On every row the filter keeps, the elements hold the value of the column they were
+// compared to. A node or an edge equals an integer by the ID it carries, so a projection
+// reads the elements back through id() of an entity column, never through the entity.
+bool comparesAnEntity(Value comparedColumn) {
     const ColumnType column = cast<ColumnType>(comparedColumn.getType());
 
-    return !isa<storage::NodeIDType, storage::EdgeIDType>(column.getType());
+    return isa<storage::NodeIDType, storage::EdgeIDType>(column.getType());
+}
+
+bool unwindsIntegers(UnwindConst unwind) {
+    const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
+
+    return column.getType().isSignlessInteger(64);
 }
 
 // A count(*) reads how many rows a column has, never what it holds, so any column of the
@@ -819,22 +825,27 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     const Operation::operand_range carried = match._filter.getColumnsToFilter();
     const ResultRange filtered = match._filter.getFilteredColumns();
 
+    const bool entityCompared = comparesAnEntity(match._comparedColumn);
+
     size_t survivingColumns = 0;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
 
         if (holdsTheElements) {
             const Value elements = filtered[index];
-            const bool changesTheType = elements.getType() != match._comparedColumn.getType();
-            const bool readsTheValues = !onlyCountsRows(elements);
+            const bool readsTheIDs = entityCompared && !onlyCountsRows(elements);
+            const Type standInType = readsTheIDs ? elements.getType() : match._comparedColumn.getType();
+            const bool changesTheType = elements.getType() != standInType;
 
             if (elements.use_empty()) {
                 continue;
-            } else if (readsTheValues && !standsInForTheElements(match._comparedColumn)) {
+            } else if (readsTheIDs && !unwindsIntegers(match._unwind)) {
                 return false;
             } else if (changesTheType && readThroughABlockArgument(elements)) {
                 return false;
             }
+
+            match._readsTheIDs = match._readsTheIDs || readsTheIDs;
         }
 
         survivingColumns++;
@@ -913,9 +924,13 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
     llvm::SmallVector<Value> columns;
     llvm::SmallVector<Type> resultTypes;
     llvm::SmallVector<size_t> keptColumns;
+    llvm::SmallVector<size_t> elementsReadAsIDs;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
         if (holdsTheElements && filtered[index].use_empty()) {
+            continue;
+        } else if (holdsTheElements && match._readsTheIDs) {
+            elementsReadAsIDs.push_back(index);
             continue;
         }
 
@@ -926,11 +941,26 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         keptColumns.push_back(index);
     }
 
+    const size_t comparedIndex = llvm::find(columns, match._comparedColumn) - columns.begin();
+    if (match._readsTheIDs && comparedIndex == columns.size()) {
+        columns.push_back(match._comparedColumn);
+        resultTypes.push_back(match._comparedColumn.getType());
+    }
+
     builder.setInsertionPoint(match._filter);
     FilterOp fused = builder.create<FilterOp>(match._filter.getLoc(), resultTypes, mask, columns);
 
     for (size_t index = 0; index < keptColumns.size(); index++) {
         filtered[keptColumns[index]].replaceAllUsesWith(fused.getResult(index));
+    }
+
+    if (match._readsTheIDs) {
+        builder.setInsertionPointAfter(fused);
+        ElementID ids = builder.create<ElementID>(match._filter.getLoc(), match._unwoundColumn.getType(), fused.getResult(comparedIndex));
+
+        for (const size_t index : elementsReadAsIDs) {
+            filtered[index].replaceAllUsesWith(ids.getResult());
+        }
     }
 
     match._filter.erase();
