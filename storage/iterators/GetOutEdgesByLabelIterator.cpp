@@ -3,6 +3,8 @@
 #include <iterator>
 
 #include "columns/ColumnIDs.h"
+#include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
 #include "reader/GraphReader.h"
 #include "IteratorUtils.h"
 
@@ -68,11 +70,21 @@ void GetOutEdgesByLabelChunkWriter::fill(size_t maxCount) {
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
+            const std::span<const EdgeID> rowExcluded = _excluded.isSet() ? _excluded.rowEdges(index) : std::span<const EdgeID> {};
+            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
+                const DataPart* part = _partIt.get();
+                _heldInRun = ExcludedEdges::countInOutRun(rowExcluded, part->edges(), _edges);
+            }
 
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
                 const LabelSetHandle targetLabels = reader.getNodeLabelSet(_edgeIt->_otherID);
 
-                if (targetLabels.isValid() && targetLabels.hasAtLeastLabels(_labelset)) {
+                const bool excluded = _heldInRun > 0 && ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
+                if (excluded) {
+                    _heldInRun--;
+                }
+
+                if (targetLabels.isValid() && targetLabels.hasAtLeastLabels(_labelset) && !excluded) {
                     _indices->push_back(index);
 
                     if constexpr (conditions[0]) {

@@ -47,6 +47,36 @@ bool isMaskColumn(Type type) {
     return isa<storage::BoolType>(value) || isa<NoneType>(value);
 }
 
+// Whether the column holds edge IDs or handles of paths, the two forms an edge can be bound in
+bool holdsEdgesOrPaths(Value column) {
+    const auto columnType = dyn_cast<ColumnType>(column.getType());
+    if (!columnType) {
+        return false;
+    }
+
+    return isa<storage::EdgeIDType, storage::PathRefType>(columnType.getType());
+}
+
+// distinct_from names carried columns by index, and only an edge or path column holds an
+// edge a hop could repeat
+LogicalResult verifyDistinctFrom(Operation* operation, std::optional<llvm::ArrayRef<int64_t>> distinctFrom, OperandRange carried) {
+    if (!distinctFrom) {
+        return success();
+    }
+
+    for (const int64_t column : *distinctFrom) {
+        if (column < 0 || static_cast<size_t>(column) >= carried.size()) {
+            return operation->emitOpError("distinct_from names carried column ") << column << " of " << carried.size();
+        }
+
+        if (!holdsEdgesOrPaths(carried[static_cast<unsigned>(column)])) {
+            return operation->emitOpError("distinct_from must name edge or path columns");
+        }
+    }
+
+    return success();
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -222,6 +252,62 @@ LogicalResult verifyFactorResults(Operation* op, Region& leftFactor, Region& rig
     }
 
     return success();
+}
+
+// distinct_from on a two-factor op lists pairs of edge columns, a left factor's yield index
+// followed by a right factor's
+LogicalResult verifyFactorDistinctFrom(Operation* op, Region& leftFactor, Region& rightFactor, DenseI64ArrayAttr pairs) {
+    if (!pairs) {
+        return success();
+    }
+
+    const llvm::ArrayRef<int64_t> indices = pairs.asArrayRef();
+    if (indices.size() % 2 != 0) {
+        return op->emitOpError("distinct_from lists pairs of a left and a right column, but holds ") << indices.size() << " indices";
+    }
+
+    const Operation::operand_range leftColumns = getFactorYield(leftFactor).getColumns();
+    const Operation::operand_range rightColumns = getFactorYield(rightFactor).getColumns();
+
+    for (size_t position = 0; position < indices.size(); position++) {
+        const bool onTheLeft = position % 2 == 0;
+        const Operation::operand_range columns = onTheLeft ? leftColumns : rightColumns;
+        const int64_t index = indices[position];
+
+        if (index < 0 || static_cast<size_t>(index) >= columns.size()) {
+            return op->emitOpError("distinct_from index ") << index << " names no column the " << (onTheLeft ? "left" : "right") << " factor yields";
+        }
+
+        const ColumnType column = cast<ColumnType>(columns[index].getType());
+        if (!isa<storage::EdgeIDType>(column.getType())) {
+            return op->emitOpError("distinct_from names the ") << (onTheLeft ? "left" : "right") << " column " << index << ", which holds no edges";
+        }
+    }
+
+    return success();
+}
+
+// The optional `distinct_from [...]` a two-factor op spells after its regions
+ParseResult parseDistinctFrom(OpAsmParser& parser, OperationState& result, StringAttr name) {
+    if (failed(parser.parseOptionalKeyword("distinct_from"))) {
+        return success();
+    }
+
+    const Attribute pairs = DenseI64ArrayAttr::parse(parser, Type());
+    if (!pairs) {
+        return failure();
+    }
+
+    result.addAttribute(name, pairs);
+
+    return success();
+}
+
+void printDistinctFrom(OpAsmPrinter& printer, DenseI64ArrayAttr pairs) {
+    if (pairs) {
+        printer << " distinct_from ";
+        pairs.print(printer);
+    }
 }
 
 // A literal list typed as homogeneous - db.unwind_const's typed column, db.const_list's
@@ -467,6 +553,10 @@ LogicalResult ExplorePaths::verify() {
     const std::optional<uint64_t> maxHops = getMaxHops();
     if (maxHops && *maxHops < getMinHops()) {
         return emitOpError("max_hops must be at least min_hops");
+    }
+
+    if (failed(verifyDistinctFrom(getOperation(), getDistinctFrom(), carried))) {
+        return failure();
     }
 
     if (const ArrayAttr edgeTypes = getEdgeTypesAttr()) {
@@ -760,9 +850,13 @@ void CrossProduct::build(OpBuilder& builder, OperationState& state, TypeRange re
 // right factor's - matching the result count parsed from the `%a, %b =` list.
 ParseResult CrossProduct::parse(OpAsmParser& parser, OperationState& result) {
     const bool regionsFailed = parseFactorRegion(parser, result)
-                               || parseFactorRegion(parser, result)
-                               || parser.parseOptionalAttrDict(result.attributes);
+                               || parseFactorRegion(parser, result);
     if (regionsFailed) {
+        return failure();
+    }
+
+    if (parseDistinctFrom(parser, result, getDistinctFromAttrName(result.name))
+        || parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
 
@@ -783,11 +877,17 @@ void CrossProduct::print(OpAsmPrinter& printer) {
     printer << " " << factorKeyword << " ";
     printer.printRegion(getRightFactor());
 
-    printer.printOptionalAttrDict((*this)->getAttrs());
+    printDistinctFrom(printer, getDistinctFromAttr());
+
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getDistinctFromAttrName()});
 }
 
 LogicalResult CrossProduct::verify() {
-    return verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor());
+    if (failed(verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor()))) {
+        return failure();
+    }
+
+    return verifyFactorDistinctFrom(getOperation(), getLeftFactor(), getRightFactor(), getDistinctFromAttr());
 }
 
 // Builds the op from the branch count alone and creates that many empty blocks. The
@@ -936,7 +1036,8 @@ ParseResult HashJoin::parse(OpAsmParser& parser, OperationState& result) {
         return failure();
     }
 
-    if (parser.parseOptionalAttrDict(result.attributes)) {
+    if (parseDistinctFrom(parser, result, getDistinctFromAttrName(result.name))
+        || parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
 
@@ -963,7 +1064,9 @@ void HashJoin::print(OpAsmPrinter& printer) {
 
     printer << " " << keysKeyword << " " << getLeftKey() << ", " << getRightKey();
 
-    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName()});
+    printDistinctFrom(printer, getDistinctFromAttr());
+
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName(), getDistinctFromAttrName()});
 }
 
 // The results line up with the two factors' yields exactly as a cross product's do, and
@@ -987,7 +1090,7 @@ LogicalResult HashJoin::verify() {
                                                 << rightCount << " columns the right factor yields";
     }
 
-    return success();
+    return verifyFactorDistinctFrom(getOperation(), getLeftFactor(), getRightFactor(), getDistinctFromAttr());
 }
 
 LogicalResult CreateNode::verify() {
@@ -1102,12 +1205,32 @@ LogicalResult ScanInEdgesByLabelSrc::verify() {
     return success();
 }
 
+LogicalResult GetOutEdges::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetInEdges::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetEdges::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetOutEdgesByType::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
+LogicalResult GetInEdgesByType::verify() {
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
+}
+
 LogicalResult GetOutEdgesByLabel::verify() {
     if (getLabels().empty()) {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult GetInEdgesByLabel::verify() {
@@ -1115,7 +1238,7 @@ LogicalResult GetInEdgesByLabel::verify() {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult GetOutEdgesByTypeAndLabel::verify() {
@@ -1123,7 +1246,7 @@ LogicalResult GetOutEdgesByTypeAndLabel::verify() {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult GetInEdgesByTypeAndLabel::verify() {
@@ -1131,7 +1254,7 @@ LogicalResult GetInEdgesByTypeAndLabel::verify() {
         return emitOpError("requires at least one label");
     }
 
-    return success();
+    return verifyDistinctFrom(getOperation(), getDistinctFrom(), getColumnsToFilter());
 }
 
 LogicalResult CountScanRows::verify() {
@@ -1183,6 +1306,31 @@ LogicalResult CheckLabelConstraint::verify() {
 
 LogicalResult CheckEdgeTypeConstraint::verify() {
     return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
+}
+
+LogicalResult CheckEdgeDistinct::verify() {
+    if (!holdsEdgesOrPaths(getSubject())) {
+        return emitOpError("subject must be an edge or path column");
+    }
+
+    if (getOthers().empty()) {
+        return emitOpError("needs at least one column to differ from");
+    }
+
+    for (const Value other : getOthers()) {
+        if (!holdsEdgesOrPaths(other)) {
+            return emitOpError("others must be edge or path columns");
+        }
+    }
+
+    const ArrayAttr names = getNamesAttr();
+    const bool namesEveryColumn = !names || names.size() == getOthers().size() + 1;
+    if (!namesEveryColumn) {
+        return emitOpError("names must name the subject and each of the others, but has ")
+               << names.size() << " names for " << getOthers().size() + 1 << " columns";
+    }
+
+    return success();
 }
 
 void Output::build(OpBuilder& builder, OperationState& state, ValueRange columns) {

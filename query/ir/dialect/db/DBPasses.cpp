@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <limits>
 #include <optional>
+#include <string_view>
+#include <vector>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -22,8 +24,10 @@
 #include "CardinalityEstimation.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
+#include "metadata/SchemaGraph.h"
 #include "views/GraphView.h"
 
+#include "ExplainReport.h"
 #include "IRConstantColumn.h"
 #include "PropertyScanLiteral.h"
 #include "DBOps.h"
@@ -32,6 +36,7 @@
 
 namespace mlir::db {
 
+#define GEN_PASS_DEF_PROVEDISTINCTEDGES
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
@@ -47,6 +52,8 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
+#define GEN_PASS_DEF_FUSEDISTINCTEDGES
+#define GEN_PASS_DEF_FUSEPRODUCTDISTINCTEDGES
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSELISTFETCHNODE
@@ -1121,7 +1128,8 @@ Operation* createByTypeHop(Operation* hop, ArrayAttr edgeTypes, mlir::OpBuilder&
                                                   results.drop_front(hopFixedResultCount).getTypes(),
                                                   hop->getOperand(0),
                                                   edgeTypes,
-                                                  hop->getOperands().drop_front());
+                                                  hop->getOperands().drop_front(),
+                                                  DenseI64ArrayAttr());
 
     return byTypeHop.getOperation();
 }
@@ -1794,7 +1802,8 @@ Operation* createByLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& b
                                                      results.drop_front(hopFixedResultCount).getTypes(),
                                                      hop->getOperand(0),
                                                      labels,
-                                                     hop->getOperands().drop_front());
+                                                     hop->getOperands().drop_front(),
+                                                     DenseI64ArrayAttr());
 
     return byLabelHop.getOperation();
 }
@@ -1813,7 +1822,8 @@ Operation* createByTypeAndLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBui
                                                                           hop->getOperand(0),
                                                                           edgeTypes,
                                                                           labels,
-                                                                          hop->getOperands().drop_front());
+                                                                          hop->getOperands().drop_front(),
+                                                                          DenseI64ArrayAttr());
 
     return byTypeAndLabelHop.getOperation();
 }
@@ -2091,6 +2101,211 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
         runFilterPass<EndConstrainedExploration>(getOperation(), matchEndConstrainedExploration, fuseExploreEndConstraint, builder);
+    }
+};
+
+// A hop, or a path exploration, whose rows are then cut down to those whose new edge, or
+// path, shares no edge with columns the clause bound before it: the exclusion spelled the
+// long way, since the writer can skip those edges and never build the rows the filter goes
+// on to drop
+struct ExcludedHop {
+    Operation* _op {nullptr};
+    CheckEdgeDistinct _check;
+    llvm::SmallVector<size_t, 2> _excludedColumns;
+};
+
+constexpr llvm::StringLiteral distinctFromAttributeName = "distinct_from";
+
+bool matchExcludedHop(FilterOp filter, ExcludedHop& excluded) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check) {
+        return false;
+    }
+
+    const OpResult subject = dyn_cast<OpResult>(check.getSubject());
+    if (!subject) {
+        return false;
+    }
+
+    // The subject is the hop's own edge column or the walk's own path column
+    Operation* const op = subject.getOwner();
+    size_t fixedResultCount = 0;
+    unsigned subjectResult = 0;
+    if (isEdgeHop(op)) {
+        fixedResultCount = hopFixedResultCount;
+        subjectResult = 1;
+    } else if (isa<ExplorePaths>(op)) {
+        fixedResultCount = pathFixedResultCount;
+        subjectResult = 2;
+    } else {
+        return false;
+    }
+
+    if (subject.getResultNumber() != subjectResult) {
+        return false;
+    }
+
+    // Every column it is checked against is a carried copy the op handed back, whose input
+    // is row-aligned with the op's own input
+    llvm::SmallVector<size_t, 2> excludedColumns;
+    for (const Value other : check.getOthers()) {
+        const OpResult result = dyn_cast<OpResult>(other);
+        const bool carriedBack = result && result.getOwner() == op && result.getResultNumber() >= fixedResultCount;
+        if (!carriedBack) {
+            return false;
+        }
+
+        excludedColumns.push_back(result.getResultNumber() - fixedResultCount);
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != op) {
+            return false;
+        }
+    }
+
+    for (const Value result : op->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    excluded = ExcludedHop {._op = op, ._check = check, ._excludedColumns = excludedColumns};
+
+    return true;
+}
+
+void fuseDistinctEdges(FilterOp filter, const ExcludedHop& excluded, mlir::OpBuilder& builder) {
+    Operation* const op = excluded._op;
+    CheckEdgeDistinct check = excluded._check;
+
+    llvm::SmallVector<int64_t, 4> columns;
+    if (const DenseI64ArrayAttr held = op->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName)) {
+        llvm::append_range(columns, held.asArrayRef());
+    }
+    for (const size_t column : excluded._excludedColumns) {
+        columns.push_back(static_cast<int64_t>(column));
+    }
+    llvm::sort(columns);
+    columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
+
+    op->setAttr(distinctFromAttributeName, builder.getDenseI64ArrayAttr(columns));
+
+    const Operation::operand_range filtered = filter.getColumnsToFilter();
+    const mlir::ResultRange results = filter.getFilteredColumns();
+    for (size_t index = 0; index < results.size(); index++) {
+        results[index].replaceAllUsesWith(filtered[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(check);
+}
+
+struct FuseDistinctEdges : public impl::FuseDistinctEdgesBase<FuseDistinctEdges> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<ExcludedHop>(getOperation(), matchExcludedHop, fuseDistinctEdges, builder);
+    }
+};
+
+// A cross product or a hash join whose rows are then cut down to those where an edge one
+// factor bound differs from an edge the other did: the exclusion spelled the long way,
+// since the op can skip the pairs holding one edge twice and never lay out the rows
+struct CrossedEdgePairs {
+    Operation* _crossing {nullptr};
+    CheckEdgeDistinct _check;
+    llvm::SmallVector<int64_t, 4> _pairs;
+};
+
+bool holdsEdges(Value column) {
+    const ColumnType type = cast<ColumnType>(column.getType());
+
+    return isa<storage::EdgeIDType>(type.getType());
+}
+
+bool matchCrossedEdgePairs(FilterOp filter, CrossedEdgePairs& crossed) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check || !holdsEdges(check.getSubject())) {
+        return false;
+    }
+
+    Operation* const crossing = check.getSubject().getDefiningOp();
+    if (!isa_and_nonnull<CrossProduct, HashJoin>(crossing)) {
+        return false;
+    }
+
+    const size_t leftCount = factorYieldColumns(crossing->getRegion(0)).size();
+    const size_t subjectIndex = cast<OpResult>(check.getSubject()).getResultNumber();
+    const bool subjectOnTheLeft = subjectIndex < leftCount;
+
+    llvm::SmallVector<int64_t, 4> pairs;
+    for (const Value other : check.getOthers()) {
+        const OpResult result = dyn_cast<OpResult>(other);
+        if (!result || result.getOwner() != crossing || !holdsEdges(other)) {
+            return false;
+        }
+
+        const size_t otherIndex = result.getResultNumber();
+        const bool otherOnTheLeft = otherIndex < leftCount;
+        if (otherOnTheLeft == subjectOnTheLeft) {
+            return false;
+        }
+
+        const size_t leftIndex = subjectOnTheLeft ? subjectIndex : otherIndex;
+        const size_t rightIndex = subjectOnTheLeft ? otherIndex : subjectIndex;
+        pairs.push_back(static_cast<int64_t>(leftIndex));
+        pairs.push_back(static_cast<int64_t>(rightIndex - leftCount));
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != crossing) {
+            return false;
+        }
+    }
+
+    for (const Value result : crossing->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    crossed = CrossedEdgePairs {._crossing = crossing, ._check = check, ._pairs = pairs};
+
+    return true;
+}
+
+void fuseProductDistinctEdges(FilterOp filter, const CrossedEdgePairs& crossed, mlir::OpBuilder& builder) {
+    Operation* const crossing = crossed._crossing;
+    CheckEdgeDistinct check = crossed._check;
+
+    llvm::SmallVector<int64_t, 4> pairs;
+    if (const DenseI64ArrayAttr held = crossing->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName)) {
+        llvm::append_range(pairs, held.asArrayRef());
+    }
+    llvm::append_range(pairs, crossed._pairs);
+
+    crossing->setAttr(distinctFromAttributeName, builder.getDenseI64ArrayAttr(pairs));
+
+    const Operation::operand_range filtered = filter.getColumnsToFilter();
+    const mlir::ResultRange results = filter.getFilteredColumns();
+    for (size_t index = 0; index < results.size(); index++) {
+        results[index].replaceAllUsesWith(filtered[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(check);
+}
+
+struct FuseProductDistinctEdges : public impl::FuseProductDistinctEdgesBase<FuseProductDistinctEdges> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<CrossedEdgePairs>(getOperation(), matchCrossedEdgePairs, fuseProductDistinctEdges, builder);
     }
 };
 
@@ -2628,8 +2843,19 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     exploration.getHopLabelsAttr(),
                                                     IntegerAttr(),
                                                     false,
-                                                    exploration.getDistinct());
+                                                    exploration.getDistinct(),
+                                                    DenseI64ArrayAttr());
     set.getHop().takeBody(exploration.getHop());
+
+    if (const std::optional<llvm::ArrayRef<int64_t>> excluded = exploration.getDistinctFrom()) {
+        llvm::SmallVector<int64_t, 2> renumbered;
+        for (const int64_t column : *excluded) {
+            bioassert(static_cast<size_t>(column) != endColumn, "The end column holds nodes, not the edges the walk leaves out");
+            renumbered.push_back(static_cast<size_t>(column) < endColumn ? column : column - 1);
+        }
+
+        set.setDistinctFromAttr(builder.getDenseI64ArrayAttr(renumbered));
+    }
 
     exploration.getSrcids().replaceAllUsesWith(set.getSrcids());
     exploration.getTgtids().replaceAllUsesWith(set.getTgtids());
@@ -2984,8 +3210,15 @@ void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {
 }
 
 // A sort orders by its keys and a grouping op groups by them whether or not anything reads
-// them; a group aggregate still has to reduce something and a collect to gather something.
+// them; a group aggregate still has to reduce something and a collect to gather something;
+// a hop or a walk reads the columns it leaves the edges of out.
 void keepRequiredColumns(Operation* op, llvm::SmallBitVector& keep) {
+    if (const DenseI64ArrayAttr excluded = op->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName)) {
+        for (const int64_t column : excluded.asArrayRef()) {
+            keep.set(static_cast<unsigned>(column));
+        }
+    }
+
     if (Sort sort = dyn_cast<Sort>(op)) {
         for (const int64_t keyColumn : sort.getKeyColumns()) {
             keep.set(static_cast<unsigned>(keyColumn));
@@ -3127,6 +3360,23 @@ void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, Op
     state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
 }
 
+void renumberDistinctFrom(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const DenseI64ArrayAttr excluded = op->getAttrOfType<DenseI64ArrayAttr>(distinctFromAttributeName);
+    if (!excluded) {
+        return;
+    }
+
+    llvm::SmallVector<int64_t, 2> renumbered;
+    for (const int64_t column : excluded.asArrayRef()) {
+        const auto keptIt = llvm::find(kept, static_cast<size_t>(column));
+        bioassert(keptIt != kept.end(), "Excluded column {} is not in the trimmed carry set", column);
+
+        renumbered.push_back(static_cast<int64_t>(keptIt - kept.begin()));
+    }
+
+    state.attributes.set(distinctFromAttributeName, builder.getDenseI64ArrayAttr(renumbered));
+}
+
 // The carry set is an exploration's second operand segment, so a trim of it rewrites the
 // segment sizes as a trimmed procedure call's are rewritten
 void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
@@ -3139,6 +3389,8 @@ void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, 
 }
 
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    renumberDistinctFrom(op, kept, state, builder);
+
     if (Sort sort = dyn_cast<Sort>(op)) {
         renumberSortKeys(sort, kept, state, builder);
     } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
@@ -4936,6 +5188,870 @@ bool writesTheGraph(Operation* root) {
     return walked.wasInterrupted();
 }
 
+// Which way a hop reads its edges, which says which of its two ends is the edge's stored
+// source: the end it left for an out-hop, the end it reached for an in-hop, either for
+// an undirected one
+enum class HopDirection {
+    Out,
+    In,
+    Both,
+};
+
+// What the clause says of one edge column a check_edge_distinct reads: the op that bound
+// it, the types the pattern allows it, and the node it left and the node it reached, each
+// with the labels on it. A path's edges have no ends the pattern names.
+struct PatternEdge {
+    Operation* _op {nullptr};
+    bool _isPath {false};
+    HopDirection _direction {HopDirection::Out};
+    bool _anyType {true};
+    llvm::SmallVector<llvm::StringRef, 2> _edgeTypes;
+    Value _near;
+    Value _far;
+    llvm::SmallVector<llvm::StringRef, 2> _nearLabels;
+    llvm::SmallVector<llvm::StringRef, 2> _farLabels;
+};
+
+// What the rows reaching a check went through: the filters that cut them, and the fixed
+// hops that bound the clause's edges
+struct RowFlow {
+    llvm::SmallPtrSet<Operation*, 16> _filters;
+    llvm::SmallVector<PatternEdge, 8> _hops;
+};
+
+Value lineageAnchor(Value column) {
+    bool crossedProducer = false;
+    return climbToLineageAnchor(column, crossedProducer);
+}
+
+void appendNames(ArrayAttr names, llvm::SmallVectorImpl<llvm::StringRef>& into) {
+    for (const Attribute name : names) {
+        into.push_back(cast<StringAttr>(name).getValue());
+    }
+}
+
+// Narrows the edge's type set by one more check the clause put on it
+void intersectEdgeTypes(ArrayAttr checked, PatternEdge& edge) {
+    if (edge._anyType) {
+        edge._anyType = false;
+        appendNames(checked, edge._edgeTypes);
+        return;
+    }
+
+    llvm::SmallVector<llvm::StringRef, 2> both;
+    for (const Attribute name : checked) {
+        const llvm::StringRef type = cast<StringAttr>(name).getValue();
+        if (llvm::is_contained(edge._edgeTypes, type)) {
+            both.push_back(type);
+        }
+    }
+
+    edge._edgeTypes = both;
+}
+
+// Reads the type and label checks of the row flow that constrain the hop: a type check
+// over its own etypes column, a label check over a node column born where one of its ends
+// was
+void describeHop(const llvm::SmallPtrSetImpl<Operation*>& filters, PatternEdge& edge) {
+    Operation* const hop = edge._op;
+    constexpr size_t srcResultIndex = 0;
+    constexpr size_t etypesResultIndex = 2;
+    constexpr size_t tgtResultIndex = 3;
+
+    if (isReverseHop(hop)) {
+        edge._direction = HopDirection::In;
+    } else if (isa<GetEdges>(hop)) {
+        edge._direction = HopDirection::Both;
+    } else {
+        edge._direction = HopDirection::Out;
+    }
+
+    const Value etypes = hop->getResult(etypesResultIndex);
+    edge._near = lineageAnchor(hop->getOperand(0));
+    edge._far = hop->getResult(edge._direction == HopDirection::In ? srcResultIndex : tgtResultIndex);
+
+    for (Operation* const filterOp : filters) {
+        FilterOp filter = cast<FilterOp>(filterOp);
+
+        if (CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>()) {
+            if (lineageAnchor(check.getEdgeTypeIds()) == etypes) {
+                intersectEdgeTypes(check.getEdgeTypes(), edge);
+            }
+        } else if (CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>()) {
+            GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+            if (!labelSet) {
+                continue;
+            }
+
+            const Value node = lineageAnchor(labelSet.getInputNodes());
+            if (node && node == edge._near) {
+                appendNames(check.getLabels(), edge._nearLabels);
+            } else if (node == edge._far) {
+                appendNames(check.getLabels(), edge._farLabels);
+            }
+        }
+    }
+}
+
+// Climbs from the column up to the scans, through the filters, the hops' inputs and carry
+// sets and the factors of a product: a filter cut the rows before the column's own op read
+// them or after, and either way every row the column holds is one it kept
+void collectRowFlow(Value column, RowFlow& flow) {
+    llvm::SmallVector<Value, 8> pending {column};
+    llvm::DenseSet<Value> visited;
+    llvm::SmallPtrSet<Operation*, 8> seenHops;
+    llvm::SmallVector<Operation*, 8> hops;
+
+    while (!pending.empty()) {
+        const Value value = pending.pop_back_val();
+        if (!visited.insert(value).second) {
+            continue;
+        }
+
+        Operation* const def = value.getDefiningOp();
+        if (!def) {
+            continue;
+        }
+
+        if (FilterOp filter = dyn_cast<FilterOp>(def)) {
+            flow._filters.insert(def);
+            pending.push_back(filter.getColumnsToFilter()[cast<OpResult>(value).getResultNumber()]);
+        } else if (isEdgeHop(def)) {
+            if (seenHops.insert(def).second) {
+                hops.push_back(def);
+            }
+            llvm::append_range(pending, def->getOperands());
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
+            pending.push_back(exploration.getInputNodes());
+            llvm::append_range(pending, exploration.getColumnsToFilter());
+        } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+            llvm::append_range(pending, factorYieldColumns(product.getLeftFactor()));
+            llvm::append_range(pending, factorYieldColumns(product.getRightFactor()));
+        }
+    }
+
+    for (Operation* const hop : hops) {
+        PatternEdge edge;
+        edge._op = hop;
+        describeHop(flow._filters, edge);
+
+        flow._hops.push_back(edge);
+    }
+}
+
+// The op every row leaving this one reaches next, when one filter or hop consumes its
+// results alone, beside the ops computing that filter's mask
+Operation* nextRowOp(Operation* op) {
+    Operation* next = nullptr;
+    llvm::SmallVector<Operation*, 4> others;
+    for (const Value result : op->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool carriesRows = isa<FilterOp>(user) || isEdgeHop(user);
+            if (!carriesRows) {
+                others.push_back(user);
+            } else if (next && next != user) {
+                return nullptr;
+            } else {
+                next = user;
+            }
+        }
+    }
+
+    if (!next || others.empty()) {
+        return next;
+    }
+
+    FilterOp filter = dyn_cast<FilterOp>(next);
+    if (!filter) {
+        return nullptr;
+    }
+
+    const MaskCone cone = collectMaskCone(filter.getMask());
+    const bool othersComputeTheMask = llvm::all_of(others, [&cone](Operation* other) {
+        return llvm::is_contained(cone._ops, other);
+    });
+
+    return othersComputeTheMask ? next : nullptr;
+}
+
+// The filters every row leaving the check's own filter goes on to pass, with nothing
+// reading the rows in between: the equality closing a cycle onto a bound node is one,
+// emitted after the check of the hop that lands on it
+void collectDownstreamFilters(FilterOp start, RowFlow& flow) {
+    for (Operation* op = nextRowOp(start); op; op = nextRowOp(op)) {
+        if (isa<FilterOp>(op)) {
+            flow._filters.insert(op);
+        }
+    }
+}
+
+// The op that bound an edge or path column, climbing back through the filters, carry sets
+// and product yields the column came down: a hop's eids or an exploration's paths
+bool climbToBindingOp(Value column, Operation*& op) {
+    for (;;) {
+        Operation* const def = column.getDefiningOp();
+        if (!def) {
+            return false;
+        }
+
+        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+        if (FilterOp filter = dyn_cast<FilterOp>(def)) {
+            column = filter.getColumnsToFilter()[resultIndex];
+        } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+            FactorColumn factorColumn;
+            locateFactorColumn(product, resultIndex, factorColumn);
+            column = factorYieldColumns(*factorColumn._factor)[factorColumn._position];
+        } else if (isEdgeHop(def)) {
+            constexpr size_t eidsResultIndex = 1;
+            if (resultIndex == eidsResultIndex) {
+                op = def;
+                return true;
+            } else if (resultIndex >= hopFixedResultCount) {
+                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
+            } else {
+                return false;
+            }
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
+            constexpr size_t pathsResultIndex = 2;
+            if (resultIndex == pathsResultIndex) {
+                op = def;
+                return true;
+            } else if (resultIndex >= pathFixedResultCount) {
+                column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+}
+
+bool describeEdge(Value column, const RowFlow& flow, PatternEdge& edge) {
+    Operation* op = nullptr;
+    if (!climbToBindingOp(column, op)) {
+        return false;
+    }
+
+    if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        edge._op = op;
+        edge._isPath = true;
+        if (const ArrayAttr edgeTypes = exploration.getEdgeTypesAttr()) {
+            edge._anyType = false;
+            appendNames(edgeTypes, edge._edgeTypes);
+        }
+
+        return true;
+    }
+
+    const auto hopIt = llvm::find_if(flow._hops, [op](const PatternEdge& hop) { return hop._op == op; });
+    if (hopIt == flow._hops.end()) {
+        return false;
+    }
+
+    edge = *hopIt;
+
+    return true;
+}
+
+// P1: an edge carries one type, so two edges the pattern types apart are two edges
+bool provenByTypes(const PatternEdge& subject, const PatternEdge& other) {
+    if (subject._anyType || other._anyType) {
+        return false;
+    }
+
+    return llvm::none_of(subject._edgeTypes, [&other](llvm::StringRef type) {
+        return llvm::is_contained(other._edgeTypes, type);
+    });
+}
+
+std::string_view toStringView(llvm::StringRef text) {
+    return std::string_view(text.data(), text.size());
+}
+
+// Whether one stored node can carry both label sets: some label set of the graph holds
+// every label of the two. A label the graph never gave out leaves the node impossible.
+bool canCoincide(const ::db::GraphView& view, llvm::ArrayRef<llvm::StringRef> first, llvm::ArrayRef<llvm::StringRef> second) {
+    if (first.empty() && second.empty()) {
+        return true;
+    }
+
+    const ::db::GraphMetadata& metadata = view.metadata();
+    const ::db::LabelMap& labels = metadata.labels();
+
+    ::db::LabelSet wanted;
+    for (const llvm::ArrayRef<llvm::StringRef> names : {first, second}) {
+        for (const llvm::StringRef name : names) {
+            const std::optional<::db::LabelID> label = labels.get(toStringView(name));
+            if (!label) {
+                return false;
+            }
+
+            wanted.set(*label);
+        }
+    }
+
+    for (const ::db::LabelSetMap::Pair& pair : metadata.labelsets()) {
+        if (pair._value->hasAtLeastLabels(wanted)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// An edge's stored source and target, one pair per way the hop can read it
+struct EdgeEnds {
+    Value _source;
+    Value _target;
+    llvm::ArrayRef<llvm::StringRef> _sourceLabels;
+    llvm::ArrayRef<llvm::StringRef> _targetLabels;
+};
+
+void collectEdgeEnds(const PatternEdge& edge, llvm::SmallVectorImpl<EdgeEnds>& ends) {
+    if (edge._direction != HopDirection::In) {
+        ends.push_back(EdgeEnds {._source = edge._near,
+                                 ._target = edge._far,
+                                 ._sourceLabels = edge._nearLabels,
+                                 ._targetLabels = edge._farLabels});
+    }
+
+    if (edge._direction != HopDirection::Out) {
+        ends.push_back(EdgeEnds {._source = edge._far,
+                                 ._target = edge._near,
+                                 ._sourceLabels = edge._farLabels,
+                                 ._targetLabels = edge._nearLabels});
+    }
+}
+
+// P2: two edge variables bind one stored edge only if their sources are one node and their
+// targets are one node, in some orientation the directions allow; no label set carrying
+// both nodes' labels rules the orientation out, and every orientation ruled out proves
+// the pair. A path's edges have no labelled ends, so a path is never proven this way.
+bool provenByLabels(const ::db::GraphView& view, const PatternEdge& subject, const PatternEdge& other) {
+    if (subject._isPath || other._isPath) {
+        return false;
+    }
+
+    llvm::SmallVector<EdgeEnds, 2> subjectEnds;
+    llvm::SmallVector<EdgeEnds, 2> otherEnds;
+    collectEdgeEnds(subject, subjectEnds);
+    collectEdgeEnds(other, otherEnds);
+
+    for (const EdgeEnds& first : subjectEnds) {
+        for (const EdgeEnds& second : otherEnds) {
+            const bool sourcesCoincide = canCoincide(view, first._sourceLabels, second._sourceLabels);
+            const bool targetsCoincide = canCoincide(view, first._targetLabels, second._targetLabels);
+            if (sourcesCoincide && targetsCoincide) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// The nodes of the pattern once the pair's ends are identified: the anchors of the flow's
+// hops, joined where a source meets a source and a target a target
+class MergedNodes {
+public:
+    size_t indexOf(Value anchor) {
+        const auto [entry, inserted] = _indices.try_emplace(anchor, _parents.size());
+        if (inserted) {
+            _parents.push_back(entry->second);
+        }
+
+        return entry->second;
+    }
+
+    size_t classOf(Value anchor) {
+        size_t node = indexOf(anchor);
+        while (_parents[node] != node) {
+            node = _parents[node];
+        }
+
+        return node;
+    }
+
+    void merge(Value first, Value second) {
+        _parents[classOf(first)] = classOf(second);
+    }
+
+    size_t size() const { return _parents.size(); }
+
+private:
+    llvm::DenseMap<Value, size_t> _indices;
+    std::vector<size_t> _parents;
+};
+
+bool resolveLabels(const ::db::LabelMap& labels, llvm::ArrayRef<llvm::StringRef> names, ::db::LabelSet& into) {
+    for (const llvm::StringRef name : names) {
+        const std::optional<::db::LabelID> label = labels.get(toStringView(name));
+        if (!label) {
+            return false;
+        }
+
+        into.set(*label);
+    }
+
+    return true;
+}
+
+// The types a hop may bind among those the graph holds, false when it names none of them
+bool resolveEdgeTypes(const ::db::EdgeTypeMap& types, llvm::ArrayRef<llvm::StringRef> names, std::vector<::db::EdgeTypeID>& into) {
+    for (const llvm::StringRef name : names) {
+        const std::optional<::db::EdgeTypeID> type = types.get(toStringView(name));
+        if (type) {
+            into.push_back(*type);
+        }
+    }
+
+    return !into.empty();
+}
+
+// The types the pair's one edge may carry once both hops bind it: the names both allow
+bool resolveSharedEdgeTypes(const ::db::EdgeTypeMap& types,
+                            const PatternEdge& subject,
+                            const PatternEdge& other,
+                            std::vector<::db::EdgeTypeID>& into) {
+    if (subject._anyType && other._anyType) {
+        return true;
+    } else if (subject._anyType) {
+        return resolveEdgeTypes(types, other._edgeTypes, into);
+    } else if (other._anyType) {
+        return resolveEdgeTypes(types, subject._edgeTypes, into);
+    }
+
+    llvm::SmallVector<llvm::StringRef, 2> shared;
+    for (const llvm::StringRef type : subject._edgeTypes) {
+        if (llvm::is_contained(other._edgeTypes, type)) {
+            shared.push_back(type);
+        }
+    }
+
+    return resolveEdgeTypes(types, shared, into);
+}
+
+bool isNodeColumn(Value column) {
+    const auto columnType = dyn_cast<ColumnType>(column.getType());
+
+    return columnType && isa<storage::NodeIDType>(columnType.getType());
+}
+
+// Two node columns a filter of the flow holds equal are one node in every row that
+// reaches the check: the end a hop lands on and the variable it closes a cycle onto
+void mergeJoinedNodes(const RowFlow& flow, MergedNodes& nodes) {
+    for (Operation* const filterOp : flow._filters) {
+        FilterOp filter = cast<FilterOp>(filterOp);
+        EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+        if (!equality || !isNodeColumn(equality.getLhs()) || !isNodeColumn(equality.getRhs())) {
+            continue;
+        }
+
+        const Value left = lineageAnchor(equality.getLhs());
+        const Value right = lineageAnchor(equality.getRhs());
+        if (left && right) {
+            nodes.merge(left, right);
+        }
+    }
+}
+
+// The pattern the clause becomes when the pair binds one edge, in the given orientation:
+// the pair's edge first, then every other hop of the flow between the nodes the merge
+// leaves. False when a label or a type set the pattern names holds nothing.
+bool buildMergedPattern(const ::db::GraphMetadata& metadata,
+                        const RowFlow& flow,
+                        const PatternEdge& subject,
+                        const PatternEdge& other,
+                        const EdgeEnds& subjectEnds,
+                        const EdgeEnds& otherEnds,
+                        ::db::SchemaPattern& pattern) {
+    MergedNodes nodes;
+    for (const PatternEdge& hop : flow._hops) {
+        if (hop._near) {
+            nodes.indexOf(hop._near);
+            nodes.indexOf(hop._far);
+        }
+    }
+
+    mergeJoinedNodes(flow, nodes);
+    nodes.merge(subjectEnds._source, otherEnds._source);
+    nodes.merge(subjectEnds._target, otherEnds._target);
+
+    // A pattern node per class, numbered as the classes are met
+    std::vector<size_t> nodeOfClass(nodes.size(), nodes.size());
+    const auto nodeOf = [&nodes, &nodeOfClass, &pattern](Value anchor) {
+        const size_t classIndex = nodes.classOf(anchor);
+        if (nodeOfClass[classIndex] == nodeOfClass.size()) {
+            nodeOfClass[classIndex] = pattern._nodes.size();
+            pattern._nodes.emplace_back();
+        }
+
+        return nodeOfClass[classIndex];
+    };
+
+    const ::db::LabelMap& labels = metadata.labels();
+    for (const PatternEdge& hop : flow._hops) {
+        if (!hop._near) {
+            continue;
+        }
+
+        const bool resolved = resolveLabels(labels, hop._nearLabels, pattern._nodes[nodeOf(hop._near)]._labels)
+                              && resolveLabels(labels, hop._farLabels, pattern._nodes[nodeOf(hop._far)]._labels);
+        if (!resolved) {
+            return false;
+        }
+    }
+
+    const ::db::EdgeTypeMap& types = metadata.edgeTypes();
+
+    ::db::SchemaPattern::Edge merged;
+    merged._source = nodeOf(subjectEnds._source);
+    merged._target = nodeOf(subjectEnds._target);
+    if (!resolveSharedEdgeTypes(types, subject, other, merged._types)) {
+        return false;
+    }
+    pattern._edges.push_back(merged);
+
+    for (const PatternEdge& hop : flow._hops) {
+        const bool isThePair = hop._op == subject._op || hop._op == other._op;
+        if (isThePair || !hop._near) {
+            continue;
+        }
+
+        ::db::SchemaPattern::Edge edge;
+        const bool reversed = hop._direction == HopDirection::In;
+        edge._source = nodeOf(reversed ? hop._far : hop._near);
+        edge._target = nodeOf(reversed ? hop._near : hop._far);
+        edge._undirected = hop._direction == HopDirection::Both;
+        if (!hop._anyType && !resolveEdgeTypes(types, hop._edgeTypes, edge._types)) {
+            return false;
+        }
+
+        pattern._edges.push_back(edge);
+    }
+
+    return true;
+}
+
+// Whether every orientation the pair's directions allow merges the clause into a pattern
+// the data cannot hold, by the test given; an orientation naming a label or a type the
+// graph lacks holds nothing either
+template <typename Impossible>
+bool everyOrientationImpossible(const ::db::GraphView& view,
+                                const RowFlow& flow,
+                                const PatternEdge& subject,
+                                const PatternEdge& other,
+                                Impossible impossible) {
+    const bool bothFixedHops = !subject._isPath && !other._isPath && subject._near && other._near;
+    if (!bothFixedHops) {
+        return false;
+    }
+
+    const ::db::GraphMetadata& metadata = view.metadata();
+
+    llvm::SmallVector<EdgeEnds, 2> subjectEnds;
+    llvm::SmallVector<EdgeEnds, 2> otherEnds;
+    collectEdgeEnds(subject, subjectEnds);
+    collectEdgeEnds(other, otherEnds);
+
+    for (const EdgeEnds& first : subjectEnds) {
+        for (const EdgeEnds& second : otherEnds) {
+            ::db::SchemaPattern pattern;
+            const bool satisfiable = buildMergedPattern(metadata, flow, subject, other, first, second, pattern);
+            if (satisfiable && !impossible(pattern)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// P3: the pair binding one edge merges the clause's pattern into a smaller one with a cycle
+// in it, and that pattern has to embed into the graph's summary by label set and edge type
+// for the data to hold a row of it; no orientation embedding proves the pair
+bool provenBySchema(const ::db::GraphView& view, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
+    const ::db::SchemaGraph& schema = view.schemaGraph();
+    const ::db::LabelSetMap& labelSets = view.metadata().labelsets();
+
+    return everyOrientationImpossible(view, flow, subject, other, [&schema, &labelSets](const ::db::SchemaPattern& pattern) {
+        return !schema.embeds(pattern, labelSets);
+    });
+}
+
+constexpr size_t cycleSearchStepBudget = 10000;
+
+// The directed cycles of a merged pattern, by a depth-first search from each node over the
+// nodes after it, carrying the types the way's edges may hold. An undirected edge runs
+// either way and is left out; an edge of any type widens the set to every type of the
+// graph. A search that outgrows its budget finds nothing.
+class PatternCycleSearch {
+public:
+    PatternCycleSearch(const ::db::GraphView& view, const ::db::SchemaPattern& pattern)
+        : _view(view),
+        _pattern(pattern)
+    {
+        _onWay.resize(pattern._nodes.size(), false);
+    }
+
+    // Whether some cycle runs over types the view's parts hold no cycle of
+    bool findsOneTheDataLacks() {
+        for (size_t start = 0; start < _pattern._nodes.size(); start++) {
+            _start = start;
+            if (extend(start)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+private:
+    const ::db::GraphView& _view;
+    const ::db::SchemaPattern& _pattern;
+    std::vector<bool> _onWay;
+    std::vector<::db::EdgeTypeID> _wayTypes;
+    size_t _anyTypeEdgesOnWay {0};
+    size_t _start {0};
+    size_t _steps {0};
+
+    void take(const ::db::SchemaPattern::Edge& edge) {
+        if (edge._types.empty()) {
+            _anyTypeEdgesOnWay++;
+        }
+
+        _wayTypes.insert(_wayTypes.end(), edge._types.begin(), edge._types.end());
+    }
+
+    void drop(const ::db::SchemaPattern::Edge& edge) {
+        if (edge._types.empty()) {
+            _anyTypeEdgesOnWay--;
+        }
+
+        _wayTypes.resize(_wayTypes.size() - edge._types.size());
+    }
+
+    bool closesOverAcyclicTypes() const {
+        if (_anyTypeEdgesOnWay == 0) {
+            return _view.isAcyclicOver(_wayTypes);
+        }
+
+        std::vector<::db::EdgeTypeID> everyType;
+        for (const ::db::EdgeTypeMap::Pair& pair : _view.metadata().edgeTypes()) {
+            everyType.push_back(pair._id);
+        }
+
+        return _view.isAcyclicOver(everyType);
+    }
+
+    bool extend(size_t node) {
+        _onWay[node] = true;
+
+        bool found = false;
+        for (const ::db::SchemaPattern::Edge& edge : _pattern._edges) {
+            const bool leavesNode = !edge._undirected && edge._source == node;
+            if (!leavesNode) {
+                continue;
+            } else if (++_steps > cycleSearchStepBudget) {
+                break;
+            }
+
+            take(edge);
+            if (edge._target == _start) {
+                found = closesOverAcyclicTypes();
+            } else if (edge._target > _start && !_onWay[edge._target]) {
+                found = extend(edge._target);
+            }
+            drop(edge);
+
+            if (found) {
+                break;
+            }
+        }
+
+        _onWay[node] = false;
+
+        return found;
+    }
+};
+
+// P4: the pair binding one edge can close the clause's pattern into a directed cycle, and
+// a cycle whose edges all carry types the parts hold no cycle of is a row the data cannot
+// hold; every orientation closing such a cycle proves the pair. An orientation the summary
+// rules out needs no sort, so only the ones it leaves open are searched.
+bool provenByAcyclicity(const ::db::GraphView& view, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
+    const ::db::SchemaGraph& schema = view.schemaGraph();
+    const ::db::LabelSetMap& labelSets = view.metadata().labelsets();
+
+    return everyOrientationImpossible(view, flow, subject, other, [&view, &schema, &labelSets](const ::db::SchemaPattern& pattern) {
+        if (!schema.embeds(pattern, labelSets)) {
+            return true;
+        }
+
+        PatternCycleSearch cycles(view, pattern);
+
+        return cycles.findsOneTheDataLacks();
+    });
+}
+
+// The check and the filter cutting the rows on it, the shape codegen leaves after a hop
+struct DistinctnessFilter {
+    CheckEdgeDistinct _check;
+    FilterOp _filter;
+};
+
+bool matchDistinctnessFilter(FilterOp filter, DistinctnessFilter& matched) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check || !check.getResult().hasOneUse()) {
+        return false;
+    }
+
+    matched = DistinctnessFilter {._check = check, ._filter = filter};
+
+    return true;
+}
+
+llvm::StringRef pairName(ArrayAttr names, size_t index) {
+    if (!names) {
+        return "?";
+    }
+
+    return cast<StringAttr>(names[index]).getValue();
+}
+
+// What the proofs may read of the graph: its label sets, and its parts' edges through the
+// summary and the sort by type, when every edge the query will see is in the parts
+struct ProofSources {
+    const ::db::GraphView* _labels {nullptr};
+    const ::db::GraphView* _parts {nullptr};
+};
+
+llvm::StringRef proveDistinct(const ProofSources& sources, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other) {
+    if (provenByTypes(subject, other)) {
+        return "proven by types";
+    } else if (sources._labels && provenByLabels(*sources._labels, subject, other)) {
+        return "proven by labels";
+    } else if (sources._parts && provenBySchema(*sources._parts, flow, subject, other)) {
+        return "proven by schema";
+    } else if (sources._parts && provenByAcyclicity(*sources._parts, flow, subject, other)) {
+        return "proven by acyclicity";
+    }
+
+    return "kept";
+}
+
+// Drops the operands the pair proofs settle: the check goes with its filter when none is
+// left, and narrows to the kept ones otherwise. One line per pair goes to the report.
+void proveDistinctEdges(const DistinctnessFilter& matched,
+                        const ProofSources& sources,
+                        std::string& report,
+                        mlir::OpBuilder& builder) {
+    CheckEdgeDistinct check = matched._check;
+    FilterOp filter = matched._filter;
+    const ArrayAttr names = check.getNamesAttr();
+
+    RowFlow flow;
+    collectRowFlow(check.getSubject(), flow);
+    collectDownstreamFilters(filter, flow);
+
+    PatternEdge subject;
+    const bool subjectKnown = describeEdge(check.getSubject(), flow, subject);
+
+    llvm::SmallVector<Value, 4> kept;
+    llvm::SmallVector<llvm::StringRef, 4> keptNames {pairName(names, 0)};
+    const Operation::operand_range others = check.getOthers();
+    for (size_t index = 0; index < others.size(); index++) {
+        const Value other = others[index];
+        const llvm::StringRef otherName = pairName(names, index + 1);
+
+        PatternEdge edge;
+        const bool known = subjectKnown && describeEdge(other, flow, edge);
+
+        const llvm::StringRef verdict = known ? proveDistinct(sources, flow, subject, edge) : "kept";
+        if (verdict == "kept") {
+            kept.push_back(other);
+            keptNames.push_back(otherName);
+        }
+
+        report += pairName(names, 0);
+        report += " <> ";
+        report += otherName;
+        report += ": ";
+        report += verdict;
+        report += '\n';
+    }
+
+    if (kept.size() == others.size()) {
+        return;
+    }
+
+    if (kept.empty()) {
+        const Operation::operand_range columns = filter.getColumnsToFilter();
+        const mlir::ResultRange filtered = filter.getFilteredColumns();
+        for (size_t index = 0; index < filtered.size(); index++) {
+            filtered[index].replaceAllUsesWith(columns[index]);
+        }
+
+        filter.erase();
+        check.erase();
+        return;
+    }
+
+    builder.setInsertionPoint(check);
+    CheckEdgeDistinct narrowed = builder.create<CheckEdgeDistinct>(check.getLoc(),
+                                                                   check.getResult().getType(),
+                                                                   check.getSubject(),
+                                                                   kept,
+                                                                   names ? builder.getStrArrayAttr(keptNames) : ArrayAttr());
+
+    check.getResult().replaceAllUsesWith(narrowed.getResult());
+    check.erase();
+}
+
+struct ProveDistinctEdges : public impl::ProveDistinctEdgesBase<ProveDistinctEdges> {
+    ProveDistinctEdges() {}
+
+    ProveDistinctEdges(const DBPassContext* context)
+        : _context(context)
+    {
+    }
+
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // The label sets a query's own writes add are not in the graph's map yet, and the
+        // edges a change has not committed are in no part, so neither proves anything then
+        const DBPassContext& context = *_context;
+        ProofSources sources;
+        sources._labels = writesTheGraph(root) ? nullptr : context._view;
+        sources._parts = context._hasPendingWrites ? nullptr : sources._labels;
+
+        llvm::SmallVector<DistinctnessFilter> matches;
+        root->walk([&matches](FilterOp filter) {
+            DistinctnessFilter match;
+            if (matchDistinctnessFilter(filter, match)) {
+                matches.push_back(match);
+            }
+        });
+
+        std::string report;
+        mlir::OpBuilder builder(&getContext());
+        for (const DistinctnessFilter& match : matches) {
+            proveDistinctEdges(match, sources, report, builder);
+        }
+
+        ::db::ExplainReport* const explain = context._explain;
+        const bool reports = explain && explain->isRequested(::db::ExplainStage::PAIRS) && !report.empty();
+        if (reports) {
+            explain->addText(::db::ExplainRequest::getStageName(::db::ExplainStage::PAIRS), report);
+        }
+    }
+
+private:
+    const DBPassContext* _context {&defaultPassContext};
+};
+
 struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
     CountFromMetadata() {}
 
@@ -4970,6 +6086,10 @@ private:
     const DBPassContext* _context {&defaultPassContext};
 };
 
+}
+
+std::unique_ptr<Pass> createProveDistinctEdges(const DBPassContext* context) {
+    return std::make_unique<ProveDistinctEdges>(context);
 }
 
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context) {

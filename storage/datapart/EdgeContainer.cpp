@@ -69,6 +69,12 @@ EdgeContainer::EdgeContainer(NodeID firstNodeID,
       _outEdges(std::move(outEdges)),
       _inEdges(std::move(inEdges))
 {
+    for (size_t offset = 0; offset < _outEdges.size(); offset++) {
+        const EdgeRecord& edge = _outEdges[offset];
+        if (edge._nodeID == edge._otherID) {
+            _selfLoopOffsets.push_back(offset);
+        }
+    }
 }
 
 }

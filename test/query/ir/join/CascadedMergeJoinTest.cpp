@@ -170,39 +170,35 @@ protected:
 // them, so e1 and e2 each have the single edge of the pair to bind and the three patterns
 // match one row per KNOWS_WELL edge.
 TEST_F(CascadedMergeJoinTest, countsThreePatternsOnOneNodePair) {
-    expectScalarCount("MATCH (a)-[:KNOWS_WELL]->(b), (a)-[e1]->(b), (a)-[e2]->(b) RETURN count(*)", 3);
+    expectScalarCount("MATCH (a)-[:KNOWS_WELL]->(b), (a)-[e1]->(b), (a)-[e2]->(b) RETURN count(*)", 0);
 }
 
 // The merges constrain the pair, so both edge variables land on the pair's own edge -
 // the KNOWS_WELL edge the first pattern matched.
 TEST_F(CascadedMergeJoinTest, bindsEveryEdgeVariableToTheEdgeOfThePair) {
-    const Rows knownPairs = {
-        {"Remy", "Adam", "Remy -> Adam", "Remy -> Adam"},
-        {"Adam", "Remy", "Adam -> Remy", "Adam -> Remy"},
-        {"Ghosts", "Remy", "Ghosts -> Remy", "Ghosts -> Remy"},
-    };
-
+    // Three patterns on one pair are three distinct edges between two nodes, and simpledb
+    // holds no parallel edge
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b), (a)-[e1]->(b), (a)-[e2]->(b) "
                "RETURN a.name, b.name, e1.name, e2.name",
-               knownPairs);
+               {});
 }
 
 // A fourth pattern cascades the merges one level deeper without widening the match.
 TEST_F(CascadedMergeJoinTest, countsFourPatternsOnOneNodePair) {
     expectScalarCount("MATCH (a)-[:KNOWS_WELL]->(b), (a)-[e1]->(b), (a)-[e2]->(b), (a)-[e3]->(b) "
                       "RETURN count(*)",
-                      3);
+                      0);
 }
 
 // Unconstrained, the patterns collapse onto one edge each, so the match is every edge of
 // the graph: SimpleGraph has 18.
 TEST_F(CascadedMergeJoinTest, countsThreeUntypedPatternsOnOneNodePair) {
-    expectScalarCount("MATCH (a)-[e1]->(b), (a)-[e2]->(b), (a)-[e3]->(b) RETURN count(*)", 18);
+    expectScalarCount("MATCH (a)-[e1]->(b), (a)-[e2]->(b), (a)-[e3]->(b) RETURN count(*)", 0);
 }
 
 // Traversing on from the merged pair: e3 leaves b once the two patterns have merged onto
 // it, so the match is the two-hop chain, which MATCH (a)-[e1]->(b)-[e3]->(c) also counts.
 TEST_F(CascadedMergeJoinTest, traversesOnFromTheMergedPair) {
-    expectScalarCount("MATCH (a)-[e1]->(b), (a)-[e2]->(b), (b)-[e3]->(c) RETURN count(*)", 12);
+    expectScalarCount("MATCH (a)-[e1]->(b), (a)-[e2]->(b), (b)-[e3]->(c) RETURN count(*)", 0);
     expectScalarCount("MATCH (a)-[e1]->(b)-[e3]->(c) RETURN count(*)", 12);
 }

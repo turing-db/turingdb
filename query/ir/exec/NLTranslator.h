@@ -110,6 +110,7 @@ private:
         // empty for the other kinds.
         llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
         llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
+        llvm::SmallVector<int64_t, 4> _crossedDistinctFrom;
 
         // The step's chunks an EachRow iterator walks one row at a time; empty for the
         // other kinds.
@@ -143,6 +144,9 @@ private:
         uint64_t _maxHops {0};
         mlir::Region* _hopRegion {nullptr};
         llvm::SmallVector<mlir::Value, 2> _hopImports;
+
+        // The carried columns, by index, whose edges the hop or walk leaves out
+        llvm::SmallVector<size_t, 2> _distinctFrom;
 
         // The labels every hop's end must carry, when the op asks only that of a hop; views
         // into the op's interned StringAttr storage like _labels
@@ -458,6 +462,13 @@ private:
 
     // Allocate the filtered output of every carried column of an expansion loop, bound to
     // the loop variables from firstCarriedArgument on, with the gather that fills it
+    template <typename HopOp>
+    void readDistinctFrom(HopOp hop, IteratorConfig& config);
+
+    // Hands the loop the input columns the carried columns named by _distinctFrom come from,
+    // the edge ones and the path ones apart
+    void bindExcludedColumns(const IteratorConfig& config, NLExpansionLoopData* loopData);
+
     void bindCarriedColumns(const IteratorConfig& config,
                             mlir::Block& loopBody,
                             size_t firstCarriedArgument,
@@ -923,6 +934,7 @@ private:
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
     void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);
+    void translateCheckEdgeDistinct(mlir::nl::CheckEdgeDistinct op, NLStmtContainer* body);
 
     void translateCreateNode(mlir::nl::CreateNode createNode, NLStmtContainer* body);
 

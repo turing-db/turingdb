@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ChunkWriter.h"
+#include "ExcludedEdges.h"
 #include "PartDirectory.h"
 #include "PathCycleTable.h"
 #include "PathExplorationDir.h"
@@ -65,6 +66,9 @@ public:
 
     void setDistinctEnds(bool distinct);
     void setCandidateLookahead(size_t lookahead) { _lookahead = lookahead; }
+
+    // The edges each seed row may not take, which the clause bound before the path
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
 
     void reset();
     void fill(size_t maxCount);
@@ -169,6 +173,10 @@ private:
         std::vector<NodeID> _next;
         std::vector<NodeID> _candidateNodes;
         std::vector<EdgeID> _candidateEdges;
+        // The edges the batch's seeds exclude, sorted by edge, each with the seeds excluding it
+        std::vector<std::pair<EdgeID, uint64_t>> _excluded;
+        uint64_t _excludedSignature {0};
+        uint64_t _excludingSeeds {0};
         size_t _batchFirstRow {0};
         uint64_t _level {0};
         size_t _emitNode {0};
@@ -238,6 +246,7 @@ private:
     size_t _pendingEdgeIDBound {0};
     bool _distinctEnds {false};
     size_t _lookahead {1};
+    ExcludedEdges _excluded;
 
     PartDirectory _parts;
     const Tombstones* _tombstones {nullptr};
@@ -259,6 +268,8 @@ private:
     PathEdgeTable _pathEdgeTable;
     std::vector<PathRef> _pathEntries;
     std::vector<uint64_t> _pathSignatures;
+    std::span<const EdgeID> _seedExcluded;
+    uint64_t _seedExclusionSignature {0};
     std::vector<Frame> _frames;
     std::vector<NodeID> _candidateNodes;
     std::vector<EdgeID> _candidateEdges;
@@ -322,6 +333,9 @@ private:
 
     void fillDistinct(size_t maxCount);
     void startBatch();
+    void collectBatchExclusions(size_t firstRow, size_t count);
+    // The seeds of the batch that exclude the edge, as a word of their bits
+    uint64_t excludedSeedMask(EdgeID edge) const;
     bool searchesSeedCycles() const;
     // The seeds of the batch, as bits, that a closed trail of at most _maxHops edges returns to
     uint64_t closedSeedsOf(uint64_t seeds);

@@ -74,7 +74,7 @@ TEST_F(CallSubqueryImportOrderByTest, ordersAGroupedBarrierByAnImport) {
                "  RETURN q.name AS sharer, shared "
                "} "
                "RETURN sharer, shared",
-               {{"Remy", "3"}, {"Luc", "1"}});
+               {{"Luc", "1"}});
 }
 
 // The rows anImportSurvivesADedupingBarrier reports without the ORDER BY
@@ -86,7 +86,7 @@ TEST_F(CallSubqueryImportOrderByTest, ordersADedupingBarrierByAnImport) {
                "  RETURN q.name AS sharer "
                "} "
                "RETURN sharer",
-               {{"Remy"}, {"Luc"}});
+               {{"Luc"}});
 }
 
 // One value per invocation orders nothing: the 15 interests come out as they would with no

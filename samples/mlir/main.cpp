@@ -145,7 +145,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     // Out-edges: send each step's target (successor) node IDs to the result.
     // The edge loop binds the chunks in order: sources, edge IDs, edge type
     // IDs, targets - so argument 3 is the targets column.
-    auto outEdges = builder.create<mlir::nl::GetOutEdges>(loc, nodeChunk, mlir::ValueRange {});
+    auto outEdges = builder.create<mlir::nl::GetOutEdges>(loc, nodeChunk, mlir::ValueRange {}, mlir::DenseI64ArrayAttr());
     auto outLoop = builder.create<mlir::nl::For>(loc, outEdges.getResult());
     mlir::Block* outLoopBody = outLoop.getBody();
     builder.setInsertionPointToStart(outLoopBody);
@@ -154,7 +154,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     // In-edges of the same node chunk: send the source (predecessor) node IDs.
     // Same chunk order, so argument 0 is the sources column.
     builder.setInsertionPointAfter(outLoop);
-    auto inEdges = builder.create<mlir::nl::GetInEdges>(loc, nodeChunk, mlir::ValueRange {});
+    auto inEdges = builder.create<mlir::nl::GetInEdges>(loc, nodeChunk, mlir::ValueRange {}, mlir::DenseI64ArrayAttr());
     auto inLoop = builder.create<mlir::nl::For>(loc, inEdges.getResult());
     mlir::Block* inLoopBody = inLoop.getBody();
     builder.setInsertionPointToStart(inLoopBody);
@@ -164,7 +164,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     // of the current step. First hop a->b with an empty carry set; its loop
     // binds sources(=a) at argument 0 and targets(=b) at argument 3.
     builder.setInsertionPointAfter(inLoop);
-    auto firstHop = builder.create<mlir::nl::GetOutEdges>(loc, nodeChunk, mlir::ValueRange {});
+    auto firstHop = builder.create<mlir::nl::GetOutEdges>(loc, nodeChunk, mlir::ValueRange {}, mlir::DenseI64ArrayAttr());
     auto firstHopLoop = builder.create<mlir::nl::For>(loc, firstHop.getResult());
     mlir::Block* firstHopLoopBody = firstHopLoop.getBody();
     builder.setInsertionPointToStart(firstHopLoopBody);
@@ -176,7 +176,7 @@ void addNestedLoopFunction(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     // back as the trailing chunk at argument 4, filtered to the `a` whose `b`
     // has a successor `c`. All three are row-aligned, so output the (a, b, c)
     // triple.
-    auto secondHop = builder.create<mlir::nl::GetOutEdges>(loc, bChunk, mlir::ValueRange {aChunk});
+    auto secondHop = builder.create<mlir::nl::GetOutEdges>(loc, bChunk, mlir::ValueRange {aChunk}, mlir::DenseI64ArrayAttr());
     auto secondHopLoop = builder.create<mlir::nl::For>(loc, secondHop.getResult());
     mlir::Block* secondHopLoopBody = secondHopLoop.getBody();
     builder.setInsertionPointToStart(secondHopLoopBody);

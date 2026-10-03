@@ -3,6 +3,11 @@
 
 include "mlir/Pass/PassBase.td"
 
+def ProveDistinctEdges : Pass<"prove_distinct_edges"> {
+    let summary = "Drop the edge pairs of a check_edge_distinct that the pattern's edge types or node labels prove distinct";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseScanByLabel : Pass<"fuse_scan_by_label"> {
     let summary = "Fuse a scan_nodes and its label-set filter into a scan_nodes_by_label";
     let dependentDialects = ["mlir::db::DB"];
@@ -100,6 +105,16 @@ def CountFromMetadata : Pass<"count_from_metadata"> {
 
 def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
     let summary = "Fuse a path exploration and the label filter over its end nodes into an exploration constrained to those ends";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def FuseDistinctEdges : Pass<"fuse_distinct_edges"> {
+    let summary = "Fold the edge-distinctness check over a path exploration's paths into the exploration, which then takes none of a seed row's bound edges";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def FuseProductDistinctEdges : Pass<"fuse_product_distinct_edges"> {
+    let summary = "Fold the edge-distinctness check between the two factors of a cross product or a hash join into the op, which then leaves out the pairs holding one edge twice";
     let dependentDialects = ["mlir::db::DB"];
 }
 

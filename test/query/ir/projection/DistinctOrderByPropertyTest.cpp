@@ -168,11 +168,8 @@ TEST_F(DistinctOrderByPropertyTest, ordersDistinctEdgesByTheirType) {
                       "WITH DISTINCT e ORDER BY e:WORKS_IN DESC, e.name ASC "
                       "RETURN e.name",
                       {{"g-seven-ghent"},
-                       {"a-ten-antwerp"},
                        {"b-two-antwerp"},
                        {"c-seven-brussels"},
-                       {"d-three-antwerp"},
-                       {"e-five-ghent"},
                        {"f-two-antwerp-again"}});
 }
 

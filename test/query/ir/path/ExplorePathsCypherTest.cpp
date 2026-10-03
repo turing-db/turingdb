@@ -170,10 +170,6 @@ TEST_F(ExplorePathsCypherTest, exploresFromTheEndOfAPlainHop) {
         {"Ghosts", "Remy", "", "Remy"},
         {"Ghosts", "Remy", "0", "Adam"},
         {"Ghosts", "Remy", "0, 4", "Remy"},
-        {"Ghosts", "Remy", "1, 7", "Remy"},
-        {"Ghosts", "Remy", "1, 7, 0", "Adam"},
-        {"Ghosts", "Remy", "0, 4, 1, 7", "Remy"},
-        {"Ghosts", "Remy", "1, 7, 0, 4", "Remy"},
     };
     EXPECT_EQ(rows, sorted(expected));
 }
@@ -303,13 +299,14 @@ TEST_F(ExplorePathsCypherTest, carriesAPathThroughAWith) {
 
 TEST_F(ExplorePathsCypherTest, closesAJoinOnABoundEnd) {
     StringRowSink sink;
-    runQuery("MATCH (a:Person)-[e:KNOWS_WELL]->+(b), (a)-[:KNOWS_WELL]->(b) RETURN a.name, e, b.name", sink);
+    runQuery("MATCH (a:Person)-[e:KNOWS_WELL]->+(b), (a)-[:KNOWS_WELL]-(b) RETURN a.name, e, b.name", sink);
 
     Rows rows;
     sink.sortedRows(rows);
 
     // Of the KNOWS_WELL trails between two Persons, only the single hops end where a direct
-    // KNOWS_WELL edge lands
+    // KNOWS_WELL edge lands, and the direct edge the join binds is the reciprocal one, the
+    // hop's own edge being taken
     const Rows expected {
         {"Adam", "4", "Remy"},
         {"Remy", "0", "Adam"},

@@ -7,6 +7,7 @@
 #include "NLMergeWorkingSet.h"
 #include "Procedure.h"
 #include "ProcedureData.h"
+#include "list/PathTrie.h"
 
 #include "BioAssert.h"
 #include "IRException.h"
@@ -623,4 +624,51 @@ NLMakeMapData::~NLMakeMapData() {
 
 void NLMakeMapData::addEntry(const Entry& entry) {
     _entries.push_back(entry);
+}
+
+void NLExpansionLoopData::collectExcludedEdges(size_t rowCount) {
+    _excludedOffsets.clear();
+    _excludedEdgeIDs.clear();
+
+    if (_excludedEdges.empty() && _excludedPaths.empty()) {
+        return;
+    } else if (_excludedPaths.empty()) {
+        const size_t width = _excludedEdges.size();
+        _excludedOffsets.resize(rowCount + 1);
+        _excludedEdgeIDs.resize(rowCount * width);
+
+        for (size_t row = 0; row <= rowCount; row++) {
+            _excludedOffsets[row] = row * width;
+        }
+
+        for (size_t column = 0; column < width; column++) {
+            const ColumnEdgeIDs& edges = *_excludedEdges[column];
+            for (size_t row = 0; row < rowCount; row++) {
+                _excludedEdgeIDs[row * width + column] = edges[row];
+            }
+        }
+    } else {
+        _excludedOffsets.reserve(rowCount + 1);
+        for (size_t row = 0; row < rowCount; row++) {
+            _excludedOffsets.push_back(_excludedEdgeIDs.size());
+
+            for (const ColumnEdgeIDs* column : _excludedEdges) {
+                _excludedEdgeIDs.push_back((*column)[row]);
+            }
+
+            for (const ColumnVector<PathRef>* column : _excludedPaths) {
+                PathRef current = (*column)[row];
+                for (uint64_t depth = _exclusionTrie->getDepth(current); depth > 0; depth--) {
+                    const PathTrieEntry& entry = _exclusionTrie->get(current);
+                    _excludedEdgeIDs.push_back(entry._edge);
+                    current = entry._parent;
+                }
+            }
+        }
+        _excludedOffsets.push_back(_excludedEdgeIDs.size());
+    }
+}
+
+ExcludedEdges NLExpansionLoopData::getExcludedEdges() const {
+    return ExcludedEdges {._offsets = _excludedOffsets, ._edges = _excludedEdgeIDs};
 }

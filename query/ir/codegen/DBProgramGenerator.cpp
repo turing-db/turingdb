@@ -139,6 +139,16 @@ std::string_view toStringView(llvm::StringRef text) {
     return std::string_view(text.data(), text.size());
 }
 
+llvm::StringRef toStringRef(std::string_view text) {
+    return llvm::StringRef(text.data(), text.size());
+}
+
+// The name the query knows an edge by: a named edge's occurrences are listed under its
+// declaration, an anonymous one is the dependency graph's own
+std::string_view edgeQueryName(const VariableDependency* edge, const VarDecl* identity) {
+    return identity ? identity->getName() : edge->getName();
+}
+
 // Whether @param column is one @param aggregateOp bound, or one computed from what it
 // bound: anything computed before it holds the matched rows the aggregate consumed. A
 // column of another block is one the body being generated binds, which no aggregate reduced
@@ -889,6 +899,7 @@ DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule,
     _explain(explain),
     _passContext(passContext)
 {
+    _passContext._explain = explain;
 }
 
 DBProgramGenerator::~DBProgramGenerator() {
@@ -1397,7 +1408,9 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         mlir::ArrayAttr(),
                                                         mlir::ArrayAttr(),
                                                         mlir::IntegerAttr(),
-                                                        false);
+                                                        false,
+                                                        false,
+                                                        mlir::DenseI64ArrayAttr());
 
     registerValue(src, op.getSrcids());
     registerValue(edge, op.getPaths());
@@ -2561,6 +2574,97 @@ void DBProgramGenerator::resolveEdgeIdentities() {
     }
 }
 
+const VarDecl* DBProgramGenerator::edgeIdentityOf(const VariableDependency* edge) const {
+    for (const auto& [decl, occurrences] : _vdg.edgeIdentities()) {
+        if (std::ranges::find(occurrences, edge) != occurrences.end()) {
+            return decl;
+        }
+    }
+
+    return nullptr;
+}
+
+// The edges bound before this one in its clause whose columns flow with it here and that no
+// earlier check paired it with; each pair found is recorded as checked. Two occurrences of
+// one named edge are joined on equality by resolveEdgeIdentities and are not a pair.
+void DBProgramGenerator::collectEdgesToDiffer(const VariableDependency* edge,
+                                              llvm::SmallVectorImpl<mlir::Value>& others,
+                                              llvm::SmallVectorImpl<llvm::StringRef>& names) {
+    const size_t clause = _vdg.clauseOf(edge);
+    const VarDecl* identity = edgeIdentityOf(edge);
+    names.push_back(toStringRef(edgeQueryName(edge, identity)));
+
+    for (const VariableDependency* bound : _part._boundEdges) {
+        const bool sameClause = _vdg.clauseOf(bound) == clause;
+        const VarDecl* boundIdentity = edgeIdentityOf(bound);
+        const bool sameEdge = identity && boundIdentity == identity;
+        if (bound == edge || !sameClause || sameEdge || !holdsColumn(bound)) {
+            continue;
+        }
+
+        const mlir::Value column = _part._varMap.at(bound).back();
+        if (!isRowAlignedHere(column)) {
+            continue;
+        }
+
+        const std::pair<const VariableDependency*, const VariableDependency*> pair =
+            bound < edge ? std::make_pair(bound, edge) : std::make_pair(edge, bound);
+        if (!_part._checkedEdgePairs.insert(pair).second) {
+            continue;
+        }
+
+        others.push_back(column);
+        names.push_back(toStringRef(edgeQueryName(bound, boundIdentity)));
+    }
+}
+
+mlir::Value DBProgramGenerator::checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others, llvm::ArrayRef<llvm::StringRef> names) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    return _opBuilder.create<mlir::db::CheckEdgeDistinct>(loc, boolType, subject, others, _opBuilder.getStrArrayAttr(names)).getResult();
+}
+
+void DBProgramGenerator::checkEdgeDistinct(const VariableDependency* edge) {
+    if (_vdg.clauseOf(edge) == 0 || !holdsColumn(edge)) {
+        return;
+    }
+
+    llvm::SmallVector<mlir::Value> others;
+    llvm::SmallVector<llvm::StringRef> names;
+    collectEdgesToDiffer(edge, others, names);
+    _part._boundEdges.push_back(edge);
+
+    if (others.empty()) {
+        return;
+    }
+
+    const mlir::Value subject = _part._varMap.at(edge).back();
+    filterAllColumns(checkEdgeDistinctMask(subject, others, names));
+}
+
+void DBProgramGenerator::checkCrossedEdgesDistinct() {
+    for (const VariableDependency* edge : _part._boundEdges) {
+        if (!holdsColumn(edge)) {
+            continue;
+        }
+
+        const mlir::Value subject = _part._varMap.at(edge).back();
+        if (!isRowAlignedHere(subject)) {
+            continue;
+        }
+
+        llvm::SmallVector<mlir::Value> others;
+        llvm::SmallVector<llvm::StringRef> names;
+        collectEdgesToDiffer(edge, others, names);
+        if (others.empty()) {
+            continue;
+        }
+
+        filterAllColumns(checkEdgeDistinctMask(subject, others, names));
+    }
+}
+
 bool DBProgramGenerator::holdsColumn(const VariableDependency* var) const {
     const auto findIt = _part._varMap.find(var);
 
@@ -2794,6 +2898,7 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     if (!metadata.isQuantified()) {
         applyConstraints(edge);
     }
+    checkEdgeDistinct(edge);
 
     carriedSet.push_back(edge);
 
@@ -3105,6 +3210,7 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
             applyConstraints(edge);
         }
         applyConstraints(tgt);
+        checkEdgeDistinct(edge);
 
         carriedSet.push_back(src);
         carriedSet.push_back(edge);
@@ -3356,6 +3462,7 @@ void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmt
             generateNamedPaths(matchStmt);
             generateMatchConstraints(matchStmt);
             generateMatchFilter(matchStmt);
+            checkCrossedEdgesDistinct();
 
             if (!matchStmt->isOptional()) {
                 generateMatchOrderBy(matchStmt);

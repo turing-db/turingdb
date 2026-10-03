@@ -9,6 +9,7 @@
 #include "columns/ColumnIDs.h"
 #include "datapart/EdgeRecord.h"
 #include "PartIterator.h"
+#include "ExcludedEdges.h"
 #include "TombstoneFilter.h"
 
 namespace db {
@@ -79,6 +80,9 @@ public:
     void setTgtIDs(ColumnNodeIDs* tgts) { _tgts = tgts; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
+    // The edges each input row of the hop may not repeat
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
+
 private:
     ColumnVector<size_t>* _indices {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
@@ -86,6 +90,8 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    ExcludedEdges _excluded;
+    size_t _heldInRun {0};
 
     void filterTombstones();
 };

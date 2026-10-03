@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <set>
 #include <unordered_set>
 #include <vector>
 
@@ -277,6 +278,12 @@ private:
         // The block arguments of the hop region being generated, under the declarations of
         // the hop's entities; empty outside a region
         std::unordered_map<const VarDecl*, mlir::Value> _hopColumns;
+
+        // The edge and path variables the traversal has bound, in order, and the pairs of
+        // them already checked distinct: relationship uniqueness holds within one MATCH
+        // clause, and a pair is checked once, where both columns first flow together
+        std::vector<const VariableDependency*> _boundEdges;
+        std::set<std::pair<const VariableDependency*, const VariableDependency*>> _checkedEdgePairs;
     };
 
     PartScope _part;
@@ -439,6 +446,17 @@ private:
 
     // Adds filters for edges which should be equivalent (joined on)
     void resolveEdgeIdentities();
+
+    // Relationship isomorphism: filters the rows where the edge, or path, the hop just
+    // bound is one an earlier hop of the same clause bound, and records it as bound
+    void checkEdgeDistinct(const VariableDependency* edge);
+    // The pairs the hops could not check, their columns having met only in a cross product
+    void checkCrossedEdgesDistinct();
+    void collectEdgesToDiffer(const VariableDependency* edge,
+                              llvm::SmallVectorImpl<mlir::Value>& others,
+                              llvm::SmallVectorImpl<llvm::StringRef>& names);
+    mlir::Value checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others, llvm::ArrayRef<llvm::StringRef> names);
+    const VarDecl* edgeIdentityOf(const VariableDependency* edge) const;
 
     // Joins each pattern variable to the column a CALL yielded under its name: the two are
     // one Cypher variable, and the call has already paired its rows with the ones the
