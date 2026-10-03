@@ -148,7 +148,7 @@ Key points:
 - Private members prefixed with underscore: `_member`
 - Methods use lowerCamelCase: `myFunction`
 - No abbreviations in identifiers — spell them out (`rowGroup`, not `rg`; `column`, not `col`; `index`, not `idx`). Applies to locals, parameters, members, and comments.
-- No Google-style `k`-prefix on constants. Use descriptive names: `previewRowsCount`, not `kPreviewRows`; `batchSize`, not `kBatch`.
+- `constexpr` constants are written in uppercase with underscores: `DB_PASS_COUNT`, not `dbPassCount`; `PREVIEW_ROWS_COUNT`, not `kPreviewRows`. Never use the Google-style `k`-prefix. Plain `const` locals and parameters stay lowerCamelCase.
 - Helpers that unconditionally throw use a `throw`-prefix: `throwError`, `throwIfError` — not `raise`, `bail`, or `fail`. C++ uses `throw` as the language keyword, so the name should match.
 - Area-local classes take a domain prefix matching their directory. Types under `io/parquet/`, `tools/turing-parquet/`, `dump/`, `import/`, etc. are written `ParquetReader`, `ParquetSchema`, `GraphLoader`, not unqualified `Reader`/`Schema`/`Loader`. Everything lives in `namespace db`, so unqualified names shadow generic ones and read ambiguously. Match file names to class names (`ParquetSchema.h` for `class ParquetSchema`).
 

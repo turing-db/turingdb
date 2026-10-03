@@ -1,14 +1,14 @@
 ---
 name: feedback-no-k-prefix-constants
-description: "Don't prefix constants with `k` (Google style); use descriptive names like `previewRowsCount`"
+description: "constexpr constants are UPPER_SNAKE_CASE (DB_PASS_COUNT); never the Google-style k-prefix"
 metadata: 
   node_type: memory
   type: feedback
   originSessionId: 092696f3-f6ed-4852-8093-a14ca7d5b3c4
 ---
 
-Don't use the Google-style `k`-prefix for constants (`kPreviewRows`, `kBatch`, `kMaxSize`). Use plain descriptive names instead (`previewRowsCount`, `batchSize`, `maxSize`).
+Write `constexpr` constants in uppercase with underscores: `DB_PASS_COUNT`, not `dbPassCount`; `PREVIEW_ROWS_COUNT`, not `kPreviewRows`. Never use the Google-style `k`-prefix (`kPreviewRows`, `kBatch`, `kMaxSize`).
 
-**Why:** User explicitly renamed `kPreviewRows` → `previewRowsCount` in `samples/parquet-import/main.cpp`. This codebase doesn't use Google's `k`-prefix convention — it's purely a habit I've imported from elsewhere.
+**Why:** User renamed `kPreviewRows` in `samples/parquet-import/main.cpp` because the `k`-prefix is a habit imported from Google style. On 2026-10-03 they asked for `dbPassCount` in `query/ir/codegen/DBPassPipeline.cpp` to be `DB_PASS_COUNT`, and for the rule to be stated in CLAUDE.md.
 
-**How to apply:** Any new `constexpr` / `const` local or static. Member constants stay with `_` prefix per the usual rule. Don't churn existing code that already uses `k`-prefix unless asked.
+**How to apply:** Any new `constexpr` constant, at namespace, class or function scope. Plain `const` locals and parameters stay lowerCamelCase (`const size_t remaining = ...`). The codebase still has lowerCamelCase `constexpr` names; don't churn them unless asked.

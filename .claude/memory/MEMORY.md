@@ -60,7 +60,7 @@
 - @feedback_size_t_for_indices.md — size_t for indices and counts in new code, narrow at API boundaries
 - @feedback_switch_case_break.md — return inside the case body, break still written aligned to case
 - @feedback_naming_throw.md — throw-prefixed names (throwError) for helpers that always throw
-- @feedback_no_k_prefix_constants.md — no Google-style k-prefix; use descriptive constant names
+- @feedback_no_k_prefix_constants.md — constexpr constants are UPPER_SNAKE_CASE (DB_PASS_COUNT); never a k-prefix
 - @feedback_exit_status_macros.md — return EXIT_SUCCESS / EXIT_FAILURE from main, not 0 / 1
 - @feedback_cpp_using_namespace.md — `using namespace db;` at top of .cpp, no body-wrapping namespace
 - @feedback_call_arg_alignment.md — wrapping a call: one argument per line, aligned under the first
