@@ -905,7 +905,7 @@ bool dropsRows(mlir::Operation* operation) {
     }
 
     return mlir::isa<mlir::db::FilterOp,
-                     mlir::db::ListFetchNode,
+                     mlir::db::FetchNodes,
                      mlir::db::HashJoin,
                      mlir::db::Skip,
                      mlir::db::Limit,
@@ -1269,8 +1269,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerLazyCase(lazyCase);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
-    } else if (mlir::db::ListFetchNode fetch = mlir::dyn_cast<mlir::db::ListFetchNode>(operation)) {
-        lowerListFetchNode(fetch);
+    } else if (mlir::db::FetchNodes fetch = mlir::dyn_cast<mlir::db::FetchNodes>(operation)) {
+        lowerFetchNodes(fetch);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
         lowerGroupAggregate(groupAggregate);
     } else if (mlir::db::Collect collect = mlir::dyn_cast<mlir::db::Collect>(operation)) {
@@ -5649,7 +5649,7 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
     followCardinalityThrough(columnChunks, nlFilter.getResults());
 }
 
-void DBLowering::lowerListFetchNode(mlir::db::ListFetchNode fetch) {
+void DBLowering::lowerFetchNodes(mlir::db::FetchNodes fetch) {
     mlir::MLIRContext* const context = _builder.getContext();
 
     llvm::SmallVector<mlir::Value, 4> carriedChunks;
@@ -5668,10 +5668,10 @@ void DBLowering::lowerListFetchNode(mlir::db::ListFetchNode fetch) {
 
     setInsertionInto(ownerBlock(deepestBoundChunk(inputChunks)));
 
-    nl::ListFetchNode nlFetch = _builder.create<nl::ListFetchNode>(_builder.getUnknownLoc(),
-                                                          resultTypes,
-                                                          idsChunk,
-                                                          carriedChunks);
+    nl::FetchNodes nlFetch = _builder.create<nl::FetchNodes>(_builder.getUnknownLoc(),
+                                                             resultTypes,
+                                                             idsChunk,
+                                                             carriedChunks);
 
     const mlir::ResultRange results = fetch->getResults();
     for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {

@@ -237,15 +237,15 @@ def Unwind : NLOp<"unwind", [Pure]> {
 }
 
 /**
-* ListFetchNode
+* FetchNodes
 */
-def ListFetchNode : NLOp<"list_fetch_node", [Pure]> {
+def FetchNodes : NLOp<"fetch_nodes", [Pure]> {
   let summary = "Keep the rows whose ID cell names a node, with that node, as freshly cut chunks";
   let description = [{
-    Imperative counterpart of db.list_fetch_node. Each step reads the chunk of ID cells, keeps
-    the rows naming a node the graph holds, and cuts the carry set to them:
+    Imperative counterpart of db.fetch_nodes. Each step reads the chunk of ID cells, keeps
+    the rows naming a node a scan would produce, and cuts the carry set to them:
 
-      %a, %i2 = nl.list_fetch_node(%ids, {%i})
+      %a, %i2 = nl.fetch_nodes(%ids, {%i})
                   : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>)
                   -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>)
   }];

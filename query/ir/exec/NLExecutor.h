@@ -244,7 +244,7 @@ public:
     static void runFilter(NLExecutionContext* context, NLFunctionData* data);
 
     // Keep the rows whose ID cell names a node, with that node, and cut the carry set to them
-    static void runListFetchNode(NLExecutionContext* context, NLFunctionData* data);
+    static void runFetchNodes(NLExecutionContext* context, NLFunctionData* data);
 
     // Zero the tally of a COUNT; runs each time its block runs.
     static void runCountReset(NLExecutionContext* context, NLFunctionData* data);
@@ -518,10 +518,10 @@ public:
     // keeps nothing, and a type-erased cell keeps its row where it holds true.
     static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable, bool untypedNull, bool taggedCells);
 
-    // The fetch for an nl.list_fetch_node reading its IDs out of nodes, integers or tagged cells
-    static NLListFetchNodeFunction selectNodeFetchFunction(bool nullable);
-    static NLListFetchNodeFunction selectIntegerFetchFunction(ValueType valueType, bool nullable);
-    static NLListFetchNodeFunction selectTaggedFetchFunction(bool nullable);
+    // The fetch for an nl.fetch_nodes reading its IDs out of nodes, integers or tagged cells
+    static NLFetchNodesFunction selectNodeFetchFunction(bool nullable);
+    static NLFetchNodesFunction selectIntegerFetchFunction(ValueType valueType, bool nullable);
+    static NLFetchNodesFunction selectTaggedFetchFunction(bool nullable);
 
     // Append (onto a buffer tail) for an ID chunk of this kind / a nullable value
     // chunk of this value type. Used by nl.sort_collect.

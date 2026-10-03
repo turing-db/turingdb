@@ -237,7 +237,7 @@ TEST_F(UnwindValueFilterCodegenTest, projectedNodeIDElementsFuseIntoAConstScan) 
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::ListFetchNode>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FetchNodes>(*module), 0u);
 }
 
 TEST_F(UnwindValueFilterCodegenTest, projectsTheNodeIDElementsBesideWhatTheyMatched) {

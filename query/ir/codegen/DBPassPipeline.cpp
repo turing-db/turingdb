@@ -10,7 +10,7 @@ namespace {
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext*);
 
-constexpr size_t DB_PASS_COUNT = 33;
+constexpr size_t DB_PASS_COUNT = 34;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -22,6 +22,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createPushDownFilters(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createTrimUnreadColumns(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createRerootPatternAtSeed(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseUnwindEquality(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByNodeIDs(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByPropertyValue(); },
@@ -46,7 +47,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByPropertyValue(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createReusePropertyReads(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createCountPathRows(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createFuseListFetchNode(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createFuseFetchNodes(); },
     [](const mlir::db::DBPassContext* context) { return mlir::db::createFuseHashJoin(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createTrimUnreadColumns(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreDistinctEnds(); },

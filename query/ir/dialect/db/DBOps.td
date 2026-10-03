@@ -102,23 +102,24 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
 }
 
 /**
-* ListFetchNode
+* FetchNodes
 */
-def ListFetchNode : TuringOp<"list_fetch_node", [Pure]> {
+def FetchNodes : TuringOp<"fetch_nodes", [Pure]> {
   let summary = "Produce for each row the node its ID cell names, dropping the rows naming none";
 
   let description = [{
     The per-row counterpart of db.const_scan_nodes: the IDs are a column computed for
     each row rather than a list known at plan time.
 
-      %a, %i2 = db.list_fetch_node(%ids, {%i}) : (!db.column<none>, !db.column<none>)
-                                              -> (!db.column<!storage.node_id>, !db.column<none>)
+      %a, %i2 = db.fetch_nodes(%ids, {%i}) : (!db.column<none>, !db.column<none>)
+                                         -> (!db.column<!storage.node_id>, !db.column<none>)
 
-    A row is kept where its cell equals a node the graph holds, as `n = cell` would
-    hold of it: a node, an integer holding the node's ID, or a tagged cell holding
-    either. Every other row is dropped - a null, a value of another type, a negative
-    integer, an ID naming no node or a deleted one. `columns_to_filter` is the carry
-    set, cut to the kept rows as db.filter cuts it.
+    A row is kept where its cell equals a node a scan would produce - one the graph
+    holds or the query created - as `n = cell` would hold of it: a node, an integer
+    holding the node's ID, or a tagged cell holding either. Every other row is dropped -
+    a null, a value of another type, a negative integer, an ID naming no node or a
+    deleted one. `columns_to_filter` is the carry set, cut to the kept rows as db.filter
+    cuts it.
   }];
 
   let arguments = (ins Column:$ids, Variadic<Column>:$columns_to_filter);

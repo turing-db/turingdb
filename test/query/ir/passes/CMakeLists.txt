@@ -292,6 +292,17 @@ add_ir_tests(test_query_ir_two_filters_over_one_read TwoFiltersOverOneReadTest.c
 
 add_ir_tests(test_query_ir_trim_lazy_case TrimLazyCaseTest.cpp)
 
-add_call_v3_test(test_query_ir_list_fetch_node ListFetchNodeTest.cpp)
+add_call_v3_test(test_query_ir_fetch_nodes FetchNodesTest.cpp)
 
 add_ir_tests(test_query_ir_deep_chain_passes DeepChainPassesTest.cpp)
+
+add_turing_test(test_query_ir_reroot_pattern_at_seed RerootPatternAtSeedTest.cpp)
+target_sources(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_reroot_pattern_at_seed PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR})
