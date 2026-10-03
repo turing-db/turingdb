@@ -3421,6 +3421,7 @@ void NLTranslator::translateFetchNodes(nl::FetchNodes fetch, NLStmtContainer* bo
     NLFetchNodesData* data = _program->allocFunctionData<NLFetchNodesData>(ids, fetchFunction, nodes);
 
     data->getIndices()->reserve(_program->getChunkSize());
+    nodes->reserve(_program->getChunkSize());
 
     const mlir::OperandRange columns = fetch.getColumnsToFilter();
     const mlir::ResultRange results = fetch.getCarried();

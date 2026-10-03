@@ -1340,7 +1340,7 @@ public:
     bool contains(NodeID node) const {
         const uint64_t id = node.getValue();
         if (id < _committedCount) {
-            return _reader.graphHasNode(node);
+            return !_reader.nodeIsDeleted(node);
         }
 
         const uint64_t offset = id - _committedCount;
@@ -8265,7 +8265,7 @@ void NLExecutor::runFetchNodes(NLExecutionContext* context, NLFunctionData* data
 
     fetch->getFetch()(fetch->getIDs(), context, indices, nodes);
 
-    for (const NLFilterData::FilterColumn& column : fetch->columns()) {
+    for (const NLFilterData::FilterColumn& column : fetch->getColumns()) {
         column._gather(column._input, indices, column._output);
     }
 }

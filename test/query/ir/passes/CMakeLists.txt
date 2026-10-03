@@ -296,6 +296,10 @@ add_call_v3_test(test_query_ir_fetch_nodes FetchNodesTest.cpp)
 
 add_ir_tests(test_query_ir_deep_chain_passes DeepChainPassesTest.cpp)
 
+add_call_v3_test(test_query_ir_reroot_id_operand_read_twice RerootIDOperandReadTwiceTest.cpp)
+
+add_call_v3_test(test_query_ir_seed_ids_below_a_filter SeedIDsBelowAFilterTest.cpp)
+
 add_turing_test(test_query_ir_reroot_pattern_at_seed RerootPatternAtSeedTest.cpp)
 target_sources(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_link_libraries(test_query_ir_reroot_pattern_at_seed PRIVATE

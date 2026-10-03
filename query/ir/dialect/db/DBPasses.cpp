@@ -175,6 +175,15 @@ bool isReverseHop(Operation* op) {
     return isa<GetInEdges, GetInEdgesByType, GetInEdgesByLabel, GetInEdgesByTypeAndLabel>(op);
 }
 
+// The result of a hop holding the node it walks from, and the one holding the node it reaches
+size_t hopInputResult(Operation* hop) {
+    return isReverseHop(hop) ? 3 : 0;
+}
+
+size_t hopReachedResult(Operation* hop) {
+    return isReverseHop(hop) ? 0 : 3;
+}
+
 constexpr size_t hopFixedResultCount = 4;
 
 // srcids, tgtids and paths; the carry set follows
@@ -188,6 +197,15 @@ Operation::operand_range factorYieldColumns(mlir::Region& factor) {
     return yield.getColumns();
 }
 
+Value productFactorColumn(CrossProduct product, size_t resultIndex) {
+    const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
+    if (resultIndex < leftColumns.size()) {
+        return leftColumns[resultIndex];
+    }
+
+    return factorYieldColumns(product.getRightFactor())[resultIndex - leftColumns.size()];
+}
+
 // Walk op chain until we reach a node/edge source or something we can't push down to
 // The column its variable was bound at, following every op that passes the column through.
 // Sets crossedProducer when one of those builds the rows - a hop or a cross product - as
@@ -196,15 +214,15 @@ using ColumnEquality = std::pair<Value, Value>;
 
 void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts);
 
+bool isNodeColumn(Value column) {
+    const ColumnType type = dyn_cast<ColumnType>(column.getType());
+    return type && isa<storage::NodeIDType>(type.getType());
+}
+
 // Every equality of two node columns the filter requires: it keeps only the rows where they
 // agree, so below it anything reading one of them reads the other just as well. A filter
 // whose mask is a conjunction requires each of its conjuncts, equalities among them.
 void collectColumnEqualities(FilterOp filter, llvm::SmallVectorImpl<ColumnEquality>& equalities) {
-    const auto isNodeColumn = [](Value column) {
-        const auto type = dyn_cast<ColumnType>(column.getType());
-        return type && isa<storage::NodeIDType>(type.getType());
-    };
-
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
@@ -242,21 +260,7 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
         }
 
         if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
-            // Descend into the xprod factor which holds def
-            const unsigned resultIndex = cast<OpResult>(column).getResultNumber();
-
-            mlir::Region& leftFactor = product.getLeftFactor();
-            const Operation::operand_range leftColumns = factorYieldColumns(leftFactor);
-            const unsigned leftCount = leftColumns.size();
-
-            if (resultIndex < leftCount) {
-                column = leftColumns[resultIndex];
-            } else {
-                mlir::Region& rightFactor = product.getRightFactor();
-                const Operation::operand_range rightColumns = factorYieldColumns(rightFactor);
-                column = rightColumns[resultIndex - leftCount];
-            }
-
+            column = productFactorColumn(product, cast<OpResult>(column).getResultNumber());
             crossedProducer = true;
 
             continue;
@@ -264,16 +268,12 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
 
         if (isEdgeHop(def)) {
             const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-            constexpr size_t srcResultIndex = 0;
-            constexpr size_t tgtResultIndex = 3;
 
             // The input node re-surfaces as srcids (forward) or tgtids (reverse) and each
             // carried column passes through: those continue a variable that existed before
             // the hop, so keep climbing. The opposite node end and the eids/etypes are
             // bound here, so the variable is born at this hop - its earliest filter point.
-            const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
-
-            if (resultIndex == inputResultIndex) {
+            if (resultIndex == hopInputResult(def)) {
                 column = def->getOperand(0);
                 crossedProducer = true;
             } else if (resultIndex >= hopFixedResultCount) {
@@ -471,6 +471,16 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
     return crossedProducer;
 }
 
+void bypassFilter(FilterOp filter) {
+    const ResultRange filtered = filter.getFilteredColumns();
+    const Operation::operand_range carried = filter.getColumnsToFilter();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(carried[index]);
+    }
+
+    filter.erase();
+}
+
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {
     Value anchor = pushable._anchor;
     const MaskCone& cone = pushable._cone;
@@ -516,12 +526,7 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
     }
 
     // Remove original filter
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    const Operation::operand_range carried = filter.getColumnsToFilter();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(carried[index]);
-    }
-    filter.erase();
+    bypassFilter(filter);
 
     for (Operation* const coneOp : llvm::reverse(cone._ops)) {
         eraseIfUnused(coneOp);
@@ -562,20 +567,25 @@ bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
     return true;
 }
 
-Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
+Value checkLabels(Value nodes, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
     MLIRContext* const context = builder.getContext();
-    const Type nodeColumnType = nodes.getType();
     const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
     const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
 
     GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, nodes);
     CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), labels);
 
-    const llvm::SmallVector<Type> resultTypes {nodeColumnType};
-    const llvm::SmallVector<Value> columns {nodes};
-    FilterOp labelFilter = builder.create<FilterOp>(loc, resultTypes, check.getResult(), columns);
+    return check.getResult();
+}
 
-    return labelFilter.getResult(0);
+// Cuts the columns to the rows whose first column holds a node carrying every label
+void keepLabelledRows(llvm::SmallVectorImpl<Value>& columns, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
+    const Value mask = checkLabels(columns.front(), labels, loc, builder);
+
+    const ValueRange columnRange(columns);
+    FilterOp labelFilter = builder.create<FilterOp>(loc, columnRange.getTypes(), mask, columnRange);
+
+    columns.assign(labelFilter.getResults().begin(), labelFilter.getResults().end());
 }
 
 void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source, const MaskCone& cone) {
@@ -998,7 +1008,6 @@ struct NodeIDScanChain {
 bool isHop(Operation* op);
 bool computesPerRow(Operation* op);
 
-// The column a node-ID disjunction compares to its literals
 Value disjunctionColumn(Value mask) {
     if (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
         return disjunctionColumn(disjunction.getLhs());
@@ -1060,7 +1069,8 @@ bool matchPatternScanSource(FilterOp filter, ScanSource& source) {
     bool crossedProducer = false;
     const Value anchor = climbToLineageAnchor(column, crossedProducer);
     Operation* const scan = anchor ? anchor.getDefiningOp() : nullptr;
-    if (!scan || !isa<ScanNodes, ScanNodesByLabel>(scan) || scan->getBlock() != filter->getBlock()) {
+    const bool isNodeScan = isa_and_nonnull<ScanNodes, ScanNodesByLabel>(scan);
+    if (!isNodeScan || scan->getBlock() != filter->getBlock()) {
         return false;
     }
 
@@ -1106,30 +1116,25 @@ void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBu
     builder.setInsertionPoint(chain._afterThePattern ? chain._source._op : filter.getOperation());
     ConstScanNodes constScan = builder.create<ConstScanNodes>(loc, nodeColumnType, chain._nodeIDs);
 
-    Value fused = constScan.getResult();
+    llvm::SmallVector<Value> fused {constScan.getResult()};
     if (chain._source._labels) {
-        fused = filterByLabels(fused, chain._source._labels, loc, builder);
+        keepLabelledRows(fused, chain._source._labels, loc, builder);
     }
 
     if (!chain._afterThePattern) {
-        replaceFilterWithSource(filter, fused, chain._source._op, collectMaskCone(filter.getMask()));
+        replaceFilterWithSource(filter, fused.front(), chain._source._op, collectMaskCone(filter.getMask()));
         return;
     }
 
     // The listed nodes start the pattern in the scan's place, and every row it builds
     // from them holds the disjunction
     Operation* const scan = chain._source._op;
-    scan->getResult(0).replaceAllUsesWith(fused);
+    scan->getResult(0).replaceAllUsesWith(fused.front());
     scan->erase();
 
     const MaskCone cone = collectMaskCone(filter.getMask());
-    const ResultRange filtered = filter.getFilteredColumns();
-    const Operation::operand_range carried = filter.getColumnsToFilter();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(carried[index]);
-    }
+    bypassFilter(filter);
 
-    filter.erase();
     for (Operation* const coneOp : llvm::reverse(cone._ops)) {
         eraseIfUnused(coneOp);
     }
@@ -3861,11 +3866,7 @@ bool matchRowSourceOperand(Operation* op, const CarrySetLayout& layout, size_t r
         operandIndex = layout._operandOffset + (resultIndex - layout._resultOffset);
         return true;
     } else if (isEdgeHop(op)) {
-        constexpr size_t srcResultIndex = 0;
-        constexpr size_t tgtResultIndex = 3;
-        const size_t inputResultIndex = isReverseHop(op) ? tgtResultIndex : srcResultIndex;
-
-        if (resultIndex == inputResultIndex) {
+        if (resultIndex == hopInputResult(op)) {
             operandIndex = 0;
             return true;
         }
@@ -4714,15 +4715,8 @@ Value handedOnFrom(OpResult result) {
         return op->getOperand(resultIndex + 1);
     } else if (isa<Unwind, FetchNodes>(op)) {
         return resultIndex == 0 ? Value() : op->getOperand(resultIndex);
-    } else if (isa<CrossProduct>(op)) {
-        Yield leftYield = factorYield(op, 0);
-        const size_t leftCount = leftYield.getNumOperands();
-
-        if (resultIndex < leftCount) {
-            return leftYield.getOperand(resultIndex);
-        }
-
-        return factorYield(op, 1).getOperand(resultIndex - leftCount);
+    } else if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+        return productFactorColumn(product, resultIndex);
     }
 
     return {};
@@ -4781,7 +4775,12 @@ bool matchFetchNodesChain(Value nodes, Value ids, FetchNodesChain& chain) {
         }
 
         const Value handedOn = handedOnFrom(link);
-        if (!handedOn || !handedOn.hasOneUse() || !keepsAColumnOnceDropped(link, handedOn)) {
+        if (!handedOn) {
+            return false;
+        }
+
+        const bool readByTheLinkAlone = handedOn.hasOneUse();
+        if (!readByTheLinkAlone || !keepsAColumnOnceDropped(link, handedOn)) {
             return false;
         }
 
@@ -4808,9 +4807,20 @@ bool matchFetchNodesChain(Value nodes, Value ids, FetchNodesChain& chain) {
     return true;
 }
 
+bool isEqualityOfTheFilter(EqOp equality, FilterOp filter) {
+    if (!equality) {
+        return false;
+    }
+
+    const bool readOnce = equality.getResult().hasOneUse();
+    const bool besideTheFilter = equality->getBlock() == filter->getBlock();
+
+    return readOnce && besideTheFilter;
+}
+
 bool matchFetchNodes(FilterOp filter, FetchNodesChain& chain) {
     EqOp equality = filter.getMask().getDefiningOp<EqOp>();
-    if (!equality || !equality.getResult().hasOneUse() || equality->getBlock() != filter->getBlock()) {
+    if (!isEqualityOfTheFilter(equality, filter)) {
         return false;
     }
 
@@ -4821,21 +4831,6 @@ bool matchFetchNodes(FilterOp filter, FetchNodesChain& chain) {
     const Value rhs = equality.getRhs();
 
     return matchFetchNodesChain(lhs, rhs, chain) || matchFetchNodesChain(rhs, lhs, chain);
-}
-
-// Cuts the columns to the rows whose first column holds a node carrying every label
-void keepLabelledRows(llvm::SmallVectorImpl<Value>& columns, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
-    MLIRContext* const context = builder.getContext();
-    const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
-    const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
-
-    GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, columns.front());
-    CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), labels);
-
-    const ValueRange columnRange(columns);
-    FilterOp labelFilter = builder.create<FilterOp>(loc, columnRange.getTypes(), check.getResult(), columnRange);
-
-    columns.assign(labelFilter.getResults().begin(), labelFilter.getResults().end());
 }
 
 CrossProduct dropProductColumn(CrossProduct product, size_t resultIndex, mlir::OpBuilder& builder) {
@@ -4957,8 +4952,6 @@ struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
 
-        // A fetch rewrites the ops the next one's chain runs through, so each is matched
-        // over the IR the one before it left.
         while (true) {
             FetchNodesChain chain;
             const WalkResult walked = getOperation()->walk([&chain](FilterOp filter) {
@@ -4981,15 +4974,6 @@ bool computesPerRow(Operation* op) {
 
 bool isHop(Operation* op) {
     return isa<GetOutEdges, GetInEdges, GetEdges>(op);
-}
-
-// The result of a hop holding the node it walks from, and the one holding the node it reaches
-size_t hopInputResult(Operation* hop) {
-    return isa<GetInEdges>(hop) ? 3 : 0;
-}
-
-size_t hopReachedResult(Operation* hop) {
-    return isa<GetInEdges>(hop) ? 0 : 3;
 }
 
 // A pattern hop or walk: the origin of the node it starts from and of the node it reaches
@@ -5017,6 +5001,14 @@ struct SeedJunction {
     llvm::SmallVector<Value> _patternResults;
     llvm::SmallVector<Value> _seedResults;
 };
+
+bool standsFromTheJunction(Operation* op, const SeedJunction& junction) {
+    if (!op || op->getBlock() != junction._op->getBlock()) {
+        return false;
+    }
+
+    return !op->isBeforeInBlock(junction._op);
+}
 
 struct PatternSeed {
     SeedJunction _junction;
@@ -5054,7 +5046,6 @@ Value patternOrigin(Value column, const SeedPattern& pattern) {
     }
 }
 
-// The pattern columns a value is computed from
 void collectPatternInputs(Value value, const SeedPattern& pattern, llvm::SmallPtrSetImpl<void*>& inputs) {
     Operation* const def = value.getDefiningOp();
     if (def && pattern._ops.contains(def) && computesPerRow(def)) {
@@ -5072,12 +5063,6 @@ void collectPatternInputs(Value value, const SeedPattern& pattern, llvm::SmallPt
     }
 }
 
-bool isNodeColumn(Value column) {
-    const ColumnType type = dyn_cast<ColumnType>(column.getType());
-    return type && isa<storage::NodeIDType>(type.getType());
-}
-
-// The scan a pattern column's rows come off, following the hops and filters that build them
 Operation* findPatternRoot(Value column) {
     for (;;) {
         const OpResult result = dyn_cast<OpResult>(column);
@@ -5254,15 +5239,14 @@ bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPatter
         return false;
     }
 
-    junction._seedResults.push_back(unwind.getElement());
-    for (size_t index = 0; index < unwind.getColumnsToFilter().size(); index++) {
-        junction._patternOutputs.push_back(unwind.getColumnsToFilter()[index]);
-        junction._patternResults.push_back(unwind.getCarried()[index]);
-    }
+    const Operation::operand_range patternOutputs = unwind.getColumnsToFilter();
+    const ResultRange patternResults = unwind.getCarried();
 
-    // The pattern stands in the unwind's block, from the scan the seeded column comes off
-    // up to the unwind
-    Operation* const root = findPatternRoot(unwind.getColumnsToFilter()[seededResult.getResultNumber() - 1]);
+    junction._seedResults.push_back(unwind.getElement());
+    junction._patternOutputs.assign(patternOutputs.begin(), patternOutputs.end());
+    junction._patternResults.assign(patternResults.begin(), patternResults.end());
+
+    Operation* const root = findPatternRoot(patternOutputs[seededResult.getResultNumber() - 1]);
     if (!root || root->getBlock() != op->getBlock()) {
         return false;
     }
@@ -5301,14 +5285,31 @@ bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPatter
     return analyzePattern(pattern, orderedOps);
 }
 
-// Whether the IDs are computed row by row from the seed's columns alone
+bool readsTheSeed(Value value, const SeedJunction& junction) {
+    if (llvm::is_contained(junction._seedResults, value)) {
+        return true;
+    }
+
+    Operation* const def = value.getDefiningOp();
+    if (!standsFromTheJunction(def, junction)) {
+        return false;
+    }
+
+    if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
+        const size_t resultIndex = cast<OpResult>(value).getResultNumber();
+        return readsTheSeed(carrying.getColumnsToFilter()[resultIndex], junction);
+    }
+
+    return llvm::any_of(def->getOperands(), [&junction](Value operand) { return readsTheSeed(operand, junction); });
+}
+
 bool isComputedFromTheSeed(Value ids, const SeedJunction& junction, Operation* filter) {
     if (llvm::is_contained(junction._seedResults, ids)) {
         return true;
     }
 
     Operation* const def = ids.getDefiningOp();
-    if (!def || def->getBlock() != junction._op->getBlock() || def->isBeforeInBlock(junction._op)) {
+    if (!standsFromTheJunction(def, junction)) {
         return true;
     }
 
@@ -5317,6 +5318,10 @@ bool isComputedFromTheSeed(Value ids, const SeedJunction& junction, Operation* f
     }
 
     if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
+        if (readsTheSeed(carrying.getMask(), junction)) {
+            return false;
+        }
+
         const size_t resultIndex = cast<OpResult>(ids).getResultNumber();
         return isComputedFromTheSeed(carrying.getColumnsToFilter()[resultIndex], junction, filter);
     }
@@ -5382,18 +5387,16 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     }
 
     const SeedJunction& junction = seed._junction;
-    if (!llvm::is_contained(junction._patternResults, Value(seededResult))) {
-        return false;
-    }
-
     const size_t outputIndex = llvm::find(junction._patternResults, Value(seededResult)) - junction._patternResults.begin();
     seed._seeded = patternOrigin(junction._patternOutputs[outputIndex], seed._pattern);
 
-    if (!isPatternNode(seed._pattern, seed._seeded) || !isWalkableFrom(seed._pattern, seed._seeded)) {
+    const bool walkableFromTheSeed = isPatternNode(seed._pattern, seed._seeded) && isWalkableFrom(seed._pattern, seed._seeded);
+    if (!walkableFromTheSeed) {
         return false;
     }
 
-    if (!isComputedFromTheSeed(ids, junction, filter) || !readsTheJunctionRowWise(junction, filter)) {
+    const bool idsOverTheSeedRows = isComputedFromTheSeed(ids, junction, filter) && readsTheJunctionRowWise(junction, filter);
+    if (!idsOverTheSeedRows) {
         return false;
     }
 
@@ -5402,7 +5405,8 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     UnwindEqualityCross unwindEquality;
     CrossProduct product = dyn_cast<CrossProduct>(junction._op);
     const bool seedsTheRoot = seed._seeded == seed._pattern._root->getResult(0);
-    if (product && seedsTheRoot && matchUnwindEqualityCross(product, unwindEquality)) {
+    const bool foldsIntoAConstScan = product && seedsTheRoot && matchUnwindEqualityCross(product, unwindEquality);
+    if (foldsIntoAConstScan) {
         return false;
     }
 
@@ -5419,7 +5423,7 @@ bool matchPatternSeed(FilterOp filter, PatternSeed& seed) {
 
     for (const Value conjunct : conjuncts) {
         EqOp equality = conjunct.getDefiningOp<EqOp>();
-        if (!equality || !equality.getResult().hasOneUse() || equality->getBlock() != filter->getBlock()) {
+        if (!isEqualityOfTheFilter(equality, filter)) {
             continue;
         }
 
@@ -5492,7 +5496,8 @@ public:
             }
 
             for (FilterOp filter : _pattern._filters) {
-                if (!applied.contains(filter.getOperation()) && dependsOnAvailable(filter.getMask())) {
+                const bool applicable = !applied.contains(filter.getOperation()) && dependsOnAvailable(filter.getMask());
+                if (applicable) {
                     keepRows(materialize(filter.getMask()));
                     applied.insert(filter.getOperation());
                 }
@@ -5563,18 +5568,10 @@ private:
             return;
         }
 
-        MLIRContext* const context = _builder.getContext();
-        const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
-        const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
-
         const Value root = _current.lookup(_pattern._root->getResult(0));
-        GetNodeLabelSet labelSet = _builder.create<GetNodeLabelSet>(_loc, labelSetType, root);
-        CheckLabelConstraint check = _builder.create<CheckLabelConstraint>(_loc, boolType, labelSet.getResult(), scanByLabel.getLabels());
-
-        keepRows(check.getResult());
+        keepRows(checkLabels(root, scanByLabel.getLabels(), _loc, _builder));
     }
 
-    // Hands a hop's four fixed results to the origins they bind, whichever end it walked from
     void bindHop(const PatternStep& step, Operation* walked, size_t fromResult, size_t toResult) {
         rebindCarried(walked, hopFixedResultCount);
 
@@ -5591,14 +5588,13 @@ private:
     }
 
     void walkForward(const PatternStep& step) {
-        llvm::SmallVector<Value> columns;
-        llvm::SmallVector<Type> types;
-
         if (ExplorePaths exploration = dyn_cast<ExplorePaths>(step._op)) {
             walkExploration(exploration, step);
             return;
         }
 
+        llvm::SmallVector<Value> columns;
+        llvm::SmallVector<Type> types;
         hopTypes(step._op, types);
         carried(columns, types);
 
@@ -5636,17 +5632,12 @@ private:
         llvm::SmallVector<Type> types {exploration.getSrcids().getType(), exploration.getTgtids().getType(), exploration.getPaths().getType()};
         carried(columns, types);
 
-        llvm::SmallVector<Value> imports;
-        for (const Value hopImport : exploration.getHopImports()) {
-            imports.push_back(materialize(hopImport));
-        }
-
         ExplorePaths walked = _builder.create<ExplorePaths>(_loc,
                                                             types,
                                                             _current.lookup(step._from),
                                                             columns,
                                                             Value(),
-                                                            imports,
+                                                            ValueRange(),
                                                             exploration.getDirection(),
                                                             exploration.getMinHops(),
                                                             exploration.getMaxHopsAttr(),
@@ -5668,27 +5659,23 @@ private:
 // Drops the equality from the filter's mask: the rebuilt rows hold it on every row
 void dropSeedEquality(FilterOp filter, EqOp equality) {
     const Value mask = filter.getMask();
+    const Value equal = equality.getResult();
 
-    if (mask == equality.getResult()) {
-        const ResultRange filtered = filter.getFilteredColumns();
-        const Operation::operand_range carried = filter.getColumnsToFilter();
-        for (size_t index = 0; index < filtered.size(); index++) {
-            filtered[index].replaceAllUsesWith(carried[index]);
-        }
-
-        filter.erase();
+    if (mask == equal) {
+        bypassFilter(filter);
     } else {
-        AndOp conjunction = cast<AndOp>(*equality.getResult().getUsers().begin());
-        const Value other = conjunction.getLhs() == equality.getResult() ? conjunction.getRhs() : conjunction.getLhs();
+        AndOp conjunction = cast<AndOp>(*equal.getUsers().begin());
+        const Value other = conjunction.getLhs() == equal ? conjunction.getRhs() : conjunction.getLhs();
 
         conjunction.getResult().replaceAllUsesWith(other);
         conjunction.erase();
     }
 
     llvm::SmallVector<Operation*> dead {equality.getOperation()};
+    llvm::SmallPtrSet<Operation*, 8> erased;
     while (!dead.empty()) {
         Operation* const op = dead.pop_back_val();
-        if (!op->use_empty()) {
+        if (erased.contains(op) || !op->use_empty()) {
             continue;
         }
 
@@ -5700,19 +5687,19 @@ void dropSeedEquality(FilterOp filter, EqOp equality) {
             }
         }
 
+        erased.insert(op);
         op->erase();
         dead.append(operandDefs.begin(), operandDefs.end());
     }
 }
 
-// Clones the computation of the IDs over the seed's own rows
 Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& seedColumns, mlir::OpBuilder& builder) {
     if (seedColumns.contains(ids)) {
         return seedColumns.lookup(ids);
     }
 
     Operation* const def = ids.getDefiningOp();
-    if (!def || def->getBlock() != junction._op->getBlock() || def->isBeforeInBlock(junction._op)) {
+    if (!standsFromTheJunction(def, junction)) {
         return ids;
     }
 
@@ -5727,7 +5714,10 @@ Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& see
     }
 
     Operation* const cloned = builder.clone(*def, mapping);
-    return cloned->getResult(cast<OpResult>(ids).getResultNumber());
+    const Value clonedIDs = cloned->getResult(cast<OpResult>(ids).getResultNumber());
+    seedColumns.map(ids, clonedIDs);
+
+    return clonedIDs;
 }
 
 void reroot(PatternSeed& seed, mlir::OpBuilder& builder) {
@@ -5811,8 +5801,6 @@ struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternA
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
 
-        // A re-rooting rewrites the ops the next one's match runs through, so each is
-        // matched over the IR the one before it left.
         while (true) {
             PatternSeed seed;
             const WalkResult walked = getOperation()->walk([&seed](FilterOp filter) {

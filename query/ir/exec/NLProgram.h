@@ -2186,7 +2186,7 @@ public:
     NLFetchNodesFunction getFetch() const { return _fetch; }
     ColumnNodeIDs* getNodes() const { return _nodes; }
 
-    const std::vector<NLFilterData::FilterColumn>& columns() const { return _columns; }
+    const std::vector<NLFilterData::FilterColumn>& getColumns() const { return _columns; }
 
     void addColumn(const NLFilterData::FilterColumn& column) {
         _columns.push_back(column);

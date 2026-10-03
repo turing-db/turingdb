@@ -117,9 +117,9 @@ def FetchNodes : TuringOp<"fetch_nodes", [Pure]> {
     A row is kept where its cell equals a node a scan would produce - one the graph
     holds or the query created - as `n = cell` would hold of it: a node, an integer
     holding the node's ID, or a tagged cell holding either. Every other row is dropped -
-    a null, a value of another type, a negative integer, an ID naming no node or a
-    deleted one. `columns_to_filter` is the carry set, cut to the kept rows as db.filter
-    cuts it.
+    a null, a value of another type, a negative tagged integer, an ID naming no node or a
+    deleted one. A negative integer column is an error, as it is to `n = cell`.
+    `columns_to_filter` is the carry set, cut to the kept rows as db.filter cuts it.
   }];
 
   let arguments = (ins Column:$ids, Variadic<Column>:$columns_to_filter);
