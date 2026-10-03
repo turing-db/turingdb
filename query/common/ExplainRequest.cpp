@@ -26,7 +26,7 @@ const std::array<StageWord, 7> stageWords {{
     {"vdg", ExplainStage::VDG},
     {"codegen", ExplainStage::CODEGEN},
     {"passes", ExplainStage::PASSES},
-    {"pairs", ExplainStage::PAIRS},
+    {"edges", ExplainStage::EDGES},
     {"db", ExplainStage::DB},
     {"nl", ExplainStage::NL},
 }};
@@ -46,7 +46,7 @@ ExplainRequest::~ExplainRequest() {
 }
 
 void ExplainRequest::requestDefaults() {
-    request(ExplainStage::PAIRS);
+    request(ExplainStage::EDGES);
     request(ExplainStage::DB);
     request(ExplainStage::NL);
 }
@@ -134,8 +134,8 @@ std::string_view ExplainRequest::getStageName(ExplainStage stage) {
             return "passes";
         break;
 
-        case ExplainStage::PAIRS:
-            return "pairs";
+        case ExplainStage::EDGES:
+            return "edges";
         break;
 
         case ExplainStage::DB:
@@ -153,7 +153,7 @@ std::string_view ExplainRequest::getStageName(ExplainStage stage) {
 void ExplainRequest::describeOptions(std::string_view word, std::string& message) {
     message = "Unknown EXPLAIN option '";
     message += word;
-    message += "'. Expected one of ast, vdg, codegen, passes, pairs, db, nl, all, "
+    message += "'. Expected one of ast, vdg, codegen, passes, edges, db, nl, all, "
                "or before, after, around followed by a pass name";
 }
 

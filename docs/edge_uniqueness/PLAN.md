@@ -396,7 +396,7 @@ filter and one left with fewer is rebuilt, so the pairs kept fold into the hops 
 P2 reads the view's `LabelSetMap`, which already holds the label sets a change's earlier
 queries wrote, and is off in a query that writes the graph, whose own label sets are
 registered after the pass runs. `check_edge_distinct` carries `names`, the query's name for
-each column, and EXPLAIN reports each pair under a `pairs` stage, on by default:
+each column, and EXPLAIN reports each pair under an `edges` stage, on by default:
 `e2 <> e1: proven by types`, `proven by labels` or `kept`. `ProveDistinctEdgesTest` pins
 15 cases on simpledb, each proven count against the split-clause form, and the codegen test
 of a typed chain no longer expects a `distinct_from`. Same machine, same protocol, on the
@@ -662,7 +662,7 @@ turingdb ran in three fresh server processes, each query alternating with its co
 one warmup, 5 or 10 timed pairs per process. The table gives the median of the three
 per-process medians, and `check` the median over the processes of query over control. Memgraph
 and Neo4j ran one warmup and 5 timed runs; a query whose first run took over 20 s ran once. The
-first column is EXPLAIN's `pairs` stage:
+first column is EXPLAIN's `edges` stage:
 
     query                                      rows   turingdb   control  check   memgraph      neo4j
     (r:Reaction)-[:precedingEvent]->(b)-[:precedingEvent]->(c)-[:precedingEvent]->(d)

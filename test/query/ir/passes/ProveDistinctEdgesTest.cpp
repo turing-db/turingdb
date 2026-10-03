@@ -22,10 +22,10 @@ class ProveDistinctEdgesTest : public CallV3Test {
 protected:
     void explain(std::string_view query, std::string& pairs, std::string& program) {
         StringRowSink sink;
-        runQuery(std::string("EXPLAIN (pairs, db) ") + std::string(query), sink);
+        runQuery(std::string("EXPLAIN (edges, db) ") + std::string(query), sink);
 
         for (const StringRowSink::Row& row : sink.getRows()) {
-            if (row.front() == "pairs") {
+            if (row.front() == "edges") {
                 pairs = row.back();
             } else if (row.front() == "db") {
                 program = row.back();
@@ -234,10 +234,10 @@ TEST_F(ProveDistinctEdgesTest, provesEveryPairOfAClosedTriangle) {
 TEST_F(ProveDistinctEdgesTest, readsTheLabelSetsAChangeAdded) {
     StringRowSink sink;
     runWritesInOneChange("CREATE (n:Person:Interest {name: 'both'})",
-                         "EXPLAIN (pairs) MATCH (a:Person)-[e1]->(b:Interest)-[e2]->(c) RETURN count(*)",
+                         "EXPLAIN (edges) MATCH (a:Person)-[e1]->(b:Interest)-[e2]->(c) RETURN count(*)",
                          sink);
 
-    EXPECT_EQ(sink.getRows(), (Rows {{"pairs", "e2 <> e1: kept\n"}}));
+    EXPECT_EQ(sink.getRows(), (Rows {{"edges", "e2 <> e1: kept\n"}}));
 }
 
 // The self-loop a change has not committed is in no part, so the schema proves nothing
@@ -245,10 +245,10 @@ TEST_F(ProveDistinctEdgesTest, readsTheLabelSetsAChangeAdded) {
 TEST_F(ProveDistinctEdgesTest, keepsTheSchemaProofOutOfAChangeWithPendingEdges) {
     StringRowSink sink;
     runWritesInOneChange("CREATE (n:Person {name: 'loop'})-[:KNOWS_WELL]->(n)",
-                         "EXPLAIN (pairs) MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c) RETURN count(*)",
+                         "EXPLAIN (edges) MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:KNOWS_WELL]->(c) RETURN count(*)",
                          sink);
 
-    EXPECT_EQ(sink.getRows(), (Rows {{"pairs", "e2 <> e1: kept\n"}}));
+    EXPECT_EQ(sink.getRows(), (Rows {{"edges", "e2 <> e1: kept\n"}}));
 }
 
 // Once the self-loop is committed the schema holds it and the proof is gone; the loop
@@ -263,12 +263,12 @@ TEST_F(ProveDistinctEdgesTest, readsTheSelfLoopACommitAdded) {
 // nothing in a writing query; the types still do
 TEST_F(ProveDistinctEdgesTest, keepsTheLabelProofOutOfAWritingQuery) {
     StringRowSink labelled;
-    runWrite("EXPLAIN (pairs) MATCH (a:Person)-[e1]->(b:Interest)-[e2]->(c) SET c.seen = true", labelled);
-    EXPECT_EQ(labelled.getRows(), (Rows {{"pairs", "e2 <> e1: kept\n"}}));
+    runWrite("EXPLAIN (edges) MATCH (a:Person)-[e1]->(b:Interest)-[e2]->(c) SET c.seen = true", labelled);
+    EXPECT_EQ(labelled.getRows(), (Rows {{"edges", "e2 <> e1: kept\n"}}));
 
     StringRowSink typed;
-    runWrite("EXPLAIN (pairs) MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:INTERESTED_IN]->(c) SET c.seen = true", typed);
-    EXPECT_EQ(typed.getRows(), (Rows {{"pairs", "e2 <> e1: proven by types\n"}}));
+    runWrite("EXPLAIN (edges) MATCH (a)-[e1:KNOWS_WELL]->(b)-[e2:INTERESTED_IN]->(c) SET c.seen = true", typed);
+    EXPECT_EQ(typed.getRows(), (Rows {{"edges", "e2 <> e1: proven by types\n"}}));
 }
 
 // The summary holds the arc from the engineers' label set to itself, so it cannot tell the
@@ -326,10 +326,10 @@ TEST_F(ProveDistinctEdgesTest, keepsTheAcyclicityProofOutOfAChangeWithPendingEdg
 
     StringRowSink sink;
     runWritesInOneChange("MATCH (nour {name: 'Nour'}), (luc {name: 'Luc'}) CREATE (nour)-[:REPORTS_TO]->(luc)",
-                         "EXPLAIN (pairs) MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:REPORTS_TO]->(d) RETURN count(*)",
+                         "EXPLAIN (edges) MATCH (a)-[e1:REPORTS_TO]->(b)-[e2:REPORTS_TO]->(c)-[e3:REPORTS_TO]->(d) RETURN count(*)",
                          sink);
 
-    EXPECT_EQ(sink.getRows(), (Rows {{"pairs", "e2 <> e1: kept\ne3 <> e1: kept\ne3 <> e2: kept\n"}}));
+    EXPECT_EQ(sink.getRows(), (Rows {{"edges", "e2 <> e1: kept\ne3 <> e1: kept\ne3 <> e2: kept\n"}}));
 }
 
 // Once Nour reports to Luc the line is a ring: the sort over the new commit's parts finds
