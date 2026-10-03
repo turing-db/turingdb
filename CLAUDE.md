@@ -156,14 +156,18 @@ match attempts: quadratic. Required shape:
 - After a rewrite, push only the ops it can have changed the answer for: the users of the
   values it replaced and the ops it created. Nothing else is re-matched.
 - Track erased ops (an erased set, or an `mlir::RewriterBase` listener) so the worklist
-  never touches a freed op.
+  never touches a freed op. Every erase in the rewrite goes through `rewriter.eraseOp`,
+  which also reports the ops nested in the erased one; a bare `op->erase()` is invisible
+  to the listener.
+- A match that reads IR far above its op (a use-def chain, a factor's shape) can start to
+  hold after a rewrite elsewhere. Run the worklist in rounds until a round rewrites
+  nothing, as `applyPatternsGreedily` does. The cost is rounds × candidates, not
+  rewrites × candidates.
 
 When a rewrite fits `mlir::RewritePattern`, use `mlir::applyPatternsGreedily`, which is
-this worklist already. Collecting all matches first and then rewriting them is fine only
-when no rewrite can touch another's match.
-
-Known violations to convert: `FuseFetchNodes` and `RerootPatternAtSeed` in
-`query/ir/dialect/db/DBPasses.cpp`.
+this worklist already. For a pass over filters, use `runFilterWorklist` in
+`query/ir/dialect/db/DBPasses.cpp`. Collecting all matches first and then rewriting them
+is fine only when no rewrite can touch another's match.
 
 ## C++ Coding Style
 
