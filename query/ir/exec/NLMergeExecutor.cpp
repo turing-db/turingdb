@@ -411,12 +411,12 @@ bool NLMergeExecutor::isDeletedNode(const NLMergeRef& node) const {
     return _view->isDeleted(NodeID(node._id));
 }
 
-// A node this query wrote, whichever clause wrote it, is in no graph the index scanned: it
-// is taken in once the write is done, so a later row or merge binds it rather than
-// writing a second copy
+// A node this change wrote, whichever clause or statement wrote it, is in no graph the
+// index scanned: it is taken in once the write is done, so a later row or merge binds it
+// rather than writing a second copy
 void NLMergeExecutor::absorbPendingNodes(NLMergeNodeIndex* index) {
     const size_t pendingCount = _writeBuffer->numPendingNodes();
-    const size_t firstOffset = std::max(index->getNextPendingNode(), _context->getFirstQueryNode());
+    const size_t firstOffset = index->getNextPendingNode();
     if (firstOffset >= pendingCount) {
         return;
     }
@@ -445,7 +445,7 @@ void NLMergeExecutor::absorbPendingEdges() {
     NLMergePendingEdges* pendingEdges = _data->getPendingEdges();
 
     const size_t pendingCount = _writeBuffer->numPendingEdges();
-    const size_t firstOffset = std::max(pendingEdges->getNextPendingEdge(), _context->getFirstQueryEdge());
+    const size_t firstOffset = pendingEdges->getNextPendingEdge();
     if (firstOffset >= pendingCount) {
         return;
     }

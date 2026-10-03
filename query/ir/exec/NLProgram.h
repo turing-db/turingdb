@@ -3404,7 +3404,7 @@ public:
 
     // False when a label or a key property of the spec is absent from the graph's
     // schema: no committed node can carry it, so the graph offers no candidate and only
-    // the pending nodes this query wrote can match
+    // the pending nodes this change wrote can match
     bool isMatchable() const { return _matchable; }
 
     bool isBuilt() const { return _built; }
@@ -3455,10 +3455,10 @@ private:
     bool _built {false};
 };
 
-// Every edge this query wrote, whichever clause wrote it, under each of the two nodes it
-// joins: a pending edge is in no graph the match reads, so this is where a hop finds it.
-// One log per program, shared by every merge op in it, and taken in from the write buffer
-// as the query writes.
+// Every edge this change wrote, whichever clause or statement wrote it, under each of the
+// two nodes it joins: a pending edge is in no graph the match reads, so this is where a
+// hop finds it. One log per program, shared by every merge op in it, and taken in from the
+// write buffer as the query writes.
 class NLMergePendingEdges {
 public:
     struct Entry {
