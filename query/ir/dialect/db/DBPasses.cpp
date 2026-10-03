@@ -5814,19 +5814,27 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
     const Value ids = cloneSeedIDs(seed._ids, junction, seedMapping, rewriter);
 
-    llvm::SmallVector<Type> fetchTypes {seed._seeded.getType()};
-    for (const Value column : seedColumns) {
-        fetchTypes.push_back(column.getType());
-    }
+    // A scan only produces nodes a fetch would keep, so its column is the seeded node as is
+    llvm::SmallVector<Value> seededColumns {ids};
+    const bool namesScannedNodes = isa_and_nonnull<ScanNodes, ScanNodesByLabel, ScanNodesByPropertyValue>(ids.getDefiningOp());
+    if (namesScannedNodes) {
+        llvm::append_range(seededColumns, seedColumns);
+    } else {
+        llvm::SmallVector<Type> fetchTypes {seed._seeded.getType()};
+        for (const Value column : seedColumns) {
+            fetchTypes.push_back(column.getType());
+        }
 
-    FetchNodes fetch = rewriter.create<FetchNodes>(loc, fetchTypes, ids, seedColumns);
+        FetchNodes fetch = rewriter.create<FetchNodes>(loc, fetchTypes, ids, seedColumns);
+        seededColumns.assign(fetch->getResults().begin(), fetch->getResults().end());
+    }
 
     PatternReplay replay(seed._pattern, rewriter, loc);
     for (size_t index = 0; index < seedColumns.size(); index++) {
-        replay.bind(junction._seedResults[index], fetch->getResult(index + 1));
+        replay.bind(junction._seedResults[index], seededColumns[index + 1]);
     }
 
-    replay.bind(seed._seeded, fetch->getResult(0));
+    replay.bind(seed._seeded, seededColumns.front());
     replay.walkFrom(seed._seeded);
 
     for (size_t index = 0; index < junction._patternResults.size(); index++) {
