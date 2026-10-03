@@ -18,10 +18,9 @@ public:
 
     void initProtectedLogger(const std::shared_ptr<LogSetup::ConsoleSink>& consoleSink);
     linenoiseState* getState() { return &_lineNoiseState; }
-    char* getBuffer() { return _lineNoiseBuffer; }
 
-    void setActive() { _lineNoiseActive.store(true); }
-    void setInactive() { _lineNoiseActive.store(false); }
+    void startEditing(const char* prompt);
+    void stopEditing();
 
     bool isActive() { return _lineNoiseActive.load(); }
 
