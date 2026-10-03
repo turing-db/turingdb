@@ -96,12 +96,12 @@ TEST_F(FetchNodesTest, keepsTheLabelOfTheScan) {
     expectRows(query, {{"Adam"}, {"Remy"}});
 }
 
-TEST_F(FetchNodesTest, fetchesANodeFromAnotherNode) {
+TEST_F(FetchNodesTest, bindsANodeToAnotherScannedNode) {
     const std::string_view query = "MATCH (a), (b) WHERE a = b RETURN count(*)";
 
     std::string program;
     dbProgramOf(query, program);
-    EXPECT_TRUE(contains(program, "db.fetch_nodes")) << program;
+    EXPECT_FALSE(contains(program, "db.fetch_nodes")) << program;
     EXPECT_FALSE(contains(program, "db.cross_product")) << program;
 
     expectRows(query, {{"18"}});

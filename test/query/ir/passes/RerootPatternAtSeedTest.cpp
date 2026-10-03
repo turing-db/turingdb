@@ -58,12 +58,13 @@ struct Seed {
     std::string_view _seeded;
     std::string_view _oracle;
     size_t _scans {0};
+    bool _fetched {true};
 };
 
 // Remy (0), Adam (1), Ghosts (6) and an ID naming no node
 const Seed vectorSeed {"VECTOR SEARCH IN people FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids ", "n = ids", "id(n) = id(ids)"};
 const Seed listSeed {"WITH [0, 1, 6, 99] AS ss UNWIND range(0, 3) AS i ", "n = ss[i]", "id(n) = ss[i]"};
-const Seed matchedSeed {"MATCH (s:Founder) WITH s ", "n = s", "id(n) = id(s)", 1};
+const Seed matchedSeed {"MATCH (s:Founder) WITH s ", "n = s", "id(n) = id(s)", 1, false};
 const Seed literalSeed {"UNWIND [0, 6, 99] AS x ", "n = x", "id(n) = x"};
 
 // Node and edge constraints on the seeded node n, and on what the pattern reaches from it
@@ -199,7 +200,7 @@ protected:
         sink.sortedRows(rows);
     }
 
-    void expectFetchesTheSeed(std::string_view query, size_t seedScans) {
+    void expectRerootedAtTheSeed(std::string_view query, const Seed& seed) {
         QueryStatus status;
         StringRowSink sink;
         runQuery(std::string("EXPLAIN (db) ") + std::string(query), status, sink);
@@ -209,13 +210,13 @@ protected:
         const std::string& program = sink.getRows().front().back();
 
         const bool fetchesTheSeed = contains(program, "db.fetch_nodes") || contains(program, "db.const_scan_nodes");
-        EXPECT_TRUE(fetchesTheSeed) << program;
-        EXPECT_EQ(countOccurrences(program, "db.scan_"), seedScans) << program;
+        EXPECT_EQ(fetchesTheSeed, seed._fetched) << program;
+        EXPECT_EQ(countOccurrences(program, "db.scan_"), seed._scans) << program;
         EXPECT_FALSE(contains(program, "db.cross_product")) << program;
         EXPECT_FALSE(contains(program, "db.hash_join")) << program;
     }
 
-    // Every pattern, seeded through the equality, fetches the seed and returns the rows
+    // Every pattern, seeded through the equality, starts at the seed and returns the rows
     // the ID comparison does
     void expectEveryPatternRerooted(const Seed& seed) {
         for (const std::string_view pattern : patterns) {
@@ -223,7 +224,7 @@ protected:
             const std::string oracle = std::string(seed._prefix) + substitute(pattern, seed._oracle);
             SCOPED_TRACE(query);
 
-            expectFetchesTheSeed(query, seed._scans);
+            expectRerootedAtTheSeed(query, seed);
 
             std::vector<StringRowSink::Row> rows;
             std::vector<StringRowSink::Row> expected;
