@@ -423,3 +423,7 @@ target_include_directories(test_query_ir_exists_outer_edge PRIVATE ${IR_TEST_DIR
 # The imports of a CALL body read by the branches of its UNION.
 add_turing_test(test_query_ir_call_subquery_union_import CallSubqueryUnionImportTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_union_import PRIVATE turing_ir_test_write_query_s)
+
+# An OPTIONAL CALL body that creates an entity and returns it for some of its input rows.
+add_turing_test(test_query_ir_optional_call_written_entity OptionalCallWrittenEntityTest.cpp)
+target_link_libraries(test_query_ir_optional_call_written_entity PRIVATE turing_ir_test_write_query_s)

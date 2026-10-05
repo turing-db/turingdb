@@ -214,11 +214,12 @@ private:
         // the groups: an op emitted below can carry only what this op bound or later.
         mlir::Operation* _aggregateOp {nullptr};
 
-        // What a part cut leaves of an entity the query wrote: every row of it still
-        // names one this change has not committed, so a read goes to the write buffer, and
-        // the labels or edge type the CREATE spelled are all there is to say what it is. Both
-        // are empty for a UNION column whose branches created different ones. No column is
-        // kept - the WITH publishes one, which a traversal below is free to cut
+        // What a part cut leaves of an entity the query wrote: every row of it that is not
+        // null names one this change has not committed, so a read goes to the write buffer,
+        // and the labels or edge type the CREATE spelled are all there is to say what it is.
+        // Both are empty for a UNION column whose branches created different ones, and for
+        // an OPTIONAL CALL's, whose null rows have neither. No column is kept - the WITH
+        // publishes one, which a traversal below is free to cut
         struct WrittenEntity {
             std::vector<std::string> _labels;
             std::string _edgeType;
