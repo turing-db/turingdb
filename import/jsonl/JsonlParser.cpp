@@ -60,6 +60,36 @@ namespace {
     }
 }
 
+JsonlImportResult<NodeID> tryResolveEndpoint(const json& endpoint,
+                                             const std::unordered_map<uint64_t, NodeID>& nodeIDs,
+                                             bool isSource,
+                                             size_t lineNumber) {
+    const json* id = &endpoint;
+    if (endpoint.is_object()) {
+        const auto idIt = endpoint.find("id");
+        if (idIt == endpoint.end()) {
+            const JsonlImportErrorType missingIDError =
+                isSource ? JsonlImportErrorType::MISSING_EDGE_SRC_ID
+                         : JsonlImportErrorType::MISSING_EDGE_TGT_ID;
+            return JsonlImportError::result(missingIDError, lineNumber);
+        }
+
+        id = &*idIt;
+    }
+
+    const uint64_t fileID = parseEntityID(*id);
+    const auto nodeIt = nodeIDs.find(fileID);
+    if (nodeIt == nodeIDs.end()) {
+        const JsonlImportErrorType unknownIDError =
+            isSource ? JsonlImportErrorType::UNKNOWN_EDGE_SRC_ID
+                     : JsonlImportErrorType::UNKNOWN_EDGE_TGT_ID;
+        return JsonlImportError::result(unknownIDError, lineNumber,
+                                        fmt::format("node id {}", fileID));
+    }
+
+    return nodeIt->second;
+}
+
 JsonlImportResult<void> tryFillEmbedding(const json& arr,
                                          std::vector<float>& storage,
                                          size_t expectedDim,
@@ -359,34 +389,17 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
 
                 EdgeTypeID edgeTypeID = metadataBuilder.getOrCreateEdgeType(edgeType->get<std::string_view>());
 
-                NodeID srcNodeID;
-                NodeID tgtNodeID;
-
-                if (start->is_object()) {
-                    const auto srcIDIt = start->find("id");
-
-                    if (srcIDIt == start->end()) {
-                        return JsonlImportError::result(JsonlImportErrorType::MISSING_EDGE_SRC_ID, lineNumber);
-                    }
-
-                    srcNodeID = nodeIDs.at(parseEntityID(*srcIDIt));
-                } else {
-                    srcNodeID = parseEntityID(*start);
+                const JsonlImportResult<NodeID> srcNodeID = tryResolveEndpoint(*start, nodeIDs, true, lineNumber);
+                if (!srcNodeID) {
+                    return srcNodeID.get_unexpected();
                 }
 
-                if (end->is_object()) {
-                    const auto tgtIDIt = end->find("id");
-
-                    if (tgtIDIt == end->end()) {
-                        return JsonlImportError::result(JsonlImportErrorType::MISSING_EDGE_TGT_ID, lineNumber);
-                    }
-
-                    tgtNodeID = nodeIDs.at(parseEntityID(*tgtIDIt));
-                } else {
-                    tgtNodeID = parseEntityID(*end);
+                const JsonlImportResult<NodeID> tgtNodeID = tryResolveEndpoint(*end, nodeIDs, false, lineNumber);
+                if (!tgtNodeID) {
+                    return tgtNodeID.get_unexpected();
                 }
 
-                const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID, tgtNodeID);
+                const EdgeRecord& edge = builder.addEdge(edgeTypeID, srcNodeID.value(), tgtNodeID.value());
 
                 if (properties != obj.end()) {
                     for (const auto& [key, value] : properties->items()) {
