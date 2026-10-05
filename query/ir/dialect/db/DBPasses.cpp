@@ -3177,10 +3177,9 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
         return false;
     }
 
-    const bool testsHopsByLabelsOnly = exploration.getHopLabels().has_value();
     const bool reachesTheFilter = exploration->getBlock() == filter->getBlock()
                                && rowsReachTheFilter(exploration, filter, keepsTheWalkedRows);
-    if (testsHopsByLabelsOnly || !reachesTheFilter) {
+    if (!reachesTheFilter) {
         return false;
     }
 
