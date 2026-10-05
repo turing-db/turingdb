@@ -99,6 +99,36 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) WHERE n:Person OR n:Person:Founder RETURN n: every Founder here is a Person
+const char* const orOfASubsumedConjunction = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls2 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls2, ["Person", "Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ok = db.or %f, %p : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%ok, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (n) WHERE n:Person:Founder OR n:Founder:Person RETURN n
+const char* const orOfAReorderedConjunction = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %pf = db.check_label_constraint(%ls1, ["Person", "Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls2 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %fp = db.check_label_constraint(%ls2, ["Founder", "Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ok = db.or %pf, %fp : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%ok, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // A label no node carries makes its alternative match nothing, not the whole check.
 const char* const orWithAnUnknownLabel = R"mlir(
 func.func @main() {
@@ -289,6 +319,14 @@ TEST_F(FuseLabelDisjunctionTest, foldsAChainOfConjunctions) {
     expectFusedTo(orOfThreeConjunctions, {{"Person", "Founder"}, {"Interest", "SoftwareEngineering"}, {"Exotic"}});
 }
 
+TEST_F(FuseLabelDisjunctionTest, dropsAnAlternativeAnotherSubsumes) {
+    expectFusedTo(orOfASubsumedConjunction, {{"Person"}});
+}
+
+TEST_F(FuseLabelDisjunctionTest, dropsAReorderedAlternative) {
+    expectFusedTo(orOfAReorderedConjunction, {{"Person", "Founder"}});
+}
+
 TEST_F(FuseLabelDisjunctionTest, leavesChecksOverDifferentNodesAlone) {
     expectUntouched(orOverDifferentNodes);
 }
@@ -303,6 +341,10 @@ TEST_F(FuseLabelDisjunctionTest, orEmitsTheSameRows) {
 
 TEST_F(FuseLabelDisjunctionTest, orOfConjunctionsEmitsTheSameRows) {
     expectSameRowsAfterPass(orOfThreeConjunctions);
+}
+
+TEST_F(FuseLabelDisjunctionTest, subsumedAlternativeEmitsTheSameRows) {
+    expectSameRowsAfterPass(orOfASubsumedConjunction);
 }
 
 TEST_F(FuseLabelDisjunctionTest, unknownLabelEmitsTheSameRows) {

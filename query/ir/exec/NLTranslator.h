@@ -443,8 +443,8 @@ private:
     std::optional<LabelID> findLabel(llvm::StringRef name) const;
     std::optional<PropertyType> findPropertyType(llvm::StringRef name) const;
 
-    // Records on @param data the ID of every label set this change knows that a node must
-    // carry at least @param constraint to be in
+    // Records on @param data the ID of every label set this change knows that carries every
+    // label of at least one of @param constraints
     void collectMatchingLabelSets(std::span<const LabelSet> constraints, NLCheckLabelConstraintData* data) const;
 
     // Translate the nl.for over an nl.explore_paths iterator: allocate the seed, end and

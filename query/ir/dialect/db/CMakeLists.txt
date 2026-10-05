@@ -42,6 +42,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   MLIRIR
   MLIRSupport
   MLIRPass
+  MLIRTransformUtils
   MLIRFuncDialect
   MLIRBuiltinToLLVMIRTranslation
   turing_db_ir_storagedialect_s
