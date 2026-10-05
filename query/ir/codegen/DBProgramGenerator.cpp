@@ -4398,17 +4398,13 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
                                               node._decl->getName()));
         }
 
-        const mlir::Value pending = findPendingMask(node._decl);
+        mlir::Value pending = findPendingMask(node._decl);
 
-        // A CREATE's entities are provisional and in no graph a merge reads, so binding
-        // one would leave the merge matching against whichever committed node the
-        // provisional ID collides with
-        const bool writtenByACreate = !pending && isPendingThroughout(node._decl);
-        if (writtenByACreate) {
-            throw TuringException(fmt::format("MERGE cannot bind '{}': a CREATE in the same query "
-                                              "writes it, and what a CREATE writes is not visible "
-                                              "to a MERGE",
-                                              node._decl->getName()));
+        // A CREATE's entities are provisional and in no graph a merge reads, so the merge
+        // is told every row is one: unmasked, it would match against whichever committed
+        // node the provisional ID collides with
+        if (!pending && isPendingThroughout(node._decl)) {
+            pending = constantBool(true);
         }
 
         if (pending) {
