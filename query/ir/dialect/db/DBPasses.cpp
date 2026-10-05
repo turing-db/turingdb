@@ -1094,12 +1094,19 @@ Value disjunctionColumn(Value mask) {
     return lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs;
 }
 
-// Whether the rows the scan starts are only walked and cut on their way to the filter, by
-// ops that keep the scanned node beside each row, with nothing else reading them before it
-bool reachesTheFilterRowWise(Operation* scan, FilterOp filter) {
-    llvm::SmallPtrSet<Operation*, 16> readers {scan};
+bool keepsTheScannedNode(Operation& op) {
+    ExplorePaths exploration = dyn_cast<ExplorePaths>(op);
+    const bool walksEachSeed = exploration && !exploration.getDistinct();
 
-    for (Operation& op : llvm::make_range(std::next(Block::iterator(scan)), Block::iterator(filter.getOperation()))) {
+    return isa<FilterOp>(op) || walksEachSeed || isHop(&op) || computesPerRow(&op);
+}
+
+// Whether the rows the source starts reach the filter only through ops keepsTheRows accepts,
+// with nothing else reading them before it
+bool rowsReachTheFilter(Operation* source, FilterOp filter, bool (*keepsTheRows)(Operation&)) {
+    llvm::SmallPtrSet<Operation*, 16> readers {source};
+
+    for (Operation& op : llvm::make_range(std::next(Block::iterator(source)), Block::iterator(filter.getOperation()))) {
         const bool readsTheRows = llvm::any_of(op.getOperands(), [&readers](Value operand) {
             Operation* const def = operand.getDefiningOp();
             return def && readers.contains(def);
@@ -1109,10 +1116,7 @@ bool reachesTheFilterRowWise(Operation* scan, FilterOp filter) {
             continue;
         }
 
-        ExplorePaths exploration = dyn_cast<ExplorePaths>(op);
-        const bool walksEachSeed = exploration && !exploration.getDistinct();
-        const bool keepsTheScannedNode = isa<FilterOp>(op) || walksEachSeed || isHop(&op) || computesPerRow(&op);
-        if (!keepsTheScannedNode) {
+        if (!keepsTheRows(op)) {
             return false;
         }
 
@@ -1146,7 +1150,7 @@ bool matchPatternScanSource(FilterOp filter, ScanSource& source) {
         return false;
     }
 
-    if (!reachesTheFilterRowWise(scan, filter)) {
+    if (!rowsReachTheFilter(scan, filter, keepsTheScannedNode)) {
         return false;
     }
 
@@ -3066,38 +3070,8 @@ Value climbFilters(Value column) {
     return column;
 }
 
-// Whether the rows the exploration emits are only cut and computed over on their way to the
-// filter, with nothing else reading them before it
-bool explorationReachesTheFilter(ExplorePaths exploration, FilterOp filter) {
-    llvm::SmallPtrSet<Operation*, 16> readers {exploration.getOperation()};
-
-    for (Operation& op : llvm::make_range(std::next(Block::iterator(exploration.getOperation())), Block::iterator(filter.getOperation()))) {
-        const bool readsTheRows = llvm::any_of(op.getOperands(), [&readers](Value operand) {
-            Operation* const def = operand.getDefiningOp();
-            return def && readers.contains(def);
-        });
-
-        if (!readsTheRows) {
-            continue;
-        }
-
-        const bool keepsTheRows = isa<FilterOp, ExpandPath, ListPredicate>(op) || computesPerRow(&op);
-        if (!keepsTheRows) {
-            return false;
-        }
-
-        readers.insert(&op);
-    }
-
-    for (Operation* const reader : readers) {
-        for (Operation* const user : reader->getUsers()) {
-            if (user != filter.getOperation() && !readers.contains(user)) {
-                return false;
-            }
-        }
-    }
-
-    return true;
+bool keepsTheWalkedRows(Operation& op) {
+    return isa<FilterOp, ExpandPath, ListPredicate>(op) || computesPerRow(&op);
 }
 
 // The operand of the exploration a column of its rows repeats for every path of a seed, or
@@ -3109,8 +3083,8 @@ Value seedColumnOf(ExplorePaths exploration, Value column) {
     }
 
     const size_t resultIndex = cast<OpResult>(climbed).getResultNumber();
-    constexpr size_t TGT_RESULT_INDEX = 1;
-    const bool holdsTheSeed = resultIndex == 0 || (resultIndex == TGT_RESULT_INDEX && exploration.getEndsOnSeed());
+    constexpr size_t TARGET_RESULT_INDEX = 1;
+    const bool holdsTheSeed = resultIndex == 0 || (resultIndex == TARGET_RESULT_INDEX && exploration.getEndsOnSeed());
 
     if (holdsTheSeed) {
         return exploration.getInputNodes();
@@ -3122,7 +3096,8 @@ Value seedColumnOf(ExplorePaths exploration, Value column) {
 }
 
 // Whether the body reads only the element, constants and carried columns holding one value per
-// seed. Each carried argument the body reads gets the exploration operand to import, the rest null.
+// seed, and cannot raise: the walk runs it on hops of paths the filter never sees. Each carried
+// argument the body reads gets the exploration operand to import, the rest null.
 bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::SmallVectorImpl<Value>& imports) {
     Block& body = predicate.getBody().front();
     const BlockArgument tag = body.getArgument(1);
@@ -3137,12 +3112,17 @@ bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::Small
     };
 
     for (Operation& op : body.without_terminator()) {
-        if (op.getNumRegions() != 0 || !llvm::all_of(op.getOperands(), readsOnlyTheHop)) {
+        const bool holdsARegion = op.getNumRegions() != 0;
+        const bool readsOutsideTheHop = !llvm::all_of(op.getOperands(), readsOnlyTheHop);
+        const bool canRaise = isa<DivOp, ModOp>(op);
+        if (holdsARegion || readsOutsideTheHop || canRaise) {
             return false;
         }
     }
 
-    if (yield.getRowTags() != tag || !readsOnlyTheHop(yield.getValue())) {
+    const bool cutsElements = yield.getRowTags() != tag;
+    const bool yieldsOutsideTheHop = !readsOnlyTheHop(yield.getValue());
+    if (cutsElements || yieldsOutsideTheHop) {
         return false;
     }
 
@@ -3194,11 +3174,15 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
 
     const Value paths = climbFilters(expansion.getPaths());
     ExplorePaths exploration = paths.getDefiningOp<ExplorePaths>();
-    if (!exploration || paths != exploration.getPaths() || exploration.getHopLabels()) {
+    const bool walksThePaths = exploration && paths == exploration.getPaths();
+    if (!walksThePaths) {
         return false;
     }
 
-    if (exploration->getBlock() != filter->getBlock() || !explorationReachesTheFilter(exploration, filter)) {
+    const bool testsHopsByLabelsOnly = exploration.getHopLabels().has_value();
+    const bool reachesTheFilter = exploration->getBlock() == filter->getBlock()
+                               && rowsReachTheFilter(exploration, filter, keepsTheWalkedRows);
+    if (testsHopsByLabelsOnly || !reachesTheFilter) {
         return false;
     }
 
@@ -3222,6 +3206,10 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
                                   ._imports = imports};
 
     return true;
+}
+
+Type boolColumnType(mlir::MLIRContext* context) {
+    return ColumnType::get(context, storage::BoolType::get(context));
 }
 
 // Clones the predicate's body at the rewriter's insertion point over the element column and
@@ -3249,10 +3237,7 @@ Value cloneElementTest(ListPredicate predicate, Value element, llvm::ArrayRef<Va
         return test;
     }
 
-    mlir::MLIRContext* context = rewriter.getContext();
-    const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
-
-    return rewriter.create<NotOp>(predicate.getLoc(), boolType, test).getResult();
+    return rewriter.create<NotOp>(predicate.getLoc(), boolColumnType(rewriter.getContext()), test).getResult();
 }
 
 Block* hopBlockOf(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
@@ -3294,6 +3279,7 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
     ExplorePaths exploration = match._exploration;
     ListPredicate predicate = match._predicate;
     ExpandPath expansion = match._expansion;
+    const Location loc = predicate.getLoc();
 
     Block* hopBlock = hopBlockOf(exploration, rewriter);
 
@@ -3317,24 +3303,18 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
     const Value hopTest = cloneElementTest(predicate, hopElement, hopCarried, rewriter);
 
     if (hopYield) {
-        mlir::MLIRContext* context = rewriter.getContext();
-        const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
-        const Value joined = rewriter.create<AndOp>(predicate.getLoc(), boolType, hopYield.getColumns().front(), hopTest).getResult();
+        const Type boolType = boolColumnType(rewriter.getContext());
+        const Value joined = rewriter.create<AndOp>(loc, boolType, hopYield.getColumns().front(), hopTest).getResult();
 
         rewriter.modifyOpInPlace(hopYield, [&hopYield, joined]() {
             hopYield->setOperand(0, joined);
         });
     } else {
-        rewriter.create<Yield>(predicate.getLoc(), ValueRange {hopTest});
+        rewriter.create<Yield>(loc, ValueRange {hopTest});
     }
 
     if (listsTheEdges) {
-        const Operation::operand_range carried = filter.getColumnsToFilter();
-        const ResultRange filtered = filter.getFilteredColumns();
-        for (size_t index = 0; index < filtered.size(); index++) {
-            rewriter.replaceAllUsesWith(filtered[index], carried[index]);
-        }
-
+        bypassFilter(filter);
         rewriter.eraseOp(filter);
     } else {
         // nodes() holds the seed, which no hop ends on, so the seed is still tested row by row
