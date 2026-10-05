@@ -4592,6 +4592,10 @@ public:
     }
 
     bool has(size_t row, uint64_t id) const {
+        if (id == EntityID::max().getValue()) {
+            return false;
+        }
+
         const bool marked = isPendingRow(_pending, _isPendingColumn, row);
         const bool namesWritten = id >= _committedCount && id - _committedCount < _pendingCount;
 

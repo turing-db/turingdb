@@ -5599,6 +5599,11 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     rebindScopeKeepingWrittenEntities(published);
 
     for (auto& [decl, written] : returnedEntities) {
+        if (optional) {
+            written._labels.clear();
+            written._edgeType.clear();
+        }
+
         _part._writtenEntities[decl] = std::move(written);
     }
 }
