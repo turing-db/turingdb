@@ -259,6 +259,22 @@ TEST_F(RerootPatternAtSeedTest, literalListSeedsEveryPattern) {
     expectEveryPatternRerooted(literalSeed);
 }
 
+TEST_F(RerootPatternAtSeedTest, unprovenEdgeCheckSeedsEveryPattern) {
+    runWrite("MATCH (r {name: 'Remy'}) CREATE (r)-[:KNOWS_WELL]->(r)");
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("EXPLAIN (db) UNWIND [0, 6, 99] AS x MATCH (a)-->(n)-->(m) WHERE n = x RETURN a.name", status, sink);
+    ASSERT_TRUE(status.isOk()) << status.getError();
+    ASSERT_EQ(sink.getRows().size(), 1u);
+    const std::string& program = sink.getRows().front().back();
+    EXPECT_TRUE(contains(program, "db.check_edge_distinct") || contains(program, "distinct_from")) << program;
+
+    for (const Seed* seed : {&vectorSeed, &listSeed, &matchedSeed, &literalSeed}) {
+        expectEveryPatternRerooted(*seed);
+    }
+}
+
 TEST_F(RerootPatternAtSeedTest, seedDropsTheIDNamingNoNode) {
     expectRows(std::string(searchThree) + "YIELD ids MATCH (n) WHERE n = ids RETURN n.name",
                {{"Remy"}, {"Ghosts"}});
