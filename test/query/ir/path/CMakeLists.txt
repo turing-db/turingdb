@@ -144,6 +144,8 @@ target_link_libraries(test_query_ir_shortest_path_endpoint_predicate PRIVATE
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_shortest_path_endpoint_predicate PRIVATE ${IR_TEST_DIR})
 
+add_call_v3_test(test_query_ir_shortest_path_elements ShortestPathElementsTest.cpp)
+
 add_turing_test(test_query_ir_path_element_index PathElementIndexTest.cpp)
 target_sources(test_query_ir_path_element_index PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
 target_link_libraries(test_query_ir_path_element_index PRIVATE

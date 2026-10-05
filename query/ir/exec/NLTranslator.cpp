@@ -2096,7 +2096,7 @@ void NLTranslator::translatePathLength(nl::PathLength length, NLStmtContainer* b
 }
 
 void NLTranslator::translatePathElements(nl::PathElements elements, NLStmtContainer* body) {
-    const ColumnVector<EntityList>* paths = static_cast<const ColumnVector<EntityList>*>(getColumn(elements.getPath()));
+    const Column* paths = getColumn(elements.getPath());
 
     PathElementsKind kind = PathElementsKind::Nodes;
     Column* output = nullptr;

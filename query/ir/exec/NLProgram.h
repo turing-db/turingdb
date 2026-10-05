@@ -1082,10 +1082,11 @@ enum class PathElementsKind {
 
 // nl.path_elements data: one list of node IDs, one list of edge IDs or one hop count per
 // row, read off the entity sequence of each path and null where that sequence is empty.
-// The lists are written into the query's list buffer.
+// The paths are entity lists or the bare alternating IDs of a shortest path. The lists
+// are written into the query's list buffer.
 class NLPathElementsData : public NLFunctionData {
 public:
-    NLPathElementsData(const ColumnVector<EntityList>* paths,
+    NLPathElementsData(const Column* paths,
                        Column* output,
                        PathElementsKind kind,
                        QueryListBuffer* listBuffer)
@@ -1096,13 +1097,13 @@ public:
     {
     }
 
-    const ColumnVector<EntityList>* getPaths() const { return _paths; }
+    const Column* getPaths() const { return _paths; }
     Column* getOutput() const { return _output; }
     PathElementsKind getKind() const { return _kind; }
     QueryListBuffer* getListBuffer() const { return _listBuffer; }
 
 private:
-    const ColumnVector<EntityList>* _paths {nullptr};
+    const Column* _paths {nullptr};
     Column* _output {nullptr};
     PathElementsKind _kind {PathElementsKind::Nodes};
     QueryListBuffer* _listBuffer {nullptr};

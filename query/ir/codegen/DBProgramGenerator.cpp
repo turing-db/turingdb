@@ -1676,8 +1676,8 @@ mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Valu
 
 mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
     const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    bioassert(columnType && mlir::isa<mlir::storage::EntityListType>(columnType.getType()),
-              "A named path is read off the entity sequence its element built");
+    const bool readsAPath = columnType && mlir::isa<mlir::storage::EntityListType, mlir::storage::PathType>(columnType.getType());
+    bioassert(readsAPath, "A named path is read off the entity sequence its element built or the path a SHORTESTPATH found");
 
     const mlir::Type resultType = pathElementsType(_mlirCtxt, kind);
     const mlir::db::ColumnType nullableType =
