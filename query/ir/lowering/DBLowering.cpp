@@ -5036,11 +5036,15 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     operandChunks.append(edgePropValues.begin(), edgePropValues.end());
     operandChunks.append(carriedColumns.begin(), carriedColumns.end());
 
-    // Inserted into the deepest block, where all the operands are defined. A merge over
-    // literals alone reads no chunk, and so opens where the program does.
-    mlir::Block* targetBlock = _entryBlock;
+    // Inserted into the deepest block, where all the operands are defined. A merge whose
+    // operands are all bound above the root - literals alone - opens in the root, as a
+    // CREATE does, so a subquery branch that is not taken merges nothing.
+    mlir::Block* targetBlock = _rootBlock;
     if (const mlir::Value insertionReference = deepestBoundChunk(operandChunks)) {
-        targetBlock = ownerBlock(insertionReference);
+        mlir::Block* const referenceBlock = ownerBlock(insertionReference);
+        if (enclosesBlock(_rootBlock, referenceBlock)) {
+            targetBlock = referenceBlock;
+        }
     }
 
     setInsertionInto(targetBlock);
