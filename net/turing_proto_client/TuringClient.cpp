@@ -513,6 +513,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
 
             case MessageTypes::END: {
                 if (!callbackFired) {
+                    df.setDeclaredRowCount(0);
                     callback(&df);
                 }
 

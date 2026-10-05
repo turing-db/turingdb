@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE n.name = 'Nobody' RETURN n, n.doesNotExist",
+  "expect": {
+    "result": "n,n.doesNotExist"
+  },
+  "tags": [
+    "null",
+    "projection"
+  ],
+  "write-required": false
+}
