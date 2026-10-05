@@ -5023,6 +5023,10 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
 
     mapColumns(merge.getBoundNodes(), boundNodes);
     mapColumns(merge.getBoundPending(), boundPending);
+
+    for (mlir::Value& pending : boundPending) {
+        pending = rowAlignedChunk(pending, boundNodes.front());
+    }
     mapColumns(merge.getNodePropValues(), nodePropValues);
     mapColumns(merge.getEdgePropValues(), edgePropValues);
     mapColumns(merge.getCarriedColumns(), carriedColumns);

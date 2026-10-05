@@ -56,17 +56,6 @@ TEST_F(MergeRejectionTest, rejectsAHopWithoutAnEdgeType) {
         << status.getError();
 }
 
-// A CREATE's entities are provisional and the graph a merge reads holds none of them, so
-// a merge that would have to bind one is turned away rather than binding the wrong node
-TEST_F(MergeRejectionTest, rejectsAPatternBindingWhatACreateInTheSameQueryWrote) {
-    QueryStatus status;
-    runQuery("CREATE (a:Tag {name: 'x'}) MERGE (a)-[:LINKS]->(b:Tag {name: 'y'})", status);
-
-    EXPECT_FALSE(status.isOk()) << status.getError();
-    EXPECT_NE(status.getError().find("a CREATE in the same query writes it"), std::string::npos)
-        << "status: " << status.getError();
-}
-
 // MERGE writes the pattern it does not find, and a variable-length hop names no one
 // path to write: Cypher has no such write pattern, so it is turned away rather than
 // silently written as a single hop
