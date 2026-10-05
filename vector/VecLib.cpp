@@ -1,10 +1,14 @@
 #include "VecLib.h"
 
+#include <algorithm>
+#include <span>
+
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
 #include <faiss/IndexHNSW.h>
 #include <faiss/IndexIDMap.h>
 #include <faiss/index_io.h>
+#include <spdlog/fmt/fmt.h>
 
 #include "ShardCache.h"
 #include "VecLibShardAccessor.h"
@@ -16,6 +20,7 @@
 #include "LSHShardRouterLoader.h"
 #include "VecLibShard.h"
 #include "VecLibAccessor.h"
+#include "VectorException.h"
 
 #include "TuringTime.h"
 #include "BioAssert.h"
@@ -46,6 +51,17 @@ std::unique_ptr<faiss::Index> buildHNSWIndex(const VecLibMetadata& meta) {
     auto* idMap = new faiss::IndexIDMap(hnsw);
     idMap->own_fields = true;
     return std::unique_ptr<faiss::Index>(idMap);
+}
+
+void appendBatch(const BatchVectorCreate* source, BatchVectorCreate* target) {
+    const Dimension dimension = source->dimension();
+
+    for (const BatchVectorCreate::Data& data : *source) {
+        for (size_t position = 0; position < data._externalIDs.size(); position++) {
+            target->addPoint(data._externalIDs[position],
+                             std::span<const float>(data._embeddings.data() + position * dimension, dimension));
+        }
+    }
 }
 
 }
@@ -198,7 +214,77 @@ VectorResult<void> VecLib::addEmbeddingsHNSW(const BatchVectorCreate* batch) {
     return {};
 }
 
-VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
+template <typename Visitor>
+void VecLib::forEachIndex(Visitor visit) {
+    switch (_metadata._indexType) {
+        case IndexType::FLAT:
+            for (const LSHSignature signature : _shardRouter->getInstantiatedShardSignatures()) {
+                const VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
+                visit(static_cast<const faiss::IndexIDMap*>(shard.get()._index.get()));
+            }
+            return;
+        break;
+        case IndexType::HNSW:
+            visit(static_cast<const faiss::IndexIDMap*>(_hnswIndex.get()));
+            return;
+        break;
+        case IndexType::_SIZE:
+            panic("VecLib: invalid index type");
+        break;
+    }
+}
+
+bool VecLib::containsAnyID(const std::unordered_set<int64_t>& ids) {
+    bool found = false;
+
+    forEachIndex([&ids, &found](const faiss::IndexIDMap* index) {
+        if (!found) {
+            found = std::ranges::any_of(index->id_map, [&ids](faiss::idx_t id) { return ids.contains(id); });
+        }
+    });
+
+    return found;
+}
+
+void VecLib::collectVectorsToKeep(const std::unordered_set<int64_t>& replacedIDs, BatchVectorCreate* batch) {
+    const Dimension dimension = _metadata._dimension;
+    std::vector<float> embeddings;
+
+    forEachIndex([&](const faiss::IndexIDMap* index) {
+        embeddings.resize(index->ntotal * dimension);
+        index->index->reconstruct_n(0, index->ntotal, embeddings.data());
+
+        for (size_t position = 0; position < index->id_map.size(); position++) {
+            const faiss::idx_t id = index->id_map[position];
+            if (replacedIDs.contains(id)) {
+                continue;
+            }
+
+            batch->addPoint(id, std::span<const float>(embeddings.data() + position * dimension, dimension));
+        }
+    });
+}
+
+void VecLib::clearIndex() {
+    switch (_metadata._indexType) {
+        case IndexType::FLAT:
+            for (const LSHSignature signature : _shardRouter->getInstantiatedShardSignatures()) {
+                VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
+                shard.get().reset(_metadata);
+            }
+            return;
+        break;
+        case IndexType::HNSW:
+            _hnswIndex = buildHNSWIndex(_metadata);
+            return;
+        break;
+        case IndexType::_SIZE:
+            panic("VecLib: invalid index type");
+        break;
+    }
+}
+
+VectorResult<void> VecLib::insertEmbeddings(const BatchVectorCreate* batch) {
     switch (_metadata._indexType) {
         case IndexType::FLAT:
             return addEmbeddingsBruteForce(batch);
@@ -211,6 +297,32 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
         break;
     }
     panic("VecLib: invalid index type");
+}
+
+VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
+    std::unordered_set<int64_t> newIDs;
+    newIDs.reserve(batch->count());
+
+    for (const BatchVectorCreate::Data& data : *batch) {
+        for (const int64_t id : data._externalIDs) {
+            if (!newIDs.insert(id).second) {
+                throw VectorException(fmt::format("Vector ID {} appears more than once in the input", id));
+            }
+        }
+    }
+
+    if (!containsAnyID(newIDs)) {
+        return insertEmbeddings(batch);
+    }
+
+    BatchVectorCreate rebuilt;
+    prepareCreateBatch(&rebuilt);
+    collectVectorsToKeep(newIDs, &rebuilt);
+    appendBatch(batch, &rebuilt);
+
+    clearIndex();
+
+    return insertEmbeddings(&rebuilt);
 }
 
 VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchResult* results) {
