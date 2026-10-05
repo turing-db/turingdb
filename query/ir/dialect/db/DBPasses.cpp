@@ -3096,8 +3096,7 @@ Value seedColumnOf(ExplorePaths exploration, Value column) {
 }
 
 // Whether the body reads only the element, constants and carried columns holding one value per
-// seed, and cannot raise: the walk runs it on hops of paths the filter never sees. Each carried
-// argument the body reads gets the exploration operand to import, the rest null.
+// seed. Each carried argument the body reads gets the exploration operand to import, the rest null.
 bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::SmallVectorImpl<Value>& imports) {
     Block& body = predicate.getBody().front();
     const BlockArgument tag = body.getArgument(1);
@@ -3114,8 +3113,7 @@ bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::Small
     for (Operation& op : body.without_terminator()) {
         const bool holdsARegion = op.getNumRegions() != 0;
         const bool readsOutsideTheHop = !llvm::all_of(op.getOperands(), readsOnlyTheHop);
-        const bool canRaise = isa<DivOp, ModOp>(op);
-        if (holdsARegion || readsOutsideTheHop || canRaise) {
+        if (holdsARegion || readsOutsideTheHop) {
             return false;
         }
     }

@@ -247,12 +247,14 @@ TEST_F(ExploreListPredicateTest, movesALiteralTestIntoTheWalk) {
                 all.getRows().front().front());
 }
 
-TEST_F(ExploreListPredicateTest, leavesADivisionTheWalkWouldRunOnUnreturnedHops) {
-    // Martina -> Cooking has duration 10 and ends on no Person: moved into the walk, the test
-    // would divide by zero on a hop no returned path takes
-    const std::string_view query = "MATCH p = (a)-[*1..3]->(b:Person) "
-                                   "WHERE all(r IN relationships(p) WHERE 100 / (r.duration - 10) > -1000) RETURN count(*)";
+TEST_F(ExploreListPredicateTest, raisesWhereTheHopPredicateRaises) {
+    // Martina -> Cooking has duration 10 and ends on no Person: the walk tests it all the same,
+    // as it tests the hop predicate written inside the pattern
+    const std::string_view filtered = "MATCH p = (a)-[*1..3]->(b:Person) "
+                                      "WHERE all(r IN relationships(p) WHERE 100 / (r.duration - 10) > -1000) RETURN count(*)";
 
-    expectNotFused(query);
-    expectCount(query, "10");
+    expectFused(filtered);
+    runQueryExpectingError(filtered, "Attempted to divide by zero");
+    runQueryExpectingError("MATCH p = (a)-[e WHERE 100 / (e.duration - 10) > -1000]->{1,3}(b:Person) RETURN count(*)",
+                           "Attempted to divide by zero");
 }
