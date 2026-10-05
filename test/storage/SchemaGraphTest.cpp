@@ -178,6 +178,62 @@ TEST_F(SchemaGraphTest, embedsNoNodeNoLabelSetAllows) {
     EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
 }
 
+// 40 parts after simpledb's, each adding one node, Even or Odd by turns, and three edges:
+// to Remy in the first part, from Remy as a patch edge, and to the node of the part before
+TEST_F(SchemaGraphTest, readsLabelSetsAcrossManyParts) {
+    constexpr size_t PART_COUNT = 40;
+    const size_t simpleDBPartCount = _graph->openTransaction().viewGraph().dataparts().size();
+
+    NodeID previous;
+    for (size_t index = 0; index < PART_COUNT; index++) {
+        std::unique_ptr<Change> change = _graph->newChange();
+        CommitBuilder* commit = change->access().getTip();
+        DataPartBuilder& builder = commit->newBuilder();
+        MetadataBuilder& metadata = builder.getMetadata();
+
+        LabelSet labelSet;
+        labelSet.set(metadata.getOrCreateLabel(index % 2 == 0 ? "Even" : "Odd"));
+        const NodeID added = builder.addNode(labelSet);
+
+        builder.addEdge(metadata.getOrCreateEdgeType("TO_REMY"), added, NodeID {0});
+        builder.addEdge(metadata.getOrCreateEdgeType("FROM_REMY"), NodeID {0}, added);
+        if (index > 0) {
+            builder.addEdge(metadata.getOrCreateEdgeType("TO_PREVIOUS"), added, previous);
+        }
+
+        ASSERT_TRUE(change->access().submit(*_jobSystem));
+        previous = added;
+    }
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+    ASSERT_EQ(view.dataparts().size(), simpleDBPartCount + PART_COUNT);
+
+    const LabelSetMap& labelSets = view.metadata().labelsets();
+    const LabelSetID remy = view.read().getNodeLabelSet(NodeID {0}).getID();
+    const LabelSetID even = labelSets.get(labels(view, {"Even"})).value();
+    const LabelSetID odd = labelSets.get(labels(view, {"Odd"})).value();
+
+    const auto countOf = [&view](LabelSetID source, std::string_view type, LabelSetID target) {
+        const EdgeTypeID typeID = types(view, {type}).front();
+        size_t count = 0;
+        for (const SchemaArc& arc : view.schemaGraph().arcs()) {
+            if (arc._source == source && arc._type == typeID && arc._target == target) {
+                count += arc._count;
+            }
+        }
+
+        return count;
+    };
+
+    EXPECT_EQ(countOf(even, "TO_REMY", remy), 20u);
+    EXPECT_EQ(countOf(odd, "TO_REMY", remy), 20u);
+    EXPECT_EQ(countOf(remy, "FROM_REMY", even), 20u);
+    EXPECT_EQ(countOf(remy, "FROM_REMY", odd), 20u);
+    EXPECT_EQ(countOf(odd, "TO_PREVIOUS", even), 20u);
+    EXPECT_EQ(countOf(even, "TO_PREVIOUS", odd), 19u);
+}
+
 // A commit adding a self-loop puts it in the summary of the views that hold the new part,
 // and a summary refreshed to such a view picks it up
 TEST_F(SchemaGraphTest, refreshesToThePartsAViewHolds) {

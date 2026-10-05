@@ -6,6 +6,7 @@
 #include "datapart/EdgeContainer.h"
 #include "datapart/EdgeRecord.h"
 #include "datapart/NodeContainer.h"
+#include "datapart/NodeOwnerPart.h"
 #include "metadata/EdgeTypeMap.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSetHandle.h"
@@ -24,17 +25,12 @@ struct TargetCounts {
     size_t _selfLoopCount {0};
 };
 
-LabelSetID findNodeLabelSet(DataPartSpan parts, NodeID node) {
-    const auto startsAtOrBefore = [node](const WeakArc<DataPart>& arc) {
-        return arc.get()->getFirstNodeID() <= node;
-    };
+LabelSetID findNodeLabelSet(std::span<const NodeID> firstNodeIDs, std::span<const NodeContainer* const> nodeContainers, NodeID node) {
+    const size_t owner = findNodeOwnerPart(firstNodeIDs, node);
+    bioassert(owner < firstNodeIDs.size(), "Node {} is in no part", node.getValue());
 
-    const DataPartIterator next = std::ranges::partition_point(parts, startsAtOrBefore);
-    bioassert(next != parts.begin(), "Node {} is in no part", node.getValue());
-
-    const DataPart* part = std::prev(next)->get();
-    const LabelSetHandle labelSet = part->nodes().getNodeLabelSet(node);
-    bioassert(labelSet.isValid(), "Node {} is in no part", node.getValue());
+    const LabelSetHandle labelSet = nodeContainers[owner]->getNodeLabelSet(node);
+    bioassert(labelSet.isValid(), "Node {} is past the end of its owner part", node.getValue());
 
     return labelSet.getID();
 }
@@ -51,23 +47,9 @@ public:
     {
     }
 
-    void build(const LabelSetMap& labelSets) {
-        const size_t nodeCount = _pattern._nodes.size();
-        _candidates.resize(nodeCount);
-        _placed.resize(nodeCount, LabelSetID {0});
-        _isPlaced.resize(nodeCount, false);
-        _done.resize(_pattern._edges.size(), false);
+    bool run(const LabelSetMap& labelSets) {
+        build(labelSets);
 
-        for (size_t node = 0; node < nodeCount; node++) {
-            for (const LabelSetMap::Pair& pair : labelSets) {
-                if (pair._value->hasAtLeastLabels(_pattern._nodes[node]._labels)) {
-                    _candidates[node].push_back(pair._id);
-                }
-            }
-        }
-    }
-
-    bool run() {
         const bool everyNodePlaceable = std::ranges::none_of(_candidates, [](const std::vector<LabelSetID>& candidates) {
             return candidates.empty();
         });
@@ -86,6 +68,22 @@ private:
     std::vector<bool> _isPlaced;
     std::vector<bool> _done;
     size_t _visits {0};
+
+    void build(const LabelSetMap& labelSets) {
+        const size_t nodeCount = _pattern._nodes.size();
+        _candidates.resize(nodeCount);
+        _placed.resize(nodeCount, LabelSetID {0});
+        _isPlaced.resize(nodeCount, false);
+        _done.resize(_pattern._edges.size(), false);
+
+        for (size_t node = 0; node < nodeCount; node++) {
+            for (const LabelSetMap::Pair& pair : labelSets) {
+                if (pair._value->hasAtLeastLabels(_pattern._nodes[node]._labels)) {
+                    _candidates[node].push_back(pair._id);
+                }
+            }
+        }
+    }
 
     size_t placedEndCount(const SchemaPattern::Edge& edge) const {
         return (_isPlaced[edge._source] ? 1 : 0) + (_isPlaced[edge._target] ? 1 : 0);
@@ -232,17 +230,26 @@ void SchemaGraph::build(DataPartSpan parts, const GraphMetadata& metadata) {
     NodeID sourceNode;
     LabelSetID source;
 
+    std::vector<NodeID> firstNodeIDs;
+    std::vector<const NodeContainer*> nodeContainers;
+    for (const WeakArc<DataPart>& arc : parts) {
+        const DataPart* part = arc.get();
+        firstNodeIDs.push_back(part->getFirstNodeID());
+        nodeContainers.push_back(&part->nodes());
+    }
+
     std::vector<std::vector<TargetCounts>> cells(labelSetCount * edgeTypeCount);
     for (const WeakArc<DataPart>& arc : parts) {
         const DataPart* part = arc.get();
+        const NodeContainer& partNodes = part->nodes();
 
         for (const EdgeRecord& edge : part->edges().getOuts()) {
             if (edge._nodeID != sourceNode) {
                 sourceNode = edge._nodeID;
-                source = findNodeLabelSet(parts, sourceNode);
+                source = partNodes.hasEntity(sourceNode) ? partNodes.getNodeLabelSet(sourceNode).getID() : findNodeLabelSet(firstNodeIDs, nodeContainers, sourceNode);
             }
 
-            const LabelSetID target = findNodeLabelSet(parts, edge._otherID);
+            const LabelSetID target = findNodeLabelSet(firstNodeIDs, nodeContainers, edge._otherID);
             const size_t cell = source.getValue() * edgeTypeCount + edge._edgeTypeID.getValue();
             bioassert(cell < cells.size(), "Edge {} runs over a label set or a type the metadata lacks", edge._edgeID.getValue());
 
@@ -279,7 +286,6 @@ void SchemaGraph::build(DataPartSpan parts, const GraphMetadata& metadata) {
 
 bool SchemaGraph::embeds(const SchemaPattern& pattern, const LabelSetMap& labelSets) const {
     SchemaEmbedding embedding(_arcs, pattern);
-    embedding.build(labelSets);
 
-    return embedding.run();
+    return embedding.run(labelSets);
 }
