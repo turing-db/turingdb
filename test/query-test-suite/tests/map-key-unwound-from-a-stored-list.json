@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (t:Tagged {name: 'a', items: [{x: 1}, {x: 2}]}) WITH 1 AS s MATCH (t:Tagged) UNWIND t.items AS m RETURN m.x",
+  "expect": {
+    "result": "m.x\n1\n2"
+  },
+  "tags": [
+    "map",
+    "key",
+    "unwind"
+  ],
+  "write-required": true
+}

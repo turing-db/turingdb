@@ -42,6 +42,20 @@ Type getNullableChunkType(MLIRContext* context, Type valueType) {
     return ChunkType::get(context, storage::NullableType::get(context, valueType));
 }
 
+// Whether a key read can be answered over this chunk: a chunk of maps, or one of tagged
+// cells, which a read of a nested container hands back and whose row says what it holds
+bool holdsAMapPerRow(Type chunkType) {
+    const auto chunk = dyn_cast<ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
+    const Type read = nullable ? nullable.getValueType() : chunk.getElementType();
+
+    return isa<storage::MapType, storage::ListElementType, storage::MapElementType>(read);
+}
+
 // The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
 // Aggregates fold property values, so an update's input and a result's output are
 // always such chunks. Returns a null Type for anything else (an ID chunk, say), so
@@ -721,12 +735,8 @@ LogicalResult MakeList::verify() {
 }
 
 LogicalResult StaticMapKey::verify() {
-    const Type element = llvm::cast<ChunkType>(getMap().getType()).getElementType();
-    const auto nullable = llvm::dyn_cast<storage::NullableType>(element);
-    const Type map = nullable ? nullable.getValueType() : element;
-
-    if (!llvm::isa<storage::MapType>(map)) {
-        return emitOpError("reads a chunk of maps, optionally nullable");
+    if (!holdsAMapPerRow(getMap().getType())) {
+        return emitOpError("reads a chunk of maps or of tagged cells, optionally nullable");
     }
 
     if (getKey().empty()) {
@@ -737,12 +747,8 @@ LogicalResult StaticMapKey::verify() {
 }
 
 LogicalResult DynamicMapKey::verify() {
-    const Type mapElement = llvm::cast<ChunkType>(getMap().getType()).getElementType();
-    const auto mapNullable = llvm::dyn_cast<storage::NullableType>(mapElement);
-    const Type map = mapNullable ? mapNullable.getValueType() : mapElement;
-
-    if (!llvm::isa<storage::MapType>(map)) {
-        return emitOpError("reads a chunk of maps, optionally nullable");
+    if (!holdsAMapPerRow(getMap().getType())) {
+        return emitOpError("reads a chunk of maps or of tagged cells, optionally nullable");
     }
 
     const Type keyElement = llvm::cast<ChunkType>(getKey().getType()).getElementType();

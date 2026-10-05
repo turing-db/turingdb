@@ -1510,6 +1510,12 @@ propertyLookupExpr
         LOC($$, @$);
       }
     | propertyLookupExpr DOT name { $$ = PropertyLookupExpr::create(ast, $1, $3->getName()); LOC($$, @$); }
+    | atomicExpr OBRACK expr CBRACK DOT name {
+        Expr* indexed = IndexExpr::create(ast, $1, $3);
+        LOC(indexed, (SourceLocation {@1._beginLine, @1._beginColumn, @4._endLine, @4._endColumn}));
+        $$ = PropertyLookupExpr::create(ast, indexed, $6->getName());
+        LOC($$, @$);
+      }
     ;
 
 atomExpr

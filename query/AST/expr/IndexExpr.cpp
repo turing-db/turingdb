@@ -18,3 +18,7 @@ IndexExpr* IndexExpr::create(CypherAST* ast, Expr* base, Expr* indexExpr) {
     ast->addExpr(expr);
     return expr;
 }
+
+void IndexExpr::setReadsAMapKey() {
+    _readsAMapKey = true;
+}

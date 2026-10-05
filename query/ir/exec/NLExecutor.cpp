@@ -4264,6 +4264,38 @@ std::optional<MapView> mapRead(const Column* input, size_t row) {
     return (*static_cast<const ColumnT*>(input))[row];
 }
 
+// The map a type-erased cell holds, absent where the cell holds anything else
+std::optional<MapView> readMapFromCell(const ListElementView cell) {
+    if (cell.getTag() != ListBufferTypeTag::MapView) {
+        return std::nullopt;
+    }
+
+    return cell.getAs<MapView>();
+}
+
+std::optional<MapView> readMapFromCell(const MapEntryView entry) {
+    if (entry.getValueTag() != MapBufferTypeTag::MapView) {
+        return std::nullopt;
+    }
+
+    return entry.getValueAs<MapView>();
+}
+
+std::optional<MapView> readMapFromCell(const std::optional<ListElementView>& cell) {
+    if (!cell) {
+        return std::nullopt;
+    }
+
+    return readMapFromCell(*cell);
+}
+
+// One cell of a column of tagged cells, read as the map its own tag says it holds: a map
+// read out of a list or out of another map arrives as such a column
+template <typename ColumnT>
+std::optional<MapView> readTaggedMap(const Column* input, size_t row) {
+    return readMapFromCell((*static_cast<const ColumnT*>(input))[row]);
+}
+
 // The key one column of a dynamic map key read holds at @param row, or nothing where the
 // row holds none.
 template <typename ColumnT>
@@ -7453,9 +7485,21 @@ NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
         return &mapRead<ColumnConst<MapView>>;
     } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
         return &mapRead<ColumnConst<std::optional<MapView>>>;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        return &readTaggedMap<ColumnVector<ListElementView>>;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        return &readTaggedMap<ColumnOptVector<ListElementView>>;
+    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+        return &readTaggedMap<ColumnConst<ListElementView>>;
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        return &readTaggedMap<ColumnConst<std::optional<ListElementView>>>;
+    } else if (kind == ColumnVector<MapEntryView>::staticKind()) {
+        return &readTaggedMap<ColumnVector<MapEntryView>>;
+    } else if (kind == ColumnConst<MapEntryView>::staticKind()) {
+        return &readTaggedMap<ColumnConst<MapEntryView>>;
     }
 
-    throw IRException("a map key read reads a map column");
+    throw IRException("a map key read reads a map column, or a column of tagged cells");
 }
 
 NLStringReadFunction NLExecutor::selectStringRead(const Column* input) {

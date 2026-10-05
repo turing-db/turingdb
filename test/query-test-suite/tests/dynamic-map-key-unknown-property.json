@@ -3,13 +3,12 @@
   "graph": "simpledb",
   "query": "MATCH (n:Person) WITH n, 'x' AS k RETURN n.nosuchprop[k]",
   "expect": {
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n:Person) WITH n, 'x' AS k RETURN n.nosuchprop[k]\n       |                                          ^^^^^^^^^^^^^^^\n-------* Index operator [] can only be applied to a list, a map or a CSV row, not 'Null'"
+    "result": "n.nosuchprop[k]\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull"
   },
   "tags": [
     "map",
     "key",
-    "dynamic",
-    "fail"
+    "dynamic"
   ],
   "write-required": false
 }

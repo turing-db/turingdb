@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: {b: 1}} AS m, 'b' AS k WITH m.a AS inner, k RETURN inner.b, inner[k], inner.nosuch",
+  "expect": {
+    "result": "inner.b,inner[k],inner.nosuch\n1,1,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "with"
+  ],
+  "write-required": false
+}

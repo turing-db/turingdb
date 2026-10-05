@@ -171,6 +171,10 @@ private:
     // its branches, reporting a pair no column type can hold
     EvaluatedType unifiedArgumentType(std::string_view name, std::span<Expr* const> args) const;
 
+    // row[i] over a LOAD CSV row, which reads a field rather than an element. A constant
+    // index names the field the load publishes it under; a computed one names none
+    void analyzeCSVRowIndex(IndexExpr* expr);
+
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 
     // The declaration the load publishes field @param slot under, created by the first

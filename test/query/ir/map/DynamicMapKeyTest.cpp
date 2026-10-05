@@ -142,6 +142,9 @@ public:
         const bool holdsOneEntryForEveryRow =
             column->getKind() == db::ColumnConst<db::MapEntryView>::staticKind();
 
+        ASSERT_TRUE(holdsOneEntryForEveryRow
+                    || column->getKind() == db::ColumnVector<db::MapEntryView>::staticKind());
+
         for (size_t row = offset; row < offset + rowCount; row++) {
             const db::MapEntryView entry =
                 holdsOneEntryForEveryRow
@@ -211,7 +214,7 @@ TEST_F(DynamicMapKeyTest, leavesANullKeyEntryUnnamed) {
     MapEntrySink sink;
     QueryStatus status;
     _interpreter->execute(status,
-                          "WITH {a: 1} AS m, null AS k RETURN m[k]",
+                          "UNWIND ['a', null] AS k WITH {a: 1} AS m, k RETURN m[k]",
                           _graphName,
                           CommitHash::head(),
                           ChangeID::head(),
@@ -219,10 +222,13 @@ TEST_F(DynamicMapKeyTest, leavesANullKeyEntryUnnamed) {
     ASSERT_TRUE(status.isOk()) << status.getError();
 
     const std::vector<MapEntrySink::Entry>& entries = sink.entries();
-    ASSERT_EQ(entries.size(), 1u);
+    ASSERT_EQ(entries.size(), 2u);
 
-    EXPECT_TRUE(entries[0]._key.empty());
-    EXPECT_EQ(entries[0]._tag, MapBufferTypeTag::Null);
+    EXPECT_EQ(entries[0]._key, "a");
+    EXPECT_EQ(entries[0]._tag, MapBufferTypeTag::Int);
+
+    EXPECT_TRUE(entries[1]._key.empty());
+    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
 }
 
 // The suite cannot express this one: it runs a single query, and a property that query

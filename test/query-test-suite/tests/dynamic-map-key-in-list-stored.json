@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (n:Tagged {name: 'a', items: [{x: 1}, {x: 2}]}) WITH 1 AS seeded MATCH (t:Tagged) UNWIND [0, 1] AS i RETURN t.items[i].x",
+  "expect": {
+    "result": "t.items[i].x\n1\n2"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "list"
+  ],
+  "write-required": true
+}

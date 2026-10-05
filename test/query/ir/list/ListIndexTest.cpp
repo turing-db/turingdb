@@ -45,6 +45,7 @@
 #include "iterators/ChunkConfig.h"
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -85,6 +86,10 @@ public:
             return;
         }
 
+        if (appendNulls(column, offset, rowCount)) {
+            return;
+        }
+
         ASSERT_TRUE(appendCells(column, offset, rowCount));
     }
 
@@ -103,6 +108,19 @@ private:
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _rows.push_back(constantColumn ? (*constantColumn)[rowIndex] : vectorColumn->getRaw()[rowIndex]);
+        }
+
+        return true;
+    }
+
+    // A read the analyzer folded to null, which holds no element to read a tag off
+    bool appendNulls(const Column* column, size_t offset, size_t rowCount) {
+        if (column->getKind() != ColumnConst<PropertyNull>::staticKind()) {
+            return false;
+        }
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back(std::nullopt);
         }
 
         return true;

@@ -468,7 +468,8 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
 
     Row r of the result is the entry row r's map holds under the key. A row whose map holds
     no such key - and a row holding no map at all - reads back as a null entry, since a map
-    value carries its null in its own tag.
+    value carries its null in its own tag. The map column is a column of tagged cells where
+    the map was itself read out of a list or a map.
   }];
 
   let arguments = (ins Column:$map, StrAttr:$key);
@@ -2813,7 +2814,8 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
 
     Row r of the result is the entry row r's map holds under row r's key. A row whose map
     holds no such key - and a row holding no map at all - reads back as a null entry, as
-    db.static_map_key's does.
+    db.static_map_key's does. The map column is a column of tagged cells where the map was
+    itself read out of a list or a map.
   }];
 
   let arguments = (ins Column:$map, Column:$key);

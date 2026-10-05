@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {a: {b: 1}} AS m, 'a' AS k, 'b' AS inner RETURN m[k][inner]",
+  "expect": {
+    "result": "m[k][inner]\n1"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic"
+  ],
+  "write-required": false
+}

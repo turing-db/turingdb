@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH [{a: 1}] AS xs, 'a' AS k RETURN xs[null].a, xs[null][k]",
+  "expect": {
+    "result": "xs[null].a,xs[null][k]\nnull,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "null"
+  ],
+  "write-required": false
+}

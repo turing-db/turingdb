@@ -1133,8 +1133,13 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::Invalid;
     }
 
-    // m.key, where m was bound to a map rather than to an entity
-    if (varType == EvaluatedType::Map) {
+    const bool readsAKeyOfTheVariable = varType == EvaluatedType::Map
+                                     || varType == EvaluatedType::ListItem
+                                     || varType == EvaluatedType::MapValue;
+
+    // m.key, where m was bound to a map rather than to an entity, or to a tagged cell whose
+    // row may hold one
+    if (readsAKeyOfTheVariable) {
         if (allowCreate) {
             throwError(mapKeyNotAProperty, expr);
         }
@@ -1303,6 +1308,11 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
     const bool readsAnEntity = baseType == EvaluatedType::NodePattern
                             || baseType == EvaluatedType::EdgePattern;
 
+    // A map, and a tagged cell the row may have put a map in: both answer a key read
+    const bool readsAMapKey = baseType == EvaluatedType::Map
+                           || baseType == EvaluatedType::MapValue
+                           || baseType == EvaluatedType::ListItem;
+
     EvaluatedType type = EvaluatedType::Null;
 
     if (baseType == EvaluatedType::DateTime) {
@@ -1332,14 +1342,9 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
             type = *maybeEvalType;
         }
-    } else if (baseType == EvaluatedType::Map) {
+    } else if (readsAMapKey) {
         expr->setReadsAMapKey();
         type = EvaluatedType::MapValue;
-    } else if (baseType == EvaluatedType::MapValue) {
-        throwError(fmt::format("'{}' reads a key of a map held by another map, which is "
-                               "not supported",
-                               propName),
-                   expr);
     } else if (baseType != EvaluatedType::Null) {
         throwError(fmt::format("A value of type '{}' has no property '{}'",
                                EvaluatedTypeName::value(baseType), propName),
@@ -1366,85 +1371,115 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     analyzeExpr(base);
     analyzeExpr(indexExpr);
 
+    if (base->isDynamic() || indexExpr->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (base->isAggregate() || indexExpr->isAggregate()) {
+        expr->setAggregate();
+    }
+
     const EvaluatedType baseType = base->getType();
     const VarDecl* baseDecl = base->getExprVarDecl();
 
     const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
-    const bool indexesAList = baseType == EvaluatedType::List
-                           || baseType == EvaluatedType::ListItem;
+    const bool indexesAList = baseType == EvaluatedType::List;
     const bool indexesAMap = baseType == EvaluatedType::Map;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
-    if (!indexesAPath && !indexesAList && !indexesAMap && !indexesACSVRow) {
+    const bool indexesATaggedCell = baseType == EvaluatedType::ListItem
+                                 || baseType == EvaluatedType::MapValue;
+
+    const bool indexesANullValue = baseType == EvaluatedType::Null;
+
+    if (!indexesAPath && !indexesAList && !indexesAMap && !indexesATaggedCell && !indexesACSVRow
+        && !indexesANullValue) {
         throwError(fmt::format("Index operator [] can only be applied to a list, a map or a CSV row, not '{}'",
                                EvaluatedTypeName::value(baseType)), expr);
     }
 
-    const EvaluatedType indexType = indexExpr->getType();
-
-    const bool indexesByNull = (indexesAPath || indexesAList || indexesAMap)
-                            && indexType == EvaluatedType::Null;
-
-    if (indexesAMap) {
-        const bool indexesByKey = indexType == EvaluatedType::String;
-
-        if (!indexesByKey && !indexesByNull) {
-            throwError(fmt::format("A map is indexed by a string key, not by '{}'",
-                                   EvaluatedTypeName::value(indexType)), expr);
-        }
-    } else {
-        const bool indexesByPosition = indexType == EvaluatedType::Integer;
-
-        if (!indexesByPosition && !indexesByNull) {
-            throwError(fmt::format("Index expression must be an integer, not '{}'",
-                                   EvaluatedTypeName::value(indexType)), expr);
-        }
+    if (indexesACSVRow) {
+        analyzeCSVRowIndex(expr);
+        return;
     }
 
-    if (indexesAPath || indexesAList) {
-        const EvaluatedType elementType = indexesAPath ? baseType : base->getListShape().unwoundType();
-        const bool readsAValue = convertibleToValueType(elementType);
-        const bool readsAnEntity = elementType == EvaluatedType::NodePattern
-                                || elementType == EvaluatedType::EdgePattern;
-        const bool readsTheElementType = readsAValue || readsAnEntity;
-        const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
+    const EvaluatedType indexType = indexExpr->getType();
 
-        expr->setType(indexedType);
+    const bool indexesByKey = indexType == EvaluatedType::String;
+    const bool indexesByPosition = indexType == EvaluatedType::Integer;
+    const bool indexesByNull = indexType == EvaluatedType::Null;
 
-        if (base->isDynamic() || indexExpr->isDynamic()) {
-            expr->setDynamic();
-        }
+    // What an index can be at all, which no base changes. Which of the two a base takes is
+    // its own question, below.
+    if (!indexesByKey && !indexesByPosition && !indexesByNull) {
+        throwError(fmt::format("An index is an integer position or a string key, not '{}'",
+                               EvaluatedTypeName::value(indexType)), expr);
+    }
 
-        if (base->isAggregate() || indexExpr->isAggregate()) {
-            expr->setAggregate();
-        }
-
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, indexedType));
+    // Set a null index, and a read of a null value, to evaluate to a null type
+    if (indexesANullValue || indexesByNull) {
+        expr->setType(EvaluatedType::Null);
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Null));
 
         return;
     }
 
-    if (indexesAMap) {
-        const bool indexesByLiteralKey = indexExpr->getKind() == Expr::Kind::LITERAL
-                                      && indexType == EvaluatedType::String;
+    // A tagged cell takes either kind, since only its row says which it holds
+    const bool readsByPositionOnly = indexesAPath || indexesAList;
 
-        if (indexesByLiteralKey) {
+    if (indexesAMap && !indexesByKey) {
+        throwError(fmt::format("A map is indexed by a string key, not by '{}'",
+                               EvaluatedTypeName::value(indexType)), expr);
+    } else if (readsByPositionOnly && !indexesByPosition) {
+        throwError(fmt::format("A list index expression must be an integer, not '{}'",
+                               EvaluatedTypeName::value(indexType)), expr);
+    }
+
+    if (indexesByKey) {
+        // A map literal names its own keys, so reading one back is a separate feature. It is
+        // turned away first, since the dotted form it would be sent to does not parse either.
+        if (base->getKind() == Expr::Kind::LITERAL) {
+            throwError("Reading a key of a map literal is not supported yet.", expr);
+        }
+
+        // The bracket form reads a key computed per row. A key written in the query is not
+        // one, whatever it is read off, so it is sent to the dotted form.
+        if (indexExpr->getKind() == Expr::Kind::LITERAL) {
             throwError("A map key known in the query is written m.key, not m['key']", expr);
         }
 
+        expr->setReadsAMapKey();
         expr->setType(EvaluatedType::MapValue);
-
-        if (base->isDynamic() || indexExpr->isDynamic()) {
-            expr->setDynamic();
-        }
-
-        if (base->isAggregate() || indexExpr->isAggregate()) {
-            expr->setAggregate();
-        }
 
         expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
 
         return;
+    }
+
+    // The case where we are reading from a list or path
+    const EvaluatedType elementType = indexesAPath ? baseType : base->getListShape().unwoundType();
+    const bool readsAValue = convertibleToValueType(elementType);
+    const bool readsAnEntity = elementType == EvaluatedType::NodePattern
+                            || elementType == EvaluatedType::EdgePattern;
+    const bool readsTheElementType = readsAValue || readsAnEntity;
+    const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
+
+    expr->setType(indexedType);
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, indexedType));
+}
+
+void ExprAnalyzer::analyzeCSVRowIndex(IndexExpr* expr) {
+    const Expr* base = expr->getBase();
+    const Expr* indexExpr = expr->getIndexExpr();
+
+    const EvaluatedType indexType = indexExpr->getType();
+
+    // A row has no null position to read, so a null index names no field here, unlike the
+    // one a list or a map answers
+    if (indexType != EvaluatedType::Integer) {
+        throwError(fmt::format("Index expression must be an integer, not '{}'",
+                               EvaluatedTypeName::value(indexType)), expr);
     }
 
     // Detect literal index for compile-time optimization
