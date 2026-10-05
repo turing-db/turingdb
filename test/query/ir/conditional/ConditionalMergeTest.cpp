@@ -73,3 +73,27 @@ TEST_F(ConditionalMergeTest, padsAnOptionalCallReturningAMergedEntity) {
                     "SET n.age = 7 RETURN name, n.age",
                     {{"Nia", "7"}, {"Remy", "null"}});
 }
+
+TEST_F(ConditionalMergeTest, mergesInTheBranchOfAStandaloneConditional) {
+    expectWriteRows("WHEN true THEN { MERGE (n:Person {name: 'Nia'}) RETURN n.name AS name } "
+                    "ELSE { MATCH (n:Person {name: 'Remy'}) RETURN n.name AS name }",
+                    {{"Nia"}});
+
+    expectRows("MATCH (p:Person {name: 'Nia'}) RETURN count(p)", {{"1"}});
+}
+
+TEST_F(ConditionalMergeTest, mergesNothingInABranchNotTaken) {
+    expectWriteRows("WHEN false THEN { MERGE (:Person {name: 'Nia'}) } ELSE { CREATE (:Badge) }", {});
+
+    expectRows("MATCH (p:Person {name: 'Nia'}) RETURN count(p)", {{"0"}});
+    expectRows("MATCH (b:Badge) RETURN count(b)", {{"1"}});
+}
+
+TEST_F(ConditionalMergeTest, mergesInTheBranchOfACallWithNoInput) {
+    expectWriteRows("CALL () { "
+                    "WHEN false THEN { MATCH (n:Person {name: 'Remy'}) RETURN n } "
+                    "ELSE { MERGE (n:Person {name: 'Nia'}) RETURN n } "
+                    "} "
+                    "RETURN n.name",
+                    {{"Nia"}});
+}
