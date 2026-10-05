@@ -68,17 +68,11 @@ void GetInEdgesByTypeAndLabelChunkWriter::fill(size_t maxCount) {
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
-            const std::span<const EdgeID> rowExcluded = _excluded.isSet() ? _excluded.rowEdges(index) : std::span<const EdgeID> {};
-            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
-                const DataPart* part = _partIt.get();
-                _heldInRun = ExcludedEdges::countInInRun(rowExcluded, part->edges(), *_nodeIt);
-            }
+            const DataPart* part = _partIt.get();
+            const std::span<const EdgeID> rowExcluded = _excluded.enterInRun(index, _edgeIt == _edges.begin(), part->edges(), *_nodeIt, _heldInRun);
 
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
-                const bool excluded = _heldInRun > 0 && ExcludedEdges::holds(rowExcluded, _edgeIt->_edgeID);
-                if (excluded) {
-                    _heldInRun--;
-                }
+                const bool excluded = ExcludedEdges::leavesOut(rowExcluded, _edgeIt->_edgeID, _heldInRun);
 
                 if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID) && !excluded) {
                     const LabelSetHandle sourceLabels = reader.getNodeLabelSet(_edgeIt->_otherID);

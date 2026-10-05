@@ -16,6 +16,48 @@ bool ExcludedEdges::repeatsEarlier(std::span<const EdgeID> edges, size_t positio
     return std::find(edges.begin(), earlierEnd, edges[position]) != earlierEnd;
 }
 
+std::span<const EdgeID> ExcludedEdges::enterOutRun(size_t row, bool runStarts, const EdgeContainer& part, std::span<const EdgeRecord> outRun, size_t& held) const {
+    if (!isSet()) {
+        return {};
+    }
+
+    const std::span<const EdgeID> excluded = rowEdges(row);
+    if (runStarts) {
+        held = countInOutRun(excluded, part, outRun);
+    }
+
+    return excluded;
+}
+
+std::span<const EdgeID> ExcludedEdges::enterInRun(size_t row, bool runStarts, const EdgeContainer& part, NodeID node, size_t& held) const {
+    if (!isSet()) {
+        return {};
+    }
+
+    const std::span<const EdgeID> excluded = rowEdges(row);
+    if (runStarts) {
+        held = countInInRun(excluded, part, node);
+    }
+
+    return excluded;
+}
+
+bool ExcludedEdges::leavesOut(std::span<const EdgeID> excluded, EdgeID edge, size_t& held) {
+    const bool leftOut = held > 0 && holds(excluded, edge);
+    if (leftOut) {
+        held--;
+    }
+
+    return leftOut;
+}
+
+size_t ExcludedEdges::dropHeld(size_t sliceSize, size_t& held) {
+    const size_t dropped = std::min(held, sliceSize);
+    held -= dropped;
+
+    return dropped;
+}
+
 size_t ExcludedEdges::countInOutRun(std::span<const EdgeID> excluded, const EdgeContainer& part, std::span<const EdgeRecord> outRun) {
     if (outRun.empty()) {
         return 0;
@@ -54,7 +96,7 @@ size_t ExcludedEdges::countInInRun(std::span<const EdgeID> excluded, const EdgeC
 }
 
 size_t ExcludedEdges::copyRunLeavingOut(std::span<const EdgeID> excluded,
-                                        size_t held,
+                                        size_t& held,
                                         std::span<const EdgeRecord> run,
                                         size_t begin,
                                         const EdgeContainer* outPart,
@@ -136,5 +178,8 @@ size_t ExcludedEdges::copyRunLeavingOut(std::span<const EdgeID> excluded,
         types->resize(written);
     }
 
-    return written;
+    const size_t leftOut = begin + count - written;
+    held -= leftOut;
+
+    return leftOut;
 }
