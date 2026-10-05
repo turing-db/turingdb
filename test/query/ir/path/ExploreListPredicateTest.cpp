@@ -228,3 +228,31 @@ TEST_F(ExploreListPredicateTest, leavesAPredicateTheQueryAlsoReturns) {
     expectNotFused("MATCH p = (a)-[*1..3]->(b) WITH a, b, all(r IN relationships(p) WHERE r.duration > 10) AS ok "
                    "WHERE ok RETURN a.name, b.name, ok");
 }
+
+TEST_F(ExploreListPredicateTest, movesALiteralTestIntoTheWalk) {
+    const std::string_view filtered = "MATCH p = (a:Person)-[*0..2]->(b) WHERE all(r IN relationships(p) WHERE false) "
+                                      "RETURN a.name, b.name, relationships(p)";
+    const std::string_view reference = "MATCH p = (a:Person)-[*0..2]->(b) RETURN a.name, b.name, relationships(p), "
+                                       "CASE WHEN all(r IN relationships(p) WHERE false) THEN 'kept' ELSE 'dropped' END";
+
+    expectFused(filtered);
+    expectKeptRows(filtered, reference);
+
+    StringRowSink all;
+    runQuery("MATCH p = (a:Person)-[*0..2]->(b) RETURN count(*)", all);
+    ASSERT_EQ(all.getRows().size(), 1u);
+
+    expectFused("MATCH p = (a:Person)-[*0..2]->(b) WHERE all(n IN nodes(p) WHERE true) RETURN count(*)");
+    expectCount("MATCH p = (a:Person)-[*0..2]->(b) WHERE all(n IN nodes(p) WHERE true) RETURN count(*)",
+                all.getRows().front().front());
+}
+
+TEST_F(ExploreListPredicateTest, leavesADivisionTheWalkWouldRunOnUnreturnedHops) {
+    // Martina -> Cooking has duration 10 and ends on no Person: moved into the walk, the test
+    // would divide by zero on a hop no returned path takes
+    const std::string_view query = "MATCH p = (a)-[*1..3]->(b:Person) "
+                                   "WHERE all(r IN relationships(p) WHERE 100 / (r.duration - 10) > -1000) RETURN count(*)";
+
+    expectNotFused(query);
+    expectCount(query, "10");
+}
