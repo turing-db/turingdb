@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "datapart/DataPart.h"
+#include "datapart/NodeOwnerPart.h"
 #include "indexers/EdgeIndexer.h"
 
 using namespace db;
@@ -31,12 +32,7 @@ PartDirectory::~PartDirectory() {
 }
 
 size_t PartDirectory::ownerIndex(NodeID node) const {
-    const auto afterOwner = std::upper_bound(_firstNodeIDs.begin(), _firstNodeIDs.end(), node);
-    if (afterOwner == _firstNodeIDs.begin()) {
-        return _entries.size();
-    }
-
-    return static_cast<size_t>(afterOwner - _firstNodeIDs.begin()) - 1;
+    return findNodeOwnerPart(_firstNodeIDs, node);
 }
 
 std::span<const size_t> PartDirectory::patchPartsAfter(size_t ownerIndex) const {
