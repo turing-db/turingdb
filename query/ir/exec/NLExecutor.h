@@ -664,6 +664,9 @@ public:
     // alone cuts down to the one row it holds or to no row at all.
     static NLCopyFunction selectConstCopyFunction();
 
+    // Gather for a constant chunk, whose one value stands for every row gathered
+    static NLGatherFunction selectConstGatherFunction();
+
     // Range copy for a nullable value chunk of this value type (skip suffix copy).
     static NLCopyFunction selectOptCopyFunction(ValueType valueType);
     static NLCopyFunction selectOptCopyFunction(NLChunkKind kind);

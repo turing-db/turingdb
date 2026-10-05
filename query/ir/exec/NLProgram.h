@@ -298,12 +298,11 @@ using NLBroadcastFunction = void (*)(const Column* input,
                                      Column* output);
 
 // One column a hop predicate reads from outside the hop: the loop's own column, and the
-// chunk the region's argument reads, filled with the seed row's value before each run by
-// the block-repeat whose one block is that row
+// chunk the region's argument reads, gathered at each candidate's seed row before each run
 struct NLHopImport {
     const Column* _source {nullptr};
     Column* _chunk {nullptr};
-    NLBroadcastFunction _broadcast {nullptr};
+    NLGatherFunction _gather {nullptr};
 };
 
 // Type of handle that appends the indices of the rows an nl.filter keeps into the

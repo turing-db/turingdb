@@ -12,6 +12,7 @@
 #include "PartDirectory.h"
 #include "PathCycleTable.h"
 #include "PathExplorationDir.h"
+#include "PathHopFilter.h"
 #include "PathReachTable.h"
 #include "PathTargetIndex.h"
 #include "versioning/PendingAdjacency.h"
@@ -25,7 +26,6 @@
 namespace db {
 
 class PathDistanceIndex;
-class PathHopFilter;
 class PathTrie;
 class Tombstones;
 
@@ -167,6 +167,8 @@ private:
         PathReachTable _reached;
         std::vector<NodeID> _frontier;
         std::vector<NodeID> _next;
+        std::vector<PathHopFrame> _frames;
+        std::vector<uint64_t> _frameWords;
         std::vector<NodeID> _candidateNodes;
         std::vector<EdgeID> _candidateEdges;
         size_t _batchFirstRow {0};
@@ -333,7 +335,11 @@ private:
     void discoverComponentNode(NodeID node, EdgeID parentEdge);
     void emitGainedRows(size_t maxCount);
     void expandLevel();
+    void reachFrames();
     void collectReachCandidates(NodeID node);
+    void appendReachFrame(NodeID node);
+    void filterReachFrames();
+    void clearReachFrames();
     void appendReachCandidates(std::span<const EdgeRecord> edges);
     void appendPendingReachCandidates(NodeID node);
     void finishBatch();

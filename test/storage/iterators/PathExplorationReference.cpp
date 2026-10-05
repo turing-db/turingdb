@@ -148,14 +148,22 @@ PredicateHopFilter::PredicateHopFilter(HopPredicate predicate)
 PredicateHopFilter::~PredicateHopFilter() {
 }
 
-size_t PredicateHopFilter::filter(size_t seedRow, NodeID source, std::span<NodeID> nodes, std::span<EdgeID> edges) {
+size_t PredicateHopFilter::filter(std::span<PathHopFrame> frames, std::span<NodeID> nodes, std::span<EdgeID> edges) {
+    size_t candidate = 0;
     size_t kept = 0;
-    for (size_t candidate = 0; candidate < edges.size(); candidate++) {
-        if (_predicate(source.getValue(), edges[candidate].getValue(), nodes[candidate].getValue())) {
-            nodes[kept] = nodes[candidate];
-            edges[kept] = edges[candidate];
-            kept++;
+    for (PathHopFrame& frame : frames) {
+        const size_t frameEnd = candidate + frame._candidateCount;
+        const size_t frameBegin = kept;
+
+        for (; candidate < frameEnd; candidate++) {
+            if (_predicate(frame._source.getValue(), edges[candidate].getValue(), nodes[candidate].getValue())) {
+                nodes[kept] = nodes[candidate];
+                edges[kept] = edges[candidate];
+                kept++;
+            }
         }
+
+        frame._candidateCount = kept - frameBegin;
     }
 
     return kept;

@@ -86,13 +86,13 @@ private:
                  std::vector<PathRow>& rows);
 };
 
-// Applies a hop predicate to a frame the way the query engine will: compacting the spans
+// Applies a hop predicate to a batch of frames the way the query engine will: compacting the spans
 class PredicateHopFilter : public db::PathHopFilter {
 public:
     explicit PredicateHopFilter(HopPredicate predicate);
     ~PredicateHopFilter() override;
 
-    size_t filter(size_t seedRow, db::NodeID source, std::span<db::NodeID> nodes, std::span<db::EdgeID> edges) override;
+    size_t filter(std::span<db::PathHopFrame> frames, std::span<db::NodeID> nodes, std::span<db::EdgeID> edges) override;
 
 private:
     HopPredicate _predicate {nullptr};

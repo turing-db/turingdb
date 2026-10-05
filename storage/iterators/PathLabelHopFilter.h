@@ -24,8 +24,7 @@ public:
                        const PendingAdjacency* pendingAdjacency);
     ~PathLabelHopFilter() override;
 
-    size_t filter(size_t seedRow,
-                  NodeID source,
+    size_t filter(std::span<PathHopFrame> frames,
                   std::span<NodeID> candidateNodes,
                   std::span<EdgeID> candidateEdges) override;
 

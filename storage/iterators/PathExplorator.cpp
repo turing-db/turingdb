@@ -6,7 +6,6 @@
 
 #include "EdgeTypeMatch.h"
 #include "PathDistanceIndex.h"
-#include "PathHopFilter.h"
 #include "datapart/NodeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "list/PathTrie.h"
@@ -20,6 +19,11 @@ namespace {
 
 // How many frontier nodes ahead the distinct mode's search fetches adjacency
 constexpr size_t frontierLookahead = 16;
+
+// The candidates a level search gathers before filtering them in one call. A directed
+// distinct walk under a hop predicate on reactome took 18.9 ms at one call a node, 18.6 to
+// 18.8 ms at 256 to 4096 candidates and 19.6 ms at 64Ki.
+constexpr size_t REACH_BATCH_CANDIDATES = 4096;
 
 constexpr size_t initialKeySetSlots = 1024;
 
@@ -818,7 +822,8 @@ void PathExplorator::descend(NodeID node) {
     if (_hopFilter && end > begin) {
         const std::span<NodeID> candidateNodes(_candidateNodes.data() + begin, end - begin);
         const std::span<EdgeID> candidateEdges(_candidateEdges.data() + begin, end - begin);
-        const size_t survivors = _hopFilter->filter(_seedRow, node, candidateNodes, candidateEdges);
+        PathHopFrame frame {._seedRow = _seedRow, ._source = node, ._candidateCount = end - begin};
+        const size_t survivors = _hopFilter->filter({&frame, 1}, candidateNodes, candidateEdges);
 
         end = begin + survivors;
         _candidateNodes.resize(end);
@@ -1190,21 +1195,29 @@ uint64_t PathExplorator::searchCycles(uint64_t seeds) {
     const std::vector<EdgeID>& candidateEdges = _reach._candidateEdges;
     const size_t firstRow = _reach._batchFirstRow;
 
+    clearReachFrames();
+    for (uint64_t remaining = seeds; remaining != 0; remaining &= remaining - 1) {
+        appendReachFrame((*_input)[firstRow + std::countr_zero(remaining)]);
+    }
+    filterReachFrames();
+
     uint64_t closed = 0;
     size_t widestDegree = 0;
+    size_t seedFrame = 0;
+    size_t seedCandidate = 0;
     for (uint64_t remaining = seeds; remaining != 0; remaining &= remaining - 1) {
         const unsigned bit = std::countr_zero(remaining);
         const NodeID seed = (*_input)[firstRow + bit];
         std::vector<CycleSearch::FirstHop>& hops = search._firstHops[bit];
+        const size_t frameEnd = seedCandidate + _reach._frames[seedFrame]._candidateCount;
+        seedFrame++;
 
         hops.clear();
-        collectReachCandidates(seed);
-
-        for (size_t index = 0; index < candidateNodes.size(); index++) {
-            if (candidateNodes[index] == seed) {
+        for (; seedCandidate < frameEnd; seedCandidate++) {
+            if (candidateNodes[seedCandidate] == seed) {
                 closed |= 1ull << bit;
             } else {
-                hops.push_back(CycleSearch::FirstHop {._edge = candidateEdges[index], ._node = candidateNodes[index]});
+                hops.push_back(CycleSearch::FirstHop {._edge = candidateEdges[seedCandidate], ._node = candidateNodes[seedCandidate]});
             }
         }
 
@@ -1259,42 +1272,68 @@ uint64_t PathExplorator::searchCycles(uint64_t seeds) {
             words[secondGainedWord] = 0;
         }
 
+        // The closed seeds are taken off again when a frame is offered: an earlier frame of
+        // its batch may have closed more since it was gathered
         const bool offers = level < _maxHops;
-        for (const NodeID node : search._frontier) {
-            const uint64_t* words = reached.reach(node);
-            const uint64_t first = words[firstFrontierWord] & ~closed;
-            const uint64_t second = words[secondFrontierWord] & ~closed;
-            if ((first | second) == 0) {
-                continue;
-            }
+        const auto offerFrames = [&]() {
+            filterReachFrames();
 
-            std::copy_n(words + identityWord, identityBits, identity.begin());
-            collectReachCandidates(node);
-
-            for (size_t index = 0; index < candidateNodes.size(); index++) {
-                const NodeID candidate = candidateNodes[index];
-                uint64_t* candidateWords = offers ? reached.reach(candidate) : reached.find(candidate);
-                if (!candidateWords) {
+            size_t index = 0;
+            for (const PathHopFrame& frame : _reach._frames) {
+                const size_t frameEnd = index + frame._candidateCount;
+                const uint64_t* words = reached.reach(frame._source);
+                const uint64_t first = words[firstFrontierWord] & ~closed;
+                const uint64_t second = words[secondFrontierWord] & ~closed;
+                if ((first | second) == 0) {
+                    index = frameEnd;
                     continue;
                 }
 
-                const uint64_t seedsThere = candidateWords[seedsWord];
-                const uint64_t returning = (first | second) & seedsThere;
-                if (returning != 0) {
-                    closed |= closingReturns(returning, second, identity, candidateEdges[index]);
-                }
+                std::copy_n(words + identityWord, identityBits, identity.begin());
 
-                if (offers) {
-                    const bool waiting = hasGains(candidateWords);
-                    offerFirstArrival(candidateWords, first & ~seedsThere, identity);
-                    offerSecondArrival(candidateWords, second & ~seedsThere, identity);
+                for (; index < frameEnd; index++) {
+                    const NodeID candidate = candidateNodes[index];
+                    uint64_t* candidateWords = offers ? reached.reach(candidate) : reached.find(candidate);
+                    if (!candidateWords) {
+                        continue;
+                    }
 
-                    if (!waiting && hasGains(candidateWords)) {
-                        search._next.push_back(candidate);
+                    const uint64_t seedsThere = candidateWords[seedsWord];
+                    const uint64_t returning = (first | second) & seedsThere;
+                    if (returning != 0) {
+                        closed |= closingReturns(returning, second, identity, candidateEdges[index]);
+                    }
+
+                    if (offers) {
+                        const bool waiting = hasGains(candidateWords);
+                        offerFirstArrival(candidateWords, first & ~seedsThere, identity);
+                        offerSecondArrival(candidateWords, second & ~seedsThere, identity);
+
+                        if (!waiting && hasGains(candidateWords)) {
+                            search._next.push_back(candidate);
+                        }
                     }
                 }
             }
+
+            clearReachFrames();
+        };
+
+        clearReachFrames();
+        for (const NodeID node : search._frontier) {
+            const uint64_t* words = reached.reach(node);
+            const uint64_t open = (words[firstFrontierWord] | words[secondFrontierWord]) & ~closed;
+            if (open == 0) {
+                continue;
+            }
+
+            appendReachFrame(node);
+            if (_reach._candidateNodes.size() >= REACH_BATCH_CANDIDATES) {
+                offerFrames();
+            }
         }
+
+        offerFrames();
     }
 
     return closed & seeds;
@@ -1361,6 +1400,8 @@ void PathExplorator::expandLevel() {
     reach._emitBits = 0;
     reach._level++;
 
+    clearReachFrames();
+
     // The frontier is known ahead, so each node's adjacency is fetched a few nodes before
     // the level reaches it
     const size_t frontierSize = reach._frontier.size();
@@ -1375,12 +1416,37 @@ void PathExplorator::expandLevel() {
         // table under the expanded slot
         const NodeID node = reach._frontier[index];
         PathReachTable::Slot& expanded = reached.get(node);
-        const uint64_t word = expanded._frontier;
+        reach._frameWords.push_back(expanded._frontier);
         expanded._frontier = 0;
 
-        collectReachCandidates(node);
+        appendReachFrame(node);
+        if (reach._candidateNodes.size() >= REACH_BATCH_CANDIDATES) {
+            reachFrames();
+        }
+    }
 
-        for (const NodeID candidate : reach._candidateNodes) {
+    reachFrames();
+
+    for (const NodeID node : reach._next) {
+        PathReachTable::Slot& slot = reached.get(node);
+        slot._frontier = slot._gained;
+        slot._gained = 0;
+    }
+}
+
+void PathExplorator::reachFrames() {
+    Reachability& reach = _reach;
+    PathReachTable& reached = reach._reached;
+
+    filterReachFrames();
+
+    size_t index = 0;
+    for (size_t frame = 0; frame < reach._frames.size(); frame++) {
+        const uint64_t word = reach._frameWords[frame];
+        const size_t frameEnd = index + reach._frames[frame]._candidateCount;
+
+        for (; index < frameEnd; index++) {
+            const NodeID candidate = reach._candidateNodes[index];
             PathReachTable::Slot& slot = reached.reach(candidate);
             const uint64_t gained = word & ~slot._seen;
             if (gained == 0) {
@@ -1395,17 +1461,18 @@ void PathExplorator::expandLevel() {
         }
     }
 
-    for (const NodeID node : reach._next) {
-        PathReachTable::Slot& slot = reached.get(node);
-        slot._frontier = slot._gained;
-        slot._gained = 0;
-    }
+    clearReachFrames();
 }
 
 void PathExplorator::collectReachCandidates(NodeID node) {
+    clearReachFrames();
+    appendReachFrame(node);
+    filterReachFrames();
+}
+
+void PathExplorator::appendReachFrame(NodeID node) {
     Reachability& reach = _reach;
-    reach._candidateNodes.clear();
-    reach._candidateEdges.clear();
+    const size_t frameBegin = reach._candidateNodes.size();
 
     appendPendingReachCandidates(node);
 
@@ -1430,11 +1497,28 @@ void PathExplorator::collectReachCandidates(NodeID node) {
         }
     }
 
-    if (_hopFilter && !reach._candidateNodes.empty()) {
-        const size_t survivors = _hopFilter->filter(reach._batchFirstRow, node, reach._candidateNodes, reach._candidateEdges);
-        reach._candidateNodes.resize(survivors);
-        reach._candidateEdges.resize(survivors);
+    reach._frames.push_back(PathHopFrame {._seedRow = reach._batchFirstRow,
+                                          ._source = node,
+                                          ._candidateCount = reach._candidateNodes.size() - frameBegin});
+}
+
+void PathExplorator::filterReachFrames() {
+    Reachability& reach = _reach;
+    if (!_hopFilter || reach._candidateNodes.empty()) {
+        return;
     }
+
+    const size_t survivors = _hopFilter->filter(reach._frames, reach._candidateNodes, reach._candidateEdges);
+    reach._candidateNodes.resize(survivors);
+    reach._candidateEdges.resize(survivors);
+}
+
+void PathExplorator::clearReachFrames() {
+    Reachability& reach = _reach;
+    reach._frames.clear();
+    reach._frameWords.clear();
+    reach._candidateNodes.clear();
+    reach._candidateEdges.clear();
 }
 
 void PathExplorator::appendPendingReachCandidates(NodeID node) {
