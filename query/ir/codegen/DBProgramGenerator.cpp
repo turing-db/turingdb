@@ -5696,9 +5696,15 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
         rebindSubqueryBranchScope(branchScopes[branchIndex], importedEntities[branchIndex]);
+        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchResults);
+    }
 
-        const mlir::Value branchDistinctSet = branchIndex < dedupedBranches ? distinctSet : mlir::Value();
-        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchDistinctSet, false, branchResults);
+    yieldEveryPendingMask(branchResults);
+
+    // The branches share one distinct set, so each dedups on the same columns: its masks
+    // included, once every branch yields them all
+    for (size_t branchIndex = 0; branchIndex < dedupedBranches; branchIndex++) {
+        dedupSubqueryBranch(distinctSet, branchIndex, branchResults);
     }
 
     typeSubqueryBranchResults(branchResults);
@@ -5739,7 +5745,7 @@ void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubquery
         }
 
         rebindSubqueryBranchScope(scope, entities);
-        generateSubqueryBranch(branch._query, bodyBlock, mlir::Value(), true, branchResults);
+        generateSubqueryBranch(branch._query, bodyBlock, branchResults);
     }
 
     yieldEveryPendingMask(branchResults);
@@ -5796,8 +5802,6 @@ void DBProgramGenerator::rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColum
 
 void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
                                                 mlir::Block* bodyBlock,
-                                                mlir::Value distinctSet,
-                                                bool carriesPendingMasks,
                                                 SubqueryBranchResults& branchResults) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
@@ -5812,7 +5816,7 @@ void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
 
     llvm::SmallVector<PublishedColumn>& branchColumns = branchResults._branchColumns.emplace_back();
     if (const ReturnStmt* returnStmt = query->getReturnStmt()) {
-        publishProjection(returnStmt->getProjection(), nullptr, carriesPendingMasks);
+        publishProjection(returnStmt->getProjection(), nullptr, true);
         collectPublishedColumns(branchColumns);
     }
 
@@ -5828,16 +5832,26 @@ void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
         }
     }
 
-    if (distinctSet) {
-        dedupUnionBranch(distinctSet, projected);
-    }
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
+    _unionBranchRowBlocks.erase(block);
+}
 
+void DBProgramGenerator::dedupSubqueryBranch(mlir::Value distinctSet,
+                                             size_t branchIndex,
+                                             SubqueryBranchResults& branchResults) {
+    mlir::db::Yield yield = mlir::cast<mlir::db::Yield>(branchResults._regions[branchIndex]->front().back());
+    _opBuilder.setInsertionPoint(yield);
+
+    const mlir::OperandRange columns = yield.getColumns();
+    llvm::SmallVector<mlir::Value> projected(columns.begin(), columns.end());
+    dedupUnionBranch(distinctSet, projected);
+
+    yield->setOperands(projected);
+
+    llvm::SmallVector<PublishedColumn>& branchColumns = branchResults._branchColumns[branchIndex];
     for (size_t columnIndex = 0; columnIndex < projected.size(); columnIndex++) {
         branchColumns[columnIndex]._column = projected[columnIndex];
     }
-
-    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
-    _unionBranchRowBlocks.erase(block);
 }
 
 void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResults) {
@@ -5874,7 +5888,7 @@ void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResu
 
         for (const std::string& name : partlyWritten) {
             const auto columnIt = std::ranges::find(branchColumns, name, &PublishedColumn::_name);
-            bioassert(columnIt != branchColumns.end(), "Column '{}' missing from a branch of a WHEN", name);
+            bioassert(columnIt != branchColumns.end(), "Column '{}' missing from a subquery branch", name);
 
             std::optional<PartScope::WrittenEntity>& written = writtenColumns[columnIt - branchColumns.begin()];
             if (!written) {
@@ -5917,7 +5931,7 @@ void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResu
                 continue;
             }
 
-            bioassert(name.starts_with(pendingMaskPrefix), "Column '{}' missing from a branch of a WHEN", name);
+            bioassert(name.starts_with(pendingMaskPrefix), "Column '{}' missing from a subquery branch", name);
 
             // None of the rows of a branch that did not write the entity is pending
             alignedColumns.push_back({nullptr, name, constantBool(false)});
@@ -6219,7 +6233,7 @@ void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection) con
         }
 
         throwError(fmt::format("A subquery cannot return '{}': a MERGE in the same query writes it, "
-                               "and what a MERGE writes is not carried out of a UNION subquery",
+                               "and what a MERGE writes is not carried out of a COUNT subquery",
                                decl->getName()),
                    projection);
     }
