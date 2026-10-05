@@ -285,8 +285,7 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
     if (!importRes) {
         _changes.deleteChange(changeAccessor, change->id());
         _graphLoadStatus.removeLoadingGraph(graphName);
-        spdlog::error(importRes.error().fmtMessage());
-        return nullptr;
+        throw TuringException(importRes.error().fmtMessage());
     }
 
     const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
