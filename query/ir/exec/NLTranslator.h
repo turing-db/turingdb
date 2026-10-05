@@ -460,8 +460,6 @@ private:
                                    NLLimitState* limit,
                                    NLStmtContainer* body);
 
-    // Allocate the filtered output of every carried column of an expansion loop, bound to
-    // the loop variables from firstCarriedArgument on, with the gather that fills it
     template <typename HopOp>
     void readDistinctFrom(HopOp hop, IteratorConfig& config);
 
@@ -469,6 +467,8 @@ private:
     // the edge ones and the path ones apart
     void bindExcludedColumns(const IteratorConfig& config, NLExpansionLoopData* loopData);
 
+    // Allocate the filtered output of every carried column of an expansion loop, bound to
+    // the loop variables from firstCarriedArgument on, with the gather that fills it
     void bindCarriedColumns(const IteratorConfig& config,
                             mlir::Block& loopBody,
                             size_t firstCarriedArgument,

@@ -80,7 +80,6 @@ public:
     // so it must outlive the hop.
     void setEndpointLabelSet(const LabelSet& labelset);
 
-    // The edges each input row of the hop may not repeat
     void setExcludedEdges(const ExcludedEdges& excluded);
 
     bool isValid() const { return _row < _inputNodeIDs->size(); }

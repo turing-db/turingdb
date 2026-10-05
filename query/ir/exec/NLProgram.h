@@ -1454,10 +1454,10 @@ public:
     const EdgePairs& edgePairs() const { return _edgePairs; }
     void addEdgePair(const NLCrossEdgePair& pair) { _edgePairs.push_back(pair); }
 
-    // Scratch the loop reuses from one run to the next: one side's edges sorted with their
-    // rows, and the positions of the pairs left out
-    EdgeIndex& edgeIndex() { return _edgeIndex; }
-    std::vector<size_t>& holes() { return _holes; }
+    // Scratch the loop reuses from one run to the next: each pair's inner edges sorted with
+    // their rows, and the inner rows left out for the outer row the walk is at
+    std::vector<EdgeIndex>& edgeIndexes() { return _edgeIndexes; }
+    std::vector<size_t>& rowHoles() { return _rowHoles; }
 
     // The governing limit counter, or null for an unbounded loop. The loop stops
     // once it reaches zero and a step lays out at most that many pairs; it never
@@ -1474,8 +1474,8 @@ private:
     const Column* _outerRows {nullptr};
     const Column* _innerRows {nullptr};
     EdgePairs _edgePairs;
-    EdgeIndex _edgeIndex;
-    std::vector<size_t> _holes;
+    std::vector<EdgeIndex> _edgeIndexes;
+    std::vector<size_t> _rowHoles;
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };

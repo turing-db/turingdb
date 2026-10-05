@@ -35,7 +35,7 @@ LabelSetID findNodeLabelSet(std::span<const NodeID> firstNodeIDs, std::span<cons
     return labelSet.getID();
 }
 
-constexpr size_t embeddingArcVisitBudget = 200000;
+constexpr size_t EMBEDDING_ARC_VISIT_BUDGET = 200000;
 
 // A depth-first search for the embedding, one pattern edge at a time, taking next the edge
 // with the most ends already placed so that each step scans the arcs at a placed node
@@ -166,7 +166,7 @@ private:
 
         bool embedded = false;
         for (const SchemaArc& arc : _arcs) {
-            if (++_visits > embeddingArcVisitBudget) {
+            if (++_visits > EMBEDDING_ARC_VISIT_BUDGET) {
                 embedded = true;
                 break;
             }

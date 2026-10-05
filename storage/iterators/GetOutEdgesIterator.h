@@ -80,7 +80,6 @@ public:
     void setTgtIDs(ColumnNodeIDs* tgts) { _tgts = tgts; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
-    // The edges each input row of the hop may not repeat
     void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
 
 private:

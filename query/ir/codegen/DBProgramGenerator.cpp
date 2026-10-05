@@ -139,10 +139,6 @@ std::string_view toStringView(llvm::StringRef text) {
     return std::string_view(text.data(), text.size());
 }
 
-llvm::StringRef toStringRef(std::string_view text) {
-    return llvm::StringRef(text.data(), text.size());
-}
-
 // The name the query knows an edge by: a named edge's occurrences are listed under its
 // declaration, an anonymous one is the dependency graph's own
 std::string_view edgeQueryName(const VariableDependency* edge, const VarDecl* identity) {
@@ -2612,7 +2608,7 @@ void DBProgramGenerator::collectEdgesToDiffer(const VariableDependency* edge,
                                               llvm::SmallVectorImpl<llvm::StringRef>& names) {
     const size_t clause = _vdg.clauseOf(edge);
     const VarDecl* identity = edgeIdentityOf(edge);
-    names.push_back(toStringRef(edgeQueryName(edge, identity)));
+    names.push_back(edgeQueryName(edge, identity));
 
     for (const VariableDependency* bound : _part._boundEdges) {
         const bool sameClause = _vdg.clauseOf(bound) == clause;
@@ -2634,7 +2630,7 @@ void DBProgramGenerator::collectEdgesToDiffer(const VariableDependency* edge,
         }
 
         others.push_back(column);
-        names.push_back(toStringRef(edgeQueryName(bound, boundIdentity)));
+        names.push_back(edgeQueryName(bound, boundIdentity));
     }
 }
 

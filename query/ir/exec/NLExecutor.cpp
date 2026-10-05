@@ -1518,60 +1518,95 @@ void tileColumn(const Column* input, size_t factor, size_t position, size_t rowC
 
 // The pairs of a cross product that distinct_from leaves out, as positions i*M + j in the
 // order the product walks them: outer row i with each inner row j holding i's edge in one
-// of the edge pairs. Each pair's columns are joined by sorting the smaller side's edges
-// with their rows and looking the larger side's up, so a run costs the larger side once.
+// of the edge pairs. Each pair's inner edges are sorted with their rows once, and an outer
+// row's left-out inner rows are looked up when the walk reaches that row.
 class CrossProductHoles {
 public:
     CrossProductHoles(NLCrossProductLoopData* loopData, size_t outerRowCount, size_t innerRowCount)
-        : _holes(loopData->holes()),
-        _productRowCount(outerRowCount * innerRowCount)
+        : _pairs(loopData->edgePairs()),
+        _indexes(loopData->edgeIndexes()),
+        _rowHoles(loopData->rowHoles()),
+        _outerRowCount(outerRowCount),
+        _innerRowCount(innerRowCount)
     {
-        _holes.clear();
-
-        NLCrossProductLoopData::EdgeIndex& index = loopData->edgeIndex();
-        for (const NLCrossEdgePair& pair : loopData->edgePairs()) {
-            const std::vector<EdgeID>& outerEdges = pair._outer->getRaw();
-            const std::vector<EdgeID>& innerEdges = pair._inner->getRaw();
-            const bool indexesTheOuterSide = outerEdges.size() <= innerEdges.size();
-            const std::vector<EdgeID>& indexed = indexesTheOuterSide ? outerEdges : innerEdges;
-            const std::vector<EdgeID>& probing = indexesTheOuterSide ? innerEdges : outerEdges;
-
-            index.resize(indexed.size());
-            for (size_t row = 0; row < indexed.size(); row++) {
-                index[row] = {indexed[row], row};
-            }
-            std::sort(index.begin(), index.end());
-
-            for (size_t probeRow = 0; probeRow < probing.size(); probeRow++) {
-                const EdgeID edge = probing[probeRow];
-                auto match = std::lower_bound(index.begin(), index.end(), std::make_pair(edge, size_t {0}));
-
-                for (; match != index.end() && match->first == edge; match++) {
-                    const size_t outerRow = indexesTheOuterSide ? match->second : probeRow;
-                    const size_t innerRow = indexesTheOuterSide ? probeRow : match->second;
-                    _holes.push_back(outerRow * innerRowCount + innerRow);
-                }
-            }
+        if (_pairs.empty()) {
+            _outerRow = _outerRowCount;
+            return;
         }
 
-        std::sort(_holes.begin(), _holes.end());
-        _holes.erase(std::unique(_holes.begin(), _holes.end()), _holes.end());
+        _indexes.resize(_pairs.size());
+        for (size_t pair = 0; pair < _pairs.size(); pair++) {
+            const std::vector<EdgeID>& innerEdges = _pairs[pair]._inner->getRaw();
+            NLCrossProductLoopData::EdgeIndex& index = _indexes[pair];
+
+            index.resize(innerEdges.size());
+            for (size_t row = 0; row < innerEdges.size(); row++) {
+                index[row] = {innerEdges[row], row};
+            }
+            std::sort(index.begin(), index.end());
+        }
+
+        collectRowHoles();
+        skipRowsWithoutHoles();
     }
 
     // The first left-out position at or after @p position, or the product's row count. The
-    // walk only moves forward, so the cursor does too.
+    // walk only moves forward, so the outer row and the cursor do too.
     size_t next(size_t position) {
-        while (_cursor < _holes.size() && _holes[_cursor] < position) {
+        while (current() < position) {
             _cursor++;
+            skipRowsWithoutHoles();
         }
 
-        return _cursor < _holes.size() ? _holes[_cursor] : _productRowCount;
+        return current();
     }
 
 private:
-    std::vector<size_t>& _holes;
-    size_t _productRowCount {0};
+    const NLCrossProductLoopData::EdgePairs& _pairs;
+    std::vector<NLCrossProductLoopData::EdgeIndex>& _indexes;
+    std::vector<size_t>& _rowHoles;
+    size_t _outerRowCount {0};
+    size_t _innerRowCount {0};
+    size_t _outerRow {0};
     size_t _cursor {0};
+
+    size_t current() const {
+        if (_outerRow >= _outerRowCount) {
+            return _outerRowCount * _innerRowCount;
+        }
+
+        return _outerRow * _innerRowCount + _rowHoles[_cursor];
+    }
+
+    void skipRowsWithoutHoles() {
+        while (_outerRow < _outerRowCount && _cursor >= _rowHoles.size()) {
+            _outerRow++;
+            _cursor = 0;
+            collectRowHoles();
+        }
+    }
+
+    void collectRowHoles() {
+        _rowHoles.clear();
+        if (_outerRow >= _outerRowCount) {
+            return;
+        }
+
+        for (size_t pair = 0; pair < _pairs.size(); pair++) {
+            const EdgeID edge = _pairs[pair]._outer->getRaw()[_outerRow];
+            const NLCrossProductLoopData::EdgeIndex& index = _indexes[pair];
+
+            auto match = std::lower_bound(index.begin(), index.end(), std::make_pair(edge, size_t {0}));
+            for (; match != index.end() && match->first == edge; match++) {
+                _rowHoles.push_back(match->second);
+            }
+        }
+
+        if (_pairs.size() > 1) {
+            std::sort(_rowHoles.begin(), _rowHoles.end());
+            _rowHoles.erase(std::unique(_rowHoles.begin(), _rowHoles.end()), _rowHoles.end());
+        }
+    }
 };
 
 // Constant broadcast: the one value a ColumnConst holds is laid out over every row
@@ -6700,9 +6735,7 @@ void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData
 
     // Walk the pairs a chunk at a time, a step gathering the slices between the pairs
     // distinct_from leaves out until it is full. Under a limit the step is cut to what the
-    // budget can still emit - the pairs come out in (outer, inner) order, so the step's
-    // prefix is exactly what the nl.limit_update/nl.output below can take, and the loop
-    // stops once the budget is spent, as a scan's loop does.
+    // budget can still emit, and the loop stops once it is spent, as a scan's loop does.
     size_t position = 0;
     while (position < productRowCount) {
         const size_t remaining = limit ? limit->getRemaining() : productRowCount;
