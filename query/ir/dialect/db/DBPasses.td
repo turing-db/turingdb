@@ -109,7 +109,7 @@ def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
 }
 
 def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
-    let summary = "Replace the hop region of a path exploration that only asks each hop's end node for labels with those labels";
+    let summary = "Move the labels the hop region of a path exploration asks of each hop's end node out of the region into hop labels";
     let dependentDialects = ["mlir::db::DB"];
 }
 
