@@ -5841,8 +5841,55 @@ void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
 }
 
 void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResults) {
+    std::vector<llvm::SmallVector<PublishedColumn>>& allBranchColumns = branchResults._branchColumns;
+    std::vector<std::vector<std::optional<PartScope::WrittenEntity>>>& allWrittenColumns = branchResults._writtenColumns;
+    const size_t branchCount = branchResults._regions.size();
+
+    // A column one branch created and another did not is told apart row by row: every
+    // row of a branch that created it is pending
+    std::vector<std::string> partlyWritten;
+    for (const PublishedColumn& column : allBranchColumns.front()) {
+        size_t writtenCount = 0;
+        for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
+            const llvm::SmallVector<PublishedColumn>& branchColumns = allBranchColumns[branchIndex];
+            const auto columnIt = std::ranges::find(branchColumns, column._name, &PublishedColumn::_name);
+
+            const bool written = columnIt != branchColumns.end()
+                              && allWrittenColumns[branchIndex][columnIt - branchColumns.begin()];
+            if (written) {
+                writtenCount++;
+            }
+        }
+
+        if (writtenCount != 0 && writtenCount != branchCount) {
+            partlyWritten.push_back(column._name);
+        }
+    }
+
+    for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
+        llvm::SmallVector<PublishedColumn>& branchColumns = allBranchColumns[branchIndex];
+        std::vector<std::optional<PartScope::WrittenEntity>>& writtenColumns = allWrittenColumns[branchIndex];
+
+        _opBuilder.setInsertionPoint(&branchResults._regions[branchIndex]->front().back());
+
+        for (const std::string& name : partlyWritten) {
+            const auto columnIt = std::ranges::find(branchColumns, name, &PublishedColumn::_name);
+            bioassert(columnIt != branchColumns.end(), "Column '{}' missing from a branch of a WHEN", name);
+
+            std::optional<PartScope::WrittenEntity>& written = writtenColumns[columnIt - branchColumns.begin()];
+            if (!written) {
+                continue;
+            }
+
+            written.reset();
+
+            branchColumns.push_back({nullptr, pendingMaskName(name), constantBool(true)});
+            writtenColumns.emplace_back();
+        }
+    }
+
     std::vector<std::string> names;
-    for (const llvm::SmallVector<PublishedColumn>& branchColumns : branchResults._branchColumns) {
+    for (const llvm::SmallVector<PublishedColumn>& branchColumns : allBranchColumns) {
         for (const PublishedColumn& column : branchColumns) {
             if (!llvm::is_contained(names, column._name)) {
                 names.push_back(column._name);
@@ -5852,13 +5899,9 @@ void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResu
 
     std::ranges::sort(names);
 
-    for (size_t branchIndex = 0; branchIndex < branchResults._regions.size(); branchIndex++) {
-        llvm::SmallVector<PublishedColumn>& branchColumns = branchResults._branchColumns[branchIndex];
-        std::vector<std::optional<PartScope::WrittenEntity>>& writtenColumns = branchResults._writtenColumns[branchIndex];
-
-        if (branchColumns.size() == names.size()) {
-            continue;
-        }
+    for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
+        llvm::SmallVector<PublishedColumn>& branchColumns = allBranchColumns[branchIndex];
+        std::vector<std::optional<PartScope::WrittenEntity>>& writtenColumns = allWrittenColumns[branchIndex];
 
         mlir::db::Yield yield = mlir::cast<mlir::db::Yield>(branchResults._regions[branchIndex]->front().back());
         _opBuilder.setInsertionPoint(yield);
@@ -5876,7 +5919,7 @@ void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResu
 
             bioassert(name.starts_with(pendingMaskPrefix), "Column '{}' missing from a branch of a WHEN", name);
 
-            // None of the rows of a branch that did not merge the entity is pending
+            // None of the rows of a branch that did not write the entity is pending
             alignedColumns.push_back({nullptr, name, constantBool(false)});
             alignedWritten.emplace_back();
         }

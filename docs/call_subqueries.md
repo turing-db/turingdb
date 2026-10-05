@@ -424,7 +424,8 @@ A computation over constants alone goes into that loop too, so
 `WHEN k = 0 THEN RETURN 0 AS r ELSE RETURN 10 / k AS r` divides by no zero. The branches
 collect into one `nl.union_buffer`, as a UNION body does. A branch can return an entity a
 MERGE wrote: each branch yields the entity's pending mask, `false` in a branch that did not
-merge it. Not done yet: a UNION inside a WHEN branch, `{ WHEN ... } UNION
+write it. A column one branch created and another did not gets a mask too, `true` in each
+branch that created it. Not done yet: a UNION inside a WHEN branch, `{ WHEN ... } UNION
 { WHEN ... }`, and WHEN in an EXISTS or COUNT body.
 
 Still open: the vectorised forms of section 4, `CALL (*)`, an import

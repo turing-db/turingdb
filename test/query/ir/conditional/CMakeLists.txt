@@ -21,3 +21,7 @@ target_link_libraries(test_query_ir_conditional_composition PRIVATE turing_ir_te
 # A WHEN branch returning an entity a MERGE wrote.
 add_turing_test(test_query_ir_conditional_merge ConditionalMergeTest.cpp)
 target_link_libraries(test_query_ir_conditional_merge PRIVATE turing_ir_test_write_query_s)
+
+# WHEN branches returning an entity one created, another merged and another matched.
+add_turing_test(test_query_ir_conditional_create_merge ConditionalCreateMergeTest.cpp)
+target_link_libraries(test_query_ir_conditional_create_merge PRIVATE turing_ir_test_write_query_s)
