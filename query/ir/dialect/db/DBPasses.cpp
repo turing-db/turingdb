@@ -5281,7 +5281,7 @@ struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
 
 // A row-wise op a re-rooted pattern recomputes over its new rows rather than carrying
 bool computesPerRow(Operation* op) {
-    return isRowWiseOp(op) || isa<ListIndex, ToNullable, GetEdgeTypes>(op);
+    return isRowWiseOp(op) || isa<ListIndex, ToNullable, GetEdgeTypes, CheckEdgeDistinct>(op);
 }
 
 bool isHop(Operation* op) {
@@ -5424,6 +5424,8 @@ bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps)
     for (Operation* const op : orderedOps) {
         if (op == pattern._root || computesPerRow(op)) {
             continue;
+        } else if (op->hasAttr(distinctFromAttributeName)) {
+            return false;
         } else if (FilterOp filter = dyn_cast<FilterOp>(op)) {
             pattern._filters.push_back(filter);
         } else if (isHop(op)) {
