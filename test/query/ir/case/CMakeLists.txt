@@ -22,3 +22,5 @@ add_call_v3_test(test_query_ir_case_entity_subject CaseEntitySubjectTest.cpp)
 
 add_turing_test(test_query_ir_case_lazy_branch CaseLazyBranchTest.cpp)
 target_link_libraries(test_query_ir_case_lazy_branch PRIVATE turing_ir_test_write_query_s)
+
+add_call_v3_test(test_query_ir_case_list_item_subject CaseListItemSubjectTest.cpp)
