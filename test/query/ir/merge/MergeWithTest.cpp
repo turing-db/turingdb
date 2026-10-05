@@ -148,12 +148,6 @@ TEST_F(MergeWithTest, rejectsAnOptionalMatchOverAMergedEntity) {
                         "An OPTIONAL MATCH cannot read what a MERGE in the same query wrote");
 }
 
-TEST_F(MergeWithTest, rejectsGroupingByAMergedEntity) {
-    expectWriteRejected("UNWIND ['Remy', 'Nia'] AS name MERGE (n:Person {name: name}) "
-                        "WITH n, count(*) AS c RETURN n.name, c",
-                        "A WITH cannot group by 'n'");
-}
-
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

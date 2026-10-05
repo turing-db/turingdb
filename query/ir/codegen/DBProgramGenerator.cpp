@@ -4183,6 +4183,21 @@ mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
     return _part._varMap.at(maskIt->second).back();
 }
 
+void DBProgramGenerator::rebindGroupedWrittenEntity(const VarDecl* decl,
+                                                    mlir::Value column,
+                                                    mlir::Value pending) {
+    const auto createdIt = _part._createdEntities.find(decl);
+    if (createdIt != end(_part._createdEntities)) {
+        PartScope::CreatedEntity& created = createdIt->second;
+
+        created._column = column;
+        created._pending = pending;
+        created._properties.clear();
+    } else if (pending) {
+        registerValue(_part._pendingMasks.at(decl), pending);
+    }
+}
+
 void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
     for (const Stmt* stmt : stmts) {
         switch (stmt->getKind()) {
@@ -5241,9 +5256,9 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
 void DBProgramGenerator::publishProjection(const Projection* projection,
                                            const WithStmt* with,
                                            bool returnsOutOfCall) {
-    const bool carriesPendingMasks = (with || returnsOutOfCall) && !projection->isAggregate();
+    const bool carriesPendingMasks = with || returnsOutOfCall;
     if (!carriesPendingMasks) {
-        throwOnPublishedMerge(projection, with);
+        throwOnPublishedMerge(projection);
     }
 
     generateGroupAggregate(projection);
@@ -5260,7 +5275,7 @@ void DBProgramGenerator::publishProjection(const Projection* projection,
     buildNamedPathItems(projection, projected);
 
     llvm::SmallVector<PublishedColumn> carriedColumns;
-    if (with && carriesPendingMasks) {
+    if (with && !projection->isAggregate()) {
         collectFilterColumns(with->filterImports(), variableColumns, carriedColumns);
     }
 
@@ -5954,19 +5969,11 @@ void DBProgramGenerator::carryWrittenEntities(const Projection* projection,
 // A MERGE's rows mix the entities it wrote with the ones it bound, and only the mask beside
 // them says which is which. Without it the rows past the cut would all be read off the
 // graph - right for the rows the merge matched, wrong for the ones it wrote
-void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection, const WithStmt* with) const {
+void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection) const {
     for (const Projection::ReturnItem& item : projection->items()) {
         const VarDecl* decl = projectedVariable(item);
         if (!findPendingMask(decl)) {
             continue;
-        }
-
-        if (projection->isAggregate()) {
-            throwError(fmt::format("A {} cannot group by '{}': a MERGE in the same query writes it, "
-                                   "and what a MERGE writes is not carried past an aggregate",
-                                   with ? "WITH" : "RETURN",
-                                   decl->getName()),
-                       projection);
         }
 
         throwError(fmt::format("A subquery cannot return '{}': a MERGE in the same query writes it, "
@@ -8891,6 +8898,43 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         aggFuncExprs.push_back(funcExpr);
     }
 
+    // The pending mask of an entity a MERGE bound is fixed by its ID, so it splits no group
+    // as a key, and as a key it is carried past the aggregate for reads to tell its rows apart
+    struct WrittenKey {
+        const VarDecl* _decl {nullptr};
+        size_t _keyIndex {0};
+        size_t _maskIndex {0};
+        bool _masked {false};
+    };
+
+    llvm::SmallVector<WrittenKey> writtenKeys;
+    const size_t itemKeyCount = keyColumns.size();
+
+    for (size_t keyIndex = 0; keyIndex < itemKeyCount; keyIndex++) {
+        const VarDecl* keyDecl = keyVarDeclAtPos[keyIndex];
+        const Expr* keyExpr = keyExprAtPos[keyIndex];
+
+        if (!keyDecl && keyExpr->getKind() == Expr::Kind::SYMBOL) {
+            keyDecl = static_cast<const SymbolExpr*>(keyExpr)->getDecl();
+        }
+
+        const mlir::Value pending = findPendingMask(keyDecl);
+        const bool writtenByACreate = _part._createdEntities.contains(keyDecl);
+        if (!pending && !writtenByACreate) {
+            continue;
+        }
+
+        WrittenKey& writtenKey = writtenKeys.emplace_back();
+        writtenKey._decl = keyDecl;
+        writtenKey._keyIndex = keyIndex;
+
+        if (pending) {
+            writtenKey._maskIndex = keyColumns.size();
+            writtenKey._masked = true;
+            keyColumns.push_back(pending);
+        }
+    }
+
     const size_t keyCount = keyColumns.size();
     const size_t aggCount = aggInputColumns.size();
     const size_t collectCount = collectInputColumns.size();
@@ -8950,7 +8994,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
     GroupedColumns groupedColumns;
 
-    for (size_t i = 0; i < keyCount; i++) {
+    for (size_t i = 0; i < itemKeyCount; i++) {
         if (keyVarDeclAtPos[i]) {
             if (keyVarAtPos[i]) {
                 registerValue(keyVarAtPos[i], results[i]);
@@ -8994,6 +9038,11 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
                 break;
             }
         }
+    }
+
+    for (const WrittenKey& writtenKey : writtenKeys) {
+        const mlir::Value pending = writtenKey._masked ? results[writtenKey._maskIndex] : mlir::Value {};
+        rebindGroupedWrittenEntity(writtenKey._decl, results[writtenKey._keyIndex], pending);
     }
 
     // The results behind the keys are the collects' lists then the reductions, or - with

@@ -523,8 +523,8 @@ private:
                               CarriedEntities& carried) const;
 
     // Rejects an item of @param projection naming an entity a MERGE wrote, where no mask can
-    // go along with it: out of a subquery, or through an aggregate
-    void throwOnPublishedMerge(const Projection* projection, const WithStmt* with) const;
+    // go along with it: out of a UNION subquery
+    void throwOnPublishedMerge(const Projection* projection) const;
 
     // Rejects a pattern of @param matchStmt that names an entity a CREATE of the same
     // query wrote, which the clause named by @param clause cannot read
@@ -625,6 +625,11 @@ private:
     // The mask saying which of a variable's rows hold a provisional ID, or a null Value
     // for a variable no write bound and for one a CREATE bound - whose every row does
     mlir::Value findPendingMask(const VarDecl* decl) const;
+
+    // Points what a write bound of @param decl at the grouped columns of an aggregate keyed
+    // on it. The property values a CREATE recorded hold the ungrouped rows, so they are
+    // dropped and a read goes to the write buffer
+    void rebindGroupedWrittenEntity(const VarDecl* decl, mlir::Value column, mlir::Value pending);
 
     void generatePropertyWrite(const PropertyExpr* propertyExpr,
                                mlir::Value valueColumn,

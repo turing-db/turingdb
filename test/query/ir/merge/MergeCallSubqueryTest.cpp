@@ -85,13 +85,6 @@ TEST_F(MergeCallSubqueryTest, setsAPropertyOfAPaddedMergedEntity) {
                     {{"Nia", "7"}, {"Remy", "null"}});
 }
 
-TEST_F(MergeCallSubqueryTest, rejectsGroupingByAMergedEntity) {
-    expectWriteRejected("UNWIND ['Remy', 'Nia'] AS name "
-                        "CALL (name) { MERGE (n:Person {name: name}) RETURN n, count(*) AS c } "
-                        "RETURN n.name, c",
-                        "A RETURN cannot group by 'n'");
-}
-
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
