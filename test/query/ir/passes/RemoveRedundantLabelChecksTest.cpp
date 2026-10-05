@@ -254,7 +254,7 @@ TEST_F(RemoveRedundantLabelChecksTest, removesACheckTwoEarlierConstraintsGuarant
 
     llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(*module);
     ASSERT_EQ(checks.size(), 1u);
-    EXPECT_EQ(checks.front().getLabels().size(), 1u);
+    EXPECT_EQ(checks.front().getConjunction().size(), 1u);
 }
 
 TEST_F(RemoveRedundantLabelChecksTest, removesACheckOverACarriedLabelledTarget) {

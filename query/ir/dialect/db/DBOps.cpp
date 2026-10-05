@@ -4,12 +4,14 @@
 #include <optional>
 
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "IRLiteralList.h"
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
+#include "LabelAlternativesFormat.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
@@ -1215,11 +1217,25 @@ LogicalResult ScanNodesByPropertyValue::verify() {
 }
 
 LogicalResult CheckLabelConstraint::verify() {
-    if (getLabels().empty()) {
-        return emitOpError("requires at least one label");
+    const ArrayAttr alternatives = getAlternatives();
+    const bool hasEmptyAlternative = llvm::any_of(alternatives, [](Attribute alternative) {
+        return cast<ArrayAttr>(alternative).empty();
+    });
+
+    if (alternatives.empty() || hasEmptyAlternative) {
+        return emitOpError("requires at least one label in every alternative");
     }
 
     return success();
+}
+
+ArrayAttr CheckLabelConstraint::getConjunction() {
+    const ArrayAttr alternatives = getAlternatives();
+    if (alternatives.size() != 1) {
+        return nullptr;
+    }
+
+    return cast<ArrayAttr>(alternatives[0]);
 }
 
 LogicalResult CheckEdgeTypeConstraint::verify() {

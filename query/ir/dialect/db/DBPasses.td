@@ -73,6 +73,11 @@ def FuseEdgeTypePredicates : Pass<"fuse_edge_type_predicates"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseLabelDisjunction : Pass<"fuse_label_disjunction"> {
+    let summary = "Combine label checks over the same nodes joined by an OR into one check with an alternative per side";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def NarrowEdgeTypeReads : Pass<"narrow_edge_type_reads"> {
     let summary = "Fold an edge-type check into the by-type read feeding it, narrowing its types";
     let dependentDialects = ["mlir::db::DB"];

@@ -170,7 +170,7 @@ TEST_F(FuseScanByNodeIDsCodegenTest, labelledDisjunctionKeepsALabelCheck) {
     // The Person test survives as a check over the listed nodes; no scan of any kind remains.
     llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(*module);
     ASSERT_EQ(checks.size(), 1u);
-    const mlir::ArrayAttr labels = checks.front().getLabels();
+    const mlir::ArrayAttr labels = checks.front().getConjunction();
     ASSERT_EQ(labels.size(), 1u);
     EXPECT_EQ(mlir::cast<mlir::StringAttr>(labels[0]).getValue(), "Person");
 

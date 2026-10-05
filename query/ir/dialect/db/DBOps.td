@@ -1675,19 +1675,27 @@ def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
 
   let description = [{
     For each LabelSetID in the input column, emits true if the node's label set
-    contains every label in `labels` (a superset match), false otherwise.
+    contains every label of at least one of `alternatives` (a superset match), false
+    otherwise. A single alternative is written flat, several are written nested.
 
       %ok = db.check_label_constraint(%ls, ["Person", "Employee"])
               : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+      %ok = db.check_label_constraint(%ls, [["Person", "Employee"], ["Interest"]])
+              : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
   }];
 
-  let arguments = (ins Column:$labelset_ids, StrArrayAttr:$labels);
+  let arguments = (ins Column:$labelset_ids, StrArrayArrayAttr:$alternatives);
   let results   = (outs Column:$result);
 
   let hasVerifier = 1;
 
+  let extraClassDeclaration = [{
+    // The labels of the sole alternative, or null when there are several
+    ::mlir::ArrayAttr getConjunction();
+  }];
+
   let assemblyFormat = [{
-    `(` $labelset_ids `,` $labels `)` attr-dict `:` functional-type(operands, results)
+    `(` $labelset_ids `,` custom<LabelAlternatives>($alternatives) `)` attr-dict `:` functional-type(operands, results)
   }];
 }
 

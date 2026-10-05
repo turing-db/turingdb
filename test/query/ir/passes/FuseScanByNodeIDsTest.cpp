@@ -291,7 +291,7 @@ TEST_F(FuseScanByNodeIDsTest, fusesLabelScanIntoConstScanWithLabelCheck) {
     mlir::db::CheckLabelConstraint check = checks.front();
     EXPECT_EQ(check.getLabelsetIds().getDefiningOp(), labelSet.getOperation());
 
-    const mlir::ArrayAttr labels = check.getLabels();
+    const mlir::ArrayAttr labels = check.getConjunction();
     ASSERT_EQ(labels.size(), 1u);
     EXPECT_EQ(mlir::cast<mlir::StringAttr>(labels[0]).getValue(), "Person");
 

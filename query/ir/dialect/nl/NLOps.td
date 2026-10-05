@@ -1219,7 +1219,8 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThrou
   let summary = "Test each label-set ID against a required-label constraint";
   let description = [{
     For each LabelSetID in the input chunk, emits true if the label set it names
-    carries every label in `labels` - a superset match.
+    carries every label of at least one of `alternatives` - a superset match. A single
+    alternative is written flat, several are written nested.
 
       nl.for %nodes in %scan {
         %ls  = nl.get_node_label_set(%nodes) : !nl.chunk<!storage.labelset_id>
@@ -1233,11 +1234,11 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThrou
     the create has been translated.
   }];
 
-  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, StrArrayAttr:$labels);
+  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, StrArrayArrayAttr:$alternatives);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $labelset_ids `,` $labels `)` attr-dict `:` qualified(type($result))
+    `(` $labelset_ids `,` custom<LabelAlternatives>($alternatives) `)` attr-dict `:` qualified(type($result))
   }];
 }
 

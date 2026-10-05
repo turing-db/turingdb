@@ -41,6 +41,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
+#define GEN_PASS_DEF_FUSELABELDISJUNCTION
 #define GEN_PASS_DEF_FUSEEDGETYPEPREDICATES
 #define GEN_PASS_DEF_NARROWEDGETYPEREADS
 #define GEN_PASS_DEF_FUSESCANOUTEDGESBYLABEL
@@ -74,6 +75,7 @@ struct LabelScanChain {
     ScanNodes scan;
     GetNodeLabelSet labelSet;
     CheckLabelConstraint check;
+    ArrayAttr labels;
 };
 
 bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
@@ -86,6 +88,11 @@ bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
 
     chain.check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
     if (!chain.check) {
+        return false;
+    }
+
+    chain.labels = chain.check.getConjunction();
+    if (!chain.labels) {
         return false;
     }
 
@@ -209,7 +216,7 @@ void fuseScanByLabel(FilterOp filter, const LabelScanChain& chain, mlir::OpBuild
     builder.setInsertionPoint(filter);
     ScanNodesByLabel scanByLabel = builder.create<ScanNodesByLabel>(filter.getLoc(),
                                                                     scan.getResult().getType(),
-                                                                    check.getLabels());
+                                                                    chain.labels);
 
     Operation* const filterOp = filter.getOperation();
     filterOp->getResult(0).replaceAllUsesWith(scanByLabel.getResult());
@@ -645,7 +652,10 @@ Value checkLabels(Value nodes, ArrayAttr labels, Location loc, mlir::OpBuilder& 
     const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
 
     GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, nodes);
-    CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), labels);
+    CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc,
+                                                                      boolType,
+                                                                      labelSet.getResult(),
+                                                                      builder.getArrayAttr({labels}));
 
     return check.getResult();
 }
@@ -1639,6 +1649,103 @@ struct FuseEdgeTypePredicates : public impl::FuseEdgeTypePredicatesBase<FuseEdge
     }
 };
 
+// A WHERE spelling a label disjunction reaches here as one check per side OR-ed together.
+// Two checks over the same nodes are one check carrying the alternatives of both.
+struct LabelDisjunction {
+    OrOp _disjunction;
+    CheckLabelConstraint _left;
+    CheckLabelConstraint _right;
+};
+
+bool matchLabelDisjunction(OrOp disjunction, LabelDisjunction& match) {
+    CheckLabelConstraint left = disjunction.getLhs().getDefiningOp<CheckLabelConstraint>();
+    CheckLabelConstraint right = disjunction.getRhs().getDefiningOp<CheckLabelConstraint>();
+    if (!left || !right) {
+        return false;
+    }
+
+    GetNodeLabelSet leftLabelSet = left.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    GetNodeLabelSet rightLabelSet = right.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    const bool overSameNodes = leftLabelSet && rightLabelSet && leftLabelSet.getInputNodes() == rightLabelSet.getInputNodes();
+    if (!overSameNodes) {
+        return false;
+    }
+
+    match = LabelDisjunction {._disjunction = disjunction, ._left = left, ._right = right};
+
+    return true;
+}
+
+CheckLabelConstraint fuseLabelDisjunction(const LabelDisjunction& match, mlir::OpBuilder& builder) {
+    OrOp disjunction = match._disjunction;
+    CheckLabelConstraint left = match._left;
+    CheckLabelConstraint right = match._right;
+
+    const ArrayAttr leftAlternatives = left.getAlternatives();
+    llvm::SmallVector<Attribute, 4> alternatives(leftAlternatives.begin(), leftAlternatives.end());
+    for (const Attribute alternative : right.getAlternatives()) {
+        if (!llvm::is_contained(alternatives, alternative)) {
+            alternatives.push_back(alternative);
+        }
+    }
+
+    builder.setInsertionPoint(disjunction);
+
+    Value disjunctionResult = disjunction.getResult();
+    CheckLabelConstraint fused = builder.create<CheckLabelConstraint>(disjunction.getLoc(),
+                                                                      disjunctionResult.getType(),
+                                                                      left.getLabelsetIds(),
+                                                                      builder.getArrayAttr(alternatives));
+
+    disjunctionResult.replaceAllUsesWith(fused.getResult());
+    disjunction.erase();
+
+    Operation* const leftOp = left.getOperation();
+    Operation* const rightOp = right.getOperation();
+    Operation* const rightLabelSetOp = right.getLabelsetIds().getDefiningOp();
+
+    eraseIfUnused(leftOp);
+    if (rightOp != leftOp) {
+        eraseIfUnused(rightOp);
+        eraseIfUnused(rightLabelSetOp);
+    }
+
+    return fused;
+}
+
+struct FuseLabelDisjunction : public impl::FuseLabelDisjunctionBase<FuseLabelDisjunction> {
+    void runOnOperation() override {
+        llvm::SmallVector<OrOp> worklist;
+        getOperation()->walk([&worklist](OrOp disjunction) {
+            worklist.push_back(disjunction);
+        });
+
+        llvm::SmallPtrSet<Operation*, 8> erased;
+        mlir::OpBuilder builder(&getContext());
+
+        while (!worklist.empty()) {
+            OrOp disjunction = worklist.pop_back_val();
+            if (erased.contains(disjunction.getOperation())) {
+                continue;
+            }
+
+            LabelDisjunction match;
+            if (!matchLabelDisjunction(disjunction, match)) {
+                continue;
+            }
+
+            erased.insert(disjunction.getOperation());
+            CheckLabelConstraint fused = fuseLabelDisjunction(match, builder);
+
+            for (Operation* const user : fused->getUsers()) {
+                if (OrOp next = dyn_cast<OrOp>(user)) {
+                    worklist.push_back(next);
+                }
+            }
+        }
+    }
+};
+
 // A type check over a read that already narrows by type is that read's types ANDed with the
 // check's: the rows that survive are the ones both keep. Folding the check into the read
 // leaves the walk to skip everything else, and the check and its filter go. A check the read
@@ -1848,6 +1955,11 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
         return false;
     }
 
+    const ArrayAttr labels = check.getConjunction();
+    if (!labels) {
+        return false;
+    }
+
     GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
     if (!labelSet) {
         return false;
@@ -1890,7 +2002,7 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
     labelledScan = EndpointLabelledEdgeScan {._scan = scan,
                                              ._labelSet = labelSet,
                                              ._check = check,
-                                             ._labels = check.getLabels(),
+                                             ._labels = labels,
                                              ._labelledTarget = labelledTarget};
 
     return true;
@@ -1965,6 +2077,11 @@ bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop)
         return false;
     }
 
+    const ArrayAttr labels = check.getConjunction();
+    if (!labels) {
+        return false;
+    }
+
     GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
     if (!labelSet) {
         return false;
@@ -2015,7 +2132,7 @@ bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop)
     labelledHop = EndpointLabelledHop {._hop = hop,
                                        ._labelSet = labelSet,
                                        ._check = check,
-                                       ._labels = check.getLabels()};
+                                       ._labels = labels};
 
     return true;
 }
@@ -2122,8 +2239,9 @@ void addFilterLabels(FilterOp filter, Value filtered, llvm::StringSet<>& labels)
         }
 
         GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-        if (labelSet && labelSet.getInputNodes() == filtered) {
-            addLabelNames(check.getLabels(), labels);
+        const ArrayAttr conjunction = check.getConjunction();
+        if (labelSet && labelSet.getInputNodes() == filtered && conjunction) {
+            addLabelNames(conjunction, labels);
         }
     }
 }
@@ -2185,7 +2303,8 @@ void collectKnownLabels(Value column, llvm::StringSet<>& labels) {
     }
 }
 
-// A label filter over nodes already known to carry every label it asks for keeps every row.
+// A label filter over nodes already known to carry every label of one of its alternatives
+// keeps every row.
 struct RedundantLabelCheck {
     CheckLabelConstraint _check;
     GetNodeLabelSet _labelSet;
@@ -2205,10 +2324,16 @@ bool matchRedundantLabelCheck(FilterOp filter, RedundantLabelCheck& redundant) {
     llvm::StringSet<> knownLabels;
     collectKnownLabels(labelSet.getInputNodes(), knownLabels);
 
-    for (const Attribute label : check.getLabels()) {
-        if (!knownLabels.contains(cast<StringAttr>(label).getValue())) {
-            return false;
-        }
+    const auto isKnown = [&knownLabels](Attribute label) {
+        return knownLabels.contains(cast<StringAttr>(label).getValue());
+    };
+
+    const auto isGuaranteed = [&isKnown](Attribute alternative) {
+        return llvm::all_of(cast<ArrayAttr>(alternative), isKnown);
+    };
+
+    if (!llvm::any_of(check.getAlternatives(), isGuaranteed)) {
+        return false;
     }
 
     redundant = RedundantLabelCheck {._check = check, ._labelSet = labelSet};
@@ -2245,11 +2370,17 @@ struct EndConstrainedExploration {
     ExplorePaths _exploration;
     GetNodeLabelSet _labelSet;
     CheckLabelConstraint _check;
+    ArrayAttr _labels;
 };
 
 bool matchEndConstrainedExploration(FilterOp filter, EndConstrainedExploration& constrained) {
     CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
     if (!check) {
+        return false;
+    }
+
+    const ArrayAttr labels = check.getConjunction();
+    if (!labels) {
         return false;
     }
 
@@ -2283,7 +2414,10 @@ bool matchEndConstrainedExploration(FilterOp filter, EndConstrainedExploration& 
         }
     }
 
-    constrained = EndConstrainedExploration {._exploration = exploration, ._labelSet = labelSet, ._check = check};
+    constrained = EndConstrainedExploration {._exploration = exploration,
+                                             ._labelSet = labelSet,
+                                             ._check = check,
+                                             ._labels = labels};
 
     return true;
 }
@@ -2310,7 +2444,7 @@ void fuseExploreEndConstraint(FilterOp filter, const EndConstrainedExploration& 
     GetNodeLabelSet labelSet = constrained._labelSet;
     CheckLabelConstraint check = constrained._check;
 
-    exploration.setEndLabelsAttr(mergedEndLabels(exploration, check.getLabels(), builder));
+    exploration.setEndLabelsAttr(mergedEndLabels(exploration, constrained._labels, builder));
 
     // The exploration now yields the rows the filter used to leave, so each column the
     // filter handed on is the one it was given.
@@ -2345,8 +2479,9 @@ CheckLabelConstraint endLabelCheckOf(Value conjunct, BlockArgument end) {
 
     GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
     const bool readsTheEnd = labelSet && labelSet.getInputNodes() == end;
+    const bool isConjunction = static_cast<bool>(check.getConjunction());
 
-    return readsTheEnd ? check : CheckLabelConstraint {};
+    return readsTheEnd && isConjunction ? check : CheckLabelConstraint {};
 }
 
 // The conjuncts of a hop region's yield, and the `and` ops joining them, each read by its
@@ -2407,7 +2542,7 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
     }
 
     for (CheckLabelConstraint check : checks) {
-        for (const Attribute label : check.getLabels()) {
+        for (const Attribute label : check.getConjunction()) {
             if (!llvm::is_contained(labels, label)) {
                 labels.push_back(label);
             }
