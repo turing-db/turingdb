@@ -111,3 +111,4 @@
 - @reference_reactome_copies_outdated.md — old reactome copies fail "File outdated"; a loadable one is in ~/.turing-uniq; rebuild from the parquet dump via JSONL; `make turingdb` before measuring
 - @reference_bench_same_shell.md — reactome timings vary up to 2x between shell processes; alternate query and control in one shell
 - @reference_build_error_filter.md — filter make output with 'error:|Error [0-9]'; a missed build failure leaves stale test binaries that still pass
+- @reference_benchgraph_hetz_bench.md — mgbench with a turingdb vendor on hetz-bench; run memgraph first for counts, cap turingdb write counts (27 MB per commit)
