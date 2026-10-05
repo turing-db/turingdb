@@ -202,6 +202,15 @@ TEST_F(LabelPredicateCodegenTest, aPatternLabelAndAWhereLabelFuseIntoTheScan) {
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
 }
 
+// The Founder filter codegen puts after the hop moves above it, onto the Person one.
+TEST_F(LabelPredicateCodegenTest, aWhereLabelOnAHopSourceJoinsThePatternLabel) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (n:Person)-->(m) WHERE n:Founder RETURN n, m");
+
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+}
+
 TEST_F(LabelPredicateCodegenTest, aConjunctionInsideADisjunctionIsOneCheck) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("MATCH (n) WHERE (n:Person AND n:Founder) OR n:Sales RETURN n");

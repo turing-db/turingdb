@@ -246,6 +246,69 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n:Person)-->(m) WHERE n:Founder AND m:Interest RETURN n: the hop sits between the
+// filter on n and the one on its source column
+const char* const labelFilterAfterAHop = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %nf = db.filter(%p, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%nf, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ls2 = db.get_node_label_set(%s) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls2, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %t1, %e1, %s1, %et1 = db.filter(%f, {%t, %e, %s, %et}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>)
+  %ls3 = db.get_node_label_set(%t1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %i = db.check_label_constraint(%ls3, ["Interest"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %t2, %e2, %s2, %et2 = db.filter(%i, {%t1, %e1, %s1, %et1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>)
+  db.output(%s2) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (n:Person)-->(m)-->(k) WHERE n:Founder RETURN n: the second hop carries n
+const char* const labelFilterOnACarriedColumn = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %nf = db.filter(%p, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %s, %e, %et, %m = db.get_out_edges(%nf, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s2, %e2, %et2, %k, %n2 = db.get_out_edges(%m, {%s}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %ls2 = db.get_node_label_set(%n2) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls2, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %n3, %k3 = db.filter(%f, {%n2, %k}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%n3) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The hop's source column is also output unfiltered, so the hop must keep every row.
+const char* const labelFilterAfterAHopReadElsewhere = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%n, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ls = db.get_node_label_set(%s) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %sf = db.filter(%f, {%s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%sf, %t) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The check is on the node the hop reaches, which no filter above the hop can see.
+const char* const labelFilterOnTheReachedEnd = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%n, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ls = db.get_node_label_set(%t) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %i = db.check_label_constraint(%ls, ["Interest"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %tf = db.filter(%i, {%t}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%tf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // A label no node carries makes its alternative match nothing, not the whole check.
 const char* const orWithAnUnknownLabel = R"mlir(
 func.func @main() {
@@ -500,6 +563,60 @@ TEST_F(FuseLabelPredicatesTest, leavesStackedFiltersOverDifferentNodesAlone) {
     EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
 }
 
+// The Founder filter moves above the hop and merges with the Person one, while the Interest
+// filter on the node the hop reaches stays below it.
+TEST_F(FuseLabelPredicatesTest, mergesALabelFilterAcrossAHop) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(labelFilterAfterAHop);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(module.get());
+    ASSERT_EQ(hops.size(), 1u);
+
+    mlir::db::FilterOp aboveHop = hops.front().getInputNodes().getDefiningOp<mlir::db::FilterOp>();
+    ASSERT_TRUE(aboveHop);
+    mlir::db::CheckLabelConstraint check = aboveHop.getMask().getDefiningOp<mlir::db::CheckLabelConstraint>();
+    ASSERT_TRUE(check);
+    expectAlternatives(check, {{"Person", "Founder"}});
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
+}
+
+TEST_F(FuseLabelPredicatesTest, mergesALabelFilterAcrossTwoHops) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(labelFilterOnACarriedColumn);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(module.get());
+    ASSERT_EQ(checks.size(), 1u);
+    expectAlternatives(checks.front(), {{"Person", "Founder"}});
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+}
+
+TEST_F(FuseLabelPredicatesTest, leavesAFilterAfterAHopReadElsewhereAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(labelFilterAfterAHopReadElsewhere);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(module.get());
+    ASSERT_EQ(hops.size(), 1u);
+    EXPECT_FALSE(hops.front().getInputNodes().getDefiningOp<mlir::db::FilterOp>());
+}
+
+TEST_F(FuseLabelPredicatesTest, leavesAFilterOnTheReachedEndAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(labelFilterOnTheReachedEnd);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(module.get());
+    ASSERT_EQ(hops.size(), 1u);
+    EXPECT_FALSE(hops.front().getInputNodes().getDefiningOp<mlir::db::FilterOp>());
+}
+
 TEST_F(FuseLabelPredicatesTest, leavesChecksOverDifferentNodesAlone) {
     expectUntouched(orOverDifferentNodes);
 }
@@ -534,6 +651,14 @@ TEST_F(FuseLabelPredicatesTest, andOverAnOrEmitsTheSameRows) {
 
 TEST_F(FuseLabelPredicatesTest, andOfTwoOrsEmitsTheSameRows) {
     expectSameRowsAfterPass(andOfTwoOrs);
+}
+
+TEST_F(FuseLabelPredicatesTest, filterAcrossAHopEmitsTheSameRows) {
+    expectSameRowsAfterPass(labelFilterAfterAHop);
+}
+
+TEST_F(FuseLabelPredicatesTest, filterAcrossTwoHopsEmitsTheSameRows) {
+    expectSameRowsAfterPass(labelFilterOnACarriedColumn);
 }
 
 TEST_F(FuseLabelPredicatesTest, unknownLabelEmitsTheSameRows) {

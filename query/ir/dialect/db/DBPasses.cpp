@@ -1905,6 +1905,107 @@ void fuseStackedLabelFilters(StackedLabelFilters& stacked, mlir::RewriterBase& r
     eraseIfUnused(innerCheck.getOperation(), rewriter);
 }
 
+// A hop repeats each node it walks from, and each column it carries, once per edge, so a label
+// filter over one of those columns keeps the rows of the nodes it would keep above the hop.
+struct LabelFilterBelowHop {
+    FilterOp _filter;
+    Operation* _hop {nullptr};
+    CheckLabelConstraint _check;
+    GetNodeLabelSet _labelSet;
+    Value _hopOperand;
+};
+
+bool matchLabelFilterBelowHop(FilterOp filter, LabelFilterBelowHop& below) {
+    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet) {
+        return false;
+    }
+
+    const Value checkedColumn = labelSet.getInputNodes();
+    Operation* const hop = checkedColumn.getDefiningOp();
+    if (!hop || !isEdgeHop(hop) || hop->getBlock() != filter->getBlock()) {
+        return false;
+    }
+
+    const size_t resultIndex = cast<OpResult>(checkedColumn).getResultNumber();
+    Value hopOperand;
+    if (resultIndex == hopInputResult(hop)) {
+        hopOperand = hop->getOperand(0);
+    } else if (resultIndex >= hopFixedResultCount) {
+        hopOperand = hop->getOperand(1 + (resultIndex - hopFixedResultCount));
+    } else {
+        return false;
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != hop) {
+            return false;
+        }
+    }
+
+    Operation* const filterOp = filter.getOperation();
+    Operation* const labelSetOp = labelSet.getOperation();
+    for (const Value result : hop->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsTheChain = user == filterOp || user == labelSetOp;
+            if (!readsTheChain) {
+                return false;
+            }
+        }
+    }
+
+    const bool chainIsPrivate = labelSet.getResult().hasOneUse() && check.getResult().hasOneUse();
+    if (!chainIsPrivate) {
+        return false;
+    }
+
+    below = LabelFilterBelowHop {._filter = filter,
+                                 ._hop = hop,
+                                 ._check = check,
+                                 ._labelSet = labelSet,
+                                 ._hopOperand = hopOperand};
+
+    return true;
+}
+
+void hoistLabelFilterAboveHop(LabelFilterBelowHop& below, mlir::RewriterBase& rewriter) {
+    Operation* const hop = below._hop;
+    CheckLabelConstraint check = below._check;
+    GetNodeLabelSet labelSet = below._labelSet;
+    const Location loc = check.getLoc();
+
+    rewriter.setInsertionPoint(hop);
+    GetNodeLabelSet hoistedLabelSet = rewriter.create<GetNodeLabelSet>(loc,
+                                                                       labelSet.getResult().getType(),
+                                                                       below._hopOperand);
+    CheckLabelConstraint hoistedCheck = rewriter.create<CheckLabelConstraint>(loc,
+                                                                              check.getResult().getType(),
+                                                                              hoistedLabelSet.getResult(),
+                                                                              check.getAlternatives());
+
+    const Operation::operand_range hopOperands = hop->getOperands();
+    FilterOp hoistedFilter = rewriter.create<FilterOp>(loc,
+                                                       hopOperands.getTypes(),
+                                                       hoistedCheck.getResult(),
+                                                       hopOperands);
+
+    const mlir::ResultRange filteredOperands = hoistedFilter.getFilteredColumns();
+    rewriter.modifyOpInPlace(hop, [hop, &filteredOperands]() {
+        hop->setOperands(filteredOperands);
+    });
+
+    FilterOp filter = below._filter;
+    rewriter.replaceOp(filter, filter.getColumnsToFilter());
+
+    eraseIfUnused(check.getOperation(), rewriter);
+    eraseIfUnused(labelSet.getOperation(), rewriter);
+}
+
 struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredicates> {
     void runOnOperation() override {
         MLIRContext* const context = &getContext();
@@ -1934,6 +2035,7 @@ struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredi
             return;
         }
 
+        runFilterWorklist<LabelFilterBelowHop>(root, matchLabelFilterBelowHop, hoistLabelFilterAboveHop);
         runFilterWorklist<StackedLabelFilters>(root, matchStackedLabelFilters, fuseStackedLabelFilters);
     }
 };
