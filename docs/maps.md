@@ -84,9 +84,33 @@ drops them too.
 Beyond that a map value is passed through and rendered, nothing more. Ordering by one,
 deduplicating on one, doing arithmetic on one and writing one back with `SET` are all rejected,
 `ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer, so they read
-as `Unsupported chunk element type`. So is `m.a.b` - a key of a map held by another map - and so
-is unwinding one, which leaves `UNWIND [{a: 1}] AS m RETURN m.a` and a key holding a list out of
-reach for now.
+as `Unsupported chunk element type`. So is `m.a.b`, a key of a map another map holds. The
+bracket form reads a key computed per row, so a key written in the query is sent to the dotted
+form - `m.key`, `xs[0].a` - and `m.a['b']` is sent there too, which leaves a nested key with no
+spelling the query can write. A key computed per row still reaches one (`m.a[k]`). So is
+unwinding
+one: `UNWIND m.l AS x` is turned away with `UNWIND requires a list, not 'MapValue'`, whatever
+the entry's tag holds.
+
+# Reading through a nested value
+
+A map value is a tagged cell, so a read through one asks the row's tag rather than the column's
+type. `m[k].b` reads `b` out of the map `m[k]` holds, and `m.l[0]` reads the first element of
+the list `m.l` holds. Where the tag says something else the key read answers a `Null`-tagged
+entry, as a key the map does not hold does, and the index answers no element at all.
+
+A key read takes a cell column wherever it takes a map column: `holdsAMapPerRow` says so in
+`DBLowering` and in the two nl verifiers, and `NLExecutor::selectMapRead` takes the `MapView`
+out of the tag. An index takes one the same way: `isIndexableChunk` admits
+`!storage.map_element`, `ListIndexImpl` carries the `MapEntryView` overloads, and
+`MapEntryKindPairs` admits their column pairs in `AllowedKinds.h`. The result is the
+`nullable<list_element>` every index gives.
+
+A map held in a list reads through those same two paths, since `xs[0]` hands back a
+`!storage.list_element` whose `MapView` tag is the map. An `UNWIND` of such a list binds its
+variable to the same cell, so `UNWIND [{a: 1}] AS m RETURN m.a` reads through one too. The
+dotted form `xs[0].a` needs a parser rule of its own (`propertyLookupExpr`), because a `.`
+after a `]` is otherwise no expression.
 
 ## Maps inside stored lists
 

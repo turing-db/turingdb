@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {a: 1}['a']",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN {a: 1}['a']\n       |        ^^^^^^^^^^^\n-------* Reading a key of a map literal is not supported yet."
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "literal",
+    "fail"
+  ],
+  "write-required": false
+}

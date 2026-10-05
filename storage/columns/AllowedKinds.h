@@ -599,11 +599,16 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<ListView, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<ListView, types::UInt64::Primitive>::Pairs,
 
+        // A list held by a map is indexed through the entry viewing it
+        MapEntryKindPairs<types::Int64::Primitive>::Pairs,
+        MapEntryKindPairs<types::UInt64::Primitive>::Pairs,
+
         std::tuple<
             KindPair<ListView, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
             KindPair<ListElementView, PropertyNull>,
-            KindPair<std::optional<ListElementView>, PropertyNull>
+            KindPair<std::optional<ListElementView>, PropertyNull>,
+            KindPair<MapEntryView, PropertyNull>
         >
     >;
 

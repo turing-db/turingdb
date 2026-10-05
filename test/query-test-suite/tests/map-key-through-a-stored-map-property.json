@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "CREATE (t:Tagged {name: 'a', attrs: {inner: {x: 1}, l: [5, 6]}}) WITH 1 AS s MATCH (t:Tagged) WITH t, 'x' AS k RETURN t.attrs.inner[k], t.attrs.l[1]",
+  "expect": {
+    "result": "t.attrs.inner[k],t.attrs.l[1]\n1,6"
+  },
+  "tags": [
+    "map",
+    "key",
+    "dynamic",
+    "stored"
+  ],
+  "write-required": true
+}

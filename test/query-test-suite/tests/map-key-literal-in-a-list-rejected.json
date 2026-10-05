@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH [{a: 1}, 2] AS xs RETURN xs[0]['a']",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | WITH [{a: 1}, 2] AS xs RETURN xs[0]['a']\n       |                               ^^^^^^^^^^\n-------* A map key known in the query is written m.key, not m['key']"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "fail"
+  ],
+  "write-required": false
+}

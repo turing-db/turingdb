@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {l: [1, 2]} AS m RETURN m.l[true]",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | WITH {l: [1, 2]} AS m RETURN m.l[true]\n       |                              ^^^^^^^^^\n-------* An index is an integer position or a string key, not 'Bool'"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "fail"
+  ],
+  "write-required": false
+}

@@ -8121,62 +8121,55 @@ void DBProgramGenerator::translateListSliceExpr(const Expr* expr, const ListSlic
 
 void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr) {
     const Expr* base = indexExpr->getBase();
-    const EvaluatedType baseType = base->getType();
-    const VarDecl* baseDecl = base->getExprVarDecl();
+    const Expr* index = indexExpr->getIndexExpr();
 
-    const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
-    const bool indexesAList = baseType == EvaluatedType::List || baseType == EvaluatedType::ListItem;
-    const bool indexesAMap = baseType == EvaluatedType::Map;
-
-    if (indexesAMap) {
-        const Expr* index = indexExpr->getIndexExpr();
-
+    // A null index reads nothing, whatever it names, so the analyzer types such a read Null.
+    // Both operands are still emitted: an aggregate under one of them is not this layer's
+    // to drop, and a pass prunes the columns nothing reads.
+    if (expr->getType() == EvaluatedType::Null) {
         translateExpr(base);
         translateExpr(index);
 
-        bioassert(_part._exprMap.contains(base), "Dynamic map key with unknown base.");
-        bioassert(_part._exprMap.contains(index), "Dynamic map key with unknown key.");
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
 
-        // A list hands its elements back as tagged cells, and no map read yet pulls a map out
-        // of one, so the lowering would turn this away naming an op the query never wrote
-        if (base->getKind() == Expr::Kind::INDEX) {
-            throwError("Reading a key of a map held in a list is not supported yet.", expr);
+    //translate a csv column read
+    if (base->getType() == EvaluatedType::StringTable) {
+        const mlir::Value fieldColumn = findVariableColumn(indexExpr->getCSVFieldDecl());
+
+        if (!fieldColumn) {
+            throwError("Only a constant index selects a CSV field: "
+                       "row[i] with a computed index is not supported yet.",
+                       expr);
         }
 
+        _part._exprMap[expr] = fieldColumn;
+        return;
+    }
+
+    translateExpr(base);
+    translateExpr(index);
+
+    bioassert(_part._exprMap.contains(base), "Index read with unknown base.");
+    bioassert(_part._exprMap.contains(index), "Index read with unknown index.");
+
+    //translate map indexing
+    if (indexExpr->readsAMapKey()) {
         _part._exprMap[expr] = emitDynamicMapKey(_part._exprMap.at(base), _part._exprMap.at(index));
         return;
     }
 
-    if (indexesAPath || indexesAList) {
-        const Expr* index = indexExpr->getIndexExpr();
+    //translate list or path indexing
+    const mlir::Value list = readWalkEntities(base, _part._exprMap.at(base));
 
-        translateExpr(base);
-        translateExpr(index);
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-        bioassert(_part._exprMap.contains(base), "List index with unknown base.");
-        bioassert(_part._exprMap.contains(index), "List index with unknown index.");
-
-        const mlir::Value list = readWalkEntities(base, _part._exprMap.at(base));
-
-        const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-        const mlir::Location loc = _opBuilder.getUnknownLoc();
-
-        _part._exprMap[expr] = _opBuilder.create<mlir::db::ListIndex>(loc,
-                                                                      noneType,
-                                                                      list,
-                                                                      _part._exprMap.at(index)).getResult();
-        return;
-    }
-
-    const mlir::Value fieldColumn = findVariableColumn(indexExpr->getCSVFieldDecl());
-
-    if (!fieldColumn) {
-        throwError("Only a constant index selects a CSV field: "
-                   "row[i] with a computed index is not supported yet.",
-                   expr);
-    }
-
-    _part._exprMap[expr] = fieldColumn;
+    _part._exprMap[expr] = _opBuilder.create<mlir::db::ListIndex>(loc,
+                                                                  noneType,
+                                                                  list,
+                                                                  _part._exprMap.at(index)).getResult();
 }
 
 void DBProgramGenerator::translateStringExpr(const Expr* expr) {
@@ -8570,7 +8563,9 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
 
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
                                         || entityType == EvaluatedType::Duration
-                                        || entityType == EvaluatedType::Map;
+                                        || entityType == EvaluatedType::Map
+                                        || entityType == EvaluatedType::ListItem
+                                        || entityType == EvaluatedType::MapValue;
 
     if (readsOffTheVariableItself) {
         const auto projectedIt = _part._projectedColumns.find(entityDecl);

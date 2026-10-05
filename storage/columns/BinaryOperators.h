@@ -15,6 +15,7 @@
 #include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
 #include "list/ListUtils.h"
+#include "map/MapEntryView.h"
 #include "metadata/DateTime.h"
 
 #include "BioAssert.h"
@@ -631,11 +632,31 @@ struct ListIndexImpl {
         return operator()(cell.getAs<ListView>(), index);
     }
 
+    inline std::optional<ListElementView> operator()(MapEntryView entry, int64_t index) const {
+        if (entry.getValueTag() != MapBufferTypeTag::ListView) {
+            return std::nullopt;
+        }
+
+        return operator()(entry.getValueAs<ListView>(), index);
+    }
+
+    inline std::optional<ListElementView> operator()(MapEntryView entry, uint64_t index) const {
+        if (entry.getValueTag() != MapBufferTypeTag::ListView) {
+            return std::nullopt;
+        }
+
+        return operator()(entry.getValueAs<ListView>(), index);
+    }
+
     inline std::optional<ListElementView> operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
         return std::nullopt;
     }
 
     inline std::optional<ListElementView> operator()(ListElementView /*unused*/, PropertyNull /*unused*/) const {
+        return std::nullopt;
+    }
+
+    inline std::optional<ListElementView> operator()(MapEntryView entry, PropertyNull index) const {
         return std::nullopt;
     }
 
@@ -656,6 +677,15 @@ struct ListIndexImpl {
         throw TuringException("Index operands the wrong way round.");
     }
     std::optional<ListElementView> operator()(uint64_t /*unused*/, ListElementView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(int64_t index, MapEntryView entry) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(uint64_t index, MapEntryView entry) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(PropertyNull index, MapEntryView entry) const {
         throw TuringException("Index operands the wrong way round.");
     }
 };

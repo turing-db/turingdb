@@ -1,14 +1,14 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "WITH [{a: 1}, {a: 2}] AS xs, 'a' AS k RETURN xs[0][k], xs[1][k]",
+  "query": "WITH {l: [1, 2, 3]} AS m RETURN m.l[0], m.l[2], m.l[9]",
   "expect": {
-    "result": "xs[0][k],xs[1][k]\n1,2"
+    "result": "m.l[0],m.l[2],m.l[9]\n1,3,null"
   },
   "tags": [
     "map",
     "key",
-    "dynamic",
+    "static",
     "list"
   ],
   "write-required": false

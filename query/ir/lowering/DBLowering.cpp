@@ -599,7 +599,22 @@ bool isIndexableChunk(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type indexed = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::ListType, storage::ListElementType>(indexed);
+    return mlir::isa<storage::ListType, storage::ListElementType, storage::MapElementType>(indexed);
+}
+
+// The chunk shapes a key read accepts: a column of maps, and a tagged cell the row may
+// have put a map in - which is what a read of a nested container hands back
+bool holdsAMapPerRow(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type read = nullable ? nullable.getValueType() : element;
+
+    return mlir::isa<storage::MapType, storage::ListElementType, storage::MapElementType>(read);
 }
 
 // The element type an indexed list hands out, read through the nullable an optional list
@@ -2030,12 +2045,8 @@ void DBLowering::lowerDynamicMapKey(mlir::db::DynamicMapKey mapKey) {
     const mlir::Value mapChunk = mapValue(mapKey.getMap());
     const mlir::Value keyChunk = mapValue(mapKey.getKey());
 
-    const mlir::Type mapElement = mlir::cast<nl::ChunkType>(mapChunk.getType()).getElementType();
-    const auto nullableMap = mlir::dyn_cast<storage::NullableType>(mapElement);
-    const mlir::Type map = nullableMap ? nullableMap.getValueType() : mapElement;
-
-    if (!mlir::isa<storage::MapType>(map)) {
-        throw IRException("db.dynamic_map_key reads from a map column");
+    if (!holdsAMapPerRow(mapChunk.getType())) {
+        throw IRException("db.dynamic_map_key reads from a map column, or from a column of tagged cells");
     }
 
     const mlir::Type keyElement = mlir::cast<nl::ChunkType>(keyChunk.getType()).getElementType();
@@ -2068,12 +2079,8 @@ void DBLowering::lowerDynamicMapKey(mlir::db::DynamicMapKey mapKey) {
 void DBLowering::lowerStaticMapKey(mlir::db::StaticMapKey mapKey) {
     const mlir::Value mapChunk = mapValue(mapKey.getMap());
 
-    const mlir::Type element = mlir::cast<nl::ChunkType>(mapChunk.getType()).getElementType();
-    const auto nullableElement = mlir::dyn_cast<storage::NullableType>(element);
-    const mlir::Type mapElement = nullableElement ? nullableElement.getValueType() : element;
-
-    if (!mlir::isa<storage::MapType>(mapElement)) {
-        throw IRException("db.static_map_key reads from a map column");
+    if (!holdsAMapPerRow(mapChunk.getType())) {
+        throw IRException("db.static_map_key reads from a map column, or from a column of tagged cells");
     }
 
     // The entry carries its own null in its tag, so the result is never wrapped in a

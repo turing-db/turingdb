@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH {l: [1, 2]} AS m UNWIND m.l AS x RETURN x",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | WITH {l: [1, 2]} AS m UNWIND m.l AS x RETURN x\n       |                              ^^^\n-------* UNWIND requires a list, not 'MapValue'"
+  },
+  "tags": [
+    "map",
+    "key",
+    "unwind",
+    "fail"
+  ],
+  "write-required": false
+}

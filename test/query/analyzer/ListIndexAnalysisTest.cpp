@@ -104,9 +104,9 @@ TEST_F(ListIndexAnalysisTest, acceptsANullIndex) {
 
 TEST_F(ListIndexAnalysisTest, rejectsANonIntegerIndex) {
     expectRejected("MATCH (n:Person) RETURN [1, 2, 3]['a']",
-                   "Index expression must be an integer");
+                   "list index expression must be an integer");
     expectRejected("MATCH (n:Person) RETURN [1, 2, 3][1.5]",
-                   "Index expression must be an integer");
+                   "An index is an integer position or a string key, not 'Double'");
 }
 
 TEST_F(ListIndexAnalysisTest, rejectsAnIndexIntoAScalar) {

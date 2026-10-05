@@ -321,9 +321,11 @@ def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAli
              : (!nl.chunk<!storage.nullable<!storage.map>>) -> !nl.chunk<!storage.map_element>
 
     The operand is nullable where a stored property fetched it and plain where a literal
-    built it, so both spellings are accepted. The result never is: a map value carries its
-    null in its own tag, so a missing key and an absent map both read back as a Null-tagged
-    entry rather than as an absent optional.
+    built it, so both spellings are accepted. It is a chunk of tagged cells where the map
+    was itself read out of a list or a map, and a cell holding no map answers like a row
+    holding none. The result never is: a map value carries its null in its own tag, so a
+    missing key and an absent map both read back as a Null-tagged entry rather than as an
+    absent optional.
   }];
 
   let arguments = (ins NLChunk:$map, StrAttr:$key);
@@ -2374,6 +2376,9 @@ def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThr
       gathered from, an invalid ID standing for a position the list does not hold:
 
       %n = nl.list_index %ns, %i : (!nl.chunk<!storage.list<!storage.node_id>>, !nl.chunk<i64>) -> !nl.chunk<!storage.node_id>
+
+      A chunk of tagged cells is indexed too - a list read out of a list or out of a map -
+      and a cell holding no list reads back as the absent element.
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
@@ -2393,9 +2398,10 @@ def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowA
                -> !nl.chunk<!storage.map_element>
 
     Either operand is nullable where a stored property fetched it and plain where a literal
-    built it, so both spellings are accepted on both. The result never is: a map value
-    carries its null in its own tag, so a map holding no such key, a row holding no map and
-    a row holding no key all read back as a Null-tagged entry.
+    built it, so both spellings are accepted on both. The map operand is a chunk of tagged
+    cells where the map was itself read out of a list or a map. The result never is: a map
+    value carries its null in its own tag, so a map holding no such key, a row holding no
+    map and a row holding no key all read back as a Null-tagged entry.
   }];
 
   let arguments = (ins NLChunk:$map, NLChunk:$key);
