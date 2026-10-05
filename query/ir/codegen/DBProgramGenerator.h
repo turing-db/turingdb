@@ -788,7 +788,9 @@ private:
     // and publishes its columns as the scope of what follows. A WITH carries columns beside
     // them: the variables its WHERE reads that the projection drops, and the mask of each
     // entity a MERGE wrote
-    void publishProjection(const Projection* projection, const WithStmt* with = nullptr);
+    void publishProjection(const Projection* projection,
+                           const WithStmt* with = nullptr,
+                           bool returnsOutOfCall = false);
 
     void collectFilterColumns(std::span<const VarDecl* const> filterImports,
                               const VariableColumnMap& variableColumns,
