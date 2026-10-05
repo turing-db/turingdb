@@ -157,22 +157,12 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
             const size_t prevSize = _indices->size();
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
 
-            std::span<const EdgeID> excluded;
-            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
-                excluded = _excluded.rowEdges(index);
+            const DataPart* part = _partIt.get();
+            const std::span<const EdgeID> excluded = _excluded.enterOutRun(index, _edgeIt == _edges.begin(), part->edges(), _edges, _heldInRun);
 
-                const DataPart* part = _partIt.get();
-                _heldInRun = ExcludedEdges::countInOutRun(excluded, part->edges(), _edges);
-            } else if (_heldInRun > 0) {
-                excluded = _excluded.rowEdges(index);
-            }
-
-            // With only indices written every row of a run is the same, so the rows
-            // its excluded edges would have produced can come off the slice's end
             size_t dropped = 0;
             if constexpr (INDICES_ONLY) {
-                dropped = std::min(_heldInRun, rangeSize);
-                _heldInRun -= dropped;
+                dropped = ExcludedEdges::dropHeld(rangeSize, _heldInRun);
             }
 
             const size_t newSize = prevSize + rangeSize - dropped;
@@ -182,19 +172,17 @@ void GetOutEdgesChunkWriter::fill(size_t maxCount) {
 
             if constexpr (!INDICES_ONLY) {
                 if (_heldInRun > 0) {
-                    const DataPart* part = _partIt.get();
                     const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
-                    const size_t kept = ExcludedEdges::copyRunLeavingOut(excluded,
-                                                                         _heldInRun,
-                                                                         run,
-                                                                         prevSize,
-                                                                         &part->edges(),
-                                                                         _indices,
-                                                                         _edgeIDs,
-                                                                         _tgts,
-                                                                         _types);
-                    _heldInRun -= newSize - kept;
-                    remainingToMax += newSize - kept;
+                    const size_t leftOut = ExcludedEdges::copyRunLeavingOut(excluded,
+                                                                            _heldInRun,
+                                                                            run,
+                                                                            prevSize,
+                                                                            &part->edges(),
+                                                                            _indices,
+                                                                            _edgeIDs,
+                                                                            _tgts,
+                                                                            _types);
+                    remainingToMax += leftOut;
                 } else {
                     if constexpr (conditions[0]) {
                         _edgeIDs->resize(newSize);
