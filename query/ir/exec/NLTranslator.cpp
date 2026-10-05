@@ -2001,13 +2001,21 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
 
         for (size_t importIndex = 0; importIndex < config._hopImports.size(); importIndex++) {
             const mlir::Value importValue = config._hopImports[importIndex];
+            const Column* importColumn = getColumn(importValue);
+            const mlir::BlockArgument importArgument = hopBlock.getArgument(static_cast<unsigned>(3 + importIndex));
 
             Column* importChunk = nullptr;
-            NLBroadcastFunction broadcast = nullptr;
-            allocBroadcastColumn(importValue, true, importChunk, broadcast);
-            _valueSlots[hopBlock.getArgument(static_cast<unsigned>(3 + importIndex))] = importChunk;
+            NLGatherFunction gather = nullptr;
+            if (isConstantColumn(importColumn)) {
+                importChunk = _memory->allocSame(importColumn);
+                gather = NLExecutor::selectConstGatherFunction();
+            } else {
+                importChunk = allocColumnForChunkType(importArgument.getType());
+                gather = selectGatherForChunkType(importValue.getType());
+            }
+            _valueSlots[importArgument] = importChunk;
 
-            loopData->addHopImport(NLHopImport {getColumn(importValue), importChunk, broadcast});
+            loopData->addHopImport(NLHopImport {importColumn, importChunk, gather});
         }
 
         translateBlock(hopBlock, loopData->getHopStmts());

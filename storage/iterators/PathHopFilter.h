@@ -7,18 +7,25 @@
 
 namespace db {
 
-// The predicate a variable-length pattern puts on each hop, evaluated once over a frame of
-// candidates leaving one node. Storage knows nothing of the query engine that evaluates it.
+// The candidates leaving one source, held in a batch right after the previous frame's.
+// _seedRow is the input row the walk left from, which is what a predicate reading a
+// column outside the hop reads its one value at.
+struct PathHopFrame {
+    size_t _seedRow {0};
+    NodeID _source;
+    size_t _candidateCount {0};
+};
+
+// The predicate a variable-length pattern puts on each hop, evaluated once over a batch of
+// frames. Storage knows nothing of the query engine that evaluates it.
 class PathHopFilter {
 public:
     PathHopFilter();
     virtual ~PathHopFilter();
 
-    // Compacts both spans in place to the candidates that pass and returns how many did.
-    // @param seedRow is the input row the walk left from, which is what a predicate reading
-    // a column outside the hop reads its one value at
-    virtual size_t filter(size_t seedRow,
-                          NodeID source,
+    // Compacts both spans in place to the candidates that pass, sets each frame's count to
+    // its survivors and returns how many passed over all the frames
+    virtual size_t filter(std::span<PathHopFrame> frames,
                           std::span<NodeID> candidateNodes,
                           std::span<EdgeID> candidateEdges) = 0;
 };

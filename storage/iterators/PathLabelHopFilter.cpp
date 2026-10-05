@@ -20,24 +20,35 @@ PathLabelHopFilter::PathLabelHopFilter(const GraphView& view,
 PathLabelHopFilter::~PathLabelHopFilter() {
 }
 
-size_t PathLabelHopFilter::filter(size_t seedRow,
-                                  NodeID source,
+size_t PathLabelHopFilter::filter(std::span<PathHopFrame> frames,
                                   std::span<NodeID> candidateNodes,
                                   std::span<EdgeID> candidateEdges) {
     if (!_matchable) {
+        for (PathHopFrame& frame : frames) {
+            frame._candidateCount = 0;
+        }
+
         return 0;
     }
 
+    size_t candidate = 0;
     size_t kept = 0;
-    for (size_t candidate = 0; candidate < candidateNodes.size(); candidate++) {
-        const LabelSetHandle labels = labelSetOf(candidateNodes[candidate]);
-        if (!labels.isValid() || !labels.hasAtLeastLabels(_labels)) {
-            continue;
+    for (PathHopFrame& frame : frames) {
+        const size_t frameEnd = candidate + frame._candidateCount;
+        const size_t frameBegin = kept;
+
+        for (; candidate < frameEnd; candidate++) {
+            const LabelSetHandle labels = labelSetOf(candidateNodes[candidate]);
+            if (!labels.isValid() || !labels.hasAtLeastLabels(_labels)) {
+                continue;
+            }
+
+            candidateNodes[kept] = candidateNodes[candidate];
+            candidateEdges[kept] = candidateEdges[candidate];
+            kept++;
         }
 
-        candidateNodes[kept] = candidateNodes[candidate];
-        candidateEdges[kept] = candidateEdges[candidate];
-        kept++;
+        frame._candidateCount = kept - frameBegin;
     }
 
     return kept;

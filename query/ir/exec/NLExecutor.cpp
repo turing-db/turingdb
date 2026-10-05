@@ -1560,6 +1560,10 @@ void copyRangeConstColumn(const Column* input, size_t inputOffset, size_t rowCou
     output->assignFromLine(input, inputOffset, rowCount);
 }
 
+void gatherConstColumn(const Column* input, const ColumnVector<size_t>* indices, Column* output) {
+    output->assignFromLine(input, 0, indices->size());
+}
+
 // Append every row of an input chunk onto the tail of a growing buffer of the
 // same element type. nl.sort_collect calls this once per producing-loop step, so
 // the buffer accumulates every row across all chunks, row-aligned with the other
@@ -6123,9 +6127,10 @@ void NLExecutor::runEachRowLoop(NLExecutionContext* context, NLFunctionData* dat
 
 namespace {
 
-// Runs the hop predicate of an nl.explore_paths over one frame of candidates: the frame is
+// Runs the hop predicate of an nl.explore_paths over a batch of frames: the candidates are
 // copied a chunk at a time into the three columns the hop statements read, the statements
-// compute the mask, and the survivors are compacted to the front of the frame.
+// compute the mask, and the survivors are compacted to the front of the batch. A chunk may
+// start and end mid-frame.
 class NLHopFilter : public PathHopFilter {
 public:
     NLHopFilter(NLExecutionContext* context, NLExplorePathsLoopData* loopData)
@@ -6138,7 +6143,7 @@ public:
     ~NLHopFilter() override {
     }
 
-    size_t filter(size_t seedRow, NodeID source, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
+    size_t filter(std::span<PathHopFrame> frames, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
         const size_t chunkSize = _context->getChunkSize();
         ColumnNodeIDs* sources = _loopData->getHopSources();
         ColumnEdgeIDs* edges = _loopData->getHopEdges();
@@ -6148,12 +6153,35 @@ public:
         const NLStmtContainer* stmts = _loopData->getHopStmts();
         const std::span<const NLHopImport> imports = _loopData->getHopImports();
 
+        _frameEnds.clear();
+        size_t frameEnd = 0;
+        for (PathHopFrame& frame : frames) {
+            frameEnd += frame._candidateCount;
+            _frameEnds.push_back(frameEnd);
+            frame._candidateCount = 0;
+        }
+
+        std::vector<size_t>& seedRows = _seedRows.getRaw();
+        size_t fillFrame = 0;
+        size_t survivorFrame = 0;
         size_t kept = 0;
         for (size_t begin = 0; begin < candidateNodes.size(); begin += chunkSize) {
             const size_t count = std::min(chunkSize, candidateNodes.size() - begin);
+            const size_t end = begin + count;
 
             sources->resize(count);
-            std::fill_n(sources->begin(), count, source);
+            seedRows.resize(count);
+            for (size_t segmentBegin = begin; segmentBegin < end;) {
+                const size_t segmentEnd = std::min(end, _frameEnds[fillFrame]);
+                const PathHopFrame& frame = frames[fillFrame];
+                std::fill_n(sources->begin() + (segmentBegin - begin), segmentEnd - segmentBegin, frame._source);
+                std::fill_n(seedRows.begin() + (segmentBegin - begin), segmentEnd - segmentBegin, frame._seedRow);
+
+                if (segmentEnd == _frameEnds[fillFrame]) {
+                    fillFrame++;
+                }
+                segmentBegin = segmentEnd;
+            }
 
             edges->resize(count);
             std::copy_n(candidateEdges.begin() + begin, count, edges->begin());
@@ -6162,7 +6190,7 @@ public:
             std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
 
             for (const NLHopImport& import : imports) {
-                import._broadcast(import._source, count, seedRow * count, count, import._chunk);
+                import._gather(import._source, &_seedRows, import._chunk);
             }
 
             runBody(_context, stmts);
@@ -6171,8 +6199,14 @@ public:
             survivors(mask, &_indices);
 
             for (const size_t survivor : _indices.getRaw()) {
-                candidateNodes[kept] = candidateNodes[begin + survivor];
-                candidateEdges[kept] = candidateEdges[begin + survivor];
+                const size_t position = begin + survivor;
+                while (position >= _frameEnds[survivorFrame]) {
+                    survivorFrame++;
+                }
+
+                frames[survivorFrame]._candidateCount++;
+                candidateNodes[kept] = candidateNodes[position];
+                candidateEdges[kept] = candidateEdges[position];
                 kept++;
             }
         }
@@ -6184,6 +6218,8 @@ private:
     NLExecutionContext* _context {nullptr};
     NLExplorePathsLoopData* _loopData {nullptr};
     ColumnVector<size_t> _indices;
+    ColumnVector<size_t> _seedRows;
+    std::vector<size_t> _frameEnds;
 };
 
 // What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
@@ -9398,6 +9434,10 @@ NLCopyFunction NLExecutor::selectCountCopyFunction() {
 
 NLCopyFunction NLExecutor::selectConstCopyFunction() {
     return &copyRangeConstColumn;
+}
+
+NLGatherFunction NLExecutor::selectConstGatherFunction() {
+    return &gatherConstColumn;
 }
 
 // A nullable value chunk gathers the same way an ID chunk does - copy the indexed

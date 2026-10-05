@@ -52,10 +52,27 @@ public:
     ~RejectingRowHopFilter() override {
     }
 
-    size_t filter(size_t seedRow, NodeID source, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
-        _hops.push_back(FilteredHop {._seedRow = seedRow, ._source = source});
+    size_t filter(std::span<PathHopFrame> frames, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
+        size_t candidate = 0;
+        size_t kept = 0;
+        for (PathHopFrame& frame : frames) {
+            _hops.push_back(FilteredHop {._seedRow = frame._seedRow, ._source = frame._source});
 
-        return seedRow == _rejectedRow ? 0 : candidateNodes.size();
+            const size_t frameEnd = candidate + frame._candidateCount;
+            if (frame._seedRow == _rejectedRow) {
+                frame._candidateCount = 0;
+                candidate = frameEnd;
+                continue;
+            }
+
+            for (; candidate < frameEnd; candidate++) {
+                candidateNodes[kept] = candidateNodes[candidate];
+                candidateEdges[kept] = candidateEdges[candidate];
+                kept++;
+            }
+        }
+
+        return kept;
     }
 
     const std::vector<FilteredHop>& getHops() const { return _hops; }

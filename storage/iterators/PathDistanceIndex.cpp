@@ -60,6 +60,31 @@ void appendMatching(std::span<const EdgeRecord> edges,
     }
 }
 
+// Filters a batch of sampled frames, moves the survivors onto the next level and empties the
+// batch, returning how many passed
+size_t advanceSampleBatch(PathHopFilter* hopFilter,
+                          std::vector<PathHopFrame>& frames,
+                          std::vector<NodeID>& candidateNodes,
+                          std::vector<EdgeID>& candidateEdges,
+                          std::vector<NodeID>& next,
+                          std::vector<size_t>& nextRows) {
+    size_t survivorCount = candidateNodes.size();
+    if (hopFilter && survivorCount > 0) {
+        survivorCount = hopFilter->filter(frames, candidateNodes, candidateEdges);
+    }
+
+    next.insert(next.end(), candidateNodes.begin(), candidateNodes.begin() + survivorCount);
+    for (const PathHopFrame& frame : frames) {
+        nextRows.insert(nextRows.end(), frame._candidateCount, frame._seedRow);
+    }
+
+    frames.clear();
+    candidateNodes.clear();
+    candidateEdges.clear();
+
+    return survivorCount;
+}
+
 double nodeTouch(const PartDirectory& parts, NodeID node, bool walksIns, bool walksOuts) {
     const size_t owner = parts.ownerIndex(node);
     if (owner == parts.size()) {
@@ -460,6 +485,7 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
 
     std::vector<NodeID> next;
     std::vector<size_t> nextRows;
+    std::vector<PathHopFrame> frames;
     std::vector<NodeID> candidateNodes;
     std::vector<EdgeID> candidateEdges;
     for (size_t level = 0; level < seedSampleLevels && !frontier.empty(); level++) {
@@ -472,9 +498,15 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
 
         // A level lists its nodes parent by parent, so the part the budget lets through has to
         // be taken across the whole frontier, not from its front: its first parents need not
-        // branch like the rest
+        // branch like the rest. A batch only takes frames the budget would let through were
+        // every candidate to pass, so the sample stops at the frame it stopped at unbatched.
         const size_t frontierSize = frontier.size();
         for (size_t visit = 0; visit < frontierSize; visit++) {
+            if (next.size() + candidateNodes.size() >= seedSampleBudget) {
+                offered += static_cast<double>(candidateNodes.size());
+                kept += static_cast<double>(advanceSampleBatch(hopFilter, frames, candidateNodes, candidateEdges, next, nextRows));
+            }
+
             if (next.size() >= seedSampleBudget) {
                 break;
             }
@@ -487,9 +519,8 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
             }
 
             const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
+            const size_t frameBegin = candidateNodes.size();
 
-            candidateNodes.clear();
-            candidateEdges.clear();
             if (walksOuts) {
                 appendMatching(ownerIndexer.getNodeOutEdges(node), edgeTypes, candidateNodes, candidateEdges);
             }
@@ -507,20 +538,16 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
                 }
             }
 
-            const size_t row = frontierRows[position];
-            const size_t candidateCount = candidateNodes.size();
-            size_t survivorCount = candidateCount;
-            if (hopFilter && candidateCount > 0) {
-                survivorCount = hopFilter->filter(row, node, candidateNodes, candidateEdges);
+            const size_t candidateCount = candidateNodes.size() - frameBegin;
+            if (candidateCount > 0) {
+                frames.push_back(PathHopFrame {._seedRow = frontierRows[position], ._source = node, ._candidateCount = candidateCount});
             }
 
-            next.insert(next.end(), candidateNodes.begin(), candidateNodes.begin() + survivorCount);
-            nextRows.insert(nextRows.end(), survivorCount, row);
-
             arrivals += 1.0;
-            offered += static_cast<double>(candidateCount);
-            kept += static_cast<double>(survivorCount);
         }
+
+        offered += static_cast<double>(candidateNodes.size());
+        kept += static_cast<double>(advanceSampleBatch(hopFilter, frames, candidateNodes, candidateEdges, next, nextRows));
 
         if (arrivals == 0.0) {
             break;
