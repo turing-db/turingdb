@@ -48,6 +48,12 @@ const Rows cyclesUnderABoundStart {
     {"Remy", "1", "Ghosts", "7, 1"},
 };
 
+// The same cycles when the hop that bound the start is in the walk's own clause: the walk
+// may not take that hop's edge, which leaves the one cycle back to Remy over Ghosts
+const Rows cyclesUnderABoundStartInItsClause {
+    {"Adam", "4", "Remy", "1, 7"},
+};
+
 const Rows shortCyclesUnderABoundStart {
     {"Adam", "4", "Remy", "0, 4"},
     {"Adam", "4", "Remy", "1, 7"},
@@ -134,7 +140,7 @@ TEST_F(SelfReferencingPatternTest, walksBackToAStartTheSameMatchBound) {
 
     Rows rows;
     sink.sortedRows(rows);
-    EXPECT_EQ(rows, sorted(cyclesUnderABoundStart));
+    EXPECT_EQ(rows, sorted(cyclesUnderABoundStartInItsClause));
 }
 
 TEST_F(SelfReferencingPatternTest, boundsTheHopsWalkedBackToABoundStart) {

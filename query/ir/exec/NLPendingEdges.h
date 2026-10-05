@@ -11,6 +11,7 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
+#include "iterators/ExcludedEdges.h"
 #include "metadata/LabelSetHandle.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
@@ -79,6 +80,9 @@ public:
     // so it must outlive the hop.
     void setEndpointLabelSet(const LabelSet& labelset);
 
+    // The edges each input row of the hop may not repeat
+    void setExcludedEdges(const ExcludedEdges& excluded);
+
     bool isValid() const { return _row < _inputNodeIDs->size(); }
 
     void fill(size_t maxCount);
@@ -104,6 +108,9 @@ private:
     // past it, so what the hop walks is what its own query wrote before it ran.
     size_t _firstQueryEdge {0};
     size_t _pendingEdgeCount {0};
+
+    ExcludedEdges _excluded;
+    std::span<const EdgeID> _rowExcluded;
 
     Direction _direction {Direction::Out};
     std::optional<std::span<const EdgeTypeID>> _edgeTypes;

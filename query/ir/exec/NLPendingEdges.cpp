@@ -116,6 +116,11 @@ void NLPendingEdgeHop::setEndpointLabelSet(const LabelSet& labelset) {
     _endpointLabels = LabelSetHandle(labelset);
 }
 
+void NLPendingEdgeHop::setExcludedEdges(const ExcludedEdges& excluded) {
+    _excluded = excluded;
+    beginRun();
+}
+
 void NLPendingEdgeHop::fill(size_t maxCount) {
     clearChunks();
 
@@ -139,6 +144,10 @@ void NLPendingEdgeHop::fill(size_t maxCount) {
 
         NodeID other;
         if (!walks(offset, other)) {
+            continue;
+        }
+
+        if (ExcludedEdges::holds(_rowExcluded, EdgeID(_firstPendingEdgeID + offset))) {
             continue;
         }
 
@@ -186,6 +195,8 @@ void NLPendingEdgeHop::beginRun() {
 
     const NodeID node = (*_inputNodeIDs)[_row];
     _offsets = walksIn() ? _index->into(node) : _index->outOf(node);
+
+    _rowExcluded = _excluded.isSet() ? _excluded.rowEdges(_row) : std::span<const EdgeID> {};
 }
 
 void NLPendingEdgeHop::nextRun() {

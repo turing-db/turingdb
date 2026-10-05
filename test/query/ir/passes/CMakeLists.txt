@@ -312,3 +312,9 @@ target_link_libraries(test_query_ir_reroot_pattern_at_seed PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_fuse_distinct_edges FuseDistinctEdgesTest.cpp)
+
+add_call_v3_test(test_query_ir_prove_distinct_edges ProveDistinctEdgesTest.cpp)
+
+add_call_v3_test(test_query_ir_fuse_product_distinct_edges FuseProductDistinctEdgesTest.cpp)

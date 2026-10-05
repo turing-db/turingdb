@@ -5,6 +5,7 @@
 #include "Iterator.h"
 #include "ChunkWriter.h"
 #include "PartIterator.h"
+#include "ExcludedEdges.h"
 #include "TombstoneFilter.h"
 #include "datapart/EdgeRecord.h"
 #include "columns/ColumnEdgeTypes.h"
@@ -78,6 +79,9 @@ public:
     void setSrcIDs(ColumnNodeIDs* srcs) { _srcs = srcs; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
+    // The edges each input row of the hop may not repeat
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
+
 private:
     ColumnVector<size_t>* _indices {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
@@ -85,6 +89,8 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    ExcludedEdges _excluded;
+    size_t _heldInRun {0};
 
     void filterTombstones();
 };

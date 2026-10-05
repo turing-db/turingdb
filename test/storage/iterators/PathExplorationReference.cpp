@@ -129,8 +129,10 @@ void ReferenceEnumerator::descend(size_t seedRow,
     for (const ReferenceEdge& candidate : candidates) {
         const bool wrongType = _edgeType && candidate._type != *_edgeType;
         const bool onTrail = std::find(path.begin(), path.end(), candidate._edge) != path.end();
+        const std::vector<uint64_t>* seedExcluded = _excluded ? &(*_excluded)[seedRow] : nullptr;
+        const bool excluded = seedExcluded && std::find(seedExcluded->begin(), seedExcluded->end(), candidate._edge) != seedExcluded->end();
         const bool rejected = _predicate && !_predicate(node, candidate._edge, candidate._other);
-        if (wrongType || onTrail || rejected) {
+        if (wrongType || onTrail || excluded || rejected) {
             continue;
         }
 
@@ -187,6 +189,7 @@ size_t turing::test::collectPaths(const GraphView& view,
         explorator.setEdgeTypeFilter(options.getEdgeTypes());
     }
     explorator.setHopFilter(options._hopFilter);
+    explorator.setExcludedEdges(options._excludedEdges);
     explorator.setEndLabels(options._endLabels);
     explorator.setEndNodes(options._endNodes);
     if (!options._endNodeSet.empty()) {

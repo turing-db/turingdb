@@ -125,16 +125,17 @@ TEST_F(HashJoinTest, dropsTheColumnAKeyWasReadFromWhenNothingElseReadsIt) {
     std::string program;
     dbProgram("MATCH (a)-->(b), (c)-->(d) WHERE b.name = c.name RETURN a, d", program);
 
-    // Two columns per factor - the one the projection reads and the key it matches on -
-    // where the fusion left three, b and c among them.
-    EXPECT_TRUE(contains(program, "%0:4 = db.hash_join")) << program;
-    EXPECT_TRUE(contains(program, "on 1, 1")) << program;
-    EXPECT_TRUE(contains(program, "db.output(%0#0, %0#2)")) << program;
+    // Three columns per factor - the one the projection reads, the edge the clause's
+    // distinctness check reads and the key it matches on - where the fusion left four, b
+    // and c among them.
+    EXPECT_TRUE(contains(program, "%0:6 = db.hash_join")) << program;
+    EXPECT_TRUE(contains(program, "on 2, 2 distinct_from [1, 0]")) << program;
+    EXPECT_TRUE(contains(program, "db.output(%0#0, %0#4)")) << program;
 }
 
 // An edge property keys a join the same way a node property does.
 TEST_F(HashJoinTest, joinsTwoEdgesOnASharedEdgeProperty) {
-    expectCount("MATCH (a)-[e]->(b), (c)-[f]->(d) WHERE e.duration = f.duration RETURN count(*)", 28);
+    expectCount("MATCH (a)-[e]->(b), (c)-[f]->(d) WHERE e.duration = f.duration RETURN count(*)", 20);
 }
 
 // A predicate the join does not absorb still applies over its rows.

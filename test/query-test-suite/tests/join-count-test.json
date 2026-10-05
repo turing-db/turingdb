@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (x)-->(a), (x)-->(b) RETURN count(x)",
   "expect": {
-    "result": "count(x)\n44",
-    "resultJson": "{\"header\":{\"column_names\":[\"count(x)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[44]]]}"
+    "result": "count(x)\n26",
+    "resultJson": "{\"header\":{\"column_names\":[\"count(x)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[26]]]}"
   },
   "tags": [],
   "write-required": false

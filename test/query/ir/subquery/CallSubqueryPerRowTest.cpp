@@ -167,14 +167,14 @@ TEST_F(CallSubqueryPerRowTest, dedupsPerInputRow) {
     expectRows("MATCH (p:Person) "
                "CALL (p) { MATCH (p)-[:INTERESTED_IN]->(i)<-[:INTERESTED_IN]-(q:Person) RETURN DISTINCT q } "
                "RETURN p.name, count(q)",
-               {{"Remy", "2"},
-                {"Adam", "3"},
-                {"Maxime", "2"},
-                {"Luc", "2"},
-                {"Martina", "2"},
-                {"Suhas", "3"},
-                {"Cyrus", "3"},
-                {"Doruk", "3"}});
+               {{"Remy", "1"},
+                {"Adam", "2"},
+                {"Maxime", "1"},
+                {"Luc", "1"},
+                {"Martina", "1"},
+                {"Suhas", "2"},
+                {"Cyrus", "2"},
+                {"Doruk", "2"}});
 }
 
 // A grouped count inside the body groups the rows of one input row: how many interests
@@ -186,24 +186,16 @@ TEST_F(CallSubqueryPerRowTest, groupsPerInputRow) {
                "  RETURN q.name AS other, count(i) AS shared "
                "} "
                "RETURN p.name, other, shared",
-               {{"Remy", "Remy", "3"},
-                {"Remy", "Luc", "1"},
-                {"Adam", "Adam", "2"},
+               {{"Remy", "Luc", "1"},
                 {"Adam", "Maxime", "1"},
                 {"Adam", "Martina", "1"},
-                {"Maxime", "Maxime", "2"},
                 {"Maxime", "Adam", "1"},
-                {"Luc", "Luc", "2"},
                 {"Luc", "Remy", "1"},
-                {"Martina", "Martina", "1"},
                 {"Martina", "Adam", "1"},
-                {"Suhas", "Suhas", "2"},
                 {"Suhas", "Cyrus", "1"},
                 {"Suhas", "Doruk", "1"},
-                {"Cyrus", "Cyrus", "2"},
                 {"Cyrus", "Suhas", "1"},
                 {"Cyrus", "Doruk", "1"},
-                {"Doruk", "Doruk", "1"},
                 {"Doruk", "Suhas", "1"},
                 {"Doruk", "Cyrus", "1"}});
 }
@@ -307,7 +299,7 @@ TEST_F(CallSubqueryPerRowTest, anImportSurvivesADedupingBarrier) {
                "  RETURN p.name AS person, q.name AS sharer "
                "} "
                "RETURN person, sharer",
-               {{"Remy", "Remy"}, {"Remy", "Luc"}});
+               {{"Remy", "Luc"}});
 }
 
 // A grouped reduction keeps its keys, and the import joins them: it holds one value per
@@ -320,5 +312,5 @@ TEST_F(CallSubqueryPerRowTest, anImportSurvivesAGroupedBarrier) {
                "  RETURN p.name AS person, q.name AS sharer, shared "
                "} "
                "RETURN person, sharer, shared",
-               {{"Remy", "Remy", "3"}, {"Remy", "Luc", "1"}});
+               {{"Remy", "Luc", "1"}});
 }

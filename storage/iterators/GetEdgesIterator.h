@@ -9,6 +9,7 @@
 #include "columns/ColumnIDs.h"
 #include "datapart/EdgeRecord.h"
 #include "PartIterator.h"
+#include "ExcludedEdges.h"
 #include "TombstoneFilter.h"
 
 namespace db {
@@ -58,6 +59,7 @@ protected:
     ColumnNodeIDs::ConstIterator _nodeIt;
 
     std::span<const EdgeRecord> _edges;
+    std::span<const EdgeRecord> _nodeOutEdges;
     std::span<const EdgeRecord>::iterator _edgeIt;
     Direction _direction {Direction::Outgoing};
 
@@ -85,6 +87,9 @@ public:
     void setOtherIDs(ColumnNodeIDs* others) { _others = others; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
+    // The edges each input row of the hop may not repeat
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
+
 private:
     ColumnVector<size_t>* _indices {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
@@ -92,8 +97,18 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    ExcludedEdges _excluded;
+
+    const DataPart* _boundPart {nullptr};
+    std::span<const EdgeRecord> _partOutEdges;
+    EdgeID _partFirstEdgeID {0};
+    std::span<const size_t> _partSelfLoopOffsets;
+    size_t _heldInOutRun {0};
+    size_t _heldInInRun {0};
+    size_t _heldInRun {0};
 
     void filterTombstones();
+    void classifyRow(std::span<const EdgeID> excluded);
 };
 
 struct GetEdgesRange {

@@ -32,7 +32,6 @@ TEST_F(CycleHeadHopTest, reachesASelfLoopOverAHop) {
     expectRows("MATCH (a)-->(b)-->(b) RETURN a.name, b.name",
                {
                    {"Ana", "Bo"},
-                   {"Bo", "Bo"},
                });
 }
 
@@ -45,12 +44,8 @@ TEST_F(CycleHeadHopTest, matchesNoSelfLoopOnSimpledb) {
 TEST_F(CycleHeadHopTest, reachesATwoHopCycleOverAHop) {
     expectRows("MATCH (x)-->(a)-->(b)-->(a) RETURN id(x), id(a), id(b)",
                {
-                   {"0", "1", "0"},
-                   {"0", "6", "0"},
-                   {"1", "0", "1"},
                    {"1", "0", "6"},
                    {"6", "0", "1"},
-                   {"6", "0", "6"},
                });
 }
 

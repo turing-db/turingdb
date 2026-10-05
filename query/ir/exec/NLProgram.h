@@ -11,6 +11,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -26,6 +27,7 @@
 #include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/ExcludedEdges.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "iterators/PathTargetIndex.h"
@@ -290,12 +292,14 @@ using NLGatherFunction = void (*)(const Column* input,
 // product is cut into chunks: a slice may start and end mid-block or mid-tile, and
 // every column of the step slices at the same position, so they stay row-aligned.
 // `factor` is M for both directions - block-repeat divides the position by it,
-// tile takes the position modulo it.
+// tile takes the position modulo it. The slice is written from `outputOffset` on, so
+// one step can hold several slices.
 using NLBroadcastFunction = void (*)(const Column* input,
                                      size_t factor,
                                      size_t position,
                                      size_t rowCount,
-                                     Column* output);
+                                     Column* output,
+                                     size_t outputOffset);
 
 // One column a hop predicate reads from outside the hop: the loop's own column, and the
 // chunk the region's argument reads, filled with the seed row's value before each run by
@@ -810,6 +814,17 @@ public:
         _carriedColumns.push_back(carried);
     }
 
+    // The edges the clause bound before this expansion, row-aligned with the input, which
+    // no row of it may repeat: edge columns, and paths read through the query's trie
+    void addExcludedEdges(const ColumnEdgeIDs* edges) { _excludedEdges.push_back(edges); }
+    void addExcludedPaths(const ColumnVector<PathRef>* paths) { _excludedPaths.push_back(paths); }
+    void setExclusionTrie(const PathTrie* trie) { _exclusionTrie = trie; }
+
+    // Lays the excluded edges of the input's rows out flat, a span per row, which is what
+    // the writers read; empty when nothing is excluded
+    void collectExcludedEdges(size_t rowCount);
+    ExcludedEdges getExcludedEdges() const;
+
 private:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
     NLLimitState* _limit {nullptr};
@@ -819,6 +834,12 @@ private:
 
     CarriedColumns _carriedColumns;
     NLStmtContainer _stmts;
+
+    std::vector<const ColumnEdgeIDs*> _excludedEdges;
+    std::vector<const ColumnVector<PathRef>*> _excludedPaths;
+    const PathTrie* _exclusionTrie {nullptr};
+    std::vector<size_t> _excludedOffsets;
+    std::vector<EdgeID> _excludedEdgeIDs;
 
     // Scratch for the writer's row-to-input-row map, which drives the gathers
     ColumnVector<size_t> _indices;
@@ -1343,6 +1364,35 @@ private:
     std::unordered_set<uint64_t> _matchingIDs;
 };
 
+// An edge or path column nl.check_edge_distinct reads a row's edges from
+struct NLEdgeHolder {
+    const Column* _column {nullptr};
+    bool _holdsPaths {false};
+};
+
+class NLCheckEdgeDistinctData : public NLFunctionData {
+public:
+    NLCheckEdgeDistinctData(const NLEdgeHolder& subject, ColumnMask* output, const PathTrie* trie)
+        : _subject(subject),
+        _output(output),
+        _trie(trie)
+    {
+    }
+
+    const NLEdgeHolder& getSubject() const { return _subject; }
+    std::span<const NLEdgeHolder> getOthers() const { return _others; }
+    ColumnMask* getOutput() const { return _output; }
+    const PathTrie* getTrie() const { return _trie; }
+
+    void addOther(const NLEdgeHolder& other) { _others.push_back(other); }
+
+private:
+    NLEdgeHolder _subject;
+    std::vector<NLEdgeHolder> _others;
+    ColumnMask* _output {nullptr};
+    const PathTrie* _trie {nullptr};
+};
+
 // One column used as operand of nl.cross_product: its input chunk, the output
 // chunk to fill, and the broadcast that fills one from the other.
 class NLCrossColumn {
@@ -1371,9 +1421,18 @@ private:
 // (inner rows) are read at run time from the first column of each group, so the
 // product has N*M pairs; the loop walks them chunk by chunk rather than laying all
 // of them out at once.
+// A pair of edge columns of a cross product, one from each side, whose rows the product
+// only pairs where they hold two different edges
+struct NLCrossEdgePair {
+    const ColumnEdgeIDs* _outer {nullptr};
+    const ColumnEdgeIDs* _inner {nullptr};
+};
+
 class NLCrossProductLoopData : public NLFunctionData {
 public:
     using Columns = std::vector<NLCrossColumn>;
+    using EdgePairs = std::vector<NLCrossEdgePair>;
+    using EdgeIndex = std::vector<std::pair<EdgeID, size_t>>;
 
     const Columns& outerColumns() const { return _outerColumns; }
     const Columns& innerColumns() const { return _innerColumns; }
@@ -1385,6 +1444,20 @@ public:
     void addInnerColumn(const NLCrossColumn& column) {
         _innerColumns.push_back(column);
     }
+
+    // The columns the two sides are sized by, broadcast or not
+    const Column* getOuterRows() const { return _outerRows; }
+    const Column* getInnerRows() const { return _innerRows; }
+    void setOuterRows(const Column* rows) { _outerRows = rows; }
+    void setInnerRows(const Column* rows) { _innerRows = rows; }
+
+    const EdgePairs& edgePairs() const { return _edgePairs; }
+    void addEdgePair(const NLCrossEdgePair& pair) { _edgePairs.push_back(pair); }
+
+    // Scratch the loop reuses from one run to the next: one side's edges sorted with their
+    // rows, and the positions of the pairs left out
+    EdgeIndex& edgeIndex() { return _edgeIndex; }
+    std::vector<size_t>& holes() { return _holes; }
 
     // The governing limit counter, or null for an unbounded loop. The loop stops
     // once it reaches zero and a step lays out at most that many pairs; it never
@@ -1398,6 +1471,11 @@ public:
 private:
     Columns _outerColumns;
     Columns _innerColumns;
+    const Column* _outerRows {nullptr};
+    const Column* _innerRows {nullptr};
+    EdgePairs _edgePairs;
+    EdgeIndex _edgeIndex;
+    std::vector<size_t> _holes;
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };
@@ -1981,6 +2059,13 @@ private:
 // output chunk and the gather that reads the matched rows back - both in the
 // NLCarriedColumn (input, output, gather) shape the edge and sort loops use. The two
 // index scratches hold this step's matched pairs, one row of each side per output row.
+// A pair of edge columns of a hash join, a probe column and a build buffer, whose rows the
+// join only pairs where they hold two different edges
+struct NLJoinEdgePair {
+    const ColumnEdgeIDs* _probe {nullptr};
+    const ColumnEdgeIDs* _build {nullptr};
+};
+
 class NLHashJoinProbeLoopData : public NLFunctionData {
 public:
     NLHashJoinProbeLoopData(NLHashJoinState* state)
@@ -1995,6 +2080,9 @@ public:
 
     void addProbeColumn(const NLCarriedColumn& column) { _probeColumns.push_back(column); }
     void addBuildColumn(const NLCarriedColumn& column) { _buildColumns.push_back(column); }
+
+    const std::vector<NLJoinEdgePair>& edgePairs() const { return _edgePairs; }
+    void addEdgePair(const NLJoinEdgePair& pair) { _edgePairs.push_back(pair); }
 
     // The governing limit counter, or null for an unbounded probe. When set, only
     // getRemaining() matched pairs are laid out; it never mutates the counter (the
@@ -2032,6 +2120,7 @@ private:
     NLHashJoinState* _state {nullptr};
     std::vector<NLCarriedColumn> _probeColumns;
     std::vector<NLCarriedColumn> _buildColumns;
+    std::vector<NLJoinEdgePair> _edgePairs;
 
     const Column* _key {nullptr};
     const Column* _buildKey {nullptr};
