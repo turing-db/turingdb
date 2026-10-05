@@ -171,6 +171,26 @@ TEST_F(LabelPredicateCodegenTest, aDisjunctionThatIsOneConjunctionFusesIntoTheSc
     EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
 }
 
+TEST_F(LabelPredicateCodegenTest, aConjunctionInsideADisjunctionIsOneCheck) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (n) WHERE (n:Person AND n:Founder) OR n:Sales RETURN n");
+
+    llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(*module);
+    ASSERT_EQ(checks.size(), 1u);
+
+    const mlir::ArrayAttr alternatives = checks.front().getAlternatives();
+    ASSERT_EQ(alternatives.size(), 2u);
+
+    std::vector<std::string> labels;
+    namesOf(mlir::cast<mlir::ArrayAttr>(alternatives[0]), labels);
+    EXPECT_EQ(labels, (std::vector<std::string> {"Person", "Founder"}));
+    namesOf(mlir::cast<mlir::ArrayAttr>(alternatives[1]), labels);
+    EXPECT_EQ(labels, (std::vector<std::string> {"Sales"}));
+
+    EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
+}
+
 TEST_F(LabelPredicateCodegenTest, aNegatedLabelPredicateStaysACheck) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("MATCH (n) WHERE NOT n:Person RETURN n");

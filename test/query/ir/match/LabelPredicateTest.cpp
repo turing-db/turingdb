@@ -127,6 +127,11 @@ TEST_F(LabelPredicateTest, keepsTheNodesEitherChainHolds) {
                {{"Adam"}, {"Maxime"}, {"Martina"}, {"Eighties"}, {"Ghosts"}});
 }
 
+TEST_F(LabelPredicateTest, keepsTheNodesAConjunctionOrALabelHolds) {
+    expectRows("MATCH (n) WHERE (n:Person AND n:Bioinformatics) OR n:Sales RETURN n.name",
+               {{"Adam"}, {"Maxime"}, {"Martina"}, {"Doruk"}});
+}
+
 TEST_F(LabelPredicateTest, keepsTheNodesTheLabelDoesNotHold) {
     expectRows("MATCH (n) WHERE NOT n:Person RETURN n.name", interests);
 }
