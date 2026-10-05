@@ -17,6 +17,7 @@
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CallStmt.h"
+#include "stmt/ReturnStmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/StmtContainer.h"
@@ -26,9 +27,11 @@
 #include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "Projection.h"
 #include "QualifiedName.h"
 #include "SinglePartQuery.h"
 #include "SourceManager.h"
+#include "Symbol.h"
 #include "WhereClause.h"
 #include "ParserException.h"
 
@@ -212,6 +215,63 @@ NodePattern* ParserUtils::createNodePattern(CypherAST* ast,
     node->setWhere(where);
 
     return node;
+}
+
+bool ParserUtils::createWhenOperand(CypherAST* ast,
+                                    const CallSubqueryStmt::Branches& branches,
+                                    const SourceLocation& location,
+                                    UnionQuery::Branch& operand) {
+    SourceManager* sourceManager = ast->getSourceManager();
+
+    CallSubqueryStmt* call = CallSubqueryStmt::create(ast, branches);
+    call->setHasScopeClause(true);
+    sourceManager->setLocation(call, location);
+
+    StmtContainer* stmts = StmtContainer::create(ast);
+    stmts->add(call);
+    sourceManager->setLocation(stmts, location);
+
+    SinglePartQuery* query = SinglePartQuery::create(ast);
+    query->setStmts(stmts);
+    sourceManager->setLocation(query, location);
+
+    operand = {query, false, call};
+
+    const ReturnStmt* branchReturn = branches.front()._query->getReturnStmt();
+    if (!branchReturn) {
+        return true;
+    }
+
+    const Projection* branchProjection = branchReturn->getProjection();
+    if (branchProjection->isReturningAll()) {
+        return false;
+    }
+
+    Projection* projection = Projection::create(ast);
+    sourceManager->setLocation(projection, location);
+
+    for (const Projection::ReturnItem& item : branchProjection->items()) {
+        const Expr* expr = std::get<Expr*>(item);
+
+        std::string_view name = expr->getName();
+        if (name.empty() && expr->getKind() == Expr::Kind::SYMBOL) {
+            name = static_cast<const SymbolExpr*>(expr)->getSymbol()->getName();
+        }
+
+        if (name.empty()) {
+            return false;
+        }
+
+        SymbolExpr* column = SymbolExpr::create(ast, Symbol::create(ast, name));
+        sourceManager->setLocation(column, location);
+        projection->addExpr(column);
+    }
+
+    ReturnStmt* returnStmt = ReturnStmt::create(ast, projection);
+    sourceManager->setLocation(returnStmt, location);
+    query->setReturnStmt(returnStmt);
+
+    return true;
 }
 
 SinglePartQuery* ParserUtils::createPatternBody(CypherAST* ast,

@@ -63,5 +63,9 @@ bool CallSubqueryStmt::readsTheGraph() const {
 void CallSubqueryStmt::addImport(const Symbol* symbol) {
     for (Branch& branch : _branches) {
         branch._imports.push_back(symbol);
+
+        if (branch._whenCall) {
+            branch._whenCall->addImport(symbol);
+        }
     }
 }
