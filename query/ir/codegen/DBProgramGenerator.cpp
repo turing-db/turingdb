@@ -5698,8 +5698,10 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
         rebindSubqueryBranchScope(branchScopes[branchIndex], importedEntities[branchIndex]);
 
         const mlir::Value branchDistinctSet = branchIndex < dedupedBranches ? distinctSet : mlir::Value();
-        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchDistinctSet, branchResults);
+        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchDistinctSet, false, branchResults);
     }
+
+    typeSubqueryBranchResults(branchResults);
 
     _opBuilder.setInsertionPointToEnd(bodyBlock);
 
@@ -5737,8 +5739,11 @@ void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubquery
         }
 
         rebindSubqueryBranchScope(scope, entities);
-        generateSubqueryBranch(branch._query, bodyBlock, mlir::Value(), branchResults);
+        generateSubqueryBranch(branch._query, bodyBlock, mlir::Value(), true, branchResults);
     }
+
+    yieldEveryPendingMask(branchResults);
+    typeSubqueryBranchResults(branchResults);
 
     _opBuilder.setInsertionPointToEnd(bodyBlock);
 
@@ -5792,9 +5797,9 @@ void DBProgramGenerator::rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColum
 void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
                                                 mlir::Block* bodyBlock,
                                                 mlir::Value distinctSet,
+                                                bool carriesPendingMasks,
                                                 SubqueryBranchResults& branchResults) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const bool firstBranch = branchResults._regions.empty();
 
     std::unique_ptr<mlir::Region>& region = branchResults._regions.emplace_back(std::make_unique<mlir::Region>());
     mlir::Block* const block = new mlir::Block(); // Region destructor frees it
@@ -5805,9 +5810,9 @@ void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
     _opBuilder.setInsertionPointToStart(block);
     generateQueryParts(query);
 
-    llvm::SmallVector<PublishedColumn> branchColumns;
+    llvm::SmallVector<PublishedColumn>& branchColumns = branchResults._branchColumns.emplace_back();
     if (const ReturnStmt* returnStmt = query->getReturnStmt()) {
-        publishProjection(returnStmt->getProjection());
+        publishProjection(returnStmt->getProjection(), nullptr, carriesPendingMasks);
         collectPublishedColumns(branchColumns);
     }
 
@@ -5827,26 +5832,81 @@ void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
         dedupUnionBranch(distinctSet, projected);
     }
 
+    for (size_t columnIndex = 0; columnIndex < projected.size(); columnIndex++) {
+        branchColumns[columnIndex]._column = projected[columnIndex];
+    }
+
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
     _unionBranchRowBlocks.erase(block);
+}
 
-    llvm::SmallVector<mlir::Type>& resultTypes = branchResults._resultTypes;
+void DBProgramGenerator::yieldEveryPendingMask(SubqueryBranchResults& branchResults) {
+    std::vector<std::string> names;
+    for (const llvm::SmallVector<PublishedColumn>& branchColumns : branchResults._branchColumns) {
+        for (const PublishedColumn& column : branchColumns) {
+            if (!llvm::is_contained(names, column._name)) {
+                names.push_back(column._name);
+            }
+        }
+    }
 
-    if (firstBranch) {
-        branchResults._resultColumns = branchColumns;
-        for (const mlir::Value column : projected) {
-            resultTypes.push_back(column.getType());
+    std::ranges::sort(names);
+
+    for (size_t branchIndex = 0; branchIndex < branchResults._regions.size(); branchIndex++) {
+        llvm::SmallVector<PublishedColumn>& branchColumns = branchResults._branchColumns[branchIndex];
+        std::vector<std::optional<PartScope::WrittenEntity>>& writtenColumns = branchResults._writtenColumns[branchIndex];
+
+        if (branchColumns.size() == names.size()) {
+            continue;
         }
 
-        return;
+        mlir::db::Yield yield = mlir::cast<mlir::db::Yield>(branchResults._regions[branchIndex]->front().back());
+        _opBuilder.setInsertionPoint(yield);
+
+        llvm::SmallVector<PublishedColumn> alignedColumns;
+        std::vector<std::optional<PartScope::WrittenEntity>> alignedWritten;
+
+        for (const std::string& name : names) {
+            const auto columnIt = std::ranges::find(branchColumns, name, &PublishedColumn::_name);
+            if (columnIt != branchColumns.end()) {
+                alignedColumns.push_back(*columnIt);
+                alignedWritten.push_back(writtenColumns[columnIt - branchColumns.begin()]);
+                continue;
+            }
+
+            bioassert(name.starts_with(pendingMaskPrefix), "Column '{}' missing from a branch of a WHEN", name);
+
+            // None of the rows of a branch that did not merge the entity is pending
+            alignedColumns.push_back({nullptr, name, constantBool(false)});
+            alignedWritten.emplace_back();
+        }
+
+        llvm::SmallVector<mlir::Value> projected;
+        for (const PublishedColumn& column : alignedColumns) {
+            projected.push_back(column._column);
+        }
+
+        yield->setOperands(projected);
+
+        branchColumns = std::move(alignedColumns);
+        writtenColumns = std::move(alignedWritten);
+    }
+}
+
+void DBProgramGenerator::typeSubqueryBranchResults(SubqueryBranchResults& branchResults) {
+    llvm::SmallVector<mlir::Type>& resultTypes = branchResults._resultTypes;
+    for (const PublishedColumn& column : branchResults._branchColumns.front()) {
+        resultTypes.push_back(column._column.getType());
     }
 
     // A null or a property names no element type until lowering resolves it, so the
     // first branch that names one types the result
-    for (size_t columnIndex = 0; columnIndex < projected.size(); columnIndex++) {
-        const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
-        if (mlir::isa<mlir::NoneType>(resultType.getType())) {
-            resultTypes[columnIndex] = projected[columnIndex].getType();
+    for (const llvm::SmallVector<PublishedColumn>& branchColumns : branchResults._branchColumns) {
+        for (size_t columnIndex = 0; columnIndex < branchColumns.size(); columnIndex++) {
+            const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
+            if (mlir::isa<mlir::NoneType>(resultType.getType())) {
+                resultTypes[columnIndex] = branchColumns[columnIndex]._column.getType();
+            }
         }
     }
 }
@@ -5855,7 +5915,7 @@ void DBProgramGenerator::publishSubqueryBranchResults(mlir::ResultRange results,
                                                       const SubqueryBranchResults& branchResults,
                                                       llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                                       CarriedEntities& returnedEntities) {
-    const llvm::SmallVector<PublishedColumn>& resultColumns = branchResults._resultColumns;
+    const llvm::SmallVector<PublishedColumn>& resultColumns = branchResults._branchColumns.front();
     const std::vector<std::vector<std::optional<PartScope::WrittenEntity>>>& writtenColumns = branchResults._writtenColumns;
 
     for (size_t columnIndex = 0; columnIndex < resultColumns.size(); columnIndex++) {
