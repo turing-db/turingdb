@@ -20,6 +20,12 @@ VectorResult<void> VecLibShard::load(const VecLibMetadata& meta) {
         return {};
     }
 
+    reset(meta);
+
+    return {};
+}
+
+void VecLibShard::reset(const VecLibMetadata& meta) {
     faiss::IndexFlat* flat = nullptr;
 
     switch (meta._metric) {
@@ -37,6 +43,4 @@ VectorResult<void> VecLibShard::load(const VecLibMetadata& meta) {
     auto* idMap = new faiss::IndexIDMap(flat);
     idMap->own_fields = true;
     _index.reset(idMap);
-
-    return {};
 }

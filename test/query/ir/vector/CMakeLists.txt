@@ -98,3 +98,14 @@ target_link_libraries(test_query_ir_similarity_guided_traversal PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_similarity_guided_traversal PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_load_vector_duplicate LoadVectorDuplicateTest.cpp)
+target_sources(test_query_ir_load_vector_duplicate PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_vector_duplicate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_vector_duplicate PRIVATE ${IR_TEST_DIR})

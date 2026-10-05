@@ -29,6 +29,7 @@ struct VecLibShard {
 
     VectorResult<void> save();
     VectorResult<void> load(const VecLibMetadata& meta);
+    void reset(const VecLibMetadata& meta);
 };
 
 }
