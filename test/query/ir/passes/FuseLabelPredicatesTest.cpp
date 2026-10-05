@@ -201,6 +201,51 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)-->(m) WHERE n:Person AND n:Founder RETURN n, m: one filter per conjunct
+const char* const stackedLabelFilters = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%s) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %s1, %t1 = db.filter(%p, {%s, %t}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %ls2 = db.get_node_label_set(%s1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls2, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %s2, %t2 = db.filter(%f, {%s1, %t1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%s2, %t2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The first filter's rows are also output, so they must keep the nodes Founder turns away.
+const char* const stackedLabelFiltersReadBetween = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%s) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %s1, %t1 = db.filter(%p, {%s, %t}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %ls2 = db.get_node_label_set(%s1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls2, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %s2, %t2 = db.filter(%f, {%s1, %t1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%s2, %t1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The two filters test the two ends of the edge.
+const char* const stackedLabelFiltersOverDifferentNodes = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%s) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %s1, %t1 = db.filter(%p, {%s, %t}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %ls2 = db.get_node_label_set(%t1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %i = db.check_label_constraint(%ls2, ["Interest"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %s2, %t2 = db.filter(%i, {%s1, %t1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%s2, %t2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // A label no node carries makes its alternative match nothing, not the whole check.
 const char* const orWithAnUnknownLabel = R"mlir(
 func.func @main() {
@@ -421,6 +466,38 @@ TEST_F(FuseLabelPredicatesTest, leavesAnAndOfTwoOrsAlone) {
     EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
     EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 1u);
+}
+
+TEST_F(FuseLabelPredicatesTest, mergesStackedLabelFilters) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(stackedLabelFilters);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(module.get());
+    ASSERT_EQ(checks.size(), 1u);
+    expectAlternatives(checks.front(), {{"Person", "Founder"}});
+
+    EXPECT_EQ(countOps<mlir::db::GetNodeLabelSet>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+}
+
+TEST_F(FuseLabelPredicatesTest, leavesStackedFiltersReadBetweenAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(stackedLabelFiltersReadBetween);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
+}
+
+TEST_F(FuseLabelPredicatesTest, leavesStackedFiltersOverDifferentNodesAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(stackedLabelFiltersOverDifferentNodes);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
 }
 
 TEST_F(FuseLabelPredicatesTest, leavesChecksOverDifferentNodesAlone) {

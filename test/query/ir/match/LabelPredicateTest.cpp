@@ -132,6 +132,33 @@ TEST_F(LabelPredicateTest, keepsTheNodesAConjunctionOrALabelHolds) {
                {{"Adam"}, {"Maxime"}, {"Martina"}, {"Doruk"}});
 }
 
+TEST_F(LabelPredicateTest, keepsTheNodesBothConjunctsHold) {
+    expectRows("MATCH (n) WHERE n:Person AND n:Bioinformatics RETURN n.name",
+               {{"Adam"}, {"Maxime"}, {"Martina"}});
+}
+
+TEST_F(LabelPredicateTest, keepsTheNodesThePatternAndWhereLabelsHold) {
+    expectRows("MATCH (n:Person)-->(m) WHERE n:Founder AND m:Interest RETURN n.name, m.name ORDER BY n.name, m.name",
+               {{"Adam", "Bio"}, {"Adam", "Cooking"}, {"Remy", "Computers"}, {"Remy", "Eighties"}, {"Remy", "Ghosts"}});
+}
+
+// The Founder test belongs to the OPTIONAL MATCH, so a Person who is no Founder is kept
+// with a null m rather than dropped.
+TEST_F(LabelPredicateTest, keepsALabelOfAnOptionalMatchInsideIt) {
+    expectRows("MATCH (n:Person) OPTIONAL MATCH (n:Founder)-->(m:Interest) RETURN n.name, m.name",
+               {{"Adam", "Bio"},
+                {"Adam", "Cooking"},
+                {"Cyrus", "null"},
+                {"Doruk", "null"},
+                {"Luc", "null"},
+                {"Martina", "null"},
+                {"Maxime", "null"},
+                {"Remy", "Computers"},
+                {"Remy", "Eighties"},
+                {"Remy", "Ghosts"},
+                {"Suhas", "null"}});
+}
+
 TEST_F(LabelPredicateTest, keepsTheNodesTheLabelDoesNotHold) {
     expectRows("MATCH (n) WHERE NOT n:Person RETURN n.name", interests);
 }

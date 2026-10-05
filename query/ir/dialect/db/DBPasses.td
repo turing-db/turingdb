@@ -74,7 +74,7 @@ def FuseEdgeTypePredicates : Pass<"fuse_edge_type_predicates"> {
 }
 
 def FuseLabelPredicates : Pass<"fuse_label_predicates"> {
-    let summary = "Combine two label checks over the same nodes joined by an AND or an OR into one check";
+    let summary = "Combine two label checks over the same nodes, joined by an AND or an OR or stacked as two filters, into one check";
     let dependentDialects = ["mlir::db::DB"];
 }
 
