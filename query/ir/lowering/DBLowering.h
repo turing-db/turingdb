@@ -683,6 +683,7 @@ private:
     // The chunk an optional mask operand lowered to, or a null Value for an absent one -
     // which is what the nl op then carries in its place
     mlir::Value mapOptionalMask(mlir::Value mask);
+    mlir::Value pendingMaskChunk(mlir::Value chunk);
 
     // Point the builder just after the loop nest that @param updateBlock belongs to,
     // where an accumulator filled from that block holds its final value. A drain loop

@@ -5238,8 +5238,10 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
     dropFilterColumns(with->filterImports());
 }
 
-void DBProgramGenerator::publishProjection(const Projection* projection, const WithStmt* with) {
-    const bool carriesPendingMasks = with && !projection->isAggregate();
+void DBProgramGenerator::publishProjection(const Projection* projection,
+                                           const WithStmt* with,
+                                           bool returnsOutOfCall) {
+    const bool carriesPendingMasks = (with || returnsOutOfCall) && !projection->isAggregate();
     if (!carriesPendingMasks) {
         throwOnPublishedMerge(projection, with);
     }
@@ -5258,8 +5260,11 @@ void DBProgramGenerator::publishProjection(const Projection* projection, const W
     buildNamedPathItems(projection, projected);
 
     llvm::SmallVector<PublishedColumn> carriedColumns;
-    if (carriesPendingMasks) {
+    if (with && carriesPendingMasks) {
         collectFilterColumns(with->filterImports(), variableColumns, carriedColumns);
+    }
+
+    if (carriesPendingMasks) {
         collectPendingMasks(projection, names, carriedColumns);
     }
 
@@ -5444,7 +5449,7 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
         generateQueryParts(body);
 
         if (returning) {
-            publishProjection(body->getReturnStmt()->getProjection());
+            publishProjection(body->getReturnStmt()->getProjection(), nullptr, true);
 
             llvm::SmallVector<PublishedColumn> bodyColumns;
             collectPublishedColumns(bodyColumns);
@@ -5956,15 +5961,16 @@ void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection, con
             continue;
         }
 
-        if (with) {
-            throwError(fmt::format("A WITH cannot group by '{}': a MERGE in the same query writes it, "
+        if (projection->isAggregate()) {
+            throwError(fmt::format("A {} cannot group by '{}': a MERGE in the same query writes it, "
                                    "and what a MERGE writes is not carried past an aggregate",
+                                   with ? "WITH" : "RETURN",
                                    decl->getName()),
                        projection);
         }
 
         throwError(fmt::format("A subquery cannot return '{}': a MERGE in the same query writes it, "
-                               "and what a MERGE writes is not carried out of a subquery",
+                               "and what a MERGE writes is not carried out of a UNION subquery",
                                decl->getName()),
                    projection);
     }

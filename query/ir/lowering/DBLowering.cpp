@@ -4750,7 +4750,22 @@ mlir::Value DBLowering::mapOptionalMask(mlir::Value mask) {
         return mlir::Value();
     }
 
-    return mapValue(mask);
+    return pendingMaskChunk(mapValue(mask));
+}
+
+// An OPTIONAL CALL pads the mask of a merged entity it returns with null, and the row it
+// pads names no entity, so none this change wrote
+mlir::Value DBLowering::pendingMaskChunk(mlir::Value chunk) {
+    if (!isNullableChunk(chunk.getType())) {
+        return chunk;
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
+
+    const mlir::Value notPending = _builder.create<nl::IsNotTrue>(loc, maskType, chunk).getResult();
+    return _builder.create<nl::Not>(loc, maskType, notPending).getResult();
 }
 
 void DBLowering::mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks) {
@@ -4790,6 +4805,10 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     }
 
     setInsertionInto(targetBlock);
+
+    for (mlir::Value& pending : boundPending) {
+        pending = pendingMaskChunk(pending);
+    }
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type nodeChunkType = nl::ChunkType::get(context, storage::NodeIDType::get(context));
