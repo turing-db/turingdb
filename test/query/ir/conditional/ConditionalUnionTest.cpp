@@ -120,3 +120,30 @@ TEST_F(ConditionalUnionTest, rejectsAConditionalInAnExistsOrCountBody) {
     expectError("MATCH (p:Person) RETURN COUNT { RETURN 2 AS x UNION { WHEN true THEN RETURN 1 AS x } }",
                 "Not implemented: WHEN in a COUNT body");
 }
+
+TEST_F(ConditionalUnionTest, dedupsAnEntityOneSideMergedAndAnotherMatched) {
+    expectWriteRowCount("{ WHEN true THEN { MERGE (n:Person {name: 'Remy'}) RETURN n } } "
+                        "UNION "
+                        "{ WHEN true THEN { MATCH (n:Person {name: 'Remy'}) RETURN n } }",
+                        1);
+}
+
+TEST_F(ConditionalUnionTest, writesNothingInABranchNotTaken) {
+    expectWriteRows("{ WHEN false THEN { MERGE (:Person {name: 'Nia'}) RETURN 1 AS x } ELSE { RETURN 2 AS x } } "
+                    "UNION "
+                    "{ WHEN false THEN { CREATE (:Person {name: 'Kai'}) RETURN 3 AS x } }",
+                    {{"2"}});
+
+    expectRows("MATCH (p:Person) WHERE p.name IN ['Kai', 'Nia'] RETURN count(p)", {{"0"}});
+}
+
+TEST_F(ConditionalUnionTest, writesInTheBranchTakenOnEachSide) {
+    expectWriteRows("{ WHEN false THEN { CREATE (:Person {name: 'Zed'}) RETURN 'z' AS x } "
+                    "ELSE { MERGE (n:Person {name: 'Nia'}) SET n.age = 5 RETURN n.name AS x } } "
+                    "UNION ALL "
+                    "{ WHEN true THEN { CREATE (n:Person {name: 'Kai'}) MERGE (n)-[:OWNS]->(:Car) RETURN n.name AS x } }",
+                    {{"Nia"}, {"Kai"}});
+
+    expectRows("MATCH (p:Person) WHERE p.name IN ['Kai', 'Nia', 'Zed'] RETURN p.name, p.age", {{"Kai", "null"}, {"Nia", "5"}});
+    expectRows("MATCH (p:Person)-[:OWNS]->(:Car) RETURN p.name", {{"Kai"}});
+}
