@@ -2311,7 +2311,7 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
         _builder.getUnknownLoc(),
         boolChunkType,
         inputChunk,
-        checkLabelConstraint.getLabels());
+        checkLabelConstraint.getAlternatives());
 
     _valueMap[checkLabelConstraint.getResult()] = check.getResult();
 }

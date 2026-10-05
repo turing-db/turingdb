@@ -1506,7 +1506,8 @@ void DBProgramGenerator::collectHopNodeMasks(const NodePattern* node,
         }
 
         const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
-        masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, labelsAttr).getResult());
+        const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({labelsAttr});
+        masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, alternatives).getResult());
     }
 
     for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
@@ -4803,11 +4804,13 @@ mlir::Value DBProgramGenerator::checkNodeLabels(mlir::Value nodeColumn,
         labelSetIDType,
         nodeColumn).getResult();
 
+    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({strArrayAttr(_opBuilder, labels)});
+
     return _opBuilder.create<mlir::db::CheckLabelConstraint>(
         loc,
         boolType,
         labelSetIDColumn,
-        strArrayAttr(_opBuilder, labels)).getResult();
+        alternatives).getResult();
 }
 
 mlir::Value DBProgramGenerator::checkEdgeType(mlir::Value edgeTypeColumn,

@@ -1,5 +1,6 @@
 #include "NLTranslator.h"
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -2241,28 +2242,36 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
 
     NLCheckLabelConstraintData* data = _program->allocFunctionData<NLCheckLabelConstraintData>(input, output);
 
-    llvm::SmallVector<llvm::StringRef> labels;
-    for (const mlir::Attribute labelAttr : op.getLabels()) {
-        labels.push_back(mlir::cast<mlir::StringAttr>(labelAttr).getValue());
+    // Each alternative is a conjunction, so one label no node has ever carried makes that
+    // alternative match nothing, where dropping the missing label would test a weaker
+    // constraint than the query wrote.
+    llvm::SmallVector<LabelSet, 4> constraints;
+    for (const mlir::Attribute alternative : op.getAlternatives()) {
+        llvm::SmallVector<llvm::StringRef> labels;
+        for (const mlir::Attribute labelAttr : mlir::cast<mlir::ArrayAttr>(alternative)) {
+            labels.push_back(mlir::cast<mlir::StringAttr>(labelAttr).getValue());
+        }
+
+        LabelSet constraint;
+        if (resolveLabelSet(labels, constraint)) {
+            constraints.push_back(constraint);
+        }
     }
 
-    // The labels are a conjunction, so one no node has ever carried makes the whole test
-    // false: matching no label set is that answer, where dropping the missing label would
-    // test a weaker constraint than the query wrote.
-    LabelSet constraint;
-    if (resolveLabelSet(labels, constraint)) {
-        collectMatchingLabelSets(constraint, data);
+    if (!constraints.empty()) {
+        collectMatchingLabelSets(constraints, data);
     }
 
     body->emplaceStmt(&NLExecutor::runCheckLabelConstraint, data);
 }
 
-void NLTranslator::collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const {
-    const LabelSetHandle constraintHandle(constraint);
+void NLTranslator::collectMatchingLabelSets(std::span<const LabelSet> constraints, NLCheckLabelConstraintData* data) const {
+    const auto collectMatching = [constraints, data](LabelSetID id, const LabelSet& labelset) {
+        const bool matches = std::any_of(constraints.begin(), constraints.end(), [&labelset](const LabelSet& constraint) {
+            return labelset.hasAtLeastLabels(constraint);
+        });
 
-    const auto collectMatching = [&constraintHandle, data](LabelSetID id, const LabelSet& labelset) {
-        const LabelSetHandle candidate(labelset);
-        if (candidate.hasAtLeastLabels(constraintHandle)) {
+        if (matches) {
             data->addMatchingID(id);
         }
     };

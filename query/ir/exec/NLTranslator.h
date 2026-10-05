@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/DenseMap.h"
@@ -444,7 +445,7 @@ private:
 
     // Records on @param data the ID of every label set this change knows that a node must
     // carry at least @param constraint to be in
-    void collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const;
+    void collectMatchingLabelSets(std::span<const LabelSet> constraints, NLCheckLabelConstraintData* data) const;
 
     // Translate the nl.for over an nl.explore_paths iterator: allocate the seed, end and
     // path loop variables, resolve the edge type name and the end labels against the

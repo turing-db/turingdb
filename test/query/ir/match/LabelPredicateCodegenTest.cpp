@@ -130,14 +130,27 @@ TEST_F(LabelPredicateCodegenTest, aChainOfLabelsFusesAsTheWholeConjunction) {
     EXPECT_EQ(labels, expected);
 }
 
-// A disjunction is no scan: both sides are computed as columns and the filter takes the
-// rows either one keeps.
-TEST_F(LabelPredicateCodegenTest, aDisjunctionOfLabelsStaysACheckPerSide) {
+// A disjunction is no scan, but it is one check: each side becomes one alternative of it.
+TEST_F(LabelPredicateCodegenTest, aDisjunctionOfLabelsIsOneCheck) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
-        generate("MATCH (n) WHERE n:Founder OR n:Sales RETURN n");
+        generate("MATCH (n) WHERE n:Person:Founder OR n:Sales OR n:Exotic RETURN n");
 
-    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
-    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 1u);
+    llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(*module);
+    ASSERT_EQ(checks.size(), 1u);
+
+    const mlir::ArrayAttr alternatives = checks.front().getAlternatives();
+    ASSERT_EQ(alternatives.size(), 3u);
+
+    std::vector<std::string> labels;
+    namesOf(mlir::cast<mlir::ArrayAttr>(alternatives[0]), labels);
+    EXPECT_EQ(labels, (std::vector<std::string> {"Person", "Founder"}));
+    namesOf(mlir::cast<mlir::ArrayAttr>(alternatives[1]), labels);
+    EXPECT_EQ(labels, (std::vector<std::string> {"Sales"}));
+    namesOf(mlir::cast<mlir::ArrayAttr>(alternatives[2]), labels);
+    EXPECT_EQ(labels, (std::vector<std::string> {"Exotic"}));
+
+    EXPECT_EQ(countOps<mlir::db::GetNodeLabelSet>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
 }
 

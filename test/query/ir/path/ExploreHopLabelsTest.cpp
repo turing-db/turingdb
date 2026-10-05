@@ -53,6 +53,23 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n:Person)((a)-[e]->(b) WHERE b:Person OR b:Interest){1,3}(m) RETURN n, m, size(e):
+// hop_labels is a conjunction, so it cannot carry the disjunction
+const char* const disjunctionRegionProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 {
+  ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
+    %ls = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %ok = db.check_label_constraint(%ls, [["Person"], ["Interest"]]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    db.yield %ok : !db.column<!storage.bool>
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %l = db.path_length(%0#2) : (!db.column<!storage.path_ref>) -> !db.column<ui64>
+  db.output(%0#0, %0#1, %l) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<ui64>
+  return
+}
+)mlir";
+
 const char* const fusedProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
@@ -354,6 +371,18 @@ TEST_F(ExploreHopLabelsTest, leavesARegionAskingTheHopSourceForLabels) {
     mlir::db::ExplorePaths exploration = findExplorePaths(*module);
     EXPECT_FALSE(exploration.getHopLabels().has_value());
     EXPECT_FALSE(exploration.getHop().empty());
+}
+
+TEST_F(ExploreHopLabelsTest, leavesARegionAskingTheEndForADisjunction) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(disjunctionRegionProgram);
+    ASSERT_TRUE(module);
+
+    runPass(*module, mlir::db::createFuseExploreHopLabels());
+
+    mlir::db::ExplorePaths exploration = findExplorePaths(*module);
+    EXPECT_FALSE(exploration.getHopLabels().has_value());
+    EXPECT_FALSE(exploration.getHop().empty());
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
 }
 
 TEST_F(ExploreHopLabelsTest, roundTripsTheHopLabelsThroughThePrinter) {
