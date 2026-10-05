@@ -91,18 +91,16 @@ Yield getFactorYield(Region& factor) {
     return dyn_cast_or_null<Yield>(terminator);
 }
 
-// The branches of a union with results feed its results rather than the result table,
-// so each one ends in a db.yield naming one column per result
-LogicalResult verifyYieldingBranches(Union unionOp) {
-    for (Region& branch : unionOp.getBranches()) {
-        Yield yield = getFactorYield(branch);
-        if (!yield) {
-            return unionOp.emitOpError("each branch of a union with results must end with a db.yield");
-        }
+// A branch feeding the results of the op holding it, rather than the result table, ends
+// in a db.yield naming one column per result
+LogicalResult verifyYieldingBranch(Operation* holder, Region& branch) {
+    Yield yield = getFactorYield(branch);
+    if (!yield) {
+        return holder->emitOpError("each branch must end with a db.yield");
+    }
 
-        if (yield.getColumns().size() != unionOp.getNumResults()) {
-            return unionOp.emitOpError("each branch must yield one column per result");
-        }
+    if (yield.getColumns().size() != holder->getNumResults()) {
+        return holder->emitOpError("each branch must yield one column per result");
     }
 
     return success();
@@ -864,7 +862,13 @@ LogicalResult Union::verify() {
     }
 
     if (getNumResults() > 0) {
-        return verifyYieldingBranches(*this);
+        for (Region& branch : branches) {
+            if (failed(verifyYieldingBranch(getOperation(), branch))) {
+                return failure();
+            }
+        }
+
+        return success();
     }
 
     Output first;
@@ -886,6 +890,46 @@ LogicalResult Union::verify() {
         if (output.getColumnNamesAttr() != first.getColumnNamesAttr()) {
             return emitOpError("every branch must output the same column names");
         }
+    }
+
+    return success();
+}
+
+void Conditional::build(OpBuilder& builder,
+                        OperationState& state,
+                        TypeRange resultTypes,
+                        size_t regionCount) {
+    const OpBuilder::InsertionGuard guard(builder);
+
+    state.addTypes(resultTypes);
+
+    for (size_t regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+        Region* region = state.addRegion();
+        builder.createBlock(region);
+    }
+}
+
+LogicalResult Conditional::verify() {
+    const MutableArrayRef<Region> regions = getBranches();
+    if (regions.size() < 2) {
+        return emitOpError("requires a condition and the branch it guards");
+    }
+
+    const size_t conditionCount = regions.size() / 2;
+    for (size_t conditionIndex = 0; conditionIndex < conditionCount; conditionIndex++) {
+        Yield condition = getFactorYield(regions[2 * conditionIndex]);
+        if (!condition || condition.getColumns().size() != 1) {
+            return emitOpError("each condition must end with a db.yield of one column");
+        }
+
+        if (failed(verifyYieldingBranch(getOperation(), regions[2 * conditionIndex + 1]))) {
+            return failure();
+        }
+    }
+
+    const bool hasDefault = regions.size() % 2 == 1;
+    if (hasDefault) {
+        return verifyYieldingBranch(getOperation(), regions.back());
     }
 
     return success();

@@ -902,6 +902,8 @@ bool dropsRows(mlir::Operation* operation) {
     mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(operation);
     if (call) {
         return !call.getUnit();
+    } else if (mlir::isa<mlir::db::Conditional>(operation)) {
+        return operation->getNumResults() > 0;
     }
 
     return mlir::isa<mlir::db::FilterOp,
@@ -1181,6 +1183,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerHashJoin(hashJoin);
     } else if (mlir::db::Union unionOp = mlir::dyn_cast<mlir::db::Union>(operation)) {
         lowerUnion(unionOp);
+    } else if (mlir::db::Conditional conditional = mlir::dyn_cast<mlir::db::Conditional>(operation)) {
+        lowerConditional(conditional);
     } else if (mlir::db::DistinctSet distinctSet = mlir::dyn_cast<mlir::db::DistinctSet>(operation)) {
         lowerDistinctSet(distinctSet);
     } else if (mlir::db::OptionalMatch optionalMatch = mlir::dyn_cast<mlir::db::OptionalMatch>(operation)) {
@@ -3429,36 +3433,168 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
     llvm::SmallVector<nl::UnionCollect, 4> collects;
 
     for (mlir::Region& branch : unionOp.getBranches()) {
-        _innermostLoopBody = nullptr;
-        _innermostCardinality = mlir::Value();
+        lowerCollectedBranch(branch, root, state, collects);
+    }
 
-        mlir::db::Yield branchYield = mlir::cast<mlir::db::Yield>(branch.front().back());
+    drainCollectedBranches(collects, state, root, unionOp.getOperation());
+}
 
-        for (mlir::Operation& operation : branch.front()) {
-            llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 4> replacedMappings;
-            convertUnionResultChunks(operation, branchYield.getColumns(), replacedMappings);
+void DBLowering::lowerConditional(mlir::db::Conditional conditional) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType maskType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
-            if (&operation != branchYield.getOperation()) {
-                lowerOperation(operation);
-            } else {
-                llvm::SmallVector<mlir::Value, 4> chunks;
-                for (const mlir::Value column : branchYield.getColumns()) {
-                    chunks.push_back(mapValue(column));
-                }
+    mlir::Block* const root = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    mlir::Block* const previousConstantComputationBlock = _constantComputationBlock;
 
-                rowAlignBufferedChunks(chunks);
+    const bool returning = conditional.getNumResults() > 0;
 
-                // A branch of constants alone lays them out where they are bound, above the
-                // root, which the collect must still run once per step of
-                setInsertionInto(deepestOwnerBlock(chunks, root));
-                collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
+    mlir::Value state;
+    if (returning) {
+        _builder.setInsertionPointToStart(root);
+        state = _builder.create<nl::UnionBuffer>(loc).getState();
+    }
+
+    _constantComputationBlock = root;
+
+    llvm::SmallVector<mlir::Value, 4> readColumns;
+    collectRowColumnsReadByBranches(conditional, readColumns);
+
+    llvm::SmallVector<mlir::Value, 8> outerChunks;
+    for (const mlir::Value column : readColumns) {
+        outerChunks.push_back(mapValue(column));
+    }
+
+    llvm::SmallVector<mlir::Value, 8> reaching(outerChunks.begin(), outerChunks.end());
+    mlir::Value reachingCardinality = cardinalityDriver(reaching);
+
+    const mlir::MutableArrayRef<mlir::Region> regions = conditional.getBranches();
+    const size_t conditionCount = regions.size() / 2;
+    const bool hasDefault = regions.size() % 2 == 1;
+
+    llvm::SmallVector<nl::UnionCollect, 4> collects;
+
+    for (size_t conditionIndex = 0; conditionIndex < conditionCount; conditionIndex++) {
+        for (size_t columnIndex = 0; columnIndex < readColumns.size(); columnIndex++) {
+            _valueMap[readColumns[columnIndex]] = reaching[columnIndex];
+        }
+
+        const mlir::Value condition = lowerBlockOverRows(regions[2 * conditionIndex].front(), reachingCardinality);
+
+        llvm::SmallVector<mlir::Value, 8> taken;
+        filterCaseRows(condition, reaching, taken);
+        lowerConditionalBranch(regions[2 * conditionIndex + 1], readColumns, taken, state, collects);
+
+        const bool rowsFallThrough = hasDefault || conditionIndex + 1 < conditionCount;
+        if (!rowsFallThrough) {
+            break;
+        }
+
+        setInsertionForUnaryOp(condition);
+        const mlir::Value fallsThrough = _builder.create<nl::IsNotTrue>(loc, maskType, condition).getResult();
+
+        llvm::SmallVector<mlir::Value, 8> rest;
+        filterCaseRows(fallsThrough, reaching, rest);
+
+        reachingCardinality = rest.front();
+        reaching.assign(rest.begin() + 1, rest.end());
+    }
+
+    if (hasDefault) {
+        llvm::SmallVector<mlir::Value, 8> taken {reachingCardinality};
+        taken.append(reaching.begin(), reaching.end());
+
+        lowerConditionalBranch(regions.back(), readColumns, taken, state, collects);
+    }
+
+    for (size_t columnIndex = 0; columnIndex < readColumns.size(); columnIndex++) {
+        _valueMap[readColumns[columnIndex]] = outerChunks[columnIndex];
+    }
+
+    _constantComputationBlock = previousConstantComputationBlock;
+
+    if (!returning) {
+        _innermostLoopBody = previousInnermostLoopBody;
+        _innermostCardinality = previousInnermostCardinality;
+
+        setInsertionInto(root);
+        return;
+    }
+
+    drainCollectedBranches(collects, state, root, conditional.getOperation());
+}
+
+void DBLowering::lowerConditionalBranch(mlir::Region& branch,
+                                        llvm::ArrayRef<mlir::Value> readColumns,
+                                        llvm::ArrayRef<mlir::Value> taken,
+                                        mlir::Value state,
+                                        llvm::SmallVectorImpl<nl::UnionCollect>& collects) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::Block* const root = _rootBlock;
+
+    setInsertionInto(deepestOwnerBlock(taken, root));
+    nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, taken);
+    nl::For branchLoop = _builder.create<nl::For>(loc, eachRow.getResult(), mlir::Value());
+    mlir::Block* const branchRoot = branchLoop.getBody();
+
+    for (size_t columnIndex = 0; columnIndex < readColumns.size(); columnIndex++) {
+        const unsigned argumentIndex = static_cast<unsigned>(columnIndex + 1);
+        _valueMap[readColumns[columnIndex]] = branchRoot->getArgument(argumentIndex);
+    }
+
+    _rootBlock = branchRoot;
+    _constantComputationBlock = branchRoot;
+
+    lowerCollectedBranch(branch, branchRoot, state, collects);
+
+    _rootBlock = root;
+    _constantComputationBlock = root;
+}
+
+void DBLowering::lowerCollectedBranch(mlir::Region& branch,
+                                      mlir::Block* root,
+                                      mlir::Value state,
+                                      llvm::SmallVectorImpl<nl::UnionCollect>& collects) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
+
+    mlir::db::Yield branchYield = mlir::cast<mlir::db::Yield>(branch.front().back());
+
+    for (mlir::Operation& operation : branch.front()) {
+        llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 4> replacedMappings;
+        convertUnionResultChunks(operation, branchYield.getColumns(), replacedMappings);
+
+        if (&operation != branchYield.getOperation()) {
+            lowerOperation(operation);
+        } else if (state) {
+            llvm::SmallVector<mlir::Value, 4> chunks;
+            for (const mlir::Value column : branchYield.getColumns()) {
+                chunks.push_back(mapValue(column));
             }
 
-            for (const auto& [column, chunk] : replacedMappings) {
-                _valueMap[column] = chunk;
-            }
+            rowAlignBufferedChunks(chunks);
+
+            // A branch of constants alone lays them out where they are bound, above the
+            // root, which the collect must still run once per step of
+            setInsertionInto(deepestOwnerBlock(chunks, root));
+            collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
+        }
+
+        for (const auto& [column, chunk] : replacedMappings) {
+            _valueMap[column] = chunk;
         }
     }
+}
+
+void DBLowering::drainCollectedBranches(llvm::ArrayRef<nl::UnionCollect> collects,
+                                        mlir::Value state,
+                                        mlir::Block* root,
+                                        mlir::Operation* holder) {
+    const mlir::Location loc = _builder.getUnknownLoc();
 
     llvm::SmallVector<mlir::MutableOperandRange, 4> branchColumns;
     for (nl::UnionCollect collect : collects) {
@@ -3474,7 +3610,33 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
     setInsertionInto(root);
     nl::UnionDrain drain = _builder.create<nl::UnionDrain>(loc, iteratorType, state);
 
-    buildLoopForSource(drain.getResult(), unionOp.getOperation());
+    buildLoopForSource(drain.getResult(), holder);
+}
+
+void DBLowering::collectRowColumnsReadByBranches(mlir::db::Conditional conditional,
+                                                 llvm::SmallVectorImpl<mlir::Value>& columns) const {
+    mlir::Operation* const holder = conditional.getOperation();
+    llvm::SmallPtrSet<mlir::Value, 8> seen;
+
+    holder->walk([&](mlir::Operation* operation) {
+        if (operation == holder) {
+            return;
+        }
+
+        for (mlir::Value operand : operation->getOperands()) {
+            const bool readFromAbove = !holder->isAncestor(operand.getParentRegion()->getParentOp());
+            const bool isColumn = mlir::isa<mlir::db::ColumnType>(operand.getType());
+            if (!readFromAbove || !isColumn || seen.contains(operand)) {
+                continue;
+            }
+
+            seen.insert(operand);
+
+            if (!yieldsConstantColumn(mapValue(operand))) {
+                columns.push_back(operand);
+            }
+        }
+    });
 }
 
 // A dedup keys a row on the bytes of the chunk it is handed, so a branch's result columns
@@ -5426,13 +5588,17 @@ mlir::Value DBLowering::lowerCaseRegion(mlir::Region& region,
         _valueMap[block.getArgument(static_cast<unsigned>(argumentIndex))] = chunks[argumentIndex];
     }
 
+    return lowerBlockOverRows(block, cardinality);
+}
+
+mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardinality) {
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostCardinality = cardinality;
 
     mlir::Value value;
     for (mlir::Operation& operation : block) {
-        if (mlir::db::CaseYield yield = mlir::dyn_cast<mlir::db::CaseYield>(operation)) {
-            value = mapValue(yield.getValue());
+        if (operation.hasTrait<mlir::OpTrait::IsTerminator>()) {
+            value = mapValue(operation.getOperand(0));
             continue;
         }
 
@@ -5513,17 +5679,7 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
 
-    mlir::Block* const insertBlock = ownerBlock(operandChunk);
-    if (insertBlock != _entryBlock) {
-        setInsertionInto(insertBlock);
-    } else {
-        mlir::Operation* const operandDef = operandChunk.getDefiningOp();
-        if (operandDef) {
-            _builder.setInsertionPointAfter(operandDef);
-        } else {
-            setInsertionToEntryBlockStart();
-        }
-    }
+    setInsertionForUnaryOp(operandChunk);
 
     nl::Not nlNotOp = _builder.create<nl::Not>(_builder.getUnknownLoc(), resultType, operandChunk);
     _valueMap[notOp.getResult()] = nlNotOp.getResult();
@@ -5531,15 +5687,21 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
 
 void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
     mlir::Block* const insertBlock = ownerBlock(operandChunk);
-    if (insertBlock != _entryBlock) {
+    mlir::Block* const constantBlock = _constantComputationBlock ? _constantComputationBlock : _entryBlock;
+
+    const bool readsAConstant = insertBlock == _entryBlock
+                             || (yieldsConstantColumn(operandChunk) && enclosesBlock(insertBlock, constantBlock));
+
+    mlir::Operation* const operandDef = operandChunk.getDefiningOp();
+
+    if (!readsAConstant) {
         setInsertionInto(insertBlock);
+    } else if (insertBlock != constantBlock) {
+        _builder.setInsertionPointToStart(constantBlock);
+    } else if (operandDef) {
+        _builder.setInsertionPointAfter(operandDef);
     } else {
-        mlir::Operation* const operandDef = operandChunk.getDefiningOp();
-        if (operandDef) {
-            _builder.setInsertionPointAfter(operandDef);
-        } else {
-            setInsertionToEntryBlockStart();
-        }
+        setInsertionToEntryBlockStart();
     }
 }
 
@@ -6051,8 +6213,13 @@ void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
     }
 
     mlir::Block* const insertBlock = ownerBlock(deepest);
+    mlir::Block* const constantBlock = _constantComputationBlock ? _constantComputationBlock : _entryBlock;
 
-    if (insertBlock != _entryBlock) {
+    const bool allConstants = llvm::all_of(operands, [](mlir::Value operand) { return yieldsConstantColumn(operand); });
+    const bool readsConstantsAlone = insertBlock == _entryBlock
+                                  || (allConstants && enclosesBlock(insertBlock, constantBlock));
+
+    if (!readsConstantsAlone) {
         setInsertionInto(insertBlock);
         return;
     }
@@ -6064,12 +6231,12 @@ void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
         }
     }
 
-    // Walk the entry block to find which of the defining ops appears last — the new op
+    // Walk the block to find which of the defining ops appears last — the new op
     // must go after that one to stay before any nl.for that follows. Each op appears once
     // in the block, so stop as soon as every def is seen.
     mlir::Operation* lastDef = nullptr;
     size_t defsFound = 0;
-    for (mlir::Operation& op : *_entryBlock) {
+    for (mlir::Operation& op : *constantBlock) {
         if (defs.contains(&op)) {
             lastDef = &op;
             defsFound++;
@@ -6082,6 +6249,8 @@ void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
 
     if (lastDef) {
         _builder.setInsertionPointAfter(lastDef);
+    } else if (constantBlock != _entryBlock) {
+        _builder.setInsertionPointToStart(constantBlock);
     } else {
         setInsertionToEntryBlockStart();
     }

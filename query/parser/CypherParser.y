@@ -55,6 +55,7 @@
     #include "EdgePattern.h"
     #include "SinglePartQuery.h"
     #include "UnionQuery.h"
+    #include "ConditionalQuery.h"
     #include "ChangeQuery.h"
     #include "CommitQuery.h"
     #include "ListGraphQuery.h"
@@ -421,6 +422,9 @@
 %type<db::CallStmt*> callSt
 %type<db::CallSubqueryStmt*> callSubquerySt
 %type<db::CallSubqueryStmt::Branches> callSubqueryBody
+%type<db::CallSubqueryStmt::Branches> conditionalBranches
+%type<db::CallSubqueryStmt::Branches> whenBranches
+%type<db::SinglePartQuery*> conditionalBranchQuery
 %type<db::ExistsExpr::Branches> existsBody
 %type<db::UnionQuery::Branches> countBody
 %type<std::vector<const db::Symbol*>> callScope
@@ -484,6 +488,13 @@ regularQuery
         }
 
         $$ = UnionQuery::create(ast, $1, $2);
+        LOC($$, @$);
+      }
+    | conditionalBranches {
+        CallSubqueryStmt* body = CallSubqueryStmt::create(ast, $1);
+        LOC(body, @$);
+
+        $$ = ConditionalQuery::create(ast, body);
         LOC($$, @$);
       }
     ;
@@ -1163,6 +1174,29 @@ callSubqueryBody
             $$.push_back({branch._query, branch._all, {}});
         }
       }
+    | conditionalBranches { $$ = std::move($1); }
+    ;
+
+conditionalBranches
+    : whenBranches { $$ = std::move($1); }
+    | whenBranches ELSE conditionalBranchQuery {
+        $$ = std::move($1);
+        $$.push_back({$3, false, {}, nullptr});
+      }
+    ;
+
+whenBranches
+    : WHEN expr THEN conditionalBranchQuery { $$.push_back({$4, false, {}, $2}); }
+    | whenBranches WHEN expr THEN conditionalBranchQuery {
+        $$ = std::move($1);
+        $$.push_back({$5, false, {}, $3});
+      }
+    ;
+
+conditionalBranchQuery
+    : singlePartQuery { $$ = $1; }
+    | OBRACE singlePartQuery CBRACE { $$ = $2; }
+    | OBRACE singlePartQuery unionList CBRACE { scanner.notImplemented(@$, "UNION inside a WHEN branch"); }
     ;
 
 existsBody

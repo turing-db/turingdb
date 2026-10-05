@@ -79,6 +79,7 @@ class SetStmt;
 class RemoveStmt;
 class SinglePartQuery;
 class UnionQuery;
+class ConditionalQuery;
 class Stmt;
 class WhereClause;
 class WithStmt;
@@ -323,6 +324,8 @@ private:
     // body in its own right
     void generateUnion(const UnionQuery* unionQuery);
 
+    void generateConditionalQuery(const ConditionalQuery* query);
+
     void generateQueryParts(const SinglePartQuery* query);
 
     // One query part: its reading clauses, then the updating ones that write over the rows
@@ -512,9 +515,43 @@ private:
     void generateSubqueryUnion(llvm::ArrayRef<const SinglePartQuery*> branches,
                                size_t dedupedBranches,
                                std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
-                               std::span<CarriedEntities> importedEntities,
+                               std::span<const CarriedEntities> importedEntities,
                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                CarriedEntities& returnedEntities);
+
+    // Emits the db.conditional of a WHEN body and fills @param yielded as
+    // generateSubqueryUnion does
+    void generateSubqueryConditional(llvm::ArrayRef<CallSubqueryStmt::Branch> branches,
+                                     std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
+                                     std::span<const CarriedEntities> importedEntities,
+                                     llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                     CarriedEntities& returnedEntities);
+
+    // What the branches build before the db.union or db.conditional holding them exists
+    struct SubqueryBranchResults {
+        std::vector<std::unique_ptr<mlir::Region>> _regions;
+        llvm::SmallVector<PublishedColumn> _resultColumns;
+        llvm::SmallVector<mlir::Type> _resultTypes;
+        std::vector<std::vector<std::optional<PartScope::WrittenEntity>>> _writtenColumns;
+    };
+
+    void rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColumn> scope, const CarriedEntities& importedEntities);
+
+    void generateConditionRegion(const Expr* predicate,
+                                 mlir::Block* bodyBlock,
+                                 std::vector<std::unique_ptr<mlir::Region>>& regions);
+
+    // Generates one branch into a region ending in a db.yield of what its RETURN publishes,
+    // none for a branch ending on a write
+    void generateSubqueryBranch(const SinglePartQuery* query,
+                                mlir::Block* bodyBlock,
+                                mlir::Value distinctSet,
+                                SubqueryBranchResults& branchResults);
+
+    void publishSubqueryBranchResults(mlir::ResultRange results,
+                                      const SubqueryBranchResults& branchResults,
+                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                      CarriedEntities& returnedEntities);
 
     // Re-keys what the query has written to the declarations a WITH publishes it under,
     // so the part below the cut still reads it as this change's own

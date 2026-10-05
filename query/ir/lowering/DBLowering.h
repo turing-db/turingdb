@@ -151,6 +151,11 @@ private:
     // while the block opens on something else, where the next constant goes to the top
     mlir::Operation* _lastHoistedConstant {nullptr};
 
+    // The block the WHEN being lowered runs in, or the loop of its branch being lowered. A
+    // computation over constants alone goes there in place of the entry block, so neither
+    // a condition nor a branch is computed for a row that does not reach it.
+    mlir::Block* _constantComputationBlock {nullptr};
+
     // The block a root scan opens its loop in. It is the entry block at top
     // level, but a db.cross_product lowers its inner factor with the outer
     // factor's innermost loop body as the root, so the inner factor's scans
@@ -319,6 +324,35 @@ private:
     // Lowers a union with results - the body of a CALL - into branches that collect their
     // rows into one nl.union_buffer, drained by the loop the rest of the body lowers into
     void lowerUnionResults(mlir::db::Union unionOp);
+
+    // Lowers a WHEN as db.lazy_case is lowered: each condition over the row no earlier
+    // branch was taken for, and each branch in a loop over that row when it is taken
+    void lowerConditional(mlir::db::Conditional conditional);
+
+    // Lowers one branch of a WHEN in a loop over @param taken, the cut mask then the
+    // chunks of @param readColumns
+    void lowerConditionalBranch(mlir::Region& branch,
+                                llvm::ArrayRef<mlir::Value> readColumns,
+                                llvm::ArrayRef<mlir::Value> taken,
+                                mlir::Value state,
+                                llvm::SmallVectorImpl<mlir::nl::UnionCollect>& collects);
+
+    // Lowers one branch of a union or a WHEN rooted in @param root, collecting what it
+    // yields into @param state when it yields anything
+    void lowerCollectedBranch(mlir::Region& branch,
+                              mlir::Block* root,
+                              mlir::Value state,
+                              llvm::SmallVectorImpl<mlir::nl::UnionCollect>& collects);
+
+    void drainCollectedBranches(llvm::ArrayRef<mlir::nl::UnionCollect> collects,
+                                mlir::Value state,
+                                mlir::Block* root,
+                                mlir::Operation* holder);
+
+    // The columns the regions of @param conditional read from around it, but for the
+    // constants, which stand for every row and are read where they are bound
+    void collectRowColumnsReadByBranches(mlir::db::Conditional conditional,
+                                         llvm::SmallVectorImpl<mlir::Value>& columns) const;
 
     // Brings a union branch's result columns to the value type the whole result carries,
     // reaching them through @param resultColumns, what the branch's db.output or db.yield
@@ -522,6 +556,10 @@ private:
     // Lowers one region of a db.lazy_case over @param chunks, whose rows @param cardinality
     // counts, and returns what it yields laid out over them
     mlir::Value lowerCaseRegion(mlir::Region& region, llvm::ArrayRef<mlir::Value> chunks, mlir::Value cardinality);
+
+    // Lowers @param block over the rows @param cardinality counts, a computation over
+    // constants included, and returns what its terminator yields laid out over them
+    mlir::Value lowerBlockOverRows(mlir::Block& block, mlir::Value cardinality);
 
     // The rows of @param chunks for which @param mask holds: the cut mask first, which
     // counts them whether or not there are chunks, then the chunks

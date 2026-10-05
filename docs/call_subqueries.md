@@ -410,6 +410,21 @@ with results inside the body, each branch ending in a `db.yield`; the lowering c
 every branch into one `nl.union_buffer` and the rest of the body lowers into the loop over
 `nl.union_drain`.
 
+A body can be a WHEN: `CALL (p) { WHEN p.age > 60 THEN { ... } WHEN ... ELSE { ... } }`.
+For each input row the first branch whose predicate is true runs, a null predicate counting
+as false, and the ELSE branch runs when none is. With no ELSE and no predicate true the row
+is dropped, or padded under OPTIONAL CALL. Every branch returns the same columns, or none.
+A standalone `WHEN ... THEN ... ELSE` query is the same body with no CALL around it. The
+body is a `db.conditional` whose regions alternate predicate and branch, each ending in a
+`db.yield`. A WHEN body always runs one input row at a time. The lowering computes each
+predicate over the row no earlier branch was taken for, as `db.lazy_case` does, and roots
+each branch in an `nl.for` over `nl.each_row` of the row its predicate held for. A branch
+therefore runs at most once, and an aggregate in a branch that is not taken produces no row.
+A computation over constants alone goes into that loop too, so
+`WHEN k = 0 THEN RETURN 0 AS r ELSE RETURN 10 / k AS r` divides by no zero. The branches
+collect into one `nl.union_buffer`, as a UNION body does. Not done yet: a UNION inside a WHEN branch, `{ WHEN ... } UNION
+{ WHEN ... }`, and WHEN in an EXISTS or COUNT body.
+
 Still open: the vectorised forms of section 4, `CALL (*)`, an import
 read below a keyless reduction in the body, and trimming inside the region. The scope
 clause alias is settled: the grammar rejects `CALL (t AS teams)`, as Neo4j does.
