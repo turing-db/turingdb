@@ -138,6 +138,11 @@ def FuseExploreEndSet : Pass<"fuse_explore_end_set"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseExploreListPredicate : Pass<"fuse_explore_list_predicate"> {
+    let summary = "Move a filter's all() or none() over the relationships or nodes of a path exploration into the exploration's hop predicate";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreDistinctEnds : Pass<"fuse_explore_distinct_ends"> {
     let summary = "Mark a path exploration whose path is unread and whose rows are only ever deduplicated as distinct, so it emits each end once";
     let dependentDialects = ["mlir::db::DB"];

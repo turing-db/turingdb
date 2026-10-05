@@ -24,8 +24,9 @@ namespace storage = mlir::storage;
 
 namespace {
 
-// What a filter reads as a mask: a boolean column, one whose values may be null, or the
-// untyped null an expression over a property no row carries evaluates to
+// What a filter reads as a mask: a boolean column, one whose values may be null, a property
+// read whose type lowering resolves, or the untyped null an expression over a property no row
+// carries evaluates to
 bool isMaskColumn(Type type) {
     const auto column = dyn_cast<ColumnType>(type);
     if (!column) {
@@ -33,7 +34,7 @@ bool isMaskColumn(Type type) {
     }
 
     const Type element = column.getType();
-    if (isa<storage::BoolType>(element)) {
+    if (isa<storage::BoolType>(element) || isa<NoneType>(element)) {
         return true;
     }
 
