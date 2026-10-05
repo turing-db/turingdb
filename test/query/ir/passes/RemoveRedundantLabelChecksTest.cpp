@@ -102,6 +102,36 @@ func.func @main() {
 }
 )mlir";
 
+// Every alternative of the first check carries Person, so the second check keeps every row.
+const char* const checkCoveredBySharedAlternativeLabel = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %labelsets = db.get_node_label_set(%a) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %either = db.check_label_constraint(%labelsets, [["Person", "Founder"], ["Sales", "Person"]]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %af = db.filter(%either, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %labelsets2 = db.get_node_label_set(%af) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %person = db.check_label_constraint(%labelsets2, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %aff = db.filter(%person, {%af}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%aff, %aff) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Founder is on only one alternative of the first check, so the second check still cuts rows.
+const char* const checkNotCoveredByOneAlternativeLabel = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %labelsets = db.get_node_label_set(%a) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %either = db.check_label_constraint(%labelsets, [["Person", "Founder"], ["Sales", "Person"]]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %af = db.filter(%either, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %labelsets2 = db.get_node_label_set(%af) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %founder = db.check_label_constraint(%labelsets2, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %aff = db.filter(%founder, {%af}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%aff, %aff) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // MATCH (a)-->(b:Person), (a)-->(b) RETURN a, b: b is the first hop's labelled target,
 // carried through the second hop and the equality that rebinds it, then checked again.
 const char* const checkOverACarriedLabelledTarget = R"mlir(
@@ -255,6 +285,25 @@ TEST_F(RemoveRedundantLabelChecksTest, removesACheckTwoEarlierConstraintsGuarant
     llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(*module);
     ASSERT_EQ(checks.size(), 1u);
     EXPECT_EQ(checks.front().getConjunction().size(), 1u);
+}
+
+TEST_F(RemoveRedundantLabelChecksTest, removesACheckEveryAlternativeGuarantees) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parseAndRemove(checkCoveredBySharedAlternativeLabel);
+    ASSERT_TRUE(module);
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+
+    llvm::SmallVector<mlir::db::CheckLabelConstraint> checks = collect<mlir::db::CheckLabelConstraint>(*module);
+    ASSERT_EQ(checks.size(), 1u);
+    EXPECT_EQ(checks.front().getAlternatives().size(), 2u);
+}
+
+TEST_F(RemoveRedundantLabelChecksTest, keepsACheckOnlyOneAlternativeGuarantees) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parseAndRemove(checkNotCoveredByOneAlternativeLabel);
+    ASSERT_TRUE(module);
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
 }
 
 TEST_F(RemoveRedundantLabelChecksTest, removesACheckOverACarriedLabelledTarget) {

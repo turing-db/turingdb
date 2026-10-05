@@ -154,6 +154,23 @@ TEST_F(LabelPredicateCodegenTest, aDisjunctionOfLabelsIsOneCheck) {
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
 }
 
+// n:Person:Founder adds no node n:Person does not already keep, so what is left is one
+// conjunction, and that fuses into the scan.
+TEST_F(LabelPredicateCodegenTest, aDisjunctionThatIsOneConjunctionFusesIntoTheScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (n) WHERE n:Person:Founder OR n:Person RETURN n");
+
+    llvm::SmallVector<mlir::db::ScanNodesByLabel> scans = collect<mlir::db::ScanNodesByLabel>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+
+    std::vector<std::string> labels;
+    namesOf(scans.front().getLabels(), labels);
+    EXPECT_EQ(labels, (std::vector<std::string> {"Person"}));
+
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
+}
+
 TEST_F(LabelPredicateCodegenTest, aNegatedLabelPredicateStaysACheck) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("MATCH (n) WHERE NOT n:Person RETURN n");
