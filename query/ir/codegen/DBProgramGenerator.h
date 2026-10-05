@@ -550,7 +550,8 @@ private:
                                 bool carriesPendingMasks,
                                 SubqueryBranchResults& branchResults);
 
-    // Makes every branch of a WHEN yield the mask of each entity a MERGE wrote in any of them
+    // Makes every branch of a WHEN yield the mask of each entity a MERGE wrote in any of
+    // them, or a CREATE wrote in some of them
     void yieldEveryPendingMask(SubqueryBranchResults& branchResults);
 
     static void typeSubqueryBranchResults(SubqueryBranchResults& branchResults);
