@@ -531,7 +531,7 @@ private:
     // What the branches build before the db.union or db.conditional holding them exists
     struct SubqueryBranchResults {
         std::vector<std::unique_ptr<mlir::Region>> _regions;
-        llvm::SmallVector<PublishedColumn> _resultColumns;
+        std::vector<llvm::SmallVector<PublishedColumn>> _branchColumns;
         llvm::SmallVector<mlir::Type> _resultTypes;
         std::vector<std::vector<std::optional<PartScope::WrittenEntity>>> _writtenColumns;
     };
@@ -547,7 +547,13 @@ private:
     void generateSubqueryBranch(const SinglePartQuery* query,
                                 mlir::Block* bodyBlock,
                                 mlir::Value distinctSet,
+                                bool carriesPendingMasks,
                                 SubqueryBranchResults& branchResults);
+
+    // Makes every branch of a WHEN yield the mask of each entity a MERGE wrote in any of them
+    void yieldEveryPendingMask(SubqueryBranchResults& branchResults);
+
+    static void typeSubqueryBranchResults(SubqueryBranchResults& branchResults);
 
     void publishSubqueryBranchResults(mlir::ResultRange results,
                                       const SubqueryBranchResults& branchResults,

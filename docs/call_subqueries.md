@@ -422,7 +422,9 @@ each branch in an `nl.for` over `nl.each_row` of the row its predicate held for.
 therefore runs at most once, and an aggregate in a branch that is not taken produces no row.
 A computation over constants alone goes into that loop too, so
 `WHEN k = 0 THEN RETURN 0 AS r ELSE RETURN 10 / k AS r` divides by no zero. The branches
-collect into one `nl.union_buffer`, as a UNION body does. Not done yet: a UNION inside a WHEN branch, `{ WHEN ... } UNION
+collect into one `nl.union_buffer`, as a UNION body does. A branch can return an entity a
+MERGE wrote: each branch yields the entity's pending mask, `false` in a branch that did not
+merge it. Not done yet: a UNION inside a WHEN branch, `{ WHEN ... } UNION
 { WHEN ... }`, and WHEN in an EXISTS or COUNT body.
 
 Still open: the vectorised forms of section 4, `CALL (*)`, an import

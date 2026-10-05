@@ -17,3 +17,7 @@ target_link_libraries(test_query_ir_conditional_lazy_branch PRIVATE turing_ir_te
 # A WHEN beside OPTIONAL MATCH, CALL and EXISTS.
 add_turing_test(test_query_ir_conditional_composition ConditionalCompositionTest.cpp)
 target_link_libraries(test_query_ir_conditional_composition PRIVATE turing_ir_test_write_query_s)
+
+# A WHEN branch returning an entity a MERGE wrote.
+add_turing_test(test_query_ir_conditional_merge ConditionalMergeTest.cpp)
+target_link_libraries(test_query_ir_conditional_merge PRIVATE turing_ir_test_write_query_s)
