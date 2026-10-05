@@ -26,6 +26,7 @@ struct ExcludedEdges {
     }
 
     static bool holds(std::span<const EdgeID> edges, EdgeID edge);
+    static bool repeatsEarlier(std::span<const EdgeID> edges, size_t position);
 
     // How many distinct edges of @p excluded a node's out-run or in-run in @p part holds,
     // found by arithmetic on the out-run and by each edge's out-record for the in-run, so

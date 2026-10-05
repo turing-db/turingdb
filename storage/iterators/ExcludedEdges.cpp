@@ -10,6 +10,12 @@ bool ExcludedEdges::holds(std::span<const EdgeID> edges, EdgeID edge) {
     return std::find(edges.begin(), edges.end(), edge) != edges.end();
 }
 
+bool ExcludedEdges::repeatsEarlier(std::span<const EdgeID> edges, size_t position) {
+    const auto earlierEnd = edges.begin() + position;
+
+    return std::find(edges.begin(), earlierEnd, edges[position]) != earlierEnd;
+}
+
 size_t ExcludedEdges::countInOutRun(std::span<const EdgeID> excluded, const EdgeContainer& part, std::span<const EdgeRecord> outRun) {
     if (outRun.empty()) {
         return 0;
@@ -22,11 +28,7 @@ size_t ExcludedEdges::countInOutRun(std::span<const EdgeID> excluded, const Edge
     for (size_t position = 0; position < excluded.size(); position++) {
         const EdgeID edge = excluded[position];
         const size_t offset = (edge - firstEdgeID).getValue();
-
-        bool repeated = false;
-        for (size_t previous = 0; previous < position; previous++) {
-            repeated |= excluded[previous] == edge;
-        }
+        const bool repeated = repeatsEarlier(excluded, position);
 
         if (!repeated && offset >= runFirst && offset < runFirst + outRun.size()) {
             held++;
@@ -40,11 +42,7 @@ size_t ExcludedEdges::countInInRun(std::span<const EdgeID> excluded, const EdgeC
     size_t held = 0;
     for (size_t position = 0; position < excluded.size(); position++) {
         const EdgeID edge = excluded[position];
-
-        bool repeated = false;
-        for (size_t previous = 0; previous < position; previous++) {
-            repeated |= excluded[previous] == edge;
-        }
+        const bool repeated = repeatsEarlier(excluded, position);
 
         const EdgeRecord* record = part.tryGet(edge);
         if (!repeated && record && record->_otherID == node) {
@@ -91,8 +89,8 @@ size_t ExcludedEdges::copyRunLeavingOut(std::span<const EdgeID> excluded,
         } else {
             for (size_t offset = from; offset < count; offset++) {
                 const EdgeID edge = run[offset]._edgeID;
-                for (const EdgeID held : excluded) {
-                    if (held == edge) {
+                for (const EdgeID excludedEdge : excluded) {
+                    if (excludedEdge == edge) {
                         return offset;
                     }
                 }

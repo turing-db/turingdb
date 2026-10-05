@@ -2865,7 +2865,7 @@ void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesB
                                                                          inputChunk,
                                                                          edgeTypeHandle,
                                                                          carriedChunks,
-                                                                     getOutEdgesByType.getDistinctFromAttr());
+                                                                         getOutEdgesByType.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByType.getOperation());
 }
 
@@ -2888,7 +2888,7 @@ void DBLowering::lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByTy
                                                                        inputChunk,
                                                                        edgeTypeHandle,
                                                                        carriedChunks,
-                                                                   getInEdgesByType.getDistinctFromAttr());
+                                                                       getInEdgesByType.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByType.getOperation());
 }
 
@@ -2908,7 +2908,7 @@ void DBLowering::lowerGetOutEdgesByLabel(mlir::db::GetOutEdgesByLabel getOutEdge
                                                                            inputChunk,
                                                                            getOutEdgesByLabel.getLabelsAttr(),
                                                                            carriedChunks,
-                                                                       getOutEdgesByLabel.getDistinctFromAttr());
+                                                                           getOutEdgesByLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByLabel.getOperation());
 }
 
@@ -2928,7 +2928,7 @@ void DBLowering::lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesBy
                                                                          inputChunk,
                                                                          getInEdgesByLabel.getLabelsAttr(),
                                                                          carriedChunks,
-                                                                     getInEdgesByLabel.getDistinctFromAttr());
+                                                                         getInEdgesByLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByLabel.getOperation());
 }
 
@@ -3096,15 +3096,13 @@ void DBLowering::lowerCheckEdgeDistinct(mlir::db::CheckEdgeDistinct checkEdgeDis
 
     setInsertionInto(deepestOwnerBlock(otherChunks, ownerBlock(subjectChunk)));
 
-    const mlir::Type boolChunkType = nl::ChunkType::get(
-        _builder.getContext(),
-        storage::BoolType::get(_builder.getContext()));
+    mlir::MLIRContext* context = _builder.getContext();
+    const mlir::Type boolChunkType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
-    nl::CheckEdgeDistinct check = _builder.create<nl::CheckEdgeDistinct>(
-        _builder.getUnknownLoc(),
-        boolChunkType,
-        subjectChunk,
-        otherChunks);
+    nl::CheckEdgeDistinct check = _builder.create<nl::CheckEdgeDistinct>(_builder.getUnknownLoc(),
+                                                                         boolChunkType,
+                                                                         subjectChunk,
+                                                                         otherChunks);
 
     _valueMap[checkEdgeDistinct.getResult()] = check.getResult();
 }

@@ -11,6 +11,7 @@ set(storage_sources
         buffers/StringBuffer.cpp
 
         datapart/DataPart.cpp
+        datapart/NodeOwnerPart.cpp
         datapart/NodeContainer.cpp
         datapart/EdgeContainer.cpp
 

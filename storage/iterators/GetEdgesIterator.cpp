@@ -161,11 +161,7 @@ void GetEdgesChunkWriter::classifyRow(std::span<const EdgeID> excluded) {
     for (size_t position = 0; position < excluded.size(); position++) {
         const EdgeID edge = excluded[position];
         const size_t offset = (edge - _partFirstEdgeID).getValue();
-
-        bool repeated = false;
-        for (size_t previous = 0; previous < position; previous++) {
-            repeated |= excluded[previous] == edge;
-        }
+        const bool repeated = ExcludedEdges::repeatsEarlier(excluded, position);
 
         if (repeated || offset >= _partOutEdges.size()) {
             continue;
@@ -225,7 +221,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
     }
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
-        constexpr bool indicesOnly = !conditions[0] && !conditions[1] && !conditions[2];
+        constexpr bool INDICES_ONLY = !conditions[0] && !conditions[1] && !conditions[2];
 
         while (isValid() && remainingToMax > 0) {
             const size_t avail = std::distance(_edgeIt, _edges.end());
@@ -248,7 +244,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
             // With only indices written every row of a run is the same, so the rows
             // its excluded edges would have produced can come off the slice's end
             size_t dropped = 0;
-            if constexpr (indicesOnly) {
+            if constexpr (INDICES_ONLY) {
                 dropped = std::min(_heldInRun, rangeSize);
                 _heldInRun -= dropped;
             }
@@ -258,7 +254,7 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
             std::fill(_indices->begin() + prevSize, _indices->end(), index);
             remainingToMax -= rangeSize - dropped;
 
-            if constexpr (!indicesOnly) {
+            if constexpr (!INDICES_ONLY) {
                 if (_heldInRun > 0) {
                     const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
                     const EdgeContainer* outPart = _direction == Direction::Outgoing ? &_boundPart->edges() : nullptr;
