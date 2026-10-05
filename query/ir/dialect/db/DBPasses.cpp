@@ -2332,51 +2332,123 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     }
 };
 
-// The labels a hop region asks of the hop's end node, when that is all it asks: a yield of
-// one label check over the end's label set, and nothing else in the block
-bool matchHopLabels(ExplorePaths exploration, ArrayAttr& labels) {
-    Region& hop = exploration.getHop();
-    if (hop.empty() || !exploration.getHopImports().empty()) {
-        return false;
-    }
+Type boolColumnType(mlir::MLIRContext* context) {
+    return ColumnType::get(context, storage::BoolType::get(context));
+}
 
-    Block& block = hop.front();
-    if (block.getOperations().size() != 3) {
-        return false;
-    }
-
-    Yield yield = dyn_cast<Yield>(block.getTerminator());
-    if (!yield || yield->getNumOperands() != 1) {
-        return false;
-    }
-
-    CheckLabelConstraint check = yield->getOperand(0).getDefiningOp<CheckLabelConstraint>();
-    if (!check) {
-        return false;
+// A conjunct of a hop region's yield that only asks the hop's end node for labels
+CheckLabelConstraint endLabelCheckOf(Value conjunct, BlockArgument end) {
+    CheckLabelConstraint check = conjunct.getDefiningOp<CheckLabelConstraint>();
+    if (!check || !conjunct.hasOneUse()) {
+        return {};
     }
 
     GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-    if (!labelSet || labelSet.getInputNodes() != block.getArgument(2)) {
-        return false;
+    const bool readsTheEnd = labelSet && labelSet.getInputNodes() == end;
+
+    return readsTheEnd ? check : CheckLabelConstraint {};
+}
+
+// The conjuncts of a hop region's yield, and the `and` ops joining them, each read by its
+// parent alone, listed parent first
+void collectHopConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts, llvm::SmallVectorImpl<AndOp>& joins) {
+    llvm::SmallVector<Value> pending {mask};
+    while (!pending.empty()) {
+        const Value conjunct = pending.pop_back_val();
+
+        AndOp conjunction = conjunct.getDefiningOp<AndOp>();
+        if (conjunction && conjunct.hasOneUse()) {
+            joins.push_back(conjunction);
+            pending.push_back(conjunction.getRhs());
+            pending.push_back(conjunction.getLhs());
+        } else {
+            conjuncts.push_back(conjunct);
+        }
+    }
+}
+
+// The labels a hop region asks of the hop's end node become hop_labels. The region keeps its
+// other conjuncts, and goes when there is none left.
+void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
+    Region& hop = exploration.getHop();
+    if (hop.empty()) {
+        return;
     }
 
-    labels = check.getLabels();
+    Block& block = hop.front();
+    Yield yield = dyn_cast<Yield>(block.getTerminator());
+    if (!yield || yield->getNumOperands() != 1) {
+        return;
+    }
 
-    return true;
+    llvm::SmallVector<Value> conjuncts;
+    llvm::SmallVector<AndOp> joins;
+    collectHopConjuncts(yield->getOperand(0), conjuncts, joins);
+
+    const BlockArgument end = block.getArgument(2);
+
+    llvm::SmallVector<CheckLabelConstraint> checks;
+    llvm::SmallVector<Value> residual;
+    for (const Value conjunct : conjuncts) {
+        if (CheckLabelConstraint check = endLabelCheckOf(conjunct, end)) {
+            checks.push_back(check);
+        } else {
+            residual.push_back(conjunct);
+        }
+    }
+
+    if (checks.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<Attribute> labels;
+    if (const std::optional<ArrayAttr> current = exploration.getHopLabels()) {
+        labels.append(current->begin(), current->end());
+    }
+
+    for (CheckLabelConstraint check : checks) {
+        for (const Attribute label : check.getLabels()) {
+            if (!llvm::is_contained(labels, label)) {
+                labels.push_back(label);
+            }
+        }
+    }
+
+    exploration.setHopLabelsAttr(builder.getArrayAttr(labels));
+
+    if (residual.empty()) {
+        exploration.getHopImportsMutable().clear();
+        hop.dropAllReferences();
+        hop.getBlocks().clear();
+        return;
+    }
+
+    builder.setInsertionPoint(yield);
+    const Type boolType = boolColumnType(builder.getContext());
+
+    Value mask = residual.front();
+    for (const Value conjunct : llvm::drop_begin(residual)) {
+        mask = builder.create<AndOp>(yield.getLoc(), boolType, mask, conjunct).getResult();
+    }
+
+    yield->setOperand(0, mask);
+
+    for (AndOp join : joins) {
+        join.erase();
+    }
+
+    for (CheckLabelConstraint check : checks) {
+        Operation* const labelSet = check.getLabelsetIds().getDefiningOp();
+        check.erase();
+        eraseIfUnused(labelSet);
+    }
 }
 
 struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreHopLabels> {
     void runOnOperation() override {
-        getOperation()->walk([](ExplorePaths exploration) {
-            ArrayAttr labels;
-            if (!matchHopLabels(exploration, labels)) {
-                return;
-            }
-
-            Region& hop = exploration.getHop();
-            exploration.setHopLabelsAttr(labels);
-            hop.dropAllReferences();
-            hop.getBlocks().clear();
+        mlir::OpBuilder builder(&getContext());
+        getOperation()->walk([&builder](ExplorePaths exploration) {
+            fuseHopLabels(exploration, builder);
         });
     }
 };
@@ -3203,10 +3275,6 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
                                   ._imports = imports};
 
     return true;
-}
-
-Type boolColumnType(mlir::MLIRContext* context) {
-    return ColumnType::get(context, storage::BoolType::get(context));
 }
 
 // Clones the predicate's body at the rewriter's insertion point over the element column and

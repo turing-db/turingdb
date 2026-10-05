@@ -182,6 +182,29 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)((a)-[e]->(b:Person) WHERE b.age > 30 AND a:Person){1,3}(m) RETURN n, m as codegen
+// leaves it: the end's label check is one conjunct among others
+const char* const conjunctRegionProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) both hops 1 to 3 {
+  ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
+    %els = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %eok = db.check_label_constraint(%els, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    %age = db.get_node_properties(%end, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %c = db.constant(30 : i64)
+    %old = db.gt %age, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    %both = db.and %eok, %old : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+    %sls = db.get_node_label_set(%src) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %sok = db.check_label_constraint(%sls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    %ok = db.and %both, %sok : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+    db.yield %ok : !db.column<!storage.bool>
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 class ExploreHopLabelsTest : public ::testing::Test {
 protected:
     ExploreHopLabelsTest() {
@@ -304,6 +327,24 @@ TEST_F(ExploreHopLabelsTest, fusesALabelOnlyHopRegionIntoHopLabels) {
     EXPECT_EQ(countOps<mlir::db::GetNodeLabelSet>(*module), 0u);
 }
 
+TEST_F(ExploreHopLabelsTest, splitsTheEndLabelOutOfAConjunction) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(conjunctRegionProgram);
+    ASSERT_TRUE(module);
+
+    runPass(*module, mlir::db::createFuseExploreHopLabels());
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    mlir::db::ExplorePaths exploration = findExplorePaths(*module);
+    expectHopLabels(exploration, {"Person"});
+    ASSERT_FALSE(exploration.getHop().empty());
+
+    // The source's label check stays: hop_labels asks the end only
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::GetNodeLabelSet>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::GtOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 1u);
+}
+
 TEST_F(ExploreHopLabelsTest, leavesARegionAskingTheHopSourceForLabels) {
     mlir::OwningOpRef<mlir::ModuleOp> module = parse(sourceLabelRegionProgram);
     ASSERT_TRUE(module);
@@ -346,4 +387,13 @@ TEST_F(ExploreHopLabelsSimpleGraphTest, fusedFormsEmitTheRegionRows) {
     expectSameRows(distinctRegionProgram, distinctFusedProgram, view);
     expectSameRows(unknownLabelRegionProgram, unknownLabelFusedProgram, view);
     expectSameRows(bothLabelsRegionProgram, hopLabelsAndRegionProgram, view);
+
+    mlir::OwningOpRef<mlir::ModuleOp> split = parse(conjunctRegionProgram);
+    ASSERT_TRUE(split);
+    runPass(*split, mlir::db::createFuseExploreHopLabels());
+
+    std::string splitText;
+    llvm::raw_string_ostream stream(splitText);
+    split->print(stream);
+    expectSameRows(conjunctRegionProgram, splitText.c_str(), view);
 }
