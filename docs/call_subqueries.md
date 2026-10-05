@@ -425,8 +425,11 @@ A computation over constants alone goes into that loop too, so
 collect into one `nl.union_buffer`, as a UNION body does. A branch can return an entity a
 MERGE wrote: each branch yields the entity's pending mask, `false` in a branch that did not
 write it. A column one branch created and another did not gets a mask too, `true` in each
-branch that created it. Not done yet: a UNION inside a WHEN branch, `{ WHEN ... } UNION
-{ WHEN ... }`, and WHEN in an EXISTS or COUNT body.
+branch that created it. A UNION can combine a WHEN, in braces, with another WHEN or any
+other query: `{ WHEN ... } UNION { WHEN ... }`. The parser writes each braced WHEN as
+`CALL () { WHEN ... } RETURN <its columns>`, which the CALL holding the union hands its
+imports, so the union handles it as any other side. Not done yet: a UNION inside a WHEN
+branch, and WHEN in an EXISTS or COUNT body.
 
 Still open: the vectorised forms of section 4, `CALL (*)`, an import
 read below a keyless reduction in the body, and trimming inside the region. The scope

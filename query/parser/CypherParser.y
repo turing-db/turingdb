@@ -404,6 +404,7 @@
 %type<db::QueryCommand*> explainQuery
 %type<db::UnionQuery::Branches> unionList
 %type<db::UnionQuery::Branch> unionSt
+%type<db::UnionQuery::Branch> unionOperand
 %type<std::vector<std::string_view>> explainPassNames
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
@@ -481,13 +482,13 @@ query
 
 regularQuery
     : singleQuery
-    | singlePartQuery unionList {
-        ParserUtils::markStandaloneCall($1);
+    | unionOperand unionList {
+        ParserUtils::markStandaloneCall($1._query);
         for (const UnionQuery::Branch& branch : $2) {
             ParserUtils::markStandaloneCall(branch._query);
         }
 
-        $$ = UnionQuery::create(ast, $1, $2);
+        $$ = UnionQuery::create(ast, $1._query, $2);
         LOC($$, @$);
       }
     | conditionalBranches {
@@ -1168,10 +1169,10 @@ callSubquerySt
 
 callSubqueryBody
     : singlePartQuery { $$.push_back({$1, false, {}}); }
-    | singlePartQuery unionList {
-        $$.push_back({$1, false, {}});
+    | unionOperand unionList {
+        $$.push_back({$1._query, false, {}, nullptr, $1._whenCall});
         for (const UnionQuery::Branch& branch : $2) {
-            $$.push_back({branch._query, branch._all, {}});
+            $$.push_back({branch._query, branch._all, {}, nullptr, branch._whenCall});
         }
       }
     | conditionalBranches { $$ = std::move($1); }
@@ -1196,14 +1197,22 @@ whenBranches
 conditionalBranchQuery
     : singlePartQuery { $$ = $1; }
     | OBRACE singlePartQuery CBRACE { $$ = $2; }
-    | OBRACE singlePartQuery unionList CBRACE { scanner.notImplemented(@$, "UNION inside a WHEN branch"); }
+    | OBRACE unionOperand unionList CBRACE { scanner.notImplemented(@$, "UNION inside a WHEN branch"); }
     ;
 
 existsBody
     : singlePartQuery { $$.push_back($1); }
-    | singlePartQuery unionList {
-        $$.push_back($1);
+    | unionOperand unionList {
+        if ($1._whenCall) {
+            scanner.notImplemented(@1, "WHEN in an EXISTS body");
+        }
+
+        $$.push_back($1._query);
         for (const UnionQuery::Branch& branch : $2) {
+            if (branch._whenCall) {
+                scanner.notImplemented(@2, "WHEN in an EXISTS body");
+            }
+
             $$.push_back(branch._query);
         }
       }
@@ -1211,9 +1220,17 @@ existsBody
 
 countBody
     : singlePartQuery { $$.push_back({$1, false}); }
-    | singlePartQuery unionList {
-        $$.push_back({$1, false});
+    | unionOperand unionList {
+        if ($1._whenCall) {
+            scanner.notImplemented(@1, "WHEN in a COUNT body");
+        }
+
+        $$.push_back($1);
         for (const UnionQuery::Branch& branch : $2) {
+            if (branch._whenCall) {
+                scanner.notImplemented(@2, "WHEN in a COUNT body");
+            }
+
             $$.push_back(branch);
         }
       }
@@ -1699,8 +1716,17 @@ edgeTypes
     ;
 
 unionSt
-    : UNION singlePartQuery { $$ = {$2, false}; }
-    | UNION ALL singlePartQuery { $$ = {$3, true}; }
+    : UNION unionOperand { $$ = $2; }
+    | UNION ALL unionOperand { $$ = $3; $$._all = true; }
+    ;
+
+unionOperand
+    : singlePartQuery { $$ = {$1, false, nullptr}; }
+    | OBRACE conditionalBranches CBRACE {
+        if (!ParserUtils::createWhenOperand(ast, $2, @$, $$)) {
+            scanner.syntaxError(@2, "A WHEN combined by UNION must name each column it returns with AS");
+        }
+      }
     ;
 
 subqueryExist

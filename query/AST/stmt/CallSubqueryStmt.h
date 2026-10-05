@@ -21,12 +21,14 @@ public:
     // One query of the body - the whole body, one side of a UNION in it, or one branch of
     // a WHEN - with the operator joining it to the ones before it and the variables it
     // imports. Each branch imports through a leading WITH of its own, so the imports are
-    // held per branch. A WHEN branch holds its predicate; the ELSE branch holds none.
+    // held per branch. A WHEN branch holds its predicate; the ELSE branch holds none. A
+    // `{ WHEN ... }` side of a UNION holds the CALL it is written as, as UnionQuery's does.
     struct Branch {
         SinglePartQuery* _query {nullptr};
         bool _all {false};
         Imports _imports;
         Expr* _condition {nullptr};
+        CallSubqueryStmt* _whenCall {nullptr};
     };
 
     using Branches = std::vector<Branch>;
