@@ -435,3 +435,7 @@ target_link_libraries(test_query_ir_subquery_union_create_merge PRIVATE turing_i
 # An OPTIONAL CALL returning an entity its body created, padded where the body returns nothing.
 add_turing_test(test_query_ir_optional_call_created_entity OptionalCallCreatedEntityTest.cpp)
 target_link_libraries(test_query_ir_optional_call_created_entity PRIVATE turing_ir_test_write_query_s)
+
+# Every subquery form returning an entity a MATCH, MERGE or CREATE gave it, read by what follows.
+add_turing_test(test_query_ir_subquery_written_entity_matrix SubqueryWrittenEntityMatrixTest.cpp)
+target_link_libraries(test_query_ir_subquery_written_entity_matrix PRIVATE turing_ir_test_write_query_s)
