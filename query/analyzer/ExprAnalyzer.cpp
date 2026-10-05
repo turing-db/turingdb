@@ -370,7 +370,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
                 const std::string error = fmt::format(
                     "Equality of types '{}' and '{}' is not encouraged due to "
-                    "potential rounding innacuracy. Please constrain with '<' "
+                    "potential rounding innaccuracy. Please constrain with '<' "
                     "and '>' instead.",
                     EvaluatedTypeName::value(a), EvaluatedTypeName::value(b));
                 throwError(error, expr);
