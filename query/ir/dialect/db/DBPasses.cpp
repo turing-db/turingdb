@@ -59,6 +59,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
 #define GEN_PASS_DEF_FUSEEXPLOREENDFACTOR
 #define GEN_PASS_DEF_FUSEEXPLOREENDSET
+#define GEN_PASS_DEF_FUSEEXPLORELISTPREDICATE
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
 #define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
@@ -3043,6 +3044,326 @@ struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet>
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
         runFilterPass<EndSetExploration>(getOperation(), matchEndSetExploration, fuseExploreEndSet, builder);
+    }
+};
+
+// A filter keeping the walks whose every hop passes a test, spelled as all() or none() over
+// the relationships or the nodes of the path: the walk can run the test on each hop as it
+// takes it, and never expand a hop that fails.
+struct ExploreListPredicate {
+    FilterOp _filter;
+    ExplorePaths _exploration;
+    ListPredicate _predicate;
+    ExpandPath _expansion;
+    llvm::SmallVector<Value> _imports;
+};
+
+Value climbFilters(Value column) {
+    while (FilterOp filter = column.getDefiningOp<FilterOp>()) {
+        column = filter.getColumnsToFilter()[cast<OpResult>(column).getResultNumber()];
+    }
+
+    return column;
+}
+
+// Whether the rows the exploration emits are only cut and computed over on their way to the
+// filter, with nothing else reading them before it
+bool explorationReachesTheFilter(ExplorePaths exploration, FilterOp filter) {
+    llvm::SmallPtrSet<Operation*, 16> readers {exploration.getOperation()};
+
+    for (Operation& op : llvm::make_range(std::next(Block::iterator(exploration.getOperation())), Block::iterator(filter.getOperation()))) {
+        const bool readsTheRows = llvm::any_of(op.getOperands(), [&readers](Value operand) {
+            Operation* const def = operand.getDefiningOp();
+            return def && readers.contains(def);
+        });
+
+        if (!readsTheRows) {
+            continue;
+        }
+
+        const bool keepsTheRows = isa<FilterOp, ExpandPath, ListPredicate>(op) || computesPerRow(&op);
+        if (!keepsTheRows) {
+            return false;
+        }
+
+        readers.insert(&op);
+    }
+
+    for (Operation* const reader : readers) {
+        for (Operation* const user : reader->getUsers()) {
+            if (user != filter.getOperation() && !readers.contains(user)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// The operand of the exploration a column of its rows repeats for every path of a seed, or
+// null for a column the walk binds
+Value seedColumnOf(ExplorePaths exploration, Value column) {
+    const Value climbed = climbFilters(column);
+    if (climbed.getDefiningOp() != exploration.getOperation()) {
+        return {};
+    }
+
+    const size_t resultIndex = cast<OpResult>(climbed).getResultNumber();
+    constexpr size_t TGT_RESULT_INDEX = 1;
+    const bool holdsTheSeed = resultIndex == 0 || (resultIndex == TGT_RESULT_INDEX && exploration.getEndsOnSeed());
+
+    if (holdsTheSeed) {
+        return exploration.getInputNodes();
+    } else if (resultIndex >= pathFixedResultCount) {
+        return exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
+    } else {
+        return {};
+    }
+}
+
+// Whether the body reads only the element, constants and carried columns holding one value per
+// seed. Each carried argument the body reads gets the exploration operand to import, the rest null.
+bool matchHopTest(ListPredicate predicate, ExplorePaths exploration, llvm::SmallVectorImpl<Value>& imports) {
+    Block& body = predicate.getBody().front();
+    const BlockArgument tag = body.getArgument(1);
+    ComprehensionYield yield = cast<ComprehensionYield>(body.getTerminator());
+
+    const auto readsOnlyTheHop = [&body, tag](Value operand) {
+        if (const BlockArgument argument = dyn_cast<BlockArgument>(operand)) {
+            return argument.getOwner() == &body && argument != tag;
+        }
+
+        return operand.getDefiningOp()->getBlock() == &body || ::db::yieldsConstantColumn(operand);
+    };
+
+    for (Operation& op : body.without_terminator()) {
+        if (op.getNumRegions() != 0 || !llvm::all_of(op.getOperands(), readsOnlyTheHop)) {
+            return false;
+        }
+    }
+
+    if (yield.getRowTags() != tag || !readsOnlyTheHop(yield.getValue())) {
+        return false;
+    }
+
+    const Operation::operand_range carried = predicate.getColumnsToFilter();
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        if (body.getArgument(carriedIndex + 2).use_empty()) {
+            imports.push_back({});
+            continue;
+        }
+
+        const Value seedColumn = seedColumnOf(exploration, carried[carriedIndex]);
+        if (!seedColumn) {
+            return false;
+        }
+
+        imports.push_back(seedColumn);
+    }
+
+    return true;
+}
+
+bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
+    ListPredicate predicate = filter.getMask().getDefiningOp<ListPredicate>();
+    if (!predicate || !predicate.getResult().hasOneUse()) {
+        return false;
+    }
+
+    const storage::ListPredicateKind kind = predicate.getKind();
+    const bool holdsForEveryElement = kind == storage::ListPredicateKind::All || kind == storage::ListPredicateKind::None;
+    if (!holdsForEveryElement) {
+        return false;
+    }
+
+    Value source = predicate.getSource();
+    if (ToNullable widened = source.getDefiningOp<ToNullable>()) {
+        source = widened.getOperand();
+    }
+
+    ExpandPath expansion = source.getDefiningOp<ExpandPath>();
+    if (!expansion) {
+        return false;
+    }
+
+    const storage::PathExpansionKind expansionKind = expansion.getKind();
+    const bool listsTheHops = expansionKind == storage::PathExpansionKind::Edges || expansionKind == storage::PathExpansionKind::Nodes;
+    if (!listsTheHops) {
+        return false;
+    }
+
+    const Value paths = climbFilters(expansion.getPaths());
+    ExplorePaths exploration = paths.getDefiningOp<ExplorePaths>();
+    if (!exploration || paths != exploration.getPaths() || exploration.getHopLabels()) {
+        return false;
+    }
+
+    if (exploration->getBlock() != filter->getBlock() || !explorationReachesTheFilter(exploration, filter)) {
+        return false;
+    }
+
+    llvm::SmallVector<Value> imports;
+    if (!matchHopTest(predicate, exploration, imports)) {
+        return false;
+    }
+
+    const bool importsAColumn = llvm::any_of(imports, [](Value import) {
+        return static_cast<bool>(import);
+    });
+
+    if (importsAColumn && exploration.getDistinct()) {
+        return false;
+    }
+
+    match = ExploreListPredicate {._filter = filter,
+                                  ._exploration = exploration,
+                                  ._predicate = predicate,
+                                  ._expansion = expansion,
+                                  ._imports = imports};
+
+    return true;
+}
+
+// Clones the predicate's body at the rewriter's insertion point over the element column and
+// the columns its carried arguments stand for, and returns the test it yields: negated for
+// none(), which holds where all() of the negation does
+Value cloneElementTest(ListPredicate predicate, Value element, llvm::ArrayRef<Value> carried, mlir::RewriterBase& rewriter) {
+    Block& body = predicate.getBody().front();
+
+    mlir::IRMapping mapping;
+    mapping.map(body.getArgument(0), element);
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        if (carried[carriedIndex]) {
+            mapping.map(body.getArgument(carriedIndex + 2), carried[carriedIndex]);
+        }
+    }
+
+    for (Operation& op : body.without_terminator()) {
+        rewriter.clone(op, mapping);
+    }
+
+    ComprehensionYield yield = cast<ComprehensionYield>(body.getTerminator());
+    const Value test = mapping.lookupOrDefault(yield.getValue());
+
+    if (predicate.getKind() == storage::ListPredicateKind::All) {
+        return test;
+    }
+
+    mlir::MLIRContext* context = rewriter.getContext();
+    const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
+
+    return rewriter.create<NotOp>(predicate.getLoc(), boolType, test).getResult();
+}
+
+Block* hopBlockOf(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
+    Region& hop = exploration.getHop();
+    if (!hop.empty()) {
+        return &hop.front();
+    }
+
+    mlir::MLIRContext* context = rewriter.getContext();
+    const Type nodeType = ColumnType::get(context, storage::NodeIDType::get(context));
+    const Type edgeType = ColumnType::get(context, storage::EdgeIDType::get(context));
+    const llvm::SmallVector<Type> argumentTypes {nodeType, edgeType, nodeType};
+    const llvm::SmallVector<Location> argumentLocations(argumentTypes.size(), exploration.getLoc());
+
+    const mlir::OpBuilder::InsertionGuard guard(rewriter);
+
+    return rewriter.createBlock(&hop, hop.end(), argumentTypes, argumentLocations);
+}
+
+Value hopImportArgument(ExplorePaths exploration, Block* hopBlock, Value import, mlir::RewriterBase& rewriter) {
+    constexpr size_t HOP_ARGUMENT_COUNT = 3;
+
+    const Operation::operand_range imports = exploration.getHopImports();
+    for (size_t importIndex = 0; importIndex < imports.size(); importIndex++) {
+        if (imports[importIndex] == import) {
+            return hopBlock->getArgument(HOP_ARGUMENT_COUNT + importIndex);
+        }
+    }
+
+    rewriter.modifyOpInPlace(exploration, [&exploration, import]() {
+        exploration.getHopImportsMutable().append(import);
+    });
+
+    return hopBlock->addArgument(import.getType(), exploration.getLoc());
+}
+
+void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& rewriter) {
+    FilterOp filter = match._filter;
+    ExplorePaths exploration = match._exploration;
+    ListPredicate predicate = match._predicate;
+    ExpandPath expansion = match._expansion;
+
+    Block* hopBlock = hopBlockOf(exploration, rewriter);
+
+    llvm::SmallVector<Value> hopCarried;
+    for (const Value import : match._imports) {
+        hopCarried.push_back(import ? hopImportArgument(exploration, hopBlock, import, rewriter) : Value {});
+    }
+
+    const bool listsTheEdges = expansion.getKind() == storage::PathExpansionKind::Edges;
+    constexpr unsigned HOP_EDGE_ARGUMENT = 1;
+    constexpr unsigned HOP_END_ARGUMENT = 2;
+    const Value hopElement = hopBlock->getArgument(listsTheEdges ? HOP_EDGE_ARGUMENT : HOP_END_ARGUMENT);
+
+    Yield hopYield = hopBlock->empty() ? Yield {} : dyn_cast<Yield>(hopBlock->getTerminator());
+    if (hopYield) {
+        rewriter.setInsertionPoint(hopYield);
+    } else {
+        rewriter.setInsertionPointToEnd(hopBlock);
+    }
+
+    const Value hopTest = cloneElementTest(predicate, hopElement, hopCarried, rewriter);
+
+    if (hopYield) {
+        mlir::MLIRContext* context = rewriter.getContext();
+        const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
+        const Value joined = rewriter.create<AndOp>(predicate.getLoc(), boolType, hopYield.getColumns().front(), hopTest).getResult();
+
+        rewriter.modifyOpInPlace(hopYield, [&hopYield, joined]() {
+            hopYield->setOperand(0, joined);
+        });
+    } else {
+        rewriter.create<Yield>(predicate.getLoc(), ValueRange {hopTest});
+    }
+
+    if (listsTheEdges) {
+        const Operation::operand_range carried = filter.getColumnsToFilter();
+        const ResultRange filtered = filter.getFilteredColumns();
+        for (size_t index = 0; index < filtered.size(); index++) {
+            rewriter.replaceAllUsesWith(filtered[index], carried[index]);
+        }
+
+        rewriter.eraseOp(filter);
+    } else {
+        // nodes() holds the seed, which no hop ends on, so the seed is still tested row by row
+        const Operation::operand_range predicateCarried = predicate.getColumnsToFilter();
+        const llvm::SmallVector<Value> rowCarried(predicateCarried.begin(), predicateCarried.end());
+
+        rewriter.setInsertionPoint(predicate);
+        const Value seedTest = cloneElementTest(predicate, expansion.getSrcids(), rowCarried, rewriter);
+
+        rewriter.modifyOpInPlace(filter, [&filter, seedTest]() {
+            filter->setOperand(0, seedTest);
+        });
+    }
+
+    Operation* const widened = predicate.getSource().getDefiningOp<ToNullable>();
+    rewriter.eraseOp(predicate);
+
+    if (widened && widened->use_empty()) {
+        rewriter.eraseOp(widened);
+    }
+
+    if (expansion->use_empty()) {
+        rewriter.eraseOp(expansion);
+    }
+}
+
+struct FuseExploreListPredicate : public impl::FuseExploreListPredicateBase<FuseExploreListPredicate> {
+    void runOnOperation() override {
+        runFilterWorklist<ExploreListPredicate>(getOperation(), matchExploreListPredicate, fuseExploreListPredicate);
     }
 };
 

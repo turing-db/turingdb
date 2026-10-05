@@ -92,6 +92,8 @@ add_call_v3_test(test_query_ir_explore_bound_and_distinct_cypher ExploreBoundAnd
 
 add_call_v3_test(test_query_ir_explore_edge_type_disjunction ExploreEdgeTypeDisjunctionTest.cpp)
 
+add_call_v3_test(test_query_ir_explore_list_predicate ExploreListPredicateTest.cpp)
+
 add_call_v3_test(test_query_ir_named_path NamedPathTest.cpp)
 
 add_call_v3_test(test_query_ir_named_path_functions NamedPathFunctionsTest.cpp)
