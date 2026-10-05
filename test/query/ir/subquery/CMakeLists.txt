@@ -427,3 +427,7 @@ target_link_libraries(test_query_ir_call_subquery_union_import PRIVATE turing_ir
 # An OPTIONAL CALL body that creates an entity and returns it for some of its input rows.
 add_turing_test(test_query_ir_optional_call_written_entity OptionalCallWrittenEntityTest.cpp)
 target_link_libraries(test_query_ir_optional_call_written_entity PRIVATE turing_ir_test_write_query_s)
+
+# A UNION in a CALL body returning an entity its branches created, merged or matched.
+add_turing_test(test_query_ir_subquery_union_create_merge SubqueryUnionCreateMergeTest.cpp)
+target_link_libraries(test_query_ir_subquery_union_create_merge PRIVATE turing_ir_test_write_query_s)

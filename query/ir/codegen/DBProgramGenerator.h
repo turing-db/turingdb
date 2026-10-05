@@ -546,13 +546,13 @@ private:
     // none for a branch ending on a write
     void generateSubqueryBranch(const SinglePartQuery* query,
                                 mlir::Block* bodyBlock,
-                                mlir::Value distinctSet,
-                                bool carriesPendingMasks,
                                 SubqueryBranchResults& branchResults);
 
-    // Makes every branch of a WHEN yield the mask of each entity a MERGE wrote in any of
-    // them, or a CREATE wrote in some of them
+    // Makes every branch yield the mask of each entity a MERGE wrote in any of them, or a
+    // CREATE wrote in some of them
     void yieldEveryPendingMask(SubqueryBranchResults& branchResults);
+
+    void dedupSubqueryBranch(mlir::Value distinctSet, size_t branchIndex, SubqueryBranchResults& branchResults);
 
     static void typeSubqueryBranchResults(SubqueryBranchResults& branchResults);
 
@@ -568,7 +568,7 @@ private:
                               CarriedEntities& carried) const;
 
     // Rejects an item of @param projection naming an entity a MERGE wrote, where no mask can
-    // go along with it: out of a UNION subquery
+    // go along with it: out of a COUNT subquery
     void throwOnPublishedMerge(const Projection* projection) const;
 
     // Rejects a pattern of @param matchStmt that names an entity a CREATE of the same
