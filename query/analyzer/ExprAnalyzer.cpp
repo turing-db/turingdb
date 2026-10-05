@@ -1891,7 +1891,9 @@ EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* b
 void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
     const EvaluatedType type = subject->getType();
 
-    const bool isScalar = type == EvaluatedType::Null || convertibleToValueType(type);
+    const bool isScalar = type == EvaluatedType::Null
+                          || type == EvaluatedType::ListItem
+                          || convertibleToValueType(type);
 
     if (isScalar || isEntity(type)) {
         return;
@@ -1905,7 +1907,11 @@ void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
 void ExprAnalyzer::requireCaseValue(const Expr* value) const {
     const EvaluatedType type = value->getType();
 
-    if (type == EvaluatedType::Null || convertibleToValueType(type)) {
+    const bool isScalar = type == EvaluatedType::Null
+                          || type == EvaluatedType::ListItem
+                          || convertibleToValueType(type);
+
+    if (isScalar) {
         return;
     }
 
