@@ -1756,6 +1756,32 @@ struct FuseLabelDisjunctionPattern : public mlir::OpRewritePattern<OrOp> {
 
 // The conjunction of two disjunctions has an alternative per pair of theirs, so a chain of
 // them would grow exponentially: one side has to be a single conjunction.
+bool conjoinAlternatives(ArrayAttr leftAlternatives,
+                         ArrayAttr rightAlternatives,
+                         mlir::Builder& builder,
+                         llvm::SmallVectorImpl<Attribute>& alternatives) {
+    if (leftAlternatives.size() > 1 && rightAlternatives.size() > 1) {
+        return false;
+    }
+
+    for (const Attribute leftAlternative : leftAlternatives) {
+        const ArrayAttr leftLabels = cast<ArrayAttr>(leftAlternative);
+
+        for (const Attribute rightAlternative : rightAlternatives) {
+            llvm::SmallVector<Attribute, 4> labels(leftLabels.begin(), leftLabels.end());
+            for (const Attribute label : cast<ArrayAttr>(rightAlternative)) {
+                if (!llvm::is_contained(labels, label)) {
+                    labels.push_back(label);
+                }
+            }
+
+            alternatives.push_back(builder.getArrayAttr(labels));
+        }
+    }
+
+    return true;
+}
+
 struct FuseLabelConjunctionPattern : public mlir::OpRewritePattern<AndOp> {
     using OpRewritePattern::OpRewritePattern;
 
@@ -1765,26 +1791,9 @@ struct FuseLabelConjunctionPattern : public mlir::OpRewritePattern<AndOp> {
             return failure();
         }
 
-        const ArrayAttr leftAlternatives = pair._left.getAlternatives();
-        const ArrayAttr rightAlternatives = pair._right.getAlternatives();
-        if (leftAlternatives.size() > 1 && rightAlternatives.size() > 1) {
-            return failure();
-        }
-
         llvm::SmallVector<Attribute, 4> alternatives;
-        for (const Attribute leftAlternative : leftAlternatives) {
-            const ArrayAttr leftLabels = cast<ArrayAttr>(leftAlternative);
-
-            for (const Attribute rightAlternative : rightAlternatives) {
-                llvm::SmallVector<Attribute, 4> labels(leftLabels.begin(), leftLabels.end());
-                for (const Attribute label : cast<ArrayAttr>(rightAlternative)) {
-                    if (!llvm::is_contained(labels, label)) {
-                        labels.push_back(label);
-                    }
-                }
-
-                alternatives.push_back(rewriter.getArrayAttr(labels));
-            }
+        if (!conjoinAlternatives(pair._left.getAlternatives(), pair._right.getAlternatives(), rewriter, alternatives)) {
+            return failure();
         }
 
         replaceWithLabelCheck(conjunction, pair, alternatives, rewriter);
@@ -1793,12 +1802,116 @@ struct FuseLabelConjunctionPattern : public mlir::OpRewritePattern<AndOp> {
     }
 };
 
+// Codegen filters once per conjunct, so a WHERE ANDing labels reaches here as a label filter
+// over the rows of another one, testing the same nodes.
+struct StackedLabelFilters {
+    FilterOp _outer;
+    FilterOp _inner;
+    CheckLabelConstraint _innerCheck;
+    CheckLabelConstraint _outerCheck;
+    GetNodeLabelSet _outerLabelSet;
+    llvm::SmallVector<Attribute, 4> _alternatives;
+};
+
+bool matchStackedLabelFilters(FilterOp outer, StackedLabelFilters& stacked) {
+    CheckLabelConstraint outerCheck = outer.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!outerCheck) {
+        return false;
+    }
+
+    GetNodeLabelSet outerLabelSet = outerCheck.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!outerLabelSet) {
+        return false;
+    }
+
+    const Value checkedColumn = outerLabelSet.getInputNodes();
+    FilterOp inner = checkedColumn.getDefiningOp<FilterOp>();
+    if (!inner) {
+        return false;
+    }
+
+    CheckLabelConstraint innerCheck = inner.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!innerCheck) {
+        return false;
+    }
+
+    GetNodeLabelSet innerLabelSet = innerCheck.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    const size_t checkedIndex = cast<OpResult>(checkedColumn).getResultNumber();
+    const bool overSameNodes = innerLabelSet && innerLabelSet.getInputNodes() == inner.getColumnsToFilter()[checkedIndex];
+    const bool inSameBlock = outer->getBlock() == inner->getBlock();
+    if (!overSameNodes || !inSameBlock) {
+        return false;
+    }
+
+    for (const Value column : outer.getColumnsToFilter()) {
+        if (column.getDefiningOp() != inner.getOperation()) {
+            return false;
+        }
+    }
+
+    // Moving the outer check onto the inner filter cuts the inner filter's rows, so nothing
+    // but the outer filter and its check may read them.
+    Operation* const outerOp = outer.getOperation();
+    Operation* const outerLabelSetOp = outerLabelSet.getOperation();
+    for (const Value result : inner->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsTheChain = user == outerOp || user == outerLabelSetOp;
+            if (!readsTheChain) {
+                return false;
+            }
+        }
+    }
+
+    const bool chainIsPrivate = outerLabelSet.getResult().hasOneUse() && outerCheck.getResult().hasOneUse();
+    if (!chainIsPrivate) {
+        return false;
+    }
+
+    mlir::Builder builder(outer.getContext());
+    llvm::SmallVector<Attribute, 4> alternatives;
+    if (!conjoinAlternatives(innerCheck.getAlternatives(), outerCheck.getAlternatives(), builder, alternatives)) {
+        return false;
+    }
+
+    stacked._outer = outer;
+    stacked._inner = inner;
+    stacked._innerCheck = innerCheck;
+    stacked._outerCheck = outerCheck;
+    stacked._outerLabelSet = outerLabelSet;
+    keepWeakestAlternatives(alternatives, stacked._alternatives);
+
+    return true;
+}
+
+void fuseStackedLabelFilters(StackedLabelFilters& stacked, mlir::RewriterBase& rewriter) {
+    FilterOp inner = stacked._inner;
+    CheckLabelConstraint innerCheck = stacked._innerCheck;
+
+    rewriter.setInsertionPoint(inner);
+    CheckLabelConstraint fused = rewriter.create<CheckLabelConstraint>(innerCheck.getLoc(),
+                                                                       innerCheck.getResult().getType(),
+                                                                       innerCheck.getLabelsetIds(),
+                                                                       rewriter.getArrayAttr(stacked._alternatives));
+
+    rewriter.modifyOpInPlace(inner, [&inner, &fused]() {
+        inner.getMaskMutable().assign(fused.getResult());
+    });
+
+    FilterOp outer = stacked._outer;
+    rewriter.replaceOp(outer, outer.getColumnsToFilter());
+
+    eraseIfUnused(stacked._outerCheck.getOperation(), rewriter);
+    eraseIfUnused(stacked._outerLabelSet.getOperation(), rewriter);
+    eraseIfUnused(innerCheck.getOperation(), rewriter);
+}
+
 struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredicates> {
     void runOnOperation() override {
         MLIRContext* const context = &getContext();
+        Operation* const root = getOperation();
 
         llvm::SmallVector<Operation*> predicates;
-        getOperation()->walk([&predicates](Operation* op) {
+        root->walk([&predicates](Operation* op) {
             if (isa<AndOp, OrOp>(op)) {
                 predicates.push_back(op);
             }
@@ -1818,7 +1931,10 @@ struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredi
 
         if (failed(mlir::applyOpPatternsGreedily(predicates, frozenPatterns, config))) {
             signalPassFailure();
+            return;
         }
+
+        runFilterWorklist<StackedLabelFilters>(root, matchStackedLabelFilters, fuseStackedLabelFilters);
     }
 };
 
