@@ -268,13 +268,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         }
                         const bool valueIsEmbedding = embDim.has_value();
 
-                        // A JSONL export spells a missing column as a null, so a null
-                        // in a property named as a datetime or a duration is that entity
-                        // having no value rather than the file contradicting the clause
-                        const bool isMissingTemporal = value.is_null()
-                                                    && (dateTimeSpecs.contains(ptName)
-                                                        || durationSpecs.contains(ptName));
-                        if (isMissingTemporal) {
+                        if (value.is_null()) {
                             continue;
                         }
 
@@ -406,13 +400,7 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                         }
                         const bool valueIsEmbedding = embDim.has_value();
 
-                        // A JSONL export spells a missing column as a null, so a null
-                        // in a property named as a datetime or a duration is that entity
-                        // having no value rather than the file contradicting the clause
-                        const bool isMissingTemporal = value.is_null()
-                                                    && (dateTimeSpecs.contains(ptName)
-                                                        || durationSpecs.contains(ptName));
-                        if (isMissingTemporal) {
+                        if (value.is_null()) {
                             continue;
                         }
 
