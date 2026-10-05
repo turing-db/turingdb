@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE n.name = 'Nobody' RETURN null AS nothing",
+  "expect": {
+    "result": "nothing"
+  },
+  "tags": [
+    "null",
+    "projection"
+  ],
+  "write-required": false
+}

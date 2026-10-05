@@ -399,6 +399,7 @@ void TuringAsyncClient::processProtoPacket() {
 
         case MessageTypes::END: {
             if (!_callbackFired) {
+                _df->setDeclaredRowCount(0);
                 _callback(_df.get());
             }
 
