@@ -219,6 +219,24 @@ TEST_F(ExploreListPredicateTest, joinsTheHopPredicateAlreadyThere) {
     expectKeptRows(filtered, reference);
 }
 
+TEST_F(ExploreListPredicateTest, keepsTheHopLabelsBesideTheTest) {
+    const std::string_view filtered = "MATCH p = (a:Person)((x)-[e]-(y:Person)){1,3}(b) "
+                                      "WHERE all(r IN relationships(p) WHERE r.name <> 'Remy -> Adam') RETURN a.name, b.name, relationships(p)";
+    const std::string_view reference = "MATCH p = (a:Person)((x)-[e]-(y:Person)){1,3}(b) RETURN a.name, b.name, relationships(p), "
+                                       "CASE WHEN all(r IN relationships(p) WHERE r.name <> 'Remy -> Adam') THEN 'kept' ELSE 'dropped' END";
+
+    std::string before;
+    std::string after;
+    explainAround(filtered, before, after);
+
+    EXPECT_TRUE(contains(before, "hop_labels [\"Person\"]")) << before;
+    EXPECT_TRUE(contains(after, "hop_labels [\"Person\"]")) << after;
+    EXPECT_FALSE(contains(after, "db.check_label_constraint")) << after;
+    EXPECT_FALSE(contains(after, "db.list_predicate")) << after;
+
+    expectKeptRows(filtered, reference);
+}
+
 TEST_F(ExploreListPredicateTest, leavesAPredicateThatHoldsForSomeElements) {
     expectNotFused("MATCH p = (a)-[*1..3]->(b) WHERE any(r IN relationships(p) WHERE r.duration > 100) "
                    "RETURN a.name, b.name");

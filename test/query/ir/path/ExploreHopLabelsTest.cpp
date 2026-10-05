@@ -149,6 +149,8 @@ func.func @main() {
 }
 )mlir";
 
+// The end label as hop_labels beside a region asking the source for it, and both asked by one
+// region: the region runs over the hops the labels keep
 const char* const hopLabelsAndRegionProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
@@ -156,6 +158,23 @@ func.func @main() {
   ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
     %ls = db.get_node_label_set(%src) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
     %ok = db.check_label_constraint(%ls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    db.yield %ok : !db.column<!storage.bool>
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+const char* const bothLabelsRegionProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 {
+  ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
+    %sls = db.get_node_label_set(%src) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %sok = db.check_label_constraint(%sls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    %els = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+    %eok = db.check_label_constraint(%els, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+    %ok = db.and %sok, %eok : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
     db.yield %ok : !db.column<!storage.bool>
   } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
@@ -312,7 +331,7 @@ TEST_F(ExploreHopLabelsTest, roundTripsTheHopLabelsThroughThePrinter) {
 }
 
 TEST_F(ExploreHopLabelsTest, rejectsMalformedHopLabels) {
-    for (const char* program : {emptyHopLabelsProgram, blankHopLabelProgram, hopLabelsAndRegionProgram}) {
+    for (const char* program : {emptyHopLabelsProgram, blankHopLabelProgram}) {
         mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
         EXPECT_FALSE(module) << program;
     }
@@ -326,4 +345,5 @@ TEST_F(ExploreHopLabelsSimpleGraphTest, fusedFormsEmitTheRegionRows) {
     expectSameRows(regionProgram, fusedProgram, view);
     expectSameRows(distinctRegionProgram, distinctFusedProgram, view);
     expectSameRows(unknownLabelRegionProgram, unknownLabelFusedProgram, view);
+    expectSameRows(bothLabelsRegionProgram, hopLabelsAndRegionProgram, view);
 }

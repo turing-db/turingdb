@@ -1320,7 +1320,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `hop_labels` is a hop predicate that asks only for labels on the hop's end node, the way
     `(b:Event)` constrains every hop of `MATCH (n)((a)-[e]->(b:Event)){1,3}(m)`: a hop whose end
     lacks one of them is neither emitted nor expanded. The fuse_explore_hop_labels pass sets it
-    from a `hop` region that asks nothing else, which it replaces, so the two never come together.
+    from a `hop` region that asks nothing else, which it replaces. A `hop` region beside it, as
+    fuse_explore_list_predicate adds, runs over the hops that carry the labels.
 
       %s, %t, %p = db.explore_paths(%n, {}) forward hops 1 to 3 hop_labels ["Event"]
 

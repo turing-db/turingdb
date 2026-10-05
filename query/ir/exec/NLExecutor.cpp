@@ -6130,12 +6130,13 @@ namespace {
 // Runs the hop predicate of an nl.explore_paths over a batch of frames: the candidates are
 // copied a chunk at a time into the three columns the hop statements read, the statements
 // compute the mask, and the survivors are compacted to the front of the batch. A chunk may
-// start and end mid-frame.
+// start and end mid-frame. The hop_labels filter, when there is one, cuts the batch first.
 class NLHopFilter : public PathHopFilter {
 public:
-    NLHopFilter(NLExecutionContext* context, NLExplorePathsLoopData* loopData)
+    NLHopFilter(NLExecutionContext* context, NLExplorePathsLoopData* loopData, PathHopFilter* labelFilter)
         : _context(context),
-        _loopData(loopData)
+        _loopData(loopData),
+        _labelFilter(labelFilter)
     {
         _indices.reserve(context->getChunkSize());
     }
@@ -6144,6 +6145,12 @@ public:
     }
 
     size_t filter(std::span<PathHopFrame> frames, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
+        if (_labelFilter) {
+            const size_t labelled = _labelFilter->filter(frames, candidateNodes, candidateEdges);
+            candidateNodes = candidateNodes.first(labelled);
+            candidateEdges = candidateEdges.first(labelled);
+        }
+
         const size_t chunkSize = _context->getChunkSize();
         ColumnNodeIDs* sources = _loopData->getHopSources();
         ColumnEdgeIDs* edges = _loopData->getHopEdges();
@@ -6217,6 +6224,7 @@ public:
 private:
     NLExecutionContext* _context {nullptr};
     NLExplorePathsLoopData* _loopData {nullptr};
+    PathHopFilter* _labelFilter {nullptr};
     ColumnVector<size_t> _indices;
     ColumnVector<size_t> _seedRows;
     std::vector<size_t> _frameEnds;
@@ -6400,11 +6408,13 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     std::optional<NLHopFilter> hopRegionFilter;
     std::optional<PathLabelHopFilter> hopLabelFilter;
     PathHopFilter* hopFilter = nullptr;
-    if (loopData->hasHopFilter()) {
-        hopFilter = &hopRegionFilter.emplace(context, loopData);
-    } else if (loopData->filtersByHopLabels()) {
+    if (loopData->filtersByHopLabels()) {
         const PendingAdjacency* pendingAdjacency = writeBuffer ? &context->getPendingAdjacency() : nullptr;
         hopFilter = &hopLabelFilter.emplace(view, loopData->getHopLabels(), loopData->areHopLabelsMatchable(), pendingAdjacency);
+    }
+
+    if (loopData->hasHopFilter()) {
+        hopFilter = &hopRegionFilter.emplace(context, loopData, hopFilter);
     }
 
     if (hopFilter) {

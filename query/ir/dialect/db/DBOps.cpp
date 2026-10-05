@@ -498,10 +498,6 @@ LogicalResult ExplorePaths::verify() {
                 return emitOpError("hop_labels must name labels");
             }
         }
-
-        if (!getHop().empty()) {
-            return emitOpError("hop_labels is the hop predicate, so there is no hop region beside it");
-        }
     }
 
     if (const std::optional<uint64_t> endColumn = getEndColumn()) {
