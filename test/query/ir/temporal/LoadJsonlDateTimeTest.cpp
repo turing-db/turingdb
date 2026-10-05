@@ -173,7 +173,7 @@ TEST_F(LoadJsonlDateTimeTest, RejectsAValueNamingNoInstant) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "bad.jsonl" AS bad WITH DATETIMES ["created"])",
-                           "failed to import");
+                           "Found a value naming no instant in a datetime property' at line 1:\nproperty 'created' reads 'not a date'");
 }
 
 TEST_F(LoadJsonlDateTimeTest, RejectsANamedPropertyThatIsNotAString) {
@@ -182,7 +182,7 @@ TEST_F(LoadJsonlDateTimeTest, RejectsANamedPropertyThatIsNotAString) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "number.jsonl" AS number WITH DATETIMES ["created"])",
-                           "failed to import");
+                           "Found a value naming no instant in a datetime property' at line 1:\nproperty 'created' is not a string");
 }
 
 // Both hint clauses are options of one statement, so a query may carry either, both, or

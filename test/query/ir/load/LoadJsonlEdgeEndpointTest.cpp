@@ -130,7 +130,7 @@ TEST_F(LoadJsonlEdgeEndpointTest, RejectsABareEndpointNamingNoNode) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "bare_unknown.jsonl" AS bare_unknown)",
-                           "failed to import");
+                           "Edge target references an unknown node id' at line 2:\nnode id 7");
 }
 
 TEST_F(LoadJsonlEdgeEndpointTest, RejectsAnObjectEndpointNamingNoNode) {
@@ -140,5 +140,5 @@ TEST_F(LoadJsonlEdgeEndpointTest, RejectsAnObjectEndpointNamingNoNode) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "object_unknown.jsonl" AS object_unknown)",
-                           "failed to import");
+                           "Edge source references an unknown node id' at line 2:\nnode id 7");
 }

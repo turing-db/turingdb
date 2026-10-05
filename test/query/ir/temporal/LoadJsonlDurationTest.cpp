@@ -157,7 +157,7 @@ TEST_F(LoadJsonlDurationTest, RejectsAString) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "string.jsonl" AS string WITH DURATIONS ["took"])",
-                           "failed to import");
+                           "Found a value that is not a count of microseconds in a duration property' at line 1:\nproperty 'took' reads '\"PT1S\"'");
 }
 
 TEST_F(LoadJsonlDurationTest, RejectsAFloat) {
@@ -166,7 +166,7 @@ TEST_F(LoadJsonlDurationTest, RejectsAFloat) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "float.jsonl" AS float WITH DURATIONS ["took"])",
-                           "failed to import");
+                           "Found a value that is not a count of microseconds in a duration property' at line 1:\nproperty 'took' reads '1.5'");
 }
 
 TEST_F(LoadJsonlDurationTest, RejectsACountPastInt64) {
@@ -175,7 +175,7 @@ TEST_F(LoadJsonlDurationTest, RejectsACountPastInt64) {
 )");
 
     runQueryExpectingError(R"(LOAD JSONL "huge.jsonl" AS huge WITH DURATIONS ["took"])",
-                           "failed to import");
+                           "Found a value that is not a count of microseconds in a duration property' at line 1:\nproperty 'took' reads '9223372036854775808'");
 }
 
 TEST_F(LoadJsonlDurationTest, ReadsDateTimesAndDurationsInEitherOrder) {

@@ -79,7 +79,7 @@ TEST_F(FailedGraphLoadTest, leavesNoChangeOpenAfterAParquetImportFails) {
 TEST_F(FailedGraphLoadTest, leavesNoChangeOpenAfterAJsonlImportFails) {
     writeDataFile("broken.jsonl", "not json\n");
 
-    expectError("LOAD JSONL 'broken.jsonl' AS broken", "LOAD JSONL: failed to import graph 'broken'");
+    expectError("LOAD JSONL 'broken.jsonl' AS broken", "JSONL error 'JSONL parse' at line 1");
     expectNoChangeOpen();
 }
 
