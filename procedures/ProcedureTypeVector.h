@@ -43,7 +43,6 @@ template <> struct ProcedureTypeOf<types::Int64::Primitive> { static constexpr P
 template <> struct ProcedureTypeOf<types::Double::Primitive> { static constexpr ProcedureType value = ProcedureType::DOUBLE; };
 template <> struct ProcedureTypeOf<types::Bool::Primitive> { static constexpr ProcedureType value = ProcedureType::BOOL; };
 template <> struct ProcedureTypeOf<types::String::Primitive> { static constexpr ProcedureType value = ProcedureType::STRING_VIEW; };
-template <> struct ProcedureTypeOf<types::String::OwningPrimitive> { static constexpr ProcedureType value = ProcedureType::STRING; };
 template <> struct ProcedureTypeOf<ListView> { static constexpr ProcedureType value = ProcedureType::LIST; };
 
 using ProcedureTypeName = EnumToString<ProcedureType>::Create<
