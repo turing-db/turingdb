@@ -5929,11 +5929,11 @@ private:
         const Value from = _current.lookup(step._to);
         Operation* walked = nullptr;
         if (isa<GetOutEdges>(step._op)) {
-            walked = _builder.create<GetInEdges>(_loc, types, from, columns).getOperation();
+            walked = _builder.create<GetInEdges>(_loc, types, from, columns, DenseI64ArrayAttr()).getOperation();
         } else if (isa<GetInEdges>(step._op)) {
-            walked = _builder.create<GetOutEdges>(_loc, types, from, columns).getOperation();
+            walked = _builder.create<GetOutEdges>(_loc, types, from, columns, DenseI64ArrayAttr()).getOperation();
         } else {
-            walked = _builder.create<GetEdges>(_loc, types, from, columns).getOperation();
+            walked = _builder.create<GetEdges>(_loc, types, from, columns, DenseI64ArrayAttr()).getOperation();
         }
 
         bindHop(step, walked, hopReachedResult(walked), hopInputResult(walked));
@@ -5958,7 +5958,8 @@ private:
                                                             exploration.getHopLabelsAttr(),
                                                             IntegerAttr(),
                                                             false,
-                                                            exploration.getDistinct());
+                                                            exploration.getDistinct(),
+                                                            DenseI64ArrayAttr());
         walked.getHop().takeBody(exploration.getHop());
 
         rebindCarried(walked.getOperation(), pathFixedResultCount);
@@ -6743,12 +6744,6 @@ bool resolveSharedEdgeTypes(const ::db::EdgeTypeMap& types,
     }
 
     return resolveEdgeTypes(types, shared, into);
-}
-
-bool isNodeColumn(Value column) {
-    const auto columnType = dyn_cast<ColumnType>(column.getType());
-
-    return columnType && isa<storage::NodeIDType>(columnType.getType());
 }
 
 // Two node columns a filter of the flow holds equal are one node in every row that
