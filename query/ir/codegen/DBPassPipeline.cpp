@@ -19,7 +19,7 @@ constexpr size_t DB_PASS_COUNT = 36;
 // beside them answering off the IR alone.
 const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkMakePath(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createFuseLabelDisjunction(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createFuseLabelPredicates(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createPushDownFilters(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createTrimUnreadColumns(); },

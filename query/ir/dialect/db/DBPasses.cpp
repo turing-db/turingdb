@@ -42,7 +42,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
-#define GEN_PASS_DEF_FUSELABELDISJUNCTION
+#define GEN_PASS_DEF_FUSELABELPREDICATES
 #define GEN_PASS_DEF_FUSEEDGETYPEPREDICATES
 #define GEN_PASS_DEF_NARROWEDGETYPEREADS
 #define GEN_PASS_DEF_FUSESCANOUTEDGESBYLABEL
@@ -1658,23 +1658,20 @@ bool containsLabels(ArrayAttr alternative, ArrayAttr labels) {
 
 // An alternative asking for every label of another one keeps no node that one does not, so
 // it is dropped, and of two asking for the same labels in a different order only the first stays
-void mergeAlternatives(ArrayAttr left, ArrayAttr right, llvm::SmallVectorImpl<Attribute>& merged) {
-    llvm::SmallVector<Attribute, 4> all(left.begin(), left.end());
-    all.append(right.begin(), right.end());
-
-    for (size_t index = 0; index < all.size(); index++) {
-        const ArrayAttr alternative = cast<ArrayAttr>(all[index]);
+void keepWeakestAlternatives(llvm::ArrayRef<Attribute> alternatives, llvm::SmallVectorImpl<Attribute>& kept) {
+    for (size_t index = 0; index < alternatives.size(); index++) {
+        const ArrayAttr alternative = cast<ArrayAttr>(alternatives[index]);
 
         bool subsumed = false;
-        for (size_t otherIndex = 0; otherIndex < all.size() && !subsumed; otherIndex++) {
-            const ArrayAttr other = cast<ArrayAttr>(all[otherIndex]);
+        for (size_t otherIndex = 0; otherIndex < alternatives.size() && !subsumed; otherIndex++) {
+            const ArrayAttr other = cast<ArrayAttr>(alternatives[otherIndex]);
             const bool otherIsWeaker = otherIndex != index && containsLabels(alternative, other);
             const bool sameLabels = containsLabels(other, alternative);
             subsumed = otherIsWeaker && (!sameLabels || otherIndex < index);
         }
 
         if (!subsumed) {
-            merged.push_back(alternative);
+            kept.push_back(alternative);
         }
     }
 }
@@ -1685,66 +1682,141 @@ void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter) {
     }
 }
 
-// A WHERE spelling a label disjunction reaches here as one check per side OR-ed together.
-// Two checks over the same nodes are one check carrying the alternatives of both.
+// A WHERE spelling a boolean of labels reaches here as one check per label, joined by AND and
+// OR. Two checks over the same nodes are one check, whichever of the two joins them.
+struct LabelCheckPair {
+    CheckLabelConstraint _left;
+    CheckLabelConstraint _right;
+    GetNodeLabelSet _rightLabelSet;
+};
+
+bool matchLabelCheckPair(Value lhs, Value rhs, LabelCheckPair& pair) {
+    CheckLabelConstraint left = lhs.getDefiningOp<CheckLabelConstraint>();
+    CheckLabelConstraint right = rhs.getDefiningOp<CheckLabelConstraint>();
+    if (!left || !right) {
+        return false;
+    }
+
+    GetNodeLabelSet leftLabelSet = left.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    GetNodeLabelSet rightLabelSet = right.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    const bool overSameNodes = leftLabelSet && rightLabelSet && leftLabelSet.getInputNodes() == rightLabelSet.getInputNodes();
+    if (!overSameNodes) {
+        return false;
+    }
+
+    pair = LabelCheckPair {._left = left, ._right = right, ._rightLabelSet = rightLabelSet};
+
+    return true;
+}
+
+void replaceWithLabelCheck(Operation* op,
+                           const LabelCheckPair& pair,
+                           llvm::ArrayRef<Attribute> alternatives,
+                           mlir::PatternRewriter& rewriter) {
+    CheckLabelConstraint left = pair._left;
+    CheckLabelConstraint right = pair._right;
+    GetNodeLabelSet rightLabelSet = pair._rightLabelSet;
+
+    llvm::SmallVector<Attribute, 4> kept;
+    keepWeakestAlternatives(alternatives, kept);
+
+    Value result = op->getResult(0);
+    CheckLabelConstraint fused = rewriter.create<CheckLabelConstraint>(op->getLoc(),
+                                                                       result.getType(),
+                                                                       left.getLabelsetIds(),
+                                                                       rewriter.getArrayAttr(kept));
+    rewriter.replaceOp(op, fused.getResult());
+
+    eraseIfUnused(left.getOperation(), rewriter);
+    if (right != left) {
+        eraseIfUnused(right.getOperation(), rewriter);
+        eraseIfUnused(rightLabelSet.getOperation(), rewriter);
+    }
+}
+
 struct FuseLabelDisjunctionPattern : public mlir::OpRewritePattern<OrOp> {
     using OpRewritePattern::OpRewritePattern;
 
     LogicalResult matchAndRewrite(OrOp disjunction, mlir::PatternRewriter& rewriter) const override {
-        CheckLabelConstraint left = disjunction.getLhs().getDefiningOp<CheckLabelConstraint>();
-        CheckLabelConstraint right = disjunction.getRhs().getDefiningOp<CheckLabelConstraint>();
-        if (!left || !right) {
+        LabelCheckPair pair;
+        if (!matchLabelCheckPair(disjunction.getLhs(), disjunction.getRhs(), pair)) {
             return failure();
         }
 
-        GetNodeLabelSet leftLabelSet = left.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-        GetNodeLabelSet rightLabelSet = right.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-        const bool overSameNodes = leftLabelSet && rightLabelSet && leftLabelSet.getInputNodes() == rightLabelSet.getInputNodes();
-        if (!overSameNodes) {
-            return failure();
-        }
+        const ArrayAttr leftAlternatives = pair._left.getAlternatives();
+        llvm::SmallVector<Attribute, 4> alternatives(leftAlternatives.begin(), leftAlternatives.end());
+        const ArrayAttr rightAlternatives = pair._right.getAlternatives();
+        alternatives.append(rightAlternatives.begin(), rightAlternatives.end());
 
-        llvm::SmallVector<Attribute, 4> alternatives;
-        mergeAlternatives(left.getAlternatives(), right.getAlternatives(), alternatives);
-
-        CheckLabelConstraint fused = rewriter.create<CheckLabelConstraint>(disjunction.getLoc(),
-                                                                           disjunction.getResult().getType(),
-                                                                           left.getLabelsetIds(),
-                                                                           rewriter.getArrayAttr(alternatives));
-        rewriter.replaceOp(disjunction, fused.getResult());
-
-        eraseIfUnused(left.getOperation(), rewriter);
-        if (right != left) {
-            eraseIfUnused(right.getOperation(), rewriter);
-            eraseIfUnused(rightLabelSet.getOperation(), rewriter);
-        }
+        replaceWithLabelCheck(disjunction, pair, alternatives, rewriter);
 
         return success();
     }
 };
 
-struct FuseLabelDisjunction : public impl::FuseLabelDisjunctionBase<FuseLabelDisjunction> {
+// The conjunction of two disjunctions has an alternative per pair of theirs, so a chain of
+// them would grow exponentially: one side has to be a single conjunction.
+struct FuseLabelConjunctionPattern : public mlir::OpRewritePattern<AndOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(AndOp conjunction, mlir::PatternRewriter& rewriter) const override {
+        LabelCheckPair pair;
+        if (!matchLabelCheckPair(conjunction.getLhs(), conjunction.getRhs(), pair)) {
+            return failure();
+        }
+
+        const ArrayAttr leftAlternatives = pair._left.getAlternatives();
+        const ArrayAttr rightAlternatives = pair._right.getAlternatives();
+        if (leftAlternatives.size() > 1 && rightAlternatives.size() > 1) {
+            return failure();
+        }
+
+        llvm::SmallVector<Attribute, 4> alternatives;
+        for (const Attribute leftAlternative : leftAlternatives) {
+            const ArrayAttr leftLabels = cast<ArrayAttr>(leftAlternative);
+
+            for (const Attribute rightAlternative : rightAlternatives) {
+                llvm::SmallVector<Attribute, 4> labels(leftLabels.begin(), leftLabels.end());
+                for (const Attribute label : cast<ArrayAttr>(rightAlternative)) {
+                    if (!llvm::is_contained(labels, label)) {
+                        labels.push_back(label);
+                    }
+                }
+
+                alternatives.push_back(rewriter.getArrayAttr(labels));
+            }
+        }
+
+        replaceWithLabelCheck(conjunction, pair, alternatives, rewriter);
+
+        return success();
+    }
+};
+
+struct FuseLabelPredicates : public impl::FuseLabelPredicatesBase<FuseLabelPredicates> {
     void runOnOperation() override {
         MLIRContext* const context = &getContext();
 
-        llvm::SmallVector<Operation*> disjunctions;
-        getOperation()->walk([&disjunctions](OrOp disjunction) {
-            disjunctions.push_back(disjunction.getOperation());
+        llvm::SmallVector<Operation*> predicates;
+        getOperation()->walk([&predicates](Operation* op) {
+            if (isa<AndOp, OrOp>(op)) {
+                predicates.push_back(op);
+            }
         });
 
         mlir::RewritePatternSet patterns(context);
-        patterns.add<FuseLabelDisjunctionPattern>(context);
+        patterns.add<FuseLabelDisjunctionPattern, FuseLabelConjunctionPattern>(context);
         const mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
 
-        // Kept to the ORs and the checks fused from them: the driver's folding and region
-        // simplification would otherwise rewrite the rest of the program as well.
+        // Kept to the ANDs, the ORs and the checks fused from them: the driver's folding and
+        // region simplification would otherwise rewrite the rest of the program as well.
         mlir::GreedyRewriteConfig config;
         config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
         config.enableFolding(false);
         config.enableConstantCSE(false);
         config.setRegionSimplificationLevel(mlir::GreedySimplifyRegionLevel::Disabled);
 
-        if (failed(mlir::applyOpPatternsGreedily(disjunctions, frozenPatterns, config))) {
+        if (failed(mlir::applyOpPatternsGreedily(predicates, frozenPatterns, config))) {
             signalPassFailure();
         }
     }

@@ -129,6 +129,78 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) WHERE n:Person AND n:Founder RETURN n
+const char* const andOfTwoLabels = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls2 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls2, ["Founder", "Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ok = db.and %p, %f : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%ok, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (n) WHERE (n:Person AND n:Bioinformatics) OR n:Sales RETURN n
+const char* const andInsideAnOr = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls2 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %b = db.check_label_constraint(%ls2, ["Bioinformatics"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %pb = db.and %p, %b : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %ls3 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %s = db.check_label_constraint(%ls3, ["Sales"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ok = db.or %pb, %s : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%ok, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (n) WHERE (n:Person OR n:Interest) AND n:Exotic RETURN n
+const char* const andOfAnOrAndALabel = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls2 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %i = db.check_label_constraint(%ls2, ["Interest"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %pi = db.or %p, %i : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %ls3 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %e = db.check_label_constraint(%ls3, ["Exotic"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ok = db.and %pi, %e : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%ok, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (n) WHERE (n:Person OR n:Interest) AND (n:Founder OR n:Exotic) RETURN n
+const char* const andOfTwoOrs = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls1 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %p = db.check_label_constraint(%ls1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls2 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %i = db.check_label_constraint(%ls2, ["Interest"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %pi = db.or %p, %i : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %ls3 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %f = db.check_label_constraint(%ls3, ["Founder"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %ls4 = db.get_node_label_set(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %e = db.check_label_constraint(%ls4, ["Exotic"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %fe = db.or %f, %e : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %ok = db.and %pi, %fe : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%ok, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // A label no node carries makes its alternative match nothing, not the whole check.
 const char* const orWithAnUnknownLabel = R"mlir(
 func.func @main() {
@@ -207,7 +279,7 @@ func.func @main() {
 
 }
 
-class FuseLabelDisjunctionTest : public TuringTest {
+class FuseLabelPredicatesTest : public TuringTest {
 protected:
     void initialize() override {
         _context.getOrLoadDialect<mlir::func::FuncDialect>();
@@ -222,7 +294,7 @@ protected:
 
     bool runFuse(mlir::ModuleOp module) {
         mlir::PassManager passManager(&_context);
-        passManager.addPass(mlir::db::createFuseLabelDisjunction());
+        passManager.addPass(mlir::db::createFuseLabelPredicates());
 
         return mlir::succeeded(passManager.run(module));
     }
@@ -259,6 +331,7 @@ protected:
 
         EXPECT_EQ(countOps<mlir::db::GetNodeLabelSet>(*module), 1u);
         EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
+        EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 0u);
     }
 
     void expectUntouched(const char* programText) {
@@ -311,47 +384,86 @@ protected:
     mlir::MLIRContext _context;
 };
 
-TEST_F(FuseLabelDisjunctionTest, foldsAnOrIntoTwoAlternatives) {
+TEST_F(FuseLabelPredicatesTest, foldsAnOrIntoTwoAlternatives) {
     expectFusedTo(orOfTwoLabels, {{"Person"}, {"Interest"}});
 }
 
-TEST_F(FuseLabelDisjunctionTest, foldsAChainOfConjunctions) {
+TEST_F(FuseLabelPredicatesTest, foldsAChainOfConjunctions) {
     expectFusedTo(orOfThreeConjunctions, {{"Person", "Founder"}, {"Interest", "SoftwareEngineering"}, {"Exotic"}});
 }
 
-TEST_F(FuseLabelDisjunctionTest, dropsAnAlternativeAnotherSubsumes) {
+TEST_F(FuseLabelPredicatesTest, dropsAnAlternativeAnotherSubsumes) {
     expectFusedTo(orOfASubsumedConjunction, {{"Person"}});
 }
 
-TEST_F(FuseLabelDisjunctionTest, dropsAReorderedAlternative) {
+TEST_F(FuseLabelPredicatesTest, dropsAReorderedAlternative) {
     expectFusedTo(orOfAReorderedConjunction, {{"Person", "Founder"}});
 }
 
-TEST_F(FuseLabelDisjunctionTest, leavesChecksOverDifferentNodesAlone) {
+TEST_F(FuseLabelPredicatesTest, foldsAnAndIntoOneConjunction) {
+    expectFusedTo(andOfTwoLabels, {{"Person", "Founder"}});
+}
+
+TEST_F(FuseLabelPredicatesTest, foldsAnAndInsideAnOr) {
+    expectFusedTo(andInsideAnOr, {{"Person", "Bioinformatics"}, {"Sales"}});
+}
+
+TEST_F(FuseLabelPredicatesTest, distributesAnAndOverAnOr) {
+    expectFusedTo(andOfAnOrAndALabel, {{"Person", "Exotic"}, {"Interest", "Exotic"}});
+}
+
+// Each OR folds, but the AND of the two would need an alternative per pair.
+TEST_F(FuseLabelPredicatesTest, leavesAnAndOfTwoOrsAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(andOfTwoOrs);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 1u);
+}
+
+TEST_F(FuseLabelPredicatesTest, leavesChecksOverDifferentNodesAlone) {
     expectUntouched(orOverDifferentNodes);
 }
 
-TEST_F(FuseLabelDisjunctionTest, leavesAnOrWithANonLabelCheckAlone) {
+TEST_F(FuseLabelPredicatesTest, leavesAnOrWithANonLabelCheckAlone) {
     expectUntouched(orWithANonLabelCheck);
 }
 
-TEST_F(FuseLabelDisjunctionTest, orEmitsTheSameRows) {
+TEST_F(FuseLabelPredicatesTest, orEmitsTheSameRows) {
     expectSameRowsAfterPass(orOfTwoLabels);
 }
 
-TEST_F(FuseLabelDisjunctionTest, orOfConjunctionsEmitsTheSameRows) {
+TEST_F(FuseLabelPredicatesTest, orOfConjunctionsEmitsTheSameRows) {
     expectSameRowsAfterPass(orOfThreeConjunctions);
 }
 
-TEST_F(FuseLabelDisjunctionTest, subsumedAlternativeEmitsTheSameRows) {
+TEST_F(FuseLabelPredicatesTest, subsumedAlternativeEmitsTheSameRows) {
     expectSameRowsAfterPass(orOfASubsumedConjunction);
 }
 
-TEST_F(FuseLabelDisjunctionTest, unknownLabelEmitsTheSameRows) {
+TEST_F(FuseLabelPredicatesTest, andEmitsTheSameRows) {
+    expectSameRowsAfterPass(andOfTwoLabels);
+}
+
+TEST_F(FuseLabelPredicatesTest, andInsideAnOrEmitsTheSameRows) {
+    expectSameRowsAfterPass(andInsideAnOr);
+}
+
+TEST_F(FuseLabelPredicatesTest, andOverAnOrEmitsTheSameRows) {
+    expectSameRowsAfterPass(andOfAnOrAndALabel);
+}
+
+TEST_F(FuseLabelPredicatesTest, andOfTwoOrsEmitsTheSameRows) {
+    expectSameRowsAfterPass(andOfTwoOrs);
+}
+
+TEST_F(FuseLabelPredicatesTest, unknownLabelEmitsTheSameRows) {
     expectSameRowsAfterPass(orWithAnUnknownLabel);
 }
 
-TEST_F(FuseLabelDisjunctionTest, printsSeveralAlternativesNested) {
+TEST_F(FuseLabelPredicatesTest, printsSeveralAlternativesNested) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedAlternatives);
     ASSERT_TRUE(module);
 
@@ -360,7 +472,7 @@ TEST_F(FuseLabelDisjunctionTest, printsSeveralAlternativesNested) {
     EXPECT_NE(text.find(R"([["Person", "Founder"], ["Interest"]])"), std::string::npos);
 }
 
-TEST_F(FuseLabelDisjunctionTest, printsOneAlternativeFlat) {
+TEST_F(FuseLabelPredicatesTest, printsOneAlternativeFlat) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(singleNestedAlternative);
     ASSERT_TRUE(module);
 
@@ -369,7 +481,7 @@ TEST_F(FuseLabelDisjunctionTest, printsOneAlternativeFlat) {
     EXPECT_NE(text.find(R"((%1, ["Person", "Founder"]))"), std::string::npos);
 }
 
-TEST_F(FuseLabelDisjunctionTest, rejectsAnEmptyAlternative) {
+TEST_F(FuseLabelPredicatesTest, rejectsAnEmptyAlternative) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyAlternative);
     EXPECT_FALSE(module);
 }
