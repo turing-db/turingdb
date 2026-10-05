@@ -1034,8 +1034,9 @@ def PathElements : NLOp<"path_elements", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read the nodes, the relationships or the length of each named path of a chunk";
   let description = [{
     Imperative counterpart of db.path_elements: one list of node IDs, one list of edge
-    IDs or one hop count per row, read off the entity sequence nl.make_path laid out,
-    and null on the rows whose sequence is empty - the paths an OPTIONAL MATCH missed.
+    IDs or one hop count per row, read off the entity sequence nl.make_path laid out
+    or the path nl.shortest_path found, and null on the rows whose sequence is empty -
+    the paths an OPTIONAL MATCH missed.
 
       %ns = nl.path_elements(%p) kind nodes
               : (!nl.chunk<!storage.entity_list>) -> !nl.chunk<!storage.nullable<!storage.list<!storage.node_id>>>

@@ -1829,19 +1829,64 @@ std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
     return cellTruth(*cell);
 }
 
+EntityID pathEntityAt(const EntityList& path, size_t index) {
+    return path.getEntries()[index]._id;
+}
+
+EntityID pathEntityAt(const Path& path, size_t index) {
+    return path[index];
+}
+
 // The entities of one kind a path runs through, in the order the path holds them. A path
 // alternates node and edge from its first node, so they are every other entry from @param first
-template <typename IDType>
-ListView listPathEntities(const EntityList& path, size_t first, ListBufferTypeTag tag, QueryListBuffer& buffer) {
-    const EntityList::Container& entries = path.getEntries();
-    const size_t count = (entries.size() - first + 1) / 2;
+template <typename IDType, typename PathType>
+ListView listPathEntities(const PathType& path, size_t first, ListBufferTypeTag tag, QueryListBuffer& buffer) {
+    const size_t count = (path.size() - first + 1) / 2;
     ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
 
     for (size_t index = 0; index < count; index++) {
-        cursor.writeValueAt(index, tag, IDType(entries[first + 2 * index]._id.getValue()));
+        cursor.writeValueAt(index, tag, IDType(pathEntityAt(path, first + 2 * index).getValue()));
     }
 
     return cursor.getView();
+}
+
+// A path an OPTIONAL MATCH missed is an empty sequence; every path found runs
+// through at least one node
+template <typename PathType>
+void readPathElements(const std::vector<PathType>& paths,
+                      PathElementsKind kind,
+                      Column* output,
+                      QueryListBuffer& listBuffer) {
+    if (kind == PathElementsKind::Length) {
+        std::vector<std::optional<uint64_t>>& lengths = static_cast<ColumnOptVector<uint64_t>*>(output)->getRaw();
+        lengths.resize(paths.size());
+
+        for (size_t row = 0; row < paths.size(); row++) {
+            const PathType& path = paths[row];
+            if (path.empty()) {
+                lengths[row] = std::nullopt;
+            } else {
+                lengths[row] = path.size() / 2;
+            }
+        }
+
+        return;
+    }
+
+    std::vector<std::optional<ListView>>& lists = static_cast<ColumnOptVector<ListView>*>(output)->getRaw();
+    lists.resize(paths.size());
+
+    for (size_t row = 0; row < paths.size(); row++) {
+        const PathType& path = paths[row];
+        if (path.empty()) {
+            lists[row] = std::nullopt;
+        } else if (kind == PathElementsKind::Nodes) {
+            lists[row] = listPathEntities<NodeID>(path, 0, ListBufferTypeTag::NodeID, listBuffer);
+        } else {
+            lists[row] = listPathEntities<EdgeID>(path, 1, ListBufferTypeTag::EdgeID, listBuffer);
+        }
+    }
 }
 
 // The truth value a list predicate holds for a row, from how many of its elements held,
@@ -6517,43 +6562,15 @@ void NLExecutor::runPathLength(NLExecutionContext* context, NLFunctionData* data
 
 void NLExecutor::runPathElements(NLExecutionContext* context, NLFunctionData* data) {
     const NLPathElementsData* elements = static_cast<NLPathElementsData*>(data);
-    const std::vector<EntityList>& paths = elements->getPaths()->getRaw();
+    const Column* paths = elements->getPaths();
     const PathElementsKind kind = elements->getKind();
-
-    // A path an OPTIONAL MATCH missed is an empty sequence; every path found runs
-    // through at least one node
-    if (kind == PathElementsKind::Length) {
-        std::vector<std::optional<uint64_t>>& lengths =
-            static_cast<ColumnOptVector<uint64_t>*>(elements->getOutput())->getRaw();
-        lengths.resize(paths.size());
-
-        for (size_t row = 0; row < paths.size(); row++) {
-            const EntityList& path = paths[row];
-            if (path.empty()) {
-                lengths[row] = std::nullopt;
-            } else {
-                lengths[row] = path.size() / 2;
-            }
-        }
-
-        return;
-    }
-
+    Column* output = elements->getOutput();
     QueryListBuffer& listBuffer = *elements->getListBuffer();
 
-    std::vector<std::optional<ListView>>& lists =
-        static_cast<ColumnOptVector<ListView>*>(elements->getOutput())->getRaw();
-    lists.resize(paths.size());
-
-    for (size_t row = 0; row < paths.size(); row++) {
-        const EntityList& path = paths[row];
-        if (path.empty()) {
-            lists[row] = std::nullopt;
-        } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities<NodeID>(path, 0, ListBufferTypeTag::NodeID, listBuffer);
-        } else {
-            lists[row] = listPathEntities<EdgeID>(path, 1, ListBufferTypeTag::EdgeID, listBuffer);
-        }
+    if (paths->getKind() == ColumnVector<Path>::staticKind()) {
+        readPathElements(static_cast<const ColumnVector<Path>*>(paths)->getRaw(), kind, output, listBuffer);
+    } else {
+        readPathElements(static_cast<const ColumnVector<EntityList>*>(paths)->getRaw(), kind, output, listBuffer);
     }
 }
 

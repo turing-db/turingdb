@@ -1518,7 +1518,8 @@ def PathElements : TuringOp<"path_elements", [Pure]> {
   let description = [{
     `nodes(p)`, `relationships(p)` and `length(p)` over the path a named pattern
     element binds: one list of node IDs, one list of edge IDs or one hop count per row,
-    read off the entity sequence db.make_path laid out.
+    read off the entity sequence db.make_path laid out, or off the path db.shortest_path
+    found.
 
       %ns = db.path_elements(%p) kind nodes
               : (!db.column<!storage.entity_list>) -> !db.column<!storage.nullable<!storage.list<!storage.node_id>>>
@@ -1531,7 +1532,7 @@ def PathElements : TuringOp<"path_elements", [Pure]> {
     length and db.expand_path for the two lists.
   }];
 
-  let arguments = (ins ColumnEntityList:$path, PathElementsKind:$kind);
+  let arguments = (ins AnyTypeOf<[ColumnEntityList, ColumnPath]>:$path, PathElementsKind:$kind);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
