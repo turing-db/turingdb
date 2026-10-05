@@ -58,6 +58,7 @@ set(ast_sources
     QueryCommand.cpp
     SinglePartQuery.cpp
     UnionQuery.cpp
+    ConditionalQuery.cpp
     LoadGraphQuery.cpp
     ChangeQuery.cpp
     CommitQuery.cpp

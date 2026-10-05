@@ -8,6 +8,7 @@
 namespace db {
 
 class CypherAST;
+class Expr;
 class SinglePartQuery;
 class Symbol;
 
@@ -17,13 +18,15 @@ class CallSubqueryStmt final : public Stmt {
 public:
     using Imports = std::vector<const Symbol*>;
 
-    // One query of the body - the whole body, or one side of a UNION in it - with the
-    // operator joining it to the ones before it and the variables it imports. Each branch
-    // imports through a leading WITH of its own, so the imports are held per branch.
+    // One query of the body - the whole body, one side of a UNION in it, or one branch of
+    // a WHEN - with the operator joining it to the ones before it and the variables it
+    // imports. Each branch imports through a leading WITH of its own, so the imports are
+    // held per branch. A WHEN branch holds its predicate; the ELSE branch holds none.
     struct Branch {
         SinglePartQuery* _query {nullptr};
         bool _all {false};
         Imports _imports;
+        Expr* _condition {nullptr};
     };
 
     using Branches = std::vector<Branch>;
@@ -35,7 +38,10 @@ public:
     const Branches& branches() const { return _branches; }
     Branches& branches() { return _branches; }
 
-    bool isUnion() const { return _branches.size() > 1; }
+    bool isUnion() const { return !isConditional() && _branches.size() > 1; }
+
+    // A body of WHEN ... THEN branches runs the first one whose predicate is true
+    bool isConditional() const { return _branches.front()._condition != nullptr; }
 
     // How many leading branches dedup against one another, as UnionQuery counts them
     size_t getDedupedBranchCount() const;

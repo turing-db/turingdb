@@ -3,6 +3,7 @@
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
 #include "UnionQuery.h"
+#include "ConditionalQuery.h"
 #include "stmt/WithStmt.h"
 #include "ChangeQuery.h"
 #include "CommitQuery.h"
@@ -198,6 +199,10 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::UNION_QUERY:
                 dump(out, static_cast<const UnionQuery*>(query));
             break;
+
+            case QueryCommand::Kind::CONDITIONAL_QUERY:
+                dump(out, static_cast<const ConditionalQuery*>(query));
+            break;
         }
     }
 }
@@ -214,6 +219,22 @@ void CypherASTDumper::dump(std::ostream& out, const UnionQuery* query) {
     for (const UnionQuery::Branch& branch : query->branches()) {
         const char* const label = isFirstBranch ? "" : (branch._all ? "UNION ALL" : "UNION");
         isFirstBranch = false;
+
+        out << "    _" << std::hex << query << " ||--o{ _" << std::hex << branch._query
+            << " : \"" << label << "\"\n";
+
+        dumpQueryBody(out, branch._query);
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const ConditionalQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType ConditionalQuery\n";
+    out << "    }\n";
+
+    for (const CallSubqueryStmt::Branch& branch : query->getBody()->branches()) {
+        const char* const label = branch._condition ? "WHEN" : "ELSE";
 
         out << "    _" << std::hex << query << " ||--o{ _" << std::hex << branch._query
             << " : \"" << label << "\"\n";

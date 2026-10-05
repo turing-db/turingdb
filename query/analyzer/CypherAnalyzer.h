@@ -20,6 +20,7 @@ class ExprAnalyzer;
 class QueryCommand;
 class SinglePartQuery;
 class UnionQuery;
+class ConditionalQuery;
 class LoadGraphQuery;
 class CreateGraphQuery;
 class DeclContext;
@@ -71,6 +72,7 @@ public:
     void analyze(const ReturnStmt* returnSt);
     void analyze(WithStmt* withSt);
     void analyze(CallSubqueryStmt* subquery);
+    void analyze(const ConditionalQuery* query);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(LoadGMLQuery* loadGML);
@@ -149,6 +151,7 @@ private:
 
     // Analyzes one query of a CALL body under its own scope, seeded with what it imports
     void analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause);
+    void importIntoBranch(const CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);
 
     void throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const;
 
@@ -204,6 +207,15 @@ private:
     const Projection* unionBranchProjection(const SinglePartQuery* branch) const;
     static void collectProjectionNames(const Projection* projection,
                                        std::vector<std::string_view>& names);
+
+    // The branches of a WHEN fill the same columns too, and a branch ending on a write
+    // fills none, so either every branch returns them or none does
+    void analyzeConditionalColumns(const SinglePartQuery* first, const SinglePartQuery* branch) const;
+
+    void throwOnDifferentColumns(std::string_view branches,
+                                 std::span<const std::string_view> firstNames,
+                                 std::span<const std::string_view> names,
+                                 const SinglePartQuery* branch) const;
 
     void throwOnReadAfterUpdate(const StmtContainer* stmts) const;
     void analyzeShortestPathReturn(const SinglePartQuery* query) const;

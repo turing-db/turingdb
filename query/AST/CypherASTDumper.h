@@ -8,6 +8,7 @@ namespace db {
 class CypherAST;
 class SinglePartQuery;
 class UnionQuery;
+class ConditionalQuery;
 class ChangeQuery;
 class CommitQuery;
 class MatchStmt;
@@ -80,6 +81,7 @@ private:
     void dumpQueryBody(std::ostream& out, const SinglePartQuery* query);
 
     void dump(std::ostream& out, const UnionQuery* query);
+    void dump(std::ostream& out, const ConditionalQuery* query);
     void dump(std::ostream& out, const WithStmt* with);
     void dump(std::ostream& out, const LoadGraphQuery* query);
     void dump(std::ostream& out, const LoadJsonlQuery* query);

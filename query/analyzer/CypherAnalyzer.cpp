@@ -24,6 +24,7 @@
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "UnionQuery.h"
+#include "ConditionalQuery.h"
 #include "LoadGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
@@ -127,6 +128,10 @@ void CypherAnalyzer::analyze() {
 
             case QueryCommand::Kind::UNION_QUERY:
                 analyze(static_cast<const UnionQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::CONDITIONAL_QUERY:
+                analyze(static_cast<const ConditionalQuery*>(query));
             break;
 
             case QueryCommand::Kind::LOAD_GRAPH_QUERY:
@@ -281,9 +286,31 @@ void CypherAnalyzer::analyzeUnionColumns(const SinglePartQuery* first, const Sin
     std::vector<std::string_view> names;
     collectProjectionNames(unionBranchProjection(branch), names);
 
+    throwOnDifferentColumns("All sub-queries of a UNION", firstNames, names, branch);
+}
+
+void CypherAnalyzer::analyzeConditionalColumns(const SinglePartQuery* first, const SinglePartQuery* branch) const {
+    std::vector<std::string_view> firstNames;
+    if (const ReturnStmt* firstReturn = first->getReturnStmt()) {
+        collectProjectionNames(firstReturn->getProjection(), firstNames);
+    }
+
+    std::vector<std::string_view> names;
+    if (const ReturnStmt* branchReturn = branch->getReturnStmt()) {
+        collectProjectionNames(branchReturn->getProjection(), names);
+    }
+
+    throwOnDifferentColumns("All branches of a conditional query", firstNames, names, branch);
+}
+
+void CypherAnalyzer::throwOnDifferentColumns(std::string_view branches,
+                                             std::span<const std::string_view> firstNames,
+                                             std::span<const std::string_view> names,
+                                             const SinglePartQuery* branch) const {
     if (names.size() != firstNames.size()) {
-        throwError(fmt::format("All sub-queries of a UNION must return the same number of columns: "
+        throwError(fmt::format("{} must return the same number of columns: "
                                "this one returns {} where the first returns {}",
+                               branches,
                                names.size(),
                                firstNames.size()),
                    branch);
@@ -291,8 +318,9 @@ void CypherAnalyzer::analyzeUnionColumns(const SinglePartQuery* first, const Sin
 
     for (size_t index = 0; index < names.size(); index++) {
         if (names[index] != firstNames[index]) {
-            throwError(fmt::format("All sub-queries of a UNION must return the same column names: "
+            throwError(fmt::format("{} must return the same column names: "
                                    "column {} is '{}' where the first returns '{}'",
+                                   branches,
                                    index + 1,
                                    names[index],
                                    firstNames[index]),
@@ -442,6 +470,7 @@ void CypherAnalyzer::setScope(DeclContext* scope) {
 
 void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     CallSubqueryStmt::Branches& branches = subquery->branches();
+    const bool conditional = subquery->isConditional();
 
     for (CallSubqueryStmt::Branch& branch : branches) {
         if (!subquery->hasScopeClause()) {
@@ -452,7 +481,11 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     }
 
     for (size_t index = 1; index < branches.size(); index++) {
-        analyzeUnionColumns(branches.front()._query, branches[index]._query);
+        if (conditional) {
+            analyzeConditionalColumns(branches.front()._query, branches[index]._query);
+        } else {
+            analyzeUnionColumns(branches.front()._query, branches[index]._query);
+        }
     }
 
     if (subquery->isReturning()) {
@@ -467,6 +500,49 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = body->getDeclContext();
 
+    // What the scope clause names is readable everywhere in the body. A body importing
+    // through a leading WITH carries nothing this way: that WITH is an ordinary
+    // projection, and an ordinary WITH below it descopes what it does not project.
+    std::vector<std::string_view> outerImports;
+    if (hasScopeClause) {
+        importIntoBranch(branch, outer, inner);
+
+        for (const Symbol* import : branch._imports) {
+            outerImports.push_back(import->getName());
+        }
+    }
+
+    std::swap(_subqueryImports, outerImports);
+
+    setScope(inner);
+
+    if (Expr* predicate = branch._condition) {
+        _exprAnalyzer->analyzeRootExpr(predicate);
+
+        if (predicate->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", predicate);
+        }
+
+        const EvaluatedType predicateType = predicate->getType();
+        if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
+            throwError("WHEN predicate must be a boolean", predicate);
+        }
+    }
+
+    // A leading WITH runs only once the WHEN predicate has picked its branch, so the
+    // predicate does not read what that WITH imports
+    if (!hasScopeClause) {
+        importIntoBranch(branch, outer, inner);
+    }
+
+    analyze(body);
+
+    std::swap(_subqueryImports, outerImports);
+
+    setScope(outer);
+}
+
+void CypherAnalyzer::importIntoBranch(const CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner) {
     for (const Symbol* import : branch._imports) {
         const std::string_view name = import->getName();
 
@@ -481,26 +557,10 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
         _declSources[imported] = decl;
         _exprAnalyzer->importCSVSource(imported, decl);
     }
+}
 
-    // What the scope clause names is readable everywhere in the body. A body importing
-    // through a leading WITH carries nothing this way: that WITH is an ordinary
-    // projection, and an ordinary WITH below it descopes what it does not project.
-    std::vector<std::string_view> outerImports;
-    if (hasScopeClause) {
-        for (const Symbol* import : branch._imports) {
-            outerImports.push_back(import->getName());
-        }
-    }
-
-    std::swap(_subqueryImports, outerImports);
-
-    setScope(inner);
-
-    analyze(body);
-
-    std::swap(_subqueryImports, outerImports);
-
-    setScope(outer);
+void CypherAnalyzer::analyze(const ConditionalQuery* query) {
+    analyze(query->getBody());
 }
 
 void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {

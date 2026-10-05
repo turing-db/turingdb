@@ -1838,7 +1838,7 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
 /**
 * Yield
 */
-def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "HashJoin", "Union", "ExplorePaths"]>]> {
+def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "HashJoin", "Union", "Conditional", "ExplorePaths"]>]> {
   let summary = "Name the columns a region contributes to the result of the op holding it";
 
   let description = [{
@@ -1848,10 +1848,11 @@ def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "H
     at least one column - the holder's verifier rejects an empty yield, since a
     side's row count is read from its first yielded column.
 
-    It also terminates each branch of a db.union that has results, naming the
-    rows that branch adds to them, and the hop region of a db.explore_paths,
-    yielding the one boolean column that says which candidates of a hop pass its
-    predicate.
+    It also terminates each branch of a db.union that has results and of a
+    db.conditional, naming the rows that branch adds to them. It terminates each
+    condition of a db.conditional and the hop region of a db.explore_paths too, yielding
+    one boolean column: whether the row takes the branch, or which candidates of a hop
+    pass its predicate.
   }];
 
   let arguments = (ins Variadic<Column>:$columns);
@@ -2222,6 +2223,57 @@ def Union : TuringOp<"union", [NoTerminator]> {
   let builders = [
       OpBuilder<(ins "size_t":$branchCount)>,
       OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "size_t":$branchCount)>
+  ];
+}
+
+/**
+* Conditional
+*/
+def Conditional : TuringOp<"conditional", []> {
+  let summary = "Run the first branch whose condition is true, or the default one";
+  let description = [{
+    The declarative counterpart of Cypher's WHEN ... THEN ... ELSE. The regions alternate
+    condition and branch, one pair per WHEN, and end with the ELSE branch when there is
+    one. Branch i runs when condition i is true and no condition before it is, and the
+    ELSE when none is. A null condition is not true. A condition is computed only when no
+    branch before it is taken, and a branch that does not run computes nothing, an
+    aggregate in it included.
+
+    It sits in the body of a db.call_subquery, which runs it once per input row, or at
+    the top of a standalone WHEN, where nothing is in flight. Either way a condition holds
+    one row. The regions read the scope around the op the way the branches of a db.union
+    in a CALL body do. A condition ends in a db.yield of one boolean column, and each
+    branch in a db.yield of the same number of columns, which are the op's results;
+    branches that only write yield none:
+
+      %z = db.conditional ({
+        %c = db.get_node_properties(%pIn, "isFrench") : ...
+        db.yield %c : !db.column<none>
+      }, {
+        %n = db.get_node_properties(%pIn, "name") : ...
+        db.yield %n : !db.column<none>
+      }, {
+        %c = db.constant("other") : !db.column<!storage.string>
+        db.yield %c : !db.column<!storage.string>
+      }) : !db.column<none>
+
+    Not Pure: its branches may write to the graph.
+  }];
+
+  let results = (outs Variadic<Column>:$results);
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$branches);
+
+  let assemblyFormat = [{
+    `(` $branches `)` attr-dict (`:` type($results)^)?
+  }];
+
+  let hasVerifier = 1;
+
+  // Creates one empty block per region; the caller fills each and ends it with a db.yield
+  let skipDefaultBuilders = 1;
+  let builders = [
+      OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "size_t":$regionCount)>
   ];
 }
 

@@ -63,6 +63,7 @@
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "UnionQuery.h"
+#include "ConditionalQuery.h"
 #include "Symbol.h"
 #include "WhereClause.h"
 #include "YieldClause.h"
@@ -1728,6 +1729,8 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     if (kind == QueryCommand::Kind::UNION_QUERY) {
         generateUnion(static_cast<const UnionQuery*>(command));
+    } else if (kind == QueryCommand::Kind::CONDITIONAL_QUERY) {
+        generateConditionalQuery(static_cast<const ConditionalQuery*>(command));
     } else if (kind == QueryCommand::Kind::SINGLE_PART_QUERY) {
         generateQuery(static_cast<const SinglePartQuery*>(command), nullptr);
     } else {
@@ -1833,6 +1836,36 @@ void DBProgramGenerator::generateUnion(const UnionQuery* unionQuery) {
     }
 
     _opBuilder.setInsertionPointAfter(unionOp);
+}
+
+void DBProgramGenerator::generateConditionalQuery(const ConditionalQuery* query) {
+    const CallSubqueryStmt::Branches& branches = query->getBody()->branches();
+
+    const std::vector<llvm::SmallVector<PublishedColumn>> branchScopes(branches.size());
+    const std::vector<CarriedEntities> importedEntities(branches.size());
+
+    llvm::SmallVector<PublishedColumn> yielded;
+    CarriedEntities returnedEntities;
+    generateSubqueryConditional(branches, branchScopes, importedEntities, yielded, returnedEntities);
+
+    const ReturnStmt* returnStmt = branches.front()._query->getReturnStmt();
+    if (!returnStmt) {
+        return;
+    }
+
+    llvm::SmallVector<mlir::Value> columns;
+    llvm::SmallVector<llvm::StringRef> names;
+    for (const VarDecl* decl : returnStmt->getProjection()->publishedDecls()) {
+        const auto columnIt = std::ranges::find(yielded, decl, &PublishedColumn::_decl);
+        bioassert(columnIt != yielded.end(), "Column '{}' of a WHEN not yielded by its branches", decl->getName());
+
+        columns.push_back(columnIt->_column);
+        names.push_back(columnIt->_name);
+    }
+
+    _opBuilder.create<mlir::db::Output>(_opBuilder.getUnknownLoc(),
+                                       mlir::ValueRange {columns},
+                                       _opBuilder.getStrArrayAttr(names));
 }
 
 void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
@@ -5352,10 +5385,13 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     const CallSubqueryStmt::Branches& branches = subquery->branches();
     const bool returning = subquery->isReturning();
     const bool optional = returning && subquery->isOptional();
+    const bool conditional = subquery->isConditional();
+    const bool isUnion = subquery->isUnion();
 
-    // A UNION dedups the rows of each input row on their own, so a union body runs one
-    // input row at a time
-    const bool carriesScope = !subquery->isUnion() && subqueryCarriesRows(branches.front()._query);
+    // A UNION dedups the rows of each input row on their own, and a WHEN decides per input
+    // row which branch runs, so either body runs one input row at a time
+    const bool runsPerRow = isUnion || conditional;
+    const bool carriesScope = !runsPerRow && subqueryCarriesRows(branches.front()._query);
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -5425,7 +5461,9 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     CarriedEntities returnedEntities;
     mlir::Value yieldedTag;
 
-    if (subquery->isUnion()) {
+    if (conditional) {
+        generateSubqueryConditional(branches, branchScopes, importedEntities, yielded, returnedEntities);
+    } else if (isUnion) {
         llvm::SmallVector<const SinglePartQuery*> queries;
         for (const CallSubqueryStmt::Branch& branch : branches) {
             queries.push_back(branch._query);
@@ -5620,7 +5658,7 @@ void DBProgramGenerator::collectSubqueryBranchScope(const CallSubqueryStmt::Bran
 void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQuery*> branches,
                                                size_t dedupedBranches,
                                                std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
-                                               std::span<CarriedEntities> importedEntities,
+                                               std::span<const CarriedEntities> importedEntities,
                                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                                CarriedEntities& returnedEntities) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -5631,79 +5669,172 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
         distinctSet = _opBuilder.create<mlir::db::DistinctSet>(loc).getSet();
     }
 
-    std::vector<std::unique_ptr<mlir::Region>> branchRegions;
-    llvm::SmallVector<PublishedColumn> resultColumns;
-    llvm::SmallVector<mlir::Type> resultTypes;
-    std::vector<std::vector<std::optional<PartScope::WrittenEntity>>> writtenColumns(branches.size());
+    SubqueryBranchResults branchResults;
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        const SinglePartQuery* query = branches[branchIndex];
+        rebindSubqueryBranchScope(branchScopes[branchIndex], importedEntities[branchIndex]);
 
-        std::unique_ptr<mlir::Region>& region = branchRegions.emplace_back(std::make_unique<mlir::Region>());
-        mlir::Block* const block = new mlir::Block(); // Region destructor frees it
-        region->push_back(block);
-
-        rebindScope(branchScopes[branchIndex]);
-
-        for (auto& [decl, written] : importedEntities[branchIndex]) {
-            _part._writtenEntities[decl] = std::move(written);
-        }
-
-        _unionBranchRowBlocks[block] = bodyBlock;
-
-        _opBuilder.setInsertionPointToStart(block);
-        generateQueryParts(query);
-        publishProjection(query->getReturnStmt()->getProjection());
-
-        llvm::SmallVector<PublishedColumn> branchColumns;
-        collectPublishedColumns(branchColumns);
-
-        llvm::SmallVector<mlir::Value> projected;
-        for (const PublishedColumn& column : branchColumns) {
-            projected.push_back(column._column);
-
-            std::optional<PartScope::WrittenEntity>& written = writtenColumns[branchIndex].emplace_back();
-            if (const PartScope::WrittenEntity* entity = findWrittenEntity(column._decl)) {
-                written = *entity;
-            }
-        }
-
-        if (branchIndex < dedupedBranches) {
-            dedupUnionBranch(distinctSet, projected);
-        }
-
-        _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
-        _unionBranchRowBlocks.erase(block);
-
-        if (branchIndex == 0) {
-            resultColumns = branchColumns;
-            for (const mlir::Value column : projected) {
-                resultTypes.push_back(column.getType());
-            }
-
-            continue;
-        }
-
-        // A null or a property names no element type until lowering resolves it, so the
-        // first branch that names one types the result
-        for (size_t columnIndex = 0; columnIndex < projected.size(); columnIndex++) {
-            const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
-            if (mlir::isa<mlir::NoneType>(resultType.getType())) {
-                resultTypes[columnIndex] = projected[columnIndex].getType();
-            }
-        }
+        const mlir::Value branchDistinctSet = branchIndex < dedupedBranches ? distinctSet : mlir::Value();
+        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchDistinctSet, branchResults);
     }
 
     _opBuilder.setInsertionPointToEnd(bodyBlock);
 
-    mlir::db::Union unionOp = _opBuilder.create<mlir::db::Union>(loc, resultTypes, branches.size());
+    mlir::db::Union unionOp = _opBuilder.create<mlir::db::Union>(loc, branchResults._resultTypes, branches.size());
     const mlir::MutableArrayRef<mlir::Region> unionBranches = unionOp.getBranches();
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        unionBranches[branchIndex].takeBody(*branchRegions[branchIndex]);
+        unionBranches[branchIndex].takeBody(*branchResults._regions[branchIndex]);
     }
 
-    const mlir::ResultRange results = unionOp.getResults();
+    publishSubqueryBranchResults(unionOp.getResults(), branchResults, yielded, returnedEntities);
+}
+
+void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubqueryStmt::Branch> branches,
+                                                     std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
+                                                     std::span<const CarriedEntities> importedEntities,
+                                                     llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                                     CarriedEntities& returnedEntities) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const bodyBlock = _opBuilder.getInsertionBlock();
+
+    std::vector<std::unique_ptr<mlir::Region>> conditionRegions;
+    SubqueryBranchResults branchResults;
+
+    // A condition's region does not dominate its branch's, so the branch rebinds the scope
+    // rather than read a value the condition bound
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        const CallSubqueryStmt::Branch& branch = branches[branchIndex];
+        const llvm::SmallVector<PublishedColumn>& scope = branchScopes[branchIndex];
+        const CarriedEntities& entities = importedEntities[branchIndex];
+
+        if (const Expr* predicate = branch._condition) {
+            rebindSubqueryBranchScope(scope, entities);
+            generateConditionRegion(predicate, bodyBlock, conditionRegions);
+        }
+
+        rebindSubqueryBranchScope(scope, entities);
+        generateSubqueryBranch(branch._query, bodyBlock, mlir::Value(), branchResults);
+    }
+
+    _opBuilder.setInsertionPointToEnd(bodyBlock);
+
+    const size_t regionCount = conditionRegions.size() + branches.size();
+    mlir::db::Conditional conditional = _opBuilder.create<mlir::db::Conditional>(loc,
+                                                                                 branchResults._resultTypes,
+                                                                                 regionCount);
+    const mlir::MutableArrayRef<mlir::Region> regions = conditional.getBranches();
+
+    size_t regionIndex = 0;
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        if (branchIndex < conditionRegions.size()) {
+            regions[regionIndex].takeBody(*conditionRegions[branchIndex]);
+            regionIndex++;
+        }
+
+        regions[regionIndex].takeBody(*branchResults._regions[branchIndex]);
+        regionIndex++;
+    }
+
+    publishSubqueryBranchResults(conditional.getResults(), branchResults, yielded, returnedEntities);
+}
+
+void DBProgramGenerator::generateConditionRegion(const Expr* predicate,
+                                                 mlir::Block* bodyBlock,
+                                                 std::vector<std::unique_ptr<mlir::Region>>& regions) {
+    std::unique_ptr<mlir::Region>& region = regions.emplace_back(std::make_unique<mlir::Region>());
+    mlir::Block* const block = new mlir::Block(); // Region destructor frees it
+    region->push_back(block);
+
+    _unionBranchRowBlocks[block] = bodyBlock;
+
+    _opBuilder.setInsertionPointToStart(block);
+    translateExpr(predicate);
+
+    const mlir::Value condition = _part._exprMap.at(predicate);
+    _opBuilder.create<mlir::db::Yield>(_opBuilder.getUnknownLoc(), mlir::ValueRange {condition});
+
+    _unionBranchRowBlocks.erase(block);
+}
+
+void DBProgramGenerator::rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColumn> scope,
+                                                   const CarriedEntities& importedEntities) {
+    rebindScope(scope);
+
+    for (const auto& [decl, written] : importedEntities) {
+        _part._writtenEntities[decl] = written;
+    }
+}
+
+void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
+                                                mlir::Block* bodyBlock,
+                                                mlir::Value distinctSet,
+                                                SubqueryBranchResults& branchResults) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const bool firstBranch = branchResults._regions.empty();
+
+    std::unique_ptr<mlir::Region>& region = branchResults._regions.emplace_back(std::make_unique<mlir::Region>());
+    mlir::Block* const block = new mlir::Block(); // Region destructor frees it
+    region->push_back(block);
+
+    _unionBranchRowBlocks[block] = bodyBlock;
+
+    _opBuilder.setInsertionPointToStart(block);
+    generateQueryParts(query);
+
+    llvm::SmallVector<PublishedColumn> branchColumns;
+    if (const ReturnStmt* returnStmt = query->getReturnStmt()) {
+        publishProjection(returnStmt->getProjection());
+        collectPublishedColumns(branchColumns);
+    }
+
+    std::vector<std::optional<PartScope::WrittenEntity>>& writtenColumns = branchResults._writtenColumns.emplace_back();
+
+    llvm::SmallVector<mlir::Value> projected;
+    for (const PublishedColumn& column : branchColumns) {
+        projected.push_back(column._column);
+
+        std::optional<PartScope::WrittenEntity>& written = writtenColumns.emplace_back();
+        if (const PartScope::WrittenEntity* entity = findWrittenEntity(column._decl)) {
+            written = *entity;
+        }
+    }
+
+    if (distinctSet) {
+        dedupUnionBranch(distinctSet, projected);
+    }
+
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {projected});
+    _unionBranchRowBlocks.erase(block);
+
+    llvm::SmallVector<mlir::Type>& resultTypes = branchResults._resultTypes;
+
+    if (firstBranch) {
+        branchResults._resultColumns = branchColumns;
+        for (const mlir::Value column : projected) {
+            resultTypes.push_back(column.getType());
+        }
+
+        return;
+    }
+
+    // A null or a property names no element type until lowering resolves it, so the
+    // first branch that names one types the result
+    for (size_t columnIndex = 0; columnIndex < projected.size(); columnIndex++) {
+        const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
+        if (mlir::isa<mlir::NoneType>(resultType.getType())) {
+            resultTypes[columnIndex] = projected[columnIndex].getType();
+        }
+    }
+}
+
+void DBProgramGenerator::publishSubqueryBranchResults(mlir::ResultRange results,
+                                                      const SubqueryBranchResults& branchResults,
+                                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                                      CarriedEntities& returnedEntities) {
+    const llvm::SmallVector<PublishedColumn>& resultColumns = branchResults._resultColumns;
+    const std::vector<std::vector<std::optional<PartScope::WrittenEntity>>>& writtenColumns = branchResults._writtenColumns;
+
     for (size_t columnIndex = 0; columnIndex < resultColumns.size(); columnIndex++) {
         const PublishedColumn& column = resultColumns[columnIndex];
         yielded.push_back({column._decl, column._name, results[columnIndex]});
@@ -5716,7 +5847,7 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
             const std::optional<PartScope::WrittenEntity>& written = branchWritten[columnIndex];
 
             if (written.has_value() != returned.has_value()) {
-                throwError(fmt::format("Column '{}' of a UNION in a CALL subquery holds what one branch "
+                throwError(fmt::format("Column '{}' of a CALL subquery holds what one branch "
                                        "created and another did not, which is not supported",
                                        column._name));
             }

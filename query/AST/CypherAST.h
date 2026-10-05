@@ -72,6 +72,7 @@ class DeleteStmt;
 class QueryCommand;
 class SinglePartQuery;
 class UnionQuery;
+class ConditionalQuery;
 class ChangeQuery;
 class ReturnStmt;
 class WhereClause;
@@ -178,6 +179,7 @@ public:
     friend YieldItems;
     friend SinglePartQuery;
     friend UnionQuery;
+    friend ConditionalQuery;
     friend ChangeQuery;
     friend DeclContext;
     friend VarDecl;
