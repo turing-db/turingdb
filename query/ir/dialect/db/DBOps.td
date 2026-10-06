@@ -2591,6 +2591,8 @@ class TypedUnaryFunctionOp<string mnemonic, string readType>
 
 def Labels : UnaryFunctionOp<"labels">;
 def EdgeType : UnaryFunctionOp<"edge_type">;
+def Keys : UnaryFunctionOp<"keys">;
+def PropertyMap : UnaryFunctionOp<"properties">;
 
 // The two ends of each edge of a column, as node columns of their own. The edge is read as
 // the graph stores it, so a hop that walked it backwards or undirected reports the same

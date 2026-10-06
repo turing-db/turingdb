@@ -78,7 +78,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLExecutor executor(_view, &program, _sink, _writeBuffer, _system);
+        NLExecutor executor(_view, &program, _sink, _writeBuffer, _system, _metadataBuilder);
         executor.run();
 
         const TimePoint end = Clock::now();

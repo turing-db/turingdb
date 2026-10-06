@@ -62,6 +62,18 @@ std::optional<PropertyType> MetadataBuilder::findPropertyType(std::string_view p
     return _metadata->_propTypeMap.get(propTypeName);
 }
 
+std::optional<PropertyType> MetadataBuilder::findPropertyType(PropertyTypeID propTypeID) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.get(propTypeID);
+}
+
+std::optional<std::string_view> MetadataBuilder::findPropertyTypeName(PropertyTypeID propTypeID) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.getName(propTypeID);
+}
+
 std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& prevMetadata, GraphMetadata* metadata) {
     Profile profile("MetadataBuilder::create");
 

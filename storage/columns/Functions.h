@@ -388,6 +388,20 @@ public:
     }
 };
 
+class MapKeysFunction {
+public:
+    using ArgType = MapView;
+    using ResultType = std::optional<ListView>;
+
+    explicit MapKeysFunction(QueryListBuffer* listBuffer);
+
+    ResultType operator()(MapView map);
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+    std::vector<QueryListBuffer::ListItemVariant> _elements;
+};
+
 class TaggedDurationFunction {
 public:
     using ArgType = ListElementView;

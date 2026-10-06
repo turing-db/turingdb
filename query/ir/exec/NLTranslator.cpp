@@ -118,6 +118,8 @@ using NLUnaryFunctionSelector = NLUnaryFunctionKernel (*)(const Column* input, b
 const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctionSelectors = {
     {"nl.labels",     &NLExecutor::selectFunction<LabelsFunction>},
     {"nl.edge_type",  &NLExecutor::selectFunction<EdgeTypesFunction>},
+    {"nl.keys",       &NLExecutor::selectKeys},
+    {"nl.properties", &NLExecutor::selectProperties},
     {"nl.start_node", &NLExecutor::selectFunction<StartNodeFunction>},
     {"nl.end_node",   &NLExecutor::selectFunction<EndNodeFunction>},
     {"nl.to_integer", &NLExecutor::selectConversion<ToIntegerFunction>},
