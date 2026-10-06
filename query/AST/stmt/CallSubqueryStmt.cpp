@@ -64,8 +64,8 @@ void CallSubqueryStmt::addImport(const Symbol* symbol) {
     for (Branch& branch : _branches) {
         branch._imports.push_back(symbol);
 
-        if (branch._whenCall) {
-            branch._whenCall->addImport(symbol);
+        if (branch._innerCall) {
+            branch._innerCall->addImport(symbol);
         }
     }
 }

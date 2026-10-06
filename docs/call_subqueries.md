@@ -428,8 +428,9 @@ write it. A column one branch created and another did not gets a mask too, `true
 branch that created it. A UNION can combine a WHEN, in braces, with another WHEN or any
 other query: `{ WHEN ... } UNION { WHEN ... }`. The parser writes each braced WHEN as
 `CALL () { WHEN ... } RETURN <its columns>`, which the CALL holding the union hands its
-imports, so the union handles it as any other side. Not done yet: a UNION inside a WHEN
-branch, and WHEN in an EXISTS or COUNT body.
+imports, so the union handles it as any other side. A WHEN branch can be a UNION,
+`WHEN ... THEN { A UNION B }`, written the same way as `CALL () { A UNION B } RETURN <its
+columns>`. Not done yet: WHEN in an EXISTS or COUNT body.
 
 Still open: the vectorised forms of section 4, `CALL (*)`, an import
 read below a keyless reduction in the body, and trimming inside the region. The scope

@@ -58,13 +58,14 @@ public:
                                           MapLiteral* properties,
                                           WhereClause* where);
 
-    // `{ WHEN ... }` combined by a UNION is `CALL () { WHEN ... } RETURN <its columns>`.
-    // False when a column of the first branch has no name to return it under: a WHEN
-    // combined by a UNION names each column with AS.
-    static bool createWhenOperand(CypherAST* ast,
-                                  const CallSubqueryStmt::Branches& branches,
-                                  const SourceLocation& location,
-                                  UnionQuery::Branch& operand);
+    // `CALL () { <branches> } RETURN <their columns>`, which `{ WHEN ... }` combined by a
+    // UNION, and a UNION in a WHEN branch, are written as. False when a column of the first
+    // branch has no name to return it under: those name each column with AS.
+    static bool createCallReturning(CypherAST* ast,
+                                    const CallSubqueryStmt::Branches& branches,
+                                    const SourceLocation& location,
+                                    SinglePartQuery*& query,
+                                    CallSubqueryStmt*& call);
 
     static SinglePartQuery* createPatternBody(CypherAST* ast,
                                               Pattern* pattern,

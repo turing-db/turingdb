@@ -16,11 +16,11 @@ public:
     // One branch of the union and the operator joining it to the ones before it. The
     // first branch is joined to nothing, so its flag is never read. A `{ WHEN ... }`
     // branch is written as `CALL () { WHEN ... } RETURN <its columns>`, that CALL held in
-    // _whenCall so a CALL holding the union can hand it its imports.
+    // _innerCall so a CALL holding the union can hand it its imports.
     struct Branch {
         SinglePartQuery* _query {nullptr};
         bool _all {false};
-        CallSubqueryStmt* _whenCall {nullptr};
+        CallSubqueryStmt* _innerCall {nullptr};
     };
 
     using Branches = std::vector<Branch>;

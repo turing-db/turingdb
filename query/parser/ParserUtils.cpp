@@ -217,13 +217,14 @@ NodePattern* ParserUtils::createNodePattern(CypherAST* ast,
     return node;
 }
 
-bool ParserUtils::createWhenOperand(CypherAST* ast,
-                                    const CallSubqueryStmt::Branches& branches,
-                                    const SourceLocation& location,
-                                    UnionQuery::Branch& operand) {
+bool ParserUtils::createCallReturning(CypherAST* ast,
+                                      const CallSubqueryStmt::Branches& branches,
+                                      const SourceLocation& location,
+                                      SinglePartQuery*& query,
+                                      CallSubqueryStmt*& call) {
     SourceManager* sourceManager = ast->getSourceManager();
 
-    CallSubqueryStmt* call = CallSubqueryStmt::create(ast, branches);
+    call = CallSubqueryStmt::create(ast, branches);
     call->setHasScopeClause(true);
     sourceManager->setLocation(call, location);
 
@@ -231,11 +232,9 @@ bool ParserUtils::createWhenOperand(CypherAST* ast,
     stmts->add(call);
     sourceManager->setLocation(stmts, location);
 
-    SinglePartQuery* query = SinglePartQuery::create(ast);
+    query = SinglePartQuery::create(ast);
     query->setStmts(stmts);
     sourceManager->setLocation(query, location);
-
-    operand = {query, false, call};
 
     const ReturnStmt* branchReturn = branches.front()._query->getReturnStmt();
     if (!branchReturn) {

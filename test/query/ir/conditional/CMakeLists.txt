@@ -29,3 +29,7 @@ target_link_libraries(test_query_ir_conditional_create_merge PRIVATE turing_ir_t
 # `{ WHEN ... } UNION { WHEN ... }`, at the top of a query and in a CALL body.
 add_turing_test(test_query_ir_conditional_union ConditionalUnionTest.cpp)
 target_link_libraries(test_query_ir_conditional_union PRIVATE turing_ir_test_write_query_s)
+
+# A WHEN branch that is a UNION.
+add_turing_test(test_query_ir_conditional_branch_union ConditionalBranchUnionTest.cpp)
+target_link_libraries(test_query_ir_conditional_branch_union PRIVATE turing_ir_test_write_query_s)

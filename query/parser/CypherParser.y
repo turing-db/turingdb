@@ -425,7 +425,8 @@
 %type<db::CallSubqueryStmt::Branches> callSubqueryBody
 %type<db::CallSubqueryStmt::Branches> conditionalBranches
 %type<db::CallSubqueryStmt::Branches> whenBranches
-%type<db::SinglePartQuery*> conditionalBranchQuery
+%type<db::CallSubqueryStmt::Branch> conditionalBranchQuery
+%type<db::CallSubqueryStmt::Branches> unionBranches
 %type<db::ExistsExpr::Branches> existsBody
 %type<db::UnionQuery::Branches> countBody
 %type<std::vector<const db::Symbol*>> callScope
@@ -1169,47 +1170,59 @@ callSubquerySt
 
 callSubqueryBody
     : singlePartQuery { $$.push_back({$1, false, {}}); }
-    | unionOperand unionList {
-        $$.push_back({$1._query, false, {}, nullptr, $1._whenCall});
+    | unionBranches { $$ = std::move($1); }
+    | conditionalBranches { $$ = std::move($1); }
+    ;
+
+unionBranches
+    : unionOperand unionList {
+        $$.push_back({$1._query, false, {}, nullptr, $1._innerCall});
         for (const UnionQuery::Branch& branch : $2) {
-            $$.push_back({branch._query, branch._all, {}, nullptr, branch._whenCall});
+            $$.push_back({branch._query, branch._all, {}, nullptr, branch._innerCall});
         }
       }
-    | conditionalBranches { $$ = std::move($1); }
     ;
 
 conditionalBranches
     : whenBranches { $$ = std::move($1); }
     | whenBranches ELSE conditionalBranchQuery {
         $$ = std::move($1);
-        $$.push_back({$3, false, {}, nullptr});
+        $$.push_back($3);
       }
     ;
 
 whenBranches
-    : WHEN expr THEN conditionalBranchQuery { $$.push_back({$4, false, {}, $2}); }
+    : WHEN expr THEN conditionalBranchQuery {
+        $$.push_back($4);
+        $$.back()._condition = $2;
+      }
     | whenBranches WHEN expr THEN conditionalBranchQuery {
         $$ = std::move($1);
-        $$.push_back({$5, false, {}, $3});
+        $$.push_back($5);
+        $$.back()._condition = $3;
       }
     ;
 
 conditionalBranchQuery
-    : singlePartQuery { $$ = $1; }
-    | OBRACE singlePartQuery CBRACE { $$ = $2; }
-    | OBRACE unionOperand unionList CBRACE { scanner.notImplemented(@$, "UNION inside a WHEN branch"); }
+    : singlePartQuery { $$._query = $1; }
+    | OBRACE singlePartQuery CBRACE { $$._query = $2; }
+    | OBRACE unionBranches CBRACE {
+        if (!ParserUtils::createCallReturning(ast, $2, @$, $$._query, $$._innerCall)) {
+            scanner.syntaxError(@2, "A UNION in a WHEN branch must name each column it returns with AS");
+        }
+      }
     ;
 
 existsBody
     : singlePartQuery { $$.push_back($1); }
     | unionOperand unionList {
-        if ($1._whenCall) {
+        if ($1._innerCall) {
             scanner.notImplemented(@1, "WHEN in an EXISTS body");
         }
 
         $$.push_back($1._query);
         for (const UnionQuery::Branch& branch : $2) {
-            if (branch._whenCall) {
+            if (branch._innerCall) {
                 scanner.notImplemented(@2, "WHEN in an EXISTS body");
             }
 
@@ -1221,13 +1234,13 @@ existsBody
 countBody
     : singlePartQuery { $$.push_back({$1, false}); }
     | unionOperand unionList {
-        if ($1._whenCall) {
+        if ($1._innerCall) {
             scanner.notImplemented(@1, "WHEN in a COUNT body");
         }
 
         $$.push_back($1);
         for (const UnionQuery::Branch& branch : $2) {
-            if (branch._whenCall) {
+            if (branch._innerCall) {
                 scanner.notImplemented(@2, "WHEN in a COUNT body");
             }
 
@@ -1723,7 +1736,7 @@ unionSt
 unionOperand
     : singlePartQuery { $$ = {$1, false, nullptr}; }
     | OBRACE conditionalBranches CBRACE {
-        if (!ParserUtils::createWhenOperand(ast, $2, @$, $$)) {
+        if (!ParserUtils::createCallReturning(ast, $2, @$, $$._query, $$._innerCall)) {
             scanner.syntaxError(@2, "A WHEN combined by UNION must name each column it returns with AS");
         }
       }

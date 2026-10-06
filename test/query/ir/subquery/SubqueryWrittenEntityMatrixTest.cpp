@@ -23,6 +23,7 @@ enum class Form {
     WHEN,
     UNION,
     WHEN_UNION,
+    BRANCH_UNION,
 };
 
 enum class Entity {
@@ -303,6 +304,17 @@ void buildQuery(const WrittenEntityCase& testCase, std::string& query) {
             query += otherClause;
             query += " } }";
         break;
+        case Form::BRANCH_UNION:
+            query += "WHEN name <> 'Zed' THEN { WITH ";
+            query += scope;
+            query += " WHERE name = 'Remy' ";
+            query += remyClause;
+            query += " UNION WITH ";
+            query += scope;
+            query += " WHERE name IN ['Nia', 'Kai'] ";
+            query += otherClause;
+            query += " }";
+        break;
     }
 
     query += " } ";
@@ -451,7 +463,7 @@ void addCases(Entity entity, bool optional, std::vector<WrittenEntityCase>& case
             cases.push_back({Form::PLAIN, entity, write, write, optional, consumer});
         }
 
-        for (const Form form : {Form::WHEN, Form::UNION, Form::WHEN_UNION}) {
+        for (const Form form : {Form::WHEN, Form::UNION, Form::WHEN_UNION, Form::BRANCH_UNION}) {
             for (const Write remyWrite : remyWrites) {
                 for (const Write otherWrite : otherWrites) {
                     cases.push_back({form, entity, remyWrite, otherWrite, optional, consumer});
@@ -485,6 +497,9 @@ std::string_view formName(Form form) {
         break;
         case Form::WHEN_UNION:
             return "WhenUnion";
+        break;
+        case Form::BRANCH_UNION:
+            return "BranchUnion";
         break;
     }
 
