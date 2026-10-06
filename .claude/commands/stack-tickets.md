@@ -142,6 +142,12 @@ Rules:
 - To skip: make no commit. Restore each tracked file you changed with `git restore <path>`
   and delete each file you created, by explicit path, so `git status --porcelain` shows
   what it showed when you started.
+- Keep a list of what you find on the way and report it under FINDINGS, whether you
+  committed or skipped: other bugs in the area of the ticket, bugs unrelated to it,
+  limitations and gaps your fix leaves (cases it does not cover, shapes still rejected or
+  wrong), and gaps in the ticket itself. Do not fix them: the commit covers the ticket
+  only. Give each one the query or test that shows it and what it returns against what it
+  should return.
 
 End your final message with exactly this block:
 
@@ -151,6 +157,8 @@ PR_SENTENCE: <one imperative sentence for the PR body, e.g. "Implement reduce.">
 TESTS: <each test binary you added or ran, one per line, as build/... paths with pass/fail>
 REASON: <why skipped, or empty>
 NOTES: <choices you made that the reviewer should know about, one line each, or empty>
+FINDINGS: <one per line, tagged [related bug], [unrelated bug], [limitation] or [gap], with
+  the query or test that shows it, or empty>
 ```
 
 ### 1c. Check what the agent left
@@ -223,7 +231,9 @@ A few plain lines. List the stack bottom first, one line per ticket:
 3  TUR-198  #1102  MLIR: ...
 ```
 
-Then the agents' NOTES, under the ticket they belong to, and the CI run on the top
-branch. If the run stopped early, say which check stopped it, what state the branch and
+Then the agents' NOTES and FINDINGS, under the ticket they belong to, skipped tickets
+included. Keep each finding's tag and its query or test. A finding several agents
+reported is listed once, under the first ticket that found it. Then the CI run on the
+top branch. If the run stopped early, say which check stopped it, what state the branch and
 tree are in, and which tickets did not run. To rerun those tickets on top of the stack,
 pass `--base <top branch>`.
