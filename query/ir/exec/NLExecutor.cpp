@@ -165,11 +165,15 @@ public:
             _elementIndex++;
 
             if (_elementIndex == _rowElements) {
-                _elementIndex = 0;
-                _sourceRow++;
-                openNextRow();
+                skipRow();
             }
         }
+    }
+
+    void skipRow() {
+        _elementIndex = 0;
+        _sourceRow++;
+        openNextRow();
     }
 
 private:
@@ -1955,6 +1959,28 @@ std::optional<bool> decideListPredicate(ListPredicateKind kind, size_t trues, si
     }
 
     return std::nullopt;
+}
+
+bool isListPredicateDecided(ListPredicateKind kind, size_t trues, size_t falses) {
+    switch (kind) {
+        case ListPredicateKind::All:
+            return falses > 0;
+        break;
+
+        case ListPredicateKind::Any:
+            return trues > 0;
+        break;
+
+        case ListPredicateKind::None:
+            return trues > 0;
+        break;
+
+        case ListPredicateKind::Single:
+            return trues > 1;
+        break;
+    }
+
+    return false;
 }
 
 // Runs the body of an op over the elements of one row's list a chunk of (row, element)
@@ -7212,6 +7238,8 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
     falseCounts.assign(sourceRows, 0);
     nullCounts.assign(sourceRows, 0);
 
+    const ListPredicateKind kind = predicate->getKind();
+
     runElementBody(context, predicate, cursor, [&](const std::vector<uint64_t>& taggedRaw) {
         for (size_t element = 0; element < taggedRaw.size(); element++) {
             const std::optional<bool> truth = truthRead(value, element);
@@ -7225,9 +7253,15 @@ void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* d
                 falseCounts[row]++;
             }
         }
+
+        if (!cursor.exhausted()) {
+            const size_t openRow = cursor.getRow();
+            if (isListPredicateDecided(kind, trueCounts[openRow], falseCounts[openRow])) {
+                cursor.skipRow();
+            }
+        }
     });
 
-    const ListPredicateKind kind = predicate->getKind();
     std::vector<std::optional<CustomBool>>& resultRaw =
         static_cast<ColumnOptMask*>(predicate->getResult())->getRaw();
     resultRaw.resize(sourceRows);

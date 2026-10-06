@@ -441,3 +441,15 @@ target_link_libraries(test_query_ir_node_in_integer_list PRIVATE
 
 add_turing_test(test_query_ir_list_reverse ListReverseTest.cpp)
 target_link_libraries(test_query_ir_list_reverse PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_list_predicate_early_exit ListPredicateEarlyExitTest.cpp)
+target_sources(test_query_ir_list_predicate_early_exit PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
+target_link_libraries(test_query_ir_list_predicate_early_exit PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_predicate_early_exit PRIVATE ${IR_TEST_DIR})
