@@ -1615,6 +1615,20 @@ void appendOwnedListColumn(const Column* input, Column* buffer, QueryListBuffer&
     }
 }
 
+template <typename Primitive>
+bool sortsBefore(const Primitive& lhs, const Primitive& rhs) {
+    return lhs < rhs;
+}
+
+// Cypher orders a NaN after every number, where < answers false against it
+bool sortsBefore(double lhs, double rhs) {
+    if (std::isnan(lhs)) {
+        return false;
+    }
+
+    return std::isnan(rhs) || lhs < rhs;
+}
+
 // 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
 // a procedure yielded): negative if row a sorts before row b, positive if after, zero if
 // they are equal.
@@ -1624,9 +1638,9 @@ int compareColumn(const Column* column, size_t a, size_t b) {
     const ElementType& valueA = raw[a];
     const ElementType& valueB = raw[b];
 
-    if (valueA < valueB) {
+    if (sortsBefore(valueA, valueB)) {
         return -1;
-    } else if (valueB < valueA) {
+    } else if (sortsBefore(valueB, valueA)) {
         return 1;
     }
 
@@ -1652,9 +1666,9 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
         return aNull ? 1 : -1;
     }
 
-    if (*valueA < *valueB) {
+    if (sortsBefore(*valueA, *valueB)) {
         return -1;
-    } else if (*valueB < *valueA) {
+    } else if (sortsBefore(*valueB, *valueA)) {
         return 1;
     }
 
@@ -2906,11 +2920,11 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
         if (!current.has_value()) {
             current = *value;
         } else if constexpr (IsMax) {
-            if (*current < *value) {
+            if (sortsBefore(*current, *value)) {
                 current = *value;
             }
         } else {
-            if (*value < *current) {
+            if (sortsBefore(*value, *current)) {
                 current = *value;
             }
         }
@@ -3353,11 +3367,11 @@ void groupFoldMinMax(Column* accumulator,
         if (!current.has_value()) {
             current = *value;
         } else if constexpr (IsMax) {
-            if (*current < *value) {
+            if (sortsBefore(*current, *value)) {
                 current = *value;
             }
         } else {
-            if (*value < *current) {
+            if (sortsBefore(*value, *current)) {
                 current = *value;
             }
         }
