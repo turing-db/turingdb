@@ -152,11 +152,12 @@ private:
     // Analyzes one query of a CALL body under its own scope, seeded with what it imports
     void analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause);
     void importIntoBranch(const CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);
+    void analyzeWhenPredicate(Expr* predicate);
 
     void throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const;
 
     // Analyzes one query of an EXISTS body, correlated with the variables in flight
-    void analyzeExistsBranch(const SinglePartQuery* body);
+    void analyzeExistsBranch(const SinglePartQuery* body, Expr* predicate);
 
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds

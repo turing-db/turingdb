@@ -1217,13 +1217,13 @@ existsBody
     : singlePartQuery { $$.push_back($1); }
     | unionOperand unionList {
         if ($1._innerCall) {
-            scanner.notImplemented(@1, "WHEN in an EXISTS body");
+            scanner.notImplemented(@1, "WHEN combined by UNION in an EXISTS body");
         }
 
         $$.push_back($1._query);
         for (const UnionQuery::Branch& branch : $2) {
             if (branch._innerCall) {
-                scanner.notImplemented(@2, "WHEN in an EXISTS body");
+                scanner.notImplemented(@2, "WHEN combined by UNION in an EXISTS body");
             }
 
             $$.push_back(branch._query);
@@ -1235,13 +1235,13 @@ countBody
     : singlePartQuery { $$.push_back({$1, false}); }
     | unionOperand unionList {
         if ($1._innerCall) {
-            scanner.notImplemented(@1, "WHEN in a COUNT body");
+            scanner.notImplemented(@1, "WHEN combined by UNION in a COUNT body");
         }
 
         $$.push_back($1);
         for (const UnionQuery::Branch& branch : $2) {
             if (branch._innerCall) {
-                scanner.notImplemented(@2, "WHEN in a COUNT body");
+                scanner.notImplemented(@2, "WHEN combined by UNION in a COUNT body");
             }
 
             $$.push_back(branch);
@@ -1744,6 +1744,19 @@ unionOperand
 
 subqueryExist
     : EXISTS OBRACE existsBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
+    | EXISTS OBRACE conditionalBranches CBRACE {
+        ExistsExpr::Branches queries;
+        ExistsExpr::Conditions conditions;
+        if (!ParserUtils::splitConditionalBranches($3, queries, conditions)) {
+            scanner.notImplemented(@3, "UNION inside a WHEN branch of an EXISTS body");
+        }
+
+        ExistsExpr* exists = ExistsExpr::create(ast, queries);
+        exists->setConditions(conditions);
+
+        $$ = exists;
+        LOC($$, @$);
+      }
     | EXISTS OBRACE patternWhere CBRACE {
         SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
         $$ = ExistsExpr::create(ast, {body});
@@ -1753,6 +1766,24 @@ subqueryExist
 
 subqueryCount
     : COUNT OBRACE countBody CBRACE { $$ = CountSubqueryExpr::create(ast, $3); LOC($$, @$); }
+    | COUNT OBRACE conditionalBranches CBRACE {
+        ExistsExpr::Branches queries;
+        CountSubqueryExpr::Conditions conditions;
+        if (!ParserUtils::splitConditionalBranches($3, queries, conditions)) {
+            scanner.notImplemented(@3, "UNION inside a WHEN branch of a COUNT body");
+        }
+
+        CountSubqueryExpr::Branches branches;
+        for (SinglePartQuery* query : queries) {
+            branches.push_back({query, false, nullptr});
+        }
+
+        CountSubqueryExpr* count = CountSubqueryExpr::create(ast, branches);
+        count->setConditions(conditions);
+
+        $$ = count;
+        LOC($$, @$);
+      }
     | COUNT OBRACE patternWhere CBRACE {
         SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
         $$ = CountSubqueryExpr::create(ast, {{body, false}});

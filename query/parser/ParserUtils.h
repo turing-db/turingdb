@@ -67,6 +67,12 @@ public:
                                     SinglePartQuery*& query,
                                     CallSubqueryStmt*& call);
 
+    // The queries and the WHEN predicates of a WHEN that is an EXISTS or COUNT body. False
+    // when a branch is a UNION, which those bodies do not take yet.
+    static bool splitConditionalBranches(const CallSubqueryStmt::Branches& branches,
+                                         std::vector<SinglePartQuery*>& queries,
+                                         std::vector<Expr*>& conditions);
+
     static SinglePartQuery* createPatternBody(CypherAST* ast,
                                               Pattern* pattern,
                                               const SourceLocation& location);

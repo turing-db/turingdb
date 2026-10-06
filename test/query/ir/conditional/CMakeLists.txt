@@ -33,3 +33,7 @@ target_link_libraries(test_query_ir_conditional_union PRIVATE turing_ir_test_wri
 # A WHEN branch that is a UNION.
 add_turing_test(test_query_ir_conditional_branch_union ConditionalBranchUnionTest.cpp)
 target_link_libraries(test_query_ir_conditional_branch_union PRIVATE turing_ir_test_write_query_s)
+
+# EXISTS { WHEN ... } and COUNT { WHEN ... }.
+add_turing_test(test_query_ir_conditional_subquery_expression ConditionalSubqueryExpressionTest.cpp)
+target_link_libraries(test_query_ir_conditional_subquery_expression PRIVATE turing_ir_test_write_query_s)

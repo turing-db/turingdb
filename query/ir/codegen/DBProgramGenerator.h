@@ -520,9 +520,12 @@ private:
                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                CarriedEntities& returnedEntities);
 
-    // Emits the db.conditional of a WHEN body and fills @param yielded as
-    // generateSubqueryUnion does
-    void generateSubqueryConditional(llvm::ArrayRef<CallSubqueryStmt::Branch> branches,
+    // Emits the db.conditional of a WHEN body, one predicate per WHEN in @param conditions
+    // and the ELSE as the query past them, and fills @param yielded as generateSubqueryUnion
+    // does
+    void generateSubqueryConditional(llvm::ArrayRef<const SinglePartQuery*> queries,
+                                     llvm::ArrayRef<const Expr*> conditions,
+                                     bool answersRows,
                                      std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
                                      std::span<const CarriedEntities> importedEntities,
                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
@@ -542,10 +545,12 @@ private:
                                  mlir::Block* bodyBlock,
                                  std::vector<std::unique_ptr<mlir::Region>>& regions);
 
-    // Generates one branch into a region ending in a db.yield of what its RETURN publishes,
-    // none for a branch ending on a write
+    // Generates one branch into a region ending in a db.yield of what its RETURN publishes:
+    // nothing for a branch ending on a write, or a column of its rows where @param
+    // answersRows is set
     void generateSubqueryBranch(const SinglePartQuery* query,
                                 mlir::Block* bodyBlock,
+                                bool answersRows,
                                 SubqueryBranchResults& branchResults);
 
     // Makes every branch yield the mask of each entity a MERGE wrote in any of them, or a
@@ -1057,10 +1062,11 @@ private:
 
     // Emits the db.exists_subquery or db.count_subquery of @param branches: the columns in
     // flight become the inputs it reads through block arguments, one query is generated into
-    // the op's region as a correlated query of its own, or the db.union of several, and the
-    // op's one result is returned
+    // the op's region as a correlated query of its own, or the db.union of several, or the
+    // db.conditional of a WHEN given its @param conditions, and the op's one result is returned
     template <typename SubqueryOp, typename YieldOp>
     mlir::Value generateSubqueryExpression(llvm::ArrayRef<const SinglePartQuery*> branches,
+                                           llvm::ArrayRef<const Expr*> conditions,
                                            size_t dedupedBranches,
                                            mlir::Type resultType,
                                            std::string_view tagName);

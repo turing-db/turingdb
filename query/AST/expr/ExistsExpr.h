@@ -19,9 +19,11 @@ class SinglePartQuery;
 //
 // A body that is a UNION holds one query per branch. It produces a row exactly when one
 // of them does, whatever the UNION dedups, so the operators joining them are not kept.
+// A body that is a WHEN holds one query per branch too, and one predicate per WHEN.
 class ExistsExpr : public Expr {
 public:
     using Branches = std::vector<SinglePartQuery*>;
+    using Conditions = std::vector<Expr*>;
 
     const Pattern* getPredicatePattern() const { return _predicatePattern; }
 
@@ -29,10 +31,15 @@ public:
 
     const Branches& branches() const { return _branches; }
 
+    const Conditions& conditions() const { return _conditions; }
+    void setConditions(const Conditions& conditions) { _conditions = conditions; }
+    bool isConditional() const { return !_conditions.empty(); }
+
     static ExistsExpr* create(CypherAST* ast, const Branches& branches);
 
 private:
     Branches _branches;
+    Conditions _conditions;
     const Pattern* _predicatePattern {nullptr};
 
     explicit ExistsExpr(const Branches& branches);

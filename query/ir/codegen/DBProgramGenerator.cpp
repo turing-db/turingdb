@@ -323,6 +323,22 @@ constexpr std::string_view existsTagName {"`hidden_`exists_tag"};
 
 constexpr std::string_view countTagName {"`hidden_`count_tag"};
 
+// What a WHEN branch of an EXISTS or COUNT body holds when it returns nothing: a column of
+// its rows, so the body is answered for by them
+constexpr std::string_view answerName {"`hidden_`answer"};
+
+void splitConditionalBranches(const CallSubqueryStmt::Branches& branches,
+                              llvm::SmallVectorImpl<const SinglePartQuery*>& queries,
+                              llvm::SmallVectorImpl<const Expr*>& conditions) {
+    for (const CallSubqueryStmt::Branch& branch : branches) {
+        queries.push_back(branch._query);
+
+        if (branch._condition) {
+            conditions.push_back(branch._condition);
+        }
+    }
+}
+
 // The mask of an entity a MERGE wrote is bound past a WITH under the entity's name behind
 // this prefix. No hidden name starts with it, so a barrier publishing no entity drops it
 constexpr std::string_view pendingMaskPrefix {"`pending_"};
@@ -1845,9 +1861,19 @@ void DBProgramGenerator::generateConditionalQuery(const ConditionalQuery* query)
     const std::vector<llvm::SmallVector<PublishedColumn>> branchScopes(branches.size());
     const std::vector<CarriedEntities> importedEntities(branches.size());
 
+    llvm::SmallVector<const SinglePartQuery*> queries;
+    llvm::SmallVector<const Expr*> conditions;
+    splitConditionalBranches(branches, queries, conditions);
+
     llvm::SmallVector<PublishedColumn> yielded;
     CarriedEntities returnedEntities;
-    generateSubqueryConditional(branches, branchScopes, importedEntities, yielded, returnedEntities);
+    generateSubqueryConditional(queries,
+                                conditions,
+                                false,
+                                branchScopes,
+                                importedEntities,
+                                yielded,
+                                returnedEntities);
 
     const ReturnStmt* returnStmt = branches.front()._query->getReturnStmt();
     if (!returnStmt) {
@@ -5476,7 +5502,17 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     mlir::Value yieldedTag;
 
     if (conditional) {
-        generateSubqueryConditional(branches, branchScopes, importedEntities, yielded, returnedEntities);
+        llvm::SmallVector<const SinglePartQuery*> queries;
+        llvm::SmallVector<const Expr*> conditions;
+        splitConditionalBranches(branches, queries, conditions);
+
+        generateSubqueryConditional(queries,
+                                    conditions,
+                                    false,
+                                    branchScopes,
+                                    importedEntities,
+                                    yielded,
+                                    returnedEntities);
     } else if (isUnion) {
         llvm::SmallVector<const SinglePartQuery*> queries;
         for (const CallSubqueryStmt::Branch& branch : branches) {
@@ -5692,7 +5728,7 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
         rebindSubqueryBranchScope(branchScopes[branchIndex], importedEntities[branchIndex]);
-        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchResults);
+        generateSubqueryBranch(branches[branchIndex], bodyBlock, false, branchResults);
     }
 
     yieldEveryPendingMask(branchResults);
@@ -5717,7 +5753,9 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
     publishSubqueryBranchResults(unionOp.getResults(), branchResults, yielded, returnedEntities);
 }
 
-void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubqueryStmt::Branch> branches,
+void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<const SinglePartQuery*> queries,
+                                                     llvm::ArrayRef<const Expr*> conditions,
+                                                     bool answersRows,
                                                      std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
                                                      std::span<const CarriedEntities> importedEntities,
                                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
@@ -5730,18 +5768,17 @@ void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubquery
 
     // A condition's region does not dominate its branch's, so the branch rebinds the scope
     // rather than read a value the condition bound
-    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        const CallSubqueryStmt::Branch& branch = branches[branchIndex];
+    for (size_t branchIndex = 0; branchIndex < queries.size(); branchIndex++) {
         const llvm::SmallVector<PublishedColumn>& scope = branchScopes[branchIndex];
         const CarriedEntities& entities = importedEntities[branchIndex];
 
-        if (const Expr* predicate = branch._condition) {
+        if (branchIndex < conditions.size()) {
             rebindSubqueryBranchScope(scope, entities);
-            generateConditionRegion(predicate, bodyBlock, conditionRegions);
+            generateConditionRegion(conditions[branchIndex], bodyBlock, conditionRegions);
         }
 
         rebindSubqueryBranchScope(scope, entities);
-        generateSubqueryBranch(branch._query, bodyBlock, branchResults);
+        generateSubqueryBranch(queries[branchIndex], bodyBlock, answersRows, branchResults);
     }
 
     yieldEveryPendingMask(branchResults);
@@ -5749,14 +5786,14 @@ void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubquery
 
     _opBuilder.setInsertionPointToEnd(bodyBlock);
 
-    const size_t regionCount = conditionRegions.size() + branches.size();
+    const size_t regionCount = conditionRegions.size() + queries.size();
     mlir::db::Conditional conditional = _opBuilder.create<mlir::db::Conditional>(loc,
                                                                                  branchResults._resultTypes,
                                                                                  regionCount);
     const mlir::MutableArrayRef<mlir::Region> regions = conditional.getBranches();
 
     size_t regionIndex = 0;
-    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+    for (size_t branchIndex = 0; branchIndex < queries.size(); branchIndex++) {
         if (branchIndex < conditionRegions.size()) {
             regions[regionIndex].takeBody(*conditionRegions[branchIndex]);
             regionIndex++;
@@ -5798,6 +5835,7 @@ void DBProgramGenerator::rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColum
 
 void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
                                                 mlir::Block* bodyBlock,
+                                                bool answersRows,
                                                 SubqueryBranchResults& branchResults) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
@@ -5814,6 +5852,11 @@ void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
     if (const ReturnStmt* returnStmt = query->getReturnStmt()) {
         publishProjection(returnStmt->getProjection(), nullptr, true);
         collectPublishedColumns(branchColumns);
+    } else if (answersRows) {
+        llvm::SmallVector<mlir::Value> answer {constantBool(true)};
+        broadcastConstantProjection(answer);
+
+        branchColumns.push_back({nullptr, std::string(answerName), answer.front()});
     }
 
     std::vector<std::optional<PartScope::WrittenEntity>>& writtenColumns = branchResults._writtenColumns.emplace_back();
@@ -7319,11 +7362,26 @@ void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
 void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr* existsExpr) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const ExistsExpr::Branches& branches = existsExpr->branches();
+
+    if (existsExpr->isConditional()) {
+        const llvm::SmallVector<const SinglePartQuery*> queries(branches.begin(), branches.end());
+        const llvm::SmallVector<const Expr*> conditions(existsExpr->conditions().begin(), existsExpr->conditions().end());
+
+        _part._exprMap[expr] =
+            generateSubqueryExpression<mlir::db::ExistsSubquery, mlir::db::ExistsYield>(queries,
+                                                                                        conditions,
+                                                                                        0,
+                                                                                        boolType,
+                                                                                        existsTagName);
+        return;
+    }
 
     mlir::Value exists;
-    for (const SinglePartQuery* branch : existsExpr->branches()) {
+    for (const SinglePartQuery* branch : branches) {
         const mlir::Value branchExists =
             generateSubqueryExpression<mlir::db::ExistsSubquery, mlir::db::ExistsYield>(llvm::ArrayRef(branch),
+                                                                                        {},
                                                                                         0,
                                                                                         boolType,
                                                                                         existsTagName);
@@ -7348,10 +7406,24 @@ void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const Coun
 
     const mlir::db::ColumnType countType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
 
+    if (countExpr->isConditional()) {
+        const CountSubqueryExpr::Conditions& countConditions = countExpr->getConditions();
+        const llvm::SmallVector<const Expr*> conditions(countConditions.begin(), countConditions.end());
+
+        _part._exprMap[expr] =
+            generateSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(branches,
+                                                                                              conditions,
+                                                                                              0,
+                                                                                              countType,
+                                                                                              countTagName);
+        return;
+    }
+
     const size_t dedupedBranches = UnionQuery::getDedupedBranchCount(countBranches);
     if (dedupedBranches > 0) {
         _part._exprMap[expr] =
             generateSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(branches,
+                                                                                              {},
                                                                                               dedupedBranches,
                                                                                               countType,
                                                                                               countTagName);
@@ -7365,6 +7437,7 @@ void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const Coun
     for (const SinglePartQuery* branch : branches) {
         const mlir::Value branchCount =
             generateSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(llvm::ArrayRef(branch),
+                                                                                              {},
                                                                                               0,
                                                                                               countType,
                                                                                               countTagName);
@@ -7381,13 +7454,15 @@ void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const Coun
 
 template <typename SubqueryOp, typename YieldOp>
 mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const SinglePartQuery*> branches,
+                                                           llvm::ArrayRef<const Expr*> conditions,
                                                            size_t dedupedBranches,
                                                            mlir::Type resultType,
                                                            std::string_view tagName) {
-    // A UNION dedups the rows of each input row on their own, so a union body runs one
-    // input row at a time
-    const bool isUnion = branches.size() > 1;
-    const bool carriesScope = !isUnion && subqueryCarriesRows(branches.front());
+    // A UNION dedups the rows of each input row on their own, and a WHEN decides per input
+    // row which branch runs, so either body runs one input row at a time
+    const bool conditional = !conditions.empty();
+    const bool isUnion = !conditional && branches.size() > 1;
+    const bool carriesScope = !isUnion && !conditional && subqueryCarriesRows(branches.front());
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -7533,7 +7608,18 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
 
     llvm::SmallVector<PublishedColumn> held;
 
-    if (isUnion) {
+    if (conditional) {
+        std::vector<CarriedEntities> importedEntities(branches.size());
+        CarriedEntities returnedEntities;
+
+        generateSubqueryConditional(branches,
+                                    conditions,
+                                    true,
+                                    branchScopes,
+                                    importedEntities,
+                                    held,
+                                    returnedEntities);
+    } else if (isUnion) {
         std::vector<CarriedEntities> importedEntities(branches.size());
         CarriedEntities returnedEntities;
 

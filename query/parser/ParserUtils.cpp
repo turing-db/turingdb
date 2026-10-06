@@ -273,6 +273,24 @@ bool ParserUtils::createCallReturning(CypherAST* ast,
     return true;
 }
 
+bool ParserUtils::splitConditionalBranches(const CallSubqueryStmt::Branches& branches,
+                                           std::vector<SinglePartQuery*>& queries,
+                                           std::vector<Expr*>& conditions) {
+    for (const CallSubqueryStmt::Branch& branch : branches) {
+        if (branch._innerCall) {
+            return false;
+        }
+
+        queries.push_back(branch._query);
+
+        if (branch._condition) {
+            conditions.push_back(branch._condition);
+        }
+    }
+
+    return true;
+}
+
 SinglePartQuery* ParserUtils::createPatternBody(CypherAST* ast,
                                                Pattern* pattern,
                                                const SourceLocation& location) {

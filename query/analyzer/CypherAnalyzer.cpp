@@ -517,16 +517,7 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
     setScope(inner);
 
     if (Expr* predicate = branch._condition) {
-        _exprAnalyzer->analyzeRootExpr(predicate);
-
-        if (predicate->isAggregate()) {
-            throwError("Invalid use of aggregate expression in this context", predicate);
-        }
-
-        const EvaluatedType predicateType = predicate->getType();
-        if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
-            throwError("WHEN predicate must be a boolean", predicate);
-        }
+        analyzeWhenPredicate(predicate);
     }
 
     // A leading WITH runs only once the WHEN predicate has picked its branch, so the
@@ -540,6 +531,19 @@ void CypherAnalyzer::analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branc
     std::swap(_subqueryImports, outerImports);
 
     setScope(outer);
+}
+
+void CypherAnalyzer::analyzeWhenPredicate(Expr* predicate) {
+    _exprAnalyzer->analyzeRootExpr(predicate);
+
+    if (predicate->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", predicate);
+    }
+
+    const EvaluatedType predicateType = predicate->getType();
+    if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
+        throwError("WHEN predicate must be a boolean", predicate);
+    }
 }
 
 void CypherAnalyzer::importIntoBranch(const CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner) {
@@ -581,8 +585,19 @@ void CypherAnalyzer::analyzeExistsBody(ExistsExpr* exists) {
         throwOnPatternPredicateVariable(predicatePattern, _ctxt);
     }
 
-    for (const SinglePartQuery* branch : branches) {
-        analyzeExistsBranch(branch);
+    const ExistsExpr::Conditions& conditions = exists->conditions();
+
+    for (size_t index = 0; index < branches.size(); index++) {
+        Expr* predicate = index < conditions.size() ? conditions[index] : nullptr;
+        analyzeExistsBranch(branches[index], predicate);
+    }
+
+    if (exists->isConditional()) {
+        for (size_t index = 1; index < branches.size(); index++) {
+            analyzeConditionalColumns(branches.front(), branches[index]);
+        }
+
+        return;
     }
 
     // A branch needs no RETURN here, but one that has it names the union's columns
@@ -607,8 +622,19 @@ void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
         }
     }
 
-    for (const UnionQuery::Branch& branch : branches) {
-        analyzeExistsBranch(branch._query);
+    const CountSubqueryExpr::Conditions& conditions = count->getConditions();
+
+    for (size_t index = 0; index < branches.size(); index++) {
+        Expr* predicate = index < conditions.size() ? conditions[index] : nullptr;
+        analyzeExistsBranch(branches[index]._query, predicate);
+    }
+
+    if (count->isConditional()) {
+        for (size_t index = 1; index < branches.size(); index++) {
+            analyzeConditionalColumns(branches.front()._query, branches[index]._query);
+        }
+
+        return;
     }
 
     // A UNION dedups the rows it counts on the columns they return, so it needs them named
@@ -624,7 +650,7 @@ void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
     }
 }
 
-void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
+void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body, Expr* predicate) {
     if (!_analyzedBodies.insert(body).second) {
         return;
     }
@@ -716,6 +742,10 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     std::swap(_consumedVariables, consumedVariables);
 
     setScope(inner);
+
+    if (predicate) {
+        analyzeWhenPredicate(predicate);
+    }
 
     analyzeQueryBody(body, /*returnRequired=*/false);
 

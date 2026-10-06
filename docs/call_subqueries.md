@@ -430,7 +430,10 @@ other query: `{ WHEN ... } UNION { WHEN ... }`. The parser writes each braced WH
 `CALL () { WHEN ... } RETURN <its columns>`, which the CALL holding the union hands its
 imports, so the union handles it as any other side. A WHEN branch can be a UNION,
 `WHEN ... THEN { A UNION B }`, written the same way as `CALL () { A UNION B } RETURN <its
-columns>`. Not done yet: WHEN in an EXISTS or COUNT body.
+columns>`. An EXISTS or COUNT body can be a WHEN too: the subquery op holds a
+`db.conditional`, run one input row at a time, and a branch with no RETURN yields a column
+of its rows for the body to be answered by. Not done yet in those correlated bodies: a
+UNION inside a WHEN branch, and a WHEN combined by UNION.
 
 Still open: the vectorised forms of section 4, `CALL (*)`, an import
 read below a keyless reduction in the body, and trimming inside the region. The scope
