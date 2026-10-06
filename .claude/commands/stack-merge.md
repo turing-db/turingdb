@@ -127,8 +127,9 @@ A run whose jobs were all skipped built nothing and does not count
 Wait on it with `gh run watch <id> --exit-status`, run in the background. A push to a
 stacked PR can start two runs for the same commit, and the PR's concurrency group cancels
 the older one. If the run you watch ends `cancelled`, wait on the newer run for `TOP_SHA`
-instead. A run takes about 25 minutes. A failure stops the run. Report the failing job's URL. The rebased branches
-stay pushed: that is harmless and saves the next attempt the rebase.
+instead. A run takes about 25 minutes. A failure stops the run. Report the failing job's
+URL. The rebased branches stay pushed: that is harmless and saves the next attempt the
+rebase.
 
 ## 5. Land
 
@@ -142,8 +143,22 @@ git merge-base --is-ancestor origin/main b_1
 If `main` moved, go back to step 2 once. If it moves again during the second CI wait, stop
 and report it.
 
+GitHub refuses to change the base of a PR in a GitHub stack ("Cannot change the base branch
+because the pull request is part of a stack"). If the top PR has a `.stack`, dissolve it
+first:
+
+```bash
+gh api repos/turing-db/turingdb/pulls/<top PR number> -q .stack.number
+gh extension list | grep -q github/gh-stack || gh extension install github/gh-stack
+gh stack unstack <stack number>
+```
+
+`unstack` closes no PR and deletes no branch. GitHub keeps a PR that is queued for merge or
+has auto-merge on in the stack: if any PR still has a `.stack` afterwards, stop and report
+it.
+
 Retarget every PR above the bottom one to `main`. Record each original base first, so a
-failed push can be undone:
+failure can be undone:
 
 ```bash
 gh api -X PATCH repos/turing-db/turingdb/pulls/<n> -f base=main
@@ -156,7 +171,8 @@ git push origin b_N:refs/heads/main
 ```
 
 Never pass `--force`. The push must be a fast-forward, and the ruleset rejects anything
-else anyway. If the push is rejected, retarget each PR back to its original base and stop
+else anyway. If a retarget or the push fails, retarget each PR back to its original base,
+rebuild the stack with `gh stack link <n_1> <n_2> ... <n_N>` if you dissolved one, and stop
 with the error. Do not fall back to `gh pr merge`.
 
 ## 6. Check
@@ -169,8 +185,20 @@ Every PR in the stack must read `MERGED`. GitHub can take a few seconds to notic
 with Monitor for up to two minutes. A PR still `OPEN` after that is reported with its
 number. Do not close it.
 
-Then `git checkout main && git pull --ff-only` and return to the branch the run started
-on, if it still exists.
+Then `git checkout main && git pull --ff-only`.
+
+When every PR reads `MERGED`, delete the stack's branches. Deleting the head branch of an
+open PR closes it, so when any PR is not merged, keep them all.
+
+```bash
+git push origin --delete b_1 b_2 ... b_N
+git branch -d b_1 b_2 ... b_N
+```
+
+`-d` refuses a branch that is not on `main`. If it does, stop and report the branch; never
+fall back to `-D`.
+
+Return to the branch the run started on, if it still exists.
 
 ## 7. Report
 
@@ -184,10 +212,10 @@ landed 3 PRs on main, 8c1d2e4..5f6a7b8, rebased onto 8c1d2e4
 CI: <run URL>
 ```
 
-Say whether a rebase was needed, name any commit the rebase dropped, and name any PR not
-marked merged. The stack's branches are left in place on `origin` and locally. Give the
-command that deletes them:
+Say whether a rebase was needed, whether a GitHub stack was dissolved, name any commit the
+rebase dropped, and name any PR not marked merged. Say whether the branches were deleted.
+If they were kept, give the command that deletes them:
 
 ```bash
-git push origin --delete b_1 b_2 ... && git branch -D b_1 b_2 ...
+git push origin --delete b_1 b_2 ... && git branch -d b_1 b_2 ...
 ```
