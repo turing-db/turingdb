@@ -92,6 +92,28 @@ TEST_F(NumericFunctionTest, aggregateOfAFunction) {
     expectRows("UNWIND [-4, 2, -7] AS x RETURN sum(abs(x))", {{"13"}});
 }
 
+// The shape of LDBC BI 2: the difference of two counts, which goes negative
+TEST_F(NumericFunctionTest, absOfADifferenceOfCounts) {
+    expectRows("MATCH (p:Person) WITH count(p) AS persons "
+               "MATCH (i:Interest) WITH persons, count(i) AS interests "
+               "RETURN persons - interests, abs(persons - interests), abs(interests - persons)",
+               {{"-2", "2", "2"}});
+}
+
+TEST_F(NumericFunctionTest, ordersGroupsByTheAbsoluteDifferenceOfTwoCounts) {
+    expectRowsInOrder("MATCH (p:Person) OPTIONAL MATCH (p)-[:INTERESTED_IN]->(i) WITH p, count(i) AS c1 "
+                      "OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) WITH p, c1, count(f) AS c2 "
+                      "RETURN p.name, c1, c2, abs(c1 - c2) AS diff ORDER BY diff DESC, p.name ASC LIMIT 100",
+                      {{"Cyrus", "2", "0", "2"},
+                       {"Luc", "2", "0", "2"},
+                       {"Maxime", "2", "0", "2"},
+                       {"Remy", "3", "1", "2"},
+                       {"Suhas", "2", "0", "2"},
+                       {"Adam", "2", "1", "1"},
+                       {"Doruk", "1", "0", "1"},
+                       {"Martina", "1", "0", "1"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
