@@ -5975,7 +5975,7 @@ void DBLowering::lowerFetchNodes(mlir::db::FetchNodes fetch) {
     llvm::SmallVector<mlir::Value, 4> inputChunks {idsChunk};
     llvm::append_range(inputChunks, carriedChunks);
 
-    setInsertionInto(ownerBlock(deepestBoundChunk(inputChunks)));
+    setInsertionInto(deeperOfBlocks(_rootBlock, ownerBlock(deepestBoundChunk(inputChunks))));
 
     nl::FetchNodes nlFetch = _builder.create<nl::FetchNodes>(_builder.getUnknownLoc(),
                                                              resultTypes,
