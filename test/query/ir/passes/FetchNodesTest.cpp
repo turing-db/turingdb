@@ -129,3 +129,20 @@ TEST_F(FetchNodesTest, fetchesANodeTheQueryCreated) {
     const Rows expected {{"Zed"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
+
+TEST_F(FetchNodesTest, fetchesTheSecondFactorOfAConstantExpression) {
+    const std::string_view query = "MATCH (a:Person), (n) WHERE n = 1 + 0 RETURN count(*)";
+
+    std::string program;
+    dbProgramOf(query, program);
+    EXPECT_TRUE(contains(program, "db.fetch_nodes")) << program;
+
+    expectRows(query, {{"8"}});
+    expectRows("MATCH (a:Person) MATCH (n) WHERE n = 1 + 0 RETURN count(*)", {{"8"}});
+    expectRows("WITH 1 + 0 AS k MATCH (a:Person), (n) WHERE n = k RETURN count(*)", {{"8"}});
+    expectRows("MATCH (a:Person), (n)-[:KNOWS_WELL]->(m) WHERE n = 1 + 0 RETURN count(*)", {{"8"}});
+}
+
+TEST_F(FetchNodesTest, fetchesTheFirstFactorOfAConstantExpression) {
+    expectRows("MATCH (n), (a:Person) WHERE n = 1 + 0 RETURN count(*)", {{"8"}});
+}
