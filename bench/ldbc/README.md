@@ -29,7 +29,7 @@ Both `load_data.sh` and `run_ldbc.py` run `build/tools/turingdb/turingdb`, not t
 
 The LDBC test data set the reference implementation ships (`cypher/test-data/vanilla`),
 converted by `ldbc_to_jsonl.py`: 34,735 nodes and 70,842 edges — 222 persons, 5,924 posts,
-2,218 comments, 805 forums, 16,080 tags. It loads in 283 ms.
+2,218 comments, 805 forums, 16,080 tags. It loads in 288 ms.
 
 The labels and relationship types are the ones the Neo4j reference implementation builds,
 so the queries match the same names: `Post:Message`, `Comment:Message`,
@@ -62,10 +62,10 @@ open change, so the update queries run after `CHANGE NEW` / `checkout change-0`.
 
 ## Results
 
-Run on 2026-10-01 against main at f14911858, release build.
+Run on 2026-10-06 against main at c8d5ebc32, release build.
 
-**34 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
-BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 34 of 45.
+**38 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
+BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 38 of 45.
 
 | query | rows |
 | --- | --- |
@@ -94,7 +94,9 @@ BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 34 o
 | interactive-update-7 | 0 |
 | interactive-update-8 | 0 |
 | bi-1 | 6 |
+| bi-2 | 100 |
 | bi-3 | 6 |
+| bi-4 | 100 |
 | bi-5 | 20 |
 | bi-6 | 20 |
 | bi-7 | 39 |
@@ -102,31 +104,42 @@ BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 34 o
 | bi-9 | 44 |
 | bi-11 | 1 |
 | bi-12 | 11 |
+| bi-13 | 6 |
+| bi-17 | 0 |
 | bi-18 | 0 |
 
-It is the same 34 queries as at c651fd852, with the same row counts. Three of the queries
-that stop moved underneath the count. BI 2 no longer stops at `duration`, which main
-implemented at 1bd5bf0f1 and built from a map at f14911858, and stops at `abs` instead. With
-`abs` taken out, the rest of BI 2 runs. BI 13 no longer stops at `.year` on a function call,
-which main implemented at d4fd4c23f. BI 4's `WHERE` after `WITH` runs since 83441efe1. Both
-now stop at a runtime failure, written up below.
+It is the 34 queries that ran at f14911858, with the same row counts, plus BI 2, 4, 13 and
+17. BI 2 runs since main implemented `abs` at 0a09cb6a6. BI 4 runs since 6c6ab9dc5, which
+reads a `CALL` body's imports in the branches of its `UNION ALL`. BI 13 runs since
+649781eef, which computes a `CASE` branch only over the rows that reach it, so the `ELSE`
+no longer divides by a `totalLikeCount` of 0. BI 17 runs since main implemented
+relationships with both arrowheads at d73c68077. BI 16 now stops at `date`, since the
+analyzer accepts `param.letter` after main implemented map accessors at ed2199cd3.
 
 The answers are right, not just the row counts. IS 2, 3, 6, IC 3, 4, 5, 6, 8, 9, 11, 12 and
-BI 1, 3, 7, 8, 9, 11, 12, 18 were recomputed in Python from the CSVs and match row for row,
-in order. BI 11 counts 25 friend triangles in India. IC 8's top 20 replies match ids, names,
-dates and order. IS 3 returns 48 friends for person 4398046511333, its degree in
-`person_knows_person`.
+BI 1, 2, 3, 4, 7, 8, 9, 11, 12, 13, 17, 18 were recomputed in Python from the CSVs and match
+row for row, in order. BI 11 counts 25 friend triangles in India. IC 8's top 20 replies
+match ids, names, dates and order. IS 3 returns 48 friends for person 4398046511333, its
+degree in `person_knows_person`.
 
-Three of them return 0 rows, and 0 is the answer on this data. IC 3's window holds
+Four of them return 0 rows, and 0 is the answer on this data. IC 3's window holds
 12 messages, all located in Sweden, so no friend has a message in Kazakhstan. BI 8 and BI 18
 take the tag Carl_Gustaf_Emil_Mannerheim, which no person has an interest in. BI 8's 30
 messages with that tag were created in September 2010, outside its June window. With the tag
 William_Shakespeare, BI 8 returns 24 rows and BI 18 returns 20, both matching the CSVs.
+BI 17 takes the same tag. Its 30 messages sit in 3 forums, and for none of the 20 tagged
+comments are the comment's creator and its parent's creator both members of a second one, so
+`forum1 <> forum2` removes all 53 matches.
 
 IC 9's image posts have no content, and their text falls back to the file name,
 `photo343597386103.jpg`. IC 11 finds one friend at a Swedish company, Joakim Larsson, and
 returns 2 of his 3 jobs. The third starts in 2006, and the query keeps jobs started before
 2006. BI 12's 11 rows sum to 222 persons, every person in the graph.
+
+BI 2 and BI 4 are cut by their `LIMIT 100`, from 1,530 tags and 212 persons. BI 4's top 100
+forums are decided by `forum.id` among the 100 forums tied at 2 members, of which 47 make
+it in. BI 13 finds 6 zombies among India's 30 persons, none of them liked, so every score
+is the `WHEN 0` branch, 0.0.
 
 BI 1 keeps all 8,142 messages, since every one was created in 2010, before its
 `datetime('2011-01-01')` cut. With the cut moved to `datetime('2010-07-01')`, 2,378 messages
@@ -138,7 +151,7 @@ Person 999999999 is Bench Mark, its `STUDY_AT` edge carries classYear 2004 to or
 edge reaches tag 1524 and its `IS_LOCATED_IN` edge reaches city 1073. The two years come
 from `s[1]` and `w[1]`, the two organisations from `s[0]` and `w[0]`.
 
-### What stops the other 11
+### What stops the other 7
 
 | queries | blocked on |
 | --- | --- |
@@ -146,30 +159,10 @@ from `s[1]` and `w[1]`, the two organisations from `s[0]` and `w[0]`.
 | IC 7, BI 14 | `collect` of a map literal, `collect({score: score})` |
 | IC 14 | `allShortestPaths` |
 | IC 10 | a datetime built from a map, `datetime({epochMillis: friend.birthday})` |
-| BI 2 | `abs` |
-| BI 13 | the `ELSE` of a `CASE` evaluated on the rows its `WHEN` guards, dividing by zero |
-| BI 16 | property access on a map, `UNWIND [{letter: 'A'}] AS param` then `param.letter` |
-| BI 17 | a relationship with both arrowheads, `(forum1)<-[:HAS_MEMBER]->(person2)` |
-| BI 4 | an internal assertion on `IN` inside a `CALL { ... UNION ALL ... }` |
+| BI 16 | `date` |
 
-The last two are not missing features. Both queries reach the runtime and fail there, so
-they are written up separately below.
-
-### Two runtime failures
-
-Each was reduced to the smallest query that reproduces it.
-
-**Division by zero under `CASE`** (blocks BI 13). `UNWIND [0, 2] AS t RETURN CASE t WHEN 0
-THEN 0 ELSE 1 / t END` fails with `Attempted to divide by zero.` The `ELSE` is evaluated on
-the row where `t` is 0. Neo4j evaluates only the branch taken and returns 0 for both rows.
-BI 13 writes the float form, `CASE totalLikeCount WHEN 0 THEN 0.0 ELSE zombieLikeCount /
-toFloat(totalLikeCount) END`, and all 6 of its zombies have a `totalLikeCount` of 0. With the
-division taken out, BI 13 returns those 6 rows. `RETURN 1.0 / 0.0` fails the same way, where
-Neo4j returns `Infinity`.
-
-**`IN` inside a `UNION ALL` branch** (blocks BI 4). `WITH range(1, 2) AS ks CALL { WITH ks
-UNWIND ks AS k WITH k WHERE k IN ks RETURN k UNION ALL WITH ks UNWIND ks AS k RETURN k }
-RETURN count(k)` fails with `The assertion 'lhs->size() == rhs->size()' failed at
-storage/columns/BinaryPredicates.h:266`. It should return 4. With the literal `[1, 2]` in
-place of `range(1, 2)` it returns 4. Each branch of BI 4's `CALL` runs alone, returning 164
-and 1,369 rows.
+With `date` taken out, BI 16 stops at `message1.creationDate = paramDateX`. `paramDateX` is
+`param.date` read from a map in an `UNWIND` list, and it is typed as a map, not a
+`DateTime`. Reading a key of an unwound map is out of reach in `docs/maps.md`, and
+`UNWIND [{letter: 'A'}] AS param RETURN param.letter` fails at runtime with
+`db.static_map_key reads from a map column`.
