@@ -371,6 +371,25 @@ TEST_F(ReduceTest, foldsARowThatHasNoListProperty) {
                 {"b", "null"}});
 }
 
+// a -> b -> c and b -> d -> b, with e unreachable. The cycle reaches b twice, so the
+// nodes are collected DISTINCT before their weights are summed.
+TEST_F(ReduceTest, sumsAPropertyOverTheNodesReachableFromASeed) {
+    write("CREATE (a:Hub {name: 'a', weight: 1})-[:LINK]->(b:Hub {name: 'b', weight: 2})"
+          "-[:LINK]->(c:Hub {name: 'c', weight: 4}), "
+          "(b)-[:LINK]->(d:Hub {name: 'd', weight: 8})-[:LINK]->(b), "
+          "(e:Hub {name: 'e', weight: 16})");
+
+    expectRows("MATCH (seed:Hub {name: 'a'})-[:LINK*1..]->(reached) "
+               "WITH collect(DISTINCT reached) AS nodes "
+               "RETURN size(nodes), reduce(total = 0, n IN nodes | total + n.weight)",
+               {{"3", "14"}});
+
+    expectRows("MATCH (seed:Hub {name: 'a'})-[:LINK*0..]->(reached) "
+               "WITH collect(DISTINCT reached) AS nodes "
+               "RETURN size(nodes), reduce(total = 0, n IN nodes | total + n.weight)",
+               {{"4", "15"}});
+}
+
 TEST_F(ReduceTest, startsFromAPropertyAndReadsAnother) {
     expectRows("MATCH (n:Person) WHERE n.age IS NOT NULL "
                "RETURN reduce(s = n.name, x IN [n.age, 1] | s + '-' + toString(x))",
