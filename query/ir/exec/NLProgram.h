@@ -4323,6 +4323,104 @@ private:
     std::vector<size_t> _nullCounts;
 };
 
+// How a value is written into one row of an nl.reduce accumulator: through a CASE write
+// where the accumulator is a typed column, or read as a list item and stored as a tagged
+// cell where it is type-erased
+struct NLReduceWrite {
+    NLCaseWriteFn _write {nullptr};
+    NLListItemReadFunction _taggedRead {nullptr};
+};
+
+// nl.reduce data: the per-row fold of `reduce(acc = init, x IN xs | f(acc, x))`. The
+// result column is the accumulator: it is reset, takes the initial value of each row whose
+// source cell holds a list, then the body's value once per element. The body runs once
+// per element position over the rows whose list reaches it; the carried columns gather
+// those rows' cells of the accumulator, of the source where its cells are the elements,
+// and of the carry set.
+class NLReduceData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    NLReduceData(const Column* source,
+                 NLUnwindElementCountFunction elementCount,
+                 NLUnwindElementEmitFunction elementEmit,
+                 NLCellAbsentFunction cellAbsent,
+                 Column* elementOutput,
+                 const Column* initialValue,
+                 Column* result,
+                 LocalMemory* memory)
+        : _source(source),
+        _elementCount(elementCount),
+        _elementEmit(elementEmit),
+        _cellAbsent(cellAbsent),
+        _elementOutput(elementOutput),
+        _initialValue(initialValue),
+        _result(result),
+        _memory(memory)
+    {
+    }
+
+    const Column* getSource() const { return _source; }
+    NLUnwindElementCountFunction getElementCountFunc() const { return _elementCount; }
+    NLUnwindElementEmitFunction getElementEmitFunc() const { return _elementEmit; }
+    NLCellAbsentFunction getCellAbsentFunc() const { return _cellAbsent; }
+    Column* getElementOutput() const { return _elementOutput; }
+    const Column* getInitialValue() const { return _initialValue; }
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+    const Column* getValue() const { return _value; }
+    void setValue(const Column* value) { _value = value; }
+
+    NLCaseResetFn getReset() const { return _reset; }
+    void setReset(NLCaseResetFn reset) { _reset = reset; }
+
+    const NLReduceWrite& getInitialWrite() const { return _initialWrite; }
+    const NLReduceWrite& getValueWrite() const { return _valueWrite; }
+
+    void setWrites(const NLReduceWrite& initialWrite, const NLReduceWrite& valueWrite) {
+        _initialWrite = initialWrite;
+        _valueWrite = valueWrite;
+    }
+
+    ColumnVector<size_t>* getRows() { return &_rows; }
+    ColumnVector<size_t>* getPositions() { return &_positions; }
+
+    std::vector<size_t>& elementCounts() { return _elementCounts; }
+    std::vector<size_t>& reachingRows() { return _reachingRows; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    const Column* _source {nullptr};
+    NLUnwindElementCountFunction _elementCount {nullptr};
+    NLUnwindElementEmitFunction _elementEmit {nullptr};
+    NLCellAbsentFunction _cellAbsent {nullptr};
+    Column* _elementOutput {nullptr};
+    const Column* _initialValue {nullptr};
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    const Column* _value {nullptr};
+    NLCaseResetFn _reset {nullptr};
+    NLReduceWrite _initialWrite;
+    NLReduceWrite _valueWrite;
+
+    CarriedColumns _carriedColumns;
+    NLStmtContainer _stmts;
+
+    ColumnVector<size_t> _rows;
+    ColumnVector<size_t> _positions;
+    std::vector<size_t> _elementCounts;
+    std::vector<size_t> _reachingRows;
+};
+
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context,
                                        Column* result,
                                        const Column* input,

@@ -1697,6 +1697,43 @@ LogicalResult ListPredicate::verify() {
     return verifyElementBody(getOperation(), getBody().front(), getColumnsToFilter());
 }
 
+// The body binds the element, the accumulator and one argument per carried column, and
+// ends naming the next accumulator.
+LogicalResult Reduce::verify() {
+    Block& bodyBlock = getBody().front();
+
+    if (bodyBlock.empty() || !isa<ReduceYield>(bodyBlock.back())) {
+        return emitOpError("body region must end with a db.reduce_yield");
+    }
+
+    const OperandRange carried = getColumnsToFilter();
+    const size_t expectedArguments = carried.size() + 2;
+
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes the element and the accumulator plus one argument per "
+                           "carried column, ")
+               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    }
+
+    for (size_t argumentIndex = 0; argumentIndex < 2; argumentIndex++) {
+        if (!llvm::isa<ColumnType>(bodyBlock.getArgument(argumentIndex).getType())) {
+            return emitOpError("body argument ") << argumentIndex << " must be a column";
+        }
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return emitOpError("body argument ") << carriedIndex + 2
+                                                 << " must have the type of carried column "
+                                                 << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // The pattern takes one argument per input column and the row tag, and ends naming what
 // each match contributes to the list of the row it came from.
 LogicalResult PatternComprehension::verify() {

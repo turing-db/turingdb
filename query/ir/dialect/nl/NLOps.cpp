@@ -820,6 +820,46 @@ LogicalResult ListComprehension::verify() {
     return success();
 }
 
+// The body binds the element, the accumulator - of the result's type - and one chunk per
+// carried column, and ends naming the next accumulator.
+LogicalResult Reduce::verify() {
+    Block& bodyBlock = getBody().front();
+
+    auto yield = dyn_cast_or_null<ReduceYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return emitOpError("body region must end with an nl.reduce_yield");
+    }
+
+    const OperandRange carried = getColumnsToFilter();
+    const size_t expectedArguments = carried.size() + 2;
+
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes the element and the accumulator plus one chunk per "
+                           "carried column, ")
+               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    }
+
+    if (!llvm::isa<ChunkType>(bodyBlock.getArgument(0).getType())) {
+        return emitOpError("body argument 0 must be the chunk of elements");
+    }
+
+    if (bodyBlock.getArgument(1).getType() != getResult().getType()) {
+        return emitOpError("body argument 1 must be the accumulator, of the result's type");
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return emitOpError("body argument ") << carriedIndex + 2
+                                                 << " must have the type of carried chunk "
+                                                 << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // The same body, ending on the predicate's value for each element. The result holds one
 // truth value per row of the source chunk, null where the elements leave it unknown.
 LogicalResult ListPredicate::verify() {

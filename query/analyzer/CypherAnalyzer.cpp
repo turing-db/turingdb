@@ -50,6 +50,7 @@
 #include "expr/ListComprehensionExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/ReduceExpr.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "stmt/ShortestPathStmt.h"
@@ -1193,8 +1194,11 @@ void CypherAnalyzer::throwOnImplicitGroupingKey(const Expr* expr,
     }
 
     const ListComprehensionExpr* comprehension = nullptr;
+    const ReduceExpr* reduce = nullptr;
     if (expr->getKind() == Expr::Kind::LIST_COMPREHENSION) {
         comprehension = static_cast<const ListComprehensionExpr*>(expr);
+    } else if (expr->getKind() == Expr::Kind::REDUCE) {
+        reduce = static_cast<const ReduceExpr*>(expr);
     }
 
     for (const Expr* child : children) {
@@ -1202,6 +1206,12 @@ void CypherAnalyzer::throwOnImplicitGroupingKey(const Expr* expr,
         const VarDecl* elementDecl = readsTheElement ? comprehension->getDecl() : nullptr;
         if (readsTheElement) {
             elements.insert(elementDecl);
+        }
+
+        const bool readsTheAccumulator = reduce && child == reduce->getExpression();
+        if (readsTheAccumulator) {
+            elements.insert(reduce->getItemDecl());
+            elements.insert(reduce->getAccumulatorDecl());
         }
 
         if (child->isAggregate()) {
@@ -1214,6 +1224,11 @@ void CypherAnalyzer::throwOnImplicitGroupingKey(const Expr* expr,
 
         if (readsTheElement) {
             elements.erase(elementDecl);
+        }
+
+        if (readsTheAccumulator) {
+            elements.erase(reduce->getItemDecl());
+            elements.erase(reduce->getAccumulatorDecl());
         }
     }
 }
@@ -1293,6 +1308,25 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         elements.erase(elementDecl);
 
         return predicateIsGroupWise && projectionIsGroupWise;
+    } else if (kind == Expr::Kind::REDUCE) {
+        const ReduceExpr* reduce = static_cast<const ReduceExpr*>(expr);
+
+        const bool operandsAreGroupWise = isGroupWise(reduce->getInitialValue(), projection, elements)
+                                       && isGroupWise(reduce->getSource(), projection, elements);
+
+        if (!operandsAreGroupWise) {
+            return false;
+        }
+
+        elements.insert(reduce->getItemDecl());
+        elements.insert(reduce->getAccumulatorDecl());
+
+        const bool expressionIsGroupWise = isGroupWise(reduce->getExpression(), projection, elements);
+
+        elements.erase(reduce->getItemDecl());
+        elements.erase(reduce->getAccumulatorDecl());
+
+        return expressionIsGroupWise;
     } else if (kind == Expr::Kind::PATTERN_COMPREHENSION) {
         const PatternComprehensionExpr* comprehension = static_cast<const PatternComprehensionExpr*>(expr);
 

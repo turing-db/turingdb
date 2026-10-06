@@ -1014,6 +1014,7 @@ private:
 
     // Translate an nl.list_predicate the same way, into the nullable mask the step fills
     void translateListPredicate(mlir::nl::ListPredicate predicate, NLStmtContainer* body);
+    void translateReduce(mlir::nl::Reduce reduce, NLStmtContainer* body);
 
     // What the two share: the element chunk and the row tag bound over the source's
     // cells, allocated into @param data's own, then the carry set and the body translated

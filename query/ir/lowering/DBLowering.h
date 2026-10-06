@@ -270,6 +270,24 @@ private:
                                       mlir::Block* nlBody,
                                       mlir::Value& rowTagChunk,
                                       mlir::Value& valueChunk);
+    // Lowers `reduce(acc = init, x IN xs | f(acc, x))`, settling the accumulator's type on
+    // what the initial value and the body's value share
+    void lowerReduce(mlir::db::Reduce reduce);
+
+    // Lowers a db.reduce's body into @param nlBody, whose arguments are already bound, and
+    // hands back the chunk its yield names. The caller creates the nl yield, then erases
+    // the placeholder terminator this returns
+    mlir::Operation* lowerReduceBody(mlir::Block& dbBody, mlir::Block* nlBody, mlir::Value& valueChunk);
+
+    // The element type an accumulator holds once it has held @param accumulated and then a
+    // chunk of @param chunkType: numbers promote, lists of two element types hold tagged
+    // cells, and any other two types meet in a tagged cell. Null until a typed value came.
+    mlir::Type accumulatedElement(mlir::Type accumulated, mlir::Type chunkType);
+    mlir::nl::ChunkType accumulatorChunkType(mlir::Type accumulated);
+
+    // @param chunk converted to the accumulator's number type where it holds another one
+    mlir::Value promotedToAccumulated(mlir::Value chunk, mlir::Type accumulated);
+
     void lowerListSlice(mlir::db::ListSlice slice);
     void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);

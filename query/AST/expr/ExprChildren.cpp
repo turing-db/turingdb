@@ -15,6 +15,7 @@
 #include "ListExpr.h"
 #include "LiteralExpr.h"
 #include "PropertyLookupExpr.h"
+#include "ReduceExpr.h"
 #include "StringExpr.h"
 #include "UnaryExpr.h"
 
@@ -125,6 +126,17 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             const ListPredicateExpr* predicate = static_cast<const ListPredicateExpr*>(expr);
 
             children.push_back(predicate->getComprehension());
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::REDUCE: {
+            const ReduceExpr* reduce = static_cast<const ReduceExpr*>(expr);
+
+            children.push_back(reduce->getInitialValue());
+            children.push_back(reduce->getSource());
+            children.push_back(reduce->getExpression());
 
             return true;
         }

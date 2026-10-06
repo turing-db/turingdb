@@ -957,6 +957,11 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
             out << "        ASTType ListPredicateExpr\n";
             out << "    }\n";
             break;
+        case Expr::Kind::REDUCE:
+            out << "    _" << std::hex << expr << " {\n";
+            out << "        ASTType ReduceExpr\n";
+            out << "    }\n";
+            break;
         case Expr::Kind::CASE:
             out << "    _" << std::hex << expr << " {\n";
             out << "        ASTType CaseExpr\n";
