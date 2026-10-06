@@ -986,7 +986,7 @@ void runArithmeticOp(Column* result, const Column* lhs, const Column* rhs, Local
     BinaryOperators::exec<Op>(static_cast<ResCol*>(result),
                               static_cast<const LhsCol*>(lhs),
                               static_cast<const RhsCol*>(rhs),
-                              Op {&mem->listBuffer()});
+                              Op {&mem->listBuffer(), &mem->stringBuffer()});
 }
 
 template <typename ResCol, typename LhsCol, typename RhsCol>
