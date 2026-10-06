@@ -2,6 +2,8 @@
 
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include "IRConstantColumn.h"
 
@@ -33,47 +35,77 @@ bool sameRowSource(mlir::Value column, mlir::Value reference) {
 // chunk at all - every operand a constant or a handle, as a CREATE over the single empty
 // row. Null where its operands disagree, which is IR no step could run.
 mlir::Value rowSource(mlir::Value column) {
-    mlir::Operation* const definingOp = column.getDefiningOp();
+    llvm::DenseMap<mlir::Value, mlir::Value> sources;
+    llvm::DenseMap<mlir::Value, bool> classified;
+    llvm::SmallVector<mlir::Value> worklist {column};
 
-    if (definingOp && definingOp->hasTrait<mlir::OpTrait::RowAlignedWithFirstOperand>()) {
-        return rowSource(definingOp->getOperand(0));
-    }
-
-    const bool computedRowByRow = definingOp
-                               && definingOp->hasTrait<mlir::OpTrait::RowAlignedThroughOperands>();
-
-    if (!computedRowByRow) {
-        return column;
-    }
-
-    mlir::Value source;
-
-    for (const mlir::Value operand : definingOp->getOperands()) {
+    const auto holdsRows = [&classified](mlir::Value operand) {
         const bool isHandle = !operand.getType().hasTrait<mlir::TypeTrait::CarriesRows>();
-        const bool standsForEveryRow = yieldsConstantColumn(operand);
+        return !isHandle && !yieldsConstantColumn(operand, classified);
+    };
 
-        if (isHandle || standsForEveryRow) {
+    while (!worklist.empty()) {
+        const mlir::Value value = worklist.back();
+        if (sources.contains(value)) {
+            worklist.pop_back();
             continue;
         }
 
-        const mlir::Value operandSource = rowSource(operand);
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        const bool alignedWithFirstOperand = definingOp && definingOp->hasTrait<mlir::OpTrait::RowAlignedWithFirstOperand>();
+        const bool computedRowByRow = definingOp && definingOp->hasTrait<mlir::OpTrait::RowAlignedThroughOperands>();
 
-        if (!operandSource) {
-            return {};
+        if (alignedWithFirstOperand) {
+            const mlir::Value operand = definingOp->getOperand(0);
+            const auto operandIt = sources.find(operand);
+            if (operandIt == sources.end()) {
+                worklist.push_back(operand);
+                continue;
+            }
+
+            sources[value] = operandIt->second;
+        } else if (!computedRowByRow) {
+            sources[value] = value;
+        } else {
+            bool operandsPending = false;
+            for (const mlir::Value operand : definingOp->getOperands()) {
+                if (holdsRows(operand) && !sources.contains(operand)) {
+                    worklist.push_back(operand);
+                    operandsPending = true;
+                }
+            }
+
+            if (operandsPending) {
+                continue;
+            }
+
+            mlir::Value source;
+            bool operandsDisagree = false;
+            for (const mlir::Value operand : definingOp->getOperands()) {
+                if (!holdsRows(operand)) {
+                    continue;
+                }
+
+                const mlir::Value operandSource = sources.at(operand);
+                if (!operandSource || (source && !sameRowSource(source, operandSource))) {
+                    operandsDisagree = true;
+                    break;
+                }
+
+                source = operandSource;
+            }
+
+            if (operandsDisagree) {
+                sources[value] = mlir::Value();
+            } else {
+                sources[value] = source ? source : value;
+            }
         }
 
-        if (source && !sameRowSource(source, operandSource)) {
-            return {};
-        }
-
-        source = operandSource;
+        worklist.pop_back();
     }
 
-    if (!source) {
-        return column;
-    }
-
-    return source;
+    return sources.at(column);
 }
 
 }

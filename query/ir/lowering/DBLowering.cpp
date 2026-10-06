@@ -4581,25 +4581,69 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
                                      mlir::Value handle,
                                      bool rowsDroppedBeforeTheCut,
                                      mlir::Operation* holder) {
-    // A visit with rows dropped claims a subset of what one without claims, and reaches
-    // the same loops, so only a visit without them can add to one made with them
+    bool reachedALoop = false;
+    if (findCoveringProducerVisit(column, rowsDroppedBeforeTheCut, reachedALoop)) {
+        return reachedALoop;
+    }
+
+    llvm::SmallVector<ProducerWalkFrame> frames;
+    frames.emplace_back();
+    visitProducer(column, handle, rowsDroppedBeforeTheCut, holder, frames.back());
+
+    for (;;) {
+        ProducerWalkFrame& frame = frames.back();
+
+        if (frame._nextOperand < frame._operands.size()) {
+            const mlir::Value operand = frame._operands[frame._nextOperand];
+            const bool operandRowsDropped = frame._operandsRowsDropped;
+            frame._nextOperand++;
+
+            bool operandReachedALoop = false;
+            if (findCoveringProducerVisit(operand, operandRowsDropped, operandReachedALoop)) {
+                frame._reachedALoop = frame._reachedALoop || operandReachedALoop;
+                continue;
+            }
+
+            frames.emplace_back();
+            visitProducer(operand, handle, operandRowsDropped, holder, frames.back());
+            continue;
+        }
+
+        _producerWalkVisits[frame._column] = ProducerWalkVisit {frame._reachedALoop, frame._rowsDroppedBeforeTheCut};
+        const bool frameReachedALoop = frame._reachedALoop;
+        frames.pop_back();
+
+        if (frames.empty()) {
+            return frameReachedALoop;
+        }
+
+        ProducerWalkFrame& parent = frames.back();
+        parent._reachedALoop = parent._reachedALoop || frameReachedALoop;
+    }
+}
+
+// A visit with rows dropped claims a subset of what one without claims, and reaches the
+// same loops, so only a visit without them can add to one made with them
+bool DBLowering::findCoveringProducerVisit(mlir::Value column, bool rowsDroppedBeforeTheCut, bool& reachedALoop) const {
     const auto visitIt = _producerWalkVisits.find(column);
     const bool wasVisited = visitIt != _producerWalkVisits.end();
     const bool isCovered = wasVisited && (rowsDroppedBeforeTheCut || !visitIt->second._rowsDroppedBeforeTheCut);
     if (isCovered) {
-        return visitIt->second._reachedALoop;
+        reachedALoop = visitIt->second._reachedALoop;
     }
 
-    const bool reachedALoop = walkProducerLoops(column, handle, rowsDroppedBeforeTheCut, holder);
-    _producerWalkVisits[column] = ProducerWalkVisit {reachedALoop, rowsDroppedBeforeTheCut};
-
-    return reachedALoop;
+    return isCovered;
 }
 
-bool DBLowering::walkProducerLoops(mlir::Value column,
-                                   mlir::Value handle,
-                                   bool rowsDroppedBeforeTheCut,
-                                   mlir::Operation* holder) {
+void DBLowering::visitProducer(mlir::Value column,
+                               mlir::Value handle,
+                               bool rowsDroppedBeforeTheCut,
+                               mlir::Operation* holder,
+                               ProducerWalkFrame& frame) {
+    frame._column = column;
+    frame._rowsDroppedBeforeTheCut = rowsDroppedBeforeTheCut;
+    frame._operandsRowsDropped = rowsDroppedBeforeTheCut;
+
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
         // A subquery body reads the rows in flight through its block arguments, so the
@@ -4611,19 +4655,17 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
         const mlir::OperandRange inputs = subqueryInputColumns(bodyHolder);
 
         if (argument.getArgNumber() >= inputs.size()) {
-            return false;
+            return;
         }
 
         // The handle this body holds is created inside the loop over its input rows, so a
         // loop outside the body cannot carry it: the walk stops at the boundary.
         if (bodyHolder == holder) {
-            return false;
+            return;
         }
 
-        return assignProducerLoops(inputs[argument.getArgNumber()],
-                                   handle,
-                                   rowsDroppedBeforeTheCut,
-                                   holder);
+        frame._operands.push_back(inputs[argument.getArgNumber()]);
+        return;
     }
 
     const bool opensLoop = opensSourceLoop(definingOp);
@@ -4651,7 +4693,7 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
     const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
-    bool reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop || loopsOverSingleRows;
+    frame._reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop || loopsOverSingleRows;
 
     // A loop's budget only stops it from taking another step, so bounding one never trims
     // the step it is in. A cross product's or a hash join's budget cuts the rows it pairs,
@@ -4672,10 +4714,11 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
     }
 
     if (breaksPipeline) {
-        return reachedALoop;
+        return;
     }
 
     const bool rowsDropped = rowsDroppedBeforeTheCut || dropsRows(definingOp);
+    frame._operandsRowsDropped = rowsDropped;
 
     if (isHashJoin) {
         // A hash join's built side has to be read whole - a build loop stopped short of
@@ -4684,18 +4727,18 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
         mlir::db::HashJoin join = mlir::cast<mlir::db::HashJoin>(definingOp);
         mlir::Operation* const probeYield = join.getLeftFactor().front().getTerminator();
         for (const mlir::Value yielded : probeYield->getOperands()) {
-            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped, holder);
+            frame._operands.push_back(yielded);
         }
     } else if (isCrossProduct) {
         // A cross product takes no column operands - its factors are regions - so
-        // recurse through each factor's db.yield operands to reach the factor
+        // walk through each factor's db.yield operands to reach the factor
         // scans/edge loops that produce the crossed columns.
         mlir::db::CrossProduct cross = mlir::cast<mlir::db::CrossProduct>(definingOp);
         mlir::Region* const factors[] = {&cross.getLeftFactor(), &cross.getRightFactor()};
         for (mlir::Region* const factor : factors) {
             mlir::Operation* const yield = factor->front().getTerminator();
             for (const mlir::Value yielded : yield->getOperands()) {
-                reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped, holder);
+                frame._operands.push_back(yielded);
             }
         }
     } else if (isSubquery) {
@@ -4706,23 +4749,21 @@ bool DBLowering::walkProducerLoops(mlir::Value column,
         mlir::db::CallSubquery call = mlir::cast<mlir::db::CallSubquery>(definingOp);
         mlir::Operation* const yield = call.getBody().front().getTerminator();
         for (const mlir::Value yielded : yield->getOperands()) {
-            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped, holder);
+            frame._operands.push_back(yielded);
         }
 
         if (!call.getCarriesScope()) {
             for (const mlir::Value input : call.getInputColumns()) {
-                reachedALoop |= assignProducerLoops(input, handle, rowsDropped, holder);
+                frame._operands.push_back(input);
             }
         }
     } else {
         // A non-loop producer (a property fetch) is traversed but not assigned -
         // it opens no loop - so its input chunk's loop is still reached.
         for (const mlir::Value operand : definingOp->getOperands()) {
-            reachedALoop |= assignProducerLoops(operand, handle, rowsDropped, holder);
+            frame._operands.push_back(operand);
         }
     }
-
-    return reachedALoop;
 }
 
 void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::Operation* holder) {

@@ -118,6 +118,15 @@ private:
         bool _rowsDroppedBeforeTheCut {false};
     };
 
+    struct ProducerWalkFrame {
+        mlir::Value _column;
+        bool _rowsDroppedBeforeTheCut {false};
+        bool _reachedALoop {false};
+        llvm::SmallVector<mlir::Value, 2> _operands;
+        bool _operandsRowsDropped {false};
+        size_t _nextOperand {0};
+    };
+
     mlir::OpBuilder _builder;
 
     // Graph schema, used to resolve a property name to its value type
@@ -476,7 +485,7 @@ private:
     // deduped rows. It opens no loop of its own (a streaming filter, unlike the
     // pipeline-breaking db.sort), so the limit machinery bounds it unchanged: a
     // db.limit over its results reaches the real producing loops through
-    // assignProducerLoops' operand recursion and early-exits them.
+    // assignProducerLoops' operand walk and early-exits them.
     void lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct);
 
     // Lower a db.count: hoist an nl.count tally to the top of the entry block,
@@ -654,7 +663,7 @@ private:
     // Walk the db dataflow backward from a limited column, recording in
     // _loopLimitHandle that each loop-opening op (scan / get_out_edges) and cross
     // product it depends on carries this limit's handle.
-    // A cross product's factors are regions, so it recurses through their
+    // A cross product's factors are regions, so the walk goes through their
     // db.yield operands; a property fetch opens no loop but is traversed to reach
     // its input chunk's loop. The first limit to claim a producer keeps it.
     // Returns whether the walk reached a loop at all: a column computed from constants
@@ -666,10 +675,15 @@ private:
                              bool rowsDroppedBeforeTheCut,
                              mlir::Operation* holder);
 
-    bool walkProducerLoops(mlir::Value column,
-                           mlir::Value handle,
-                           bool rowsDroppedBeforeTheCut,
-                           mlir::Operation* holder);
+    // Claims @param column's producer for @param handle and lists in @param frame the
+    // columns the walk goes on to, without walking them
+    void visitProducer(mlir::Value column,
+                       mlir::Value handle,
+                       bool rowsDroppedBeforeTheCut,
+                       mlir::Operation* holder,
+                       ProducerWalkFrame& frame);
+
+    bool findCoveringProducerVisit(mlir::Value column, bool rowsDroppedBeforeTheCut, bool& reachedALoop) const;
 
     // Records that the loops producing the relation which drives @param limit's projection
     // carry its handle, so a cut charged to constants alone stops its nest as any other
