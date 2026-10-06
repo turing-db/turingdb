@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {a: 1, b: 'x'}.a, {a: 1, b: 'x'}.b, {a: 1}.nosuch",
+  "expect": {
+    "result": "\"{a: 1, b: 'x'}.a\",\"{a: 1, b: 'x'}.b\",{a: 1}.nosuch\n1,x,null"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "literal"
+  ],
+  "write-required": false
+}

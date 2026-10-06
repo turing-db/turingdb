@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 'x'.a",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN 'x'.a\n       |        ^^^^^\n-------* A value of type 'String' has no property 'a'"
+  },
+  "tags": [
+    "map",
+    "key",
+    "static",
+    "literal",
+    "fail"
+  ],
+  "write-required": false
+}
