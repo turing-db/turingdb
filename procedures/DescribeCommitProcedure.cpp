@@ -19,7 +19,7 @@ using namespace db;
 
 namespace {
 
-struct Data : public IndexedProcedureData {
+struct Data : public TypedProcedureData<DescribeCommitProcedure, IndexedProcedureData> {
     size_t _i {0};
     const Commit* _headCommit {nullptr};
 };
@@ -94,7 +94,7 @@ void dispatchStringInternal(const Column* col, const F& fn) {
 }
 
 void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<DescribeCommitProcedure, Data>("describeCommit");
+    Procedure* proc = createTypedProcedure<Data>("describeCommit");
     proc->addArgument("commit", ProcedureType::STRING_VIEW);
     ns->addProcedure(proc);
 }
@@ -104,9 +104,9 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
 
     const Column* rawCommitCol = data.getInputColumn(0);
-    auto* nodeCountCol = getReturnColumn<DescribeCommitProcedure, 0>(&data);
-    auto* edgeCountCol = getReturnColumn<DescribeCommitProcedure, 1>(&data);
-    auto* partCountCol = getReturnColumn<DescribeCommitProcedure, 2>(&data);
+    auto* nodeCountCol = data.getReturnColumn<0>();
+    auto* edgeCountCol = data.getReturnColumn<1>();
+    auto* partCountCol = data.getReturnColumn<2>();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

@@ -50,7 +50,7 @@ constexpr size_t returnValuesPerHop = 3;
 
 static_assert(GraphSAGEProcedure::numHops == 3, "Update the return values");
 
-struct Data final : public ProcedureData {
+struct Data final : public TypedProcedureData<GraphSAGEProcedure> {
     std::unique_ptr<GraphSAGESampler> sampler;
 };
 
@@ -99,9 +99,9 @@ void setHopData(Data& data, const GraphSAGESampler::Fanouts& fanouts) {
     constexpr size_t base = Hop * returnValuesPerHop;
 
     data.sampler->setHopData(Hop,
-                             getReturnColumn<GraphSAGEProcedure, base + 1>(&data),
-                             getReturnColumn<GraphSAGEProcedure, base + 2>(&data),
-                             getReturnColumn<GraphSAGEProcedure, base>(&data),
+                             data.getReturnColumn<base + 1>(),
+                             data.getReturnColumn<base + 2>(),
+                             data.getReturnColumn<base>(),
                              fanouts[Hop]);
 }
 
@@ -180,7 +180,7 @@ void executeImpl(ProcedureState* state) {
 }
 
 void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<GraphSAGEProcedure, Data>("graphSAGE");
+    Procedure* proc = createTypedProcedure<Data>("graphSAGE");
 
     proc->addConstantArgument("seeds", ProcedureType::LIST);
     proc->addConstantArgument("fanouts", ProcedureType::LIST);

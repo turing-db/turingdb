@@ -32,10 +32,17 @@ struct ProcedureReturnKind<ColumnVector<std::optional<T>>> {
 template <typename P, size_t I>
 using ProcedureReturnColumn = std::tuple_element_t<I, typename P::Returns>;
 
-template <typename P, size_t I>
-ProcedureReturnColumn<P, I>* getReturnColumn(ProcedureData* data) {
-    return static_cast<ProcedureReturnColumn<P, I>*>(data->getReturnColumn(I));
-}
+template <typename P, typename Base = ProcedureData>
+class TypedProcedureData : public Base {
+public:
+    using Declaration = P;
+
+    template <size_t I>
+    ProcedureReturnColumn<P, I>* getReturnColumn() {
+        static_assert(I < P::numReturns, "OOB return column access");
+        return static_cast<ProcedureReturnColumn<P, I>*>(Base::getReturnColumn(I));
+    }
+};
 
 template <ProcedureDataType D>
 ProcedureData* allocProcedureData() {
@@ -63,8 +70,10 @@ void addProcedureReturnValues(Procedure* proc, std::index_sequence<I...>) {
     (addProcedureReturnValue<ProcedureReturnColumn<P, I>>(proc, P::_returnNames[I]), ...);
 }
 
-template <typename P, ProcedureDataType D>
+template <ProcedureDataType D>
 Procedure* createTypedProcedure(std::string_view name) {
+    using P = typename D::Declaration;
+
     Procedure* proc = new Procedure(name);
     proc->setExecuteCallback(&P::execute);
     proc->setAllocCallback(&allocProcedureData<D>);

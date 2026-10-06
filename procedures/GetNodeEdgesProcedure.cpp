@@ -44,7 +44,7 @@ constexpr std::string_view limitValueListErr = "getNodeEdges: limit-value list m
 constexpr std::string_view defaultLimitErr = "getNodeEdges: defaultLimit must be a constant int";
 constexpr std::string_view returnOnlyIDsErr = "getNodeEdges: returnOnlyIDs must be a constant bool";
 
-struct Data : public ProcedureData {};
+struct Data : public TypedProcedureData<GetNodeEdgesProcedure> {};
 
 // Fill `limits` with an {edgeTypeID -> limit} map from parallel (types, values)
 // list args.
@@ -99,11 +99,11 @@ void executeImpl(ProcedureState* proc) {
     const Column* inputInValues = data.getInputColumn(5);
     const Column* inputReturnOnlyIds= data.getInputColumn(6);
 
-    auto* idCol = getReturnColumn<GetNodeEdgesProcedure, 0>(&data);
-    auto* outCol = getReturnColumn<GetNodeEdgesProcedure, 1>(&data);
-    auto* inCol = getReturnColumn<GetNodeEdgesProcedure, 2>(&data);
-    auto* outCountsCol = getReturnColumn<GetNodeEdgesProcedure, 3>(&data);
-    auto* inCountsCol = getReturnColumn<GetNodeEdgesProcedure, 4>(&data);
+    auto* idCol = data.getReturnColumn<0>();
+    auto* outCol = data.getReturnColumn<1>();
+    auto* inCol = data.getReturnColumn<2>();
+    auto* outCountsCol = data.getReturnColumn<3>();
+    auto* inCountsCol = data.getReturnColumn<4>();
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -226,7 +226,7 @@ void executeImpl(ProcedureState* proc) {
 }
 
 void GetNodeEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<GetNodeEdgesProcedure, Data>("getNodeEdges");
+    Procedure* proc = createTypedProcedure<Data>("getNodeEdges");
     proc->addConstantArgument("nodeIDs", ProcedureType::LIST);
     proc->addConstantArgument("defaultLimit", ProcedureType::INT64);
     proc->addConstantArgument("outLimitTypes", ProcedureType::LIST);

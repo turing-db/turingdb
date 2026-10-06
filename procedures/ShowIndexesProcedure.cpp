@@ -22,14 +22,14 @@ using namespace db;
 
 namespace {
 
-struct Data : public ProcedureData {
+struct Data : public TypedProcedureData<ShowIndexesProcedure> {
     const Commit* _commit {nullptr};
     size_t _written {0};
 };
 
 void writeChunk(Data* data, ProcedureState* procedure, size_t chunkSize) {
-    auto* names = getReturnColumn<ShowIndexesProcedure, 0>(data);
-    auto* sizes = getReturnColumn<ShowIndexesProcedure, 1>(data);
+    auto* names = data->getReturnColumn<0>();
+    auto* sizes = data->getReturnColumn<1>();
 
     // Not all columns may be YIELDed, only fill those which are
     data->clearReturnColumns();
@@ -104,7 +104,7 @@ void prepare(ProcedureState* proc) {
 }
 
 void ShowIndexesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    ns->addProcedure(createTypedProcedure<ShowIndexesProcedure, Data>("showIndexes"));
+    ns->addProcedure(createTypedProcedure<Data>("showIndexes"));
 }
 
 void ShowIndexesProcedure::execute(ProcedureState* proc) {

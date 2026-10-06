@@ -13,14 +13,14 @@ using namespace db;
 
 namespace {
 
-struct Data : public ProcedureData {
+struct Data : public TypedProcedureData<EdgeTypesProcedure> {
     std::unique_ptr<ScanEdgeTypesChunkWriter> _it;
 };
 
 }
 
 void EdgeTypesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    ns->addProcedure(createTypedProcedure<EdgeTypesProcedure, Data>("edgeTypes"));
+    ns->addProcedure(createTypedProcedure<Data>("edgeTypes"));
 }
 
 void EdgeTypesProcedure::execute(ProcedureState* proc) {
@@ -28,8 +28,8 @@ void EdgeTypesProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    auto* idsCol = getReturnColumn<EdgeTypesProcedure, 0>(&data);
-    auto* namesCol = getReturnColumn<EdgeTypesProcedure, 1>(&data);
+    auto* idsCol = data.getReturnColumn<0>();
+    auto* namesCol = data.getReturnColumn<1>();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

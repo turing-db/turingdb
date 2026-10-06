@@ -34,7 +34,7 @@ namespace {
 
 constexpr std::string_view nodeIDsErr = "getNodes: nodeIDs must be a constant list";
 
-struct Data : public ProcedureData {};
+struct Data : public TypedProcedureData<GetNodesProcedure> {};
 
 void executeImpl(ProcedureState* proc) {
     Data& data = proc->data<Data>();
@@ -42,11 +42,11 @@ void executeImpl(ProcedureState* proc) {
 
     const Column* inputNodeIDs = data.getInputColumn(0);
 
-    auto* idCol = getReturnColumn<GetNodesProcedure, 0>(&data);
-    auto* labelsCol = getReturnColumn<GetNodesProcedure, 1>(&data);
-    auto* inCol = getReturnColumn<GetNodesProcedure, 2>(&data);
-    auto* outCol = getReturnColumn<GetNodesProcedure, 3>(&data);
-    auto* propsCol = getReturnColumn<GetNodesProcedure, 4>(&data);
+    auto* idCol = data.getReturnColumn<0>();
+    auto* labelsCol = data.getReturnColumn<1>();
+    auto* inCol = data.getReturnColumn<2>();
+    auto* outCol = data.getReturnColumn<3>();
+    auto* propsCol = data.getReturnColumn<4>();
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -116,7 +116,7 @@ void executeImpl(ProcedureState* proc) {
 }
 
 void GetNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<GetNodesProcedure, Data>("getNodes");
+    Procedure* proc = createTypedProcedure<Data>("getNodes");
     proc->addConstantArgument("nodeIDs", ProcedureType::LIST);
     ns->addProcedure(proc);
 }

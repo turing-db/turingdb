@@ -13,14 +13,14 @@ using namespace db;
 
 namespace {
 
-struct Data : public ProcedureData {
+struct Data : public TypedProcedureData<PropertyTypesProcedure> {
     std::unique_ptr<ScanPropertyTypesChunkWriter> _it;
 };
 
 }
 
 void PropertyTypesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    ns->addProcedure(createTypedProcedure<PropertyTypesProcedure, Data>("propertyTypes"));
+    ns->addProcedure(createTypedProcedure<Data>("propertyTypes"));
 }
 
 void PropertyTypesProcedure::execute(ProcedureState* proc) {
@@ -28,9 +28,9 @@ void PropertyTypesProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    auto* idsCol = getReturnColumn<PropertyTypesProcedure, 0>(&data);
-    auto* namesCol = getReturnColumn<PropertyTypesProcedure, 1>(&data);
-    auto* valueTypesCol = getReturnColumn<PropertyTypesProcedure, 2>(&data);
+    auto* idsCol = data.getReturnColumn<0>();
+    auto* namesCol = data.getReturnColumn<1>();
+    auto* valueTypesCol = data.getReturnColumn<2>();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {
