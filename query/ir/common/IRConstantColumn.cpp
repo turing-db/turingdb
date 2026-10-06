@@ -2,45 +2,68 @@
 
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 
 using namespace db;
 
 namespace {
 
-bool isConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>* classified) {
-    if (classified) {
-        const auto classifiedIt = classified->find(value);
-        if (classifiedIt != classified->end()) {
-            return classifiedIt->second;
+bool isConstantColumn(mlir::Value root, llvm::DenseMap<mlir::Value, bool>& classified) {
+    llvm::SmallVector<mlir::Value> worklist {root};
+    llvm::SmallVector<mlir::Value> pendingOperands;
+
+    while (!worklist.empty()) {
+        const mlir::Value value = worklist.back();
+        if (classified.contains(value)) {
+            worklist.pop_back();
+            continue;
+        }
+
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        const bool isConstantLike = definingOp && definingOp->hasTrait<mlir::OpTrait::ConstantLike>();
+        const bool dependsOnOperands = definingOp
+                                    && !isConstantLike
+                                    && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>();
+
+        if (!dependsOnOperands) {
+            classified[value] = isConstantLike;
+            worklist.pop_back();
+            continue;
+        }
+
+        pendingOperands.clear();
+        bool readsANonConstant = false;
+        for (const mlir::Value operand : definingOp->getOperands()) {
+            const auto classifiedIt = classified.find(operand);
+            if (classifiedIt == classified.end()) {
+                pendingOperands.push_back(operand);
+            } else if (!classifiedIt->second) {
+                readsANonConstant = true;
+                break;
+            }
+        }
+
+        if (readsANonConstant) {
+            classified[value] = false;
+            worklist.pop_back();
+        } else if (pendingOperands.empty()) {
+            classified[value] = true;
+            worklist.pop_back();
+        } else {
+            worklist.append(pendingOperands);
         }
     }
 
-    mlir::Operation* const definingOp = value.getDefiningOp();
-
-    bool isConstant = false;
-    if (definingOp) {
-        if (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()) {
-            isConstant = true;
-        } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
-            isConstant = llvm::all_of(definingOp->getOperands(),
-                                      [classified](mlir::Value operand) { return isConstantColumn(operand, classified); });
-        }
-    }
-
-    if (classified) {
-        (*classified)[value] = isConstant;
-    }
-
-    return isConstant;
+    return classified.at(root);
 }
 
 }
 
 bool db::yieldsConstantColumn(mlir::Value value) {
-    return isConstantColumn(value, nullptr);
+    llvm::DenseMap<mlir::Value, bool> classified;
+    return isConstantColumn(value, classified);
 }
 
 bool db::yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& classified) {
-    return isConstantColumn(value, &classified);
+    return isConstantColumn(value, classified);
 }

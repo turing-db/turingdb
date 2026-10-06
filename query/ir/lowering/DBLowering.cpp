@@ -1034,6 +1034,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _valueMap.clear();
     _propertyTypes.clear();
     _edgeTypeSets.clear();
+    _constantColumns.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
     _innermostCardinality = mlir::Value();
@@ -3023,7 +3024,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
 
 void DBLowering::collectReadPastRowLoop(mlir::Operation* subquery,
                                         mlir::Block* stepBlock,
-                                        llvm::SmallVectorImpl<mlir::Value>& readPast) const {
+                                        llvm::SmallVectorImpl<mlir::Value>& readPast) {
     mlir::Block* const block = subquery->getBlock();
     const mlir::OperandRange inputs = subqueryInputColumns(subquery);
 
@@ -3047,7 +3048,7 @@ void DBLowering::collectReadPastRowLoop(mlir::Operation* subquery,
 
         const mlir::Value chunk = chunkIt->second;
         const bool holdsTheStep = mlir::isa<nl::ChunkType>(chunk.getType())
-                                  && !yieldsConstantColumn(chunk)
+                                  && !yieldsConstantColumn(chunk, _constantColumns)
                                   && ownerBlock(chunk) == stepBlock;
 
         if (holdsTheStep && !llvm::is_contained(inputs, value) && readAfterTheOp(value)) {
@@ -3730,7 +3731,7 @@ void DBLowering::drainCollectedBranches(llvm::ArrayRef<nl::UnionCollect> collect
 }
 
 void DBLowering::collectRowColumnsReadByBranches(mlir::db::Conditional conditional,
-                                                 llvm::SmallVectorImpl<mlir::Value>& columns) const {
+                                                 llvm::SmallVectorImpl<mlir::Value>& columns) {
     mlir::Operation* const holder = conditional.getOperation();
     llvm::SmallPtrSet<mlir::Value, 8> seen;
 
@@ -3748,7 +3749,7 @@ void DBLowering::collectRowColumnsReadByBranches(mlir::db::Conditional condition
 
             seen.insert(operand);
 
-            if (!yieldsConstantColumn(mapValue(operand))) {
+            if (!yieldsConstantColumn(mapValue(operand), _constantColumns)) {
                 columns.push_back(operand);
             }
         }
@@ -5732,7 +5733,7 @@ mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardi
         const bool computesFromConstantsAlone = cardinality
                                              && operation.getNumResults() == 1
                                              && !operation.hasTrait<mlir::OpTrait::ConstantLike>()
-                                             && yieldsConstantColumn(operation.getResult(0));
+                                             && yieldsConstantColumn(operation.getResult(0), _constantColumns);
 
         if (!computesFromConstantsAlone) {
             lowerOperation(operation);
@@ -5817,7 +5818,7 @@ void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
     mlir::Block* const constantBlock = _constantComputationBlock ? _constantComputationBlock : _entryBlock;
 
     const bool readsAConstant = insertBlock == _entryBlock
-                             || (yieldsConstantColumn(operandChunk) && enclosesBlock(insertBlock, constantBlock));
+                             || (yieldsConstantColumn(operandChunk, _constantColumns) && enclosesBlock(insertBlock, constantBlock));
 
     mlir::Operation* const operandDef = operandChunk.getDefiningOp();
 
@@ -6069,7 +6070,7 @@ nl::Output DBLowering::lowerOutput(mlir::db::Output output) {
         // but if we have all constants, then it need be moved to the inner most loop to
         // match cardinality. An expression over constants alone is one of them: it is
         // bound where its operands are, above the loop whose rows it is projected over
-        const bool allConstants = llvm::all_of(columns, [](mlir::Value column) { return yieldsConstantColumn(column); });
+        const bool allConstants = llvm::all_of(columns, [this](mlir::Value column) { return yieldsConstantColumn(column, _constantColumns); });
 
         if (allConstants) {
             anchorBlock = _innermostLoopBody;
@@ -6342,7 +6343,7 @@ void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
     mlir::Block* const insertBlock = ownerBlock(deepest);
     mlir::Block* const constantBlock = _constantComputationBlock ? _constantComputationBlock : _entryBlock;
 
-    const bool allConstants = llvm::all_of(operands, [](mlir::Value operand) { return yieldsConstantColumn(operand); });
+    const bool allConstants = llvm::all_of(operands, [this](mlir::Value operand) { return yieldsConstantColumn(operand, _constantColumns); });
     const bool readsConstantsAlone = insertBlock == _entryBlock
                                   || (allConstants && enclosesBlock(insertBlock, constantBlock));
 
@@ -6412,7 +6413,7 @@ void DBLowering::followCardinalityThrough(mlir::ValueRange inputChunks, mlir::Va
 void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
     mlir::Value cardinality;
     for (const mlir::Value chunk : chunks) {
-        if (!yieldsConstantColumn(chunk)) {
+        if (!yieldsConstantColumn(chunk, _constantColumns)) {
             cardinality = chunk;
             break;
         }
@@ -6430,7 +6431,7 @@ void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks
 void DBLowering::rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunks) {
     mlir::Value cardinality = _innermostCardinality;
     for (const mlir::Value chunk : chunks) {
-        if (!yieldsConstantColumn(chunk)) {
+        if (!yieldsConstantColumn(chunk, _constantColumns)) {
             cardinality = chunk;
             break;
         }
@@ -6580,9 +6581,9 @@ mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
     return chunk;
 }
 
-mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const {
+mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) {
     for (const mlir::Value chunk : chunks) {
-        if (!yieldsConstantColumn(chunk)) {
+        if (!yieldsConstantColumn(chunk, _constantColumns)) {
             return chunk;
         }
     }
@@ -6592,7 +6593,7 @@ mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) co
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {
     // A chunk that carries rows is its own alignment
-    if (!yieldsConstantColumn(chunk)) {
+    if (!yieldsConstantColumn(chunk, _constantColumns)) {
         return chunk;
     }
 
