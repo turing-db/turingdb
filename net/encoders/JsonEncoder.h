@@ -1,5 +1,6 @@
 #pragma once
 
+#include <math.h>
 #include <ranges>
 #include <span>
 #include <string_view>
@@ -132,7 +133,11 @@ private:
 
     template <std::floating_point T>
     void encodeValue(const T& value) {
-        _writer.write(std::to_string(value));
+        if (std::isnan(value)) {
+            _writer.write("NaN");
+        } else {
+            _writer.write(std::to_string(value));
+        }
     }
 
     void encodeValue(bool value) {

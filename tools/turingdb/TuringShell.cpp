@@ -1,5 +1,6 @@
 #include "TuringShell.h"
 
+#include <math.h>
 #include <signal.h>
 #include <regex>
 #include <stdlib.h>
@@ -602,6 +603,12 @@ void asString(std::string& out, const T& value) {
 
     if constexpr (std::same_as<T, CustomBool>) {
         out += fmt::format("{}", value._boolean);
+    } else if constexpr (std::floating_point<T>) {
+        if (std::isnan(value)) {
+            out += "NaN";
+        } else {
+            out += fmt::format("{}", value);
+        }
     } else {
         out += fmt::format("{}", value);
     }

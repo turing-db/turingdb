@@ -1,6 +1,8 @@
 #include "StringRowSink.h"
 
+#include <math.h>
 #include <algorithm>
+#include <concepts>
 #include <optional>
 #include <stdexcept>
 
@@ -24,6 +26,17 @@ using namespace db;
 using namespace turing::test;
 
 namespace {
+
+template <typename T>
+std::string valueText(const T& value) {
+    if constexpr (std::floating_point<T>) {
+        if (std::isnan(value)) {
+            return "NaN";
+        }
+    }
+
+    return fmt::format("{}", value);
+}
 
 // An entity an OPTIONAL MATCH did not match is an invalid ID, which reads as null
 template <typename IDType>
@@ -64,7 +77,7 @@ bool textOfConstant(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", column->at(rowIndex));
+    text = valueText(column->at(rowIndex));
     return true;
 }
 
@@ -86,7 +99,7 @@ bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", column->getRaw()[rowIndex]);
+    text = valueText(column->getRaw()[rowIndex]);
     return true;
 }
 
@@ -155,7 +168,7 @@ std::string elementText(const ListElementView& element) {
         break;
 
         case ListBufferTypeTag::Double:
-            return fmt::format("{}", element.getAs<double>());
+            return valueText(element.getAs<double>());
         break;
 
         case ListBufferTypeTag::Bool:
@@ -385,7 +398,7 @@ bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     const std::optional<Primitive>& value = column->getRaw()[rowIndex];
-    text = value ? fmt::format("{}", *value) : "null";
+    text = value ? valueText(*value) : "null";
     return true;
 }
 
@@ -398,7 +411,7 @@ bool textOfConst(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", (*column)[rowIndex]);
+    text = valueText((*column)[rowIndex]);
     return true;
 }
 
@@ -410,7 +423,7 @@ bool textOfOptionalConst(const Column* chunk, size_t rowIndex, std::string& text
     }
 
     const std::optional<Primitive>& value = (*column)[rowIndex];
-    text = value ? fmt::format("{}", *value) : "null";
+    text = value ? valueText(*value) : "null";
     return true;
 }
 
