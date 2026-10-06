@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <span>
 #include <sstream>
@@ -417,6 +418,31 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"head", &emitUnaryFunction<mlir::db::Head>},
     {"last", &emitUnaryFunction<mlir::db::Last>},
     {"tail", &emitUnaryFunction<mlir::db::Tail>},
+    {"abs", &emitUnaryFunction<mlir::db::Abs>},
+    {"sign", &emitUnaryFunction<mlir::db::Sign>},
+    {"ceil", &emitUnaryFunction<mlir::db::Ceil>},
+    {"floor", &emitUnaryFunction<mlir::db::Floor>},
+    {"round", &emitUnaryFunction<mlir::db::Round>},
+    {"sqrt", &emitUnaryFunction<mlir::db::Sqrt>},
+    {"exp", &emitUnaryFunction<mlir::db::Exp>},
+    {"log", &emitUnaryFunction<mlir::db::Log>},
+    {"log10", &emitUnaryFunction<mlir::db::Log10>},
+    {"sin", &emitUnaryFunction<mlir::db::Sin>},
+    {"cos", &emitUnaryFunction<mlir::db::Cos>},
+    {"tan", &emitUnaryFunction<mlir::db::Tan>},
+    {"cot", &emitUnaryFunction<mlir::db::Cot>},
+    {"asin", &emitUnaryFunction<mlir::db::Asin>},
+    {"acos", &emitUnaryFunction<mlir::db::Acos>},
+    {"atan", &emitUnaryFunction<mlir::db::Atan>},
+    {"degrees", &emitUnaryFunction<mlir::db::Degrees>},
+    {"radians", &emitUnaryFunction<mlir::db::Radians>},
+    {"haversin", &emitUnaryFunction<mlir::db::Haversin>},
+    {"toUpper", &emitUnaryFunction<mlir::db::ToUpper>},
+    {"toLower", &emitUnaryFunction<mlir::db::ToLower>},
+    {"trim", &emitUnaryFunction<mlir::db::Trim>},
+    {"ltrim", &emitUnaryFunction<mlir::db::LTrim>},
+    {"rtrim", &emitUnaryFunction<mlir::db::RTrim>},
+    {"reverse", &emitUnaryFunction<mlir::db::Reverse>},
 };
 
 using BinaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
@@ -8201,6 +8227,13 @@ mlir::Value DBProgramGenerator::constantBool(bool value) {
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
 }
 
+mlir::Value DBProgramGenerator::constantDouble(double value) {
+    const mlir::TypedAttr valueAttr = _opBuilder.getF64FloatAttr(value);
+    const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
+
+    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+}
+
 mlir::Value DBProgramGenerator::constantString(llvm::StringRef value) {
     const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
     const mlir::TypedAttr valueAttr = mlir::StringAttr::get(value, stringType);
@@ -8764,6 +8797,14 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         const mlir::db::ColumnType dateTimeType = allocColumnType(mlir::storage::DateTimeType::get(_mlirCtxt));
 
         _part._exprMap[expr] = _opBuilder.create<mlir::db::CurrentDateTime>(loc, dateTimeType).getResult();
+        return;
+    }
+
+    if (funcName == "pi") {
+        _part._exprMap[expr] = constantDouble(std::numbers::pi);
+        return;
+    } else if (funcName == "e") {
+        _part._exprMap[expr] = constantDouble(std::numbers::e);
         return;
     }
 

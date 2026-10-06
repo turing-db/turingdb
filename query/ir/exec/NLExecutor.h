@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "columns/ColumnOperator.h"
 #include "metadata/PropertyType.h"
@@ -15,6 +16,8 @@ class NLOutputSink;
 class LocalMemory;
 class NLSystemContext;
 class NLVectorSearchLoopData;
+
+enum class FloatFunctionKind : uint8_t;
 
 // Executes a translated NLProgram against a graph view
 class NLExecutor {
@@ -479,6 +482,14 @@ public:
     static NLUnaryFunctionKernel selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    template <template <typename> typename NumberFunctor>
+    static NLUnaryFunctionKernel selectNumberFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    template <FloatFunctionKind Kind>
+    static NLUnaryFunctionKernel selectFloatFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
     // what a label test, an edge type test and a merge produce - where an i1 value chunk

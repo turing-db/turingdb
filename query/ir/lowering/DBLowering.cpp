@@ -122,6 +122,10 @@ mlir::Type floatFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElemen
     return builder.getF64Type();
 }
 
+mlir::Type absFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    return inputElement;
+}
+
 mlir::Type booleanFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI1Type();
 }
@@ -173,6 +177,14 @@ mlir::Type listTailFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEle
     }
 
     return inputElement;
+}
+
+mlir::Type reverseFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    if (mlir::isa<storage::ListType, storage::ListElementType>(inputElement)) {
+        return inputElement;
+    }
+
+    return storage::StringType::get(builder.getContext());
 }
 
 // The nl sibling of each db system command. They are copied across one for one -
@@ -268,7 +280,34 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
     {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
-    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}}
+    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
+
+    {"db.abs",      {&emitNLUnaryFunction<nl::Abs>,      &absFunctionElement,     ResultNullability::FollowsInput}},
+    {"db.sign",     {&emitNLUnaryFunction<nl::Sign>,     &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.ceil",     {&emitNLUnaryFunction<nl::Ceil>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.floor",    {&emitNLUnaryFunction<nl::Floor>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.round",    {&emitNLUnaryFunction<nl::Round>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.sqrt",     {&emitNLUnaryFunction<nl::Sqrt>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.exp",      {&emitNLUnaryFunction<nl::Exp>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.log",      {&emitNLUnaryFunction<nl::Log>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.log10",    {&emitNLUnaryFunction<nl::Log10>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.sin",      {&emitNLUnaryFunction<nl::Sin>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.cos",      {&emitNLUnaryFunction<nl::Cos>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.tan",      {&emitNLUnaryFunction<nl::Tan>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.cot",      {&emitNLUnaryFunction<nl::Cot>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.asin",     {&emitNLUnaryFunction<nl::Asin>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.acos",     {&emitNLUnaryFunction<nl::Acos>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.atan",     {&emitNLUnaryFunction<nl::Atan>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.degrees",  {&emitNLUnaryFunction<nl::Degrees>,  &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.radians",  {&emitNLUnaryFunction<nl::Radians>,  &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.haversin", {&emitNLUnaryFunction<nl::Haversin>, &floatFunctionElement,   ResultNullability::FollowsInput}},
+
+    {"db.to_upper", {&emitNLUnaryFunction<nl::ToUpper>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.to_lower", {&emitNLUnaryFunction<nl::ToLower>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.trim",     {&emitNLUnaryFunction<nl::Trim>,     &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.ltrim",    {&emitNLUnaryFunction<nl::LTrim>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.rtrim",    {&emitNLUnaryFunction<nl::RTrim>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.reverse",  {&emitNLUnaryFunction<nl::Reverse>,  &reverseFunctionElement, ResultNullability::FollowsInput}}
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {

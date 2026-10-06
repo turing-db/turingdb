@@ -3,8 +3,10 @@
 #include <math.h>
 
 #include <limits>
+#include <numbers>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <type_traits>
 #include <vector>
@@ -558,6 +560,322 @@ struct ConversionFunctorFor<ToFloatFunction, Argument> {
 template <ConvertibleNumber Argument>
 struct ConversionFunctorFor<ToStringFunction, Argument> {
     using Type = ToStringFromValueFunction<Argument>;
+};
+
+// A function over a type-erased cell finds out per row what the cell holds. A null answers
+// null; any other type the function does not read is the row's type error.
+[[noreturn]] void throwCellTypeError(std::string_view functionName, std::string_view expected);
+
+template <typename Result, typename Visit>
+Result visitNumberCell(const ListElementView cell, std::string_view functionName, Visit&& visit) {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::Int) {
+        return visit(cell.getAs<types::Int64::Primitive>());
+    } else if (tag == ListBufferTypeTag::UInt) {
+        return visit(cell.getAs<types::UInt64::Primitive>());
+    } else if (tag == ListBufferTypeTag::Double) {
+        return visit(cell.getAs<types::Double::Primitive>());
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError(functionName, "a number");
+}
+
+std::optional<types::String::Primitive> cellString(const ListElementView cell, std::string_view functionName);
+
+// abs keeps the type each cell holds, so its answer is a cell of its own
+class TaggedAbsFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<ListElementView>;
+
+    explicit TaggedAbsFunction(QueryListBuffer* listBuffer);
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+};
+
+template <typename Number>
+class AbsFunction {
+public:
+    using ArgType = Number;
+    using ResultType = Number;
+    using TaggedCounterpart = TaggedAbsFunction;
+
+    ResultType operator()(const Number value) const {
+        if constexpr (std::is_unsigned_v<Number>) {
+            return value;
+        } else if constexpr (std::is_floating_point_v<Number>) {
+            return fabs(value);
+        } else {
+            // -value is undefined on the lowest int64; negating its unsigned form wraps it
+            // onto itself, as Java's Math.abs does
+            using Unsigned = std::make_unsigned_t<Number>;
+            return value < 0 ? static_cast<Number>(Unsigned {0} - static_cast<Unsigned>(value)) : value;
+        }
+    }
+};
+
+class TaggedSignFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+template <typename Number>
+class SignFunction {
+public:
+    using ArgType = Number;
+    using ResultType = types::Int64::Primitive;
+    using TaggedCounterpart = TaggedSignFunction;
+
+    ResultType operator()(const Number value) const {
+        return static_cast<ResultType>(value > Number {0}) - static_cast<ResultType>(value < Number {0});
+    }
+};
+
+enum class FloatFunctionKind : uint8_t {
+    Ceil,
+    Floor,
+    Round,
+    Sqrt,
+    Exp,
+    Log,
+    Log10,
+    Sin,
+    Cos,
+    Tan,
+    Cot,
+    Asin,
+    Acos,
+    Atan,
+    Degrees,
+    Radians,
+    Haversin,
+};
+
+std::string_view floatFunctionName(FloatFunctionKind kind);
+
+template <FloatFunctionKind Kind>
+class TaggedFloatFunction;
+
+template <FloatFunctionKind Kind, typename Number>
+class FloatFunction {
+public:
+    using ArgType = Number;
+    using ResultType = types::Double::Primitive;
+    using TaggedCounterpart = TaggedFloatFunction<Kind>;
+
+    ResultType operator()(const Number number) const {
+        const types::Double::Primitive value = static_cast<types::Double::Primitive>(number);
+
+        if constexpr (Kind == FloatFunctionKind::Ceil) {
+            return ceil(value);
+        } else if constexpr (Kind == FloatFunctionKind::Floor) {
+            return floor(value);
+        } else if constexpr (Kind == FloatFunctionKind::Round) {
+            // Cypher rounds a half-way value up, so round(-2.5) is -2 where C's round gives -3
+            const types::Double::Primitive floored = floor(value);
+            return value - floored >= 0.5 ? floored + 1.0 : floored;
+        } else if constexpr (Kind == FloatFunctionKind::Sqrt) {
+            return sqrt(value);
+        } else if constexpr (Kind == FloatFunctionKind::Exp) {
+            return exp(value);
+        } else if constexpr (Kind == FloatFunctionKind::Log) {
+            return log(value);
+        } else if constexpr (Kind == FloatFunctionKind::Log10) {
+            return log10(value);
+        } else if constexpr (Kind == FloatFunctionKind::Sin) {
+            return sin(value);
+        } else if constexpr (Kind == FloatFunctionKind::Cos) {
+            return cos(value);
+        } else if constexpr (Kind == FloatFunctionKind::Tan) {
+            return tan(value);
+        } else if constexpr (Kind == FloatFunctionKind::Cot) {
+            return 1.0 / tan(value);
+        } else if constexpr (Kind == FloatFunctionKind::Asin) {
+            return asin(value);
+        } else if constexpr (Kind == FloatFunctionKind::Acos) {
+            return acos(value);
+        } else if constexpr (Kind == FloatFunctionKind::Atan) {
+            return atan(value);
+        } else if constexpr (Kind == FloatFunctionKind::Degrees) {
+            return value * (180.0 / std::numbers::pi);
+        } else if constexpr (Kind == FloatFunctionKind::Radians) {
+            return value * (std::numbers::pi / 180.0);
+        } else {
+            static_assert(Kind == FloatFunctionKind::Haversin);
+            return (1.0 - cos(value)) / 2.0;
+        }
+    }
+};
+
+template <FloatFunctionKind Kind>
+class TaggedFloatFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Double::Primitive>;
+
+    ResultType operator()(const ArgType cell) const {
+        return visitNumberCell<ResultType>(cell, floatFunctionName(Kind), []<typename Number>(const Number number) -> ResultType {
+            return FloatFunction<Kind, Number> {}(number);
+        });
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+};
+
+template <typename TextFunctor>
+class TaggedTextFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::String::Primitive>;
+
+    TaggedTextFunction()
+        requires std::is_default_constructible_v<TextFunctor>
+    {
+    }
+
+    explicit TaggedTextFunction(StringBuffer* stringBuffer)
+        requires std::is_constructible_v<TextFunctor, StringBuffer*>
+        : _functor(stringBuffer)
+    {
+    }
+
+    ResultType operator()(const ArgType cell) const {
+        const std::optional<types::String::Primitive> text = cellString(cell, TextFunctor::NAME);
+
+        return text.has_value() ? ResultType {_functor(*text)} : std::nullopt;
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) const {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+
+private:
+    TextFunctor _functor;
+};
+
+// Only ASCII letters change case: every byte of a multi-byte UTF-8 character is at least
+// 0x80, so 'é' passes through both unchanged.
+class ToUpperFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::String::Primitive;
+    using TaggedCounterpart = TaggedTextFunction<ToUpperFunction>;
+
+    static constexpr std::string_view NAME = "toUpper";
+
+    explicit ToUpperFunction(StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType string) const;
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+};
+
+class ToLowerFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::String::Primitive;
+    using TaggedCounterpart = TaggedTextFunction<ToLowerFunction>;
+
+    static constexpr std::string_view NAME = "toLower";
+
+    explicit ToLowerFunction(StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType string) const;
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+};
+
+enum class TrimSide : uint8_t {
+    Start,
+    End,
+    Both,
+};
+
+template <TrimSide Side>
+class TrimFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::String::Primitive;
+    using TaggedCounterpart = TaggedTextFunction<TrimFunction<Side>>;
+
+    static constexpr std::string_view NAME = Side == TrimSide::Start ? "ltrim"
+                                           : Side == TrimSide::End   ? "rtrim"
+                                                                     : "trim";
+
+    ResultType operator()(const ArgType string) const {
+        constexpr std::string_view whitespace = " \t\n\v\f\r";
+
+        ResultType trimmed = string;
+
+        if constexpr (Side != TrimSide::End) {
+            const size_t first = trimmed.find_first_not_of(whitespace);
+            trimmed.remove_prefix(first == std::string_view::npos ? trimmed.size() : first);
+        }
+
+        if constexpr (Side != TrimSide::Start) {
+            const size_t last = trimmed.find_last_not_of(whitespace);
+            trimmed.remove_suffix(last == std::string_view::npos ? trimmed.size() : trimmed.size() - last - 1);
+        }
+
+        return trimmed;
+    }
+};
+
+class ListReverseFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = types::List::Primitive;
+
+    explicit ListReverseFunction(QueryListBuffer* listBuffer);
+
+    ResultType operator()(const ArgType list) const;
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+};
+
+class ReverseFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::String::Primitive;
+
+    explicit ReverseFunction(StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType string) const;
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+};
+
+// A cell may hold a string or a list, so its reversal is a cell of its own
+class TaggedReverseFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<ListElementView>;
+
+    TaggedReverseFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+    StringBuffer* _stringBuffer {nullptr};
 };
 
 // The list family over a type-erased cell, which is what a list looks like wherever its

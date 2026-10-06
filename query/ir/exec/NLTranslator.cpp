@@ -144,6 +144,33 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
     {"nl.last",       &NLExecutor::selectFunction<ListLastFunction>},
     {"nl.tail",       &NLExecutor::selectFunction<ListTailFunction>},
+
+    {"nl.abs",      &NLExecutor::selectNumberFunction<AbsFunction>},
+    {"nl.sign",     &NLExecutor::selectNumberFunction<SignFunction>},
+    {"nl.ceil",     &NLExecutor::selectFloatFunction<FloatFunctionKind::Ceil>},
+    {"nl.floor",    &NLExecutor::selectFloatFunction<FloatFunctionKind::Floor>},
+    {"nl.round",    &NLExecutor::selectFloatFunction<FloatFunctionKind::Round>},
+    {"nl.sqrt",     &NLExecutor::selectFloatFunction<FloatFunctionKind::Sqrt>},
+    {"nl.exp",      &NLExecutor::selectFloatFunction<FloatFunctionKind::Exp>},
+    {"nl.log",      &NLExecutor::selectFloatFunction<FloatFunctionKind::Log>},
+    {"nl.log10",    &NLExecutor::selectFloatFunction<FloatFunctionKind::Log10>},
+    {"nl.sin",      &NLExecutor::selectFloatFunction<FloatFunctionKind::Sin>},
+    {"nl.cos",      &NLExecutor::selectFloatFunction<FloatFunctionKind::Cos>},
+    {"nl.tan",      &NLExecutor::selectFloatFunction<FloatFunctionKind::Tan>},
+    {"nl.cot",      &NLExecutor::selectFloatFunction<FloatFunctionKind::Cot>},
+    {"nl.asin",     &NLExecutor::selectFloatFunction<FloatFunctionKind::Asin>},
+    {"nl.acos",     &NLExecutor::selectFloatFunction<FloatFunctionKind::Acos>},
+    {"nl.atan",     &NLExecutor::selectFloatFunction<FloatFunctionKind::Atan>},
+    {"nl.degrees",  &NLExecutor::selectFloatFunction<FloatFunctionKind::Degrees>},
+    {"nl.radians",  &NLExecutor::selectFloatFunction<FloatFunctionKind::Radians>},
+    {"nl.haversin", &NLExecutor::selectFloatFunction<FloatFunctionKind::Haversin>},
+
+    {"nl.to_upper", &NLExecutor::selectFunction<ToUpperFunction>},
+    {"nl.to_lower", &NLExecutor::selectFunction<ToLowerFunction>},
+    {"nl.trim",     &NLExecutor::selectFunction<TrimFunction<TrimSide::Both>>},
+    {"nl.ltrim",    &NLExecutor::selectFunction<TrimFunction<TrimSide::Start>>},
+    {"nl.rtrim",    &NLExecutor::selectFunction<TrimFunction<TrimSide::End>>},
+    {"nl.reverse",  &NLExecutor::selectReverse},
 };
 
 NLUnaryFunctionSelector lookupUnaryFunctionSelector(mlir::Operation& operation) {

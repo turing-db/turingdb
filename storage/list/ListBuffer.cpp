@@ -1,5 +1,6 @@
 #include "ListBuffer.h"
 
+#include <ranges>
 #include <type_traits>
 #include <vector>
 
@@ -93,6 +94,24 @@ ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
         cursor.writeRaw(element.getData(), numBytes);
     }
     for (const ListElementView element : b) {
+        const size_t numBytes = tagSize + elementValueSize(element);
+        cursor.writeRaw(element.getData(), numBytes);
+    }
+
+    return cursor.getView();
+}
+
+template <size_t N>
+ListView ListBuffer<N>::reverse(ListView list) {
+    size_t valueBytes = 0;
+    for (const ListElementView element : list) {
+        valueBytes += elementValueSize(element);
+    }
+
+    ListWriteCursor cursor = reserveList(list.size(), valueBytes);
+    constexpr size_t tagSize = decltype(_elements)::tagSize();
+
+    for (const ListElementView element : std::views::reverse(list.elements())) {
         const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }

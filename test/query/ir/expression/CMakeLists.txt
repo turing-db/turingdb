@@ -228,6 +228,15 @@ target_link_libraries(test_query_ir_parenthesised_property PRIVATE turing_ir_tes
 add_turing_test(test_query_ir_function_call_property FunctionCallPropertyTest.cpp)
 target_link_libraries(test_query_ir_function_call_property PRIVATE turing_ir_test_write_query_s)
 
+add_turing_test(test_query_ir_numeric_function NumericFunctionTest.cpp)
+target_link_libraries(test_query_ir_numeric_function PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_string_function StringFunctionTest.cpp)
+target_link_libraries(test_query_ir_string_function PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_untyped_element_function UntypedElementFunctionTest.cpp)
+target_link_libraries(test_query_ir_untyped_element_function PRIVATE turing_ir_test_write_query_s)
+
 # A comparison chain's middle operand is one expression both of its sides point at, read
 # off the codegen dump.
 add_ir_tests(test_query_ir_comparison_chain_codegen ComparisonChainCodegenTest.cpp)

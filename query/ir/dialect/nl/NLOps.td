@@ -2692,6 +2692,33 @@ def Head : NLUnaryFunctionOp<"head", [ConstantThroughOperands]>;
 def Last : NLUnaryFunctionOp<"last", [ConstantThroughOperands]>;
 def Tail : NLUnaryFunctionOp<"tail", [ConstantThroughOperands]>;
 
+def Abs : NLUnaryFunctionOp<"abs", [ConstantThroughOperands]>;
+def Sign : NLUnaryFunctionOp<"sign", [ConstantThroughOperands]>;
+def Ceil : NLUnaryFunctionOp<"ceil", [ConstantThroughOperands]>;
+def Floor : NLUnaryFunctionOp<"floor", [ConstantThroughOperands]>;
+def Round : NLUnaryFunctionOp<"round", [ConstantThroughOperands]>;
+def Sqrt : NLUnaryFunctionOp<"sqrt", [ConstantThroughOperands]>;
+def Exp : NLUnaryFunctionOp<"exp", [ConstantThroughOperands]>;
+def Log : NLUnaryFunctionOp<"log", [ConstantThroughOperands]>;
+def Log10 : NLUnaryFunctionOp<"log10", [ConstantThroughOperands]>;
+def Sin : NLUnaryFunctionOp<"sin", [ConstantThroughOperands]>;
+def Cos : NLUnaryFunctionOp<"cos", [ConstantThroughOperands]>;
+def Tan : NLUnaryFunctionOp<"tan", [ConstantThroughOperands]>;
+def Cot : NLUnaryFunctionOp<"cot", [ConstantThroughOperands]>;
+def Asin : NLUnaryFunctionOp<"asin", [ConstantThroughOperands]>;
+def Acos : NLUnaryFunctionOp<"acos", [ConstantThroughOperands]>;
+def Atan : NLUnaryFunctionOp<"atan", [ConstantThroughOperands]>;
+def Degrees : NLUnaryFunctionOp<"degrees", [ConstantThroughOperands]>;
+def Radians : NLUnaryFunctionOp<"radians", [ConstantThroughOperands]>;
+def Haversin : NLUnaryFunctionOp<"haversin", [ConstantThroughOperands]>;
+
+def ToUpper : NLUnaryFunctionOp<"to_upper", [ConstantThroughOperands]>;
+def ToLower : NLUnaryFunctionOp<"to_lower", [ConstantThroughOperands]>;
+def Trim : NLUnaryFunctionOp<"trim", [ConstantThroughOperands]>;
+def LTrim : NLUnaryFunctionOp<"ltrim", [ConstantThroughOperands]>;
+def RTrim : NLUnaryFunctionOp<"rtrim", [ConstantThroughOperands]>;
+def Reverse : NLUnaryFunctionOp<"reverse", [ConstantThroughOperands]>;
+
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 
