@@ -153,3 +153,23 @@ TEST_F(DeepChainQueryTest, rerootsAPatternFilteredOnALongChain) {
     const std::vector<StringRowSink::Row> expected {{"2"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
+
+TEST_F(DeepChainQueryTest, pushesALongChainOfFiltersOnTheHopStart) {
+    const std::string query = "MATCH (a)-->(b) WITH a, b" + repeat(" WITH a, b WHERE a.name <> 'Remy'") + " RETURN count(b)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"14"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepChainQueryTest, pushesALongChainOfFiltersOnTheHopEnd) {
+    const std::string query = "MATCH (a)-->(b) WITH a, b" + repeat(" WITH a, b WHERE b.name <> 'Gym'") + " RETURN count(b)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"15"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
