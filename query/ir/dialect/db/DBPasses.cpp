@@ -3987,8 +3987,8 @@ bool isRowWiseOp(Operation* op) {
                CosineSimilarity, EuclideanDistance>(op);
 }
 
-bool aggregatesDistinctly(GroupAggregate groupAggregate) {
-    for (const int64_t kind : groupAggregate.getKinds()) {
+bool aggregatesDistinctly(llvm::ArrayRef<int64_t> kinds) {
+    for (const int64_t kind : kinds) {
         switch (static_cast<storage::GroupAggregateKind>(kind)) {
             case storage::GroupAggregateKind::Min:
             case storage::GroupAggregateKind::Max:
@@ -4009,13 +4009,31 @@ bool aggregatesDistinctly(GroupAggregate groupAggregate) {
     return true;
 }
 
+size_t collectValueCount(Collect collect) {
+    const size_t aggregateCount = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {}).size();
+
+    return collect.getColumns().size() - collect.getKeyCount() - aggregateCount;
+}
+
+// Every list a collect builds dedupes its values, and every aggregate beside them ignores a
+// repeated row
+bool collectsDistinctly(Collect collect) {
+    const llvm::ArrayRef<int64_t> kinds = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {});
+    const llvm::ArrayRef<int64_t> distinctValues = collect.getDistinctValues().value_or(llvm::ArrayRef<int64_t> {});
+    const llvm::SmallDenseSet<int64_t, 4> dedupedValues(distinctValues.begin(), distinctValues.end());
+
+    return dedupedValues.size() == collectValueCount(collect) && aggregatesDistinctly(kinds);
+}
+
 bool readsRowsAsASet(Operation* op, llvm::SmallVectorImpl<Operation*>& passedOn) {
     if (isa<RemoveDuplicates>(op)) {
         return true;
     } else if (Count count = dyn_cast<Count>(op)) {
         return count.getDistinct();
     } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
-        return aggregatesDistinctly(groupAggregate);
+        return aggregatesDistinctly(groupAggregate.getKinds());
+    } else if (Collect collect = dyn_cast<Collect>(op)) {
+        return collectsDistinctly(collect);
     } else if (isRowWiseOp(op) || isa<FilterOp, ExplorePaths>(op) || isEdgeHop(op)) {
         passedOn.push_back(op);
         return true;
@@ -4161,12 +4179,6 @@ bool trimsColumns(Operation* op) {
 
 size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
     return op->getNumOperands() - layout._operandOffset - layout._trailingOperandCount;
-}
-
-size_t collectValueCount(Collect collect) {
-    const size_t aggregateCount = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {}).size();
-
-    return collect.getColumns().size() - collect.getKeyCount() - aggregateCount;
 }
 
 void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {

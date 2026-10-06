@@ -48,9 +48,14 @@ protected:
         runQuery(std::string("EXPLAIN (after fuse_explore_distinct_ends) ") + std::string(query), sink);
 
         const std::string_view after = dumpOf(sink, "after fuse_explore_distinct_ends");
-        EXPECT_TRUE(contains(after, "db.explore_paths")) << after;
 
-        return contains(after, " distinct");
+        // A distinct collect or count prints the word too, so only the exploration's line is read
+        const size_t exploration = after.find("db.explore_paths");
+        EXPECT_NE(exploration, std::string_view::npos) << after;
+
+        const std::string_view explorationLine = after.substr(exploration, after.find('\n', exploration) - exploration);
+
+        return contains(explorationLine, " distinct");
     }
 
     // The DISTINCT query must emit the distinct rows of the same query without DISTINCT
@@ -126,6 +131,30 @@ TEST_F(ExploreBoundAndDistinctCypherTest, explainShowsTheDistinctExploration) {
     EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN DISTINCT n.name, e"));
     EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN count(*)"));
     EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN n.name, m.name"));
+}
+
+TEST_F(ExploreBoundAndDistinctCypherTest, explainShowsTheDistinctExplorationUnderACollect) {
+    EXPECT_TRUE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN collect(DISTINCT m)"));
+    EXPECT_TRUE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN n.name, collect(DISTINCT m.name)"));
+    EXPECT_TRUE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN collect(DISTINCT m.name), count(DISTINCT n)"));
+    EXPECT_TRUE(exploresDistinctly("MATCH (n:Person)-[e]->+(m) WITH collect(DISTINCT m) AS reached "
+                                   "RETURN reduce(s = 0, x IN reached | s + 1)"));
+
+    // A repeated row lands in the list, or is counted beside it
+    EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN collect(m)"));
+    EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN collect(DISTINCT m), collect(m.name)"));
+    EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN collect(DISTINCT m), count(m)"));
+}
+
+TEST_F(ExploreBoundAndDistinctCypherTest, distinctCollectGathersTheDeduplicatedEnds) {
+    StringRowSink plain;
+    runQuery("MATCH (n:Person)-[e]->+(m) RETURN m.name", plain);
+    const size_t distinctEnds = deduplicated(plain.getRows()).size();
+
+    StringRowSink collected;
+    runQuery("MATCH (n:Person)-[e]->+(m) WITH collect(DISTINCT m.name) AS names RETURN size(names)", collected);
+    ASSERT_EQ(collected.getRows().size(), 1u);
+    EXPECT_EQ(collected.getRows().front().front(), std::to_string(distinctEnds));
 }
 
 TEST_F(ExploreBoundAndDistinctCypherTest, distinctExplorationEmitsTheDeduplicatedRows) {
