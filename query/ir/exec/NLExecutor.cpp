@@ -5028,9 +5028,17 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
     getOutEdgesWriter.setEdgeIDs(outputEdges);
     getOutEdgesWriter.setTgtIDs(outputNodes);
 
-    GetPropertiesWithNullChunkWriter<EdgeID, T> getPropertiesWriter(
-        view, state->getPropertyType(), outputEdges);
+    const PropertyTypeID weightType = state->getPropertyType();
+    GetPropertiesWithNullChunkWriter<EdgeID, T> getPropertiesWriter(view, weightType, outputEdges);
     getPropertiesWriter.setOutput(properties);
+
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    NLWrittenValues& written = context->getWrittenValues();
+    if (writeBuffer) {
+        written.indexUpdates(writeBuffer);
+    }
+
+    const bool hasUpdates = writeBuffer && written.hasUpdates();
 
     const std::unordered_set<NodeID>& targetNodes = state->targets();
 
@@ -5066,6 +5074,15 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
 
         getPropertiesWriter.reset();
         getPropertiesWriter.fill(std::numeric_limits<size_t>::max());
+
+        if (hasUpdates) {
+            for (size_t row = 0; row < properties->size(); row++) {
+                const CommitWriteBuffer::SupportedTypeVariant* update = written.findEdgeUpdate((*outputEdges)[row], weightType);
+                if (update) {
+                    (*properties)[row] = written.read<T>(*update);
+                }
+            }
+        }
 
         // loop over all the edge properties
         for (size_t i = 0; i < properties->size(); ++i) {
