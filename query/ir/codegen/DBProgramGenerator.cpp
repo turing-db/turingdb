@@ -7252,6 +7252,22 @@ void DBProgramGenerator::collectElementCarrySet(CarrySet& carrySet) {
     } else {
         collectCarrySet(carrySet);
     }
+
+    llvm::SmallVector<mlir::Value> projectedColumns;
+    for (const auto& [decl, column] : _part._projectedColumns) {
+        const bool isCarriedAlready = llvm::is_contained(carrySet._columns, column)
+                                   || llvm::is_contained(projectedColumns, column);
+        const bool needsCarrying = holdsTheRowsInFlight(column)
+                                && !yieldsConstantColumn(column, _constantColumns)
+                                && !isCarriedAlready;
+
+        if (needsCarrying) {
+            projectedColumns.push_back(column);
+        }
+    }
+
+    std::ranges::sort(projectedColumns, computedBefore);
+    carrySet._columns.append(projectedColumns.begin(), projectedColumns.end());
 }
 
 void DBProgramGenerator::generateElementRegion(mlir::Region& region,
