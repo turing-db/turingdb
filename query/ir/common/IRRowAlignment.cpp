@@ -29,9 +29,9 @@ bool sameRowSource(mlir::Value column, mlir::Value reference) {
 }
 
 // The chunk a column takes its rows from: one computed row by row over other chunks holds
-// the rows they hold, so the walk ends on a chunk a step bound. Null where the column
-// brings no rows of its own - every operand a constant or a handle - or where its
-// operands disagree, which is IR no step could run.
+// the rows they hold, so the walk ends on a chunk a step bound, or on one computed over no
+// chunk at all - every operand a constant or a handle, as a CREATE over the single empty
+// row. Null where its operands disagree, which is IR no step could run.
 mlir::Value rowSource(mlir::Value column) {
     mlir::Operation* const definingOp = column.getDefiningOp();
 
@@ -67,6 +67,10 @@ mlir::Value rowSource(mlir::Value column) {
         }
 
         source = operandSource;
+    }
+
+    if (!source) {
+        return column;
     }
 
     return source;
