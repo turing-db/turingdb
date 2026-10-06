@@ -483,6 +483,63 @@ def ListPredicate : NLOp<"list_predicate", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* Reduce
+*/
+def Reduce : NLOp<"reduce", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise fold of the elements of each row's list into one value per row";
+
+  let description = [{
+    Imperative counterpart of db.reduce. Row r of the result is the initial value of row
+    r, replaced by what the body yields for it and each element of row r's list in turn:
+
+      %sum = nl.reduce(%xs, %zero, {%n}) ({
+        ^bb0(%x: !nl.chunk<!storage.nullable<i64>>,
+             %acc: !nl.chunk<!storage.nullable<i64>>,
+             %nIn: !nl.chunk<!storage.node_id>):
+          %next = nl.add %acc, %x : ...
+          nl.reduce_yield %next : !nl.chunk<!storage.nullable<i64>>
+      }) : (!nl.chunk<!storage.nullable<!storage.list<i64>>>,
+            !nl.chunk<i64>,
+            !nl.chunk<!storage.node_id>)
+        -> !nl.chunk<!storage.nullable<i64>>
+
+    Each element depends on the accumulator the previous one left, so the body runs once
+    per element position rather than once per chunk of elements: run k holds element k of
+    every row whose list is longer than k, beside that row's accumulator and carried
+    chunks. The accumulator chunk has the result's type; the initial value and the body's
+    value are written into it, so either may be the narrower type it holds - a plain
+    value where it is nullable, a list of any element type where it holds lists of tagged
+    cells, any value where it holds tagged cells.
+  }];
+
+  let arguments = (ins NLChunk:$source, NLChunk:$initial_value, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLChunk:$result);
+
+  // Exactly one block, ending in an nl.reduce_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` $initial_value `,` `{` $columns_to_filter `}` `)` $body attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* ReduceYield
+*/
+def ReduceYield : NLOp<"reduce_yield", [Pure, Terminator, HasParent<"Reduce">]> {
+  let summary = "Name the accumulator an nl.reduce's body computed for each element";
+
+  let arguments = (ins NLChunk:$value);
+
+  let assemblyFormat = [{
+    $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
 * ComprehensionYield
 */
 def ComprehensionYield : NLOp<"comprehension_yield",

@@ -28,6 +28,7 @@
 #include "StringBucket.h"
 
 #include "expr/All.h"
+#include "expr/ExprChildren.h"
 #include "expr/Expr.h"
 
 #include "BioAssert.h"
@@ -80,6 +81,34 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
     }
 
     return EvaluatedType::Invalid;
+}
+
+// The type a reduce's accumulator takes once it has held @param accumulator and then
+// @param value: what a CASE unifies, and a tagged cell when the two share no column type
+EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
+    if (accumulator == EvaluatedType::ListItem) {
+        return accumulator;
+    }
+
+    const EvaluatedType unified = unifiedBranchType(accumulator, value);
+    if (unified == EvaluatedType::Invalid) {
+        return EvaluatedType::ListItem;
+    }
+
+    return unified;
+}
+
+ListShape accumulatedShape(const ListShape& accumulator, const ListShape& value) {
+    const bool sameShape = accumulator.getLeafType() == value.getLeafType()
+                        && accumulator.getDepth() == value.getDepth();
+
+    if (sameShape || !value.isList()) {
+        return accumulator;
+    } else if (!accumulator.isList()) {
+        return value;
+    }
+
+    return ListShape(EvaluatedType::Invalid, 1);
 }
 
 // A type-erased cell concatenates as the text it holds, which is how the element of a list
@@ -300,6 +329,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         break;
         case Expr::Kind::LIST_PREDICATE:
             analyzeListPredicateExpr(static_cast<ListPredicateExpr*>(expr));
+        break;
+        case Expr::Kind::REDUCE:
+            analyzeReduceExpr(static_cast<ReduceExpr*>(expr));
         break;
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
@@ -2246,6 +2278,117 @@ void ExprAnalyzer::analyzeListPredicateExpr(ListPredicateExpr* expr) {
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool));
+}
+
+void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
+    Expr* const initialValue = expr->getInitialValue();
+    Expr* const source = expr->getSource();
+    analyzeExpr(initialValue);
+    analyzeExpr(source);
+
+    const EvaluatedType sourceType = source->getType();
+
+    const bool iteratesAList = sourceType == EvaluatedType::List
+                            || sourceType == EvaluatedType::ListItem
+                            || sourceType == EvaluatedType::Null;
+
+    if (!iteratesAList) {
+        throwError(fmt::format("A reduce iterates a list, not '{}'", EvaluatedTypeName::value(sourceType)),
+                   expr);
+    }
+
+    const std::string_view accumulatorName = expr->getAccumulatorSymbol()->getName();
+    const std::string_view itemName = expr->getItemSymbol()->getName();
+
+    for (const std::string_view name : {accumulatorName, itemName}) {
+        if (_ctxt->hasDecl(name)) {
+            throwError(fmt::format("Variable '{}' is already declared", name), expr);
+        }
+    }
+
+    if (accumulatorName == itemName) {
+        throwError(fmt::format("Variable '{}' is already declared", itemName), expr);
+    }
+
+    const ListShape& sourceShape = source->getListShape();
+    const EvaluatedType itemType = sourceType == EvaluatedType::Null ? EvaluatedType::Null
+                                                                     : sourceShape.unwoundType();
+
+    VarDecl* const itemDecl = _ctxt->getOrCreateNamedVariable(_ast, itemType, itemName);
+    itemDecl->setIsUnwound(true);
+    itemDecl->setListShape(sourceShape.unwound());
+
+    VarDecl* const accumulatorDecl = _ctxt->getOrCreateNamedVariable(_ast, initialValue->getType(), accumulatorName);
+    accumulatorDecl->setListShape(initialValue->getListShape());
+
+    expr->setItemDecl(itemDecl);
+    expr->setAccumulatorDecl(accumulatorDecl);
+
+    // The accumulator holds the initial value and then whatever the expression computed
+    // from it, so its type is what both share. Reading it as the initial value's alone
+    // would fold `acc + x` to null under `reduce(acc = null, ...)`
+    Expr* const expression = expr->getExpression();
+
+    while (true) {
+        analyzeExpr(expression);
+
+        const EvaluatedType accumulatorType = accumulatorDecl->getType();
+        const ListShape& accumulatorShape = accumulatorDecl->getListShape();
+
+        const EvaluatedType widenedType = accumulatedType(accumulatorType, expression->getType());
+        const ListShape widenedShape = accumulatedShape(accumulatorShape, expression->getListShape());
+
+        const bool settled = widenedType == accumulatorType
+                          && widenedShape.getLeafType() == accumulatorShape.getLeafType()
+                          && widenedShape.getDepth() == accumulatorShape.getDepth();
+
+        if (settled) {
+            break;
+        }
+
+        accumulatorDecl->setType(widenedType);
+        accumulatorDecl->setListShape(widenedShape);
+        forgetAnalysis(expression);
+    }
+
+    _ctxt->dropVariable(itemName);
+    _ctxt->dropVariable(accumulatorName);
+
+    if (expression->isAggregate()) {
+        throwError(fmt::format("Aggregate functions may not be used over the elements of a "
+                               "reduce: '{}' names one element, not a group",
+                               itemName),
+                   expr);
+    }
+
+    const EvaluatedType reducedType = accumulatorDecl->getType();
+
+    expr->setType(reducedType);
+    expr->setListShape(accumulatorDecl->getListShape());
+    expr->setDynamic();
+
+    if (initialValue->isAggregate() || source->isAggregate()) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, reducedType));
+}
+
+void ExprAnalyzer::forgetAnalysis(const Expr* expr) {
+    std::vector<const Expr*> pending {expr};
+    std::vector<const Expr*> children;
+
+    while (!pending.empty()) {
+        const Expr* const current = pending.back();
+        pending.pop_back();
+
+        _analyzedExprs.erase(current);
+
+        children.clear();
+        if (ExprChildren::collect(current, children)) {
+            pending.insert(pending.end(), children.begin(), children.end());
+        }
+    }
 }
 
 void ExprAnalyzer::analyzePatternComprehensionExpr(PatternComprehensionExpr* expr) {

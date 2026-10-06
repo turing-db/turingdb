@@ -418,6 +418,13 @@ public:
     // the same way, and each row is decided from the tally of what its elements answered
     static void runListPredicate(NLExecutionContext* context, NLFunctionData* data);
 
+    // Fold each row's list into one value (nl.reduce): the body runs once per element
+    // position over the rows whose list reaches it, reading and replacing their accumulator
+    static void runReduce(NLExecutionContext* context, NLFunctionData* data);
+
+    // Size a type-erased accumulator to the step's rows, every cell a tagged null
+    static NLCaseResetFn selectTaggedReduceReset();
+
     // Read one element's predicate: a mask, a nullable mask - where a null row is unknown
     // -, a type-erased cell holding a boolean or a null, or the null literal, which is
     // unknown for every row

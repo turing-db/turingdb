@@ -54,6 +54,7 @@ class Literal;
 class ListLiteral;
 class ListComprehensionExpr;
 class ListPredicateExpr;
+class ReduceExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class ListSliceExpr;
@@ -1073,6 +1074,11 @@ private:
     // Emits the db.list_predicate of `all(x IN xs WHERE p(x))` and its three siblings: the
     // same source, carry set and body, yielding the predicate's value for each element
     void translateListPredicateExpr(const Expr* expr, const ListPredicateExpr* predicate);
+
+    // Emits the db.reduce of `reduce(acc = init, x IN xs | f(acc, x))`: the source and
+    // initial value columns, the columns in flight as its carry set, and a body region
+    // binding the element and the accumulator, yielding the next accumulator
+    void translateReduceExpr(const Expr* expr, const ReduceExpr* reduce);
 
     // The columns an op over the elements of one row's list carries: every column in
     // flight, since the body reads the elements rather than the rows

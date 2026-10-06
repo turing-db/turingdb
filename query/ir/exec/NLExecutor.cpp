@@ -2010,6 +2010,11 @@ void caseWriteEntityCell(Column* result, size_t resultRow, const Column* value, 
     results[resultRow] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[valueRow];
 }
 
+void resetTaggedCells(Column* result, size_t rowCount) {
+    std::vector<ListElementView>& results = static_cast<ColumnVector<ListElementView>*>(result)->getRaw();
+    results.assign(rowCount, ListElementView::nullElement());
+}
+
 template <typename Primitive>
 void caseResetColumn(Column* result, size_t rowCount) {
     std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
@@ -7269,6 +7274,92 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
     });
 
     buildRowsBefore(sourceRows);
+}
+
+void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
+    NLReduceData* reduce = static_cast<NLReduceData*>(data);
+
+    const Column* source = reduce->getSource();
+    const NLUnwindElementCountFunction elementCount = reduce->getElementCountFunc();
+    const NLUnwindElementEmitFunction elementEmit = reduce->getElementEmitFunc();
+    const NLCellAbsentFunction cellAbsent = reduce->getCellAbsentFunc();
+    const Column* initialValue = reduce->getInitialValue();
+    const Column* value = reduce->getValue();
+    const NLStmtContainer* body = reduce->getStmts();
+    Column* accumulator = reduce->getResult();
+    LocalMemory* const memory = reduce->getMemory();
+    ListBuffer<>& listBuffer = memory->listBuffer();
+
+    const size_t sourceRows = source->size();
+    const size_t chunkSize = context->getChunkSize();
+
+    const auto write = [&](const NLReduceWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
+        if (rowWrite._write) {
+            rowWrite._write(accumulator, row, written, writtenRow);
+            return;
+        }
+
+        const ListBuffer<>::ListItemVariant item = rowWrite._taggedRead(written, writtenRow, memory);
+        const ListView cell = listBuffer.insert(std::span<const ListBuffer<>::ListItemVariant> {&item, 1});
+        static_cast<ColumnVector<ListElementView>*>(accumulator)->getRaw()[row] = cell.elements().front();
+    };
+
+    reduce->getReset()(accumulator, sourceRows);
+
+    std::vector<size_t>& elementCounts = reduce->elementCounts();
+    std::vector<size_t>& reachingRows = reduce->reachingRows();
+    elementCounts.assign(sourceRows, 0);
+    reachingRows.clear();
+
+    // A row whose cell holds no list keeps the null the reset left it, as Cypher reads
+    // `reduce(s = 0, x IN null | s + x)`
+    for (size_t row = 0; row < sourceRows; row++) {
+        if (cellAbsent(source, row)) {
+            continue;
+        }
+
+        write(reduce->getInitialWrite(), row, initialValue, row);
+
+        elementCounts[row] = elementCount(source, row);
+        if (elementCounts[row] > 0) {
+            reachingRows.push_back(row);
+        }
+    }
+
+    std::vector<size_t>& rowsRaw = reduce->getRows()->getRaw();
+    std::vector<size_t>& positionsRaw = reduce->getPositions()->getRaw();
+
+    for (size_t position = 0; !reachingRows.empty(); position++) {
+        for (size_t first = 0; first < reachingRows.size(); first += chunkSize) {
+            const size_t last = std::min(first + chunkSize, reachingRows.size());
+            rowsRaw.assign(reachingRows.begin() + first, reachingRows.begin() + last);
+
+            if (elementEmit) {
+                positionsRaw.assign(rowsRaw.size(), position);
+                elementEmit(source, reduce->getRows(), reduce->getPositions(), reduce->getElementOutput());
+            }
+
+            for (const NLCarriedColumn& carriedColumn : reduce->carriedColumns()) {
+                const auto gatherFunc = carriedColumn.getGatherFunc();
+                gatherFunc(carriedColumn.getInput(), reduce->getRows(), carriedColumn.getOutput());
+            }
+
+            runBody(context, body);
+
+            bioassert(value->size() == rowsRaw.size(),
+                      "Yielded accumulator of an nl.reduce is not row-aligned with its elements.");
+
+            for (size_t index = 0; index < rowsRaw.size(); index++) {
+                write(reduce->getValueWrite(), rowsRaw[index], value, index);
+            }
+        }
+
+        std::erase_if(reachingRows, [&](size_t row) { return elementCounts[row] == position + 1; });
+    }
+}
+
+NLCaseResetFn NLExecutor::selectTaggedReduceReset() {
+    return &resetTaggedCells;
 }
 
 NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {

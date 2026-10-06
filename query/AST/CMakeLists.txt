@@ -85,6 +85,7 @@ set(ast_sources
     expr/ListComprehensionExpr.cpp
     expr/PatternComprehensionExpr.cpp
     expr/ListPredicateExpr.cpp
+    expr/ReduceExpr.cpp
     expr/CaseExpr.cpp
     NodePattern.cpp
     EdgePattern.cpp

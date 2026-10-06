@@ -88,6 +88,7 @@
     #include "expr/ListExpr.h"
     #include "expr/ListComprehensionExpr.h"
     #include "expr/ListPredicateExpr.h"
+    #include "expr/ReduceExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
@@ -203,6 +204,7 @@
 %token<std::string_view> UNION
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
+%token<std::string_view> REDUCE
 %token<std::string_view> GRAPH
 %token<std::string_view> GRAPHS
 %token<std::string_view> AVAILABLE
@@ -331,6 +333,7 @@
 %type<std::pair<db::WhereClause*, db::Expr*>> comprehensionTail
 %type<db::ListComprehensionExpr*> filterExpr
 %type<db::Expr*> filterWith
+%type<db::Expr*> reduceExpr
 %type<db::ListPredicateExpr::Quantifier> filterKeyword
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
@@ -1524,6 +1527,7 @@ atomExpr
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | bracketExpr { $$ = $1; }
     | filterWith { $$ = $1; }
+    | reduceExpr { $$ = $1; }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
     | subqueryCount { $$ = $1; }
@@ -1836,6 +1840,13 @@ parenthesizedExpr
 
 filterWith
     : filterKeyword OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, $1, $3); LOC($$, @$); }
+    ;
+
+reduceExpr
+    : REDUCE OPAREN symbol ASSIGN expr COMMA symbol IN expr PIPE expr CPAREN {
+        $$ = ReduceExpr::create(ast, $3, $5, $7, $9, $11);
+        LOC($$, @$);
+      }
     ;
 
 filterKeyword

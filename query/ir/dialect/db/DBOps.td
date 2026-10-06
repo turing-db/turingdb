@@ -643,6 +643,60 @@ def ListPredicate : TuringOp<"list_predicate", [Pure]> {
 }
 
 /**
+* Reduce
+*/
+def Reduce : TuringOp<"reduce", [Pure]> {
+  let summary = "Fold the elements of each row's list into one value per row";
+
+  let description = [{
+    Cypher's `reduce(acc = init, x IN xs | f(acc, x))`. The op reads one list column and
+    produces one value per row: the initial value, replaced by what the body computes
+    from it and each element of the row's list in turn.
+
+      %sum = db.reduce(%xs, %zero, {%n}) ({
+        ^bb0(%x: !db.column<none>, %acc: !db.column<none>, %nIn: !db.column<!storage.node_id>):
+          %next = db.add %acc, %x : (!db.column<none>, !db.column<none>) -> !db.column<none>
+          db.reduce_yield %next : !db.column<none>
+      }) : (!db.column<none>, !db.column<none>, !db.column<!storage.node_id>) -> !db.column<none>
+
+    The region's entry block takes the element, the accumulator as the previous element
+    left it, and one argument per carried column - db.list_comprehension's carry set. The
+    body cuts nothing, so the yield names only the next accumulator.
+
+    The accumulator's type is resolved during lowering: it is the type the initial value
+    and the body's value share, so `reduce(s = 0, x IN [1.5] | s + x)` accumulates a
+    float. An empty list gives the initial value, and a row whose source cell is null
+    gives a null.
+  }];
+
+  let arguments = (ins Column:$source, Column:$initial_value, Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$result);
+
+  // Exactly one block, ending in a db.reduce_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` $initial_value `,` `{` $columns_to_filter `}` `)` $body attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* ReduceYield
+*/
+def ReduceYield : TuringOp<"reduce_yield", [Pure, Terminator, HasParent<"Reduce">]> {
+  let summary = "Name the accumulator a db.reduce's body computed for each element";
+
+  let arguments = (ins Column:$value);
+
+  let assemblyFormat = [{
+    $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
 * PatternComprehension
 */
 def PatternComprehension : TuringOp<"pattern_comprehension", [Pure]> {

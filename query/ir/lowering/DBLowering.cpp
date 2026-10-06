@@ -1121,6 +1121,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerListComprehension(listComprehension);
     } else if (mlir::db::ListPredicate listPredicate = mlir::dyn_cast<mlir::db::ListPredicate>(operation)) {
         lowerListPredicate(listPredicate);
+    } else if (mlir::db::Reduce reduce = mlir::dyn_cast<mlir::db::Reduce>(operation)) {
+        lowerReduce(reduce);
     } else if (mlir::db::PatternComprehension patternComprehension = mlir::dyn_cast<mlir::db::PatternComprehension>(operation)) {
         lowerPatternComprehension(patternComprehension);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
@@ -1710,6 +1712,139 @@ void DBLowering::lowerListPredicate(mlir::db::ListPredicate predicate) {
     placeholderYield->erase();
 
     _valueMap[predicate.getResult()] = truths.getResult();
+}
+
+void DBLowering::lowerReduce(mlir::db::Reduce reduce) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    ElementOperands operands;
+    lowerElementOperands(reduce.getSource(), reduce.getColumnsToFilter(), operands);
+
+    const mlir::Value initialChunk = rowAlignedChunk(mapValue(reduce.getInitialValue()), operands._sourceChunk);
+
+    // The body is lowered over an accumulator of the type the initial value has, and again
+    // over a wider one whenever what it computes does not fit: `s + x` over an integer s
+    // and a float x needs a float s. Each round widens, so this settles.
+    mlir::Type accumulated = accumulatedElement(mlir::Type {}, initialChunk.getType());
+
+    while (true) {
+        const nl::ChunkType accumulatorType = accumulatorChunkType(accumulated);
+        const mlir::Value initialAccumulator = promotedToAccumulated(initialChunk, accumulated);
+
+        llvm::SmallVector<mlir::Value, 8> operandChunks {operands._sourceChunk, initialAccumulator};
+        operandChunks.append(operands._carriedChunks.begin(), operands._carriedChunks.end());
+        setInsertionForNaryOp(operandChunks);
+
+        nl::Reduce reduced = _builder.create<nl::Reduce>(loc,
+                                                         accumulatorType,
+                                                         operands._sourceChunk,
+                                                         initialAccumulator,
+                                                         operands._carriedChunks);
+
+        llvm::SmallVector<mlir::Type, 4> argumentTypes = operands._argumentTypes;
+        argumentTypes[1] = accumulatorType;
+
+        mlir::Block* const bodyBlock = &reduced.getBody().emplaceBlock();
+        bodyBlock->addArguments(argumentTypes, operands._argumentLocations);
+
+        mlir::Value valueChunk;
+        mlir::Operation* const placeholderYield = lowerReduceBody(reduce.getBody().front(), bodyBlock, valueChunk);
+
+        const mlir::Type widened = accumulatedElement(accumulated, valueChunk.getType());
+        if (widened != accumulated) {
+            reduced->erase();
+            accumulated = widened;
+            continue;
+        }
+
+        valueChunk = promotedToAccumulated(valueChunk, accumulated);
+
+        _builder.setInsertionPointToEnd(bodyBlock);
+        _builder.create<nl::ReduceYield>(loc, valueChunk);
+        placeholderYield->erase();
+
+        _valueMap[reduce.getResult()] = reduced.getResult();
+        return;
+    }
+}
+
+mlir::Operation* DBLowering::lowerReduceBody(mlir::Block& dbBody, mlir::Block* nlBody, mlir::Value& valueChunk) {
+    const mlir::Value elementChunk = nlBody->getArgument(0);
+
+    // The yield the body decides is only known once it is lowered, and every insertion
+    // goes before a block's terminator, so one stands in for it meanwhile
+    _builder.setInsertionPointToEnd(nlBody);
+    mlir::Operation* const placeholderYield = _builder.create<nl::ReduceYield>(_builder.getUnknownLoc(), elementChunk);
+
+    for (size_t argumentIndex = 0; argumentIndex < nlBody->getNumArguments(); argumentIndex++) {
+        const unsigned index = static_cast<unsigned>(argumentIndex);
+        _valueMap[dbBody.getArgument(index)] = nlBody->getArgument(index);
+    }
+
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostLoopBody = nlBody;
+    _innermostCardinality = elementChunk;
+
+    for (mlir::Operation& operation : dbBody) {
+        mlir::db::ReduceYield yield = mlir::dyn_cast<mlir::db::ReduceYield>(operation);
+        if (yield) {
+            valueChunk = mapValue(yield.getValue());
+        } else {
+            lowerOperation(operation);
+        }
+    }
+
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    valueChunk = rowAlignedChunk(valueChunk, elementChunk);
+
+    return placeholderYield;
+}
+
+mlir::Type DBLowering::accumulatedElement(mlir::Type accumulated, mlir::Type chunkType) {
+    if (isUntypedNullChunk(chunkType)) {
+        return accumulated;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type element = chunkValueElement(_builder, chunkType);
+
+    if (!accumulated || accumulated == element) {
+        return element;
+    } else if (isNumericElement(accumulated) && isNumericElement(element)) {
+        return promoteNumeric(_builder, accumulated, element);
+    } else if (mlir::isa<storage::ListType>(accumulated) && mlir::isa<storage::ListType>(element)) {
+        return storage::ListType::get(context, storage::ListElementType::get(context));
+    }
+
+    return storage::ListElementType::get(context);
+}
+
+nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    // An accumulator that only ever held the null literal is that literal, which a CASE
+    // branch or a null test reads as the null it is rather than as a value of some type
+    if (!accumulated) {
+        return nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getNoneType()));
+    } else if (mlir::isa<storage::ListElementType>(accumulated)) {
+        return nl::ChunkType::get(context, accumulated);
+    }
+
+    return caseResultChunkType(accumulated);
+}
+
+mlir::Value DBLowering::promotedToAccumulated(mlir::Value chunk, mlir::Type accumulated) {
+    if (isUntypedNullChunk(chunk.getType())) {
+        return chunk;
+    }
+
+    const mlir::Type element = chunkValueElement(_builder, chunk.getType());
+    const bool promotes = element != accumulated && isNumericElement(element) && isNumericElement(accumulated);
+
+    return promotes ? chunkAsElement(chunk, accumulated) : chunk;
 }
 
 void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension comprehension) {

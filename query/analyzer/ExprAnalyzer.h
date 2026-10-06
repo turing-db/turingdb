@@ -40,6 +40,7 @@ class EdgePattern;
 class ListExpr;
 class ListComprehensionExpr;
 class ListPredicateExpr;
+class ReduceExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class ListSliceExpr;
@@ -92,6 +93,7 @@ public:
     void analyzeListComprehensionExpr(ListComprehensionExpr* expr);
     void analyzePatternComprehensionExpr(PatternComprehensionExpr* expr);
     void analyzeListPredicateExpr(ListPredicateExpr* expr);
+    void analyzeReduceExpr(ReduceExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeCountSubqueryExpr(CountSubqueryExpr* expr);
@@ -138,6 +140,10 @@ private:
 
     // The declaration a name reads as, noting it when it came from an enclosing scope
     VarDecl* resolveVariable(std::string_view name);
+
+    // Lets @param expr and the expressions under it be analyzed again, as a reduce's body
+    // is once its accumulator has widened
+    void forgetAnalysis(const Expr* expr);
 
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
     void analyzeMapEntries(Expr* expr, const MapLiteral* map);
