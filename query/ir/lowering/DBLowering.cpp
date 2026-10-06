@@ -5971,13 +5971,13 @@ void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
     mlir::Block* const insertBlock = ownerBlock(operandChunk);
     mlir::Block* const constantBlock = _constantComputationBlock ? _constantComputationBlock : _entryBlock;
 
-    const bool readsAConstant = insertBlock == _entryBlock
-                             || (yieldsConstantColumn(operandChunk, _constantColumns) && enclosesBlock(insertBlock, constantBlock));
+    const bool readsAConstant = yieldsConstantColumn(operandChunk, _constantColumns)
+                             && enclosesBlock(insertBlock, constantBlock);
 
     mlir::Operation* const operandDef = operandChunk.getDefiningOp();
 
     if (!readsAConstant) {
-        setInsertionInto(insertBlock);
+        setInsertionInto(deepestOwnerBlock({operandChunk}, _rootBlock));
     } else if (insertBlock != constantBlock) {
         _builder.setInsertionPointToStart(constantBlock);
     } else if (operandDef) {

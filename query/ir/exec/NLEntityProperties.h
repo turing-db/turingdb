@@ -49,7 +49,7 @@ private:
     bool _readsValues {false};
     std::vector<Property> _properties;
     std::vector<PropertyTypeID> _decided;
-    std::vector<PropertyTypeID> _updated;
+    std::vector<bool> _isDecided;
 
     template <TypedInternalID IDT>
     void collect(IDT entity);

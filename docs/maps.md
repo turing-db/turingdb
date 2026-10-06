@@ -82,15 +82,14 @@ So `WHERE n.attrs.x = 1` drops the rows whose map holds no `x`, and `WHERE NOT (
 drops them too.
 
 Beyond that and `keys()` / `properties()` below, a map value is passed through and rendered.
-Ordering by one, deduplicating on one, doing arithmetic on one and writing one back with `SET` are all rejected,
-`ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer, so they read
-as `Unsupported chunk element type`. So is `m.a.b`, a key of a map another map holds. The
-bracket form reads a key computed per row, so a key written in the query is sent to the dotted
+Ordering by one, deduplicating on one, doing arithmetic on one and writing one back with `SET` are
+all rejected, `ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer,
+so they read as `Unsupported chunk element type`. So is `m.a.b`, a key of a map another map holds.
+The bracket form reads a key computed per row, so a key written in the query is sent to the dotted
 form - `m.key`, `xs[0].a` - and `m.a['b']` is sent there too, which leaves a nested key with no
-spelling the query can write. A key computed per row still reaches one (`m.a[k]`). So is
-unwinding
-one: `UNWIND m.l AS x` is turned away with `UNWIND requires a list, not 'MapValue'`, whatever
-the entry's tag holds.
+spelling the query can write. A key computed per row still reaches one (`m.a[k]`). So is unwinding
+one: `UNWIND m.l AS x` is turned away with `UNWIND requires a list, not 'MapValue'`, whatever the
+entry's tag holds.
 
 # Reading through a nested value
 
@@ -112,6 +111,13 @@ variable to the same cell, so `UNWIND [{a: 1}] AS m RETURN m.a` reads through on
 dotted form `xs[0].a` needs a parser rule of its own (`propertyLookupExpr`), because a `.`
 after a `]` is otherwise no expression.
 
+## Maps inside stored lists
+
+A `ListContainer` keeps the map elements of its lists in a `MapContainer` of its own, created on
+first use (`ListContainer::getMaps`). A `MapContainer` holds its list values in a `ListContainer`
+by value, so the two types nest, but the objects form a tree. `EncodedList` encodes a map element
+as `[u64 length][EncodedMap bytes]`.
+
 # keys() and properties()
 
 `keys(x)` returns the property names of a node or a relationship, or the keys of a map, sorted.
@@ -122,12 +128,5 @@ return null for a null.
 An entity's properties are read across every datapart, newest first, so `n.age` set in a later
 commit appears once with its newest value, and one a later commit removed does not appear. The
 query's own writes are included: `MATCH (n) SET n.x = 1 RETURN keys(n)` lists `x`, and
-`CREATE (n {a: 1}) RETURN properties(n)` returns `{a: 1}`. A value the query wrote reads back
+`CREATE (n:T {a: 1}) RETURN properties(n)` returns `{a: 1}`. A value the query wrote reads back
 as the type the schema holds the property as.
-
-## Maps inside stored lists
-
-A `ListContainer` keeps the map elements of its lists in a `MapContainer` of its own, created on
-first use (`ListContainer::getMaps`). A `MapContainer` holds its list values in a `ListContainer`
-by value, so the two types nest, but the objects form a tree. `EncodedList` encodes a map element
-as `[u64 length][EncodedMap bytes]`.
