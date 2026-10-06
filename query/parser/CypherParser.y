@@ -1682,9 +1682,11 @@ edgePattern
 exprEdgePattern
     : TIP_TAIL_TAIL { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
     | TAIL_TAIL_TIP { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
+    | TIP_TAIL_TAIL GT { $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected); LOC($$, @$); } // Both arrow heads
     | TAIL_BRACKET edgeDetail CBRACK SUB     { $$ = $2; $$->setDirection(EdgePattern::Direction::Undirected); LOC($$, @$); } // Undirected
     | TIP_TAIL_BRACKET edgeDetail CBRACK SUB { $$ = $2; $$->setDirection(EdgePattern::Direction::Backward); LOC($$, @$); } // Directed backwards
     | TAIL_BRACKET edgeDetail CBRACK SUB GT  { $$ = $2; $$->setDirection(EdgePattern::Direction::Forward); LOC($$, @$); } // Directed forwards
+    | TIP_TAIL_BRACKET edgeDetail CBRACK SUB GT { $$ = $2; $$->setDirection(EdgePattern::Direction::Undirected); LOC($$, @$); } // Both arrow heads
     ;
 
 edgeDetail
