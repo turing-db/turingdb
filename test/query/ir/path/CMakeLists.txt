@@ -80,6 +80,8 @@ add_call_v3_test(test_query_ir_hop_predicate_non_seed_variable HopPredicateNonSe
 
 add_call_v3_test(test_query_ir_list_predicate_over_edge_list ListPredicateOverEdgeListTest.cpp)
 
+add_call_v3_test(test_query_ir_list_predicate_over_group ListPredicateOverGroupTest.cpp)
+
 add_call_v3_test(test_query_ir_named_path_cut NamedPathCutTest.cpp)
 
 add_call_v3_test(test_query_ir_collect_variable_length_edges CollectVariableLengthEdgesTest.cpp)

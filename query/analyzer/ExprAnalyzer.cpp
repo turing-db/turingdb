@@ -2194,7 +2194,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
         throwError(fmt::format("Variable '{}' is already declared", itemName), expr);
     }
 
-    const ListShape sourceShape = iteratesAPath ? ListShape(EvaluatedType::EdgePattern, 1) : source->getListShape();
+    const ListShape sourceShape = iteratesAPath ? ListShape(sourceType, 1) : source->getListShape();
 
     // A null list holds no element, so the variable never reads as anything but null
     const EvaluatedType itemType = sourceType == EvaluatedType::Null ? EvaluatedType::Null

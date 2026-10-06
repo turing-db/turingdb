@@ -3690,8 +3690,8 @@ struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet>
 };
 
 // A filter keeping the walks whose every hop passes a test, spelled as all() or none() over
-// the relationships or the nodes of the path: the walk can run the test on each hop as it
-// takes it, and never expand a hop that fails.
+// the relationships, the nodes or a group variable of the path: the walk can run the test on
+// each hop as it takes it, and never expand a hop that fails.
 struct ExploreListPredicate {
     FilterOp _filter;
     ExplorePaths _exploration;
@@ -3802,12 +3802,6 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
         return false;
     }
 
-    const storage::PathExpansionKind expansionKind = expansion.getKind();
-    const bool listsTheHops = expansionKind == storage::PathExpansionKind::Edges || expansionKind == storage::PathExpansionKind::Nodes;
-    if (!listsTheHops) {
-        return false;
-    }
-
     const Value paths = climbFilters(expansion.getPaths());
     ExplorePaths exploration = paths.getDefiningOp<ExplorePaths>();
     const bool walksThePaths = exploration && paths == exploration.getPaths();
@@ -3841,6 +3835,27 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
                                   ._imports = imports};
 
     return true;
+}
+
+unsigned hopArgumentOf(storage::PathExpansionKind expansionKind) {
+    constexpr unsigned HOP_SOURCE_ARGUMENT = 0;
+    constexpr unsigned HOP_EDGE_ARGUMENT = 1;
+    constexpr unsigned HOP_END_ARGUMENT = 2;
+
+    switch (expansionKind) {
+        case storage::PathExpansionKind::Sources:
+            return HOP_SOURCE_ARGUMENT;
+        break;
+        case storage::PathExpansionKind::Edges:
+            return HOP_EDGE_ARGUMENT;
+        break;
+        case storage::PathExpansionKind::Ends:
+        case storage::PathExpansionKind::Nodes:
+            return HOP_END_ARGUMENT;
+        break;
+    }
+
+    llvm_unreachable("Unknown path expansion kind");
 }
 
 // Clones the predicate's body at the rewriter's insertion point over the element column and
@@ -3919,10 +3934,8 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
         hopCarried.push_back(import ? hopImportArgument(exploration, hopBlock, import, rewriter) : Value {});
     }
 
-    const bool listsTheEdges = expansion.getKind() == storage::PathExpansionKind::Edges;
-    constexpr unsigned HOP_EDGE_ARGUMENT = 1;
-    constexpr unsigned HOP_END_ARGUMENT = 2;
-    const Value hopElement = hopBlock->getArgument(listsTheEdges ? HOP_EDGE_ARGUMENT : HOP_END_ARGUMENT);
+    const storage::PathExpansionKind expansionKind = expansion.getKind();
+    const Value hopElement = hopBlock->getArgument(hopArgumentOf(expansionKind));
 
     Yield hopYield = hopBlock->empty() ? Yield {} : dyn_cast<Yield>(hopBlock->getTerminator());
     if (hopYield) {
@@ -3944,7 +3957,7 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
         rewriter.create<Yield>(loc, ValueRange {hopTest});
     }
 
-    if (listsTheEdges) {
+    if (expansionKind != storage::PathExpansionKind::Nodes) {
         bypassFilter(filter);
         rewriter.eraseOp(filter);
     } else {

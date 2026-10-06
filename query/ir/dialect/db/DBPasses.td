@@ -144,7 +144,7 @@ def FuseExploreEndSet : Pass<"fuse_explore_end_set"> {
 }
 
 def FuseExploreListPredicate : Pass<"fuse_explore_list_predicate"> {
-    let summary = "Move a filter's all() or none() over the relationships or nodes of a path exploration into the exploration's hop predicate";
+    let summary = "Move a filter's all() or none() over the relationships, nodes or group variables of a path exploration into the exploration's hop predicate";
     let dependentDialects = ["mlir::db::DB"];
 }
 
