@@ -237,6 +237,9 @@ target_link_libraries(test_query_ir_string_function PRIVATE turing_ir_test_write
 add_turing_test(test_query_ir_untyped_element_function UntypedElementFunctionTest.cpp)
 target_link_libraries(test_query_ir_untyped_element_function PRIVATE turing_ir_test_write_query_s)
 
+add_turing_test(test_query_ir_function_argument_source FunctionArgumentSourceTest.cpp)
+target_link_libraries(test_query_ir_function_argument_source PRIVATE turing_ir_test_write_query_s)
+
 # A comparison chain's middle operand is one expression both of its sides point at, read
 # off the codegen dump.
 add_ir_tests(test_query_ir_comparison_chain_codegen ComparisonChainCodegenTest.cpp)
