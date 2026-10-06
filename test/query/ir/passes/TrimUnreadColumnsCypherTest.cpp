@@ -204,3 +204,36 @@ TEST_F(TrimUnreadColumnsCypherTest, collectsUngroupedWithAnUnreadList) {
     expectRows("MATCH (p:Person) WITH collect(p.name) AS names, collect(p.age) AS ages RETURN ages",
                {{"32, 32"}});
 }
+
+// KNOWS_WELL runs Remy -> Adam, Adam -> Remy and Ghosts -> Remy; only x = 1 passes the WHERE.
+TEST_F(TrimUnreadColumnsCypherTest, comprehendsAConstantListReadingTheSource) {
+    expectRows("MATCH (a)-[:KNOWS_WELL]->(b) RETURN b.name, [x IN [1, 2] WHERE x < 2 | a.name]",
+               {{"Adam", "Remy"}, {"Remy", "Adam"}, {"Remy", "Ghosts"}});
+}
+
+TEST_F(TrimUnreadColumnsCypherTest, comprehendsAConstantListReadingNothingCarried) {
+    expectRows("MATCH (a)-[:KNOWS_WELL]->(b) RETURN b.name, [x IN [1, 2] | x * 10]",
+               {{"Adam", "10, 20"}, {"Remy", "10, 20"}, {"Remy", "10, 20"}});
+}
+
+TEST_F(TrimUnreadColumnsCypherTest, comprehendsARowListReadingNothingCarried) {
+    expectRows("MATCH (a)-[:KNOWS_WELL]->(b) RETURN b.name, [x IN [a.name, 'x'] | x]",
+               {{"Adam", "Remy, x"}, {"Remy", "Adam, x"}, {"Remy", "Ghosts, x"}});
+}
+
+TEST_F(TrimUnreadColumnsCypherTest, comprehendsInsideAComprehension) {
+    expectRows("MATCH (a)-[:KNOWS_WELL]->(b) RETURN b.name, [x IN [1, 2] WHERE x > 1 | head([y IN [3] WHERE y > x | a.name])]",
+               {{"Adam", "Remy"}, {"Remy", "Adam"}, {"Remy", "Ghosts"}});
+}
+
+// Remy and Adam are 32; Ghosts has no age, so its predicate is null and the row is dropped.
+TEST_F(TrimUnreadColumnsCypherTest, filtersOnAListPredicateReadingTheSource) {
+    expectRows("MATCH (a)-[:KNOWS_WELL]->(b) WHERE any(x IN [30, 32] WHERE x = a.age) RETURN b.name",
+               {{"Adam"}, {"Remy"}});
+}
+
+// Remy and Adam give 0 + 1 + 32 + 2 + 32; Ghosts has no age.
+TEST_F(TrimUnreadColumnsCypherTest, reducesReadingTheSource) {
+    expectRows("MATCH (a)-[:KNOWS_WELL]->(b) RETURN b.name, reduce(s = 0, x IN [1, 2] | s + x + a.age)",
+               {{"Adam", "67"}, {"Remy", "67"}, {"Remy", "null"}});
+}

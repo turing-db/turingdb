@@ -158,7 +158,7 @@ def CountPathRows : Pass<"count_path_rows"> {
 }
 
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
-    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls and CASEs";
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs and the ops over the elements of a list";
     let dependentDialects = ["mlir::db::DB"];
 }
 

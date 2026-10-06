@@ -4619,53 +4619,130 @@ void trimLazyCase(LazyCase caseOp) {
     caseOp->eraseOperands(erased);
 }
 
-struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
-    void runOnOperation() override {
-        Operation* const root = getOperation();
+// The ops over the elements of a list repeat every carried column once per element, so a
+// column the body does not read leaves the operands and the body's arguments together. A
+// constant list is laid out over the rows of a carried column, so one row-carrying column
+// stays for it.
+void trimElementCarrySet(Operation* op, Value source, OperandRange carried, Block& body) {
+    const size_t argumentOffset = body.getNumArguments() - carried.size();
 
-        // The walk visits a nested case before the one holding it, so the inner one drops
-        // the outer one's arguments it alone read before the outer one is trimmed.
-        llvm::SmallVector<LazyCase> lazyCases;
-        root->walk([&lazyCases](LazyCase caseOp) {
-            lazyCases.push_back(caseOp);
-        });
+    llvm::SmallBitVector keep(carried.size());
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        if (!body.getArgument(argumentOffset + carriedIndex).use_empty()) {
+            keep.set(carriedIndex);
+        }
+    }
 
-        for (LazyCase caseOp : lazyCases) {
-            trimLazyCase(caseOp);
+    if (::db::yieldsConstantColumn(source)) {
+        keepRowCarryingColumn(carried, 0, keep);
+    }
+
+    if (keep.all()) {
+        return;
+    }
+
+    const size_t operandOffset = carried.getBeginOperandIndex();
+
+    llvm::BitVector erasedOperands(op->getNumOperands());
+    llvm::BitVector erasedArguments(body.getNumArguments());
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        if (!keep[carriedIndex]) {
+            erasedOperands.set(operandOffset + carriedIndex);
+            erasedArguments.set(argumentOffset + carriedIndex);
+        }
+    }
+
+    body.eraseArguments(erasedArguments);
+    op->eraseOperands(erasedOperands);
+}
+
+bool readsCarriedColumnsInItsRegions(Operation* op) {
+    return isa<LazyCase, ListComprehension, ListPredicate, Reduce>(op);
+}
+
+struct TrimVisit {
+    Operation* _op {nullptr};
+    bool _regionsVisited {false};
+};
+
+void pushNestedOps(Operation* op, llvm::SmallVectorImpl<TrimVisit>& worklist) {
+    for (Region& region : op->getRegions()) {
+        for (Block& block : region) {
+            for (Operation& nested : block) {
+                worklist.push_back(TrimVisit {._op = &nested});
+            }
+        }
+    }
+}
+
+// Each block is swept backwards, so a reader is trimmed before the ops feeding it. An op
+// reading its carried columns inside its regions is trimmed after what they hold; a hop or
+// a two-factor op only reads what its regions yield, so it is trimmed before them.
+void collectTrimOrder(Operation* root, llvm::SmallVectorImpl<Operation*>& order) {
+    llvm::SmallVector<TrimVisit> worklist;
+    pushNestedOps(root, worklist);
+
+    while (!worklist.empty()) {
+        const TrimVisit visit = worklist.pop_back_val();
+        Operation* const op = visit._op;
+
+        if (visit._regionsVisited) {
+            order.push_back(op);
+            continue;
         }
 
-        llvm::SmallVector<Operation*> carriers;
-        root->walk([&](Operation* op) {
-            if (trimsColumns(op)) {
-                carriers.push_back(op);
-            }
-        });
+        if (readsCarriedColumnsInItsRegions(op)) {
+            worklist.push_back(TrimVisit {._op = op, ._regionsVisited = true});
+        } else if (trimsColumns(op)) {
+            order.push_back(op);
+        }
 
-        // The walk lists a producer before its readers, so sweeping it backwards trims a
-        // reader before the op feeding it and a chain of hops settles in one pass.
+        pushNestedOps(op, worklist);
+    }
+}
+
+void trimCarriedColumns(Operation* op, mlir::OpBuilder& builder) {
+    CarrySetLayout layout;
+    const bool carries = matchCarrySetLayout(op, layout);
+    bioassert(carries, "A trimming op that is neither a cross product nor a join has a carry set");
+
+    llvm::SmallVector<size_t> kept;
+    selectKeptCarriedColumns(op, layout, kept);
+
+    if (kept.size() == carriedCount(op, layout)) {
+        return;
+    }
+
+    trimCarrySet(op, layout, kept, builder);
+    op->erase();
+}
+
+void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder) {
+    if (LazyCase caseOp = dyn_cast<LazyCase>(op)) {
+        trimLazyCase(caseOp);
+    } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
+        trimElementCarrySet(op, comprehension.getSource(), comprehension.getColumnsToFilter(), comprehension.getBody().front());
+    } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
+        trimElementCarrySet(op, predicate.getSource(), predicate.getColumnsToFilter(), predicate.getBody().front());
+    } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
+        trimElementCarrySet(op, reduce.getSource(), reduce.getColumnsToFilter(), reduce.getBody().front());
+    } else if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+        trimCrossProduct(product, builder);
+    } else if (HashJoin join = dyn_cast<HashJoin>(op)) {
+        trimHashJoin(join, builder);
+    } else {
+        trimCarriedColumns(op, builder);
+    }
+}
+
+struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
+    void runOnOperation() override {
+        llvm::SmallVector<Operation*> order;
+        collectTrimOrder(getOperation(), order);
+
         mlir::OpBuilder builder(&getContext());
-        for (Operation* const op : llvm::reverse(carriers)) {
-            if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
-                trimCrossProduct(product, builder);
-                continue;
-            } else if (HashJoin join = dyn_cast<HashJoin>(op)) {
-                trimHashJoin(join, builder);
-                continue;
-            }
-
-            CarrySetLayout layout;
-            const bool carries = matchCarrySetLayout(op, layout);
-            bioassert(carries, "A trimming op that is neither a cross product nor a join has a carry set");
-
-            llvm::SmallVector<size_t> kept;
-            selectKeptCarriedColumns(op, layout, kept);
-
-            if (kept.size() == carriedCount(op, layout)) {
-                continue;
-            }
-
-            trimCarrySet(op, layout, kept, builder);
-            op->erase();
+        for (Operation* const op : order) {
+            trimUnreadColumnsOf(op, builder);
         }
     }
 };
