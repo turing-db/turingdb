@@ -21,7 +21,7 @@ TEST_F(TemporalCellArithmeticTest, computesTwoCellsInTheirOwnTypes) {
                {{"PT24H"}, {"null"}, {"null"}, {"null"}});
     expectRows("UNWIND [datetime('2024-01-01T00:00:00Z'), 'x'] AS a "
                "UNWIND [duration(3600000000), 'y'] AS b RETURN a + b, b + a",
-               {{"2024-01-01T01:00:00Z", "2024-01-01T01:00:00Z"}, {"null", "null"}, {"null", "null"}, {"null", "null"}});
+               {{"2024-01-01T01:00:00Z", "2024-01-01T01:00:00Z"}, {"null", "null"}, {"null", "null"}, {"xy", "yx"}});
 }
 
 TEST_F(TemporalCellArithmeticTest, rejectsCellsWithNoOperatorBetweenThem) {

@@ -239,6 +239,20 @@ inline bool holdsAnInteger(const T& value) {
     }
 }
 
+/// Whether such an operand holds a string: a cell tagged as one, or a string value.
+template <typename T>
+inline bool holdsAString(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return value.getTag() == ListBufferTypeTag::String;
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return value.has_value() && holdsAString(*value);
+    } else {
+        return std::is_same_v<Decayed, std::string_view>;
+    }
+}
+
 template <typename T>
 concept Temporal = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, DateTime>
                 || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, Duration>;
@@ -315,6 +329,15 @@ concept ConcatenatesNullableText = TypeUtils::is_optional_v<std::decay_t<A>>
                                 || TaggedCell<A>
                                 || TaggedCell<B>;
 
+// The operands a '+' can join as text when one of them turns out to hold a string
+template <typename T>
+concept JoinsAsText = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>
+                   || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, std::string_view>
+                   || std::is_arithmetic_v<TypeUtils::unwrap_optional_t<std::decay_t<T>>>;
+
+template <typename T, typename U>
+std::optional<std::string_view> joinedText(StringBuffer* stringBuffer, const T& a, const U& b);
+
 /**
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
  * accordingly
@@ -322,6 +345,7 @@ concept ConcatenatesNullableText = TypeUtils::is_optional_v<std::decay_t<A>>
 template <typename F, bool NarrowsUnsigned = true>
 struct BinaryOp {
     QueryListBuffer* _listBuffer {nullptr};
+    StringBuffer* _stringBuffer {nullptr};
 
     template <typename T>
     static inline decltype(auto) operand(T&& value) {
@@ -354,6 +378,19 @@ struct BinaryOp {
         requires ComputesOverTaggedCell<F, T, U>
     inline std::optional<ListElementView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
+
+        if constexpr (std::is_same_v<F, std::plus<>> && JoinsAsText<T> && JoinsAsText<U>) {
+            if (holdsAString(a) || holdsAString(b)) {
+                bioassert(_stringBuffer, "A '+' over a string cell has no string buffer to join its text in");
+
+                const std::optional<std::string_view> text = joinedText(_stringBuffer, a, b);
+                if (!text.has_value()) {
+                    return std::nullopt;
+                }
+
+                return stagedCell(*text);
+            }
+        }
 
         return visitArithmeticOperand(a, [this, &b](const auto lhs) {
             return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<ListElementView> {
@@ -552,6 +589,11 @@ struct Concatenate {
         return _listBuffer->concatenate(TypeUtils::unwrap(a), TypeUtils::unwrap(b));
     }
 };
+
+template <typename T, typename U>
+std::optional<std::string_view> joinedText(StringBuffer* stringBuffer, const T& a, const U& b) {
+    return Concatenate {stringBuffer}(a, b);
+}
 
 struct ListIndexImpl {
     inline std::optional<ListElementView> operator()(ListView list, int64_t index) const {
