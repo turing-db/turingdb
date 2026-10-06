@@ -173,3 +173,63 @@ TEST_F(DeepChainQueryTest, pushesALongChainOfFiltersOnTheHopEnd) {
     const std::vector<StringRowSink::Row> expected {{"15"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
+
+TEST_F(DeepChainQueryTest, rerootsAtASeedEquatedAlongALongChain) {
+    const std::string query = "MATCH (s:Founder) WITH s MATCH (n)-->(m) WITH s, n, m" + repeat(" WITH s, n, m WHERE n = s") + " RETURN count(m)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"7"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepChainQueryTest, equatesTwoMatchesAlongALongChain) {
+    const std::string query = "MATCH (s {name: 'Adam'}) MATCH (n) WITH s, n" + repeat(" WITH s, n WHERE n = s") + " RETURN count(n)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"1"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepChainQueryTest, equatesTheHopEndsAlongALongChain) {
+    const std::string query = "MATCH (a)-->(b) WITH a, b" + repeat(" WITH a, b WHERE b = a") + " RETURN count(b)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"0"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepChainQueryTest, boundsAnExplorationEndAlongALongChain) {
+    const std::string query = "MATCH (s {name: 'Adam'}) MATCH (a)-[*1..2]->(b) WITH s, a, b" + repeat(" WITH s, a, b WHERE b = s") + " RETURN count(b)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"3"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepChainQueryTest, fusesAScanUnderALongChainOfNodeIDs) {
+    const std::string query = "MATCH (n) WITH n" + repeat(" WITH n WHERE n = 1") + " RETURN count(n)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"1"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepChainQueryTest, fusesAPatternScanUnderALongChainOfNodeIDs) {
+    const std::string query = "MATCH (a)-->(b) WITH a, b" + repeat(" WITH a, b WHERE a = 1") + " RETURN count(b)";
+
+    StringRowSink sink;
+    runOnSmallStack(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"3"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}

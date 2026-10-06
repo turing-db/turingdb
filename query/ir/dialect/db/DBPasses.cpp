@@ -119,11 +119,8 @@ void eraseIfUnused(Operation* op) {
 
 // The driver every filter pass shares: collect the filters first, since rewriting erases
 // ops and would invalidate the walk, then rewrite each one that matches.
-template <typename Match>
-void runFilterPass(Operation* root,
-                   bool (*matchFilter)(FilterOp, Match&),
-                   void (*rewriteFilter)(FilterOp, const Match&, mlir::OpBuilder&),
-                   mlir::OpBuilder& builder) {
+template <typename Match, typename MatchFilter, typename RewriteFilter>
+void runFilterPass(Operation* root, MatchFilter matchFilter, RewriteFilter rewriteFilter, mlir::OpBuilder& builder) {
     llvm::SmallVector<FilterOp> filters;
     root->walk([&](FilterOp filter) {
         filters.push_back(filter);
@@ -189,10 +186,8 @@ private:
 
 // A match can read IR far above its filter, so a rewrite can make a filter it never touched
 // match. The worklist runs again until a round rewrites nothing, as MLIR's greedy driver does.
-template <typename Match>
-void runFilterWorklist(Operation* root,
-                       bool (*matchFilter)(FilterOp, Match&),
-                       void (*rewriteFilter)(Match&, mlir::RewriterBase&)) {
+template <typename Match, typename MatchFilter, typename RewriteFilter>
+void runFilterWorklist(Operation* root, MatchFilter matchFilter, RewriteFilter rewriteFilter) {
     bool rewritten = true;
     while (rewritten) {
         rewritten = false;
@@ -288,10 +283,6 @@ Value productFactorColumn(CrossProduct product, size_t resultIndex) {
     return factorYieldColumns(product.getRightFactor())[resultIndex - leftColumns.size()];
 }
 
-// Walk op chain until we reach a node/edge source or something we can't push down to
-// The column its variable was bound at, following every op that passes the column through.
-// Sets crossedProducer when one of those builds the rows - a hop or a cross product - as
-// opposed to a filter, which only drops them.
 using ColumnEquality = std::pair<Value, Value>;
 
 void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts);
@@ -318,7 +309,8 @@ void collectColumnEqualities(FilterOp filter, llvm::SmallVectorImpl<ColumnEquali
     }
 }
 
-// One step of the climb from a column to the column its variable was bound at
+// One step of the climb from a column to the column its variable was bound at. It crosses a
+// producer where the op builds the rows - a hop or a cross product - rather than dropping them
 struct LineageStep {
     Value _next;
     bool _isAnchor {false};
@@ -378,36 +370,25 @@ void stepTowardLineageAnchor(Value column, LineageStep& step) {
     }
 }
 
-Value climbToLineageAnchor(Value column, bool& crossedProducer) {
-    for (;;) {
-        LineageStep step;
-        stepTowardLineageAnchor(column, step);
-
-        if (step._isAnchor) {
-            return column;
-        } else if (!step._next) {
-            return {};
-        }
-
-        crossedProducer = crossedProducer || step._crossesProducer;
-        column = step._next;
-    }
-}
-
-// The climbs of one push_down_filters run, each built from the climb one step up. A push
+// The climbs of one pass run, each built from the climb one step up. A push_down_filters push
 // moves a single-variable predicate, which changes no anchor and crosses no producer, so a
 // climb stays true across pushes; its equalities are kept as their sides' anchors, which a
-// push never erases.
+// push never erases. A rewrite that replaces an anchor has to clear() them.
 class LineageClimbs {
 public:
+    Value anchorOf(Value column) {
+        computeClimb(column);
+        return _climbs.at(column)._anchor;
+    }
+
     Value climb(Value column, bool& crossedProducer, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
         computeClimb(column);
 
         const Climb& climb = _climbs.at(column);
         crossedProducer = crossedProducer || climb._crossedProducer;
 
-        for (size_t link = climb._equalities; link != NO_LINK; link = _equalityLinks[link]._next) {
-            anchorEqualities.push_back(_equalityLinks[link]._anchors);
+        if (climb._equalities != NO_LIST) {
+            llvm::append_range(anchorEqualities, _equalityLists[climb._equalities]);
         }
 
         return climb._anchor;
@@ -419,23 +400,24 @@ public:
         }
     }
 
+    void clear() {
+        _climbs.clear();
+        _equalityLists.clear();
+    }
+
 private:
-    static constexpr size_t NO_LINK = SIZE_MAX;
+    static constexpr size_t NO_LIST = SIZE_MAX;
 
     struct Climb {
         Value _anchor;
         bool _crossedProducer {false};
-        size_t _equalities {NO_LINK};
+        size_t _equalities {NO_LIST};
     };
 
-    // A climb's equalities, nearest filter first, sharing their tail with the climb one step up
-    struct EqualityLink {
-        ColumnEquality _anchors;
-        size_t _next {NO_LINK};
-    };
-
+    // A climb's distinct equalities, nearest filter first. A filter whose equalities the climb
+    // one step up already holds shares that list, so a chain repeating one equality keeps one.
     llvm::DenseMap<Value, Climb> _climbs;
-    std::vector<EqualityLink> _equalityLinks;
+    std::vector<llvm::SmallVector<ColumnEquality, 2>> _equalityLists;
 
     void computeClimb(Value column) {
         llvm::SmallVector<Value> worklist {column};
@@ -484,12 +466,24 @@ private:
                 climb._equalities = next._equalities;
 
                 for (const ColumnEquality& equality : llvm::reverse(filterEqualities)) {
-                    const Value lhs = _climbs.at(equality.first)._anchor;
-                    const Value rhs = _climbs.at(equality.second)._anchor;
-                    if (lhs && rhs) {
-                        _equalityLinks.push_back(EqualityLink {ColumnEquality {lhs, rhs}, climb._equalities});
-                        climb._equalities = _equalityLinks.size() - 1;
+                    const ColumnEquality anchors {_climbs.at(equality.first)._anchor, _climbs.at(equality.second)._anchor};
+                    const bool relatesTwoAnchors = anchors.first && anchors.second && anchors.first != anchors.second;
+                    if (!relatesTwoAnchors) {
+                        continue;
                     }
+
+                    llvm::SmallVector<ColumnEquality, 2> equalities {anchors};
+                    if (climb._equalities != NO_LIST) {
+                        const llvm::SmallVector<ColumnEquality, 2>& held = _equalityLists[climb._equalities];
+                        if (llvm::is_contained(held, anchors)) {
+                            continue;
+                        }
+
+                        llvm::append_range(equalities, held);
+                    }
+
+                    _equalityLists.push_back(equalities);
+                    climb._equalities = _equalityLists.size() - 1;
                 }
             }
 
@@ -1267,14 +1261,8 @@ bool rowsReachTheFilter(Operation* source, FilterOp filter, bool (*keepsTheRows)
 
 // A disjunction over the scanned node read after the hops and filters of the pattern
 // rooted at the scan: it restricts the scan itself
-bool matchPatternScanSource(FilterOp filter, ScanSource& source) {
-    const Value column = disjunctionColumn(filter.getMask());
-    if (!column) {
-        return false;
-    }
-
-    bool crossedProducer = false;
-    const Value anchor = climbToLineageAnchor(column, crossedProducer);
+bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs, ScanSource& source) {
+    const Value anchor = climbs.anchorOf(column);
     Operation* const scan = anchor ? anchor.getDefiningOp() : nullptr;
     const bool isNodeScan = isa_and_nonnull<ScanNodes, ScanNodesByLabel>(scan);
     if (!isNodeScan || scan->getBlock() != filter->getBlock()) {
@@ -1296,17 +1284,24 @@ bool matchPatternScanSource(FilterOp filter, ScanSource& source) {
     return true;
 }
 
-bool matchNodeIDScanChain(FilterOp filter, NodeIDScanChain& chain) {
-    if (!matchSoleScanSource(filter, chain._source)) {
-        if (!matchPatternScanSource(filter, chain._source)) {
+bool matchNodeIDScanChain(FilterOp filter, LineageClimbs& climbs, NodeIDScanChain& chain) {
+    const Value mask = filter.getMask();
+
+    if (matchSoleScanSource(filter, chain._source)) {
+        if (!collectNodeIDDisjunction(mask, chain._source._column, chain._nodeIDs)) {
+            return false;
+        }
+    } else {
+        const Value column = disjunctionColumn(mask);
+        if (!column || !collectNodeIDDisjunction(mask, column, chain._nodeIDs)) {
+            return false;
+        }
+
+        if (!matchPatternScanSource(filter, column, climbs, chain._source)) {
             return false;
         }
 
         chain._afterThePattern = true;
-    }
-
-    if (!collectNodeIDDisjunction(filter.getMask(), chain._source._column, chain._nodeIDs)) {
-        return false;
     }
 
     // A scan yields each node once in ID order, so the filter did too.
@@ -1351,7 +1346,18 @@ void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBu
 struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
-        runFilterPass<NodeIDScanChain>(getOperation(), matchNodeIDScanChain, fuseScanByNodeIDs, builder);
+        LineageClimbs climbs;
+
+        const auto matchChain = [&climbs](FilterOp filter, NodeIDScanChain& chain) {
+            return matchNodeIDScanChain(filter, climbs, chain);
+        };
+
+        const auto fuseChain = [&climbs](FilterOp filter, const NodeIDScanChain& chain, mlir::OpBuilder& builder) {
+            climbs.clear();
+            fuseScanByNodeIDs(filter, chain, builder);
+        };
+
+        runFilterPass<NodeIDScanChain>(getOperation(), matchChain, fuseChain, builder);
     }
 };
 
@@ -6257,27 +6263,55 @@ bool isPatternNode(const SeedPattern& pattern, Value origin) {
     return llvm::any_of(pattern._steps, [origin](const PatternStep& step) { return step._to == origin; });
 }
 
-// The junction column @param column is carried from through the filters after it
-OpResult traceToJunction(Value column, Block* block) {
-    for (;;) {
-        const OpResult result = dyn_cast<OpResult>(column);
-        if (!result || result.getOwner()->getBlock() != block) {
-            return nullptr;
+// The junction column each column of a block is carried from through the filters after it,
+// kept so the filters of one chain trace it once rather than once per filter. A reroot
+// rewrites the block, so clear() follows every one.
+class JunctionTraces {
+public:
+    OpResult trace(Value column, Block* block) {
+        llvm::SmallVector<Value> climbed;
+        Value junction;
+
+        for (;;) {
+            const OpResult result = dyn_cast<OpResult>(column);
+            if (!result || result.getOwner()->getBlock() != block) {
+                break;
+            }
+
+            const auto tracedIt = _junctions.find(column);
+            if (tracedIt != _junctions.end()) {
+                junction = tracedIt->second;
+                break;
+            }
+
+            climbed.push_back(column);
+
+            Operation* const op = result.getOwner();
+            FilterOp filter = dyn_cast<FilterOp>(op);
+            if (isa<CrossProduct, Unwind>(op)) {
+                junction = column;
+                break;
+            } else if (!filter) {
+                break;
+            }
+
+            column = filter.getColumnsToFilter()[result.getResultNumber()];
         }
 
-        Operation* const op = result.getOwner();
-        if (isa<CrossProduct, Unwind>(op)) {
-            return result;
+        for (const Value value : climbed) {
+            _junctions[value] = junction;
         }
 
-        FilterOp filter = dyn_cast<FilterOp>(op);
-        if (!filter) {
-            return nullptr;
-        }
-
-        column = filter.getColumnsToFilter()[result.getResultNumber()];
+        return junction ? cast<OpResult>(junction) : nullptr;
     }
-}
+
+    void clear() {
+        _junctions.clear();
+    }
+
+private:
+    llvm::DenseMap<Value, Value> _junctions;
+};
 
 bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPattern& pattern) {
     Operation* const op = seededResult.getOwner();
@@ -6469,13 +6503,13 @@ bool readsTheJunctionRowWise(const SeedJunction& junction, FilterOp filter) {
     return true;
 }
 
-bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value ids, PatternSeed& seed) {
+bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value ids, JunctionTraces& traces, PatternSeed& seed) {
     if (!isNodeColumn(seeded)) {
         return false;
     }
 
     Block* const block = filter->getBlock();
-    const OpResult seededResult = traceToJunction(seeded, block);
+    const OpResult seededResult = traces.trace(seeded, block);
     if (!seededResult) {
         return false;
     }
@@ -6516,7 +6550,7 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
     return true;
 }
 
-bool matchPatternSeed(FilterOp filter, PatternSeed& seed) {
+bool matchPatternSeed(FilterOp filter, JunctionTraces& traces, PatternSeed& seed) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
@@ -6529,7 +6563,7 @@ bool matchPatternSeed(FilterOp filter, PatternSeed& seed) {
         const Value lhs = equality.getLhs();
         const Value rhs = equality.getRhs();
 
-        if (matchPatternSeedSide(filter, equality, lhs, rhs, seed) || matchPatternSeedSide(filter, equality, rhs, lhs, seed)) {
+        if (matchPatternSeedSide(filter, equality, lhs, rhs, traces, seed) || matchPatternSeedSide(filter, equality, rhs, lhs, traces, seed)) {
             return true;
         }
     }
@@ -6952,7 +6986,18 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
 struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternAtSeed> {
     void runOnOperation() override {
-        runFilterWorklist<PatternSeed>(getOperation(), matchPatternSeed, reroot);
+        JunctionTraces traces;
+
+        const auto matchSeed = [&traces](FilterOp filter, PatternSeed& seed) {
+            return matchPatternSeed(filter, traces, seed);
+        };
+
+        const auto rerootAtSeed = [&traces](PatternSeed& seed, mlir::RewriterBase& rewriter) {
+            traces.clear();
+            reroot(seed, rewriter);
+        };
+
+        runFilterWorklist<PatternSeed>(getOperation(), matchSeed, rerootAtSeed);
     }
 };
 
