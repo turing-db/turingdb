@@ -7127,7 +7127,8 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
 
 void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
                                                         const ListComprehensionExpr* comprehension) {
-    const mlir::Value source = getOrTranslateExprColumn(comprehension->getSource());
+    const Expr* const sourceExpr = comprehension->getSource();
+    const mlir::Value source = readWalkEntities(sourceExpr, getOrTranslateExprColumn(sourceExpr));
 
     CarrySet carrySet;
     collectElementCarrySet(carrySet);
@@ -7150,7 +7151,8 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
 
 void DBProgramGenerator::translateListPredicateExpr(const Expr* expr, const ListPredicateExpr* predicate) {
     const ListComprehensionExpr* comprehension = predicate->getComprehension();
-    const mlir::Value source = getOrTranslateExprColumn(comprehension->getSource());
+    const Expr* const sourceExpr = comprehension->getSource();
+    const mlir::Value source = readWalkEntities(sourceExpr, getOrTranslateExprColumn(sourceExpr));
 
     CarrySet carrySet;
     collectElementCarrySet(carrySet);

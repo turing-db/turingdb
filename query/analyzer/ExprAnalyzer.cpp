@@ -2138,10 +2138,13 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     analyzeExpr(source);
 
     const EvaluatedType sourceType = source->getType();
+    const VarDecl* const sourceDecl = source->getExprVarDecl();
+    const bool iteratesAPath = sourceDecl && sourceDecl->isQuantifiedPath();
 
     // A tagged cell names no type until a row is in hand, and a null iterates into a null
     // rather than into a type error - as an UNWIND of one emits no row
-    const bool iteratesAList = sourceType == EvaluatedType::List
+    const bool iteratesAList = iteratesAPath
+                            || sourceType == EvaluatedType::List
                             || sourceType == EvaluatedType::ListItem
                             || sourceType == EvaluatedType::Null;
 
@@ -2159,7 +2162,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
         throwError(fmt::format("Variable '{}' is already declared", itemName), expr);
     }
 
-    const ListShape& sourceShape = source->getListShape();
+    const ListShape sourceShape = iteratesAPath ? ListShape(EvaluatedType::EdgePattern, 1) : source->getListShape();
 
     // A null list holds no element, so the variable never reads as anything but null
     const EvaluatedType itemType = sourceType == EvaluatedType::Null ? EvaluatedType::Null
