@@ -75,6 +75,7 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     if (const Pattern* pattern = createStmt->getPattern()) {
         throwOnEntityWhere(pattern, "CREATE");
+        throwOnUndirectedEdge(pattern);
         analyze(pattern);
     }
 }
@@ -133,6 +134,17 @@ void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_v
         for (const EntityPattern* entity : element->getEntities()) {
             if (entity->getWhere()) {
                 throwError(fmt::format("WHERE is not allowed in a {} pattern", clause), entity);
+            }
+        }
+    }
+}
+
+void WriteStmtAnalyzer::throwOnUndirectedEdge(const Pattern* pattern) const {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const EdgePattern* edge = dynamic_cast<const EdgePattern*>(entity);
+            if (edge && edge->getDirection() == EdgePattern::Direction::Undirected) {
+                throwError("Only directed relationships are supported in CREATE", entity);
             }
         }
     }
