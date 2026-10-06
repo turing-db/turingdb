@@ -14,6 +14,7 @@ namespace db {
 class GraphView;
 class NLOutputSink;
 class LocalMemory;
+class MetadataBuilder;
 class NLSystemContext;
 class NLVectorSearchLoopData;
 
@@ -26,7 +27,8 @@ public:
                const NLProgram* prog,
                NLOutputSink* sink,
                CommitWriteBuffer* writeBuffer = nullptr,
-               const NLSystemContext* system = nullptr);
+               const NLSystemContext* system = nullptr,
+               const MetadataBuilder* metadataBuilder = nullptr);
     ~NLExecutor();
 
     void run();
@@ -499,6 +501,9 @@ public:
     static NLUnaryFunctionKernel selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    static NLUnaryFunctionKernel selectKeys(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectProperties(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     template <template <typename> typename NumberFunctor>
     static NLUnaryFunctionKernel selectNumberFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

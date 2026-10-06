@@ -232,6 +232,20 @@ LabelsFunction::ResultType LabelsFunction::operator()(const NodeID node) {
     return _listBuffer->insert(_elements);
 }
 
+MapKeysFunction::MapKeysFunction(QueryListBuffer* listBuffer)
+    : _listBuffer(listBuffer)
+{
+}
+
+MapKeysFunction::ResultType MapKeysFunction::operator()(const MapView map) {
+    _elements.clear();
+    for (const MapEntryView entry : map) {
+        _elements.emplace_back(entry.getKey());
+    }
+
+    return _listBuffer->insert(_elements);
+}
+
 ToStringFunction::ToStringFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {

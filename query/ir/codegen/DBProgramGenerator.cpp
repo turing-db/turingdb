@@ -407,6 +407,8 @@ mlir::Value emitUnaryFunction(mlir::OpBuilder& builder,
 const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEmitters = {
     {"labels", &emitUnaryFunction<mlir::db::Labels>},
     {"type", &emitUnaryFunction<mlir::db::EdgeType>},
+    {"keys", &emitUnaryFunction<mlir::db::Keys>},
+    {"properties", &emitUnaryFunction<mlir::db::PropertyMap>},
     {"startNode", &emitUnaryFunction<mlir::db::StartNode>},
     {"endNode", &emitUnaryFunction<mlir::db::EndNode>},
     {"toInteger", &emitUnaryFunction<mlir::db::ToInteger>},
@@ -9019,6 +9021,14 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         return;
     } else if (funcName == "substring") {
         translateSubstring(expr, args);
+        return;
+    }
+
+    const bool readsTheMapItself = funcName == "properties"
+                                && args && args->size() == 1
+                                && args->front()->getType() == EvaluatedType::Map;
+    if (readsTheMapItself) {
+        _part._exprMap[expr] = translateArg(args->front());
         return;
     }
 

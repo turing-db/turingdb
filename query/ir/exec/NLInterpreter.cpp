@@ -62,7 +62,7 @@ NLInterpreter::Status NLInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLExecutor executor(_view, &program, _sink, _writeBuffer);
+        NLExecutor executor(_view, &program, _sink, _writeBuffer, nullptr, _metadataBuilder);
         executor.run();
 
         const TimePoint end = Clock::now();

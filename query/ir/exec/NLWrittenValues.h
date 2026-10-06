@@ -44,6 +44,10 @@ public:
     template <TypedInternalID IDT>
     const Value* findUpdate(IDT entity, PropertyTypeID property) const;
 
+    // Every property an update of @param entity names, set or removed
+    template <TypedInternalID IDT>
+    void collectUpdatedProperties(IDT entity, std::vector<PropertyTypeID>& properties);
+
     // One value this change wrote, as a column of the property holds it. The value is held
     // as whatever type the row's own column carried, so it is converted to the type the
     // schema holds the property as - which is the column's element type.
@@ -82,6 +86,7 @@ private:
     };
 
     using UpdateIndex = std::unordered_map<Key, size_t, KeyHash>;
+    using UpdatedProperties = std::unordered_map<uint64_t, std::vector<PropertyTypeID>>;
 
     const CommitWriteBuffer* _writeBuffer {nullptr};
 
@@ -93,11 +98,19 @@ private:
     size_t _indexedNodeUpdates {0};
     size_t _indexedEdgeUpdates {0};
 
+    // Built only once something asks for an entity's whole set of updates
+    UpdatedProperties _nodeUpdatedProperties;
+    UpdatedProperties _edgeUpdatedProperties;
+    size_t _propertyIndexedNodeUpdates {0};
+    size_t _propertyIndexedEdgeUpdates {0};
+
     std::vector<PendingNodeUpdate> _pendingNodeUpdates;
 
     std::deque<Value> _retained;
     ListContainer _decodedLists;
     MapContainer _decodedMaps;
+
+    void indexUpdatedProperties();
 };
 
 }

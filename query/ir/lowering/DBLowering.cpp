@@ -114,6 +114,10 @@ mlir::Type labelListFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEl
     return storage::ListType::get(context, storage::StringType::get(context));
 }
 
+mlir::Type mapFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    return storage::MapType::get(builder.getContext());
+}
+
 mlir::Type integerFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI64Type();
 }
@@ -234,6 +238,8 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     // chunk's own type says
     {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
     {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,      ResultNullability::AlwaysNullable}},
+    {"db.keys",       {&emitNLUnaryFunction<nl::Keys>,      &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
+    {"db.properties", {&emitNLUnaryFunction<nl::PropertyMap>, &mapFunctionElement,       ResultNullability::AlwaysNullable}},
 
     // An end of an edge is a node, and a node column spells its null as an invalid ID, so
     // the result stays a plain node chunk where labels() and type() need a nullable one

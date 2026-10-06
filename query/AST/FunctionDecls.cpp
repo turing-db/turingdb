@@ -61,11 +61,48 @@ void FunctionDecls::initDefault() {
 
     FunctionSignature* keysNodes = createFunction("keys");
     keysNodes->setArguments({EvaluatedType::NodePattern});
-    keysNodes->setReturnTypes({{EvaluatedType::String}});
+    keysNodes->setReturnTypes({{EvaluatedType::List}});
+    keysNodes->setReturnedListShape(ListShape(EvaluatedType::String, 1));
 
     FunctionSignature* keysEdges = createFunction("keys");
     keysEdges->setArguments({EvaluatedType::EdgePattern});
-    keysEdges->setReturnTypes({{EvaluatedType::String}});
+    keysEdges->setReturnTypes({{EvaluatedType::List}});
+    keysEdges->setReturnedListShape(ListShape(EvaluatedType::String, 1));
+
+    FunctionSignature* keysMap = createFunction("keys");
+    keysMap->setArguments({EvaluatedType::Map});
+    keysMap->setReturnTypes({{EvaluatedType::List}});
+    keysMap->setReturnedListShape(ListShape(EvaluatedType::String, 1));
+
+    FunctionSignature* keysCell = createFunction("keys");
+    keysCell->setArguments({EvaluatedType::ListItem});
+    keysCell->setReturnTypes({{EvaluatedType::List}});
+    keysCell->setReturnedListShape(ListShape(EvaluatedType::String, 1));
+
+    FunctionSignature* keysMapValue = createFunction("keys");
+    keysMapValue->setArguments({EvaluatedType::MapValue});
+    keysMapValue->setReturnTypes({{EvaluatedType::List}});
+    keysMapValue->setReturnedListShape(ListShape(EvaluatedType::String, 1));
+
+    FunctionSignature* propertiesNodes = createFunction("properties");
+    propertiesNodes->setArguments({EvaluatedType::NodePattern});
+    propertiesNodes->setReturnTypes({{EvaluatedType::Map}});
+
+    FunctionSignature* propertiesEdges = createFunction("properties");
+    propertiesEdges->setArguments({EvaluatedType::EdgePattern});
+    propertiesEdges->setReturnTypes({{EvaluatedType::Map}});
+
+    FunctionSignature* propertiesMap = createFunction("properties");
+    propertiesMap->setArguments({EvaluatedType::Map});
+    propertiesMap->setReturnTypes({{EvaluatedType::Map}});
+
+    FunctionSignature* propertiesCell = createFunction("properties");
+    propertiesCell->setArguments({EvaluatedType::ListItem});
+    propertiesCell->setReturnTypes({{EvaluatedType::Map}});
+
+    FunctionSignature* propertiesMapValue = createFunction("properties");
+    propertiesMapValue->setArguments({EvaluatedType::MapValue});
+    propertiesMapValue->setReturnTypes({{EvaluatedType::Map}});
 
     FunctionArgumentType nodeOrGroup(EvaluatedType::NodePattern);
     nodeOrGroup.setTakesAVariableLengthPath(true);

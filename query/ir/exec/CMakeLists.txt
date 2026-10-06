@@ -5,6 +5,8 @@ set(exec_sources
     NLExecutionContext.cpp
     NLWriteProperties.cpp
     NLWrittenValues.cpp
+    NLEntityProperties.cpp
+    NLPropertyFunctions.cpp
     NLExecutor.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp

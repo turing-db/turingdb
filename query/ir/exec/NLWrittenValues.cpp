@@ -1,5 +1,6 @@
 #include "NLWrittenValues.h"
 
+#include <algorithm>
 #include <type_traits>
 #include <variant>
 
@@ -15,6 +16,12 @@ const NLWrittenValues::Value& retainIfBorrowed(NLWrittenValues& written, const N
         return written.retain(value);
     } else {
         return value;
+    }
+}
+
+void addUpdatedProperty(std::vector<PropertyTypeID>& properties, PropertyTypeID property) {
+    if (std::ranges::find(properties, property) == properties.end()) {
+        properties.push_back(property);
     }
 }
 
@@ -83,6 +90,33 @@ const NLWrittenValues::Value* NLWrittenValues::findUpdate(IDT entity, PropertyTy
     }
 }
 
+template <TypedInternalID IDT>
+void NLWrittenValues::collectUpdatedProperties(IDT entity, std::vector<PropertyTypeID>& properties) {
+    properties.clear();
+    indexUpdatedProperties();
+
+    const UpdatedProperties& updated = std::is_same_v<IDT, NodeID> ? _nodeUpdatedProperties : _edgeUpdatedProperties;
+
+    const auto findIt = updated.find(entity.getValue());
+    if (findIt != end(updated)) {
+        properties = findIt->second;
+    }
+}
+
+void NLWrittenValues::indexUpdatedProperties() {
+    const CommitWriteBuffer::UpdatedNodes& nodes = _writeBuffer->updatedNodes();
+    for (; _propertyIndexedNodeUpdates < nodes.size(); _propertyIndexedNodeUpdates++) {
+        const CommitWriteBuffer::NodeUpdate& update = nodes[_propertyIndexedNodeUpdates];
+        addUpdatedProperty(_nodeUpdatedProperties[update._idToUpdate.getValue()], update._updatedValue.propertyID);
+    }
+
+    const CommitWriteBuffer::UpdatedEdges& edges = _writeBuffer->updatedEdges();
+    for (; _propertyIndexedEdgeUpdates < edges.size(); _propertyIndexedEdgeUpdates++) {
+        const CommitWriteBuffer::EdgeUpdate& update = edges[_propertyIndexedEdgeUpdates];
+        addUpdatedProperty(_edgeUpdatedProperties[update._idToUpdate.getValue()], update._updatedValue.propertyID);
+    }
+}
+
 template <SupportedType T>
 std::optional<typename T::Primitive> NLWrittenValues::read(const Value& value) {
     using Primitive = typename T::Primitive;
@@ -129,6 +163,9 @@ namespace db {
 
 template const NLWrittenValues::Value* NLWrittenValues::findUpdate<NodeID>(NodeID entity, PropertyTypeID property) const;
 template const NLWrittenValues::Value* NLWrittenValues::findUpdate<EdgeID>(EdgeID entity, PropertyTypeID property) const;
+
+template void NLWrittenValues::collectUpdatedProperties<NodeID>(NodeID entity, std::vector<PropertyTypeID>& properties);
+template void NLWrittenValues::collectUpdatedProperties<EdgeID>(EdgeID entity, std::vector<PropertyTypeID>& properties);
 
 template std::optional<types::Int64::Primitive> NLWrittenValues::read<types::Int64>(const Value& value);
 template std::optional<types::UInt64::Primitive> NLWrittenValues::read<types::UInt64>(const Value& value);

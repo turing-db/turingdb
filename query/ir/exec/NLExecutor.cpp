@@ -84,6 +84,7 @@
 #include "NLPropertyValueScan.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
+#include "NLPropertyFunctions.h"
 #include "NLMergeWorkingSet.h"
 #include "NLOutputSink.h"
 
@@ -451,7 +452,9 @@ void unwindOptTaggedElementEmit(const Column* source,
 
 template <typename Functor>
 Functor makeFunctor(NLExecutionContext* context, LocalMemory* memory) {
-    if constexpr (std::is_constructible_v<Functor, GraphView, QueryListBuffer*, const CommitWriteBuffer*>) {
+    if constexpr (std::is_constructible_v<Functor, NLExecutionContext*, LocalMemory*>) {
+        return Functor(context, memory);
+    } else if constexpr (std::is_constructible_v<Functor, GraphView, QueryListBuffer*, const CommitWriteBuffer*>) {
         return Functor(*context->getView(), &memory->listBuffer(), context->getWriteBuffer());
     } else if constexpr (std::is_constructible_v<Functor, GraphView, StringBuffer*, const CommitWriteBuffer*>) {
         return Functor(*context->getView(), &memory->stringBuffer(), context->getWriteBuffer());
@@ -629,6 +632,28 @@ NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNu
     if (inputNullable) {
         result = memory->alloc<ColumnVector<Res>>();
         return &functionNullReadingKernel<Functor>;
+    }
+
+    result = memory->alloc<ColumnVector<Res>>();
+    return &functionVectorKernel<Functor>;
+}
+
+// A value read out of a map carries its null in its own tag, so its column is never a
+// nullable one: a row per entry, or the single entry a constant is
+bool readsMapValues(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    return kind == ColumnVector<MapEntryView>::staticKind()
+        || kind == ColumnConst<MapEntryView>::staticKind();
+}
+
+template <typename Functor>
+NLUnaryFunctionKernel selectMapValueFunction(const Column* input, LocalMemory* memory, Column*& result) {
+    using Res = typename Functor::ResultType;
+
+    if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+        result = memory->alloc<ColumnConst<Res>>();
+        return &functionConstKernel<Functor>;
     }
 
     result = memory->alloc<ColumnVector<Res>>();
@@ -5326,8 +5351,9 @@ NLExecutor::NLExecutor(const GraphView* view,
                        const NLProgram* prog,
                        NLOutputSink* sink,
                        CommitWriteBuffer* writeBuffer,
-                       const NLSystemContext* system)
-    : _ctxt(view, sink, prog->getChunkSize(), writeBuffer, system),
+                       const NLSystemContext* system,
+                       const MetadataBuilder* metadataBuilder)
+    : _ctxt(view, sink, prog->getChunkSize(), writeBuffer, system, metadataBuilder),
     _prog(prog)
 {
 }
@@ -8298,6 +8324,36 @@ NLUnaryFunctionKernel NLExecutor::selectReverse(const Column* input, bool inputN
     }
 
     return selectFunction<ListReverseFunction>(input, inputNullable, memory, result);
+}
+
+NLUnaryFunctionKernel NLExecutor::selectKeys(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<NodeID>(input)) {
+        return selectFunction<NLKeysFunction<NodeID>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<EdgeID>(input)) {
+        return selectFunction<NLKeysFunction<EdgeID>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<NLTaggedKeysFunction<ListElementView>>(input, inputNullable, memory, result);
+    } else if (readsMapValues(input)) {
+        return selectMapValueFunction<NLTaggedKeysFunction<MapEntryView>>(input, memory, result);
+    } else if (columnHoldsElement<MapView>(input)) {
+        return selectFunction<MapKeysFunction>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("keys() reads a node, a relationship or a map column");
+}
+
+NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<NodeID>(input)) {
+        return selectFunction<NLPropertiesFunction<NodeID>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<EdgeID>(input)) {
+        return selectFunction<NLPropertiesFunction<EdgeID>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<NLTaggedPropertiesFunction<ListElementView>>(input, inputNullable, memory, result);
+    } else if (readsMapValues(input)) {
+        return selectMapValueFunction<NLTaggedPropertiesFunction<MapEntryView>>(input, memory, result);
+    }
+
+    throw IRException("properties() reads a node, a relationship or a map column");
 }
 
 template <template <typename> typename NumberFunctor>

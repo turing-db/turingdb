@@ -81,8 +81,8 @@ two decisions are made independently and nothing checks them against each other 
 So `WHERE n.attrs.x = 1` drops the rows whose map holds no `x`, and `WHERE NOT (n.attrs.x = 1)`
 drops them too.
 
-Beyond that a map value is passed through and rendered, nothing more. Ordering by one,
-deduplicating on one, doing arithmetic on one and writing one back with `SET` are all rejected,
+Beyond that and `keys()` / `properties()` below, a map value is passed through and rendered.
+Ordering by one, deduplicating on one, doing arithmetic on one and writing one back with `SET` are all rejected,
 `ORDER BY` and `DISTINCT` by the chunk-kind selectors rather than by the analyzer, so they read
 as `Unsupported chunk element type`. So is `m.a.b`, a key of a map another map holds. The
 bracket form reads a key computed per row, so a key written in the query is sent to the dotted
@@ -111,6 +111,19 @@ A map held in a list reads through those same two paths, since `xs[0]` hands bac
 variable to the same cell, so `UNWIND [{a: 1}] AS m RETURN m.a` reads through one too. The
 dotted form `xs[0].a` needs a parser rule of its own (`propertyLookupExpr`), because a `.`
 after a `]` is otherwise no expression.
+
+# keys() and properties()
+
+`keys(x)` returns the property names of a node or a relationship, or the keys of a map, sorted.
+`properties(x)` returns a node's or a relationship's properties as a map, and a map unchanged.
+Both also read a list element or a map value holding a node, a relationship or a map, and
+return null for a null.
+
+An entity's properties are read across every datapart, newest first, so `n.age` set in a later
+commit appears once with its newest value, and one a later commit removed does not appear. The
+query's own writes are included: `MATCH (n) SET n.x = 1 RETURN keys(n)` lists `x`, and
+`CREATE (n {a: 1}) RETURN properties(n)` returns `{a: 1}`. A value the query wrote reads back
+as the type the schema holds the property as.
 
 ## Maps inside stored lists
 
