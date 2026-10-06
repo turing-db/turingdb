@@ -134,9 +134,6 @@ Stop the loop at 4 hits, or at the deadline.
 
 ### Known limitations — not bugs
 
-- `CONTAINS`, `STARTS WITH`, `ENDS WITH` are unimplemented. `StringOperator` in the AST and
-  `ExprAnalyzer::analyzeStringExpr` exist and mean nothing; there is no execution path.
-- Variable-length paths are rejected by v3 on purpose (`MLIR: reject variable-length paths`).
 - Relationship uniqueness within one MATCH is unimplemented, so there is no point testing
   it. openCypher binds two relationship variables of one clause to two different edges;
   TuringDB lets them bind the same one, and `MATCH (a)<-[e1]-(b)-[e2]->(c)` and
