@@ -91,16 +91,17 @@ const NLWrittenValues::Value* NLWrittenValues::findUpdate(IDT entity, PropertyTy
 }
 
 template <TypedInternalID IDT>
-void NLWrittenValues::collectUpdatedProperties(IDT entity, std::vector<PropertyTypeID>& properties) {
-    properties.clear();
+std::span<const PropertyTypeID> NLWrittenValues::findUpdatedProperties(IDT entity) {
     indexUpdatedProperties();
 
     const UpdatedProperties& updated = std::is_same_v<IDT, NodeID> ? _nodeUpdatedProperties : _edgeUpdatedProperties;
 
     const auto findIt = updated.find(entity.getValue());
-    if (findIt != end(updated)) {
-        properties = findIt->second;
+    if (findIt == end(updated)) {
+        return {};
     }
+
+    return findIt->second;
 }
 
 void NLWrittenValues::indexUpdatedProperties() {
@@ -164,8 +165,8 @@ namespace db {
 template const NLWrittenValues::Value* NLWrittenValues::findUpdate<NodeID>(NodeID entity, PropertyTypeID property) const;
 template const NLWrittenValues::Value* NLWrittenValues::findUpdate<EdgeID>(EdgeID entity, PropertyTypeID property) const;
 
-template void NLWrittenValues::collectUpdatedProperties<NodeID>(NodeID entity, std::vector<PropertyTypeID>& properties);
-template void NLWrittenValues::collectUpdatedProperties<EdgeID>(EdgeID entity, std::vector<PropertyTypeID>& properties);
+template std::span<const PropertyTypeID> NLWrittenValues::findUpdatedProperties<NodeID>(NodeID entity);
+template std::span<const PropertyTypeID> NLWrittenValues::findUpdatedProperties<EdgeID>(EdgeID entity);
 
 template std::optional<types::Int64::Primitive> NLWrittenValues::read<types::Int64>(const Value& value);
 template std::optional<types::UInt64::Primitive> NLWrittenValues::read<types::UInt64>(const Value& value);

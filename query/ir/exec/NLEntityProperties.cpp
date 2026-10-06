@@ -75,8 +75,6 @@ MapBuffer<>::MapItemVariant readWritten(NLWrittenValues& written, const NLWritte
     return *read;
 }
 
-// A written value is held as the type its row's column carried; it reads back as the
-// type the schema holds the property as, which is what the commit will store it as
 MapBuffer<>::MapItemVariant writtenValue(NLWrittenValues& written,
                                          ValueType valueType,
                                          const NLWrittenValues::Value& value) {
@@ -181,23 +179,38 @@ void NLEntityProperties::collect(IDT entity) {
 
 template <TypedInternalID IDT>
 void NLEntityProperties::collectCommitted(IDT entity) {
-    const EntityID entityID {entity.getValue()};
+    const uint64_t entityValue = entity.getValue();
+    const EntityID entityID {entityValue};
 
+    for (const PropertyTypeID id : _decided) {
+        _isDecided[id.getValue()] = false;
+    }
     _decided.clear();
 
     for (const auto& part : rv::reverse(_view->dataparts())) {
         const PropertyManager& properties = std::is_same_v<IDT, NodeID> ? part->nodeProperties() : part->edgeProperties();
+        const uint64_t firstEntity = std::is_same_v<IDT, NodeID> ? part->getFirstNodeID().getValue() : part->getFirstEdgeID().getValue();
 
         for (const auto& [id, container] : properties) {
-            if (!container->hasEntry(entityID) || std::ranges::contains(_decided, id)) {
+            const size_t index = id.getValue();
+            if (index >= _isDecided.size()) {
+                _isDecided.resize(index + 1, false);
+            }
+
+            if (!container->hasEntry(entityID) || _isDecided[index]) {
                 continue;
             }
 
+            _isDecided[index] = true;
             _decided.push_back(id);
 
             if (container->has(entityID)) {
                 add(id, _readsValues ? storedValue(*container, entityID) : PropertyNull {});
             }
+        }
+
+        if (entityValue >= firstEntity) {
+            return;
         }
     }
 }
@@ -223,9 +236,9 @@ void NLEntityProperties::collectUpdates(IDT entity) {
         return;
     }
 
-    _written->collectUpdatedProperties(entity, _updated);
+    const std::span<const PropertyTypeID> updated = _written->findUpdatedProperties(entity);
 
-    for (const PropertyTypeID id : _updated) {
+    for (const PropertyTypeID id : updated) {
         std::erase_if(_properties, [id](const Property& property) { return property._id == id; });
         addWritten(id, *_written->findUpdate(entity, id));
     }
@@ -259,7 +272,9 @@ void NLEntityProperties::add(PropertyTypeID id, const MapBuffer<>::MapItemVarian
 }
 
 std::string_view NLEntityProperties::getName(PropertyTypeID id) const {
-    const std::optional<std::string_view> name = _view->metadata().propTypes().getName(id);
+    const PropertyTypeMap& propertyTypes = _view->metadata().propTypes();
+
+    const std::optional<std::string_view> name = propertyTypes.getName(id);
     if (name) {
         return *name;
     }
@@ -273,7 +288,9 @@ std::string_view NLEntityProperties::getName(PropertyTypeID id) const {
 }
 
 ValueType NLEntityProperties::getValueType(PropertyTypeID id) const {
-    const std::optional<PropertyType> type = _view->metadata().propTypes().get(id);
+    const PropertyTypeMap& propertyTypes = _view->metadata().propTypes();
+
+    const std::optional<PropertyType> type = propertyTypes.get(id);
     if (type) {
         return type->_valueType;
     }

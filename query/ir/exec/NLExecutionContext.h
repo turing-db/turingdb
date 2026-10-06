@@ -40,7 +40,6 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     CommitWriteBuffer* getWriteBuffer() const { return _writeBuffer; }
 
-    // What the change knows a property type by, the ones it created included; null for a read
     const MetadataBuilder* getMetadataBuilder() const { return _metadataBuilder; }
 
     // The server-level facilities the system commands reach for. Every query the server

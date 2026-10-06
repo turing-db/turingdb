@@ -5,6 +5,7 @@
 
 #include <deque>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -46,7 +47,7 @@ public:
 
     // Every property an update of @param entity names, set or removed
     template <TypedInternalID IDT>
-    void collectUpdatedProperties(IDT entity, std::vector<PropertyTypeID>& properties);
+    std::span<const PropertyTypeID> findUpdatedProperties(IDT entity);
 
     // One value this change wrote, as a column of the property holds it. The value is held
     // as whatever type the row's own column carried, so it is converted to the type the
@@ -98,7 +99,6 @@ private:
     size_t _indexedNodeUpdates {0};
     size_t _indexedEdgeUpdates {0};
 
-    // Built only once something asks for an entity's whole set of updates
     UpdatedProperties _nodeUpdatedProperties;
     UpdatedProperties _edgeUpdatedProperties;
     size_t _propertyIndexedNodeUpdates {0};
