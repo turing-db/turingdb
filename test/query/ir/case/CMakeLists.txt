@@ -24,3 +24,14 @@ add_turing_test(test_query_ir_case_lazy_branch CaseLazyBranchTest.cpp)
 target_link_libraries(test_query_ir_case_lazy_branch PRIVATE turing_ir_test_write_query_s)
 
 add_call_v3_test(test_query_ir_case_list_item_subject CaseListItemSubjectTest.cpp)
+
+add_turing_test(test_query_ir_case_over_projection_alias CaseOverProjectionAliasTest.cpp)
+target_sources(test_query_ir_case_over_projection_alias PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_case_over_projection_alias PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_case_over_projection_alias PRIVATE ${IR_TEST_DIR})
