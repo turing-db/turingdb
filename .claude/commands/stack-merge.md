@@ -103,21 +103,31 @@ A rejected lease means someone pushed to that branch during the run. Stop and re
 
 Skip this step with `--no-ci`.
 
-CI's `pull_request` trigger only fires for PRs whose base is `main`, so CI runs on the top
-branch through `workflow_dispatch`. The top tree contains every commit in the stack.
+CI runs once, on the top of the stack, whose tree contains every commit in it.
 
 ```bash
 TOP_SHA=$(git rev-parse b_N)
-gh run list --workflow ci_build.yml --commit "$TOP_SHA" --json databaseId,status,conclusion
+gh run list --workflow ci_build.yml --commit "$TOP_SHA" --json databaseId,event,status,conclusion,createdAt
 ```
 
-- A run with `conclusion: success` exists for `TOP_SHA`: CI is done, go to step 5.
-- One is in progress: wait for that one.
-- None, or only failed ones: `gh workflow run ci_build.yml --ref b_N`. Poll
-  `gh run list` until a run for `TOP_SHA` appears.
+A run whose jobs were all skipped built nothing and does not count
+(`gh run view <id> --json jobs`). Of the others:
 
-Wait on it with `gh run watch <id> --exit-status`, run in the background. It takes about
-25 minutes. A failure stops the run. Report the failing job's URL. The rebased branches
+- One has `conclusion: success`: CI is done, go to step 5.
+- One is in progress: wait for the newest.
+- None, or only failed or cancelled ones:
+  - If step 3 pushed and `gh api repos/turing-db/turingdb/pulls/<top PR number> -q .stack`
+    shows a stack whose `position` equals its `size`, the push starts the top PR's
+    `pull_request` run. Actions runs `ci_build.yml` for every PR of a stack as if it
+    targeted `main`, and the workflow builds only the top one. Poll `gh run list` until
+    that run appears. Dispatch nothing.
+  - Otherwise `gh workflow run ci_build.yml --ref b_N`, and poll `gh run list` until its
+    run appears.
+
+Wait on it with `gh run watch <id> --exit-status`, run in the background. A push to a
+stacked PR can start two runs for the same commit, and the PR's concurrency group cancels
+the older one. If the run you watch ends `cancelled`, wait on the newer run for `TOP_SHA`
+instead. A run takes about 25 minutes. A failure stops the run. Report the failing job's URL. The rebased branches
 stay pushed: that is harmless and saves the next attempt the rebase.
 
 ## 5. Land

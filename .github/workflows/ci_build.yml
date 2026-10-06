@@ -33,6 +33,9 @@ concurrency:
 
 jobs:
   build:
+    # GitHub runs pull_request workflows for every PR of a stack as if it targeted main. The
+    # top PR's tree holds every commit below it, so only the top one builds.
+    if: github.event.pull_request.stack == null || github.event.pull_request.stack.position == github.event.pull_request.stack.size
     strategy:
       # Don't cancel the whole matrix when one job fails: on the shared
       # self-hosted runners a single transient flake would otherwise cancel the

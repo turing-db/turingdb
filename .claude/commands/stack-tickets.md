@@ -194,13 +194,22 @@ Record the PR number and URL, then go to the next ticket with `<parent> = <branc
 
 ## 2. After the last ticket
 
-CI's `pull_request` trigger only fires for PRs whose base is `main`, so every PR above the
-bottom one gets no CI. Run it once on the top of the stack, which builds every commit in
-it:
+CI runs once, on the top of the stack, whose tree holds every commit in it. Ask GitHub
+whether the PRs form a stack:
 
 ```bash
-gh workflow run ci_build.yml --ref <top branch>
+gh api repos/turing-db/turingdb/pulls/<top PR number> -q .stack
 ```
+
+- A stack whose `position` equals its `size`: Actions runs `ci_build.yml` for every PR of a
+  stack as if it targeted `main`, and the workflow builds only the top one. That
+  `pull_request` run is the CI run. Dispatch nothing.
+- Empty: the PRs above the bottom one target branches other than `main`, so no CI runs on
+  them. Run it on the top branch:
+
+  ```bash
+  gh workflow run ci_build.yml --ref <top branch>
+  ```
 
 Then return to the branch you started on.
 
@@ -214,7 +223,7 @@ A few plain lines. List the stack bottom first, one line per ticket:
 3  TUR-198  #1102  MLIR: ...
 ```
 
-Then the agents' NOTES, under the ticket they belong to, and the CI run started on the top
+Then the agents' NOTES, under the ticket they belong to, and the CI run on the top
 branch. If the run stopped early, say which check stopped it, what state the branch and
 tree are in, and which tickets did not run. To rerun those tickets on top of the stack,
 pass `--base <top branch>`.
