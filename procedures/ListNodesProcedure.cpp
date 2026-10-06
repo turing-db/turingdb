@@ -46,7 +46,7 @@ constexpr std::string_view propertiesErr = "listNodes: properties must be a cons
 constexpr std::string_view skipErr = "listNodes: skip must be a constant int";
 constexpr std::string_view limitErr = "listNodes: limit must be a constant int";
 
-struct Data : public ProcedureData {};
+struct Data : public TypedProcedureData<ListNodesProcedure> {};
 
 struct PropertyFilter {
     PropertyTypeID _id;
@@ -122,9 +122,9 @@ void executeImpl(ProcedureState* proc) {
     const Column* inputLabelNames = data.getInputColumn(0);
     const Column* inputProperties = data.getInputColumn(1);
 
-    auto* idCol = getReturnColumn<ListNodesProcedure, 0>(&data);
-    auto* labelsCol = getReturnColumn<ListNodesProcedure, 1>(&data);
-    auto* propsCol = getReturnColumn<ListNodesProcedure, 2>(&data);
+    auto* idCol = data.getReturnColumn<0>();
+    auto* labelsCol = data.getReturnColumn<1>();
+    auto* propsCol = data.getReturnColumn<2>();
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -282,7 +282,7 @@ void executeImpl(ProcedureState* proc) {
 }
 
 void ListNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<ListNodesProcedure, Data>("listNodes");
+    Procedure* proc = createTypedProcedure<Data>("listNodes");
     proc->addConstantArgument("labels", ProcedureType::LIST);
     proc->addConstantArgument("properties", ProcedureType::MAP);
     proc->addConstantArgument("skip", ProcedureType::INT64);

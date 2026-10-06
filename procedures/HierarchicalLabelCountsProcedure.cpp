@@ -23,7 +23,7 @@ namespace {
 
 constexpr std::string_view currentLabelsErr = "hierarchicalLabelCounts: currentLabels must be a constant list";
 
-struct Data : public ProcedureData {};
+struct Data : public TypedProcedureData<HierarchicalLabelCountsProcedure> {};
 
 // Read the string elements of `view` into `selected` as the set of selected
 // labels. The caller supplies the list view via `ProcUtils::constArg<ListView>`,
@@ -45,8 +45,8 @@ void executeImpl(ProcedureState* proc) {
     Data& data = proc->data<Data>();
     const ProcedureContext* ctxt = proc->getContext();
 
-    auto* namesCol = getReturnColumn<HierarchicalLabelCountsProcedure, 0>(&data);
-    auto* countCol = getReturnColumn<HierarchicalLabelCountsProcedure, 1>(&data);
+    auto* namesCol = data.getReturnColumn<0>();
+    auto* countCol = data.getReturnColumn<1>();
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -92,7 +92,7 @@ void executeImpl(ProcedureState* proc) {
 }
 
 void HierarchicalLabelCountsProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<HierarchicalLabelCountsProcedure, Data>("hierarchicalLabelCounts");
+    Procedure* proc = createTypedProcedure<Data>("hierarchicalLabelCounts");
     proc->addConstantArgument("currentLabels", ProcedureType::LIST);
     ns->addProcedure(proc);
 }

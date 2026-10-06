@@ -29,7 +29,7 @@ namespace {
 constexpr std::string_view sampleSizeErr = "gnn.neighbourhood_sample: sampleSize must be a constant int";
 constexpr std::string_view seedErr = "gnn.neighbourhoodSample: seed must be a constant int";
 
-struct Data : public IndexedProcedureData {
+struct Data : public TypedProcedureData<GnnNeighbourhoodSampleProcedure, IndexedProcedureData> {
     std::unique_ptr<NeighbourhoodSampleWriter> writer;
 };
 
@@ -62,10 +62,10 @@ void prepareImpl(ProcedureState* proc) {
 
     bioassert(inputNodeIDs, "gnn.neighbourhoodSample: must be provided input nodes");
 
-    auto* srcCol = getReturnColumn<GnnNeighbourhoodSampleProcedure, 0>(&data);
-    auto* edgeCol = getReturnColumn<GnnNeighbourhoodSampleProcedure, 1>(&data);
-    auto* edgeTypeCol = getReturnColumn<GnnNeighbourhoodSampleProcedure, 2>(&data);
-    auto* tgtCol = getReturnColumn<GnnNeighbourhoodSampleProcedure, 3>(&data);
+    auto* srcCol = data.getReturnColumn<0>();
+    auto* edgeCol = data.getReturnColumn<1>();
+    auto* edgeTypeCol = data.getReturnColumn<2>();
+    auto* tgtCol = data.getReturnColumn<3>();
     ColumnIndices* indices = data.indices();
 
     const int64_t signedSampleSize =
@@ -99,7 +99,7 @@ void prepareImpl(ProcedureState* proc) {
 }
 
 void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<GnnNeighbourhoodSampleProcedure, Data>("neighbourhoodSample");
+    Procedure* proc = createTypedProcedure<Data>("neighbourhoodSample");
 
     proc->addArgument("node", ProcedureType::NODE);
     proc->addConstantArgument("sampleSize", ProcedureType::INT64);

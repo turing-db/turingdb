@@ -29,7 +29,7 @@ namespace {
 
 constexpr std::string_view edgeIDsErr = "getEdges: edgeIDs must be a constant list";
 
-struct Data : public ProcedureData {};
+struct Data : public TypedProcedureData<GetEdgesProcedure> {};
 
 void executeImpl(ProcedureState* proc) {
     Data& data = proc->data<Data>();
@@ -37,11 +37,11 @@ void executeImpl(ProcedureState* proc) {
 
     const Column* inputEdgeIDs = data.getInputColumn(0);
 
-    auto* idCol = getReturnColumn<GetEdgesProcedure, 0>(&data);
-    auto* srcCol = getReturnColumn<GetEdgesProcedure, 1>(&data);
-    auto* tgtCol = getReturnColumn<GetEdgesProcedure, 2>(&data);
-    auto* typeCol = getReturnColumn<GetEdgesProcedure, 3>(&data);
-    auto* propsCol = getReturnColumn<GetEdgesProcedure, 4>(&data);
+    auto* idCol = data.getReturnColumn<0>();
+    auto* srcCol = data.getReturnColumn<1>();
+    auto* tgtCol = data.getReturnColumn<2>();
+    auto* typeCol = data.getReturnColumn<3>();
+    auto* propsCol = data.getReturnColumn<4>();
 
     const GraphView& view = *ctxt->getGraphView();
     const GraphReader reader(view);
@@ -95,7 +95,7 @@ void executeImpl(ProcedureState* proc) {
 }
 
 void GetEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = createTypedProcedure<GetEdgesProcedure, Data>("getEdges");
+    Procedure* proc = createTypedProcedure<Data>("getEdges");
     proc->addConstantArgument("edgeIDs", ProcedureType::LIST);
     ns->addProcedure(proc);
 }

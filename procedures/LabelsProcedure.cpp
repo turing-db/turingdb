@@ -13,14 +13,14 @@ using namespace db;
 
 namespace {
 
-struct Data : public ProcedureData {
+struct Data : public TypedProcedureData<LabelsProcedure> {
     std::unique_ptr<ScanLabelsChunkWriter> _it;
 };
 
 }
 
 void LabelsProcedure::registerProcedure(ProcedureNamespace* ns) {
-    ns->addProcedure(createTypedProcedure<LabelsProcedure, Data>("labels"));
+    ns->addProcedure(createTypedProcedure<Data>("labels"));
 }
 
 void LabelsProcedure::execute(ProcedureState* proc) {
@@ -28,8 +28,8 @@ void LabelsProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    auto* idsCol = getReturnColumn<LabelsProcedure, 0>(&data);
-    auto* namesCol = getReturnColumn<LabelsProcedure, 1>(&data);
+    auto* idsCol = data.getReturnColumn<0>();
+    auto* namesCol = data.getReturnColumn<1>();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

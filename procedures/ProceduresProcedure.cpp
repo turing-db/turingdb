@@ -14,7 +14,7 @@ using namespace db;
 
 namespace {
 
-struct Data : public ProcedureData {
+struct Data : public TypedProcedureData<ProceduresProcedure> {
     size_t _nsIndex {0};
     size_t _procIndex {0};
 };
@@ -103,7 +103,7 @@ void writeProcedures(Data* data,
 }
 
 void ProceduresProcedure::registerProcedure(ProcedureNamespace* ns) {
-    ns->addProcedure(createTypedProcedure<ProceduresProcedure, Data>("procedures"));
+    ns->addProcedure(createTypedProcedure<Data>("procedures"));
 }
 
 void ProceduresProcedure::execute(ProcedureState* proc) {
@@ -111,8 +111,8 @@ void ProceduresProcedure::execute(ProcedureState* proc) {
     const ProcedureContext* ctxt = proc->getContext();
     const ProcedureManager* manager = ctxt->getProcedures();
 
-    auto* nameCol = getReturnColumn<ProceduresProcedure, 0>(&data);
-    auto* signatureCol = getReturnColumn<ProceduresProcedure, 1>(&data);
+    auto* nameCol = data.getReturnColumn<0>();
+    auto* signatureCol = data.getReturnColumn<1>();
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE: {

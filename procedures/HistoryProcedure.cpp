@@ -16,7 +16,7 @@ using namespace db;
 
 namespace {
 
-struct Data : public ProcedureData {
+struct Data : public TypedProcedureData<HistoryProcedure> {
     // The commit the walk starts from - the one the query reads - resolved once when the
     // call is prepared, so a rewind restarts from it without asking the transaction again.
     const Commit* _headCommit {nullptr};
@@ -45,10 +45,10 @@ void writeChunk(Data* data,
                 StringBuffer* stringBuffer) {
     size_t count = 0;
 
-    auto* commitCol = getReturnColumn<HistoryProcedure, 0>(data);
-    auto* nodeCountCol = getReturnColumn<HistoryProcedure, 1>(data);
-    auto* edgeCountCol = getReturnColumn<HistoryProcedure, 2>(data);
-    auto* partCountCol = getReturnColumn<HistoryProcedure, 3>(data);
+    auto* commitCol = data->getReturnColumn<0>();
+    auto* nodeCountCol = data->getReturnColumn<1>();
+    auto* edgeCountCol = data->getReturnColumn<2>();
+    auto* partCountCol = data->getReturnColumn<3>();
 
     data->clearReturnColumns();
 
@@ -86,7 +86,7 @@ void writeChunk(Data* data,
 }
 
 void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
-    ns->addProcedure(createTypedProcedure<HistoryProcedure, Data>("history"));
+    ns->addProcedure(createTypedProcedure<Data>("history"));
 }
 
 void HistoryProcedure::execute(ProcedureState* proc) {
