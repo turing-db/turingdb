@@ -1,5 +1,6 @@
 #include "DBPasses.h"
 
+#include <stdint.h>
 #include <algorithm>
 #include <limits>
 #include <optional>
@@ -317,77 +318,186 @@ void collectColumnEqualities(FilterOp filter, llvm::SmallVectorImpl<ColumnEquali
     }
 }
 
-Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVectorImpl<ColumnEquality>* equalities = nullptr) {
-    for (;;) {
-        Operation* const def = column.getDefiningOp();
-        if (!def) {
-            return {};
-        }
+// One step of the climb from a column to the column its variable was bound at
+struct LineageStep {
+    Value _next;
+    bool _isAnchor {false};
+    bool _crossesProducer {false};
+};
 
-        if (isNodeSource(def)) {
-            return column;
-        }
+// Sets _isAnchor where @param column is where its variable was bound, _next to the column
+// the climb goes on from, and neither where the climb cannot pass the op defining it
+void stepTowardLineageAnchor(Value column, LineageStep& step) {
+    Operation* const def = column.getDefiningOp();
+    if (!def) {
+        return;
+    }
 
-        if (FilterOp filter = dyn_cast<FilterOp>(def)) {
-            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+    const size_t resultIndex = cast<OpResult>(column).getResultNumber();
 
-            if (equalities) {
-                collectColumnEqualities(filter, *equalities);
-            }
-
-            column = filter.getColumnsToFilter()[resultIndex];
-
-            continue;
-        }
-
-        if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
-            column = productFactorColumn(product, cast<OpResult>(column).getResultNumber());
-            crossedProducer = true;
-
-            continue;
-        }
-
-        if (isEdgeHop(def)) {
-            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-
-            // The input node re-surfaces as srcids (forward) or tgtids (reverse) and each
-            // carried column passes through: those continue a variable that existed before
-            // the hop, so keep climbing. The opposite node end and the eids/etypes are
-            // bound here, so the variable is born at this hop - its earliest filter point.
-            if (resultIndex == hopInputResult(def)) {
-                column = def->getOperand(0);
-                crossedProducer = true;
-            } else if (resultIndex >= hopFixedResultCount) {
-                // Carried columns follow input_nodes (operand 0) in operand order.
-                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
-                crossedProducer = true;
-            } else {
-                return column;
-            }
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
-            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-            constexpr size_t tgtResultIndex = 1;
-
-            // The seed re-surfaces as srcids and each carried column passes through; the end
-            // node and the path are born here, whichever direction the exploration walks -
-            // except where the walk is one that comes back to its seed, which leaves the end
-            // holding that seed row for row, so a predicate on it is one on the seed.
-            const bool endHoldsTheSeed = resultIndex == tgtResultIndex && exploration.getEndsOnSeed();
-
-            if (resultIndex == 0 || endHoldsTheSeed) {
-                column = def->getOperand(0);
-                crossedProducer = true;
-            } else if (resultIndex >= pathFixedResultCount) {
-                column = def->getOperand(1 + (resultIndex - pathFixedResultCount));
-                crossedProducer = true;
-            } else {
-                return column;
-            }
+    if (isNodeSource(def)) {
+        step._isAnchor = true;
+    } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
+        step._next = filter.getColumnsToFilter()[resultIndex];
+    } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+        step._next = productFactorColumn(product, resultIndex);
+        step._crossesProducer = true;
+    } else if (isEdgeHop(def)) {
+        // The input node re-surfaces as srcids (forward) or tgtids (reverse) and each
+        // carried column passes through: those continue a variable that existed before
+        // the hop, so keep climbing. The opposite node end and the eids/etypes are
+        // bound here, so the variable is born at this hop - its earliest filter point.
+        if (resultIndex == hopInputResult(def)) {
+            step._next = def->getOperand(0);
+            step._crossesProducer = true;
+        } else if (resultIndex >= hopFixedResultCount) {
+            // Carried columns follow input_nodes (operand 0) in operand order.
+            step._next = def->getOperand(1 + (resultIndex - hopFixedResultCount));
+            step._crossesProducer = true;
         } else {
-            return {};
+            step._isAnchor = true;
+        }
+    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
+        constexpr size_t tgtResultIndex = 1;
+
+        // The seed re-surfaces as srcids and each carried column passes through; the end
+        // node and the path are born here, whichever direction the exploration walks -
+        // except where the walk is one that comes back to its seed, which leaves the end
+        // holding that seed row for row, so a predicate on it is one on the seed.
+        const bool endHoldsTheSeed = resultIndex == tgtResultIndex && exploration.getEndsOnSeed();
+
+        if (resultIndex == 0 || endHoldsTheSeed) {
+            step._next = def->getOperand(0);
+            step._crossesProducer = true;
+        } else if (resultIndex >= pathFixedResultCount) {
+            step._next = def->getOperand(1 + (resultIndex - pathFixedResultCount));
+            step._crossesProducer = true;
+        } else {
+            step._isAnchor = true;
         }
     }
 }
+
+Value climbToLineageAnchor(Value column, bool& crossedProducer) {
+    for (;;) {
+        LineageStep step;
+        stepTowardLineageAnchor(column, step);
+
+        if (step._isAnchor) {
+            return column;
+        } else if (!step._next) {
+            return {};
+        }
+
+        crossedProducer = crossedProducer || step._crossesProducer;
+        column = step._next;
+    }
+}
+
+// The climbs of one push_down_filters run, each built from the climb one step up. A push
+// moves a single-variable predicate, which changes no anchor and crosses no producer, so a
+// climb stays true across pushes; its equalities are kept as their sides' anchors, which a
+// push never erases.
+class LineageClimbs {
+public:
+    Value climb(Value column, bool& crossedProducer, llvm::SmallVectorImpl<ColumnEquality>& anchorEqualities) {
+        computeClimb(column);
+
+        const Climb& climb = _climbs.at(column);
+        crossedProducer = crossedProducer || climb._crossedProducer;
+
+        for (size_t link = climb._equalities; link != NO_LINK; link = _equalityLinks[link]._next) {
+            anchorEqualities.push_back(_equalityLinks[link]._anchors);
+        }
+
+        return climb._anchor;
+    }
+
+    void forget(Operation* op) {
+        for (const Value result : op->getResults()) {
+            _climbs.erase(result);
+        }
+    }
+
+private:
+    static constexpr size_t NO_LINK = SIZE_MAX;
+
+    struct Climb {
+        Value _anchor;
+        bool _crossedProducer {false};
+        size_t _equalities {NO_LINK};
+    };
+
+    // A climb's equalities, nearest filter first, sharing their tail with the climb one step up
+    struct EqualityLink {
+        ColumnEquality _anchors;
+        size_t _next {NO_LINK};
+    };
+
+    llvm::DenseMap<Value, Climb> _climbs;
+    std::vector<EqualityLink> _equalityLinks;
+
+    void computeClimb(Value column) {
+        llvm::SmallVector<Value> worklist {column};
+        llvm::SmallVector<ColumnEquality, 4> filterEqualities;
+
+        while (!worklist.empty()) {
+            const Value value = worklist.back();
+            if (_climbs.contains(value)) {
+                worklist.pop_back();
+                continue;
+            }
+
+            LineageStep step;
+            stepTowardLineageAnchor(value, step);
+
+            filterEqualities.clear();
+            if (FilterOp filter = value.getDefiningOp<FilterOp>()) {
+                collectColumnEqualities(filter, filterEqualities);
+            }
+
+            bool dependenciesPending = false;
+            const auto requireClimb = [this, &worklist, &dependenciesPending](Value dependency) {
+                if (dependency && !_climbs.contains(dependency)) {
+                    worklist.push_back(dependency);
+                    dependenciesPending = true;
+                }
+            };
+
+            requireClimb(step._next);
+            for (const ColumnEquality& equality : filterEqualities) {
+                requireClimb(equality.first);
+                requireClimb(equality.second);
+            }
+
+            if (dependenciesPending) {
+                continue;
+            }
+
+            Climb climb;
+            if (step._isAnchor) {
+                climb._anchor = value;
+            } else if (step._next) {
+                const Climb next = _climbs.at(step._next);
+                climb._anchor = next._anchor;
+                climb._crossedProducer = next._crossedProducer || step._crossesProducer;
+                climb._equalities = next._equalities;
+
+                for (const ColumnEquality& equality : llvm::reverse(filterEqualities)) {
+                    const Value lhs = _climbs.at(equality.first)._anchor;
+                    const Value rhs = _climbs.at(equality.second)._anchor;
+                    if (lhs && rhs) {
+                        _equalityLinks.push_back(EqualityLink {ColumnEquality {lhs, rhs}, climb._equalities});
+                        climb._equalities = _equalityLinks.size() - 1;
+                    }
+                }
+            }
+
+            _climbs[value] = climb;
+            worklist.pop_back();
+        }
+    }
+};
 
 bool isMaskComputeOp(Operation* op) {
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
@@ -476,7 +586,7 @@ struct PushablePredicate {
 // scanned for, the predicate reads that node off the scan. Applying it there is what spares
 // the walk between the two. The class is closed over the equalities rather than read a pair
 // at a time, so a column held to the scan through an intermediate is still found.
-Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> equalities) {
+Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> anchorEqualities) {
     if (!anchor || isNodeSource(anchor.getDefiningOp())) {
         return {};
     }
@@ -484,19 +594,10 @@ Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> equaliti
     llvm::SmallVector<Value, 4> anchorClass {anchor};
     llvm::SmallPtrSet<void*, 4> seen {anchor.getAsOpaquePointer()};
 
-    const auto anchorOf = [](Value column) {
-        bool crossed = false;
-        return climbToLineageAnchor(column, crossed);
-    };
-
     for (size_t index = 0; index < anchorClass.size(); index++) {
-        for (const ColumnEquality& equality : equalities) {
-            const Value lhs = anchorOf(equality.first);
-            const Value rhs = anchorOf(equality.second);
-            if (!lhs || !rhs) {
-                continue;
-            }
-
+        for (const ColumnEquality& equality : anchorEqualities) {
+            const Value lhs = equality.first;
+            const Value rhs = equality.second;
             const Value held = lhs == anchorClass[index] ? rhs : (rhs == anchorClass[index] ? lhs : Value {});
             if (!held || !seen.insert(held.getAsOpaquePointer()).second) {
                 continue;
@@ -513,7 +614,7 @@ Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> equaliti
     return {};
 }
 
-bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
+bool matchPushablePredicate(FilterOp filter, LineageClimbs& climbs, PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
     if (!maskDef || !isMaskComputeOp(maskDef)) {
         return false;
@@ -525,9 +626,9 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
     }
 
     bool crossedProducer = false;
-    llvm::SmallVector<ColumnEquality, 4> equalities;
+    llvm::SmallVector<ColumnEquality, 4> anchorEqualities;
     for (const Value input : pushable._cone._inputs) {
-        const Value inputAnchor = climbToLineageAnchor(input, crossedProducer, &equalities);
+        const Value inputAnchor = climbs.climb(input, crossedProducer, anchorEqualities);
         if (!inputAnchor) {
             return false;
         }
@@ -540,7 +641,7 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
         }
     }
 
-    const Value equatedAnchor = scannedAnchorEqualTo(pushable._anchor, equalities);
+    const Value equatedAnchor = scannedAnchorEqualTo(pushable._anchor, anchorEqualities);
     if (equatedAnchor) {
         pushable._anchor = equatedAnchor;
         crossedProducer = true;
@@ -616,7 +717,26 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
 struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
-        runFilterPass<PushablePredicate>(getOperation(), matchPushablePredicate, pushDownPredicate, builder);
+
+        llvm::SmallVector<FilterOp> filters;
+        getOperation()->walk([&filters](FilterOp filter) {
+            filters.push_back(filter);
+        });
+
+        LineageClimbs climbs;
+        for (FilterOp filter : filters) {
+            PushablePredicate pushable;
+            if (!matchPushablePredicate(filter, climbs, pushable)) {
+                continue;
+            }
+
+            climbs.forget(filter.getOperation());
+            for (Operation* const coneOp : pushable._cone._ops) {
+                climbs.forget(coneOp);
+            }
+
+            pushDownPredicate(filter, pushable, builder);
+        }
     }
 };
 
@@ -4840,14 +4960,86 @@ Value carryThrough(Operation* op, Value column, mlir::OpBuilder& builder) {
     return appendCarriedColumn(op, column, builder);
 }
 
+// The property columns reuse_property_reads carried down to each row column, so a later read
+// of those rows stops where an earlier one left the property rather than climbing back to
+// the read it came from
+class CarriedPropertyColumns {
+public:
+    Value find(Value rows, StringAttr property, bool nodeProperty) const {
+        const auto rowsIt = _columns.find(rows);
+        if (rowsIt == _columns.end()) {
+            return {};
+        }
+
+        for (const CarriedProperty& carried : rowsIt->second) {
+            if (carried._property == property && carried._nodeProperty == nodeProperty) {
+                return carried._column;
+            }
+        }
+
+        return {};
+    }
+
+    void add(Value rows, StringAttr property, bool nodeProperty, Value column) {
+        _columns[rows].push_back(CarriedProperty {property, nodeProperty, column});
+    }
+
+    // Moves what was carried to @param replacedResults, the results of an op since widened
+    // into @param widened, onto the results of @param widened at the same positions
+    void rebind(llvm::ArrayRef<Value> replacedResults, Operation* widened) {
+        llvm::DenseMap<Value, size_t> replacedIndices;
+        for (size_t index = 0; index < replacedResults.size(); index++) {
+            replacedIndices[replacedResults[index]] = index;
+        }
+
+        for (size_t index = 0; index < replacedResults.size(); index++) {
+            const auto rowsIt = _columns.find(replacedResults[index]);
+            if (rowsIt == _columns.end()) {
+                continue;
+            }
+
+            llvm::SmallVector<CarriedProperty, 1> carried = rowsIt->second;
+            _columns.erase(rowsIt);
+
+            for (CarriedProperty& property : carried) {
+                const auto columnIt = replacedIndices.find(property._column);
+                if (columnIt != replacedIndices.end()) {
+                    property._column = widened->getResult(columnIt->second);
+                }
+            }
+
+            _columns[widened->getResult(index)] = carried;
+        }
+    }
+
+private:
+    struct CarriedProperty {
+        StringAttr _property;
+        bool _nodeProperty {false};
+        Value _column;
+    };
+
+    llvm::DenseMap<Value, llvm::SmallVector<CarriedProperty, 1>> _columns;
+};
+
 // The column holding `property` for the rows of `column`, taken from a read already
 // standing before `useSite` and carried down through the ops in between when that read was
 // taken further up the chain. Null when there is none: this adds no read of its own.
-Value propertyColumnOf(Value column, StringAttr property, bool nodeProperty, Operation* useSite, mlir::OpBuilder& builder) {
+Value propertyColumnOf(Value column,
+                       StringAttr property,
+                       bool nodeProperty,
+                       Operation* useSite,
+                       CarriedPropertyColumns& carriedColumns,
+                       mlir::OpBuilder& builder) {
     llvm::SmallVector<Operation*> carriers;
+    llvm::SmallVector<size_t> carriedRowsResults;
     Value rows = column;
 
     Value propertyColumn = readStandingBefore(rows, property, nodeProperty, useSite);
+    if (!propertyColumn) {
+        propertyColumn = carriedColumns.find(rows, property, nodeProperty);
+    }
+
     while (!propertyColumn) {
         Operation* const def = rows.getDefiningOp();
         if (!def || !mapsRowsThrough(def)) {
@@ -4865,12 +5057,27 @@ Value propertyColumnOf(Value column, StringAttr property, bool nodeProperty, Ope
         }
 
         carriers.push_back(def);
+        carriedRowsResults.push_back(resultIndex);
         rows = def->getOperand(sourceOperandIndex);
+
         propertyColumn = readStandingBefore(rows, property, nodeProperty, def);
+        if (!propertyColumn) {
+            propertyColumn = carriedColumns.find(rows, property, nodeProperty);
+        }
     }
 
-    for (Operation* const carrier : llvm::reverse(carriers)) {
+    for (size_t carrierIndex = carriers.size(); carrierIndex > 0; carrierIndex--) {
+        Operation* const carrier = carriers[carrierIndex - 1];
+        const llvm::SmallVector<Value> carrierResults(carrier->getResults());
+
         propertyColumn = carryThrough(carrier, propertyColumn, builder);
+
+        Operation* const carrying = propertyColumn.getDefiningOp();
+        if (carrying != carrier) {
+            carriedColumns.rebind(carrierResults, carrying);
+        }
+
+        carriedColumns.add(carrying->getResult(carriedRowsResults[carrierIndex - 1]), property, nodeProperty, propertyColumn);
     }
 
     return propertyColumn;
@@ -4899,6 +5106,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         });
 
         mlir::OpBuilder builder(&getContext());
+        CarriedPropertyColumns carriedColumns;
         for (Operation* const read : reads) {
             StringAttr property;
             bool nodeProperty = false;
@@ -4912,7 +5120,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                 continue;
             }
 
-            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, builder);
+            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, carriedColumns, builder);
             if (!reused) {
                 continue;
             }
