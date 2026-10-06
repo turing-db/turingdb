@@ -439,3 +439,7 @@ target_link_libraries(test_query_ir_optional_call_created_entity PRIVATE turing_
 # Every subquery form returning an entity a MATCH, MERGE or CREATE gave it, read by what follows.
 add_turing_test(test_query_ir_subquery_written_entity_matrix SubqueryWrittenEntityMatrixTest.cpp)
 target_link_libraries(test_query_ir_subquery_written_entity_matrix PRIVATE turing_ir_test_write_query_s)
+
+# An EXISTS or COUNT subquery over a node the same query created.
+add_turing_test(test_query_ir_exists_over_created_node ExistsOverCreatedNodeTest.cpp)
+target_link_libraries(test_query_ir_exists_over_created_node PRIVATE turing_ir_test_write_query_s)
