@@ -196,6 +196,10 @@ private:
     // the dataflow is walked once rather than once per path
     llvm::DenseMap<mlir::Value, ProducerWalkVisit> _producerWalkVisits;
 
+    // Whether a value holds the same value in every row, so a chain of ops over constants
+    // is walked once rather than once per op lowered along it
+    llvm::DenseMap<mlir::Value, bool> _constantColumns;
+
     // A db.sort whose result is capped by an adjacent terminal db.limit fuses into
     // a bounded top-K: the count is baked into the nl.sort_buffer and the db.limit
     // becomes a pass-through. _sortTopK maps the fused db.sort to its bound;
@@ -352,7 +356,7 @@ private:
     // The columns the regions of @param conditional read from around it, but for the
     // constants, which stand for every row and are read where they are bound
     void collectRowColumnsReadByBranches(mlir::db::Conditional conditional,
-                                         llvm::SmallVectorImpl<mlir::Value>& columns) const;
+                                         llvm::SmallVectorImpl<mlir::Value>& columns);
 
     // Brings a union branch's result columns to the value type the whole result carries,
     // reaching them through @param resultColumns, what the branch's db.output or db.yield
@@ -404,7 +408,7 @@ private:
     // loop over the step's rows, so that loop hands these on a row at a time as well.
     void collectReadPastRowLoop(mlir::Operation* subquery,
                                 mlir::Block* stepBlock,
-                                llvm::SmallVectorImpl<mlir::Value>& readPast) const;
+                                llvm::SmallVectorImpl<mlir::Value>& readPast);
 
     // Lower a db.call_subquery. A body carrying its scope, and a unit body, are lowered in
     // place: the block arguments become the step's chunks, the body's loops nest in the
@@ -757,7 +761,7 @@ private:
     // The chunk whose rows the constants of a step are laid out over: the first of
     // @param chunks carrying rows of its own, and the innermost loop's cardinality when
     // every one of them is a constant, or there are none.
-    mlir::Value cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const;
+    mlir::Value cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks);
 
     // Follows the cardinality driver through a step that narrows the relation, from the
     // chunk it read in @param inputChunks to the narrowed chunk standing for it in
