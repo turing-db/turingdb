@@ -23,3 +23,7 @@ std::string_view StringBuffer::insert(std::string_view str) {
     return SpanBuffer::insert(std::span<const char> {str.data(), str.size()});
 }
 
+
+std::span<char> StringBuffer::allocate(size_t size) {
+    return {allocUninit(size), size};
+}

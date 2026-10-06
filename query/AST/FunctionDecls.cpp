@@ -412,6 +412,11 @@ void FunctionDecls::initDefault() {
     tail->setReturnTypes({{EvaluatedType::List}});
     tail->setReturnsItsArgumentShape(true);
 
+    FunctionSignature* reverseList = createFunction("reverse");
+    reverseList->setArguments({EvaluatedType::List});
+    reverseList->setReturnTypes({{EvaluatedType::List}});
+    reverseList->setReturnsItsArgumentShape(true);
+
     // The same four over a type-erased cell, which is the only thing an UNWIND of a
     // stored list of lists can bind: a stored list names no element type, so what its
     // elements are is known per row rather than in the plan. A cell holding a null
@@ -555,6 +560,53 @@ void FunctionDecls::initDefault() {
     FunctionSignature* durationOfCell = createFunction("duration");
     durationOfCell->setArguments({EvaluatedType::ListItem});
     durationOfCell->setReturnTypes({{EvaluatedType::Duration}});
+
+    // Numeric functions
+    for (const EvaluatedType numberType : {EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::ListItem}) {
+        FunctionSignature* abs = createFunction("abs");
+        abs->setArguments({numberType});
+        abs->setReturnTypes({{numberType}});
+
+        FunctionSignature* sign = createFunction("sign");
+        sign->setArguments({numberType});
+        sign->setReturnTypes({{EvaluatedType::Integer}});
+
+        const auto floatFunctionNames = {"ceil", "floor", "round", "sqrt", "exp", "log", "log10",
+                                         "sin", "cos", "tan", "cot", "asin", "acos", "atan",
+                                         "degrees", "radians", "haversin"};
+
+        for (const std::string_view name : floatFunctionNames) {
+            FunctionSignature* floatFunction = createFunction(name);
+            floatFunction->setArguments({numberType});
+            floatFunction->setReturnTypes({{EvaluatedType::Double}});
+        }
+    }
+
+    FunctionSignature* pi = createFunction("pi");
+    pi->setArguments({});
+    pi->setReturnTypes({{EvaluatedType::Double}});
+
+    FunctionSignature* e = createFunction("e");
+    e->setArguments({});
+    e->setReturnTypes({{EvaluatedType::Double}});
+
+    // String functions
+    for (const std::string_view name : {"toUpper", "toLower", "trim", "ltrim", "rtrim", "reverse"}) {
+        FunctionSignature* stringFunction = createFunction(name);
+        stringFunction->setArguments({EvaluatedType::String});
+        stringFunction->setReturnTypes({{EvaluatedType::String}});
+    }
+
+    for (const std::string_view name : {"toUpper", "toLower", "trim", "ltrim", "rtrim"}) {
+        FunctionSignature* stringFunctionOfCell = createFunction(name);
+        stringFunctionOfCell->setArguments({EvaluatedType::ListItem});
+        stringFunctionOfCell->setReturnTypes({{EvaluatedType::String}});
+    }
+
+    // A cell holds a string or a list, so what its reversal is is known per row
+    FunctionSignature* reverseCell = createFunction("reverse");
+    reverseCell->setArguments({EvaluatedType::ListItem});
+    reverseCell->setReturnTypes({{EvaluatedType::ListItem}});
 
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they

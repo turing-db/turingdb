@@ -74,6 +74,12 @@ public:
     ListView concatenate(ListView a, ListView b);
 
     /**
+     * @brief Stores the elements of @param list in reverse order as one new list in
+     * contiguous storage and returns a @ref ListView over it.
+     */
+    ListView reverse(ListView list);
+
+    /**
      * @brief Stores the elements of @param list - the elements of a nested list among them
      * - as one new list in this buffer and returns a @ref ListView over the copy.
      *

@@ -2563,6 +2563,33 @@ def Head : UnaryFunctionOp<"head">;
 def Last : UnaryFunctionOp<"last">;
 def Tail : UnaryFunctionOp<"tail">;
 
+def Abs : UnaryFunctionOp<"abs">;
+def Sign : UnaryFunctionOp<"sign">;
+def Ceil : UnaryFunctionOp<"ceil">;
+def Floor : UnaryFunctionOp<"floor">;
+def Round : UnaryFunctionOp<"round">;
+def Sqrt : UnaryFunctionOp<"sqrt">;
+def Exp : UnaryFunctionOp<"exp">;
+def Log : UnaryFunctionOp<"log">;
+def Log10 : UnaryFunctionOp<"log10">;
+def Sin : UnaryFunctionOp<"sin">;
+def Cos : UnaryFunctionOp<"cos">;
+def Tan : UnaryFunctionOp<"tan">;
+def Cot : UnaryFunctionOp<"cot">;
+def Asin : UnaryFunctionOp<"asin">;
+def Acos : UnaryFunctionOp<"acos">;
+def Atan : UnaryFunctionOp<"atan">;
+def Degrees : UnaryFunctionOp<"degrees">;
+def Radians : UnaryFunctionOp<"radians">;
+def Haversin : UnaryFunctionOp<"haversin">;
+
+def ToUpper : UnaryFunctionOp<"to_upper">;
+def ToLower : UnaryFunctionOp<"to_lower">;
+def Trim : UnaryFunctionOp<"trim">;
+def LTrim : UnaryFunctionOp<"ltrim">;
+def RTrim : UnaryFunctionOp<"rtrim">;
+def Reverse : UnaryFunctionOp<"reverse">;
+
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 

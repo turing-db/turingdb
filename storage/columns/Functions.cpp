@@ -6,6 +6,7 @@
 #include <span>
 
 #include <range/v3/view/drop.hpp>
+#include <spdlog/fmt/bundled/format.h>
 
 #include "datapart/EdgeRecord.h"
 #include "list/ListBufferTypeTag.h"
@@ -45,6 +46,14 @@ types::Int64::Primitive characterCount(const types::String::Primitive string) {
     return std::count_if(string.begin(), string.end(), [](const char byte) {
         return (static_cast<unsigned char>(byte) & 0xC0) != 0x80;
     });
+}
+
+bool isContinuationByte(const char byte) {
+    return (static_cast<unsigned char>(byte) & 0xC0) == 0x80;
+}
+
+ListElementView stageCell(QueryListBuffer* listBuffer, const QueryListBuffer::ListItemVariant& element) {
+    return listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&element, 1}).front();
 }
 
 // The edge a tagged cell holds, or nothing when it holds a null. Anything else is an edge
@@ -191,6 +200,193 @@ LabelsFunction::ResultType LabelsFunction::operator()(const NodeID node) {
 ToStringFunction::ToStringFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {
+}
+
+void db::throwCellTypeError(std::string_view functionName, std::string_view expected) {
+    throw TuringException(fmt::format("{}() reads {}, and this row holds a value that is not one", functionName, expected));
+}
+
+std::optional<types::String::Primitive> db::cellString(const ListElementView cell, std::string_view functionName) {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::String) {
+        return cell.getAs<types::String::Primitive>();
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError(functionName, "a string");
+}
+
+std::string_view db::floatFunctionName(FloatFunctionKind kind) {
+    switch (kind) {
+        case FloatFunctionKind::Ceil:
+            return "ceil";
+        break;
+        case FloatFunctionKind::Floor:
+            return "floor";
+        break;
+        case FloatFunctionKind::Round:
+            return "round";
+        break;
+        case FloatFunctionKind::Sqrt:
+            return "sqrt";
+        break;
+        case FloatFunctionKind::Exp:
+            return "exp";
+        break;
+        case FloatFunctionKind::Log:
+            return "log";
+        break;
+        case FloatFunctionKind::Log10:
+            return "log10";
+        break;
+        case FloatFunctionKind::Sin:
+            return "sin";
+        break;
+        case FloatFunctionKind::Cos:
+            return "cos";
+        break;
+        case FloatFunctionKind::Tan:
+            return "tan";
+        break;
+        case FloatFunctionKind::Cot:
+            return "cot";
+        break;
+        case FloatFunctionKind::Asin:
+            return "asin";
+        break;
+        case FloatFunctionKind::Acos:
+            return "acos";
+        break;
+        case FloatFunctionKind::Atan:
+            return "atan";
+        break;
+        case FloatFunctionKind::Degrees:
+            return "degrees";
+        break;
+        case FloatFunctionKind::Radians:
+            return "radians";
+        break;
+        case FloatFunctionKind::Haversin:
+            return "haversin";
+        break;
+    }
+
+    return "";
+}
+
+TaggedAbsFunction::TaggedAbsFunction(QueryListBuffer* listBuffer)
+    : _listBuffer(listBuffer)
+{
+}
+
+TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const ArgType cell) const {
+    return visitNumberCell<ResultType>(cell, "abs", [this]<typename Number>(const Number number) -> ResultType {
+        return stageCell(_listBuffer, AbsFunction<Number> {}(number));
+    });
+}
+
+TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedSignFunction::ResultType TaggedSignFunction::operator()(const ArgType cell) const {
+    return visitNumberCell<ResultType>(cell, "sign", []<typename Number>(const Number number) -> ResultType {
+        return SignFunction<Number> {}(number);
+    });
+}
+
+TaggedSignFunction::ResultType TaggedSignFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+ToUpperFunction::ToUpperFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
+ToUpperFunction::ResultType ToUpperFunction::operator()(const ArgType string) const {
+    const std::span<char> upper = _stringBuffer->allocate(string.size());
+
+    std::transform(string.begin(), string.end(), upper.begin(), [](const char byte) {
+        return byte >= 'a' && byte <= 'z' ? static_cast<char>(byte - 'a' + 'A') : byte;
+    });
+
+    return {upper.data(), upper.size()};
+}
+
+ToLowerFunction::ToLowerFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
+ToLowerFunction::ResultType ToLowerFunction::operator()(const ArgType string) const {
+    const std::span<char> lower = _stringBuffer->allocate(string.size());
+
+    std::transform(string.begin(), string.end(), lower.begin(), [](const char byte) {
+        return byte >= 'A' && byte <= 'Z' ? static_cast<char>(byte - 'A' + 'a') : byte;
+    });
+
+    return {lower.data(), lower.size()};
+}
+
+ListReverseFunction::ListReverseFunction(QueryListBuffer* listBuffer)
+    : _listBuffer(listBuffer)
+{
+}
+
+ListReverseFunction::ResultType ListReverseFunction::operator()(const ArgType list) const {
+    return _listBuffer->reverse(list);
+}
+
+TaggedReverseFunction::TaggedReverseFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer)
+    : _listBuffer(listBuffer),
+    _stringBuffer(stringBuffer)
+{
+}
+
+TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const ArgType cell) const {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::String) {
+        const ReverseFunction reverse(_stringBuffer);
+        return stageCell(_listBuffer, reverse(cell.getAs<types::String::Primitive>()));
+    } else if (tag == ListBufferTypeTag::ListView) {
+        return stageCell(_listBuffer, _listBuffer->reverse(cell.getAs<ListView>()));
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError("reverse", "a string or a list");
+}
+
+TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+ReverseFunction::ReverseFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
+ReverseFunction::ResultType ReverseFunction::operator()(const ArgType string) const {
+    const std::span<char> reversed = _stringBuffer->allocate(string.size());
+
+    std::span<char>::iterator output = reversed.begin();
+    size_t characterEnd = string.size();
+
+    while (characterEnd > 0) {
+        size_t characterStart = characterEnd - 1;
+        while (characterStart > 0 && isContinuationByte(string[characterStart])) {
+            characterStart--;
+        }
+
+        output = std::copy(string.begin() + characterStart, string.begin() + characterEnd, output);
+        characterEnd = characterStart;
+    }
+
+    return {reversed.data(), reversed.size()};
 }
 
 EdgeTypesFunction::EdgeTypesFunction(GraphView view, StringBuffer* stringBuffer)

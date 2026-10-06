@@ -986,6 +986,7 @@ private:
     mlir::Value disjointComparison(mlir::Value lhs, mlir::Value rhs, bool equality);
 
     mlir::Value constantBool(bool value);
+    mlir::Value constantDouble(double value);
     mlir::Value constantString(llvm::StringRef value);
     mlir::Value constantLabelList(llvm::ArrayRef<std::string> labels);
 

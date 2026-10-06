@@ -454,6 +454,10 @@ Functor makeFunctor(NLExecutionContext* context, LocalMemory* memory) {
         return Functor(*context->getView(), context->getWriteBuffer());
     } else if constexpr (std::is_constructible_v<Functor, GraphView>) {
         return Functor(*context->getView());
+    } else if constexpr (std::is_constructible_v<Functor, QueryListBuffer*, StringBuffer*>) {
+        return Functor(&memory->listBuffer(), &memory->stringBuffer());
+    } else if constexpr (std::is_constructible_v<Functor, QueryListBuffer*>) {
+        return Functor(&memory->listBuffer());
     } else if constexpr (std::is_constructible_v<Functor, StringBuffer*>) {
         return Functor(&memory->stringBuffer());
     } else {
@@ -7920,6 +7924,66 @@ NLUnaryFunctionKernel NLExecutor::selectId(const Column* input, bool inputNullab
     return selectFunction<TaggedIdFunction>(input, inputNullable, memory, result);
 }
 
+NLUnaryFunctionKernel NLExecutor::selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::String::Primitive>(input)) {
+        return selectFunction<ReverseFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedReverseFunction>(input, inputNullable, memory, result);
+    }
+
+    return selectFunction<ListReverseFunction>(input, inputNullable, memory, result);
+}
+
+template <template <typename> typename NumberFunctor>
+NLUnaryFunctionKernel NLExecutor::selectNumberFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<NumberFunctor<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<NumberFunctor<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<NumberFunctor<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<typename NumberFunctor<types::Int64::Primitive>::TaggedCounterpart>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("A numeric function reads an integer or a double column");
+}
+
+template <FloatFunctionKind Kind>
+NLUnaryFunctionKernel NLExecutor::selectFloatFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<FloatFunction<Kind, types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<FloatFunction<Kind, types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<FloatFunction<Kind, types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedFloatFunction<Kind>>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("A numeric function reads an integer or a double column");
+}
+
+template NLUnaryFunctionKernel NLExecutor::selectNumberFunction<AbsFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectNumberFunction<SignFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Ceil>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Floor>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Round>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Sqrt>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Exp>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Log>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Log10>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Sin>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Cos>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Tan>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Cot>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Asin>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Acos>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Atan>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Degrees>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Radians>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFloatFunction<FloatFunctionKind::Haversin>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
 template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
@@ -7960,6 +8024,11 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<DurationComponentFunct
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListLastFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<ToUpperFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<ToLowerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<TrimFunction<TrimSide::Start>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<TrimFunction<TrimSide::End>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<TrimFunction<TrimSide::Both>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 NLUnaryFunctionKernel NLExecutor::selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<types::Int64::Primitive>(input)) {
