@@ -1092,8 +1092,8 @@ bool isHop(Operation* op);
 bool computesPerRow(Operation* op);
 
 Value disjunctionColumn(Value mask) {
-    if (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
-        return disjunctionColumn(disjunction.getLhs());
+    while (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
+        mask = disjunction.getLhs();
     }
 
     EqOp equality = mask.getDefiningOp<EqOp>();
@@ -5913,19 +5913,26 @@ Value patternOrigin(Value column, const SeedPattern& pattern) {
 }
 
 void collectPatternInputs(Value value, const SeedPattern& pattern, llvm::SmallPtrSetImpl<void*>& inputs) {
-    Operation* const def = value.getDefiningOp();
-    if (def && pattern._ops.contains(def) && computesPerRow(def)) {
-        for (const Value operand : def->getOperands()) {
-            collectPatternInputs(operand, pattern, inputs);
+    llvm::SmallVector<Value> worklist {value};
+    llvm::DenseSet<Value> visited;
+
+    while (!worklist.empty()) {
+        const Value current = worklist.pop_back_val();
+        if (!visited.insert(current).second) {
+            continue;
         }
 
-        return;
-    }
+        Operation* const def = current.getDefiningOp();
+        if (def && pattern._ops.contains(def) && computesPerRow(def)) {
+            llvm::append_range(worklist, def->getOperands());
+            continue;
+        }
 
-    const Value origin = patternOrigin(value, pattern);
-    Operation* const originDef = origin.getDefiningOp();
-    if (originDef && pattern._ops.contains(originDef)) {
-        inputs.insert(origin.getAsOpaquePointer());
+        const Value origin = patternOrigin(current, pattern);
+        Operation* const originDef = origin.getDefiningOp();
+        if (originDef && pattern._ops.contains(originDef)) {
+            inputs.insert(origin.getAsOpaquePointer());
+        }
     }
 }
 
@@ -6151,54 +6158,72 @@ bool matchSeedJunction(OpResult seededResult, SeedJunction& junction, SeedPatter
     return analyzePattern(pattern, orderedOps);
 }
 
-bool readsTheSeed(Value value, const SeedJunction& junction) {
-    if (llvm::is_contained(junction._seedResults, value)) {
-        return true;
+// @param visited holds the values an earlier call reached without finding the seed, so a
+// caller asking of every filter along a chain walks the chain once
+bool readsTheSeed(Value value, const SeedJunction& junction, llvm::DenseSet<Value>& visited) {
+    llvm::SmallVector<Value> worklist {value};
+
+    while (!worklist.empty()) {
+        const Value current = worklist.pop_back_val();
+        if (!visited.insert(current).second) {
+            continue;
+        }
+
+        if (llvm::is_contained(junction._seedResults, current)) {
+            return true;
+        }
+
+        Operation* const def = current.getDefiningOp();
+        if (!standsFromTheJunction(def, junction)) {
+            continue;
+        }
+
+        if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
+            const size_t resultIndex = cast<OpResult>(current).getResultNumber();
+            worklist.push_back(carrying.getColumnsToFilter()[resultIndex]);
+        } else {
+            llvm::append_range(worklist, def->getOperands());
+        }
     }
 
-    Operation* const def = value.getDefiningOp();
-    if (!standsFromTheJunction(def, junction)) {
-        return false;
-    }
-
-    if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
-        const size_t resultIndex = cast<OpResult>(value).getResultNumber();
-        return readsTheSeed(carrying.getColumnsToFilter()[resultIndex], junction);
-    }
-
-    return llvm::any_of(def->getOperands(), [&junction](Value operand) { return readsTheSeed(operand, junction); });
+    return false;
 }
 
 bool isComputedFromTheSeed(Value ids, const SeedJunction& junction, Operation* filter) {
-    if (llvm::is_contained(junction._seedResults, ids)) {
-        return true;
-    }
+    llvm::SmallVector<Value> worklist {ids};
+    llvm::DenseSet<Value> visited;
+    llvm::DenseSet<Value> masksVisited;
 
-    Operation* const def = ids.getDefiningOp();
-    if (!standsFromTheJunction(def, junction)) {
-        return true;
-    }
+    while (!worklist.empty()) {
+        const Value current = worklist.pop_back_val();
+        if (!visited.insert(current).second || llvm::is_contained(junction._seedResults, current)) {
+            continue;
+        }
 
-    if (def == junction._op || !def->isBeforeInBlock(filter)) {
-        return false;
-    }
+        Operation* const def = current.getDefiningOp();
+        if (!standsFromTheJunction(def, junction)) {
+            continue;
+        }
 
-    if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
-        if (readsTheSeed(carrying.getMask(), junction)) {
+        if (def == junction._op || !def->isBeforeInBlock(filter)) {
             return false;
         }
 
-        const size_t resultIndex = cast<OpResult>(ids).getResultNumber();
-        return isComputedFromTheSeed(carrying.getColumnsToFilter()[resultIndex], junction, filter);
+        if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
+            if (readsTheSeed(carrying.getMask(), junction, masksVisited)) {
+                return false;
+            }
+
+            const size_t resultIndex = cast<OpResult>(current).getResultNumber();
+            worklist.push_back(carrying.getColumnsToFilter()[resultIndex]);
+        } else if (!computesPerRow(def)) {
+            return false;
+        } else {
+            llvm::append_range(worklist, def->getOperands());
+        }
     }
 
-    if (!computesPerRow(def)) {
-        return false;
-    }
-
-    return llvm::all_of(def->getOperands(), [&junction, filter](Value operand) {
-        return isComputedFromTheSeed(operand, junction, filter);
-    });
+    return true;
 }
 
 // The junction's rows reach the equality's filter through filters and row-wise ops alone,
@@ -6326,25 +6351,46 @@ public:
 
     // The value a pattern column holds over the rebuilt rows
     Value materialize(Value value) {
-        const Value origin = patternOrigin(value, _pattern);
-        if (_current.count(origin)) {
-            return _current.lookup(origin);
+        mlir::IRMapping materialized;
+        llvm::SmallVector<Value> worklist {value};
+
+        while (!worklist.empty()) {
+            const Value pending = worklist.back();
+            if (materialized.contains(pending)) {
+                worklist.pop_back();
+                continue;
+            }
+
+            const Value origin = patternOrigin(pending, _pattern);
+            Operation* const def = pending.getDefiningOp();
+
+            if (_current.count(origin)) {
+                materialized.map(pending, _current.lookup(origin));
+            } else if (!def || !_pattern._ops.contains(def)) {
+                materialized.map(pending, pending);
+            } else {
+                bioassert(computesPerRow(def), "A pattern column read before the step binding it");
+
+                bool operandsPending = false;
+                for (const Value operand : llvm::reverse(def->getOperands())) {
+                    if (!materialized.contains(operand)) {
+                        worklist.push_back(operand);
+                        operandsPending = true;
+                    }
+                }
+
+                if (operandsPending) {
+                    continue;
+                }
+
+                Operation* const cloned = _builder.clone(*def, materialized);
+                materialized.map(pending, cloned->getResult(cast<OpResult>(pending).getResultNumber()));
+            }
+
+            worklist.pop_back();
         }
 
-        Operation* const def = value.getDefiningOp();
-        if (!def || !_pattern._ops.contains(def)) {
-            return value;
-        }
-
-        bioassert(computesPerRow(def), "A pattern column read before the step binding it");
-
-        mlir::IRMapping mapping;
-        for (const Value operand : def->getOperands()) {
-            mapping.map(operand, materialize(operand));
-        }
-
-        Operation* const cloned = _builder.clone(*def, mapping);
-        return cloned->getResult(cast<OpResult>(value).getResultNumber());
+        return materialized.lookup(value);
     }
 
     void walkFrom(Value seeded) {
@@ -6561,30 +6607,54 @@ void dropSeedEquality(FilterOp filter, EqOp equality, mlir::RewriterBase& rewrit
 }
 
 Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& seedColumns, mlir::OpBuilder& builder) {
-    if (seedColumns.contains(ids)) {
-        return seedColumns.lookup(ids);
+    llvm::SmallVector<Value> worklist {ids};
+
+    while (!worklist.empty()) {
+        const Value value = worklist.back();
+        if (seedColumns.contains(value)) {
+            worklist.pop_back();
+            continue;
+        }
+
+        Operation* const def = value.getDefiningOp();
+        if (!standsFromTheJunction(def, junction)) {
+            seedColumns.map(value, value);
+            worklist.pop_back();
+            continue;
+        }
+
+        const size_t resultIndex = cast<OpResult>(value).getResultNumber();
+
+        if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
+            const Value carried = carrying.getColumnsToFilter()[resultIndex];
+            if (seedColumns.contains(carried)) {
+                seedColumns.map(value, seedColumns.lookup(carried));
+                worklist.pop_back();
+            } else {
+                worklist.push_back(carried);
+            }
+
+            continue;
+        }
+
+        bool operandsPending = false;
+        for (const Value operand : llvm::reverse(def->getOperands())) {
+            if (!seedColumns.contains(operand)) {
+                worklist.push_back(operand);
+                operandsPending = true;
+            }
+        }
+
+        if (operandsPending) {
+            continue;
+        }
+
+        Operation* const cloned = builder.clone(*def, seedColumns);
+        seedColumns.map(value, cloned->getResult(resultIndex));
+        worklist.pop_back();
     }
 
-    Operation* const def = ids.getDefiningOp();
-    if (!standsFromTheJunction(def, junction)) {
-        return ids;
-    }
-
-    if (FilterOp carrying = dyn_cast<FilterOp>(def)) {
-        const size_t resultIndex = cast<OpResult>(ids).getResultNumber();
-        return cloneSeedIDs(carrying.getColumnsToFilter()[resultIndex], junction, seedColumns, builder);
-    }
-
-    mlir::IRMapping mapping;
-    for (const Value operand : def->getOperands()) {
-        mapping.map(operand, cloneSeedIDs(operand, junction, seedColumns, builder));
-    }
-
-    Operation* const cloned = builder.clone(*def, mapping);
-    const Value clonedIDs = cloned->getResult(cast<OpResult>(ids).getResultNumber());
-    seedColumns.map(ids, clonedIDs);
-
-    return clonedIDs;
+    return seedColumns.lookup(ids);
 }
 
 void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {

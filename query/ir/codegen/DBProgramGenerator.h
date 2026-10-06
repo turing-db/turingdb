@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Types.h"
@@ -291,6 +292,10 @@ private:
     // names the span of the query it came from
     const CypherAST* _ast {nullptr};
 
+    // Whether a value holds the same value in every row, so a chain of clauses over one
+    // column is walked once rather than once per clause
+    llvm::DenseMap<mlir::Value, bool> _constantColumns;
+
     // The branches of a union in a subquery body start from the rows of that body, so each
     // branch block being generated maps to the body block whose columns are in flight in it
     std::unordered_map<mlir::Block*, mlir::Block*> _unionBranchRowBlocks;
@@ -464,7 +469,7 @@ private:
 
     void collectVarsOfDecl(const VarDecl* decl, llvm::SmallVectorImpl<const VariableDependency*>& vars) const;
 
-    bool walkReadsAnotherComponent(const DefinedVars& componentVars) const;
+    bool walkReadsAnotherComponent(const DefinedVars& componentVars);
 
     void expandCrossedComponents(llvm::ArrayRef<const VariableDependency*> roots,
                                  const std::vector<TranslatedComponent>& components,
@@ -706,7 +711,7 @@ private:
     // itself where one carries rows - the rows a cut left, where a cut ran - and otherwise
     // the relation driving the scope. Null where no relation drives it at all, as for a
     // bare `RETURN 1`, whose projection is the single row its constants are.
-    mlir::Value resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected) const;
+    mlir::Value resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected);
 
     // A standalone CALL ends no projection: what it yielded is the result
     void generateYieldedOutput(const SinglePartQuery* query);
@@ -994,7 +999,7 @@ private:
     // and not the addresses'
     mlir::Value resolveColumnInScope(ColumnPredicate accept) const;
 
-    mlir::Value resolveRowCarryingColumn() const;
+    mlir::Value resolveRowCarryingColumn();
 
     // Pins a constant column to the relation whose rows it stands for. Left unpinned, a
     // constant is aligned during lowering against whichever loop is innermost by then,
@@ -1004,7 +1009,7 @@ private:
     // The column count(*) counts: the first variable bound to a column holding the rows
     // flowing past the insertion point. A scope of constants alone is the single row those
     // constants are, which is what count(*) counts there
-    mlir::Value resolveWildcardColumn() const;
+    mlir::Value resolveWildcardColumn();
 
     // The column an aggregate folds over: the column count(*) counts, or the one its
     // argument's translation computes. @param variableColumns resolves an entity

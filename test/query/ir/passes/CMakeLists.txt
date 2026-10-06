@@ -301,6 +301,8 @@ add_ir_tests(test_query_ir_deep_chain_passes DeepChainPassesTest.cpp)
 
 add_ir_tests(test_query_ir_constant_column_deep_chain ConstantColumnDeepChainTest.cpp)
 
+add_call_v3_test(test_query_ir_deep_chain_query DeepChainQueryTest.cpp)
+
 add_call_v3_test(test_query_ir_reroot_id_operand_read_twice RerootIDOperandReadTwiceTest.cpp)
 
 add_call_v3_test(test_query_ir_seed_ids_below_a_filter SeedIDsBelowAFilterTest.cpp)

@@ -1260,7 +1260,7 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
         }
 
         const mlir::Value column = _part._varMap[var].back();
-        if (!isRowAlignedHere(column) || yieldsConstantColumn(column)) {
+        if (!isRowAlignedHere(column) || yieldsConstantColumn(column, _constantColumns)) {
             continue;
         }
 
@@ -1320,7 +1320,7 @@ void DBProgramGenerator::collectHopCarrySet(const VariableDependency* src,
         }
 
         const mlir::Value column = _part._varMap[var].back();
-        if (!isRowAlignedHere(column) || yieldsConstantColumn(column)) {
+        if (!isRowAlignedHere(column) || yieldsConstantColumn(column, _constantColumns)) {
             continue;
         }
 
@@ -1479,7 +1479,7 @@ void DBProgramGenerator::collectHopImports(const EdgePattern* pattern,
                                            llvm::SmallVectorImpl<mlir::Value>& columns) {
     for (const VarDecl* decl : pattern->hopImports()) {
         const mlir::Value column = resolveEntityColumn(decl);
-        if (column && yieldsConstantColumn(column)) {
+        if (column && yieldsConstantColumn(column, _constantColumns)) {
             continue;
         }
 
@@ -1731,6 +1731,7 @@ void DBProgramGenerator::createMain() {
 
 void DBProgramGenerator::generate(const CypherAST* ast) {
     _ast = ast;
+    _constantColumns.clear();
     _vdg.setDiagnosticsManager(ast->getDiagnosticsManager());
 
     createMain();
@@ -2254,7 +2255,7 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
         for (const VariableDependency* var : bound) {
             defined.insert(var);
 
-            if (!yieldsConstantColumn(_part._varMap.at(var).back())) {
+            if (!yieldsConstantColumn(_part._varMap.at(var).back(), _constantColumns)) {
                 mainComponent._vars.push_back(var);
             }
         }
@@ -2395,7 +2396,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
 
         // A constant stands for every row rather than holding rows of its own, so an op
         // over the row set has no row of it to cut or to cross
-        if (yieldsConstantColumn(column)) {
+        if (yieldsConstantColumn(column, _constantColumns)) {
             continue;
         }
 
@@ -2541,7 +2542,7 @@ void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
 void DBProgramGenerator::filterConstantScope(mlir::Value predicate) {
     llvm::SmallVector<const VariableDependency*> constantVars;
     for (auto& [var, values] : _part._varMap) {
-        if (yieldsConstantColumn(values.back())) {
+        if (yieldsConstantColumn(values.back(), _constantColumns)) {
             constantVars.push_back(var);
         }
     }
@@ -2688,7 +2689,7 @@ void DBProgramGenerator::extendBoundDataflow(DefinedVars& defined,
     for (const VariableDependency* var : bound) {
         defined.insert(var);
 
-        if (!yieldsConstantColumn(_part._varMap.at(var).back())) {
+        if (!yieldsConstantColumn(_part._varMap.at(var).back(), _constantColumns)) {
             carriedSet.push_back(var);
             dataflowVars.push_back(var);
         }
@@ -2953,7 +2954,7 @@ void DBProgramGenerator::collectVarsOfDecl(const VarDecl* decl, llvm::SmallVecto
     }
 }
 
-bool DBProgramGenerator::walkReadsAnotherComponent(const DefinedVars& componentVars) const {
+bool DBProgramGenerator::walkReadsAnotherComponent(const DefinedVars& componentVars) {
     const auto inComponent = [&componentVars](const VariableDependency* var) {
         return componentVars.contains(var);
     };
@@ -2978,7 +2979,7 @@ bool DBProgramGenerator::walkReadsAnotherComponent(const DefinedVars& componentV
                     continue;
                 }
 
-                const bool holdsRows = !holdsColumn(var) || !yieldsConstantColumn(_part._varMap.at(var).back());
+                const bool holdsRows = !holdsColumn(var) || !yieldsConstantColumn(_part._varMap.at(var).back(), _constantColumns);
                 if (holdsRows) {
                     return true;
                 }
@@ -3224,8 +3225,8 @@ void DBProgramGenerator::takeMainDataflow(mlir::Block* mainBlock, TranslatedComp
     mlir::Block* const scratch = new mlir::Block(); // Region destructor frees scratch
     component._region->push_back(scratch);
 
-    const auto bindsAConstant = [](mlir::Value result) {
-        return yieldsConstantColumn(result);
+    const auto bindsAConstant = [this](mlir::Value result) {
+        return yieldsConstantColumn(result, _constantColumns);
     };
 
     // A constant is left above the product: it holds one value standing for every row, so
@@ -3598,7 +3599,7 @@ void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
         }
 
         const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, keyExpr);
-        if (yieldsConstantColumn(keyColumn)) {
+        if (yieldsConstantColumn(keyColumn, _constantColumns)) {
             continue;
         }
 
@@ -4528,7 +4529,7 @@ void DBProgramGenerator::collectCarrySet(CarrySet& carrySet) {
         for (const auto& [propName, propColumn] : written._properties) {
             // A constant holds one value standing for every row rather than rows of its
             // own, so the fan-out leaves it as it is
-            if (yieldsConstantColumn(propColumn)) {
+            if (yieldsConstantColumn(propColumn, _constantColumns)) {
                 continue;
             }
 
@@ -4576,7 +4577,7 @@ void DBProgramGenerator::collectGroupedColumns(CarrySet& carrySet) {
 
     for (const auto& [expr, column] : exprMap) {
         const bool holdsTheGroupedRows = isRowAlignedHere(column)
-                                      && !yieldsConstantColumn(column)
+                                      && !yieldsConstantColumn(column, _constantColumns)
                                       && boundAtOrAfter(column, _part._aggregateOp);
 
         if (holdsTheGroupedRows) {
@@ -5003,12 +5004,12 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), oneType, oneAttr).getResult();
 }
 
-mlir::Value DBProgramGenerator::resolveRowCarryingColumn() const {
-    return resolveColumnInScope([](mlir::Value column) { return !yieldsConstantColumn(column); });
+mlir::Value DBProgramGenerator::resolveRowCarryingColumn() {
+    return resolveColumnInScope([this](mlir::Value column) { return !yieldsConstantColumn(column, _constantColumns); });
 }
 
 mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
-    if (!yieldsConstantColumn(column)) {
+    if (!yieldsConstantColumn(column, _constantColumns)) {
         return column;
     }
 
@@ -5022,7 +5023,7 @@ mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
     return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), noneType, column, driver).getResult();
 }
 
-mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
+mlir::Value DBProgramGenerator::resolveWildcardColumn() {
     const mlir::Value rowColumn = resolveRowCarryingColumn();
     if (rowColumn) {
         return rowColumn;
@@ -5185,9 +5186,9 @@ void DBProgramGenerator::generateShortestPath(std::span<Stmt* const> stmts) {
     _part._yieldedColumns.push_back({stmt->getPathDecl(), pathName, shortestPath.getPath()});
 }
 
-mlir::Value DBProgramGenerator::resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected) const {
+mlir::Value DBProgramGenerator::resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected) {
     for (const mlir::Value column : projected) {
-        if (!yieldsConstantColumn(column)) {
+        if (!yieldsConstantColumn(column, _constantColumns)) {
             return column;
         }
     }
@@ -5228,7 +5229,7 @@ void DBProgramGenerator::broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Va
     const mlir::Value driver = resolveProjectionDriver(projected);
 
     for (mlir::Value& column : projected) {
-        if (yieldsConstantColumn(column)) {
+        if (yieldsConstantColumn(column, _constantColumns)) {
             column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, driver).getResult();
         }
     }
@@ -5442,7 +5443,7 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     llvm::SmallVector<PublishedColumn> constants;
 
     for (const PublishedColumn& column : scopeColumns) {
-        if (yieldsConstantColumn(column._column)) {
+        if (yieldsConstantColumn(column._column, _constantColumns)) {
             constants.push_back(column);
         } else {
             inputs.push_back(column);
@@ -6058,7 +6059,7 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
     llvm::SmallVector<PublishedColumn> constants;
 
     for (const PublishedColumn& column : scopeColumns) {
-        if (yieldsConstantColumn(column._column)) {
+        if (yieldsConstantColumn(column._column, _constantColumns)) {
             constants.push_back(column);
         } else {
             inputs.push_back(column);
@@ -6169,8 +6170,8 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
 }
 
 void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir::Value>& projected) {
-    const bool constantsAlone = std::ranges::all_of(projected, [](mlir::Value column) {
-        return yieldsConstantColumn(column);
+    const bool constantsAlone = std::ranges::all_of(projected, [this](mlir::Value column) {
+        return yieldsConstantColumn(column, _constantColumns);
     });
 
     if (!constantsAlone) {
@@ -6750,7 +6751,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
             // A key the projection does not carry is read into a column of its own, which
             // is constant when the key computes over constants alone: one value for every
             // row, so it orders nothing and there is no per-row column to key on
-            if (yieldsConstantColumn(keyColumn)) {
+            if (yieldsConstantColumn(keyColumn, _constantColumns)) {
                 continue;
             }
 
@@ -7460,7 +7461,7 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
         const bool consumedByTheAggregate = _part._aggregateOp
                                          && !boundAtOrAfter(column._column, _part._aggregateOp);
 
-        if (yieldsConstantColumn(column._column)) {
+        if (yieldsConstantColumn(column._column, _constantColumns)) {
             constants.push_back(column);
         } else if (!consumedByTheAggregate) {
             inputs.push_back(column);
@@ -7628,7 +7629,7 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
     collectElementCarrySet(carrySet);
 
     llvm::SmallVector<mlir::Value> carried(carrySet._columns.begin(), carrySet._columns.end());
-    if (subject && !yieldsConstantColumn(subject)) {
+    if (subject && !yieldsConstantColumn(subject, _constantColumns)) {
         carried.push_back(subject);
     }
 
@@ -7724,7 +7725,7 @@ mlir::Value DBProgramGenerator::disjointComparison(mlir::Value lhs, mlir::Value 
     // absent, and a null test on the literal would meet its one row against the relation's
     llvm::SmallVector<mlir::Value, 2> columns;
     for (const mlir::Value operand : {lhs, rhs}) {
-        if (!yieldsConstantColumn(operand)) {
+        if (!yieldsConstantColumn(operand, _constantColumns)) {
             columns.push_back(operand);
         }
     }
@@ -9088,7 +9089,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
             // A constant tells no two rows apart, so it groups nothing - whether the
             // projection spells it out or a wildcard expands it
-            if (yieldsConstantColumn(keyColumn)) {
+            if (yieldsConstantColumn(keyColumn, _constantColumns)) {
                 continue;
             }
 
@@ -9135,7 +9136,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             // A constant column holds the same value in every row, so it tells no two
             // rows apart: it groups nothing and rides along beside the groups, as it
             // rides past a dedup or a sort
-            if (yieldsConstantColumn(keyColumn)) {
+            if (yieldsConstantColumn(keyColumn, _constantColumns)) {
                 continue;
             }
 

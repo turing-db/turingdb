@@ -58,43 +58,58 @@ namespace {
 // A chunk holding the single row a reduction collapsed the whole relation to, or a
 // computation over such rows and constants: like a constant, it holds one value for
 // every row of the step that reads it, whichever loop that step belongs to.
-bool yieldsReducedRowChunk(mlir::Value column, llvm::DenseMap<mlir::Value, bool>& classified) {
-    const auto classifiedIt = classified.find(column);
-    if (classifiedIt != classified.end()) {
-        return classifiedIt->second;
-    }
-
-    mlir::Operation* const definingOp = column.getDefiningOp();
-
-    bool isReducedRow = false;
-    if (definingOp) {
-        if (mlir::isa<nl::CountResult, nl::CountScanRows, nl::AggregateResult>(definingOp)) {
-            isReducedRow = true;
-        } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
-            bool readsAReducedRow = false;
-            bool everyOperandStandsForEveryRow = true;
-
-            for (const mlir::Value operand : definingOp->getOperands()) {
-                const bool operandIsReducedRow = yieldsReducedRowChunk(operand, classified);
-                const bool operandStandsForEveryRow = operandIsReducedRow || yieldsConstantColumn(operand);
-
-                readsAReducedRow = readsAReducedRow || operandIsReducedRow;
-                everyOperandStandsForEveryRow = everyOperandStandsForEveryRow && operandStandsForEveryRow;
-            }
-
-            isReducedRow = readsAReducedRow && everyOperandStandsForEveryRow;
-        }
-    }
-
-    classified[column] = isReducedRow;
-
-    return isReducedRow;
-}
-
 bool yieldsReducedRowChunk(mlir::Value column) {
     llvm::DenseMap<mlir::Value, bool> classified;
+    llvm::DenseMap<mlir::Value, bool> constants;
+    llvm::SmallVector<mlir::Value> worklist {column};
 
-    return yieldsReducedRowChunk(column, classified);
+    while (!worklist.empty()) {
+        const mlir::Value value = worklist.back();
+        if (classified.contains(value)) {
+            worklist.pop_back();
+            continue;
+        }
+
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        const bool isReduction = definingOp && mlir::isa<nl::CountResult, nl::CountScanRows, nl::AggregateResult>(definingOp);
+        const bool dependsOnOperands = definingOp
+                                    && !isReduction
+                                    && definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>();
+
+        if (!dependsOnOperands) {
+            classified[value] = isReduction;
+            worklist.pop_back();
+            continue;
+        }
+
+        bool operandsPending = false;
+        for (const mlir::Value operand : definingOp->getOperands()) {
+            if (!classified.contains(operand)) {
+                worklist.push_back(operand);
+                operandsPending = true;
+            }
+        }
+
+        if (operandsPending) {
+            continue;
+        }
+
+        bool readsAReducedRow = false;
+        bool everyOperandStandsForEveryRow = true;
+
+        for (const mlir::Value operand : definingOp->getOperands()) {
+            const bool operandIsReducedRow = classified.at(operand);
+            const bool operandStandsForEveryRow = operandIsReducedRow || yieldsConstantColumn(operand, constants);
+
+            readsAReducedRow = readsAReducedRow || operandIsReducedRow;
+            everyOperandStandsForEveryRow = everyOperandStandsForEveryRow && operandStandsForEveryRow;
+        }
+
+        classified[value] = readsAReducedRow && everyOperandStandsForEveryRow;
+        worklist.pop_back();
+    }
+
+    return classified.at(column);
 }
 
 using NLUnaryFunctionSelector = NLUnaryFunctionKernel (*)(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
