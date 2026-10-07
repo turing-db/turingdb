@@ -20,6 +20,7 @@ target_link_libraries(turingdb PUBLIC
     turing_db_proto_client_s
     argparse
     linenoise_s
-    termcolor)
+    termcolor
+    nlohmann_json)
 
 install(TARGETS turingdb DESTINATION bin)
