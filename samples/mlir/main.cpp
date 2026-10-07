@@ -260,7 +260,7 @@ void progGen(std::string_view query, Graph& graph, mlir::ModuleOp* module) {
 
     const auto codegenStart = Clock::now();
     DBProgramGenerator generator(module);
-    generator.generate(&ast);
+    generator.generate(&ast, ast.queries().front());
     const double codegenMs = Ms(Clock::now() - codegenStart).count();
 
     std::cout << "[progGen] parse: " << parseMs << " ms, "

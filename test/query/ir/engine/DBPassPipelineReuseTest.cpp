@@ -63,7 +63,7 @@ protected:
 
         DBProgramGenerator generator(&module, nullptr, passContext);
         generator.setPassPipeline(_passPipeline.get());
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
 
         program.clear();
         llvm::raw_string_ostream stream(program);

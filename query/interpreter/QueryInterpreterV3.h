@@ -15,6 +15,9 @@ class MLIRContext;
 namespace db {
 
 class SystemManager;
+class SystemAccessor;
+class CypherAST;
+class QueryCommand;
 class LocalMemory;
 class CompilerContext;
 class ExplainReport;
@@ -46,6 +49,15 @@ private:
                      CommitHash hash,
                      ChangeID changeID,
                      NLOutputSink* sink);
+
+    void executeStatement(QueryStatus& status,
+                          SystemAccessor* system,
+                          CypherAST* ast,
+                          QueryCommand* statement,
+                          std::string_view graphName,
+                          CommitHash hash,
+                          ChangeID changeID,
+                          NLOutputSink* sink);
 
     // Emits the dumps an explained query collected, by compiling and running the
     // small program that reports them - so an EXPLAIN returns its rows through the

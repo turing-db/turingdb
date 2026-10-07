@@ -12,6 +12,7 @@
 #include "DBDialectInterpreter.h"
 #include "DBProgramGenerator.h"
 #include "ExplainReport.h"
+#include "NLDiscardedOutputSink.h"
 #include "NLSystemContext.h"
 #include "iterators/ChunkConfig.h"
 
@@ -19,6 +20,7 @@
 #include "CypherASTDumper.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
+#include "QueryCommand.h"
 
 #include "LocalMemory.h"
 #include "ProcedureContext.h"
@@ -66,7 +68,55 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      NLOutputSink* sink) {
     SystemAccessor system = _sysMan->accessShared();
 
-    auto txRes = system.openTransaction(graphName, hash, changeID);
+    CypherAST ast(system.getProcedures(), query);
+    CypherParser parser(&ast);
+    try {
+        parser.parse(query);
+    } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::PARSE_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const std::exception& e) {
+        status.setStatus(QueryStatus::Status::PARSE_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    } catch (...) {
+        status.setStatus(QueryStatus::Status::PARSE_ERROR);
+        status.setMessage("Unknown exception occurred");
+        return;
+    }
+
+    NLDiscardedOutputSink discardedSink;
+    const CypherAST::QueryCommands& statements = ast.queries();
+
+    for (size_t statementIndex = 0; statementIndex < statements.size(); statementIndex++) {
+        const bool isLastStatement = statementIndex + 1 == statements.size();
+        NLOutputSink* const statementSink = isLastStatement ? sink : &discardedSink;
+
+        executeStatement(status,
+                         &system,
+                         &ast,
+                         statements[statementIndex],
+                         graphName,
+                         hash,
+                         changeID,
+                         statementSink);
+
+        if (!status.isOk()) {
+            return;
+        }
+    }
+}
+
+void QueryInterpreterV3::executeStatement(QueryStatus& status,
+                                          SystemAccessor* system,
+                                          CypherAST* ast,
+                                          QueryCommand* statement,
+                                          std::string_view graphName,
+                                          CommitHash hash,
+                                          ChangeID changeID,
+                                          NLOutputSink* sink) {
+    auto txRes = system->openTransaction(graphName, hash, changeID);
     if (!txRes) {
         switch (txRes.error().getType()) {
             case ChangeErrorType::GRAPH_NOT_FOUND: {
@@ -106,36 +156,17 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         view.setChangeDeletions(&writeBuffer->deletedNodes(), &writeBuffer->deletedEdges());
     }
 
-    // Filled for every query, since which statement this one is only becomes known
-    // once it is parsed. An ordinary query never reads it.
+    // Filled for every statement, though only a system command reads it
     NLSystemContext systemContext;
     systemContext.setSystemManager(_sysMan);
-    systemContext.setAccessor(&system);
+    systemContext.setAccessor(system);
     systemContext.setTransaction(&txRes.value());
     systemContext.setCommitBuilder(commitBuilder);
     systemContext.setGraphName(graphName);
 
-    CypherAST ast(system.getProcedures(), query);
-    CypherParser parser(&ast);
+    CypherAnalyzer analyzer(ast, view);
     try {
-        parser.parse(query);
-    } catch (const CompilerException& e) {
-        status.setStatus(QueryStatus::Status::PARSE_ERROR);
-        status.setMessage(e.what());
-        return;
-    } catch (const std::exception& e) {
-        status.setStatus(QueryStatus::Status::PARSE_ERROR);
-        status.setMessage(std::string("Unexpected exception: ") + e.what());
-        return;
-    } catch (...) {
-        status.setStatus(QueryStatus::Status::PARSE_ERROR);
-        status.setMessage("Unknown exception occurred");
-        return;
-    }
-
-    CypherAnalyzer analyzer(&ast, view);
-    try {
-        analyzer.analyze();
+        analyzer.analyze(statement);
     } catch (const CompilerException& e) {
         status.setStatus(QueryStatus::Status::ANALYZE_ERROR);
         status.setMessage(e.what());
@@ -151,14 +182,14 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     }
 
     std::optional<ExplainReport> explainReport;
-    const ExplainRequest* const explainRequest = ast.getExplainRequest();
+    const ExplainRequest* const explainRequest = statement->getExplainRequest();
     if (explainRequest) {
         explainReport.emplace(explainRequest);
 
         if (explainRequest->isRequested(ExplainStage::AST)) {
             std::ostringstream tree;
-            CypherASTDumper dumper(&ast);
-            dumper.dump(tree);
+            CypherASTDumper dumper;
+            dumper.dump(tree, statement);
 
             explainReport->addText(ExplainRequest::getStageName(ExplainStage::AST), tree.str());
         }
@@ -183,7 +214,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     DBProgramGenerator generator(&module, explain, passContext);
     generator.setPassPipeline(_compilerContext->getPassPipeline());
     try {
-        generator.generate(&ast);
+        generator.generate(ast, statement);
     } catch (const CompilerException& e) {
         _compilerContext->handleCompileError();
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
@@ -214,10 +245,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     }
 
     ProcedureContext procedureContext;
-    procedureContext.setGraph(system.getGraph(graphName));
+    procedureContext.setGraph(system->getGraph(graphName));
     procedureContext.setGraphView(&view);
     procedureContext.setTransaction(&txRes.value());
-    procedureContext.setProcedures(system.getProcedures());
+    procedureContext.setProcedures(system->getProcedures());
     procedureContext.setChunkSize(_chunkSize);
     procedureContext.setListBuffer(&_mem->listBuffer());
     procedureContext.setStringBuffer(&_mem->stringBuffer());

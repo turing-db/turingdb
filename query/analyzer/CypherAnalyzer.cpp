@@ -120,88 +120,92 @@ CypherAnalyzer::~CypherAnalyzer() {
 
 void CypherAnalyzer::analyze() {
     for (QueryCommand* query : _ast->queries()) {
-        setScope(query->getDeclContext());
+        analyze(query);
+    }
+}
 
-        switch (query->getKind()) {
-            case QueryCommand::Kind::SINGLE_PART_QUERY:
-                analyze(static_cast<const SinglePartQuery*>(query));
-            break;
+void CypherAnalyzer::analyze(QueryCommand* query) {
+    setScope(query->getDeclContext());
 
-            case QueryCommand::Kind::UNION_QUERY:
-                analyze(static_cast<const UnionQuery*>(query));
-            break;
+    switch (query->getKind()) {
+        case QueryCommand::Kind::SINGLE_PART_QUERY:
+            analyze(static_cast<const SinglePartQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CONDITIONAL_QUERY:
-                analyze(static_cast<const ConditionalQuery*>(query));
-            break;
+        case QueryCommand::Kind::UNION_QUERY:
+            analyze(static_cast<const UnionQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_GRAPH_QUERY:
-                analyze(static_cast<const LoadGraphQuery*>(query));
-            break;
+        case QueryCommand::Kind::CONDITIONAL_QUERY:
+            analyze(static_cast<const ConditionalQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_GML_QUERY:
-                analyze(static_cast<LoadGMLQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_GRAPH_QUERY:
+            analyze(static_cast<const LoadGraphQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_PARQUET_QUERY:
-                analyze(static_cast<LoadParquetQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_GML_QUERY:
+            analyze(static_cast<LoadGMLQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CREATE_GRAPH_QUERY:
-                analyze(static_cast<const CreateGraphQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_PARQUET_QUERY:
+            analyze(static_cast<LoadParquetQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_JSONL_QUERY:
-                analyze(static_cast<LoadJsonlQuery*>(query));
-            break;
+        case QueryCommand::Kind::CREATE_GRAPH_QUERY:
+            analyze(static_cast<const CreateGraphQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::S3_CONNECT_QUERY:
-                analyze(static_cast<const S3ConnectQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_JSONL_QUERY:
+            analyze(static_cast<LoadJsonlQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::S3_TRANSFER_QUERY:
-                analyze(static_cast<S3TransferQuery*>(query));
-            break;
+        case QueryCommand::Kind::S3_CONNECT_QUERY:
+            analyze(static_cast<const S3ConnectQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
-                analyze(static_cast<const CreateVectorIndexQuery*>(query));
-            break;
+        case QueryCommand::Kind::S3_TRANSFER_QUERY:
+            analyze(static_cast<S3TransferQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_VECTOR_QUERY:
-                analyze(static_cast<const LoadVectorQuery*>(query));
-            break;
+        case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+            analyze(static_cast<const CreateVectorIndexQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
-                analyze(static_cast<const LoadEmbeddingQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_VECTOR_QUERY:
+            analyze(static_cast<const LoadVectorQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
-                analyze(static_cast<const InstallExtensionQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
+            analyze(static_cast<const LoadEmbeddingQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
-                analyze(static_cast<const CreateNodePropertyIndexQuery*>(query));
-            break;
+        case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
+            analyze(static_cast<const InstallExtensionQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
-                analyze(static_cast<const CreateEdgePropertyIndexQuery*>(query));
-            break;
+        case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
+            analyze(static_cast<const CreateNodePropertyIndexQuery*>(query));
+        break;
 
-            // Nothing to analyze
-            case QueryCommand::Kind::CHANGE_QUERY:
-            case QueryCommand::Kind::COMMIT_QUERY:
-            case QueryCommand::Kind::LIST_GRAPH_QUERY:
-            case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
-            case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
-            case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
-            case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
-            case QueryCommand::Kind::LOAD_COMMIT_QUERY:
-            case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
-            case QueryCommand::Kind::DROP_INDEX_QUERY:
-            case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
-            break;
+        case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
+            analyze(static_cast<const CreateEdgePropertyIndexQuery*>(query));
+        break;
 
-        }
+        // Nothing to analyze
+        case QueryCommand::Kind::CHANGE_QUERY:
+        case QueryCommand::Kind::COMMIT_QUERY:
+        case QueryCommand::Kind::LIST_GRAPH_QUERY:
+        case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
+        case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
+        case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+        case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+        case QueryCommand::Kind::LOAD_COMMIT_QUERY:
+        case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
+        case QueryCommand::Kind::DROP_INDEX_QUERY:
+        case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
+        break;
+
     }
 }
 

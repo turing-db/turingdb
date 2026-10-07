@@ -244,11 +244,10 @@ public:
     ProcedureLookup* getProcedureLookup() { return _procedureLookup.get(); }
     const ProcedureLookup* getProcedureLookup() const { return _procedureLookup.get(); }
 
-    // What the query's EXPLAIN prefix asks the engine to report, created by the first
-    // call. Null for a query carrying no prefix, which is what tells the engine to run
-    // it rather than explain it.
+    // The request the EXPLAIN prefix being parsed fills, created by the first call after
+    // the previous prefix was closed. Closing hands it to the statement it prefixes.
     ExplainRequest& explainRequest();
-    const ExplainRequest* getExplainRequest() const { return _explainRequest.get(); }
+    const ExplainRequest* closeExplainRequest();
 
 private:
     SourceManager* _sourceManager {nullptr};
@@ -288,7 +287,8 @@ private:
     std::vector<std::string*> _unnamedVarIdentifiers;
 
     std::unique_ptr<ProcedureLookup> _procedureLookup;
-    std::unique_ptr<ExplainRequest> _explainRequest;
+    std::vector<ExplainRequest*> _explainRequests;
+    ExplainRequest* _openExplainRequest {nullptr};
 
     void addSymbol(Symbol* symbol);
     void addSymbolChain(SymbolChain* symbol);

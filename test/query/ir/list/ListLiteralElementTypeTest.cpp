@@ -94,7 +94,7 @@ protected:
         mlir::ModuleOp moduleOp = module.get();
 
         DBProgramGenerator generator(&moduleOp);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
     }
 
     void expectListElementType(std::string_view query, mlir::Type expected) {

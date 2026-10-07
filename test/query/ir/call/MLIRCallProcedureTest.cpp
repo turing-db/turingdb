@@ -1551,7 +1551,7 @@ protected:
         mlir::ModuleOp module = dbModule.get();
 
         DBProgramGenerator generator(&module);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
 
         const mlir::func::FuncOp dbFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
         ASSERT_TRUE(dbFunction);
@@ -1611,7 +1611,7 @@ protected:
 
         mlir::ModuleOp moduleOp = module.get();
         DBProgramGenerator generator(&moduleOp);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
     }
 
     // Lowers a program the same way but without running it, so a test can assert the

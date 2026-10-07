@@ -43,11 +43,19 @@ CypherAST::CypherAST(const ProcedureManager* procedures,
 }
 
 ExplainRequest& CypherAST::explainRequest() {
-    if (!_explainRequest) {
-        _explainRequest = std::make_unique<ExplainRequest>();
+    if (!_openExplainRequest) {
+        _openExplainRequest = new ExplainRequest();
+        _explainRequests.push_back(_openExplainRequest);
     }
 
-    return *_explainRequest;
+    return *_openExplainRequest;
+}
+
+const ExplainRequest* CypherAST::closeExplainRequest() {
+    const ExplainRequest* request = _openExplainRequest;
+    _openExplainRequest = nullptr;
+
+    return request;
 }
 
 CypherAST::~CypherAST() {
@@ -156,6 +164,10 @@ CypherAST::~CypherAST() {
 
     for (ExprChain* chain : _exprChains) {
         delete chain;
+    }
+
+    for (ExplainRequest* request : _explainRequests) {
+        delete request;
     }
 
     for (FunctionInvocation* invocation : _functionInvocations) {

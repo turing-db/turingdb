@@ -14,7 +14,6 @@
 #include <unistd.h>
 #include <algorithm>
 #include <memory>
-#include <span>
 #include <string>
 #include <string_view>
 
@@ -38,7 +37,7 @@
 #include "DBDialectInterpreter.h"
 #include "DBProgramGenerator.h"
 #include "NLDialect.h"
-#include "NLOutputSink.h"
+#include "NLDiscardedOutputSink.h"
 #include "NLSystemContext.h"
 #include "StorageDialect.h"
 
@@ -53,11 +52,6 @@
 using namespace turing::test;
 
 namespace {
-
-class DiscardedOutputSink : public db::NLOutputSink {
-public:
-    void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {}
-};
 
 std::unique_ptr<TuringTestEnv> g_env;
 std::string g_rootDirectory;
@@ -92,51 +86,25 @@ bool mentionsMergeDataParts(std::string_view query) {
     return !std::ranges::search(query, keyword, sameLetter).empty();
 }
 
-int fuzzOne(const char* data, size_t size) {
-    if (size > 64 * 1024) {
-        return 0;
-    }
-
-    const std::string_view query(data, size);
-
-    // MERGE_DATAPARTS is not meant to be used yet, so what it breaks is known and not worth a crash
-    if (mentionsMergeDataParts(query)) {
-        return 0;
-    }
-
-    db::SystemManager& sysMan = g_env->getSystemManager();
-    db::SystemAccessor system = sysMan.accessShared();
-
-    auto txRes = system.openTransaction(g_graphName, db::CommitHash::head(), db::ChangeID::head());
+bool fuzzStatement(db::SystemAccessor* system, db::CypherAST* ast, db::QueryCommand* statement) {
+    auto txRes = system->openTransaction(g_graphName, db::CommitHash::head(), db::ChangeID::head());
     if (!txRes) {
-        return 0;
+        return false;
     }
 
     const db::GraphView view = txRes->viewGraph();
 
     db::NLSystemContext systemContext;
-    systemContext.setSystemManager(&sysMan);
-    systemContext.setAccessor(&system);
+    systemContext.setSystemManager(&g_env->getSystemManager());
+    systemContext.setAccessor(system);
     systemContext.setTransaction(&txRes.value());
     systemContext.setGraphName(g_graphName);
 
-    db::CypherAST ast(system.getProcedures(), query);
-    db::CypherParser parser(&ast);
+    db::CypherAnalyzer analyzer(ast, view);
     try {
-        parser.parse(query);
+        analyzer.analyze(statement);
     } catch (const db::CompilerException&) {
-        return 0;
-    }
-
-    db::CypherAnalyzer analyzer(&ast, view);
-    try {
-        analyzer.analyze();
-    } catch (const db::CompilerException&) {
-        return 0;
-    }
-
-    if (ast.queries().empty()) {
-        return 0;
+        return false;
     }
 
     mlir::MLIRContext context;
@@ -153,24 +121,24 @@ int fuzzOne(const char* data, size_t size) {
 
     db::DBProgramGenerator generator(&module, nullptr, passContext);
     try {
-        generator.generate(&ast);
+        generator.generate(ast, statement);
     } catch (const FatalException&) {
         throw;
     } catch (const TuringException&) {
-        return 0;
+        return false;
     }
 
     db::LocalMemory mem;
 
     db::ProcedureContext procedureContext;
-    procedureContext.setGraph(system.getGraph(g_graphName));
+    procedureContext.setGraph(system->getGraph(g_graphName));
     procedureContext.setGraphView(&view);
     procedureContext.setTransaction(&txRes.value());
-    procedureContext.setProcedures(system.getProcedures());
+    procedureContext.setProcedures(system->getProcedures());
     procedureContext.setListBuffer(&mem.listBuffer());
     procedureContext.setStringBuffer(&mem.stringBuffer());
 
-    DiscardedOutputSink sink;
+    db::NLDiscardedOutputSink sink;
     db::DBDialectInterpreter interpreter(module,
                                          &view,
                                          &sink,
@@ -185,7 +153,38 @@ int fuzzOne(const char* data, size_t size) {
     } catch (const FatalException&) {
         throw;
     } catch (const TuringException&) {
+        return false;
+    }
+
+    return true;
+}
+
+int fuzzOne(const char* data, size_t size) {
+    if (size > 64 * 1024) {
         return 0;
+    }
+
+    const std::string_view query(data, size);
+
+    // MERGE_DATAPARTS is not meant to be used yet, so what it breaks is known and not worth a crash
+    if (mentionsMergeDataParts(query)) {
+        return 0;
+    }
+
+    db::SystemAccessor system = g_env->getSystemManager().accessShared();
+
+    db::CypherAST ast(system.getProcedures(), query);
+    db::CypherParser parser(&ast);
+    try {
+        parser.parse(query);
+    } catch (const db::CompilerException&) {
+        return 0;
+    }
+
+    for (db::QueryCommand* statement : ast.queries()) {
+        if (!fuzzStatement(&system, &ast, statement)) {
+            return 0;
+        }
     }
 
     return 0;

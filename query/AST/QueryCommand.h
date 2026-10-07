@@ -4,6 +4,7 @@ namespace db {
 
 class CypherAST;
 class DeclContext;
+class ExplainRequest;
 
 class QueryCommand {
 public:
@@ -43,8 +44,14 @@ public:
 
     DeclContext* getDeclContext() const { return _declContext; }
 
+    // Null for a statement carrying no EXPLAIN prefix, which is what tells the engine to
+    // run it rather than explain it
+    const ExplainRequest* getExplainRequest() const { return _explainRequest; }
+    void setExplainRequest(const ExplainRequest* request) { _explainRequest = request; }
+
 protected:
     DeclContext* _declContext {nullptr};
+    const ExplainRequest* _explainRequest {nullptr};
 
     QueryCommand(DeclContext* declContext);
     virtual ~QueryCommand();

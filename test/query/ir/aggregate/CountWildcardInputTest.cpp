@@ -76,7 +76,7 @@ protected:
         mlir::ModuleOp module = _module.get();
 
         _generator = std::make_unique<DBProgramGenerator>(&module);
-        _generator->generate(ast);
+        _generator->generate(ast, ast->queries().front());
     }
 
     // The single cross product of the generated program - the one pairing the two patterns

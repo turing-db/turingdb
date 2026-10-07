@@ -44,6 +44,7 @@ class UnaryExpr;
 class CallStmt;
 class CreateStmt;
 class CypherAST;
+class QueryCommand;
 class DeleteStmt;
 class EdgePattern;
 class EmbeddingLiteral;
@@ -142,7 +143,7 @@ public:
 
     void setPassPipeline(DBPassPipeline* passPipeline) { _passPipeline = passPipeline; }
 
-    void generate(const CypherAST* ast);
+    void generate(const CypherAST* ast, const QueryCommand* command);
 
     // Emits the program that reports a finished EXPLAIN: the db.explain holding the
     // dumps its compilation collected, and the db.output naming its two columns
@@ -436,7 +437,7 @@ private:
     // Emits the op of a system-level statement - LOAD GRAPH, CHANGE, COMMIT and
     // their siblings - which is the whole program. False for an ordinary query,
     // which then goes through the traversal pipeline
-    bool generateSystemCommand(const CypherAST* ast);
+    bool generateSystemCommand(const QueryCommand* command);
 
     // Whether a variable can open a connected component: a node variable no traversal binds
     bool isValidRoot(const VariableDependency& var) const;

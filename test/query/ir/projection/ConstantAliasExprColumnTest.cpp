@@ -137,7 +137,7 @@ protected:
         mlir::ModuleOp moduleOp = module.get();
 
         DBProgramGenerator generator(&moduleOp);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
 
         LocalMemory memory;
         DBDialectInterpreter interpreter(moduleOp, &view, sink, &memory);

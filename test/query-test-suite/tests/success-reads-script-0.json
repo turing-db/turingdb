@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) RETURN count(n); MATCH (n:Interest) RETURN count(n)",
+  "expect": {
+    "result": "count(n)\n10",
+    "resultJson": "{\"header\":{\"column_names\":[\"count(n)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[10]]]}"
+  },
+  "tags": [
+    "script",
+    "count"
+  ],
+  "write-required": false
+}

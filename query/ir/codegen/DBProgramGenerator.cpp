@@ -1730,7 +1730,7 @@ void DBProgramGenerator::createMain() {
     _opBuilder.setInsertionPointToStart(&block);
 }
 
-void DBProgramGenerator::generate(const CypherAST* ast) {
+void DBProgramGenerator::generate(const CypherAST* ast, const QueryCommand* command) {
     _ast = ast;
     _constantColumns.clear();
     _vdg.setDiagnosticsManager(ast->getDiagnosticsManager());
@@ -1739,20 +1739,13 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
-    if (generateSystemCommand(ast)) {
+    if (generateSystemCommand(command)) {
         _opBuilder.create<mlir::func::ReturnOp>(uloc);
 
         explainModule(ExplainStage::CODEGEN);
         explainModule(ExplainStage::DB);
         return;
     }
-
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throwError("Multiple queries not yet supported.", queries.front());
-    }
-
-    const QueryCommand* command = queries.front();
 
     const QueryCommand::Kind kind = command->getKind();
 
@@ -2030,15 +2023,10 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     generateShortestPath(stmts);
 }
 
-bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throwError("Multiple queries not yet supported.", queries.front());
-    }
-
+bool DBProgramGenerator::generateSystemCommand(const QueryCommand* command) {
     DBSystemProgramGenerator systemGenerator(&_opBuilder);
 
-    return systemGenerator.generate(queries.front());
+    return systemGenerator.generate(command);
 }
 
 void DBProgramGenerator::runPasses() {

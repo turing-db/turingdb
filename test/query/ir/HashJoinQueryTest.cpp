@@ -117,7 +117,7 @@ void HashJoinQueryTest::generate(std::string_view query,
 
     const mlir::db::DBPassContext passContext {&view, forcesJoin, true};
     DBProgramGenerator generator(&module, nullptr, passContext);
-    generator.generate(&ast);
+    generator.generate(&ast, ast.queries().front());
 }
 
 void HashJoinQueryTest::lower(const GraphView& view, mlir::ModuleOp module, mlir::ModuleOp nlModule) {

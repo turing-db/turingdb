@@ -421,7 +421,7 @@ protected:
         mlir::ModuleOp moduleOp = module.get();
 
         DBProgramGenerator generator(&moduleOp);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
     }
 
     void runQuery(std::string_view query, NLOutputSink* sink) {

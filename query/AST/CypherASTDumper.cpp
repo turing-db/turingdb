@@ -82,12 +82,11 @@ void dumpQualifiedName(std::ostream& out, const QualifiedName* name) {
 
 }
 
-CypherASTDumper::CypherASTDumper(const CypherAST* ast)
-    : _ast(ast)
+CypherASTDumper::CypherASTDumper()
 {
 }
 
-void CypherASTDumper::dump(std::ostream& out) {
+void CypherASTDumper::dump(std::ostream& out, const QueryCommand* query) {
     out << "---\n";
     out << "config:\n";
     out << "  layout: hierarchical\n";
@@ -95,115 +94,114 @@ void CypherASTDumper::dump(std::ostream& out) {
     out << "---\n";
     out << "erDiagram\n";
 
-    for (const auto& query : _ast->queries()) {
-        switch (query->getKind()) {
-            case QueryCommand::Kind::SINGLE_PART_QUERY:
-                dump(out, static_cast<const SinglePartQuery*>(query));
-            break;
+    switch (query->getKind()) {
+        case QueryCommand::Kind::SINGLE_PART_QUERY:
+            dump(out, static_cast<const SinglePartQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_GRAPH_QUERY:
-                dump(out, static_cast<const LoadGraphQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_GRAPH_QUERY:
+            dump(out, static_cast<const LoadGraphQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_JSONL_QUERY:
-                dump(out, static_cast<const LoadJsonlQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_JSONL_QUERY:
+            dump(out, static_cast<const LoadJsonlQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CHANGE_QUERY:
-                dump(out, static_cast<const ChangeQuery*>(query));
-            break;
+        case QueryCommand::Kind::CHANGE_QUERY:
+            dump(out, static_cast<const ChangeQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::COMMIT_QUERY:
-                dump(out, static_cast<const CommitQuery*>(query));
-            break;
+        case QueryCommand::Kind::COMMIT_QUERY:
+            dump(out, static_cast<const CommitQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LIST_GRAPH_QUERY:
-                dump(out, static_cast<const ListGraphQuery*>(query));
-            break;
+        case QueryCommand::Kind::LIST_GRAPH_QUERY:
+            dump(out, static_cast<const ListGraphQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
-                dump(out, static_cast<const ListAvailableGraphsQuery*>(query));
-            break;
+        case QueryCommand::Kind::LIST_AVAILABLE_GRAPHS_QUERY:
+            dump(out, static_cast<const ListAvailableGraphsQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CREATE_GRAPH_QUERY:
-                dump(out, static_cast<const CreateGraphQuery*>(query));
-            break;
+        case QueryCommand::Kind::CREATE_GRAPH_QUERY:
+            dump(out, static_cast<const CreateGraphQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_GML_QUERY:
-                dump(out, static_cast<const LoadGMLQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_GML_QUERY:
+            dump(out, static_cast<const LoadGMLQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::LOAD_PARQUET_QUERY:
-                dump(out, static_cast<const LoadParquetQuery*>(query));
-            break;
+        case QueryCommand::Kind::LOAD_PARQUET_QUERY:
+            dump(out, static_cast<const LoadParquetQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::S3_CONNECT_QUERY:
-                dump(out, static_cast<const S3ConnectQuery*>(query));
-            break;
+        case QueryCommand::Kind::S3_CONNECT_QUERY:
+            dump(out, static_cast<const S3ConnectQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::S3_TRANSFER_QUERY:
-                dump(out, static_cast<const S3TransferQuery*>(query));
-            break;
+        case QueryCommand::Kind::S3_TRANSFER_QUERY:
+            dump(out, static_cast<const S3TransferQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
-                out << "    script ||--o{ SHOW_PROCEDURES : \"\"\n";
-            break;
+        case QueryCommand::Kind::SHOW_PROCEDURES_QUERY:
+            out << "    script ||--o{ SHOW_PROCEDURES : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
-                out << "    script ||--o{ CREATE_VECTOR_INDEX : \"\"\n";
-            break;
+        case QueryCommand::Kind::CREATE_VECTOR_INDEX_QUERY:
+            out << "    script ||--o{ CREATE_VECTOR_INDEX : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::LOAD_VECTOR_QUERY:
-                out << "    script ||--o{ LOAD_VECTOR : \"\"\n";
-            break;
+        case QueryCommand::Kind::LOAD_VECTOR_QUERY:
+            out << "    script ||--o{ LOAD_VECTOR : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
-                out << "    script ||--o{ LOAD_EMBEDDING : \"\"\n";
-            break;
+        case QueryCommand::Kind::LOAD_EMBEDDING_QUERY:
+            out << "    script ||--o{ LOAD_EMBEDDING : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
-                out << "    script ||--o{ DELETE_VECTOR_INDEX : \"\"\n";
-            break;
+        case QueryCommand::Kind::DELETE_VECTOR_INDEX_QUERY:
+            out << "    script ||--o{ DELETE_VECTOR_INDEX : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
-                out << "    script ||--o{ SHOW_VECTOR_INDEXES : \"\"\n";
+        case QueryCommand::Kind::SHOW_VECTOR_INDEXES_QUERY:
+            out << "    script ||--o{ SHOW_VECTOR_INDEXES : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::LOAD_COMMIT_QUERY:
-                out << "    script ||--o{ LOAD_COMMIT : \"\"\n";
-            break;
+        case QueryCommand::Kind::LOAD_COMMIT_QUERY:
+            out << "    script ||--o{ LOAD_COMMIT : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
-                out << "    script ||--o{ INSTALL_EXTENSION : \"\"\n";
-            break;
+        case QueryCommand::Kind::INSTALL_EXTENSION_QUERY:
+            out << "    script ||--o{ INSTALL_EXTENSION : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
-                out << "    script ||--o{ SHOW_EXTENSIONS : \"\"\n";
-            break;
+        case QueryCommand::Kind::SHOW_EXTENSIONS_QUERY:
+            out << "    script ||--o{ SHOW_EXTENSIONS : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
-                out << "    script ||--o{ CREATE_NODE_PROPERTY_INDEX : \"\"\n";
-            break;
+        case QueryCommand::Kind::CREATE_NODE_PROPERTY_INDEX_QUERY:
+            out << "    script ||--o{ CREATE_NODE_PROPERTY_INDEX : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
-                out << "    script ||--o{ CREATE_EDGE_PROPERTY_INDEX : \"\"\n";
-            break;
+        case QueryCommand::Kind::CREATE_EDGE_PROPERTY_INDEX_QUERY:
+            out << "    script ||--o{ CREATE_EDGE_PROPERTY_INDEX : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::DROP_INDEX_QUERY:
-                out << "    script ||--o{ DROP_INDEX : \"\"\n";
-            break;
+        case QueryCommand::Kind::DROP_INDEX_QUERY:
+            out << "    script ||--o{ DROP_INDEX : \"\"\n";
+        break;
 
-            case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
-                dump(out, static_cast<const MergeDataPartsQuery*>(query));
-            break;
+        case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
+            dump(out, static_cast<const MergeDataPartsQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::UNION_QUERY:
-                dump(out, static_cast<const UnionQuery*>(query));
-            break;
+        case QueryCommand::Kind::UNION_QUERY:
+            dump(out, static_cast<const UnionQuery*>(query));
+        break;
 
-            case QueryCommand::Kind::CONDITIONAL_QUERY:
-                dump(out, static_cast<const ConditionalQuery*>(query));
-            break;
-        }
+        case QueryCommand::Kind::CONDITIONAL_QUERY:
+            dump(out, static_cast<const ConditionalQuery*>(query));
+        break;
     }
 }
 

@@ -2,6 +2,7 @@ set(exec_sources
     NLProgram.cpp
     NLHashJoinIndex.cpp
     NLOutputSink.cpp
+    NLDiscardedOutputSink.cpp
     NLExecutionContext.cpp
     NLWriteProperties.cpp
     NLWrittenValues.cpp

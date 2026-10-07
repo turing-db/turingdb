@@ -78,9 +78,8 @@ optional flag and a standalone flag. `Stmt::Kind` has no subquery kind and
 `Stmt::isUpdating` decides which half of a part a clause belongs to.
 
 `SinglePartQuery::create` (`query/AST/SinglePartQuery.cpp:17`) creates a `DeclContext` with
-no parent and appends the query to `CypherAST::_queries`. `CypherAnalyzer::analyze` walks
-that list, and `DBProgramGenerator::generate` throws "Multiple queries not yet supported"
-when it holds more than one, so a nested query must not be registered there.
+no parent and appends the query to `CypherAST::_queries`. `QueryInterpreterV3` runs each
+entry of that list as a statement of its own, so a nested query must not be registered there.
 
 ### Analyzer
 

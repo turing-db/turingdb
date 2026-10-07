@@ -5,7 +5,7 @@
 
 namespace db {
 
-class CypherAST;
+class QueryCommand;
 class SinglePartQuery;
 class UnionQuery;
 class ConditionalQuery;
@@ -60,7 +60,7 @@ class EdgePatternData;
 
 class CypherASTDumper {
 public:
-    explicit CypherASTDumper(const CypherAST* ast);
+    CypherASTDumper();
     ~CypherASTDumper() = default;
 
     CypherASTDumper(const CypherASTDumper&) = delete;
@@ -68,10 +68,9 @@ public:
     CypherASTDumper(CypherASTDumper&&) = delete;
     CypherASTDumper& operator=(CypherASTDumper&&) = delete;
 
-    void dump(std::ostream& output);
+    void dump(std::ostream& output, const QueryCommand* query);
 
 private:
-    const CypherAST* _ast {nullptr};
     std::unordered_set<const VarDecl*> _dumpedVariables;
 
     void dump(std::ostream& out, const SinglePartQuery* query);

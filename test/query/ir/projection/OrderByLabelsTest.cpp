@@ -114,7 +114,7 @@ protected:
             mlir::ModuleOp moduleOp = module.get();
 
             DBProgramGenerator generator(&moduleOp);
-            generator.generate(&ast);
+            generator.generate(&ast, ast.queries().front());
         }
 
         const FrozenCommitTx transaction = _graph->openTransaction();

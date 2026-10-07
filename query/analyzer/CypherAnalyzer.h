@@ -65,6 +65,7 @@ public:
     CypherAST* getAST() const { return _ast; }
 
     void analyze();
+    void analyze(QueryCommand* query);
 
     // Query types
     void analyze(const SinglePartQuery* query);

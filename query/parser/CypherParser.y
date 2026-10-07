@@ -506,9 +506,13 @@ regularQuery
 explainQuery
     : EXPLAIN regularQuery {
         ast->explainRequest().requestDefaults();
+        $2->setExplainRequest(ast->closeExplainRequest());
         $$ = $2;
       }
-    | EXPLAIN OPAREN explainOptions CPAREN regularQuery { $$ = $5; }
+    | EXPLAIN OPAREN explainOptions CPAREN regularQuery {
+        $5->setExplainRequest(ast->closeExplainRequest());
+        $$ = $5;
+      }
     ;
 
 explainOptions

@@ -74,7 +74,7 @@ protected:
         mlir::ModuleOp module = owningModule.get();
 
         DBProgramGenerator generator(&module);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
 
         return owningModule;
     }

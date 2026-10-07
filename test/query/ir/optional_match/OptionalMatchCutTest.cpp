@@ -130,7 +130,7 @@ protected:
         mlir::ModuleOp module = dbModule.get();
 
         DBProgramGenerator generator(&module);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
 
         const mlir::func::FuncOp dbFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
         ASSERT_TRUE(dbFunction);
@@ -167,7 +167,7 @@ protected:
         mlir::ModuleOp module = owningModule.get();
 
         DBProgramGenerator generator(&module);
-        generator.generate(&ast);
+        generator.generate(&ast, ast.queries().front());
 
         NameRowSink sink;
         LocalMemory memory;

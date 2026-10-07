@@ -1,21 +1,10 @@
 #include "TuringDB.h"
 
-#include <span>
-
 #include "SystemManager.h"
-#include "NLOutputSink.h"
+#include "NLDiscardedOutputSink.h"
 #include "QueryInterpreterV3.h"
 
 using namespace db;
-
-namespace {
-
-class DiscardedOutputSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {}
-};
-
-}
 
 TuringDB::TuringDB(const TuringConfig* config)
     : TuringDB(config, QueryConfig{})
@@ -39,7 +28,7 @@ QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
     QueryInterpreterV3 interp(_systemManager.get(), state.getMemory(), state.getCompilerContext());
     interp.setChunkSize(state.getQueryConfig()->getChunkSize());
 
-    DiscardedOutputSink discardedSink;
+    NLDiscardedOutputSink discardedSink;
     NLOutputSink* sink = state.getSink();
     if (!sink) {
         sink = &discardedSink;

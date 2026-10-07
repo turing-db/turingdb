@@ -1,0 +1,3 @@
+add_turing_test(test_query_ir_multi_statement_script MultiStatementScriptTest.cpp)
+target_sources(test_query_ir_multi_statement_script PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_multi_statement_script PRIVATE turing_ir_test_write_query_s)
