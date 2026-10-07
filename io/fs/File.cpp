@@ -145,6 +145,10 @@ Result<void> File::clearContent() {
         return Error::result(ErrorType::CLEAR_FILE, errno);
     }
 
+    if (auto seekRes = seek(0); !seekRes) {
+        return seekRes;
+    }
+
     return refreshInfo();
 }
 
