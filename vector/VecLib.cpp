@@ -270,7 +270,7 @@ void VecLib::collectVectorsToKeep(const std::unordered_set<int64_t>& replacedIDs
     });
 }
 
-void VecLib::clearIndex() {
+VectorResult<void> VecLib::clearIndex() {
     switch (_metadata._indexType) {
         case IndexType::FLAT:
             for (const LSHSignature signature : _shardRouter->getInstantiatedShardSignatures()) {
@@ -278,17 +278,22 @@ void VecLib::clearIndex() {
                 VecLibShard& shardRef = shard.get();
                 shardRef.reset(_metadata);
                 shardRef._dirty = true;
+
+                if (auto res = shardRef.save(); !res) {
+                    return nonstd::make_unexpected(res.error());
+                }
             }
-            return;
+            return {};
         break;
         case IndexType::HNSW:
             _hnswIndex = buildHNSWIndex(_metadata);
-            return;
+            return {};
         break;
         case IndexType::_SIZE:
             panic("VecLib: invalid index type");
         break;
     }
+    panic("VecLib: invalid index type");
 }
 
 VectorResult<void> VecLib::insertEmbeddings(const BatchVectorCreate* batch) {
@@ -327,7 +332,9 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
     collectVectorsToKeep(newIDs, &rebuilt);
     appendBatch(batch, &rebuilt);
 
-    clearIndex();
+    if (auto res = clearIndex(); !res) {
+        return nonstd::make_unexpected(res.error());
+    }
 
     return insertEmbeddings(&rebuilt);
 }
