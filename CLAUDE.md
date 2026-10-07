@@ -98,6 +98,74 @@ These are structural properties of the graph model, not validation rules layered
 - `memory/` - Memory management
 - `vector/` - Vector search with Faiss
 
+## Fix the root cause, in its most general form
+
+**Every bug fix and every improvement goes to the root cause and takes the most general
+form that fits. Never patch the symptom.** A tactical fix makes the reported query pass
+and leaves the defect in place for the next query of the same shape. It also adds one
+more special case that every later reader has to learn. A fix is judged by the class of
+inputs it repairs, not by the one reported.
+
+Before writing any fix:
+- Name the invariant that broke and the layer that owns it, then fix it in that layer. A
+  lowering crash on an op that should not have verified is a verifier or codegen bug. Wrong
+  rows produced by a bad rewrite are a pass bug, not an executor bug.
+- Find the class, not the instance. List the other queries, types, operators and code paths
+  that reach the same defect, and probe them. The fix covers the whole class, and the tests
+  show it does.
+- Look for siblings. If one helper recurses once per op, check every helper in the file. If
+  one switch is missing an enum member, check every switch over that enum.
+- Change the abstraction, not the call site. An `if (kind == X)` next to the failing line is
+  the tactical shape. A missing concept - a type, an op, an interface, a trait, one helper
+  shared by N callers - is the general shape.
+- Refactor when the fix needs it. Do not bend a fix around a bad abstraction to keep the
+  diff small. Splitting a class, adding an op or an interface, moving logic to the layer
+  that owns it, renaming what the new design makes wrong: all are part of the fix.
+
+A fix is tactical if it: special-cases a name or a literal; rejects input it should handle;
+adds a flag parameter to route around one case; catches an exception to hide it; raises a
+limit (stack size, buffer size, timeout) instead of removing the dependency on it; copies
+logic that already exists elsewhere; or is exercised only by the reported query.
+
+Worked examples:
+- TUR-183. An UNWIND of ~5,500 ids folded into a 5,500-deep OR chain and
+  `collectNodeIDDisjunction` overflowed the 512 KB macOS thread stack. Tactical: raise the
+  stack size, or convert that one helper. Root cause: IR walks that recurse once per op.
+  Fix: all six recursive helpers in `DBPasses.cpp` became worklists, and the rule went into
+  "Optimisation passes" below.
+- Cross product OOM. Two 64Ki-row sides laid out 4.29e9 rows (64 GiB) in one step.
+  Tactical: cap the side sizes or reject large products. Root cause: an op whose output
+  outgrows its inputs was a straight-line op. Fix: `nl.cross_product` became an iterator
+  driven like a scan. Peak memory is one chunk per product, and LIMIT works through the
+  ordinary loop exit with no extra operand.
+- Analyzer rejections. A valid query that fails downstream is fixed by making the engine
+  run it, not by an analyzer rule that turns it away (see "Cypher language support").
+
+If the general fix is much larger than the request, say so: give the tactical and the
+general option and recommend the general one. Never ship the tactical one silently.
+
+### Engineer the query engine like a compiler
+
+The query engine is a compiler: parser, AST, analyzer, IR dialects, passes, lowering,
+interpreter. Before choosing a design, look at how LLVM, MLIR and GCC, and the query
+compilers (HyPer/Umbra, DuckDB, Calcite), solve the same problem. Follow their practice
+unless there is a stated reason not to.
+- One job per phase. The frontend checks and translates, passes optimise, lowering
+  translates, the runtime executes. Do not move work across those lines to save effort
+  (see "No optimisation in codegen").
+- Invariants live in the IR and are checked once, by the op's verifier. Do not re-check
+  them in every consumer. Where the type system allows, make the invalid state
+  unrepresentable instead of checking for it.
+- Canonicalise early, then match. Passes match one canonical shape, not N variants of it.
+- Passes are small, composable, and driven by a worklist to a fixed point (see
+  "Optimisation passes").
+- Analyses run on IR values - use-def chains, dominance, dataflow - not on Cypher names or
+  on the AST.
+- Lowering is total: every op that verifies lowers. A verified op that fails to lower is a
+  lowering bug.
+- Reduce before fixing. Shrink a failing query to the smallest IR or Cypher that still
+  fails, and make that the test.
+
 ## Cypher language support
 
 **If a query is valid openCypher, implement it. Do not reject it in the analyzer.** An
@@ -271,7 +339,7 @@ Key points:
 - During multi-turn iteration on a change (style feedback, API shape, refactors), **don't build after each edit**. Just write the edits and stop. Builds are slow and noisy; running them every micro-revision burns time. Only build when the user explicitly asks ("build" / "compile" / "run it") or signals the design is settled.
 - **Build only the affected target, never the whole tree for a test.** When the change is one unit test — writing it, fixing it, adding a case to it — build and run that test's target alone: `make -j8 test_query_ir_<name>`, then `./test/query/ir/<feature>/test_query_ir_<name>`. Do not run a bare `make -j8`. The same holds for any single binary you are fixing: name its target. A bare `make -j8` rebuilds the whole engine and every test binary for nothing.
 - Don't preface `make` with `cmake ..`. `make` already re-runs cmake when any tracked `CMakeLists.txt` has changed. Only run `cmake ..` after editing `CMakeLists.txt` / `dependencies.sh`, or when resetting the build directory.
-- **Make minimal, targeted edits — fix exactly what's asked.** When the request is narrow (a comment, a wording, one line), change only that and leave surrounding working code alone. Don't refactor an adjacent loop or rename things just because you're nearby (e.g. asked to fix a confusing comment over a loop, rewrite the comment — don't also convert the loop to `all_of`). It keeps diffs small and reviewable and respects the existing structure. If a larger refactor seems worthwhile, propose it separately and let the user decide rather than bundling it in.
+- **Make minimal, targeted edits — fix exactly what's asked.** When the request is narrow (a comment, a wording, one line), change only that and leave surrounding working code alone. Don't refactor an adjacent loop or rename things just because you're nearby (e.g. asked to fix a confusing comment over a loop, rewrite the comment — don't also convert the loop to `all_of`). It keeps diffs small and reviewable and respects the existing structure. If a larger refactor seems worthwhile, propose it separately and let the user decide rather than bundling it in. This rule is about *unrelated* changes. A refactor that the root-cause fix needs is part of the fix, not scope creep (see "Fix the root cause, in its most general form").
 
 ## Project context
 
