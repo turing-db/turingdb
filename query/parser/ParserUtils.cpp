@@ -8,6 +8,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "expr/BinaryExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/ExistsExpr.h"
 #include "expr/ListComprehensionExpr.h"
 #include "expr/ListExpr.h"
@@ -322,6 +323,15 @@ PropertyExpr* ParserUtils::createParenthesizedPropertyAccess(CypherAST* ast, Exp
     fullName->addName(propertyName);
 
     return PropertyExpr::create(ast, fullName);
+}
+
+EntityTypeExpr* ParserUtils::createLabelTest(CypherAST* ast, Expr* operand, SymbolChain* labels) {
+    if (operand->getKind() == Expr::Kind::SYMBOL) {
+        const SymbolExpr* variable = static_cast<const SymbolExpr*>(operand);
+        return EntityTypeExpr::create(ast, variable->getSymbol(), labels);
+    }
+
+    return EntityTypeExpr::create(ast, operand, labels);
 }
 
 Expr* ParserUtils::createNegation(CypherAST* ast, Expr* operand) {

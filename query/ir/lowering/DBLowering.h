@@ -336,6 +336,7 @@ private:
     void lowerGetEdgeTypes(mlir::db::GetEdgeTypes getEdgeTypes);
     void lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint);
     void lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint);
+    mlir::Type checkResultChunkType(bool nullable);
     void lowerCreateNode(mlir::db::CreateNode createNode);
     void lowerCreateEdge(mlir::db::CreateEdge createEdge);
 

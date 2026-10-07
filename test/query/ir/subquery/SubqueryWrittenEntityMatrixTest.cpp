@@ -361,7 +361,7 @@ void buildExpectedRows(const WrittenEntityCase& testCase, Rows& expected) {
                 expected.push_back({rowName, returned ? "7" : "null"});
             break;
             case Consumer::LABEL:
-                expected.push_back({rowName, returned ? "true" : "false"});
+                expected.push_back({rowName, returned ? "true" : "null"});
             break;
             default:
                 expected.push_back({rowName});

@@ -324,7 +324,7 @@
 %type<db::Expr*> atomicExpr
 %type<db::Expr*> stringExpr
 %type<db::Expr*> entityTypeExpr
-%type<db::Expr*> propertyOrLabelExpr
+%type<db::Expr*> labelTestOperand
 %type<db::Expr*> propertyLookupExpr
 %type<db::Expr*> propertyExpr
 %type<db::Expr*> atomExpr
@@ -1454,7 +1454,14 @@ unaryAddSubExpr
     ;
 
 atomicExpr
-    : propertyOrLabelExpr { $$ = $1; }
+    : symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
+    | entityTypeExpr { $$ = $1; }
+    | labelTestOperand { $$ = $1; }
+    | labelTestOperand nodeLabels { $$ = ParserUtils::createLabelTest(ast, $1, $2); LOC($$, @$); }
+    ;
+
+labelTestOperand
+    : propertyExpr { $$ = $1; }
     | propertyLookupExpr { $$ = $1; }
     | atomExpr { $$ = $1; }
     | atomicExpr OBRACK expr CBRACK {
@@ -1472,16 +1479,6 @@ atomicExpr
     | atomicExpr OBRACK RANGE CBRACK {
         $$ = ListSliceExpr::create(ast, $1, nullptr, nullptr); LOC($$, @$);
       }
-    ;
-
-propertyOrLabelExpr
-    : propertyExpr { $$ = $1; }
-
-    // | propertyExpr nodeLabels
-    // This seems too permissive, it allows 'n.name:Person' which is weird
-
-    // Replaced by this more specific rule
-    | entityTypeExpr { $$ = $1; }
     ;
 
 entityTypeExpr
@@ -1526,8 +1523,6 @@ atomExpr
         $$ = ParserUtils::createPatternPredicate(ast, element, @$);
       }
     | literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
-    | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
-
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }

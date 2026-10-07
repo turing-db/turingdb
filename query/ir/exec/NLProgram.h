@@ -1305,41 +1305,41 @@ private:
 
 class NLCheckLabelConstraintData : public NLFunctionData {
 public:
-    NLCheckLabelConstraintData(const ColumnLabelSetIDs* input, ColumnMask* output)
+    NLCheckLabelConstraintData(const ColumnLabelSetIDs* input, Column* output)
         : _input(input),
         _output(output)
     {
     }
 
     const ColumnLabelSetIDs* getInput() const { return _input; }
-    ColumnMask* getOutput() const { return _output; }
+    Column* getOutput() const { return _output; }
 
     void addMatchingID(LabelSetID id) { _matchingIDs.insert(id.getValue()); }
     bool isMatching(LabelSetID id) const { return _matchingIDs.count(id.getValue()) > 0; }
 
 private:
     const ColumnLabelSetIDs* _input {nullptr};
-    ColumnMask* _output {nullptr};
+    Column* _output {nullptr};
     std::unordered_set<uint32_t> _matchingIDs;
 };
 
 class NLCheckEdgeTypeConstraintData : public NLFunctionData {
 public:
-    NLCheckEdgeTypeConstraintData(const ColumnEdgeTypes* input, ColumnMask* output)
+    NLCheckEdgeTypeConstraintData(const ColumnEdgeTypes* input, Column* output)
         : _input(input),
         _output(output)
     {
     }
 
     const ColumnEdgeTypes* getInput() const { return _input; }
-    ColumnMask* getOutput() const { return _output; }
+    Column* getOutput() const { return _output; }
 
     void addMatchingID(EdgeTypeID id) { _matchingIDs.insert(id.getValue()); }
     bool isMatching(EdgeTypeID id) const { return _matchingIDs.count(id.getValue()) > 0; }
 
 private:
     const ColumnEdgeTypes* _input {nullptr};
-    ColumnMask* _output {nullptr};
+    Column* _output {nullptr};
     std::unordered_set<uint64_t> _matchingIDs;
 };
 

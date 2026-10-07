@@ -126,3 +126,17 @@ target_link_libraries(test_query_ir_function_null_argument PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_function_null_argument PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_type_test_on_a_null_entity TypeTestOnANullEntityTest.cpp)
+target_sources(test_query_ir_type_test_on_a_null_entity PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
+target_link_libraries(test_query_ir_type_test_on_a_null_entity PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_db_ir_dbdialect_s
+        turing_ir_test_rows_s
+        MLIRParser)
+target_include_directories(test_query_ir_type_test_on_a_null_entity PRIVATE ${IR_TEST_DIR})

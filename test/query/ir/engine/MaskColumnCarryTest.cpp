@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -46,15 +47,16 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* mask = dynamic_cast<const ColumnMask*>(chunks[0]);
+        const auto* mask = dynamic_cast<const ColumnOptMask*>(chunks[0]);
         if (!mask) {
             _otherKinds.emplace_back(chunks[0]->getTypeName());
             return;
         }
 
-        const std::vector<ColumnMask::Bool_t>& raw = mask->getRaw();
+        const std::vector<std::optional<CustomBool>>& raw = mask->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(static_cast<bool>(raw[rowIndex]));
+            ASSERT_TRUE(raw[rowIndex].has_value());
+            _values.push_back(static_cast<bool>(*raw[rowIndex]));
         }
     }
 
@@ -68,8 +70,8 @@ private:
 
 }
 
-// A label test is a mask, and the ops that carry a column past its producer - the sort,
-// the limit, the skip, the dedup, the cross product - hand it on as the same mask. None
+// A label test is a nullable mask, and the ops that carry a column past its producer - the
+// sort, the limit, the skip, the dedup, the cross product - hand it on as the same mask. None
 // of them turns it into a plain boolean column on the way.
 class MaskColumnCarryTest : public TuringTest {
 protected:

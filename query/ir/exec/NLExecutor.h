@@ -124,7 +124,9 @@ public:
     static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
 
     // Fills a boolean mask
+    template <typename MaskColumn>
     static void runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data);
+    template <typename MaskColumn>
     static void runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data);
 
     // Drive the pairs of a cross product, running the body once per chunk of them.

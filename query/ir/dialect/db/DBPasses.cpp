@@ -1686,6 +1686,10 @@ bool matchCombinedTypeChecks(Operation* op, CombinedTypeChecks& combined) {
         return false;
     }
 
+    if (left.getNullable() != right.getNullable()) {
+        return false;
+    }
+
     combined = CombinedTypeChecks {._left = left, ._right = right};
 
     return true;
@@ -1736,7 +1740,8 @@ void fuseTypeChecks(Operation* op, const CombinedTypeChecks& combined, mlir::OpB
     CheckEdgeTypeConstraint fused = builder.create<CheckEdgeTypeConstraint>(op->getLoc(),
                                                                             op->getResult(0).getType(),
                                                                             left.getEdgeTypeIds(),
-                                                                            builder.getArrayAttr(edgeTypes));
+                                                                            builder.getArrayAttr(edgeTypes),
+                                                                            left.getNullable());
 
     op->getResult(0).replaceAllUsesWith(fused.getResult());
     op->erase();
@@ -1826,7 +1831,7 @@ bool matchLabelCheckPair(Value lhs, Value rhs, LabelCheckPair& pair) {
     GetNodeLabelSet leftLabelSet = left.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
     GetNodeLabelSet rightLabelSet = right.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
     const bool overSameNodes = leftLabelSet && rightLabelSet && leftLabelSet.getInputNodes() == rightLabelSet.getInputNodes();
-    if (!overSameNodes) {
+    if (!overSameNodes || left.getNullable() != right.getNullable()) {
         return false;
     }
 
@@ -1850,7 +1855,8 @@ void replaceWithLabelCheck(Operation* op,
     CheckLabelConstraint fused = rewriter.create<CheckLabelConstraint>(op->getLoc(),
                                                                        result.getType(),
                                                                        left.getLabelsetIds(),
-                                                                       rewriter.getArrayAttr(kept));
+                                                                       rewriter.getArrayAttr(kept),
+                                                                       left.getNullable());
     rewriter.replaceOp(op, fused.getResult());
 
     eraseIfUnused(left.getOperation(), rewriter);
@@ -2012,12 +2018,14 @@ bool matchStackedLabelFilters(FilterOp outer, StackedLabelFilters& stacked) {
 void fuseStackedLabelFilters(StackedLabelFilters& stacked, mlir::RewriterBase& rewriter) {
     FilterOp inner = stacked._inner;
     CheckLabelConstraint innerCheck = stacked._innerCheck;
+    const bool nullable = innerCheck.getNullable() || stacked._outerCheck.getNullable();
 
     rewriter.setInsertionPoint(inner);
     CheckLabelConstraint fused = rewriter.create<CheckLabelConstraint>(innerCheck.getLoc(),
                                                                        innerCheck.getResult().getType(),
                                                                        innerCheck.getLabelsetIds(),
-                                                                       rewriter.getArrayAttr(stacked._alternatives));
+                                                                       rewriter.getArrayAttr(stacked._alternatives),
+                                                                       nullable);
 
     rewriter.modifyOpInPlace(inner, [&inner, &fused]() {
         inner.getMaskMutable().assign(fused.getResult());
@@ -2112,7 +2120,8 @@ void hoistLabelFilterAboveHop(LabelFilterBelowHop& below, mlir::RewriterBase& re
     CheckLabelConstraint hoistedCheck = rewriter.create<CheckLabelConstraint>(loc,
                                                                               check.getResult().getType(),
                                                                               hoistedLabelSet.getResult(),
-                                                                              check.getAlternatives());
+                                                                              check.getAlternatives(),
+                                                                              check.getNullable());
 
     const Operation::operand_range hopOperands = hop->getOperands();
     FilterOp hoistedFilter = rewriter.create<FilterOp>(loc,

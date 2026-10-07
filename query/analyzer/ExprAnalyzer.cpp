@@ -1594,6 +1594,11 @@ void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
 }
 
 void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
+    if (Expr* operand = expr->getOperand()) {
+        analyzeTypeTestOfAnExpr(expr, operand);
+        return;
+    }
+
     expr->setType(EvaluatedType::Bool);
 
     VarDecl* decl = resolveVariable(expr->getSymbol()->getName());
@@ -1602,10 +1607,11 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
 
-    if (decl->getType() != EvaluatedType::NodePattern
-        && decl->getType() != EvaluatedType::EdgePattern) {
+    const EvaluatedType entityType = decl->getType();
+    const bool isEntity = entityType == EvaluatedType::NodePattern || entityType == EvaluatedType::EdgePattern;
+    if (!isEntity && entityType != EvaluatedType::Null) {
         const std::string error = fmt::format("Variable '{}' is '{}'. Must be NodePattern or EdgePattern",
-                                              decl->getName(), EvaluatedTypeName::value(decl->getType()));
+                                              decl->getName(), EvaluatedTypeName::value(entityType));
 
         throwError(error, expr);
     }
@@ -1617,8 +1623,38 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
                    expr);
     }
 
+    if (entityType == EvaluatedType::Null) {
+        expr->setType(EvaluatedType::Null);
+    }
+
     expr->setEntityDecl(decl);
     expr->setDynamic();
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+}
+
+void ExprAnalyzer::analyzeTypeTestOfAnExpr(EntityTypeExpr* expr, Expr* operand) {
+    analyzeExpr(operand);
+
+    const EvaluatedType operandType = operand->getType();
+    const bool testsAnEntity = operandType == EvaluatedType::NodePattern
+                            || operandType == EvaluatedType::EdgePattern;
+
+    if (!testsAnEntity && operandType != EvaluatedType::Null) {
+        throwError(fmt::format("A label or type test needs a node or an edge, not '{}'",
+                               EvaluatedTypeName::value(operandType)),
+                   expr);
+    }
+
+    expr->setType(testsAnEntity ? EvaluatedType::Bool : EvaluatedType::Null);
+
+    if (operand->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (operand->isAggregate()) {
+        expr->setAggregate();
+    }
+
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 

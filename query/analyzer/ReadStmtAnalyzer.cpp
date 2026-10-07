@@ -284,7 +284,8 @@ void ReadStmtAnalyzer::analyzeYieldFilter(const YieldItems* yieldItems) {
         throwError("Invalid use of aggregate expression in this context", where);
     }
 
-    if (whereExpr->getType() != EvaluatedType::Bool) {
+    const EvaluatedType whereType = whereExpr->getType();
+    if (whereType != EvaluatedType::Bool && whereType != EvaluatedType::Null) {
         throwError("WHERE expression must be a boolean", where);
     }
 }
@@ -347,7 +348,8 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
             throwError("Invalid use of aggregate expression in this context", pattern);
         }
 
-        if (whereExpr->getType() != EvaluatedType::Bool) {
+        const EvaluatedType whereType = whereExpr->getType();
+        if (whereType != EvaluatedType::Bool && whereType != EvaluatedType::Null) {
             throwError("WHERE expression must be a boolean", pattern);
         }
     }
@@ -611,7 +613,8 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
             throwError("Invalid use of aggregate expression in this context", edgePattern);
         }
 
-        if (predicate->getType() != EvaluatedType::Bool) {
+        const EvaluatedType predicateType = predicate->getType();
+        if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
             throwError("WHERE expression must be a boolean", edgePattern);
         }
 

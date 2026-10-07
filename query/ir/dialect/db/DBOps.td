@@ -1761,9 +1761,12 @@ def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
               : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
       %ok = db.check_label_constraint(%ls, [["Person", "Employee"], ["Interest"]])
               : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+
+    With `nullable`, a row whose node is null - one an OPTIONAL MATCH missed - tests
+    null rather than false, as a label test written in an expression must.
   }];
 
-  let arguments = (ins Column:$labelset_ids, StrArrayArrayAttr:$alternatives);
+  let arguments = (ins Column:$labelset_ids, StrArrayArrayAttr:$alternatives, UnitAttr:$nullable);
   let results   = (outs Column:$result);
 
   let hasVerifier = 1;
@@ -1787,9 +1790,12 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
 
       %ok = db.check_edge_type_constraint(%et, ["KNOWS", "LIKES"])
               : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
+
+    With `nullable`, a row whose edge is null tests null rather than false, as for
+    db.check_label_constraint.
   }];
 
-  let arguments = (ins Column:$edge_type_ids, StrArrayAttr:$edge_types);
+  let arguments = (ins Column:$edge_type_ids, StrArrayAttr:$edge_types, UnitAttr:$nullable);
   let results   = (outs Column:$result);
 
   let hasVerifier = 1;

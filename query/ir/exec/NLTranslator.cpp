@@ -2285,8 +2285,8 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     const Column* lblsCol = getColumn(lbls);
     const ColumnLabelSetIDs* input = static_cast<const ColumnLabelSetIDs*>(lblsCol);
 
-    ColumnMask* output = _memory->alloc<ColumnMask>();
-    output->reserve(_program->getChunkSize());
+    const bool nullable = isNullableChunk(op.getResult().getType());
+    Column* output = allocCheckMask(nullable);
     _valueSlots[op.getResult()] = output;
 
     NLCheckLabelConstraintData* data = _program->allocFunctionData<NLCheckLabelConstraintData>(input, output);
@@ -2311,7 +2311,26 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
         collectMatchingLabelSets(constraints, data);
     }
 
-    body->emplaceStmt(&NLExecutor::runCheckLabelConstraint, data);
+    if (nullable) {
+        body->emplaceStmt(&NLExecutor::runCheckLabelConstraint<ColumnOptMask>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runCheckLabelConstraint<ColumnMask>, data);
+    }
+}
+
+Column* NLTranslator::allocCheckMask(bool nullable) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    if (nullable) {
+        ColumnOptMask* mask = _memory->alloc<ColumnOptMask>();
+        mask->reserve(chunkSize);
+        return mask;
+    }
+
+    ColumnMask* mask = _memory->alloc<ColumnMask>();
+    mask->reserve(chunkSize);
+
+    return mask;
 }
 
 void NLTranslator::collectMatchingLabelSets(std::span<const LabelSet> constraints, NLCheckLabelConstraintData* data) const {
@@ -2339,8 +2358,8 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
     const Column* etypesCol = getColumn(etypes);
     const ColumnEdgeTypes* input = static_cast<const ColumnEdgeTypes*>(etypesCol);
 
-    ColumnMask* output = _memory->alloc<ColumnMask>();
-    output->reserve(_program->getChunkSize());
+    const bool nullable = isNullableChunk(op.getResult().getType());
+    Column* output = allocCheckMask(nullable);
     _valueSlots[op.getResult()] = output;
 
     NLCheckEdgeTypeConstraintData* data = _program->allocFunctionData<NLCheckEdgeTypeConstraintData>(input, output);
@@ -2352,7 +2371,11 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
         data->addMatchingID(edgeTypeID);
     }
 
-    body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint, data);
+    if (nullable) {
+        body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnOptMask>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>, data);
+    }
 }
 
 void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContainer* body) {

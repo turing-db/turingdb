@@ -2571,9 +2571,7 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    const mlir::Type boolChunkType = nl::ChunkType::get(
-        _builder.getContext(),
-        storage::BoolType::get(_builder.getContext()));
+    const mlir::Type boolChunkType = checkResultChunkType(checkLabelConstraint.getNullable());
 
     nl::CheckLabelConstraint check = _builder.create<nl::CheckLabelConstraint>(
         _builder.getUnknownLoc(),
@@ -2589,9 +2587,7 @@ void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint 
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    const mlir::Type boolChunkType = nl::ChunkType::get(
-        _builder.getContext(),
-        storage::BoolType::get(_builder.getContext()));
+    const mlir::Type boolChunkType = checkResultChunkType(checkEdgeTypeConstraint.getNullable());
 
     nl::CheckEdgeTypeConstraint check = _builder.create<nl::CheckEdgeTypeConstraint>(
         _builder.getUnknownLoc(),
@@ -2600,6 +2596,15 @@ void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint 
         checkEdgeTypeConstraint.getEdgeTypes());
 
     _valueMap[checkEdgeTypeConstraint.getResult()] = check.getResult();
+}
+
+mlir::Type DBLowering::checkResultChunkType(bool nullable) {
+    mlir::MLIRContext* const context = _builder.getContext();
+    if (nullable) {
+        return nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getI1Type()));
+    }
+
+    return nl::ChunkType::get(context, storage::BoolType::get(context));
 }
 
 mlir::Block* DBLowering::deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback) {

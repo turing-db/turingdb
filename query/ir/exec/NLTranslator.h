@@ -446,6 +446,7 @@ private:
     // Records on @param data the ID of every label set this change knows that carries every
     // label of at least one of @param constraints
     void collectMatchingLabelSets(std::span<const LabelSet> constraints, NLCheckLabelConstraintData* data) const;
+    Column* allocCheckMask(bool nullable);
 
     // Translate the nl.for over an nl.explore_paths iterator: allocate the seed, end and
     // path loop variables, resolve the edge type name and the end labels against the

@@ -14,7 +14,7 @@ TEST_F(OptionalCallCreatedEntityTest, readsAPropertyOfAPaddedCreatedEntity) {
     expectWriteRows("UNWIND ['Remy', 'Kai'] AS name "
                     "OPTIONAL CALL (name) { CREATE (n:Person {name: name}) WITH n WHERE name = 'Kai' RETURN n } "
                     "RETURN name, n.name, n:Person",
-                    {{"Kai", "Kai", "true"}, {"Remy", "null", "false"}});
+                    {{"Kai", "Kai", "true"}, {"Remy", "null", "null"}});
 }
 
 TEST_F(OptionalCallCreatedEntityTest, setsAPropertyOfAPaddedCreatedEntity) {
@@ -41,7 +41,7 @@ TEST_F(OptionalCallCreatedEntityTest, padsAUnionWhoseBranchesCreated) {
                     "CREATE (n:Robot {name: name}) WITH n WHERE name = 'Kai' RETURN n "
                     "} "
                     "RETURN name, n.name, n:Robot",
-                    {{"Kai", "Kai", "false"}, {"Kai", "Kai", "true"}, {"Remy", "null", "false"}});
+                    {{"Kai", "Kai", "false"}, {"Kai", "Kai", "true"}, {"Remy", "null", "null"}});
 }
 
 TEST_F(OptionalCallCreatedEntityTest, padsAnImportedCreatedEntity) {

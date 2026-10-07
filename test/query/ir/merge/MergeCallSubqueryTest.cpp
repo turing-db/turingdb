@@ -75,7 +75,7 @@ TEST_F(MergeCallSubqueryTest, padsAnOptionalCallReturningAMergedEntity) {
     expectWriteRows("UNWIND ['Remy', 'Nia'] AS name "
                     "OPTIONAL CALL (name) { MERGE (n:Person {name: name}) WITH n WHERE n.age IS NULL RETURN n } "
                     "RETURN name, n.name, n:Person",
-                    {{"Nia", "Nia", "true"}, {"Remy", "null", "false"}});
+                    {{"Nia", "Nia", "true"}, {"Remy", "null", "null"}});
 }
 
 TEST_F(MergeCallSubqueryTest, setsAPropertyOfAPaddedMergedEntity) {

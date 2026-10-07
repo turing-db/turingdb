@@ -11,6 +11,7 @@ namespace db {
 
 class CypherAST;
 class EmbeddingLiteral;
+class EntityTypeExpr;
 class ExistsExpr;
 class Expr;
 class ListLiteral;
@@ -77,6 +78,8 @@ public:
     static PropertyExpr* createParenthesizedPropertyAccess(CypherAST* ast,
                                                            Expr* base,
                                                            Symbol* propertyName);
+
+    static EntityTypeExpr* createLabelTest(CypherAST* ast, Expr* operand, SymbolChain* labels);
 
     // `-1` stays the literal it spells: an embedding list or a procedure's constant argument
     // takes literals only

@@ -418,7 +418,8 @@ void CypherAnalyzer::analyze(WithStmt* withSt) {
         throwError("Invalid use of aggregate expression in this context", predicate);
     }
 
-    if (predicate->getType() != EvaluatedType::Bool) {
+    const EvaluatedType predicateType = predicate->getType();
+    if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
         throwError("WHERE expression must be a boolean", predicate);
     }
 }
@@ -1282,6 +1283,11 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
     } else if (kind == Expr::Kind::ENTITY_TYPES) {
         const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+
+        if (const Expr* operand = entityType->getOperand()) {
+            return isGroupWise(operand, projection, elements);
+        }
+
         const VarDecl* const entityDecl = entityType->getEntityVarDecl();
 
         return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
@@ -1569,6 +1575,11 @@ const VarDecl* CypherAnalyzer::findConsumedVariable(const Expr* expr,
         return consumedDecl(property->getEntityVarDecl());
     } else if (kind == Expr::Kind::ENTITY_TYPES) {
         const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+
+        if (const Expr* operand = entityType->getOperand()) {
+            return findConsumedVariable(operand, distDecl, pathDecl);
+        }
+
         return consumedDecl(entityType->getEntityVarDecl());
     }
 

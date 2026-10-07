@@ -11484,35 +11484,59 @@ void NLExecutor::runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* da
     }
 }
 
+template <typename MaskColumn>
 void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data) {
     NLCheckLabelConstraintData* checkData = static_cast<NLCheckLabelConstraintData*>(data);
 
     const ColumnLabelSetIDs* input = checkData->getInput();
-    ColumnMask* output = checkData->getOutput();
+    MaskColumn* output = static_cast<MaskColumn*>(checkData->getOutput());
 
     const size_t rowCount = input->size();
     output->resize(rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const LabelSetID id = (*input)[rowIndex];
+
+        if constexpr (std::is_same_v<MaskColumn, ColumnOptMask>) {
+            if (!id.isValid()) {
+                (*output)[rowIndex] = std::nullopt;
+                continue;
+            }
+        }
+
         (*output)[rowIndex] = checkData->isMatching(id);
     }
 }
 
+template void NLExecutor::runCheckLabelConstraint<ColumnMask>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runCheckLabelConstraint<ColumnOptMask>(NLExecutionContext*, NLFunctionData*);
+
+template <typename MaskColumn>
 void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data) {
     NLCheckEdgeTypeConstraintData* checkData = static_cast<NLCheckEdgeTypeConstraintData*>(data);
 
     const ColumnEdgeTypes* input = checkData->getInput();
-    ColumnMask* output = checkData->getOutput();
+    MaskColumn* output = static_cast<MaskColumn*>(checkData->getOutput());
 
     const size_t rowCount = input->size();
     output->resize(rowCount);
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const EdgeTypeID id = (*input)[rowIndex];
+
+        if constexpr (std::is_same_v<MaskColumn, ColumnOptMask>) {
+            if (!id.isValid()) {
+                (*output)[rowIndex] = std::nullopt;
+                continue;
+            }
+        }
+
         (*output)[rowIndex] = checkData->isMatching(id);
     }
 }
+
+template void NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runCheckEdgeTypeConstraint<ColumnOptMask>(NLExecutionContext*, NLFunctionData*);
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_CONCAT>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

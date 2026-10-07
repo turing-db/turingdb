@@ -969,8 +969,8 @@ private:
 
     // Whether the entity of each row carries the named types: every one of them for a
     // node, since labels are a conjunction, any one of them for an edge.
-    mlir::Value checkNodeLabels(mlir::Value nodeColumn, std::span<const std::string_view> labels);
-    mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const std::string_view> edgeTypes);
+    mlir::Value checkNodeLabels(mlir::Value nodeColumn, std::span<const std::string_view> labels, bool nullable);
+    mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const std::string_view> edgeTypes, bool nullable);
 
     // A named edge variable has one occurrence per time the pattern walks it, all equated
     // by the identity filter, so the first one's type column answers for the variable. Null
@@ -980,6 +980,7 @@ private:
     // That column where a traversal published one, otherwise a read of the type of the
     // edge each row holds
     mlir::Value resolveOrFetchEdgeTypeColumn(const VarDecl* decl, std::string_view varName);
+    mlir::Value fetchEdgeTypeColumn(mlir::Value edgeColumn);
 
     mlir::Value nullConstantColumn();
 

@@ -207,7 +207,8 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const EntityTypeExpr* lhsTypes = static_cast<const EntityTypeExpr*>(lhs);
             const EntityTypeExpr* rhsTypes = static_cast<const EntityTypeExpr*>(rhs);
 
-            const bool sameEntity = lhsTypes->getEntityVarDecl() == rhsTypes->getEntityVarDecl();
+            const bool sameEntity = lhsTypes->getEntityVarDecl() == rhsTypes->getEntityVarDecl()
+                                 && equal(lhsTypes->getOperand(), rhsTypes->getOperand());
 
             return sameEntity && equalSymbolChains(lhsTypes->getTypes(), rhsTypes->getTypes());
         }

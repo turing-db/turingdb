@@ -5,6 +5,7 @@
 
 #include "BinaryExpr.h"
 #include "CaseExpr.h"
+#include "EntityTypeExpr.h"
 #include "Expr.h"
 #include "ExprChain.h"
 #include "FunctionInvocationExpr.h"
@@ -206,10 +207,20 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
 
         case Expr::Kind::SYMBOL:
         case Expr::Kind::PROPERTY:
-        case Expr::Kind::ENTITY_TYPES:
             // A leaf as far as expressions go: what it reads is a variable, not another
             // expression
             return true;
+        break;
+
+        case Expr::Kind::ENTITY_TYPES: {
+            const EntityTypeExpr* typeTest = static_cast<const EntityTypeExpr*>(expr);
+
+            if (const Expr* operand = typeTest->getOperand()) {
+                children.push_back(operand);
+            }
+
+            return true;
+        }
         break;
 
         case Expr::Kind::PATTERN_COMPREHENSION:
