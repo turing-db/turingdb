@@ -447,6 +447,8 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
                 _declSources[published] = decl;
             }
 
+            _exprAnalyzer->importCSVSource(published, decl);
+
             continue;
         }
 
@@ -460,6 +462,8 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
         published->setListShape(item->getListShape());
         published->setIsQuantifiedPath(itemDecl && itemDecl->isQuantifiedPath());
         projection->addPublishedDecl(published);
+
+        _exprAnalyzer->importCSVSource(published, itemDecl);
     }
 }
 

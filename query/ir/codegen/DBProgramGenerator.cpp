@@ -5334,15 +5334,21 @@ void DBProgramGenerator::publishProjection(const Projection* projection,
     VariableColumnMap variableColumns;
     collectVariableColumns(variableColumns);
 
+    llvm::SmallVector<PublishedColumn> carriedColumns;
+    VariableColumnMap itemColumns = variableColumns;
+
+    if (with) {
+        bindCSVRowItems(projection, itemColumns, carriedColumns);
+    }
+
     llvm::SmallVector<mlir::Value> projected;
     llvm::SmallVector<llvm::StringRef> names;
-    translateProjection(projection, variableColumns, projected, names);
+    translateProjection(projection, itemColumns, projected, names);
 
     broadcastConstantProjection(projected);
 
     buildNamedPathItems(projection, projected);
 
-    llvm::SmallVector<PublishedColumn> carriedColumns;
     if (with && !projection->isAggregate()) {
         collectFilterColumns(with->filterImports(), variableColumns, carriedColumns);
     }
@@ -5360,6 +5366,11 @@ void DBProgramGenerator::collectFilterColumns(std::span<const VarDecl* const> fi
                                               const VariableColumnMap& variableColumns,
                                               llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) {
     for (const VarDecl* decl : filterImports) {
+        if (decl->getType() == EvaluatedType::StringTable) {
+            collectCSVFieldColumns(decl, carriedColumns);
+            continue;
+        }
+
         const auto columnIt = variableColumns.find(decl);
         bioassert(columnIt != end(variableColumns),
                   "Variable '{}' read by the WHERE of a WITH is not in scope",
@@ -5372,6 +5383,91 @@ void DBProgramGenerator::collectFilterColumns(std::span<const VarDecl* const> fi
             carriedColumns.push_back({nullptr, pendingMaskName(decl->getName()), mask});
         }
     }
+}
+
+void DBProgramGenerator::collectCSVFieldColumns(const VarDecl* row,
+                                                llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const {
+    const std::string_view rowName = row->getName();
+
+    forEachVariableColumn([this, rowName, &carriedColumns](const VarDecl* decl, std::string_view name, mlir::Value column) {
+        if (decl && findCSVFieldRow(decl) == rowName) {
+            carriedColumns.push_back({decl, std::string(name), column});
+        }
+    });
+}
+
+void DBProgramGenerator::throwCSVRowRead(const Expr* expr, std::string_view rowName) const {
+    throwError(fmt::format("A CSV row cannot be read as a whole: "
+                           "read a field of '{}' as {}[<index>] or {}.<header>",
+                           rowName, rowName, rowName),
+               expr);
+}
+
+void DBProgramGenerator::bindCSVRowItems(const Projection* projection,
+                                         VariableColumnMap& itemColumns,
+                                         llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const {
+    const bool reducesRows = projection->isAggregate() || projection->isDistinct();
+
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const VarDecl* row = projectedVariable(item);
+        if (!row || row->getType() != EvaluatedType::StringTable) {
+            continue;
+        }
+
+        const std::optional<std::string_view> name = std::visit([projection](auto&& projected) {
+            return projection->getName(projected);
+        }, item);
+
+        if (name != row->getName()) {
+            continue;
+        }
+
+        // A load reads only the fields the query names, which cannot tell two records apart
+        // as a dedup or a group of the whole row would have to
+        if (reducesRows && !_importedCSVRows.contains(row->getName())) {
+            continue;
+        }
+
+        const mlir::Value rowColumn = findCSVRowColumn(row);
+        bioassert(rowColumn, "CSV row '{}' projected by a WITH carries no column", row->getName());
+
+        itemColumns[row] = rowColumn;
+        collectCSVFieldColumns(row, carriedColumns);
+    }
+}
+
+mlir::Value DBProgramGenerator::findCSVRowColumn(const VarDecl* row) const {
+    llvm::SmallVector<PublishedColumn> published;
+    collectPublishedColumns(published);
+
+    for (const PublishedColumn& column : published) {
+        if (carriesCSVRow(row, column._decl, column._name)) {
+            return column._column;
+        }
+    }
+
+    return mlir::Value {};
+}
+
+bool DBProgramGenerator::carriesCSVRow(const VarDecl* row, const VarDecl* decl, std::string_view name) const {
+    const std::string_view rowName = row->getName();
+
+    if (decl) {
+        return decl == row || findCSVFieldRow(decl) == rowName;
+    }
+
+    return name == rowName;
+}
+
+void DBProgramGenerator::collectCSVRowVariables(const VarDecl* row,
+                                                llvm::SmallVectorImpl<const VariableDependency*>& rowVars) const {
+    for (const auto& [var, columns] : _part._varMap) {
+        if (carriesCSVRow(row, var->getDecl(), var->getName())) {
+            rowVars.push_back(var);
+        }
+    }
+
+    std::ranges::sort(rowVars, {}, &VariableDependency::getName);
 }
 
 void DBProgramGenerator::collectPendingMasks(const Projection* projection,
@@ -5396,9 +5492,14 @@ void DBProgramGenerator::dropFilterColumns(std::span<const VarDecl* const> filte
     llvm::SmallVector<PublishedColumn> published;
     collectPublishedColumns(published);
 
-    llvm::erase_if(published, [filterImports](const PublishedColumn& column) {
-        return std::ranges::any_of(filterImports, [&column](const VarDecl* decl) {
-            return column._decl == decl || column._name == pendingMaskName(decl->getName());
+    llvm::erase_if(published, [this, filterImports](const PublishedColumn& column) {
+        const std::string_view fieldRow = findCSVFieldRow(column._decl);
+
+        return std::ranges::any_of(filterImports, [&column, fieldRow](const VarDecl* decl) {
+            const std::string_view name = decl->getName();
+            const bool isFieldOfTheRow = decl->getType() == EvaluatedType::StringTable && fieldRow == name;
+
+            return column._decl == decl || column._name == pendingMaskName(name) || isFieldOfTheRow;
         });
     });
 
@@ -5505,6 +5606,9 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     PartScope outerPart = std::move(_part);
     VariableDependencyGraph outerGraph = std::move(_vdg);
 
+    std::unordered_set<std::string_view> outerImportedCSVRows;
+    std::swap(_importedCSVRows, outerImportedCSVRows);
+
     _opBuilder.setInsertionPointToStart(bodyBlock);
 
     llvm::SmallVector<PublishedColumn> yielded;
@@ -5528,11 +5632,7 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     } else {
         const SinglePartQuery* body = branches.front()._query;
 
-        rebindScope(branchScopes.front());
-
-        for (auto& [decl, written] : importedEntities.front()) {
-            _part._writtenEntities[decl] = std::move(written);
-        }
+        rebindSubqueryBranchScope(branchScopes.front(), importedEntities.front());
 
         generateQueryParts(body);
 
@@ -5605,6 +5705,8 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
 
     _part = std::move(outerPart);
     _vdg = std::move(outerGraph);
+
+    std::swap(_importedCSVRows, outerImportedCSVRows);
 
     if (!returning) {
         return;
@@ -5829,6 +5931,19 @@ void DBProgramGenerator::rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColum
 
     for (const auto& [decl, written] : importedEntities) {
         _part._writtenEntities[decl] = written;
+    }
+
+    _importedCSVRows.clear();
+
+    for (const PublishedColumn& column : scope) {
+        const VarDecl* decl = column._decl;
+        const std::string_view fieldRow = findCSVFieldRow(decl);
+
+        if (!fieldRow.empty()) {
+            _importedCSVRows.insert(fieldRow);
+        } else if (decl && decl->getType() == EvaluatedType::StringTable) {
+            _importedCSVRows.insert(decl->getName());
+        }
     }
 }
 
@@ -6215,7 +6330,13 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
     llvm::SmallVector<PublishedColumn> published;
     for (size_t index = 0; index < names.size(); index++) {
         const llvm::StringRef name = names[index];
-        published.push_back({publishedDecls[index], std::string(name.data(), name.size()), columns[index]});
+
+        // A CSV row is read through the columns of its fields: the one standing for it
+        // only carries its rows, as the column a load publishes when no field is read
+        const VarDecl* decl = publishedDecls[index];
+        const VarDecl* boundDecl = decl->getType() == EvaluatedType::StringTable ? nullptr : decl;
+
+        published.push_back({boundDecl, std::string(name.data(), name.size()), columns[index]});
     }
 
     CarriedEntities carried;
@@ -6730,6 +6851,10 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     for (const OrderByItem* item : items) {
         const Expr* keyExpr = item->getExpr();
 
+        if (keyExpr->getType() == EvaluatedType::StringTable) {
+            throwCSVRowRead(keyExpr, keyExpr->getExprVarDecl()->getName());
+        }
+
         const size_t projectedIndex = projection->findItemIndex(keyExpr);
         const bool isProjected = projectedIndex < projectedCount;
         const auto sortedItem = std::find(sortedItems.begin(), sortedItems.end(), projectedIndex);
@@ -6983,11 +7108,8 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             // The row a LOAD CSV bound is not a column of its own: the load publishes one
             // per field the query reads, and nothing stands for the whole record
             const bool namesACSVRow = decl->getType() == EvaluatedType::StringTable;
-            if (!bound && namesACSVRow) {
-                throwError(fmt::format("A CSV row cannot be read as a whole: "
-                                       "read a field of '{}' as {}[<index>] or {}.<header>",
-                                       varName, varName, varName),
-                           expr);
+            if (namesACSVRow) {
+                throwCSVRowRead(expr, varName);
             }
 
             bioassert(bound, "Symbol refers to unknown variable: {}", varName);
@@ -7650,6 +7772,9 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
     PartScope outerPart = std::move(_part);
     VariableDependencyGraph outerGraph = std::move(_vdg);
 
+    std::unordered_set<std::string_view> outerImportedCSVRows;
+    std::swap(_importedCSVRows, outerImportedCSVRows);
+
     llvm::SmallVector<PublishedColumn> held;
 
     if (isUnion) {
@@ -7665,7 +7790,7 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
     } else {
         const SinglePartQuery* body = branches.front();
 
-        rebindScope(branchScopes.front());
+        rebindSubqueryBranchScope(branchScopes.front(), CarriedEntities {});
 
         generateQueryParts(body);
 
@@ -7698,6 +7823,8 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
 
     _part = std::move(outerPart);
     _vdg = std::move(outerGraph);
+
+    std::swap(_importedCSVRows, outerImportedCSVRows);
 
     return subqueryOp.getResult();
 }
@@ -9185,6 +9312,25 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
     for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const VarDecl* projectedDecl = projectedVariable(returnItem);
+        const bool keysAnImportedCSVRow = projectedDecl
+                                       && projectedDecl->getType() == EvaluatedType::StringTable
+                                       && !variableColumns.contains(projectedDecl)
+                                       && _importedCSVRows.contains(projectedDecl->getName());
+        if (keysAnImportedCSVRow) {
+            llvm::SmallVector<const VariableDependency*> rowVars;
+            collectCSVRowVariables(projectedDecl, rowVars);
+
+            for (const VariableDependency* rowVar : rowVars) {
+                keyColumns.push_back(_part._varMap.at(rowVar).back());
+                keyVarAtPos.push_back(rowVar);
+                keyVarDeclAtPos.push_back(projectedDecl);
+                keyExprAtPos.push_back(nullptr);
+            }
+
+            continue;
+        }
+
         if (const VarDecl* const* varDeclPtr = std::get_if<VarDecl*>(&returnItem)) {
             const VarDecl* decl = *varDeclPtr;
             const auto findIt = variableColumns.find(decl);

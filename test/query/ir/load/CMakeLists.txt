@@ -106,3 +106,14 @@ target_link_libraries(test_query_ir_load_jsonl_edge_endpoint PRIVATE
         turing_db_storage_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_load_jsonl_edge_endpoint PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_load_csv_with_where LoadCSVWithWhereTest.cpp)
+target_sources(test_query_ir_load_csv_with_where PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_csv_with_where PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_load_csv_with_where PRIVATE ${IR_TEST_DIR})

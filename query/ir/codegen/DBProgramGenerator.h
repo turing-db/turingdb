@@ -305,6 +305,11 @@ private:
     // handed the field's column with it
     std::unordered_map<const VarDecl*, std::string_view> _csvFieldRows;
 
+    // The LOAD CSV rows the subquery body being generated imports. A body that groups or
+    // dedups runs one input row at a time, so such a row holds one record there and the
+    // columns of its fields tell its rows apart as the whole row would
+    std::unordered_set<std::string_view> _importedCSVRows;
+
     struct TranslatedComponent {
         std::unique_ptr<mlir::Region> _region;
         std::vector<const VariableDependency*> _vars;
@@ -851,6 +856,22 @@ private:
     void collectFilterColumns(std::span<const VarDecl* const> filterImports,
                               const VariableColumnMap& variableColumns,
                               llvm::SmallVectorImpl<PublishedColumn>& carriedColumns);
+
+    void collectCSVFieldColumns(const VarDecl* row,
+                                llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const;
+
+    [[noreturn]] void throwCSVRowRead(const Expr* expr, std::string_view rowName) const;
+
+    void bindCSVRowItems(const Projection* projection,
+                         VariableColumnMap& itemColumns,
+                         llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const;
+
+    mlir::Value findCSVRowColumn(const VarDecl* row) const;
+
+    bool carriesCSVRow(const VarDecl* row, const VarDecl* decl, std::string_view name) const;
+
+    void collectCSVRowVariables(const VarDecl* row,
+                                llvm::SmallVectorImpl<const VariableDependency*>& rowVars) const;
 
     void collectPendingMasks(const Projection* projection,
                              llvm::ArrayRef<llvm::StringRef> names,
