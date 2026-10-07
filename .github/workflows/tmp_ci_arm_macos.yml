@@ -1,0 +1,13 @@
+name: Temporary CI ARM macOS
+
+on:
+  push:
+    branches: [ "tmp-ci-arm-macos" ]
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci_build.yml
+    with:
+      os_list: '["ubuntu-22.04-arm", "ubuntu-24.04-arm", "macos15", "macos26"]'
+      python_version_list: '["3.14"]'
+    secrets: inherit
