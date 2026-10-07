@@ -89,6 +89,12 @@ public:
      */
     ListView copy(ListView list);
 
+    /**
+     * @brief Stores @param element - the elements of a nested list among them - in this
+     * buffer and returns a view of the copy, which stands as long as @ref copy(ListView)'s.
+     */
+    ListElementView copy(ListElementView element);
+
     void clear();
 
 private:
@@ -96,6 +102,9 @@ private:
     ListByteBuffer<N> _elements;
     /// Container of @ref ListElementView, for each element in @ref _elements
     ListElementViewBuffer<N> _views;
+
+    /// Returns the value @param element holds, a nested list copied into this buffer
+    ListItemVariant ownedItem(ListElementView element);
 };
 
 // Default size; alias to avoid ugly empty template

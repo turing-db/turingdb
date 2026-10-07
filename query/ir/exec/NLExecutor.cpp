@@ -2894,6 +2894,7 @@ void aggregateResetNull(NLAggregateState* state) {
     auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
     accumulator->getRaw().assign(1, std::nullopt);
     state->setCount(0);
+    state->listBuffer().clear();
 }
 
 // Add two aggregate values with defined overflow. A signed integer sum wraps in
@@ -2928,35 +2929,6 @@ void aggregateUpdateSum(NLAggregateState* state, const Column* input) {
     current = running;
 }
 
-// Fold a chunk's present values into a min (IsMax false) or max (IsMax true)
-// accumulator. The first present value seeds the accumulator; later values
-// replace it when more extreme. Nulls are skipped, so an all-null input leaves
-// the accumulator null.
-template <typename Primitive, bool IsMax>
-void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
-    std::optional<Primitive>& current = accumulator->getRaw().front();
-    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
-
-    for (const std::optional<Primitive>& value : inputRaw) {
-        if (!value.has_value()) {
-            continue;
-        }
-
-        if (!current.has_value()) {
-            current = *value;
-        } else if constexpr (IsMax) {
-            if (sortsBefore(*current, *value)) {
-                current = *value;
-            }
-        } else {
-            if (sortsBefore(*value, *current)) {
-                current = *value;
-            }
-        }
-    }
-}
-
 std::optional<ListElementView> presentCell(const ListElementView element) {
     if (element.getTag() == ListBufferTypeTag::Null) {
         return std::nullopt;
@@ -2971,6 +2943,63 @@ std::optional<ListElementView> presentCell(const std::optional<ListElementView>&
     }
 
     return presentCell(*element);
+}
+
+template <typename Primitive>
+std::optional<Primitive> presentCell(const std::optional<Primitive>& value) {
+    return value;
+}
+
+template <typename Primitive, bool IsMax>
+bool replacesExtremum(const Primitive& current, const Primitive& value) {
+    if constexpr (IsMax) {
+        return sortsBefore(current, value);
+    } else {
+        return sortsBefore(value, current);
+    }
+}
+
+// The value an extremum keeps, which outlives the step that read it: a list or a cell
+// goes into the accumulator's own buffer, as appendOwnedListColumn's lists do.
+template <typename Primitive>
+Primitive ownedExtremum(const Primitive& value, QueryListBuffer& lists) {
+    return value;
+}
+
+ListView ownedExtremum(const ListView& list, QueryListBuffer& lists) {
+    return lists.copy(list);
+}
+
+ListElementView ownedExtremum(const ListElementView& element, QueryListBuffer& lists) {
+    return lists.copy(element);
+}
+
+// Fold a chunk's present values into a min (IsMax false) or max (IsMax true)
+// accumulator. The first present value seeds the accumulator; later values
+// replace it when more extreme. Nulls are skipped, so an all-null input leaves
+// the accumulator null.
+template <typename Primitive, bool IsMax, typename Cell = std::optional<Primitive>>
+void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
+    std::optional<Primitive>& current = accumulator->getRaw().front();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    bool replaced = false;
+    for (const Cell& cell : inputRaw) {
+        const std::optional<Primitive> value = presentCell(cell);
+        if (!value.has_value()) {
+            continue;
+        }
+
+        if (!current.has_value() || replacesExtremum<Primitive, IsMax>(*current, *value)) {
+            current = *value;
+            replaced = true;
+        }
+    }
+
+    if (replaced) {
+        current = ownedExtremum(*current, state->listBuffer());
+    }
 }
 
 // The number a tagged cell holds, whatever numeric type its tag names. A reduction over
@@ -3038,8 +3067,11 @@ NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
         break;
 
         case AggregateKind::Min:
+            return &aggregateUpdateMinMax<ListElementView, /*IsMax=*/false, Cell>;
+        break;
+
         case AggregateKind::Max:
-            throw IRException("min/max over type-erased cells is not supported");
+            return &aggregateUpdateMinMax<ListElementView, /*IsMax=*/true, Cell>;
         break;
     }
 
@@ -3147,8 +3179,8 @@ NLAggregateUpdateFunction selectAvgUpdate(ValueType inputType) {
 
 // The fold handler for a min (IsMax false) or max (IsMax true) over a column of
 // this value type. min/max order the values, so any orderable type is valid -
-// numbers, bools and strings - but an embedding has no order (its < would not
-// compile), so it is rejected.
+// numbers, bools, strings, lists and maps - but an embedding has no order (its <
+// would not compile), so it is rejected.
 template <bool IsMax>
 NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
     switch (inputType) {
@@ -3178,6 +3210,14 @@ NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
 
         case ValueType::Duration:
             return &aggregateUpdateMinMax<types::Duration::Primitive, IsMax>;
+        break;
+
+        case ValueType::List:
+            return &aggregateUpdateMinMax<types::List::Primitive, IsMax>;
+        break;
+
+        case ValueType::Map:
+            return &aggregateUpdateMinMax<types::Map::Primitive, IsMax>;
         break;
 
         default:
@@ -3253,7 +3293,8 @@ void groupFoldSum(Column* accumulator,
                   std::vector<uint64_t>& counts,
                   const Column* input,
                   const std::vector<size_t>& groups,
-                  NLGroupDistinctTally& distinct) {
+                  NLGroupDistinctTally& distinct,
+                  QueryListBuffer& lists) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -3274,7 +3315,8 @@ void groupFoldSumDistinct(Column* accumulator,
                           std::vector<uint64_t>& counts,
                           const Column* input,
                           const std::vector<size_t>& groups,
-                          NLGroupDistinctTally& distinct) {
+                          NLGroupDistinctTally& distinct,
+                          QueryListBuffer& lists) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -3306,7 +3348,8 @@ void groupFoldNumericTagged(Column* accumulator,
                             std::vector<uint64_t>& counts,
                             const Column* input,
                             const std::vector<size_t>& groups,
-                            NLGroupDistinctTally& distinct) {
+                            NLGroupDistinctTally& distinct,
+                            QueryListBuffer& lists) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
@@ -3336,6 +3379,32 @@ void groupFoldNumericTagged(Column* accumulator,
     }
 }
 
+// Fold a chunk's present values into per-group min (IsMax false) or max (IsMax
+// true) accumulators. The first present value of a group seeds it; a later value
+// replaces it when more extreme. A group with no present value stays null.
+template <typename Primitive, bool IsMax, typename Cell = std::optional<Primitive>>
+void groupFoldMinMax(Column* accumulator,
+                     std::vector<uint64_t>& counts,
+                     const Column* input,
+                     const std::vector<size_t>& groups,
+                     NLGroupDistinctTally& distinct,
+                     QueryListBuffer& lists) {
+    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<Primitive> value = presentCell(inputRaw[row]);
+        if (!value.has_value()) {
+            continue;
+        }
+
+        std::optional<Primitive>& current = raw[groups[row]];
+        if (!current.has_value() || replacesExtremum<Primitive, IsMax>(*current, *value)) {
+            current = ownedExtremum(*value, lists);
+        }
+    }
+}
+
 template <typename Cell>
 NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind) {
     switch (kind) {
@@ -3356,8 +3425,11 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
         break;
 
         case GroupAggregateKind::Min:
+            return &groupFoldMinMax<ListElementView, /*IsMax=*/false, Cell>;
+        break;
+
         case GroupAggregateKind::Max:
-            throw IRException("min/max over type-erased cells is not supported");
+            return &groupFoldMinMax<ListElementView, /*IsMax=*/true, Cell>;
         break;
 
         case GroupAggregateKind::Count:
@@ -3371,39 +3443,6 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
     return nullptr;
 }
 
-// Fold a chunk's present values into per-group min (IsMax false) or max (IsMax
-// true) accumulators. The first present value of a group seeds it; a later value
-// replaces it when more extreme. A group with no present value stays null.
-template <typename Primitive, bool IsMax>
-void groupFoldMinMax(Column* accumulator,
-                     std::vector<uint64_t>& counts,
-                     const Column* input,
-                     const std::vector<size_t>& groups,
-                     NLGroupDistinctTally& distinct) {
-    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<Primitive>& value = inputRaw[row];
-        if (!value.has_value()) {
-            continue;
-        }
-
-        std::optional<Primitive>& current = raw[groups[row]];
-        if (!current.has_value()) {
-            current = *value;
-        } else if constexpr (IsMax) {
-            if (sortsBefore(*current, *value)) {
-                current = *value;
-            }
-        } else {
-            if (sortsBefore(*value, *current)) {
-                current = *value;
-            }
-        }
-    }
-}
-
 // Fold a chunk's present values into per-group avg accumulators: a running f64 sum
 // (the accumulator, widened from the input) plus the per-group non-null count. avg
 // divides the two at the emit step.
@@ -3412,7 +3451,8 @@ void groupFoldAvg(Column* accumulator,
                   std::vector<uint64_t>& counts,
                   const Column* input,
                   const std::vector<size_t>& groups,
-                  NLGroupDistinctTally& distinct) {
+                  NLGroupDistinctTally& distinct,
+                  QueryListBuffer& lists) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -3435,7 +3475,8 @@ void groupFoldAvgDistinct(Column* accumulator,
                           std::vector<uint64_t>& counts,
                           const Column* input,
                           const std::vector<size_t>& groups,
-                          NLGroupDistinctTally& distinct) {
+                          NLGroupDistinctTally& distinct,
+                          QueryListBuffer& lists) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -3466,7 +3507,8 @@ void groupFoldCountAll(Column* accumulator,
                        std::vector<uint64_t>& counts,
                        const Column* input,
                        const std::vector<size_t>& groups,
-                       NLGroupDistinctTally& distinct) {
+                       NLGroupDistinctTally& distinct,
+                       QueryListBuffer& lists) {
     for (const size_t group : groups) {
         counts[group]++;
     }
@@ -3479,7 +3521,8 @@ void groupFoldCountPresent(Column* accumulator,
                            std::vector<uint64_t>& counts,
                            const Column* input,
                            const std::vector<size_t>& groups,
-                           NLGroupDistinctTally& distinct) {
+                           NLGroupDistinctTally& distinct,
+                           QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3496,7 +3539,8 @@ void groupFoldCountValidID(Column* accumulator,
                            std::vector<uint64_t>& counts,
                            const Column* input,
                            const std::vector<size_t>& groups,
-                           NLGroupDistinctTally& distinct) {
+                           NLGroupDistinctTally& distinct,
+                           QueryListBuffer& lists) {
     const std::vector<ID>& inputRaw = static_cast<const ColumnVector<ID>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3510,7 +3554,8 @@ void groupFoldCountPresentPath(Column* accumulator,
                                std::vector<uint64_t>& counts,
                                const Column* input,
                                const std::vector<size_t>& groups,
-                               NLGroupDistinctTally& distinct) {
+                               NLGroupDistinctTally& distinct,
+                               QueryListBuffer& lists) {
     const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3528,7 +3573,8 @@ void groupFoldCountDistinctID(Column* accumulator,
                               std::vector<uint64_t>& counts,
                               const Column* input,
                               const std::vector<size_t>& groups,
-                              NLGroupDistinctTally& distinct) {
+                              NLGroupDistinctTally& distinct,
+                              QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3555,7 +3601,8 @@ void groupFoldCountDistinctValue(Column* accumulator,
                                  std::vector<uint64_t>& counts,
                                  const Column* input,
                                  const std::vector<size_t>& groups,
-                                 NLGroupDistinctTally& distinct) {
+                                 NLGroupDistinctTally& distinct,
+                                 QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3579,7 +3626,8 @@ void groupFoldCountDistinctPresent(Column* accumulator,
                                    std::vector<uint64_t>& counts,
                                    const Column* input,
                                    const std::vector<size_t>& groups,
-                                   NLGroupDistinctTally& distinct) {
+                                   NLGroupDistinctTally& distinct,
+                                   QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3607,7 +3655,8 @@ void groupFoldCountPresentListElement(Column* accumulator,
                                       std::vector<uint64_t>& counts,
                                       const Column* input,
                                       const std::vector<size_t>& groups,
-                                      NLGroupDistinctTally& distinct) {
+                                      NLGroupDistinctTally& distinct,
+                                      QueryListBuffer& lists) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3625,7 +3674,8 @@ void groupFoldCountDistinctListElement(Column* accumulator,
                                        std::vector<uint64_t>& counts,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
-                                       NLGroupDistinctTally& distinct) {
+                                       NLGroupDistinctTally& distinct,
+                                       QueryListBuffer& lists) {
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3651,7 +3701,8 @@ void groupFoldCountDistinctPresentList(Column* accumulator,
                                        std::vector<uint64_t>& counts,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
-                                       NLGroupDistinctTally& distinct) {
+                                       NLGroupDistinctTally& distinct,
+                                       QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3675,7 +3726,8 @@ void groupFoldCountDistinctList(Column* accumulator,
                                 std::vector<uint64_t>& counts,
                                 const Column* input,
                                 const std::vector<size_t>& groups,
-                                NLGroupDistinctTally& distinct) {
+                                NLGroupDistinctTally& distinct,
+                                QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnVector<ListView>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -3694,7 +3746,8 @@ void groupFoldCountDistinctPresentMap(Column* accumulator,
                                       std::vector<uint64_t>& counts,
                                       const Column* input,
                                       const std::vector<size_t>& groups,
-                                      NLGroupDistinctTally& distinct) {
+                                      NLGroupDistinctTally& distinct,
+                                      QueryListBuffer& lists) {
     const auto& inputRaw = static_cast<const ColumnOptVector<MapView>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -4568,8 +4621,8 @@ NLGroupAggregateFoldFunction selectGroupAvgDistinctFold(ValueType inputType) {
 }
 
 // The grouped min (IsMax false) / max (IsMax true) fold for a column of this value
-// type. min/max order the values, so any orderable type is valid - numbers, bools
-// and strings - but an embedding has no order, so it is rejected.
+// type. min/max order the values, so any orderable type is valid - numbers, bools,
+// strings, lists and maps - but an embedding has no order, so it is rejected.
 template <bool IsMax>
 NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
     switch (inputType) {
@@ -4599,6 +4652,14 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
 
         case ValueType::Duration:
             return &groupFoldMinMax<types::Duration::Primitive, IsMax>;
+        break;
+
+        case ValueType::List:
+            return &groupFoldMinMax<types::List::Primitive, IsMax>;
+        break;
+
+        case ValueType::Map:
+            return &groupFoldMinMax<types::Map::Primitive, IsMax>;
         break;
 
         default:
@@ -8926,12 +8987,15 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
         aggregate._grow(aggregate._accumulator, aggregate._counts, groupCount);
     }
 
+    QueryListBuffer& lists = state->listBuffer();
+
     for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
         aggregate._fold(aggregate._accumulator,
                         aggregate._counts,
                         aggregate._input,
                         groupIndices,
-                        aggregate._distinct);
+                        aggregate._distinct,
+                        lists);
     }
 }
 
@@ -9072,12 +9136,15 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
         aggregate._grow(aggregate._accumulator, aggregate._counts, groupCount);
     }
 
+    QueryListBuffer& lists = state->listBuffer();
+
     for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
         aggregate._fold(aggregate._accumulator,
                         aggregate._counts,
                         aggregate._input,
                         groupIndices,
-                        aggregate._distinct);
+                        aggregate._distinct,
+                        lists);
     }
 }
 
@@ -10471,15 +10538,20 @@ NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, 
     return nullptr;
 }
 
-// The reduction of a type-erased column: only sum and avg are defined over one, both
-// into the f64 accumulator mixed numeric tags reduce to. min/max would have to hand back
-// the winning cell in its own type, which no static result type names.
 NLAggregateUpdateFunction NLExecutor::selectTaggedAggregateUpdate(AggregateKind kind) {
     return taggedAggregateUpdateFor<ListElementView>(kind);
 }
 
 NLAggregateUpdateFunction NLExecutor::selectOptTaggedAggregateUpdate(AggregateKind kind) {
     return taggedAggregateUpdateFor<std::optional<ListElementView>>(kind);
+}
+
+NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset() {
+    return &aggregateResetNull<ListElementView>;
+}
+
+NLAggregateResultFunction NLExecutor::selectTaggedAggregateResult() {
+    return &aggregateResultCopy<ListElementView>;
 }
 
 NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, ValueType resultType) {
@@ -10546,16 +10618,20 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
     return nullptr;
 }
 
-// The grouped reduction of a type-erased column: sum and avg only, both into the f64
-// accumulator mixed numeric tags reduce to - the grouped sibling of
-// selectTaggedAggregateUpdate. A switch (not a default) over every kind so a new one is a
-// compile error here rather than being reported as an unsupported min/max.
 NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAggregateKind kind) {
     return taggedGroupAggregateFoldFor<ListElementView>(kind);
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectOptTaggedGroupAggregateFold(GroupAggregateKind kind) {
     return taggedGroupAggregateFoldFor<std::optional<ListElementView>>(kind);
+}
+
+NLGroupAggregateGrowFunction NLExecutor::selectTaggedGroupAggregateGrow() {
+    return &groupGrowNull<ListElementView>;
+}
+
+NLGroupAggregateEmitFunction NLExecutor::selectTaggedGroupAggregateEmit() {
+    return &groupEmitCopy<ListElementView>;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType) {

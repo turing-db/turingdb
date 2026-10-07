@@ -749,13 +749,11 @@ TEST_F(CypherUnwindExprTest, reducesTheDistinctCellsOfAHeterogeneousElementPerGr
                {{"Remy", "3.500000", "1.750000"}});
 }
 
-// min and max name no type a static result column could be, so a tagged cell is no
-// argument for them: it is the signature that turns the query away, ahead of the
-// reduction that has no fold for the pair.
-TEST_F(CypherUnwindExprTest, rejectsMinMaxOverAHeterogeneousElement) {
-    expectRejected("UNWIND [10, 'a'] AS v RETURN min(v)", "Invalid arguments for function 'min'");
-    expectRejected("MATCH (n) UNWIND [10, 'a'] AS v RETURN n.name, max(v)",
-                   "Invalid arguments for function 'max'");
+// Cypher orders a string below every number, so the extremes of the pair are one of each
+TEST_F(CypherUnwindExprTest, reducesMinMaxOverAHeterogeneousElement) {
+    expectRows("UNWIND [10, 'a'] AS v RETURN min(v), max(v)", {{"a", "10"}});
+    expectRows("UNWIND [10, 'a'] AS v MATCH (n:Person) WHERE n.name = 'Remy' RETURN n.name, min(v), max(v)",
+               {{"Remy", "a", "10"}});
 }
 
 TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementPerGroup) {

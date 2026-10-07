@@ -439,6 +439,17 @@ target_link_libraries(test_query_ir_min_max_orderable PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_min_max_orderable PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_min_max_over_lists MinMaxOverListsTest.cpp)
+target_link_libraries(test_query_ir_min_max_over_lists PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_min_max_over_lists PRIVATE ${IR_TEST_DIR})
+
 # Reductions over a column that is null on every row, run end to end over SimpleGraph.
 add_turing_test(test_query_ir_null_aggregate NullAggregateTest.cpp)
 target_link_libraries(test_query_ir_null_aggregate PRIVATE
