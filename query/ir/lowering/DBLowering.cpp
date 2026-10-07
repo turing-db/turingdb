@@ -6478,8 +6478,11 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
 void DBLowering::setInsertionInto(mlir::Block* block) {
     // Every home block already has a terminator - the entry block's func.return
     // or a loop body's implicit nl.yield - so the next op goes just before it,
-    // after any siblings already lowered here.
-    _builder.setInsertionPoint(block->getTerminator());
+    // after any siblings already lowered here. A block enclosing the root a factor
+    // is lowered under already holds the nest that factor reads it from, so an op
+    // hoisted there goes before that nest.
+    mlir::Operation* const nest = block->findAncestorOpInBlock(*_rootBlock->getParentOp());
+    _builder.setInsertionPoint(nest ? nest : block->getTerminator());
 }
 
 void DBLowering::setInsertionAfterProducingLoop(mlir::Block* updateBlock) {

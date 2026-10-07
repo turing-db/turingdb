@@ -63,6 +63,25 @@ TEST_F(UnwindOverProductTest, unwindsTwoListsCollectedByAnEarlierPart) {
                       8);
 }
 
+TEST_F(UnwindOverProductTest, unwindsAListReadThroughAFilter) {
+    expectPlacedCount("MATCH (a:Person), (b:Interest) WHERE a.name = 'Remy' "
+                      "UNWIND range(1, a.age) AS i RETURN count(*)",
+                      320);
+}
+
+// 30 pairs of a person and an interest whose name sorts after the person's
+TEST_F(UnwindOverProductTest, unwindsAListReadThroughAFilterOfBothFactors) {
+    expectPlacedCount("MATCH (a:Person), (b:Interest) WHERE a.name < b.name "
+                      "UNWIND [a.name, a.name] AS n RETURN count(*)",
+                      60);
+}
+
+TEST_F(UnwindOverProductTest, keepsTheColumnsOfFilteredFactors) {
+    expectRows("MATCH (a:Person), (b:Interest) WHERE a.name = 'Luc' AND b.name STARTS WITH 'C' "
+               "UNWIND [a.name + '1', a.name + '2'] AS n RETURN b.name, n ORDER BY b.name, n",
+               {{"Computers", "Luc1"}, {"Computers", "Luc2"}, {"Cooking", "Luc1"}, {"Cooking", "Luc2"}});
+}
+
 TEST_F(UnwindOverProductTest, keepsTheColumnsOfEveryFactor) {
     expectRows("UNWIND range(31, 33) AS i MATCH (a:Person {age: i}) MATCH (b:Interest {name: 'Bio'}) "
                "RETURN a.name, i, b.name ORDER BY a.name",

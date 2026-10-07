@@ -65,6 +65,15 @@ TEST_F(NestedProductFilterTest, cutsTwoComponentsByAComparison) {
     expectJoinedCount("MATCH (a:Person), (b:Interest), (c:Interest) WHERE b.name < c.name RETURN count(*)", 0, 360);
 }
 
+// The subquery filters the rows it imports in a factor of its own, which reads them from the
+// step the call runs once per outer row
+TEST_F(NestedProductFilterTest, cutsAComponentByTheRowsASubqueryImports) {
+    expectJoinedCount("UNWIND ['Remy', 'Adam'] AS nm CALL (nm) { WITH nm WHERE nm = 'Remy' "
+                      "MATCH (a:Person {name: nm}), (b:Interest) RETURN b } RETURN count(*)",
+                      0,
+                      10);
+}
+
 TEST_F(NestedProductFilterTest, keepsTheColumnsOfEveryComponent) {
     expectRows("MATCH (a:Person), (b:Interest), (c:Interest) "
                "WHERE b.name = c.name AND a.name = 'Remy' AND b.name STARTS WITH 'C' "
