@@ -145,7 +145,7 @@ private:
 
     bool containsAnyID(const std::unordered_set<int64_t>& ids);
     void collectVectorsToKeep(const std::unordered_set<int64_t>& replacedIDs, BatchVectorCreate* batch);
-    void clearIndex();
+    [[nodiscard]] VectorResult<void> clearIndex();
 
     VectorResult<void> insertEmbeddings(const BatchVectorCreate* batch);
     VectorResult<void> addEmbeddingsBruteForce(const BatchVectorCreate* batch);
