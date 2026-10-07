@@ -4800,9 +4800,17 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     const mlir::Type accumulatorElement = stateType.getElementType();
     const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
 
-    const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
-    Column* accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
-    const NLAggregateResetFunction reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
+    // A min/max over type-erased cells keeps the winning cell, which names no value type
+    Column* accumulator = nullptr;
+    NLAggregateResetFunction reset = nullptr;
+    if (mlir::isa<storage::ListElementType>(accumulatorElement)) {
+        accumulator = allocOptListElementColumn();
+        reset = NLExecutor::selectTaggedAggregateReset();
+    } else {
+        const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
+        accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
+        reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
+    }
 
     state->setAccumulator(accumulator);
 
@@ -4837,10 +4845,18 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     // map the op result to it.
     const mlir::Value resultChunk = result.getResult();
     const AggregateKind kind = toRuntimeAggregateKind(result.getKind());
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultChunk.getType()).getElementType();
 
-    const ValueType resultType = nullableChunkValueType(resultChunk.getType());
-    Column* output = allocOptColumnForValueType(resultType);
-    const NLAggregateResultFunction emit = NLExecutor::selectAggregateResult(kind, resultType);
+    Column* output = nullptr;
+    NLAggregateResultFunction emit = nullptr;
+    if (isNullableListElement(resultElement)) {
+        output = allocOptListElementColumn();
+        emit = NLExecutor::selectTaggedAggregateResult();
+    } else {
+        const ValueType resultType = nullableChunkValueType(resultChunk.getType());
+        output = allocOptColumnForValueType(resultType);
+        emit = NLExecutor::selectAggregateResult(kind, resultType);
+    }
 
     _valueSlots[resultChunk] = output;
 
@@ -4973,14 +4989,16 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             // kinds keep the shape of the kind they mirror and differ only in the
             // fold, which charges each of a group's values once.
             //
-            // A type-erased input carries a type per cell, so it reduces by tag into the
-            // f64 its mixed numeric tags land on rather than into the input's own type.
+            // A type-erased input carries a type per cell, so sum and avg reduce it by tag
+            // into the f64 its mixed numeric tags land on, and min/max keep the winning cell.
             const mlir::Type reducedElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
             const bool reducesNullableTaggedCells = isNullableListElement(reducedElement);
             const bool reducesTaggedCells = mlir::isa<storage::ListElementType>(reducedElement)
                                          || reducesNullableTaggedCells;
 
-            const bool accumulatesAsDouble = reducesTaggedCells
+            const bool isExtremum = (kind == GroupAggregateKind::Min) || (kind == GroupAggregateKind::Max);
+            const bool keepsTaggedCells = reducesTaggedCells && isExtremum;
+            const bool accumulatesAsDouble = (reducesTaggedCells && !isExtremum)
                                           || (kind == GroupAggregateKind::Avg)
                                           || (kind == GroupAggregateKind::AvgDistinct);
 
@@ -4988,9 +5006,15 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                                                            : nullableChunkValueType(chunkType);
             const ValueType accumulatorType = accumulatesAsDouble ? ValueType::Double : inputType;
 
-            aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
-            aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
-            aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
+            if (keepsTaggedCells) {
+                aggregate._accumulator = allocOptListElementColumn();
+                aggregate._grow = NLExecutor::selectTaggedGroupAggregateGrow();
+                aggregate._emit = NLExecutor::selectTaggedGroupAggregateEmit();
+            } else {
+                aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
+                aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
+                aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
+            }
 
             if (reducesNullableTaggedCells) {
                 aggregate._fold = NLExecutor::selectOptTaggedGroupAggregateFold(kind);

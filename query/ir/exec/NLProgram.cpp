@@ -387,6 +387,7 @@ void NLGroupTable::clear() {
 
 void NLGroupAggregateState::reset() {
     _groupTable.clear();
+    _listBuffer.clear();
 
     for (KeyColumn& key : _keyColumns) {
         key._buffer->clear();

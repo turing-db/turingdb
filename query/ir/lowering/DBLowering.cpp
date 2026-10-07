@@ -480,9 +480,14 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
 
         case storage::AggregateKind::Min:
         case storage::AggregateKind::Max: {
-            // min/max order the values, so anything with a natural order is fine -
-            // numbers, strings, bools and instants - but an embedding has none.
-            if (!isNumeric && !isString && !isBool && !isDateTime && !isDuration) {
+            // min/max order the values, so anything Cypher orders is fine - numbers,
+            // strings, bools, instants, lists, maps, and cells of different types - but
+            // an embedding has no order.
+            const bool isList = mlir::isa<storage::ListType>(inputElement);
+            const bool isMap = mlir::isa<storage::MapType>(inputElement);
+            const bool isOrderable = isNumeric || isString || isBool || isDateTime || isDuration
+                                  || isList || isMap || isTaggedCell;
+            if (!isOrderable) {
                 throw IRException("db.min/db.max requires an orderable column");
             }
             return inputElement;
@@ -4174,13 +4179,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // rows it stands for, so it is laid out over the driving relation first.
     const mlir::Value alignedChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
 
-    // A type-erased column of tagged cells - what a list mixing types, holding a null
-    // or holding nothing unwinds into - is folded as it stands: every cell carries its
-    // own tag, so there is no one value type to read the column as.
-    const mlir::Type alignedElement = mlir::cast<nl::ChunkType>(alignedChunk.getType()).getElementType();
-    const bool taggedCells = mlir::isa<storage::ListElementType>(alignedElement);
-
-    const mlir::Value inputChunk = taggedCells ? alignedChunk : nullableValueChunk(alignedChunk);
+    const mlir::Value inputChunk = reducedValueChunk(alignedChunk);
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
@@ -4188,6 +4187,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // A type-erased column is read as the tagged cell it holds; every other input is a
     // nullable value chunk, and the reduction is resolved from the value type it wraps.
     const mlir::Type inputChunkElement = mlir::cast<nl::ChunkType>(inputChunk.getType()).getElementType();
+    const bool taggedCells = mlir::isa<storage::ListElementType>(inputChunkElement);
     const mlir::Type inputElement = taggedCells
         ? inputChunkElement
         : mlir::cast<storage::NullableType>(inputChunkElement).getValueType();
@@ -4280,15 +4280,8 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
         const size_t chunkIndex = keyCount + aggregateIndex;
 
-        // A type-erased column of tagged cells is folded as it stands, like a count's
-        // input: every cell carries its own tag, so there is no one value type to read
-        // the column as.
-        const mlir::Value aggregateChunk = chunks[chunkIndex];
-        const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(aggregateChunk.getType()).getElementType();
-        const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
-
-        if (reducesValues(kind) && !taggedCells) {
-            chunks[chunkIndex] = nullableValueChunk(aggregateChunk);
+        if (reducesValues(kind)) {
+            chunks[chunkIndex] = reducedValueChunk(chunks[chunkIndex]);
         }
     }
 
@@ -4401,19 +4394,14 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         }
     }
 
-    // A reduction beside the lists reads its input as a nullable value chunk, as it does
-    // under a grouped aggregation; a count tallies rows and takes the chunk as it is, and
-    // so does a type-erased column of tagged cells, which has no one value type to be read
-    // as.
+    // A reduction beside the lists reads its input as it does under a grouped
+    // aggregation; a count tallies rows and takes the chunk as it is.
     for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
         const size_t chunkIndex = keyCount + valueCount + aggregateIndex;
 
-        const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
-        const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
-
-        if (reducesValues(kind) && !taggedCells) {
-            chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
+        if (reducesValues(kind)) {
+            chunks[chunkIndex] = reducedValueChunk(chunks[chunkIndex]);
         }
     }
 
@@ -6659,6 +6647,21 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     }
 
     return toNullableChunk(chunk, valueElement);
+}
+
+// A type-erased column of tagged cells - what a list mixing types, holding a null or
+// holding nothing unwinds into - is read as it stands, every cell carrying its own tag. A
+// list or a map, which min and max order as a whole, rides a nullable column of its own type.
+mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
+    const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
+
+    if (mlir::isa<storage::ListElementType>(element)) {
+        return chunk;
+    } else if (mlir::isa<storage::ListType, storage::MapType>(element)) {
+        return toNullableChunk(chunk, element);
+    } else {
+        return nullableValueChunk(chunk);
+    }
 }
 
 // A path's null is the empty path, and no value of a path is read here: tested against null

@@ -752,10 +752,13 @@ public:
     static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
     static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
 
-    // The sibling reading a type-erased input column: sum and avg reduce its numeric
-    // cells into the f64 accumulator, whatever tags they carry.
+    // The siblings reading a type-erased input column: sum and avg reduce its numeric
+    // cells into the f64 accumulator, whatever tags they carry, and min/max keep the
+    // winning cell in a tagged cell accumulator, which the reset and result below handle.
     static NLAggregateUpdateFunction selectTaggedAggregateUpdate(AggregateKind kind);
     static NLAggregateUpdateFunction selectOptTaggedAggregateUpdate(AggregateKind kind);
+    static NLAggregateResetFunction selectTaggedAggregateReset();
+    static NLAggregateResultFunction selectTaggedAggregateResult();
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The grouped counterparts, selected for one aggregate of a grouped
@@ -771,10 +774,11 @@ public:
     static NLGroupAggregateGrowFunction selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType);
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
 
-    // The sibling reading a type-erased input column: sum and avg reduce its numeric
-    // cells into the f64 accumulator, whatever tags they carry.
+    // The siblings reading a type-erased input column, as selectTaggedAggregateUpdate's are
     static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
+    static NLGroupAggregateGrowFunction selectTaggedGroupAggregateGrow();
+    static NLGroupAggregateEmitFunction selectTaggedGroupAggregateEmit();
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);

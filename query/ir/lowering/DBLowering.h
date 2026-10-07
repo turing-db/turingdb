@@ -811,6 +811,7 @@ private:
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
     mlir::Value nullTestedChunk(mlir::Value chunk);
+    mlir::Value reducedValueChunk(mlir::Value chunk);
 
     void lowerStaticMapKey(mlir::db::StaticMapKey mapKey);
 

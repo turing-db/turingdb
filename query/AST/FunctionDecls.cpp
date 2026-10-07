@@ -319,6 +319,41 @@ void FunctionDecls::initDefault() {
     maxDuration->setReturnTypes({{EvaluatedType::Duration}});
     maxDuration->setIsAggregate(true);
 
+    // Cypher orders lists, maps and values of different types against each other, so
+    // their extremum is defined too: lists compare element by element, and across types
+    // MAP < LIST < STRING < BOOLEAN < NUMBER.
+    FunctionSignature* minList = createFunction("min");
+    minList->setArguments({EvaluatedType::List});
+    minList->setReturnTypes({{EvaluatedType::List}});
+    minList->setReturnsItsArgumentShape(true);
+    minList->setIsAggregate(true);
+
+    FunctionSignature* maxList = createFunction("max");
+    maxList->setArguments({EvaluatedType::List});
+    maxList->setReturnTypes({{EvaluatedType::List}});
+    maxList->setReturnsItsArgumentShape(true);
+    maxList->setIsAggregate(true);
+
+    FunctionSignature* minMap = createFunction("min");
+    minMap->setArguments({EvaluatedType::Map});
+    minMap->setReturnTypes({{EvaluatedType::Map}});
+    minMap->setIsAggregate(true);
+
+    FunctionSignature* maxMap = createFunction("max");
+    maxMap->setArguments({EvaluatedType::Map});
+    maxMap->setReturnTypes({{EvaluatedType::Map}});
+    maxMap->setIsAggregate(true);
+
+    FunctionSignature* minListItems = createFunction("min");
+    minListItems->setArguments({EvaluatedType::ListItem});
+    minListItems->setReturnTypes({{EvaluatedType::ListItem}});
+    minListItems->setIsAggregate(true);
+
+    FunctionSignature* maxListItems = createFunction("max");
+    maxListItems->setArguments({EvaluatedType::ListItem});
+    maxListItems->setReturnTypes({{EvaluatedType::ListItem}});
+    maxListItems->setIsAggregate(true);
+
     // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
     // null, so a column that is null on every row - a name no property in the graph carries,
     // or the null literal - reduces to an answer rather than to an argument error, exactly

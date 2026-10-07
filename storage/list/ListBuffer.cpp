@@ -124,6 +124,22 @@ ListView ListBuffer<N>::copy(ListView list) {
     std::vector<ListItemVariant> elements;
     elements.reserve(list.size());
 
+    for (const ListElementView element : list) {
+        elements.push_back(ownedItem(element));
+    }
+
+    return insert(elements);
+}
+
+template <size_t N>
+ListElementView ListBuffer<N>::copy(ListElementView element) {
+    const ListItemVariant item = ownedItem(element);
+
+    return insert(std::span<const ListItemVariant> {&item, 1}).front();
+}
+
+template <size_t N>
+typename ListBuffer<N>::ListItemVariant ListBuffer<N>::ownedItem(ListElementView element) {
     const auto asVariant = [this]<typename T>(const ListElementView view) -> ListItemVariant {
         if constexpr (std::same_as<T, ListView>) {
             return copy(view.getAs<ListView>());
@@ -132,12 +148,9 @@ ListView ListBuffer<N>::copy(ListView list) {
         }
     };
 
-    for (const ListElementView element : list) {
-        const ListTagDispatcher dispatcher {element.getTag()};
-        elements.push_back(dispatcher.execute(asVariant, element));
-    }
+    const ListTagDispatcher dispatcher {element.getTag()};
 
-    return insert(elements);
+    return dispatcher.execute(asVariant, element);
 }
 
 template <size_t N>

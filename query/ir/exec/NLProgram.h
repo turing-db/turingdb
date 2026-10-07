@@ -2358,9 +2358,13 @@ public:
     void setCount(size_t count) { _count = count; }
     void addCount(size_t count) { _count += count; }
 
+    // The lists a min/max accumulator holds, copied in as NLSortState::listBuffer's are
+    QueryListBuffer& listBuffer() { return _listBuffer; }
+
 private:
     Column* _accumulator {nullptr};
     size_t _count {0};
+    QueryListBuffer _listBuffer;
 };
 
 // Handlers of one aggregate, selected during translation from the reduction and
@@ -2508,13 +2512,15 @@ using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
 // value (or tally it) into the group named by groups[row]. groups is the row ->
 // group-index map nl.group_aggregate_update built for this step. One per kind /
 // value type. The parameters are the union of what any reduction needs, so each fold
-// reads only its own: sum/min/max ignore counts, count ignores the accumulator, and
-// only the distinct kinds touch the tally of already-charged (group, value) pairs.
+// reads only its own: sum/min/max ignore counts, count ignores the accumulator, only
+// the distinct kinds touch the tally of already-charged (group, value) pairs, and only
+// min/max store the lists they keep in lists.
 using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
                                               const Column* input,
                                               const std::vector<size_t>& groups,
-                                              NLGroupDistinctTally& distinct);
+                                              NLGroupDistinctTally& distinct,
+                                              QueryListBuffer& lists);
 
 // Materialize the reduction of groups [begin, begin + count) into an emit output
 // column: a copy of the accumulator slice (sum/min/max), a per-group divide
@@ -2618,6 +2624,9 @@ public:
 
     NLGroupTable& groupTable() { return _groupTable; }
 
+    // The lists the min/max accumulators hold, copied in as NLSortState::listBuffer's are
+    QueryListBuffer& listBuffer() { return _listBuffer; }
+
     // Scratch reused per update step: the row key being built, the per-row group
     // index map, and the incoming rows that created a new group this step.
     std::string& keyScratch() { return _key; }
@@ -2634,6 +2643,7 @@ private:
     std::vector<Aggregate> _aggregates;
 
     NLGroupTable _groupTable;
+    QueryListBuffer _listBuffer;
 
     std::string _key;
     std::vector<size_t> _groupIndices;
