@@ -77,7 +77,7 @@ ShardCache::~ShardCache() noexcept {
 VecLibShardAccessor ShardCache::getShard(const VecLibMetadata& meta, LSHSignature signature) {
     const ShardIdentifier id(meta._id, signature);
 
-    LoadData data {*_storageManager, meta};
+    LoadData data {._storageManager = *_storageManager, ._meta = meta};
 
     auto handle = _cache->acquire(id, &data);
     if (!handle) {
