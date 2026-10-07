@@ -181,6 +181,11 @@ VectorResult<void> VecLib::addEmbeddingsBruteForce(const BatchVectorCreate* batc
 
             const size_t count = data._externalIDs.size();
             shardRef._index->add_with_ids(count, data._embeddings.data(), data._externalIDs.data());
+            shardRef._dirty = true;
+
+            if (auto res = shardRef.save(); !res) {
+                return nonstd::make_unexpected(res.error());
+            }
         }
     }
 
@@ -270,7 +275,9 @@ void VecLib::clearIndex() {
         case IndexType::FLAT:
             for (const LSHSignature signature : _shardRouter->getInstantiatedShardSignatures()) {
                 VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
-                shard.get().reset(_metadata);
+                VecLibShard& shardRef = shard.get();
+                shardRef.reset(_metadata);
+                shardRef._dirty = true;
             }
             return;
         break;

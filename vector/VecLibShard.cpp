@@ -10,7 +10,13 @@
 using namespace vec;
 
 VectorResult<void> VecLibShard::save() {
+    if (!_dirty) {
+        return {};
+    }
+
     faiss::write_index(_index.get(), _indexPath.c_str());
+    _dirty = false;
+
     return {};
 }
 
