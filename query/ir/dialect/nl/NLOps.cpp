@@ -11,6 +11,7 @@
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
+#include "PathStepsFormat.h"
 #include "LabelAlternativesFormat.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
@@ -390,12 +391,46 @@ LogicalResult ExplorePaths::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-// The hop region mirrors the db op's: one block over the source node, edge and end node
-// chunks of a hop, ending in an nl.yield of one mask chunk
+Value ExplorePaths::getStepEdgeTypes(size_t step) {
+    const OperandRange edgeTypes = getEdgeTypes();
+    const std::optional<llvm::ArrayRef<int64_t>> typedSteps = getEdgeTypeSteps();
+    if (!typedSteps) {
+        return edgeTypes.empty() ? Value() : edgeTypes[step];
+    }
+
+    const auto typed = llvm::find(*typedSteps, static_cast<int64_t>(step));
+
+    return typed == typedSteps->end() ? Value() : edgeTypes[typed - typedSteps->begin()];
+}
+
+// The hop regions mirror the db op's: one block per step over the node and edge chunks of
+// the repetition up to its hop, ending in an nl.yield of one mask chunk
 LogicalResult ExplorePaths::verify() {
     const std::optional<uint64_t> maxHops = getMaxHops();
     if (maxHops && *maxHops < getMinHops()) {
         return emitOpError("max_hops must be at least min_hops");
+    }
+
+    const size_t stepCount = getStepCount();
+    if (stepCount == 0) {
+        return emitOpError("must take at least one step");
+    }
+
+    const size_t edgeTypeCount = getEdgeTypes().size();
+    if (const std::optional<llvm::ArrayRef<int64_t>> typedSteps = getEdgeTypeSteps()) {
+        if (typedSteps->size() != edgeTypeCount) {
+            return emitOpError("edge_type_steps must name one step per edge type handle");
+        }
+
+        for (size_t index = 0; index < typedSteps->size(); index++) {
+            const int64_t step = (*typedSteps)[index];
+            const bool ascends = index == 0 || (*typedSteps)[index - 1] < step;
+            if (step < 0 || static_cast<size_t>(step) >= stepCount || !ascends) {
+                return emitOpError("edge_type_steps must name steps in ascending order");
+            }
+        }
+    } else if (edgeTypeCount != 0 && edgeTypeCount != stepCount) {
+        return emitOpError("expects one edge type handle per step, or edge_type_steps naming theirs");
     }
 
     const std::optional<ArrayAttr> endLabels = getEndLabels();
@@ -404,8 +439,8 @@ LogicalResult ExplorePaths::verify() {
     }
 
     const std::optional<ArrayAttr> hopLabels = getHopLabels();
-    if (hopLabels && hopLabels->empty()) {
-        return emitOpError("hop_labels must name at least one label");
+    if (hopLabels && hopLabels->size() != stepCount) {
+        return emitOpError("hop_labels must hold one list per step");
     }
 
     const std::optional<uint64_t> endColumn = getEndColumn();
@@ -423,8 +458,13 @@ LogicalResult ExplorePaths::verify() {
 
     const OperandRange imports = getHopImports();
 
-    Region& hop = getHop();
-    if (hop.empty()) {
+    MutableArrayRef<Region> hops = getHops();
+    if (hops.size() != stepCount) {
+        return emitOpError("expects one hop region per step");
+    }
+
+    const bool hasPredicate = llvm::any_of(hops, [](Region& hop) { return !hop.empty(); });
+    if (!hasPredicate) {
         if (!imports.empty()) {
             return emitOpError("hop imports without a hop region to read them");
         }
@@ -437,30 +477,44 @@ LogicalResult ExplorePaths::verify() {
                            "read a chunk that holds one value per seed");
     }
 
-    Block& block = hop.front();
     MLIRContext* context = getContext();
     const Type nodeChunk = getNodeIDChunkType(context);
     const Type edgeChunk = getEdgeIDChunkType(context);
-    llvm::SmallVector<Type> expectedArguments {nodeChunk, edgeChunk, nodeChunk};
-    for (const Value import : imports) {
-        expectedArguments.push_back(import.getType());
-    }
 
-    if (block.getNumArguments() != expectedArguments.size()) {
-        return emitOpError("hop region must take the source node, edge and end node chunks, "
-                           "then one argument per hop import");
-    }
-
-    for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
-        if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
-            return emitOpError("hop region argument ") << argumentIndex << " must be "
-                                                       << expectedArguments[argumentIndex];
+    for (size_t step = 0; step < stepCount; step++) {
+        Region& hop = hops[step];
+        if (hop.empty()) {
+            continue;
         }
-    }
 
-    Yield yield = dyn_cast_or_null<Yield>(block.empty() ? nullptr : &block.back());
-    if (!yield || yield.getColumns().size() != 1) {
-        return emitOpError("hop region must end with an nl.yield of one mask chunk");
+        Block& block = hop.front();
+        llvm::SmallVector<Type> expectedArguments;
+        for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
+            expectedArguments.push_back(nodeChunk);
+            expectedArguments.push_back(edgeChunk);
+        }
+        expectedArguments.push_back(nodeChunk);
+
+        for (const Value import : imports) {
+            expectedArguments.push_back(import.getType());
+        }
+
+        if (block.getNumArguments() != expectedArguments.size()) {
+            return emitOpError("hop region ") << step << " must take the node and edge chunks of its repetition "
+                                                         "up to its end node, then one argument per hop import";
+        }
+
+        for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
+            if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
+                return emitOpError("hop region argument ") << argumentIndex << " must be "
+                                                           << expectedArguments[argumentIndex];
+            }
+        }
+
+        Yield yield = dyn_cast_or_null<Yield>(block.empty() ? nullptr : &block.back());
+        if (!yield || yield.getColumns().size() != 1) {
+            return emitOpError("hop region must end with an nl.yield of one mask chunk");
+        }
     }
 
     return success();

@@ -12,6 +12,7 @@
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
+#include "PathStepsFormat.h"
 #include "LabelAlternativesFormat.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
@@ -109,6 +110,34 @@ bool isMaskColumn(Type type) {
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
+    }
+
+    return success();
+}
+
+// One list of names per step of a path exploration, an empty list leaving its step free
+LogicalResult verifyStepNames(Operation* operation, ArrayAttr names, size_t stepCount, llvm::StringRef what) {
+    if (!names) {
+        return success();
+    }
+
+    if (names.size() != stepCount) {
+        return operation->emitOpError(what) << " must hold one list per step";
+    }
+
+    bool namesAny = false;
+    for (const Attribute stepNames : names) {
+        for (const Attribute name : cast<ArrayAttr>(stepNames)) {
+            if (cast<StringAttr>(name).getValue().empty()) {
+                return operation->emitOpError(what) << " must not hold an empty name";
+            }
+
+            namesAny = true;
+        }
+    }
+
+    if (!namesAny) {
+        return operation->emitOpError(what) << " must name at least one name";
     }
 
     return success();
@@ -349,23 +378,30 @@ LogicalResult verifyPassThrough(Operation* op,
     return success();
 }
 
-// The hop region of an explore_paths: one block over (source, edge, end) yielding a boolean
-// column, reading nothing defined outside it but constants
-LogicalResult verifyHopRegion(Operation* op, Region& hop, ValueRange imports) {
+// The hop region of one step of an explore_paths: one block over the nodes and edges of the
+// repetition up to the step's end node yielding a boolean column, reading nothing defined
+// outside it but constants
+LogicalResult verifyHopRegion(Operation* op, Region& hop, size_t step, ValueRange imports) {
     Block& block = hop.front();
     MLIRContext* context = op->getContext();
 
     const Type nodeColumn = ColumnType::get(context, storage::NodeIDType::get(context));
     const Type edgeColumn = ColumnType::get(context, storage::EdgeIDType::get(context));
-    llvm::SmallVector<Type> expectedArguments {nodeColumn, edgeColumn, nodeColumn};
+    llvm::SmallVector<Type> expectedArguments;
+    for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
+        expectedArguments.push_back(nodeColumn);
+        expectedArguments.push_back(edgeColumn);
+    }
+    expectedArguments.push_back(nodeColumn);
 
     for (const Value import : imports) {
         expectedArguments.push_back(import.getType());
     }
 
     if (block.getNumArguments() != expectedArguments.size()) {
-        return op->emitOpError("hop region must take the source node, edge and end node columns, "
-                               "then one argument per hop import");
+        return op->emitOpError("hop region ") << step << " must take the node and edge columns of its "
+                                                         "repetition up to its end node, then one argument "
+                                                         "per hop import";
     }
 
     for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
@@ -508,6 +544,32 @@ void ExplorePaths::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     }
 }
 
+storage::PathDirection ExplorePaths::getStepDirection(size_t step) {
+    return static_cast<storage::PathDirection>(getDirections()[step]);
+}
+
+ArrayAttr ExplorePaths::getStepEdgeTypes(size_t step) {
+    const ArrayAttr edgeTypes = getEdgeTypesAttr();
+    if (!edgeTypes) {
+        return {};
+    }
+
+    const ArrayAttr names = cast<ArrayAttr>(edgeTypes[step]);
+
+    return names.empty() ? ArrayAttr() : names;
+}
+
+ArrayAttr ExplorePaths::getStepHopLabels(size_t step) {
+    const ArrayAttr hopLabels = getHopLabelsAttr();
+    if (!hopLabels) {
+        return {};
+    }
+
+    const ArrayAttr names = cast<ArrayAttr>(hopLabels[step]);
+
+    return names.empty() ? ArrayAttr() : names;
+}
+
 LogicalResult ExplorePaths::verify() {
     const OperandRange carried = getColumnsToFilter();
     const ResultRange filtered = getFilteredColumns();
@@ -529,10 +591,23 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("max_hops must be at least min_hops");
     }
 
-    if (const ArrayAttr edgeTypes = getEdgeTypesAttr()) {
-        if (failed(verifyEdgeTypesNotEmpty(getOperation(), edgeTypes))) {
-            return failure();
+    const size_t stepCount = getStepCount();
+    if (stepCount == 0) {
+        return emitOpError("must take at least one step");
+    }
+
+    for (const int64_t direction : getDirections()) {
+        if (!storage::symbolizePathDirection(static_cast<uint64_t>(direction))) {
+            return emitOpError("unknown path direction ") << direction;
         }
+    }
+
+    if (failed(verifyStepNames(getOperation(), getEdgeTypesAttr(), stepCount, "edge_types"))) {
+        return failure();
+    }
+
+    if (failed(verifyStepNames(getOperation(), getHopLabelsAttr(), stepCount, "hop_labels"))) {
+        return failure();
     }
 
     if (const std::optional<ArrayAttr> endLabels = getEndLabels()) {
@@ -543,18 +618,6 @@ LogicalResult ExplorePaths::verify() {
         for (const Attribute label : *endLabels) {
             if (cast<StringAttr>(label).getValue().empty()) {
                 return emitOpError("end_labels must name labels");
-            }
-        }
-    }
-
-    if (const std::optional<ArrayAttr> hopLabels = getHopLabels()) {
-        if (hopLabels->empty()) {
-            return emitOpError("hop_labels must name at least one label");
-        }
-
-        for (const Attribute label : *hopLabels) {
-            if (cast<StringAttr>(label).getValue().empty()) {
-                return emitOpError("hop_labels must name labels");
             }
         }
     }
@@ -586,8 +649,14 @@ LogicalResult ExplorePaths::verify() {
 
     const OperandRange imports = getHopImports();
 
-    Region& hop = getHop();
-    if (hop.empty()) {
+    MutableArrayRef<Region> hops = getHops();
+    if (hops.size() != stepCount) {
+        return emitOpError("expects one hop region per step, but takes ") << stepCount
+                                                                          << " steps and " << hops.size() << " regions";
+    }
+
+    const bool hasPredicate = llvm::any_of(hops, [](Region& hop) { return !hop.empty(); });
+    if (!hasPredicate) {
         if (!imports.empty()) {
             return emitOpError("hop imports without a hop region to read them");
         }
@@ -600,7 +669,14 @@ LogicalResult ExplorePaths::verify() {
                            "read a column that holds one value per seed");
     }
 
-    return verifyHopRegion(getOperation(), hop, imports);
+    for (size_t step = 0; step < stepCount; step++) {
+        Region& hop = hops[step];
+        if (!hop.empty() && failed(verifyHopRegion(getOperation(), hop, step, imports))) {
+            return failure();
+        }
+    }
+
+    return success();
 }
 
 LogicalResult ExpandPath::verify() {
@@ -621,9 +697,23 @@ LogicalResult ExpandPath::verify() {
         return emitOpError("kind sources, ends and nodes expand to a list of node IDs");
     }
 
+    const std::optional<uint64_t> step = getStep();
+    const std::optional<uint64_t> steps = getSteps();
+    if (step.has_value() != steps.has_value()) {
+        return emitOpError("step and steps name a step of the body together");
+    }
+
+    if (steps && *step >= *steps) {
+        return emitOpError("step ") << *step << " is not one of the " << *steps << " steps of the body";
+    }
+
+    if (steps && kind == storage::PathExpansionKind::Nodes) {
+        return emitOpError("kind nodes lists every node of the walk and takes no step");
+    }
+
     // Reversed, the kinds swap: the pattern's end list is the walk's source list read
     // backwards, so that is the one holding the seed. The nodes hold it either way.
-    const bool readsTheSeed = kind == storage::PathExpansionKind::Sources
+    const bool readsTheSeed = (kind == storage::PathExpansionKind::Sources && step.value_or(0) == 0)
                            || kind == storage::PathExpansionKind::Nodes;
     if (readsTheSeed && !getSrcids()) {
         return emitOpError("kind sources and nodes read the seed of each path from srcids");

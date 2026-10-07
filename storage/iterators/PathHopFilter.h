@@ -9,11 +9,15 @@ namespace db {
 
 // The candidates leaving one source, held in a batch right after the previous frame's.
 // _seedRow is the input row the walk left from, which is what a predicate reading a
-// column outside the hop reads its one value at.
+// column outside the hop reads its one value at. A walk repeating a body of several hops
+// gives the nodes and edges it took earlier in the current repetition, the node it started
+// the repetition from first; the source follows the last of those nodes.
 struct PathHopFrame {
     size_t _seedRow {0};
     NodeID _source;
     size_t _candidateCount {0};
+    std::span<const NodeID> _repetitionNodes;
+    std::span<const EdgeID> _repetitionEdges;
 };
 
 // The predicate a variable-length pattern puts on each hop, evaluated once over a batch of
@@ -28,6 +32,10 @@ public:
     virtual size_t filter(std::span<PathHopFrame> frames,
                           std::span<NodeID> candidateNodes,
                           std::span<EdgeID> candidateEdges) = 0;
+
+    // Whether the predicate reads the nodes and edges a frame gives of its repetition, which
+    // makes what a node expands to depend on how the walk reached it
+    virtual bool readsRepetition() const;
 };
 
 }

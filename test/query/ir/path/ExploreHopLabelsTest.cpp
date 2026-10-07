@@ -259,11 +259,11 @@ protected:
     }
 
     static void expectHopLabels(mlir::db::ExplorePaths exploration, const std::vector<std::string>& expected) {
-        const std::optional<mlir::ArrayAttr> hopLabels = exploration.getHopLabels();
-        ASSERT_TRUE(hopLabels.has_value());
+        const mlir::ArrayAttr hopLabels = exploration.getStepHopLabels(0);
+        ASSERT_TRUE(hopLabels);
 
         std::vector<std::string> labels;
-        for (const mlir::Attribute label : *hopLabels) {
+        for (const mlir::Attribute label : hopLabels) {
             labels.push_back(mlir::cast<mlir::StringAttr>(label).getValue().str());
         }
         EXPECT_EQ(labels, expected);
@@ -339,7 +339,7 @@ TEST_F(ExploreHopLabelsTest, fusesALabelOnlyHopRegionIntoHopLabels) {
 
     mlir::db::ExplorePaths exploration = findExplorePaths(*module);
     expectHopLabels(exploration, {"Person"});
-    EXPECT_TRUE(exploration.getHop().empty());
+    EXPECT_TRUE(exploration.getHops()[0].empty());
     EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::GetNodeLabelSet>(*module), 0u);
 }
@@ -353,7 +353,7 @@ TEST_F(ExploreHopLabelsTest, splitsTheEndLabelOutOfAConjunction) {
 
     mlir::db::ExplorePaths exploration = findExplorePaths(*module);
     expectHopLabels(exploration, {"Person"});
-    ASSERT_FALSE(exploration.getHop().empty());
+    ASSERT_FALSE(exploration.getHops()[0].empty());
 
     // The source's label check stays: hop_labels asks the end only
     EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
@@ -370,7 +370,7 @@ TEST_F(ExploreHopLabelsTest, leavesARegionAskingTheHopSourceForLabels) {
 
     mlir::db::ExplorePaths exploration = findExplorePaths(*module);
     EXPECT_FALSE(exploration.getHopLabels().has_value());
-    EXPECT_FALSE(exploration.getHop().empty());
+    EXPECT_FALSE(exploration.getHops()[0].empty());
 }
 
 TEST_F(ExploreHopLabelsTest, leavesARegionAskingTheEndForADisjunction) {
@@ -381,7 +381,7 @@ TEST_F(ExploreHopLabelsTest, leavesARegionAskingTheEndForADisjunction) {
 
     mlir::db::ExplorePaths exploration = findExplorePaths(*module);
     EXPECT_FALSE(exploration.getHopLabels().has_value());
-    EXPECT_FALSE(exploration.getHop().empty());
+    EXPECT_FALSE(exploration.getHops()[0].empty());
     EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
 }
 

@@ -129,25 +129,19 @@ private:
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
         // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
-        // iterator filters by, as a disjunction, or the single type an ExplorePaths
-        // iterator restricts every hop to; empty for the other kinds. Like
+        // iterator filters by, as a disjunction; empty for the other kinds. Like
         // _labels, views into the op's interned StringAttr storage, which the
         // MLIRContext keeps alive for the whole translation; resolved to EdgeTypeIDs
         // when the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _edgeTypes;
 
-        // What an ExplorePaths iterator walks: the direction, the hop bounds (an absent
-        // maximum is unbounded) and the hop predicate region, null when the op has none.
-        // The region is the op's own, which the module keeps alive for the translation.
-        PathExplorationDir _direction {PathExplorationDir::FORWARD};
+        // What an ExplorePaths iterator walks: the op, whose steps each give a direction,
+        // edge types, hop labels and a hop region, and the hop bounds (an absent maximum is
+        // unbounded). The module keeps the op alive for the translation.
+        mlir::nl::ExplorePaths _explorePaths;
         uint64_t _minHops {0};
         uint64_t _maxHops {0};
-        mlir::Region* _hopRegion {nullptr};
         llvm::SmallVector<mlir::Value, 2> _hopImports;
-
-        // The labels every hop's end must carry, when the op asks only that of a hop; views
-        // into the op's interned StringAttr storage like _labels
-        llvm::SmallVector<llvm::StringRef, 4> _hopLabels;
 
         // The carried column holding each seed's own end, when the exploration is bound,
         // and whether it reports each (seed, end) pair once instead of every path
@@ -457,6 +451,11 @@ private:
                                    mlir::Block& loopBody,
                                    NLLimitState* limit,
                                    NLStmtContainer* body);
+
+    void translateExploreStep(mlir::nl::ExplorePaths explorePaths,
+                              size_t step,
+                              llvm::ArrayRef<mlir::Value> hopImports,
+                              NLExplorePathsLoopData* loopData);
 
     // Allocate the filtered output of every carried column of an expansion loop, bound to
     // the loop variables from firstCarriedArgument on, with the gather that fills it

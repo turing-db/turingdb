@@ -1011,32 +1011,45 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     yielding a boolean mask chunk; `hop_labels` is the db op's label-only hop predicate,
     carried as it is. The input chunk type and the three fixed result chunks
     are inferred; only the carried chunk types are spelled out, after the colon.
+
+    A body of several steps is the db op's too: a direction, a hop labels list and a hop
+    region per step, the region of step `k` over the node and edge chunks of its repetition
+    up to its hop. Each edge type handle filters one step; `edge_type_steps` names which
+    when not every step has one.
   }];
 
   let arguments = (ins NLNodeIDChunk:$input_nodes,
                        Variadic<NLChunk>:$columns_to_filter,
                        Optional<NLNodeSetStateHandle>:$end_nodes,
-                       Optional<NLEdgeTypeHandle>:$edge_types,
+                       Variadic<NLEdgeTypeHandle>:$edge_types,
                        Variadic<NLChunk>:$hop_imports,
-                       PathDirection:$direction,
+                       DenseI64ArrayAttr:$directions,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
+                       OptionalAttr<DenseI64ArrayAttr>:$edge_type_steps,
                        OptionalAttr<StrArrayAttr>:$end_labels,
-                       OptionalAttr<StrArrayAttr>:$hop_labels,
+                       OptionalAttr<StrArrayArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
   let results   = (outs NLIterator:$result);
 
-  let regions = (region MaxSizedRegion<1>:$hop);
+  let regions = (region VariadicRegion<MaxSizedRegion<1>>:$hops);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
-    (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` custom<PathDirections>($directions) `hops` $min_hops
+    (`to` $max_hops^)? (`edge_types` $edge_types^)? (`edge_type_steps` $edge_type_steps^)? (`end_labels` $end_labels^)?
+    (`hop_labels` custom<StepNames>($hop_labels)^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
     (`hop_imports` `{` $hop_imports^ `:` qualified(type($hop_imports)) `}`)? (`ends_on_seed` $ends_on_seed^)?
-    (`distinct` $distinct^)? ($hop^)?
+    (`distinct` $distinct^)? `` custom<HopRegions>($hops, ref($directions))
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+
+  let extraClassDeclaration = [{
+    size_t getStepCount() { return getDirections().size(); }
+
+    // The edge type handle filtering one step, null when the step has none
+    ::mlir::Value getStepEdgeTypes(size_t step);
   }];
 
   let hasVerifier = 1;
@@ -1059,11 +1072,13 @@ def ExpandPath : NLOp<"expand_path", [Pure, RowAlignedThroughOperands]> {
   let arguments = (ins NLChunk:$paths,
                        Optional<NLNodeIDChunk>:$srcids,
                        PathExpansionKind:$kind,
-                       UnitAttr:$reversed);
+                       UnitAttr:$reversed,
+                       OptionalAttr<UI64Attr>:$step,
+                       OptionalAttr<UI64Attr>:$steps);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $paths (`,` $srcids^)? `)` `kind` $kind (`reversed` $reversed^)?
+    `(` $paths (`,` $srcids^)? `)` `kind` $kind (`reversed` $reversed^)? (`step` $step^ `of` $steps)?
     attr-dict `:` functional-type(operands, results)
   }];
 }

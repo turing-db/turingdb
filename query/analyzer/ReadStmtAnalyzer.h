@@ -1,5 +1,6 @@
 #pragma once
 
+#include "decl/EvaluatedType.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -74,22 +75,22 @@ private:
     void yieldEveryReturnValue(const FunctionSignature& signature, YieldClause* yield);
 
     // The property map of an edge pattern, each entry an equality predicate on @param decl:
-    // a constraint on the matched edge, or - for a quantified pattern - one more predicate
-    // every hop must pass
+    // a constraint on the matched edge, or - for a hop of the quantified pattern @param
+    // walk - one more predicate every repetition must pass
     void analyzeEdgeProperties(EdgePattern* edgePattern,
                                VarDecl* decl,
                                EdgePatternData* data,
-                               bool asHopPredicates);
+                               EdgePattern* walk);
 
-    // The hop of a quantified pattern: its edge, inner nodes and predicates resolve in a
-    // scope of their own, where the names bind one entity; outside it the same names bind
-    // the whole path's lists
-    void analyzeHop(EdgePattern* edgePattern, EdgePatternData* data);
+    // The hops a quantified pattern repeats: their edges, inner nodes and predicates resolve
+    // in a scope of their own, where the names bind one entity; outside it the same names
+    // bind the whole path's lists
+    void analyzeHops(EdgePattern* walk);
 
-    // The name a quantified pattern's inner node groups, rejected when the query has
+    // The name a quantified pattern's inner node or edge groups, rejected when the query has
     // already bound it and declared as the list of that name otherwise
-    void throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* edgePattern) const;
-    VarDecl* declareGroupVariable(DeclContext* outer, std::string_view name);
+    void throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* walk) const;
+    VarDecl* declareGroupVariable(DeclContext* outer, EvaluatedType type, std::string_view name);
 
     // Declares the variable a `MATCH p = ...` names the whole element with, once its
     // entities are bound

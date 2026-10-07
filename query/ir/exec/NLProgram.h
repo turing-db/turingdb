@@ -875,75 +875,27 @@ private:
     bool _ordered {false};
 };
 
-class NLExplorePathsLoopData : public NLExpansionLoopData {
+// One step of the body an nl.explore_paths walk repeats: the direction and edge types its
+// hops follow, and the labels and the predicate they must pass. The predicate reads the
+// repetition up to the hop through the node and edge columns of its region, interleaved as
+// the region's arguments are; a null column is an argument the region does not read.
+class NLExploreStep {
 public:
-    NLExplorePathsLoopData(const ColumnNodeIDs* input,
-                           ColumnNodeIDs* sources,
-                           ColumnNodeIDs* targets,
-                           ColumnVector<PathRef>* paths,
-                           PathTrie* trie,
-                           PathExplorationDir direction,
-                           uint64_t minHops,
-                           uint64_t maxHops,
-                           bool filtersByType,
-                           std::span<const EdgeTypeID> edgeTypes,
-                           bool matchable)
-        : NLExpansionLoopData(input, sources, targets),
-        _paths(paths),
-        _trie(trie),
-        _direction(direction),
-        _minHops(minHops),
-        _maxHops(maxHops),
+    NLExploreStep(PathExplorationDir direction,
+                  bool filtersByType,
+                  std::span<const EdgeTypeID> edgeTypes,
+                  bool matchable)
+        : _direction(direction),
         _filtersByType(filtersByType),
         _edgeTypes(edgeTypes.begin(), edgeTypes.end()),
         _matchable(matchable)
     {
     }
 
-    ColumnVector<PathRef>* getPaths() const { return _paths; }
-    PathTrie* getTrie() const { return _trie; }
     PathExplorationDir getDirection() const { return _direction; }
-    uint64_t getMinHops() const { return _minHops; }
-    uint64_t getMaxHops() const { return _maxHops; }
     bool filtersByType() const { return _filtersByType; }
     std::span<const EdgeTypeID> getEdgeTypes() const { return _edgeTypes; }
     bool isMatchable() const { return _matchable; }
-
-    bool hasHopFilter() const { return _hopMask != nullptr; }
-
-    void setHopFilter(ColumnNodeIDs* hopSources,
-                      ColumnEdgeIDs* hopEdges,
-                      ColumnNodeIDs* hopEnds,
-                      const Column* hopMask,
-                      NLMaskSurvivorFunction hopSurvivors) {
-        _hopSources = hopSources;
-        _hopEdges = hopEdges;
-        _hopEnds = hopEnds;
-        _hopMask = hopMask;
-        _hopSurvivors = hopSurvivors;
-    }
-
-    void addHopImport(const NLHopImport& import) { _hopImports.push_back(import); }
-    std::span<const NLHopImport> getHopImports() const { return _hopImports; }
-
-    ColumnNodeIDs* getHopSources() const { return _hopSources; }
-    ColumnEdgeIDs* getHopEdges() const { return _hopEdges; }
-    ColumnNodeIDs* getHopEnds() const { return _hopEnds; }
-    const Column* getHopMask() const { return _hopMask; }
-    NLMaskSurvivorFunction getHopSurvivors() const { return _hopSurvivors; }
-
-    NLStmtContainer* getHopStmts() { return &_hopStmts; }
-    const NLStmtContainer* getHopStmts() const { return &_hopStmts; }
-
-    void setEndLabels(const LabelSet& endLabels, bool matchable) {
-        _endLabels = endLabels;
-        _filtersByEndLabels = true;
-        _endMatchable = matchable;
-    }
-
-    bool filtersByEndLabels() const { return _filtersByEndLabels; }
-    const LabelSet& getEndLabels() const { return _endLabels; }
-    bool isEndMatchable() const { return _endMatchable; }
 
     void setHopLabels(const LabelSet& hopLabels, bool matchable) {
         _hopLabels = hopLabels;
@@ -954,6 +906,94 @@ public:
     bool filtersByHopLabels() const { return _filtersByHopLabels; }
     const LabelSet& getHopLabels() const { return _hopLabels; }
     bool areHopLabelsMatchable() const { return _hopLabelsMatchable; }
+
+    bool hasHopFilter() const { return _hopMask != nullptr; }
+
+    void setHopFilter(const Column* hopMask, NLMaskSurvivorFunction hopSurvivors) {
+        _hopMask = hopMask;
+        _hopSurvivors = hopSurvivors;
+    }
+
+    void addHopNode(ColumnNodeIDs* column) { _hopNodes.push_back(column); }
+    void addHopEdge(ColumnEdgeIDs* column) { _hopEdges.push_back(column); }
+    void addHopImport(const NLHopImport& import) { _hopImports.push_back(import); }
+
+    std::span<ColumnNodeIDs* const> getHopNodes() const { return _hopNodes; }
+    std::span<ColumnEdgeIDs* const> getHopEdges() const { return _hopEdges; }
+    std::span<const NLHopImport> getHopImports() const { return _hopImports; }
+    const Column* getHopMask() const { return _hopMask; }
+    NLMaskSurvivorFunction getHopSurvivors() const { return _hopSurvivors; }
+
+    NLStmtContainer* getHopStmts() { return &_hopStmts; }
+    const NLStmtContainer* getHopStmts() const { return &_hopStmts; }
+
+private:
+    PathExplorationDir _direction {PathExplorationDir::FORWARD};
+    bool _filtersByType {false};
+    std::vector<EdgeTypeID> _edgeTypes;
+    bool _matchable {true};
+
+    LabelSet _hopLabels;
+    bool _filtersByHopLabels {false};
+    bool _hopLabelsMatchable {true};
+
+    std::vector<ColumnNodeIDs*> _hopNodes;
+    std::vector<ColumnEdgeIDs*> _hopEdges;
+    const Column* _hopMask {nullptr};
+    NLMaskSurvivorFunction _hopSurvivors {nullptr};
+    std::vector<NLHopImport> _hopImports;
+    NLStmtContainer _hopStmts;
+};
+
+// The hop bounds count repetitions of the body of steps
+class NLExplorePathsLoopData : public NLExpansionLoopData {
+public:
+    NLExplorePathsLoopData(const ColumnNodeIDs* input,
+                           ColumnNodeIDs* sources,
+                           ColumnNodeIDs* targets,
+                           ColumnVector<PathRef>* paths,
+                           PathTrie* trie,
+                           uint64_t minHops,
+                           uint64_t maxHops)
+        : NLExpansionLoopData(input, sources, targets),
+        _paths(paths),
+        _trie(trie),
+        _minHops(minHops),
+        _maxHops(maxHops)
+    {
+    }
+
+    ColumnVector<PathRef>* getPaths() const { return _paths; }
+    PathTrie* getTrie() const { return _trie; }
+    uint64_t getMinHops() const { return _minHops; }
+    uint64_t getMaxHops() const { return _maxHops; }
+
+    NLExploreStep* addStep(PathExplorationDir direction,
+                           bool filtersByType,
+                           std::span<const EdgeTypeID> edgeTypes,
+                           bool matchable) {
+        _steps.push_back(std::make_unique<NLExploreStep>(direction, filtersByType, edgeTypes, matchable));
+        return _steps.back().get();
+    }
+
+    size_t getStepCount() const { return _steps.size(); }
+    NLExploreStep* getStep(size_t step) const { return _steps[step].get(); }
+
+    bool isMatchable() const {
+        return std::ranges::all_of(_steps, [](const std::unique_ptr<NLExploreStep>& step) {
+            return step->isMatchable();
+        });
+    }
+
+    void setEndLabels(const LabelSet& endLabels, bool matchable) {
+        _endLabels = endLabels;
+        _filtersByEndLabels = true;
+        _endMatchable = matchable;
+    }
+
+    bool filtersByEndLabels() const { return _filtersByEndLabels; }
+    const LabelSet& getEndLabels() const { return _endLabels; }
+    bool isEndMatchable() const { return _endMatchable; }
 
     PathDistanceIndex* getDistanceIndex() { return &_distanceIndex; }
 
@@ -974,19 +1014,13 @@ public:
 private:
     ColumnVector<PathRef>* _paths {nullptr};
     PathTrie* _trie {nullptr};
-    PathExplorationDir _direction {PathExplorationDir::FORWARD};
     uint64_t _minHops {0};
     uint64_t _maxHops {0};
-    bool _filtersByType {false};
-    std::vector<EdgeTypeID> _edgeTypes;
-    bool _matchable {true};
+    std::vector<std::unique_ptr<NLExploreStep>> _steps;
 
     LabelSet _endLabels;
     bool _filtersByEndLabels {false};
     bool _endMatchable {true};
-    LabelSet _hopLabels;
-    bool _filtersByHopLabels {false};
-    bool _hopLabelsMatchable {true};
     PathDistanceIndex _distanceIndex;
     size_t _seedsSeen {0};
 
@@ -994,14 +1028,6 @@ private:
     NLNodeSetState* _endNodeSet {nullptr};
     PathTargetIndex _targetIndex;
     bool _distinctEnds {false};
-
-    ColumnNodeIDs* _hopSources {nullptr};
-    ColumnEdgeIDs* _hopEdges {nullptr};
-    ColumnNodeIDs* _hopEnds {nullptr};
-    const Column* _hopMask {nullptr};
-    NLMaskSurvivorFunction _hopSurvivors {nullptr};
-    std::vector<NLHopImport> _hopImports;
-    NLStmtContainer _hopStmts;
 };
 
 // The list a path handle expands to; the interpreter-side counterpart of the MLIR
@@ -1022,6 +1048,7 @@ public:
                      ColumnVector<ListView>* output,
                      PathExpansionKind kind,
                      bool reversed,
+                     PathHopStride hops,
                      const PathTrie* trie,
                      QueryListBuffer* listBuffer)
         : _paths(paths),
@@ -1029,6 +1056,7 @@ public:
         _output(output),
         _kind(kind),
         _reversed(reversed),
+        _hops(hops),
         _trie(trie),
         _listBuffer(listBuffer)
     {
@@ -1039,6 +1067,7 @@ public:
     ColumnVector<ListView>* getOutput() const { return _output; }
     PathExpansionKind getKind() const { return _kind; }
     bool isReversed() const { return _reversed; }
+    PathHopStride getHops() const { return _hops; }
     const PathTrie* getTrie() const { return _trie; }
     QueryListBuffer* getListBuffer() const { return _listBuffer; }
 
@@ -1048,6 +1077,7 @@ private:
     ColumnVector<ListView>* _output {nullptr};
     PathExpansionKind _kind {PathExpansionKind::Edges};
     bool _reversed {false};
+    PathHopStride _hops;
     const PathTrie* _trie {nullptr};
     QueryListBuffer* _listBuffer {nullptr};
 };

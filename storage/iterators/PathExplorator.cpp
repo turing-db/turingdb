@@ -349,13 +349,13 @@ PathExplorator::PathExplorator(const GraphView& view,
                                uint64_t maxHops)
     : _view(view),
     _input(inputNodeIDs),
-    _direction(direction),
     _minHops(minHops),
     _maxHops(maxHops),
     _parts(view),
     _tombstones(&view.tombstones()),
     _filterTombstones(view.tombstones().hasEdges())
 {
+    addStep(direction);
     reset();
 }
 
@@ -381,18 +381,25 @@ void PathExplorator::setPaths(ColumnVector<PathRef>* paths, PathTrie* trie) {
     }
 }
 
-void PathExplorator::setEdgeTypeFilter(std::span<const EdgeTypeID> edgeTypes) {
-    _filterByType = true;
-    _edgeTypes = edgeTypes;
+void PathExplorator::addStep(PathExplorationDir direction) {
+    _steps.push_back(Step {._direction = direction});
+    _reach._reached.resize(_steps.size());
+}
 
-    _edgeTypeWords.clear();
+void PathExplorator::setEdgeTypeFilter(size_t step, std::span<const EdgeTypeID> edgeTypes) {
+    Step& filtered = _steps[step];
+    filtered._filterByType = true;
+    filtered._edgeTypes = edgeTypes;
+
+    std::vector<uint64_t>& words = filtered._edgeTypeWords;
+    words.clear();
     for (const EdgeTypeID edgeType : edgeTypes) {
         const size_t word = edgeType.getValue() >> 6;
-        if (word >= _edgeTypeWords.size()) {
-            _edgeTypeWords.resize(word + 1, 0);
+        if (word >= words.size()) {
+            words.resize(word + 1, 0);
         }
 
-        _edgeTypeWords[word] |= 1ull << (edgeType.getValue() & 63);
+        words[word] |= 1ull << (edgeType.getValue() & 63);
     }
 }
 
@@ -411,17 +418,57 @@ void PathExplorator::setDistinctEnds(bool distinct) {
 }
 
 // The level search answers "reached within k", which coincides with "reached by a trail
-// within k" only when the walk may stop at its first hop; deeper minimums walk instead
+// within k" only when the walk may stop at its first repetition; deeper minimums walk instead
 bool PathExplorator::searchesLevels() const {
-    return _distinctEnds && _minHops <= 1;
+    return _distinctEnds && _minHops <= _steps.size() && levelsFindTrails();
+}
+
+// The search keeps one state per node and step, so a walk it finds repeats no state. A state
+// takes an edge of a directed step one way only, and an edge no two steps share is then taken
+// once. Its frames give no repetition, so a hop filter reading one rules it out.
+bool PathExplorator::levelsFindTrails() const {
+    if (_steps.size() == 1) {
+        return true;
+    }
+
+    for (size_t step = 0; step < _steps.size(); step++) {
+        const Step& taken = _steps[step];
+        const bool readsRepetition = taken._hopFilter && taken._hopFilter->readsRepetition();
+        if (taken._direction == PathExplorationDir::BOTH || !taken._filterByType || readsRepetition) {
+            return false;
+        }
+
+        for (size_t other = 0; other < step; other++) {
+            const std::span<const EdgeTypeID> otherTypes = _steps[other]._edgeTypes;
+            const bool sharesAType = std::ranges::any_of(taken._edgeTypes, [otherTypes](EdgeTypeID edgeType) {
+                return std::ranges::find(otherTypes, edgeType) != otherTypes.end();
+            });
+
+            if (sharesAType) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+PathReachTable& PathExplorator::reachTableAt(uint64_t level) {
+    return _reach._reached[level % _steps.size()];
 }
 
 bool PathExplorator::searchesSeedCycles() const {
-    return _minHops == 1 && _direction == PathExplorationDir::BOTH;
+    return _minHops == 1 && _steps.front()._direction == PathExplorationDir::BOTH;
 }
 
+// Keyed by depth, two arrivals past the minimum differ only by the step of the body they are at
 uint64_t PathExplorator::expansionKey(NodeID node, uint64_t budget) const {
-    const uint64_t offset = _keysDepth ? std::min(_maxHops - budget, _expansionSpan) : budget;
+    uint64_t offset = budget;
+    if (_keysDepth) {
+        const uint64_t depth = _maxHops - budget;
+        const uint64_t phaseFloor = _expansionSpan + 1 - _steps.size();
+        offset = depth < phaseFloor ? depth : phaseFloor + (depth - phaseFloor) % _steps.size();
+    }
 
     return node.getValue() * (_expansionSpan + 1) + offset;
 }
@@ -459,6 +506,14 @@ void PathExplorator::prefetchNodeData(NodeID node, size_t partIndex) const {
 
 bool PathExplorator::hasWork() const {
     return _active || _reach._batchActive || _seedCursor < _input->size();
+}
+
+const PathExplorator::Step& PathExplorator::stepAt(uint64_t depth) const {
+    return _steps.size() == 1 ? _steps.front() : _steps[depth % _steps.size()];
+}
+
+bool PathExplorator::endsRepetition(uint64_t depth) const {
+    return _steps.size() == 1 || depth % _steps.size() == 0;
 }
 
 LabelSetHandle PathExplorator::labelSetOf(NodeID node) const {
@@ -527,6 +582,7 @@ void PathExplorator::reset() {
     _target = PathTargetHandle {};
     _pathEdgeTable.clear();
     _pathEdges.clear();
+    _pathNodes.clear();
     _pathEntries.clear();
     _pathSignatures.clear();
     _frames.clear();
@@ -563,11 +619,16 @@ void PathExplorator::fill(size_t maxCount) {
         // subtree clears the minimum, and it stops mattering once the minimum is reached
         const uint64_t hopCeiling = std::max<uint64_t>(_parts.getAllocatedEdgeCount(), _pendingEdgeIDBound);
         _keysDepth = _maxHops > hopCeiling;
-        _expansionSpan = _keysDepth ? std::min(_minHops, hopCeiling) : _maxHops;
+        _expansionSpan = _keysDepth ? std::min(_minHops, hopCeiling) + _steps.size() - 1 : _maxHops;
 
         const uint64_t nodeBound = std::max<uint64_t>(nodeIDBound(), 1);
         _prunes = _expansionSpan < std::numeric_limits<uint64_t>::max() / nodeBound;
     }
+
+    const auto readsRepetition = [](const Step& step) {
+        return step._hopFilter && step._hopFilter->readsRepetition();
+    };
+    _remembersExpansions = _prunes && std::none_of(_steps.begin(), _steps.end(), readsRepetition);
 
     if (_paths) {
         retainWalkedPath();
@@ -602,6 +663,7 @@ void PathExplorator::startSeed(size_t row) {
     _seedRow = row;
     _pathEdgeTable.clear();
     _pathEdges.clear();
+    _pathNodes.clear();
     _pathSignatures.clear();
     _pathSignatures.push_back(0);
     _pathEntries.clear();
@@ -646,7 +708,7 @@ void PathExplorator::step() {
     frame._next++;
 
     const uint64_t depth = _frames.size();
-    const bool emits = depth >= _minHops && isEnd(_seedRow, node);
+    const bool emits = depth >= _minHops && endsRepetition(depth) && isEnd(_seedRow, node);
     const bool expands = depth < _maxHops;
 
     if (!emits && !expands) {
@@ -669,7 +731,7 @@ void PathExplorator::step() {
         return;
     }
 
-    if (_prunes) {
+    if (_remembersExpansions) {
         const DependencyList* remembered = _expansions.find(expansionKey(node, _maxHops - depth));
 
         if (remembered && remembered->_count == 0) {
@@ -705,7 +767,11 @@ void PathExplorator::popFrame() {
     _candidateEdges.resize(frame._candidateBegin);
     _frames.pop_back();
 
-    if (_prunes) {
+    if (_steps.size() > 1) {
+        _pathNodes.pop_back();
+    }
+
+    if (_remembersExpansions) {
         size_t taint = frame._taint;
 
         const bool dependsOnHeldEdges = _dependencies.size() > frame._dependencyBegin;
@@ -769,11 +835,13 @@ void PathExplorator::generatePendingCandidates(NodeID node) {
         return;
     }
 
-    if (_direction != PathExplorationDir::BACKWARD) {
+    const PathExplorationDir direction = stepAt(_pathEdges.size())._direction;
+
+    if (direction != PathExplorationDir::BACKWARD) {
         generateCandidates(_pendingAdjacency->outOf(node, _pendingEdgeIDBound));
     }
 
-    if (_direction != PathExplorationDir::FORWARD) {
+    if (direction != PathExplorationDir::FORWARD) {
         generateCandidates(_pendingAdjacency->into(node, _pendingEdgeIDBound));
     }
 }
@@ -785,17 +853,21 @@ void PathExplorator::descend(NodeID node) {
     const size_t owner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
     prefetchNodeData(node, owner);
 
+    const uint64_t depth = _pathEdges.size();
+    const Step& step = stepAt(depth);
+    const PathExplorationDir direction = step._direction;
+
     std::span<const EdgeRecord> outs;
     std::span<const EdgeRecord> ins;
 
     if (owner < _parts.size()) {
         const EdgeIndexer& indexer = *_parts.get(owner)._indexer;
 
-        if (_direction != PathExplorationDir::BACKWARD) {
+        if (direction != PathExplorationDir::BACKWARD) {
             outs = indexer.getNodeOutEdges(node);
         }
 
-        if (_direction != PathExplorationDir::FORWARD) {
+        if (direction != PathExplorationDir::FORWARD) {
             ins = indexer.getNodeInEdges(node);
         }
     }
@@ -809,28 +881,39 @@ void PathExplorator::descend(NodeID node) {
     for (const size_t patchIndex : _parts.patchPartsAfter(owner)) {
         const EdgeIndexer& indexer = *_parts.get(patchIndex)._indexer;
 
-        if (_direction != PathExplorationDir::BACKWARD) {
+        if (direction != PathExplorationDir::BACKWARD) {
             generateCandidates(indexer.getNodeOutEdges(node));
         }
 
-        if (_direction != PathExplorationDir::FORWARD) {
+        if (direction != PathExplorationDir::FORWARD) {
             generateCandidates(indexer.getNodeInEdges(node));
         }
     }
 
     size_t end = _candidateNodes.size();
-    if (_hopFilter && end > begin) {
+    if (step._hopFilter && end > begin) {
         const std::span<NodeID> candidateNodes(_candidateNodes.data() + begin, end - begin);
         const std::span<EdgeID> candidateEdges(_candidateEdges.data() + begin, end - begin);
         PathHopFrame frame {._seedRow = _seedRow, ._source = node, ._candidateCount = end - begin};
-        const size_t survivors = _hopFilter->filter({&frame, 1}, candidateNodes, candidateEdges);
+
+        if (_steps.size() > 1) {
+            const size_t position = depth % _steps.size();
+            frame._repetitionNodes = std::span<const NodeID>(_pathNodes).subspan(depth - position, position);
+            frame._repetitionEdges = std::span<const EdgeID>(_pathEdges).subspan(depth - position, position);
+        }
+
+        const size_t survivors = step._hopFilter->filter({&frame, 1}, candidateNodes, candidateEdges);
 
         end = begin + survivors;
         _candidateNodes.resize(end);
         _candidateEdges.resize(end);
     }
 
-    _frames.push_back({begin, end, begin, node, _maxHops - _pathEdges.size(), dependencyBegin, NO_TAINT});
+    if (_steps.size() > 1) {
+        _pathNodes.push_back(node);
+    }
+
+    _frames.push_back({begin, end, begin, node, _maxHops - depth, dependencyBegin, NO_TAINT});
 }
 
 void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
@@ -843,8 +926,10 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
     // The hops a candidate may still take after the one that reaches it
     const uint64_t remainingHops = _maxHops - candidateDepth;
 
-    const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
-    const std::span<const uint64_t> edgeTypeWords = _edgeTypeWords;
+    const Step& step = stepAt(_pathEdges.size());
+    const bool filterByType = step._filterByType;
+    const std::span<const EdgeTypeID> edgeTypes = step._edgeTypes;
+    const std::span<const uint64_t> edgeTypeWords = step._edgeTypeWords;
     const bool checksTarget = _target.isValid() || (_filtersByEndNodeSet && _targetIndex);
 
     _candidateChecks += edges.size();
@@ -853,7 +938,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const EdgeID edge = record._edgeID;
 
         const bool backtracks = hasPathEdges && edge == lastEdge;
-        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
+        const bool wrongType = filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
         const size_t heldAt = backtracks ? _pathEdges.size() - 1
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
@@ -863,7 +948,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const bool beyondTarget = !ruledOut && !beyondLabels && checksTarget && !canReachTargetWithin(record._otherID, remainingHops);
 
         if (ruledOut || beyondLabels || beyondTarget) {
-            if (_prunes && onTrail) {
+            if (_remembersExpansions && onTrail) {
                 dependOnBlockedEdge(edge, record._otherID, candidateDepth, heldAt);
             }
 
@@ -915,7 +1000,7 @@ void PathExplorator::dependOnBlockedEdge(EdgeID edge, NodeID node, uint64_t dept
         return;
     }
 
-    const bool emitsThere = depth >= _minHops && isEnd(_seedRow, node);
+    const bool emitsThere = depth >= _minHops && endsRepetition(depth) && isEnd(_seedRow, node);
     const bool emitted = !emitsThere || _emittedEnds.contains(node.getValue());
     const bool expandsThere = depth < _maxHops;
     const DependencyList* covering = emitted && expandsThere ? findReusableExpansion(node, depth, edge) : nullptr;
@@ -1017,6 +1102,7 @@ void PathExplorator::startBatch() {
 
     reach._batchFirstRow = _seedCursor;
     reach._level = 0;
+    reach._step = 0;
     reach._next.clear();
     reach._emitNode = 0;
     reach._emitBits = 0;
@@ -1038,7 +1124,7 @@ void PathExplorator::startBatch() {
         }
 
         const uint64_t mask = 1ull << bit;
-        PathReachTable::Slot& slot = reach._reached.reach(seed);
+        PathReachTable::Slot& slot = reachTableAt(0).reach(seed);
 
         if (_minHops == 0 || seedCycles) {
             slot._seen |= mask;
@@ -1109,7 +1195,7 @@ uint64_t PathExplorator::closedSeedsOf(uint64_t seeds) {
 bool PathExplorator::labelsComponents() const {
     const uint64_t hopCeiling = std::max<uint64_t>(_parts.getAllocatedEdgeCount(), _pendingEdgeIDBound);
 
-    return _maxHops >= hopCeiling && !_hopFilter;
+    return _maxHops >= hopCeiling && !_steps.front()._hopFilter;
 }
 
 // Tarjan's bridges: a node is on a cycle when it carries an edge off the depth-first tree, a
@@ -1372,7 +1458,7 @@ void PathExplorator::emitGainedRows(size_t maxCount) {
         const NodeID node = reach._next[reach._emitNode];
 
         if (reach._emitBits == 0) {
-            reach._emitBits = reach._reached.get(node)._frontier;
+            reach._emitBits = reachTableAt(reach._level).get(node)._frontier;
         }
 
         const unsigned bit = static_cast<unsigned>(std::countr_zero(reach._emitBits));
@@ -1380,7 +1466,8 @@ void PathExplorator::emitGainedRows(size_t maxCount) {
 
         const size_t row = reach._batchFirstRow + bit;
         const bool closesOnSeed = reach._level == 0 && ((reach._closedSeeds >> bit) & 1) != 0;
-        if ((reach._level >= _minHops || closesOnSeed) && isEnd(row, node)) {
+        const bool emitsAtLevel = reach._level >= _minHops && endsRepetition(reach._level);
+        if ((emitsAtLevel || closesOnSeed) && isEnd(row, node)) {
             emit(row, node, PathTrie::ROOT);
         }
 
@@ -1392,12 +1479,14 @@ void PathExplorator::emitGainedRows(size_t maxCount) {
 
 void PathExplorator::expandLevel() {
     Reachability& reach = _reach;
-    PathReachTable& reached = reach._reached;
+    PathReachTable& expandedTable = reachTableAt(reach._level);
+    PathReachTable& reachedTable = reachTableAt(reach._level + 1);
 
     std::swap(reach._frontier, reach._next);
     reach._next.clear();
     reach._emitNode = 0;
     reach._emitBits = 0;
+    reach._step = reach._level % _steps.size();
     reach._level++;
 
     clearReachFrames();
@@ -1415,7 +1504,7 @@ void PathExplorator::expandLevel() {
         // The word is taken before the candidates are reached: reaching one may grow the
         // table under the expanded slot
         const NodeID node = reach._frontier[index];
-        PathReachTable::Slot& expanded = reached.get(node);
+        PathReachTable::Slot& expanded = expandedTable.get(node);
         reach._frameWords.push_back(expanded._frontier);
         expanded._frontier = 0;
 
@@ -1428,7 +1517,7 @@ void PathExplorator::expandLevel() {
     reachFrames();
 
     for (const NodeID node : reach._next) {
-        PathReachTable::Slot& slot = reached.get(node);
+        PathReachTable::Slot& slot = reachedTable.get(node);
         slot._frontier = slot._gained;
         slot._gained = 0;
     }
@@ -1436,7 +1525,7 @@ void PathExplorator::expandLevel() {
 
 void PathExplorator::reachFrames() {
     Reachability& reach = _reach;
-    PathReachTable& reached = reach._reached;
+    PathReachTable& reached = reachTableAt(reach._level);
 
     filterReachFrames();
 
@@ -1476,22 +1565,23 @@ void PathExplorator::appendReachFrame(NodeID node) {
 
     appendPendingReachCandidates(node);
 
+    const PathExplorationDir direction = _steps[reach._step]._direction;
     const size_t owner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
     if (owner < _parts.size()) {
         const EdgeIndexer& indexer = *_parts.get(owner)._indexer;
-        if (_direction != PathExplorationDir::BACKWARD) {
+        if (direction != PathExplorationDir::BACKWARD) {
             appendReachCandidates(indexer.getNodeOutEdges(node));
         }
-        if (_direction != PathExplorationDir::FORWARD) {
+        if (direction != PathExplorationDir::FORWARD) {
             appendReachCandidates(indexer.getNodeInEdges(node));
         }
 
         for (const size_t patchIndex : _parts.patchPartsAfter(owner)) {
             const EdgeIndexer& patchIndexer = *_parts.get(patchIndex)._indexer;
-            if (_direction != PathExplorationDir::BACKWARD) {
+            if (direction != PathExplorationDir::BACKWARD) {
                 appendReachCandidates(patchIndexer.getNodeOutEdges(node));
             }
-            if (_direction != PathExplorationDir::FORWARD) {
+            if (direction != PathExplorationDir::FORWARD) {
                 appendReachCandidates(patchIndexer.getNodeInEdges(node));
             }
         }
@@ -1504,11 +1594,12 @@ void PathExplorator::appendReachFrame(NodeID node) {
 
 void PathExplorator::filterReachFrames() {
     Reachability& reach = _reach;
-    if (!_hopFilter || reach._candidateNodes.empty()) {
+    PathHopFilter* hopFilter = _steps[reach._step]._hopFilter;
+    if (!hopFilter || reach._candidateNodes.empty()) {
         return;
     }
 
-    const size_t survivors = _hopFilter->filter(reach._frames, reach._candidateNodes, reach._candidateEdges);
+    const size_t survivors = hopFilter->filter(reach._frames, reach._candidateNodes, reach._candidateEdges);
     reach._candidateNodes.resize(survivors);
     reach._candidateEdges.resize(survivors);
 }
@@ -1526,23 +1617,27 @@ void PathExplorator::appendPendingReachCandidates(NodeID node) {
         return;
     }
 
-    if (_direction != PathExplorationDir::BACKWARD) {
+    const PathExplorationDir direction = _steps[_reach._step]._direction;
+
+    if (direction != PathExplorationDir::BACKWARD) {
         appendReachCandidates(_pendingAdjacency->outOf(node, _pendingEdgeIDBound));
     }
 
-    if (_direction != PathExplorationDir::FORWARD) {
+    if (direction != PathExplorationDir::FORWARD) {
         appendReachCandidates(_pendingAdjacency->into(node, _pendingEdgeIDBound));
     }
 }
 
 void PathExplorator::appendReachCandidates(std::span<const EdgeRecord> edges) {
-    const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
-    const std::span<const uint64_t> edgeTypeWords = _edgeTypeWords;
+    const Step& step = _steps[_reach._step];
+    const bool filterByType = step._filterByType;
+    const std::span<const EdgeTypeID> edgeTypes = step._edgeTypes;
+    const std::span<const uint64_t> edgeTypeWords = step._edgeTypeWords;
 
     _candidateChecks += edges.size();
 
     for (const EdgeRecord& record : edges) {
-        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
+        const bool wrongType = filterByType && !edgeTypeMatches(edgeTypes, edgeTypeWords, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(record._edgeID);
         if (wrongType || deleted) {
             continue;
@@ -1556,7 +1651,10 @@ void PathExplorator::appendReachCandidates(std::span<const EdgeRecord> edges) {
 void PathExplorator::finishBatch() {
     Reachability& reach = _reach;
 
-    reach._reached.clear();
+    for (PathReachTable& reached : reach._reached) {
+        reached.clear();
+    }
+
     reach._frontier.clear();
     reach._next.clear();
     reach._emitNode = 0;

@@ -104,28 +104,44 @@ void PathTrie::appendHops(PathRef path, EntityList& entities, bool reversed) con
     }
 }
 
-ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed) const {
+ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed, PathHopStride hops) const {
     const uint64_t depth = getDepth(path);
-    ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(EdgeID));
+    bioassert(depth % hops._stride == 0, "A path ends after a whole number of repetitions");
+    const uint64_t count = depth / hops._stride;
+    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(EdgeID));
 
     PathRef current = path;
-    for (uint64_t index = depth; index > 0; index--) {
+    for (uint64_t hop = depth; hop > 0; hop--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(reversed ? depth - index : index - 1, ListBufferTypeTag::EdgeID, entry._edge);
+        const uint64_t taken = hop - 1;
+
+        if (taken % hops._stride == hops._offset) {
+            const uint64_t index = taken / hops._stride;
+            cursor.writeValueAt(reversed ? count - 1 - index : index, ListBufferTypeTag::EdgeID, entry._edge);
+        }
+
         current = entry._parent;
     }
 
     return cursor.getView();
 }
 
-ListView PathTrie::expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed) const {
+ListView PathTrie::expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed, PathHopStride hops) const {
     const uint64_t depth = getDepth(path);
-    ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(NodeID));
+    bioassert(depth % hops._stride == 0, "A path ends after a whole number of repetitions");
+    const uint64_t count = depth / hops._stride;
+    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(NodeID));
 
     PathRef current = path;
-    for (uint64_t index = depth; index > 0; index--) {
+    for (uint64_t hop = depth; hop > 0; hop--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(reversed ? depth - index : index - 1, ListBufferTypeTag::NodeID, entry._node);
+        const uint64_t taken = hop - 1;
+
+        if (taken % hops._stride == hops._offset) {
+            const uint64_t index = taken / hops._stride;
+            cursor.writeValueAt(reversed ? count - 1 - index : index, ListBufferTypeTag::NodeID, entry._node);
+        }
+
         current = entry._parent;
     }
 
@@ -149,22 +165,31 @@ ListView PathTrie::expandNodes(PathRef path, NodeID seed, QueryListBuffer& buffe
     return cursor.getView();
 }
 
-ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const {
+ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed, PathHopStride hops) const {
     const uint64_t depth = getDepth(path);
-    ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(NodeID));
+    bioassert(depth % hops._stride == 0, "A path ends after a whole number of repetitions");
+    const uint64_t count = depth / hops._stride;
+    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(NodeID));
 
-    if (depth == 0) {
+    if (count == 0) {
         return cursor.getView();
     }
 
     PathRef current = get(path)._parent;
-    for (uint64_t index = depth - 1; index > 0; index--) {
+    for (uint64_t hop = depth - 1; hop > 0; hop--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(reversed ? depth - 1 - index : index, ListBufferTypeTag::NodeID, entry._node);
+
+        if (hop % hops._stride == hops._offset) {
+            const uint64_t index = hop / hops._stride;
+            cursor.writeValueAt(reversed ? count - 1 - index : index, ListBufferTypeTag::NodeID, entry._node);
+        }
+
         current = entry._parent;
     }
 
-    cursor.writeValueAt(reversed ? depth - 1 : 0, ListBufferTypeTag::NodeID, seed);
+    if (hops._offset == 0) {
+        cursor.writeValueAt(reversed ? count - 1 : 0, ListBufferTypeTag::NodeID, seed);
+    }
 
     return cursor.getView();
 }

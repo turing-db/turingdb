@@ -510,8 +510,8 @@ TEST_F(ExploreEndConstraintTest, keepsTheTypeTheRegionAndTheCarrySet) {
     expectEdgeTypes(fused, {"KNOWS_WELL"});
     EXPECT_EQ(fused.getMaxHops(), std::optional<uint64_t> {3});
     EXPECT_EQ(fused.getColumnsToFilter().size(), 1u);
-    ASSERT_FALSE(fused.getHop().empty());
-    EXPECT_EQ(fused.getHop().front().getNumArguments(), 3u);
+    ASSERT_FALSE(fused.getHops()[0].empty());
+    EXPECT_EQ(fused.getHops()[0].front().getNumArguments(), 3u);
 
     // The hop region's own label check stays: it is a hop predicate, not an end filter
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);

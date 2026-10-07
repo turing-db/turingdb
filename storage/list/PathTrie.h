@@ -23,6 +23,14 @@ struct PathTrieEntry {
 // by many paths is one chain of entries, and a row holds only the handle of its last entry.
 // Entries live in arenas, one per walk, that grow and shrink with it; a handle names
 // its arena in its high bits and stays valid for the chunk that emitted it.
+// The hops a list is read off: hop _offset, then every _stride-th hop after it. A walk
+// repeating a body of several hops reads each hop of the body as its offset into each
+// repetition; every hop of a walk is offset 0 of stride 1.
+struct PathHopStride {
+    size_t _offset {0};
+    size_t _stride {1};
+};
+
 class PathTrie {
 public:
     static constexpr PathRef ROOT {0};
@@ -55,9 +63,9 @@ public:
     void appendHops(PathRef path, EntityList& entities, bool reversed) const;
 
     // Each list in walk order, or backwards from the node the walk ended on
-    ListView expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed) const;
-    ListView expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed) const;
-    ListView expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed) const;
+    ListView expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed, PathHopStride hops = {}) const;
+    ListView expandEnds(PathRef path, QueryListBuffer& buffer, bool reversed, PathHopStride hops = {}) const;
+    ListView expandSources(PathRef path, NodeID seed, QueryListBuffer& buffer, bool reversed, PathHopStride hops = {}) const;
 
     // Every node the path runs through: the seed then the end of each hop, or reversed
     // the ends from the last back then the seed. A path of no hops gives the seed alone.

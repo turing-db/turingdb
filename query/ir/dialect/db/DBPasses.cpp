@@ -3942,25 +3942,25 @@ void collectHopConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts, ll
     }
 }
 
-// The labels a hop region asks of the hop's end node become hop_labels. The region keeps its
-// other conjuncts, and goes when there is none left.
-void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
-    Region& hop = exploration.getHop();
+// The labels the hop region of a step asks of the hop's end node join the step's labels. The
+// region keeps its other conjuncts, and goes when there is none left.
+bool fuseStepHopLabels(ExplorePaths exploration, size_t step, llvm::SmallVectorImpl<Attribute>& labels, mlir::OpBuilder& builder) {
+    Region& hop = exploration.getHops()[step];
     if (hop.empty()) {
-        return;
+        return false;
     }
 
     Block& block = hop.front();
     Yield yield = dyn_cast<Yield>(block.getTerminator());
     if (!yield || yield->getNumOperands() != 1) {
-        return;
+        return false;
     }
 
     llvm::SmallVector<Value> conjuncts;
     llvm::SmallVector<AndOp> joins;
     collectHopConjuncts(yield->getOperand(0), conjuncts, joins);
 
-    const BlockArgument end = block.getArgument(2);
+    const BlockArgument end = block.getArgument(static_cast<unsigned>(2 * step + 2));
 
     llvm::SmallVector<CheckLabelConstraint> checks;
     llvm::SmallVector<Value> residual;
@@ -3973,12 +3973,7 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
     }
 
     if (checks.empty()) {
-        return;
-    }
-
-    llvm::SmallVector<Attribute> labels;
-    if (const std::optional<ArrayAttr> current = exploration.getHopLabels()) {
-        labels.append(current->begin(), current->end());
+        return false;
     }
 
     for (CheckLabelConstraint check : checks) {
@@ -3989,13 +3984,10 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
         }
     }
 
-    exploration.setHopLabelsAttr(builder.getArrayAttr(labels));
-
     if (residual.empty()) {
-        exploration.getHopImportsMutable().clear();
         hop.dropAllReferences();
         hop.getBlocks().clear();
-        return;
+        return true;
     }
 
     builder.setInsertionPoint(yield);
@@ -4016,6 +4008,35 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
         Operation* const labelSet = check.getLabelsetIds().getDefiningOp();
         check.erase();
         eraseIfUnused(labelSet);
+    }
+
+    return true;
+}
+
+void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
+    const size_t stepCount = exploration.getStepCount();
+
+    llvm::SmallVector<Attribute> stepLabels;
+    bool fused = false;
+    for (size_t step = 0; step < stepCount; step++) {
+        llvm::SmallVector<Attribute> labels;
+        if (const ArrayAttr current = exploration.getStepHopLabels(step)) {
+            labels.append(current.begin(), current.end());
+        }
+
+        fused |= fuseStepHopLabels(exploration, step, labels, builder);
+        stepLabels.push_back(builder.getArrayAttr(labels));
+    }
+
+    if (!fused) {
+        return;
+    }
+
+    exploration.setHopLabelsAttr(builder.getArrayAttr(stepLabels));
+
+    const bool hasPredicate = llvm::any_of(exploration.getHops(), [](Region& hop) { return !hop.empty(); });
+    if (!hasPredicate) {
+        exploration.getHopImportsMutable().clear();
     }
 }
 
@@ -4166,7 +4187,9 @@ Value walkPathElements(PathElements elements, const WalkPath& walk, mlir::OpBuil
                                               walk._path,
                                               Value(),
                                               storage::PathExpansionKind::Edges,
-                                              walk._reversed).getResult();
+                                              walk._reversed,
+                                              IntegerAttr(),
+                                              IntegerAttr()).getResult();
         }
         break;
 
@@ -4177,7 +4200,9 @@ Value walkPathElements(PathElements elements, const WalkPath& walk, mlir::OpBuil
                                               walk._path,
                                               walk._seed,
                                               storage::PathExpansionKind::Nodes,
-                                              walk._reversed).getResult();
+                                              walk._reversed,
+                                              IntegerAttr(),
+                                              IntegerAttr()).getResult();
         }
         break;
     }
@@ -4514,6 +4539,15 @@ Value hoistFactorColumn(CrossProduct product, size_t resultIndex, Block* head, m
     return hoisted;
 }
 
+void takeHopRegions(ExplorePaths from, ExplorePaths to) {
+    MutableArrayRef<Region> fromHops = from.getHops();
+    MutableArrayRef<Region> toHops = to.getHops();
+
+    for (size_t step = 0; step < fromHops.size(); step++) {
+        toHops[step].takeBody(fromHops[step]);
+    }
+}
+
 void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& builder) {
     ExplorePaths exploration = match._exploration;
     CrossProduct product = match._product;
@@ -4542,16 +4576,17 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     keptColumns,
                                                     endResult,
                                                     exploration.getHopImports(),
-                                                    exploration.getDirection(),
-                                                    exploration.getMinHops(),
+                                                    exploration.getDirectionsAttr(),
+                                                    exploration.getMinHopsAttr(),
                                                     exploration.getMaxHopsAttr(),
                                                     exploration.getEdgeTypesAttr(),
                                                     exploration.getEndLabelsAttr(),
                                                     exploration.getHopLabelsAttr(),
                                                     IntegerAttr(),
-                                                    false,
-                                                    exploration.getDistinct());
-    set.getHop().takeBody(exploration.getHop());
+                                                    UnitAttr(),
+                                                    exploration.getDistinctAttr(),
+                                                    exploration.getStepCount());
+    takeHopRegions(exploration, set);
 
     exploration.getSrcids().replaceAllUsesWith(set.getSrcids());
     exploration.getTgtids().replaceAllUsesWith(set.getTgtids());
@@ -4818,6 +4853,11 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
         return false;
     }
 
+    const std::optional<uint64_t> expandedSteps = expansion.getSteps();
+    if (expandedSteps && *expandedSteps != exploration.getStepCount()) {
+        return false;
+    }
+
     const bool reachesTheFilter = exploration->getBlock() == filter->getBlock()
                                && rowsReachTheFilter(exploration, filter, keepsTheWalkedRows);
     if (!reachesTheFilter) {
@@ -4846,25 +4886,33 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
     return true;
 }
 
-unsigned hopArgumentOf(storage::PathExpansionKind expansionKind) {
+// The argument of a step's hop region holding the element a list of the expansion kind reads
+// off that hop: the region opens on the step's earlier nodes and edges
+unsigned hopArgumentOf(storage::PathExpansionKind expansionKind, size_t step) {
     constexpr unsigned HOP_SOURCE_ARGUMENT = 0;
     constexpr unsigned HOP_EDGE_ARGUMENT = 1;
     constexpr unsigned HOP_END_ARGUMENT = 2;
 
+    const unsigned stepOffset = static_cast<unsigned>(2 * step);
+
     switch (expansionKind) {
         case storage::PathExpansionKind::Sources:
-            return HOP_SOURCE_ARGUMENT;
+            return stepOffset + HOP_SOURCE_ARGUMENT;
         break;
         case storage::PathExpansionKind::Edges:
-            return HOP_EDGE_ARGUMENT;
+            return stepOffset + HOP_EDGE_ARGUMENT;
         break;
         case storage::PathExpansionKind::Ends:
         case storage::PathExpansionKind::Nodes:
-            return HOP_END_ARGUMENT;
+            return stepOffset + HOP_END_ARGUMENT;
         break;
     }
 
     llvm_unreachable("Unknown path expansion kind");
+}
+
+size_t hopArgumentCount(size_t step) {
+    return 2 * step + 3;
 }
 
 // Clones the predicate's body at the rewriter's insertion point over the element column and
@@ -4895,8 +4943,10 @@ Value cloneElementTest(ListPredicate predicate, Value element, llvm::ArrayRef<Va
     return rewriter.create<NotOp>(predicate.getLoc(), boolColumnType(rewriter.getContext()), test).getResult();
 }
 
-Block* hopBlockOf(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
-    Region& hop = exploration.getHop();
+// The block of a step's hop region, created over the step's hop and the imports the
+// exploration already reads when the step had no predicate
+Block* hopBlockOf(ExplorePaths exploration, size_t step, mlir::RewriterBase& rewriter) {
+    Region& hop = exploration.getHops()[step];
     if (!hop.empty()) {
         return &hop.front();
     }
@@ -4904,7 +4954,18 @@ Block* hopBlockOf(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
     mlir::MLIRContext* context = rewriter.getContext();
     const Type nodeType = ColumnType::get(context, storage::NodeIDType::get(context));
     const Type edgeType = ColumnType::get(context, storage::EdgeIDType::get(context));
-    const llvm::SmallVector<Type> argumentTypes {nodeType, edgeType, nodeType};
+
+    llvm::SmallVector<Type> argumentTypes;
+    for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
+        argumentTypes.push_back(nodeType);
+        argumentTypes.push_back(edgeType);
+    }
+    argumentTypes.push_back(nodeType);
+
+    for (const Value import : exploration.getHopImports()) {
+        argumentTypes.push_back(import.getType());
+    }
+
     const llvm::SmallVector<Location> argumentLocations(argumentTypes.size(), exploration.getLoc());
 
     const mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -4912,13 +4973,15 @@ Block* hopBlockOf(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
     return rewriter.createBlock(&hop, hop.end(), argumentTypes, argumentLocations);
 }
 
-Value hopImportArgument(ExplorePaths exploration, Block* hopBlock, Value import, mlir::RewriterBase& rewriter) {
-    constexpr size_t HOP_ARGUMENT_COUNT = 3;
+// A new import is one more argument of every hop region the exploration has
+Value hopImportArgument(ExplorePaths exploration, size_t step, Value import, mlir::RewriterBase& rewriter) {
+    Block* hopBlock = &exploration.getHops()[step].front();
+    const size_t hopArguments = hopArgumentCount(step);
 
     const Operation::operand_range imports = exploration.getHopImports();
     for (size_t importIndex = 0; importIndex < imports.size(); importIndex++) {
         if (imports[importIndex] == import) {
-            return hopBlock->getArgument(HOP_ARGUMENT_COUNT + importIndex);
+            return hopBlock->getArgument(static_cast<unsigned>(hopArguments + importIndex));
         }
     }
 
@@ -4926,25 +4989,29 @@ Value hopImportArgument(ExplorePaths exploration, Block* hopBlock, Value import,
         exploration.getHopImportsMutable().append(import);
     });
 
-    return hopBlock->addArgument(import.getType(), exploration.getLoc());
+    for (Region& hop : exploration.getHops()) {
+        if (!hop.empty()) {
+            hop.front().addArgument(import.getType(), exploration.getLoc());
+        }
+    }
+
+    return hopBlock->getArguments().back();
 }
 
-void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& rewriter) {
-    FilterOp filter = match._filter;
+void addHopTest(const ExploreListPredicate& match, size_t step, mlir::RewriterBase& rewriter) {
     ExplorePaths exploration = match._exploration;
     ListPredicate predicate = match._predicate;
-    ExpandPath expansion = match._expansion;
     const Location loc = predicate.getLoc();
 
-    Block* hopBlock = hopBlockOf(exploration, rewriter);
+    Block* hopBlock = hopBlockOf(exploration, step, rewriter);
 
     llvm::SmallVector<Value> hopCarried;
     for (const Value import : match._imports) {
-        hopCarried.push_back(import ? hopImportArgument(exploration, hopBlock, import, rewriter) : Value {});
+        hopCarried.push_back(import ? hopImportArgument(exploration, step, import, rewriter) : Value {});
     }
 
-    const storage::PathExpansionKind expansionKind = expansion.getKind();
-    const Value hopElement = hopBlock->getArgument(hopArgumentOf(expansionKind));
+    ExpandPath expansion = match._expansion;
+    const Value hopElement = hopBlock->getArgument(hopArgumentOf(expansion.getKind(), step));
 
     Yield hopYield = hopBlock->empty() ? Yield {} : dyn_cast<Yield>(hopBlock->getTerminator());
     if (hopYield) {
@@ -4965,6 +5032,24 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
     } else {
         rewriter.create<Yield>(loc, ValueRange {hopTest});
     }
+}
+
+// A list over one step of the body is tested on that step's hops alone, a list over every
+// hop on the hops of every step
+void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& rewriter) {
+    FilterOp filter = match._filter;
+    ExplorePaths exploration = match._exploration;
+    ListPredicate predicate = match._predicate;
+    ExpandPath expansion = match._expansion;
+
+    const std::optional<uint64_t> expandedStep = expansion.getStep();
+    for (size_t step = 0; step < exploration.getStepCount(); step++) {
+        if (!expandedStep || *expandedStep == step) {
+            addHopTest(match, step, rewriter);
+        }
+    }
+
+    const storage::PathExpansionKind expansionKind = expansion.getKind();
 
     if (expansionKind != storage::PathExpansionKind::Nodes) {
         bypassFilter(filter);
@@ -7896,16 +7981,17 @@ private:
                                                             columns,
                                                             Value(),
                                                             ValueRange(),
-                                                            exploration.getDirection(),
-                                                            exploration.getMinHops(),
+                                                            exploration.getDirectionsAttr(),
+                                                            exploration.getMinHopsAttr(),
                                                             exploration.getMaxHopsAttr(),
                                                             exploration.getEdgeTypesAttr(),
                                                             exploration.getEndLabelsAttr(),
                                                             exploration.getHopLabelsAttr(),
                                                             IntegerAttr(),
-                                                            false,
-                                                            exploration.getDistinct());
-        walked.getHop().takeBody(exploration.getHop());
+                                                            UnitAttr(),
+                                                            exploration.getDistinctAttr(),
+                                                            exploration.getStepCount());
+        takeHopRegions(exploration, walked);
 
         rebindCarried(walked.getOperation(), pathFixedResultCount);
         bind(step._from, walked.getSrcids());

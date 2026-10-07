@@ -31,6 +31,9 @@ class Tombstones;
 
 // Enumerates every trail of minHops to maxHops edges leaving each input node, depth first,
 // as a chunk writer: each fill emits up to maxCount rows of (input row, end node, path).
+// The walk repeats a body of steps, each with its own direction, edge types and hop filter,
+// and ends only after a whole number of repetitions; the body starts as the one step of the
+// direction the walk is made with.
 // With end labels, end nodes or an end node set only the paths ending on a node carrying
 // them, on the seed's own target, or on a node of the set are emitted, and with a distance
 // or target index set the prefixes that cannot reach such a node in time are not walked. In
@@ -50,8 +53,9 @@ public:
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
     void setTargets(ColumnNodeIDs* targets) { _targets = targets; }
     void setPaths(ColumnVector<PathRef>* paths, PathTrie* trie);
-    void setHopFilter(PathHopFilter* filter) { _hopFilter = filter; }
-    void setEdgeTypeFilter(std::span<const EdgeTypeID> edgeTypes);
+    void addStep(PathExplorationDir direction);
+    void setHopFilter(size_t step, PathHopFilter* filter) { _steps[step]._hopFilter = filter; }
+    void setEdgeTypeFilter(size_t step, std::span<const EdgeTypeID> edgeTypes);
     void setEndLabels(const LabelSet* labels);
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     // The ends every seed shares, sorted and without duplicates
@@ -77,6 +81,14 @@ public:
 
 private:
     static constexpr size_t MAX_DEPENDENCIES = 4;
+
+    struct Step {
+        PathExplorationDir _direction {PathExplorationDir::FORWARD};
+        bool _filterByType {false};
+        std::span<const EdgeTypeID> _edgeTypes;
+        std::vector<uint64_t> _edgeTypeWords;
+        PathHopFilter* _hopFilter {nullptr};
+    };
 
     // The candidates of one node on the path, a range of the candidate stacks. The held edges
     // its subtree's ends depend on start at _dependencyBegin on the dependency stack; _taint is
@@ -162,9 +174,11 @@ private:
 
     // The multi-source search of the distinct mode: one bit per seed of the current batch in
     // the words of every node it reaches, the rows a level gained emitted before the next
-    // level is expanded
+    // level is expanded. A body of several steps reaches a node at each step of it apart, so
+    // each step has a table of its own.
     struct Reachability {
-        PathReachTable _reached;
+        std::vector<PathReachTable> _reached;
+        size_t _step {0};
         std::vector<NodeID> _frontier;
         std::vector<NodeID> _next;
         std::vector<PathHopFrame> _frames;
@@ -218,7 +232,7 @@ private:
 
     GraphView _view;
     const ColumnNodeIDs* _input {nullptr};
-    PathExplorationDir _direction {PathExplorationDir::FORWARD};
+    std::vector<Step> _steps;
     uint64_t _minHops {0};
     uint64_t _maxHops {0};
 
@@ -226,10 +240,6 @@ private:
     ColumnNodeIDs* _targets {nullptr};
     ColumnVector<PathRef>* _paths {nullptr};
     PathTrie* _trie {nullptr};
-    PathHopFilter* _hopFilter {nullptr};
-    bool _filterByType {false};
-    std::span<const EdgeTypeID> _edgeTypes;
-    std::vector<uint64_t> _edgeTypeWords;
     LabelSetHandle _endLabels;
     const ColumnNodeIDs* _endNodes {nullptr};
     std::span<const NodeID> _endNodeSet;
@@ -258,6 +268,8 @@ private:
     NodeID _targetNode;
     PathTargetHandle _target;
     std::vector<EdgeID> _pathEdges;
+    // The node at each depth of the walk, kept only for a body of several steps
+    std::vector<NodeID> _pathNodes;
     PathEdgeTable _pathEdgeTable;
     std::vector<PathRef> _pathEntries;
     std::vector<uint64_t> _pathSignatures;
@@ -268,6 +280,8 @@ private:
     // Set while the walk only owes its caller the set of nodes it ends on, which lets a
     // subtree that no held edge constrained stand in for every later arrival at its node
     bool _prunes {false};
+    // Off when a hop filter reads the repetition the walk is in, which the memo does not key
+    bool _remembersExpansions {false};
     uint64_t _expansionSpan {0};
     bool _keysDepth {false};
     KeySet _emittedEnds;
@@ -289,6 +303,9 @@ private:
 
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;
+    // The step the hop leaving a node at that depth takes
+    const Step& stepAt(uint64_t depth) const;
+    bool endsRepetition(uint64_t depth) const;
     bool isEnd(size_t seedRow, NodeID node) const;
     bool canReachTargetWithin(NodeID node, uint64_t hops) const;
     void resizeOutputs(size_t count);
@@ -323,6 +340,8 @@ private:
     void releasePathEntry();
 
     void fillDistinct(size_t maxCount);
+    bool levelsFindTrails() const;
+    PathReachTable& reachTableAt(uint64_t level);
     void startBatch();
     bool searchesSeedCycles() const;
     // The seeds of the batch, as bits, that a closed trail of at most _maxHops edges returns to

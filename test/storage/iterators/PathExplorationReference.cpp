@@ -192,9 +192,9 @@ size_t turing::test::collectPaths(const GraphView& view,
         explorator.setPaths(&paths, &trie);
     }
     if (options._edgeType) {
-        explorator.setEdgeTypeFilter(options.getEdgeTypes());
+        explorator.setEdgeTypeFilter(0, options.getEdgeTypes());
     }
-    explorator.setHopFilter(options._hopFilter);
+    explorator.setHopFilter(0, options._hopFilter);
     explorator.setEndLabels(options._endLabels);
     explorator.setEndNodes(options._endNodes);
     if (!options._endNodeSet.empty()) {

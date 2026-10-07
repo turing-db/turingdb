@@ -34,17 +34,22 @@ public:
 
     QuantifiedPath* getQuantifiedPath() const { return _quantifiedPath; }
 
-    // The parenthesized form of a quantified pattern, (n)((a)-[e]->(b) WHERE ...){1,3}(m):
-    // the two inner nodes and the predicate, which constrain every hop of the path
-    NodePattern* getHopSource() const { return _hopSource; }
-    NodePattern* getHopEnd() const { return _hopEnd; }
+    // The hops a quantified pattern repeats: (n)((a)-[e]->(b)-[f]->(c) WHERE ...){1,3}(m)
+    // repeats e then f. A pattern of one hop is that hop's own edge pattern, and one of
+    // several an edge pattern of its own holding them.
+    size_t getHopCount() const { return _hops.empty() ? 1 : _hops.size(); }
+    EdgePattern* getHop(size_t hop) { return _hops.empty() ? this : _hops[hop]; }
+    const EdgePattern* getHop(size_t hop) const { return _hops.empty() ? this : _hops[hop]; }
+
+    // The nodes of the parenthesized form, one more than its hops, and the predicate, which
+    // constrain every repetition of the pattern. Null for the bracketed form, [e*1..3].
+    NodePattern* getHopNode(size_t position) const { return _hopNodes.empty() ? nullptr : _hopNodes[position]; }
     WhereClause* getHopWhere() const { return _hopWhere; }
 
-    // The declarations of one hop of a quantified pattern: the single edge the variable is
-    // inside the pattern, and the group variables the inner nodes are outside it
+    // The declarations of a quantified pattern: the single edge a hop's variable is inside
+    // the pattern, and the group variable each named node is outside it
     VarDecl* getHopDecl() const { return _hopDecl; }
-    VarDecl* getHopSourceGroup() const { return _hopSourceGroup; }
-    VarDecl* getHopEndGroup() const { return _hopEndGroup; }
+    VarDecl* getHopNodeGroup(size_t position) const { return _hopNodeGroups.empty() ? nullptr : _hopNodeGroups[position]; }
 
     // Every analyzed predicate a hop of a quantified pattern must pass
     const std::vector<Expr*>& hopPredicates() const { return _hopPredicates; }
@@ -61,12 +66,11 @@ public:
 
     void setQuantifiedPath(QuantifiedPath* quantifiedPath) { _quantifiedPath = quantifiedPath; }
 
-    void setHopSource(NodePattern* source) { _hopSource = source; }
-    void setHopEnd(NodePattern* end) { _hopEnd = end; }
+    void addHop(EdgePattern* hop) { _hops.push_back(hop); }
+    void addHopNode(NodePattern* node) { _hopNodes.push_back(node); }
     void setHopWhere(WhereClause* where) { _hopWhere = where; }
     void setHopDecl(VarDecl* decl) { _hopDecl = decl; }
-    void setHopSourceGroup(VarDecl* decl) { _hopSourceGroup = decl; }
-    void setHopEndGroup(VarDecl* decl) { _hopEndGroup = decl; }
+    void addHopNodeGroup(VarDecl* decl) { _hopNodeGroups.push_back(decl); }
     void addHopPredicate(Expr* predicate) { _hopPredicates.push_back(predicate); }
     void addHopImport(const VarDecl* decl) { _hopImports.push_back(decl); }
 
@@ -75,12 +79,11 @@ private:
     SymbolChain* _types {nullptr};
     EdgePatternData* _data {nullptr};
     QuantifiedPath* _quantifiedPath {nullptr};
-    NodePattern* _hopSource {nullptr};
-    NodePattern* _hopEnd {nullptr};
+    std::vector<EdgePattern*> _hops;
+    std::vector<NodePattern*> _hopNodes;
     WhereClause* _hopWhere {nullptr};
     VarDecl* _hopDecl {nullptr};
-    VarDecl* _hopSourceGroup {nullptr};
-    VarDecl* _hopEndGroup {nullptr};
+    std::vector<VarDecl*> _hopNodeGroups;
     std::vector<Expr*> _hopPredicates;
     std::vector<const VarDecl*> _hopImports;
 

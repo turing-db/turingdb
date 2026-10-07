@@ -602,20 +602,98 @@ bool constrainsHop(const NodePattern* node) {
     return data && (!data->labelConstraints().empty() || !data->exprConstraints().empty());
 }
 
-// Both ends of the repetition under one name: the hop must land where it left from
-bool repeatsItsHopName(const EdgePattern* pattern) {
-    const NodePattern* source = pattern->getHopSource();
-    const NodePattern* end = pattern->getHopEnd();
+bool hasHopConstraints(const EdgePattern* pattern) {
+    if (!pattern) {
+        return false;
+    }
 
-    return source && end && source->getDecl() == end->getDecl();
+    const size_t hopCount = pattern->getHopCount();
+    bool constrainsANode = false;
+    bool repeatsAName = false;
+    for (size_t position = 0; position <= hopCount; position++) {
+        const NodePattern* node = pattern->getHopNode(position);
+        constrainsANode |= constrainsHop(node);
+
+        for (size_t earlier = 0; node && earlier < position; earlier++) {
+            const NodePattern* other = pattern->getHopNode(earlier);
+            repeatsAName |= other && other->getDecl() == node->getDecl();
+        }
+    }
+
+    return !pattern->hopPredicates().empty() || constrainsANode || repeatsAName;
 }
 
-bool hasHopConstraints(const EdgePattern* pattern) {
-    return pattern
-        && (!pattern->hopPredicates().empty()
-            || repeatsItsHopName(pattern)
-            || constrainsHop(pattern->getHopSource())
-            || constrainsHop(pattern->getHopEnd()));
+// The position along the walk of an entity of the repeated pattern, nodes at even positions
+// and edges at odd ones: a walk taken against the pattern reads it from its far end
+size_t walkPositionOf(size_t patternPosition, size_t hopCount, bool reversed) {
+    return reversed ? 2 * hopCount - patternPosition : patternPosition;
+}
+
+// The step of the walk that first binds the entity at a walk position: the first step binds
+// its source, and every step its edge and end node
+size_t stepBinding(size_t walkPosition) {
+    return walkPosition == 0 ? 0 : (walkPosition - 1) / 2;
+}
+
+mlir::storage::PathDirection walkDirectionOf(EdgePattern::Direction direction, bool reversed) {
+    switch (direction) {
+        case EdgePattern::Direction::Forward:
+            return reversed ? mlir::storage::PathDirection::Backward : mlir::storage::PathDirection::Forward;
+        break;
+
+        case EdgePattern::Direction::Backward:
+            return reversed ? mlir::storage::PathDirection::Forward : mlir::storage::PathDirection::Backward;
+        break;
+
+        case EdgePattern::Direction::Undirected:
+            return mlir::storage::PathDirection::Both;
+        break;
+    }
+
+    throw FatalException("Uncaught edge pattern direction.");
+}
+
+// The latest step of the walk binding a node or edge of the repeated pattern the conjunct
+// reads, which is where its test can run: the first step for a conjunct reading none of them,
+// the last for one whose reads cannot be listed
+size_t stepOfConjunct(const Expr* conjunct,
+                      const std::unordered_map<const VarDecl*, size_t>& declSteps,
+                      size_t lastStep) {
+    size_t step = 0;
+    std::vector<const Expr*> pending {conjunct};
+    std::vector<const Expr*> children;
+
+    while (!pending.empty()) {
+        const Expr* expr = pending.back();
+        pending.pop_back();
+
+        const VarDecl* read = nullptr;
+        const Expr::Kind kind = expr->getKind();
+        if (kind == Expr::Kind::SYMBOL) {
+            read = static_cast<const SymbolExpr*>(expr)->getDecl();
+        } else if (kind == Expr::Kind::PROPERTY) {
+            read = static_cast<const PropertyExpr*>(expr)->getEntityVarDecl();
+        } else if (kind == Expr::Kind::ENTITY_TYPES) {
+            read = static_cast<const EntityTypeExpr*>(expr)->getEntityVarDecl();
+        }
+
+        const auto stepIt = declSteps.find(read);
+        if (stepIt != declSteps.end()) {
+            step = std::max(step, stepIt->second);
+        }
+
+        if (!ExprChildren::collect(expr, children)) {
+            if (kind != Expr::Kind::LITERAL) {
+                return lastStep;
+            }
+
+            continue;
+        }
+
+        pending.insert(pending.end(), children.begin(), children.end());
+    }
+
+    return step;
 }
 
 bool isPathColumn(mlir::Value column) {
@@ -1416,14 +1494,32 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
         maxHopsAttr = mlir::IntegerAttr::get(hopType, metadata.getMaxHops());
     }
 
-    mlir::ArrayAttr edgeTypesAttr;
-    const std::optional<VariableDependency::Constraint>& constraints = edge->constraints();
-    if (constraints) {
-        const auto* edgeTypes = std::get_if<VariableDependency::EdgeTypeNames>(&*constraints);
-        if (edgeTypes && !edgeTypes->_names.empty()) {
-            edgeTypesAttr = strArrayAttr(_opBuilder, edgeTypes->_names);
+    const size_t hopCount = pattern ? pattern->getHopCount() : 1;
+
+    // A walk of one hop follows the edge the dependency graph oriented; a longer one takes
+    // the pattern's hops in the order it walks them
+    llvm::SmallVector<int64_t> directions;
+    llvm::SmallVector<mlir::Attribute> stepEdgeTypes;
+    bool typesAStep = false;
+    if (hopCount == 1) {
+        const std::optional<VariableDependency::Constraint>& constraints = edge->constraints();
+        const auto* edgeTypes = constraints ? std::get_if<VariableDependency::EdgeTypeNames>(&*constraints) : nullptr;
+        typesAStep = edgeTypes && !edgeTypes->_names.empty();
+
+        directions.push_back(static_cast<int64_t>(direction));
+        stepEdgeTypes.push_back(typesAStep ? strArrayAttr(_opBuilder, edgeTypes->_names) : _opBuilder.getArrayAttr({}));
+    } else {
+        for (size_t step = 0; step < hopCount; step++) {
+            const EdgePattern* hop = pattern->getHop(reversed ? hopCount - 1 - step : step);
+            const std::span<const std::string_view> names = hop->getData()->edgeTypeConstraints();
+            typesAStep |= !names.empty();
+
+            directions.push_back(static_cast<int64_t>(walkDirectionOf(hop->getDirection(), reversed)));
+            stepEdgeTypes.push_back(strArrayAttr(_opBuilder, names));
         }
     }
+
+    const mlir::ArrayAttr edgeTypesAttr = typesAStep ? _opBuilder.getArrayAttr(stepEdgeTypes) : mlir::ArrayAttr();
 
     auto op = _opBuilder.create<mlir::db::ExplorePaths>(_opBuilder.getUnknownLoc(),
                                                         results,
@@ -1431,14 +1527,16 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         carried._columns,
                                                         mlir::Value(),
                                                         hopImportColumns,
-                                                        direction,
+                                                        directions,
                                                         metadata.getMinHops(),
                                                         maxHopsAttr,
                                                         edgeTypesAttr,
                                                         mlir::ArrayAttr(),
                                                         mlir::ArrayAttr(),
                                                         mlir::IntegerAttr(),
-                                                        false);
+                                                        false,
+                                                        false,
+                                                        static_cast<unsigned>(hopCount));
 
     registerValue(src, op.getSrcids());
     registerValue(edge, op.getPaths());
@@ -1457,23 +1555,36 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
         return;
     }
 
-    // A walk taken against the pattern swaps the two: its ends read backwards are the
-    // nodes each repetition of the pattern started from, and its sources its ends
-    const mlir::storage::PathExpansionKind sourceKind = reversed ? mlir::storage::PathExpansionKind::Ends
-                                                                 : mlir::storage::PathExpansionKind::Sources;
-    const mlir::storage::PathExpansionKind endKind = reversed ? mlir::storage::PathExpansionKind::Sources
-                                                              : mlir::storage::PathExpansionKind::Ends;
+    // A group variable reads its node or edge off each repetition at the step of the walk
+    // taking it: the source of that step, or the end of the last one for the node the
+    // repetition ends on, which a walk taken against the pattern swaps
+    for (size_t position = 0; position <= hopCount; position++) {
+        const VarDecl* group = pattern->getHopNodeGroup(position);
+        if (!group) {
+            continue;
+        }
 
-    if (const VarDecl* sourceGroup = pattern->getHopSourceGroup()) {
-        _part._pathBindings[sourceGroup] = PartScope::PathBinding {sourceKind, src, edge, reversed};
+        const size_t walkNode = walkPositionOf(2 * position, hopCount, reversed) / 2;
+        const bool endsTheRepetition = walkNode == hopCount;
+        const mlir::storage::PathExpansionKind kind = endsTheRepetition ? mlir::storage::PathExpansionKind::Ends
+                                                                        : mlir::storage::PathExpansionKind::Sources;
+        const size_t step = endsTheRepetition ? hopCount - 1 : walkNode;
+
+        _part._pathBindings[group] = PartScope::PathBinding {kind, src, edge, reversed, step, hopCount};
     }
 
-    if (const VarDecl* endGroup = pattern->getHopEndGroup()) {
-        _part._pathBindings[endGroup] = PartScope::PathBinding {endKind, src, edge, reversed};
+    for (size_t hopIndex = 0; hopCount > 1 && hopIndex < hopCount; hopIndex++) {
+        const EdgePattern* hop = pattern->getHop(hopIndex);
+        if (!hop->getSymbol()) {
+            continue;
+        }
+
+        const size_t step = reversed ? hopCount - 1 - hopIndex : hopIndex;
+        _part._pathBindings[hop->getDecl()] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Edges, src, edge, reversed, step, hopCount};
     }
 
     if (hasHopConstraints(pattern)) {
-        generateHopRegion(op, pattern, hopImports);
+        generateHopRegions(op, pattern, hopImports, reversed);
     }
 }
 
@@ -1546,69 +1657,137 @@ void DBProgramGenerator::collectHopNodeMasks(const NodePattern* node,
     }
 }
 
-void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
-                                          const EdgePattern* pattern,
-                                          llvm::ArrayRef<const VarDecl*> imports) {
-    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
+void DBProgramGenerator::generateHopRegions(mlir::db::ExplorePaths exploration,
+                                           const EdgePattern* pattern,
+                                           llvm::ArrayRef<const VarDecl*> imports,
+                                           bool reversed) {
+    const size_t hopCount = pattern->getHopCount();
 
-    const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    const mlir::db::ColumnType edgeType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
-    llvm::SmallVector<mlir::Type> argumentTypes {nodeType, edgeType, nodeType};
-    for (const mlir::Value column : exploration.getHopImports()) {
-        argumentTypes.push_back(column.getType());
+    // A name the pattern gives two of its nodes is read at the first of them the walk takes
+    std::unordered_map<const VarDecl*, size_t> declPositions;
+    const auto placeDecl = [&declPositions, hopCount, reversed](const VarDecl* decl, size_t patternPosition) {
+        const size_t walkPosition = walkPositionOf(patternPosition, hopCount, reversed);
+        const auto [placed, inserted] = declPositions.emplace(decl, walkPosition);
+        if (!inserted) {
+            placed->second = std::min(placed->second, walkPosition);
+        }
+    };
+
+    for (size_t position = 0; position <= hopCount; position++) {
+        if (const NodePattern* node = pattern->getHopNode(position)) {
+            placeDecl(node->getDecl(), 2 * position);
+        }
     }
 
-    const llvm::SmallVector<mlir::Location> argumentLocations(argumentTypes.size(), loc);
-
-    mlir::Region& hop = exploration.getHop();
-    mlir::Block* block = _opBuilder.createBlock(&hop, hop.end(), argumentTypes, argumentLocations);
-
-    const mlir::Value sourceColumn = block->getArgument(0);
-    const mlir::Value edgeColumn = block->getArgument(1);
-    const mlir::Value endColumn = block->getArgument(2);
-
-    _part._hopColumns.clear();
-    _part._hopColumns[pattern->getHopDecl()] = edgeColumn;
-
-    for (size_t importIndex = 0; importIndex < imports.size(); importIndex++) {
-        _part._hopColumns[imports[importIndex]] = block->getArgument(static_cast<unsigned>(3 + importIndex));
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        placeDecl(pattern->getHop(hopIndex)->getHopDecl(), 2 * hopIndex + 1);
     }
 
-    llvm::SmallVector<mlir::Value> masks;
-
-    const NodePattern* source = pattern->getHopSource();
-    const NodePattern* end = pattern->getHopEnd();
-
-    if (source) {
-        _part._hopColumns[source->getDecl()] = sourceColumn;
-        collectHopNodeMasks(source, sourceColumn, masks);
+    std::unordered_map<const VarDecl*, size_t> declSteps;
+    for (const auto& [decl, walkPosition] : declPositions) {
+        declSteps[decl] = stepBinding(walkPosition);
     }
 
-    if (end) {
-        _part._hopColumns[end->getDecl()] = endColumn;
-        collectHopNodeMasks(end, endColumn, masks);
-    }
-
-    if (repeatsItsHopName(pattern)) {
-        const mlir::db::ColumnType maskType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-        masks.push_back(_opBuilder.create<mlir::db::EqOp>(loc, maskType, sourceColumn, endColumn).getResult());
-    }
-
+    std::vector<std::vector<const Expr*>> stepConjuncts(hopCount);
     std::vector<const Expr*> conjuncts;
     for (const Expr* predicate : pattern->hopPredicates()) {
         conjuncts.clear();
         flattenConjuncts(predicate, conjuncts);
 
         for (const Expr* conjunct : conjuncts) {
-            translateExpr(conjunct);
-            masks.push_back(_part._exprMap.at(conjunct));
+            stepConjuncts[stepOfConjunct(conjunct, declSteps, hopCount - 1)].push_back(conjunct);
         }
+    }
+
+    for (size_t step = 0; step < hopCount; step++) {
+        generateHopRegion(exploration, pattern, step, declPositions, stepConjuncts[step], imports, reversed);
+    }
+}
+
+void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
+                                          const EdgePattern* pattern,
+                                          size_t step,
+                                          const std::unordered_map<const VarDecl*, size_t>& declPositions,
+                                          std::span<const Expr* const> conjuncts,
+                                          llvm::ArrayRef<const VarDecl*> imports,
+                                          bool reversed) {
+    const size_t hopCount = pattern->getHopCount();
+
+    // The nodes this step binds, at their walk positions, and the earlier position holding
+    // the same name for a node named twice
+    llvm::SmallVector<std::pair<const NodePattern*, size_t>> boundNodes;
+    bool repeatsAName = false;
+    for (size_t position = 0; position <= hopCount; position++) {
+        const NodePattern* node = pattern->getHopNode(position);
+        const size_t walkPosition = walkPositionOf(2 * position, hopCount, reversed);
+        if (!node || stepBinding(walkPosition) != step) {
+            continue;
+        }
+
+        boundNodes.emplace_back(node, walkPosition);
+        repeatsAName |= declPositions.at(node->getDecl()) != walkPosition;
+    }
+
+    const bool constrainsANode = llvm::any_of(boundNodes, [](const auto& bound) { return constrainsHop(bound.first); });
+    if (conjuncts.empty() && !constrainsANode && !repeatsAName) {
+        return;
+    }
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType edgeType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
+    const size_t hopArguments = 2 * step + 3;
+
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    for (size_t walkPosition = 0; walkPosition < hopArguments; walkPosition++) {
+        argumentTypes.push_back(walkPosition % 2 == 0 ? nodeType : edgeType);
+    }
+
+    for (const mlir::Value column : exploration.getHopImports()) {
+        argumentTypes.push_back(column.getType());
+    }
+
+    const llvm::SmallVector<mlir::Location> argumentLocations(argumentTypes.size(), loc);
+
+    mlir::Region& hop = exploration.getHops()[step];
+    mlir::Block* block = _opBuilder.createBlock(&hop, hop.end(), argumentTypes, argumentLocations);
+
+    _part._hopColumns.clear();
+    for (const auto& [decl, walkPosition] : declPositions) {
+        if (walkPosition < hopArguments) {
+            _part._hopColumns[decl] = block->getArgument(static_cast<unsigned>(walkPosition));
+        }
+    }
+
+    for (size_t importIndex = 0; importIndex < imports.size(); importIndex++) {
+        _part._hopColumns[imports[importIndex]] = block->getArgument(static_cast<unsigned>(hopArguments + importIndex));
+    }
+
+    llvm::SmallVector<mlir::Value> masks;
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    for (const auto& [node, walkPosition] : boundNodes) {
+        collectHopNodeMasks(node, block->getArgument(static_cast<unsigned>(walkPosition)), masks);
+    }
+
+    for (const auto& [node, walkPosition] : boundNodes) {
+        const size_t namedAt = declPositions.at(node->getDecl());
+        if (namedAt != walkPosition) {
+            const mlir::Value named = block->getArgument(static_cast<unsigned>(namedAt));
+            const mlir::Value bound = block->getArgument(static_cast<unsigned>(walkPosition));
+            masks.push_back(_opBuilder.create<mlir::db::EqOp>(loc, boolType, named, bound).getResult());
+        }
+    }
+
+    for (const Expr* conjunct : conjuncts) {
+        translateExpr(conjunct);
+        masks.push_back(_part._exprMap.at(conjunct));
     }
 
     bioassert(!masks.empty(), "Hop region without a predicate");
 
-    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
     mlir::Value mask = masks.front();
     for (size_t maskIndex = 1; maskIndex < masks.size(); maskIndex++) {
         mask = _opBuilder.create<mlir::db::AndOp>(loc, boolType, mask, masks[maskIndex]).getResult();
@@ -1647,12 +1826,22 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
                                      : static_cast<mlir::Type>(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType listType = allocColumnType(mlir::storage::ListType::get(_mlirCtxt, elementType));
 
+    mlir::IntegerAttr stepAttr;
+    mlir::IntegerAttr stepsAttr;
+    if (binding._steps > 1) {
+        const mlir::IntegerType stepType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
+        stepAttr = mlir::IntegerAttr::get(stepType, binding._step);
+        stepsAttr = mlir::IntegerAttr::get(stepType, binding._steps);
+    }
+
     return _opBuilder.create<mlir::db::ExpandPath>(_opBuilder.getUnknownLoc(),
                                                    listType,
                                                    column,
                                                    seeds,
                                                    binding._kind,
-                                                   binding._reversed).getResult();
+                                                   binding._reversed,
+                                                   stepAttr,
+                                                   stepsAttr).getResult();
 }
 
 void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
