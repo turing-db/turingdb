@@ -1,0 +1,3 @@
+add_turing_test(test_query_common_parameter_map ParameterMapTest.cpp)
+target_link_libraries(test_query_common_parameter_map
+    PRIVATE turing_db_query_common_s)
