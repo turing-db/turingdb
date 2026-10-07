@@ -10,6 +10,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
+#include "columns/ColumnKind.h"
 #include "columns/ColumnOperator.h"
 #include "ProcedureTypeVector.h"
 #include "metadata/PropertyType.h"
@@ -863,7 +864,17 @@ private:
     // for that element type. The compare selector throws for chunk types that have no
     // order (an embedding key).
     Column* allocColumnForChunkType(mlir::Type chunkType);
+    static ColumnKind::Code columnKindForChunkType(mlir::Type chunkType);
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
+
+    template <typename Handler>
+    static void dispatchChunkColumnType(mlir::Type chunkType, Handler&& handler);
+    template <template <typename> typename OuterColumn, typename Handler>
+    static void dispatchElementColumnType(mlir::Type elementType, Handler&& handler);
+
+    // A kernel picks its result column from its operands' column kinds, while every
+    // consumer reads that column through the result's declared chunk type
+    void bindKernelResult(mlir::Value resultValue, Column* result);
 
     // The append a sort takes a column of lists with, and nothing for a column of anything
     // else: the buffer holds the lists rather than views of the ones a chunk was handed

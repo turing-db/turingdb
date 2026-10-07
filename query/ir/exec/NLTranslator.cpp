@@ -210,6 +210,13 @@ NLBinaryFunctionSelector lookupBinaryFunctionSelector(mlir::Operation& operation
 // Pool-allocate a plain (never-null) chunk column of the given element type, reserving a
 // full chunk so execution stays allocation-free. Every such column - an ID chunk, or one a
 // procedure yielded - is a ColumnVector, so the element type is all that varies.
+template <typename ColumnType>
+Column* allocChunkColumn(LocalMemory* memory, size_t chunkSize) {
+    ColumnType* column = memory->alloc<ColumnType>();
+    column->reserve(chunkSize);
+    return column;
+}
+
 template <typename T>
 Column* allocPlainChunkColumn(LocalMemory* memory, size_t chunkSize) {
     ColumnVector<T>* column = memory->alloc<ColumnVector<T>>();
@@ -2943,9 +2950,7 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
 
     Column* result = nullptr;
     const NLBinaryFn fn = NLExecutor::selectBinary<Op>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate binary operator result.");
-
-    _valueSlots[op.getResult()] = result;
+    bindKernelResult(op.getResult(), result);
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
@@ -2980,9 +2985,7 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
         }
     }
 
-    bioassert(result, "Failed to translate list index result.");
-
-    _valueSlots[index.getResult()] = result;
+    bindKernelResult(index.getResult(), result);
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
@@ -2993,9 +2996,7 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
 
     Column* result = nullptr;
     const NLUnaryFn fn = NLExecutor::selectNot(operand, _memory, result);
-    bioassert(result, "Failed to allocate NOT result column.");
-
-    _valueSlots[notOp.getResult()] = result;
+    bindKernelResult(notOp.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
@@ -3043,9 +3044,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     } else {
         fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
     }
-    bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
-
-    _valueSlots[toNullable.getResult()] = result;
+    bindKernelResult(toNullable.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
@@ -3545,9 +3544,7 @@ void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* 
 
     Column* result = nullptr;
     const NLUnaryFunctionKernel kernel = select(input, inputNullable, _memory, result);
-    bioassert(result, "Failed to allocate unary function result column.");
-
-    _valueSlots[op->getResult(0)] = result;
+    bindKernelResult(op->getResult(0), result);
 
     NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel, _memory);
     body->emplaceStmt(&NLExecutor::runUnaryFunction, data);
@@ -3562,9 +3559,7 @@ void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer*
 
     Column* result = nullptr;
     const NLBinaryFn fn = select(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to allocate binary function result column.");
-
-    _valueSlots[op->getResult(0)] = result;
+    bindKernelResult(op->getResult(0), result);
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
@@ -5876,38 +5871,81 @@ Column* NLTranslator::allocColumnForProcedureType(const NamedProcedureType& retu
 // An ID chunk allocates an ID column on its kind; a !storage.nullable<...> chunk
 // allocates a ColumnOptVector on its value type; a ui64 count chunk a
 // ColumnVector<uint64_t>. Mirrors addCrossColumn's split.
-Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
-    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const mlir::Type elementType = chunk.getElementType();
+template <typename Handler>
+void NLTranslator::dispatchChunkColumnType(mlir::Type chunkType, Handler&& handler) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
-    if (isNullableList(elementType)) {
-        return allocOptListColumn();
-    } else if (isNullableListElement(elementType)) {
-        return allocOptListElementColumn();
+    if (isMaskElementType(elementType)) {
+        return handler.template operator()<ColumnMask>();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        return dispatchElementColumnType<ColumnOptVector>(nullableType.getValueType(), handler);
     }
 
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        const mlir::Type wrappedType = nullableType.getValueType();
+    dispatchElementColumnType<ColumnVector>(elementType, handler);
+}
 
-        if (isIDElement(wrappedType)) {
-            return allocOptIDColumn(chunkKindFromElementType(wrappedType));
+template <template <typename> typename OuterColumn, typename Handler>
+void NLTranslator::dispatchElementColumnType(mlir::Type elementType, Handler&& handler) {
+    const auto dispatch = [&]<typename ElementType>() {
+        using ColumnType = OuterColumn<ElementType>;
+
+        if constexpr (InternalKind::Types::contains<typename ColumnType::ValueType>()) {
+            handler.template operator()<ColumnType>();
+        } else {
+            throw IRException("No column holds a chunk of this element type");
         }
+    };
 
-        const ValueType valueType = valueTypeFromElementType(wrappedType);
-        return allocOptColumnForValueType(valueType);
-    } else if (mlir::isa<storage::ListElementType>(elementType)) {
-        return allocListElementColumn();
+    if (mlir::isa<storage::ListElementType>(elementType)) {
+        return dispatch.template operator()<ListElementView>();
     } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        return allocMapEntryColumn();
-    } else if (isMaskElementType(elementType)) {
-        return allocMaskColumn();
+        return dispatch.template operator()<MapEntryView>();
+    } else if (mlir::isa<storage::EmbeddingType>(elementType)) {
+        return dispatch.template operator()<types::Embedding::Primitive>();
+    } else if (mlir::isa<mlir::NoneType>(elementType)) {
+        return dispatch.template operator()<types::Int64::Primitive>();
     }
 
-    if (isPlainValueElementType(elementType)) {
-        return allocPlainColumn(valueTypeFromElementType(elementType));
+    dispatchChunkKind(chunkKindFromElementType(elementType), dispatch);
+}
+
+Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    Column* column = nullptr;
+    dispatchChunkColumnType(chunkType, [&]<typename ColumnType>() {
+        column = allocChunkColumn<ColumnType>(_memory, chunkSize);
+    });
+
+    return column;
+}
+
+ColumnKind::Code NLTranslator::columnKindForChunkType(mlir::Type chunkType) {
+    ColumnKind::Code kind = ColumnKind::Invalid;
+    dispatchChunkColumnType(chunkType, [&]<typename ColumnType>() {
+        kind = ColumnKind::code<ColumnType>();
+    });
+
+    return kind;
+}
+
+void NLTranslator::bindKernelResult(mlir::Value resultValue, Column* result) {
+    bioassert(result, "The kernel allocated no result column");
+
+    const mlir::Type resultType = resultValue.getType();
+    if (result->getKind() == columnKindForChunkType(resultType)) {
+        _valueSlots[resultValue] = result;
+        return;
     }
 
-    return allocColumnForKind(chunkKindFromElementType(elementType));
+    std::string declared;
+    llvm::raw_string_ostream stream(declared);
+    resultType.print(stream);
+
+    throw IRException(
+        fmt::format("The kernel of {} writes a {} but got a {}.",
+                    resultValue.getDefiningOp()->getName().getStringRef().str(),
+                    result->getTypeName(), declared));
 }
 
 NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
