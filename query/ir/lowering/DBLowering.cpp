@@ -1577,16 +1577,13 @@ void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
     const mlir::Value cardinality = cardinalityDriver(carriedChunks);
     const mlir::Value sourceChunk = rowAlignedChunk(mapValue(unwind.getSource()), cardinality);
 
-    // Inserted into the deepest block, where every operand is bound - as lowerFilter's is
-    mlir::Value insertionReference = sourceChunk;
-    for (const mlir::Value carriedChunk : carriedChunks) {
-        mlir::Block* const block = deeperBlock(insertionReference, carriedChunk);
-        if (ownerBlock(carriedChunk) == block) {
-            insertionReference = carriedChunk;
-        }
-    }
+    // Inserted into the deepest block, where every operand is bound - as lowerFilter's is.
+    // The unwind opens a loop, so like a scan it sits no higher than the root block: a
+    // factor unwinding a list of constants loops inside the factor, not where they were hoisted.
+    llvm::SmallVector<mlir::Value, 4> operandChunks {sourceChunk};
+    operandChunks.append(carriedChunks.begin(), carriedChunks.end());
 
-    setInsertionInto(ownerBlock(insertionReference));
+    setInsertionInto(deepestOwnerBlock(operandChunks, _rootBlock));
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceChunk.getType()).getElementType();

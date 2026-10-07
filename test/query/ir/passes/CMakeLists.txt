@@ -1,5 +1,7 @@
 add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
 
+add_ir_tests(test_query_ir_push_down_through_unwind PushDownThroughUnwindTest.cpp)
+
 add_ir_tests(test_query_ir_fuse_scan_by_node_ids FuseScanByNodeIDsTest.cpp)
 
 add_ir_tests(test_query_ir_fuse_scan_by_property_value FuseScanByPropertyValueTest.cpp)

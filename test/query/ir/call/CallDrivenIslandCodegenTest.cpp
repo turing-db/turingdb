@@ -117,25 +117,29 @@ TEST_F(CallDrivenIslandCodegenTest, islandIsCrossedWithTheDrivenComponent) {
 }
 
 // A second yielded column would be left inside the product's factor, out of reach of the
-// clause that reads it, so an island makes the whole part fall back to matching and joining.
-TEST_F(CallDrivenIslandCodegenTest, secondYieldedColumnDeclinesTheDrivenPath) {
+// clause that reads it, so codegen falls back to matching the pattern and joining it to the
+// call. regroup_products moves that join into the factor holding the call, where the walk
+// is seeded from the yielded column again.
+TEST_F(CallDrivenIslandCodegenTest, secondYieldedColumnSeedsTheWalkAfterTheFallback) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("CALL db.getNodes([0]) YIELD id AS a, inEdgeCount MATCH (a)-->(m), (x) RETURN a, m, x, inEdgeCount");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FetchNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 0u);
 }
 
-TEST_F(CallDrivenIslandCodegenTest, yieldedPatternEndpointsDeclineTheDrivenPath) {
+TEST_F(CallDrivenIslandCodegenTest, yieldedPatternEndpointsSeedTheWalkAfterTheFallback) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("CALL db.getEdges([0]) YIELD src, tgt MATCH (src)-->(tgt), (x) RETURN src, tgt, x");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FetchNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 1u);
 }
 
 // Without an island the pair of yielded endpoints still drives the traversal: one is the

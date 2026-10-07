@@ -43,13 +43,18 @@ void HashJoinQueryTest::initialize() {
     _context.getOrLoadDialect<mlir::nl::NL>();
 }
 
-void HashJoinQueryTest::dbProgram(std::string_view query, std::string& program) {
+void HashJoinQueryTest::dbModule(std::string_view query, mlir::OwningOpRef<mlir::ModuleOp>& module) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const GraphView view = reader.getView();
 
-    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(mlir::UnknownLoc::get(&_context));
+    module = mlir::ModuleOp::create(mlir::UnknownLoc::get(&_context));
     generate(query, view, module.get(), true);
+}
+
+void HashJoinQueryTest::dbProgram(std::string_view query, std::string& program) {
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    dbModule(query, module);
 
     render(module.get(), program);
 }

@@ -40,7 +40,7 @@ target_include_directories(turing_ir_test_write_query_s PUBLIC ${CMAKE_CURRENT_S
 
 # Compiles a query against the shared SimpleGraph with the join forced, for the hash join
 # tests that read the db program, the nl program or the rows it runs to.
-add_library(turing_ir_test_hash_join_s STATIC HashJoinQueryTest.cpp StringRowSink.cpp)
+add_library(turing_ir_test_hash_join_s STATIC HashJoinQueryTest.cpp ProductPlacement.cpp StringRowSink.cpp)
 target_link_libraries(turing_ir_test_hash_join_s
     PUBLIC  GTest::gtest
             turing_testutils_s
