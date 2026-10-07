@@ -13,6 +13,7 @@ class NLOutputSink;
 class LocalMemory;
 class CommitWriteBuffer;
 class MetadataBuilder;
+class ParameterMap;
 class ProcedureContext;
 
 // Executes an nl-dialect MLIR module against a GraphView
@@ -48,7 +49,8 @@ public:
                   size_t chunkSize = ChunkConfig::CHUNK_SIZE,
                   CommitWriteBuffer* writeBuffer = nullptr,
                   MetadataBuilder* metadataBuilder = nullptr,
-                  const ProcedureContext* procedureContext = nullptr);
+                  const ProcedureContext* procedureContext = nullptr,
+                  const ParameterMap* parameters = nullptr);
     ~NLInterpreter();
 
     Status run();
@@ -62,6 +64,7 @@ private:
     CommitWriteBuffer* _writeBuffer {nullptr};
     MetadataBuilder* _metadataBuilder {nullptr};
     const ProcedureContext* _procedureContext {nullptr};
+    const ParameterMap* _parameters {nullptr};
 };
 
 }

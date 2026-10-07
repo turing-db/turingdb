@@ -15,6 +15,7 @@ class LocalMemory;
 class CommitWriteBuffer;
 class MetadataBuilder;
 class NLSystemContext;
+class ParameterMap;
 class ProcedureContext;
 class ExplainReport;
 
@@ -54,7 +55,8 @@ public:
                          CommitWriteBuffer* writeBuffer = nullptr,
                          MetadataBuilder* metadataBuilder = nullptr,
                          const ProcedureContext* procedureContext = nullptr,
-                         const NLSystemContext* system = nullptr);
+                         const NLSystemContext* system = nullptr,
+                         const ParameterMap* parameters = nullptr);
 
     ~DBDialectInterpreter();
 
@@ -75,6 +77,7 @@ private:
     MetadataBuilder* _metadataBuilder {nullptr};
     const ProcedureContext* _procedureContext {nullptr};
     const NLSystemContext* _system {nullptr};
+    const ParameterMap* _parameters {nullptr};
 
     mlir::func::FuncOp requireMain();
     mlir::func::FuncOp lower(mlir::func::FuncOp dbFunction, mlir::ModuleOp nlModule);

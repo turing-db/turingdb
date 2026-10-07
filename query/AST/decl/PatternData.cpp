@@ -4,6 +4,10 @@
 
 using namespace db;
 
+bool LabelRef::operator==(const LabelRef& other) const {
+    return _name == other._name && _isParameter == other._isParameter;
+}
+
 // PatternData
 PatternData::PatternData()
 {
@@ -31,7 +35,11 @@ NodePatternData* NodePatternData::create(CypherAST* ast) {
 }
 
 void NodePatternData::addLabelConstraint(std::string_view label) {
-    _labelConstraints.push_back(label);
+    _labelConstraints.emplace_back(label, false);
+}
+
+void NodePatternData::addLabelParameter(std::string_view name) {
+    _labelConstraints.emplace_back(name, true);
 }
 
 // EdgePatternData

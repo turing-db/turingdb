@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "decl/PatternData.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -226,6 +227,10 @@ private:
         struct WrittenEntity {
             std::vector<std::string> _labels;
             std::string _edgeType;
+
+            // False when a label of the entity is a parameter, so the labels it carries are
+            // only known once the program runs
+            bool _labelsKnown {true};
         };
 
         std::unordered_map<const VarDecl*, WrittenEntity> _writtenEntities;
@@ -596,7 +601,7 @@ private:
     // reads that back rather than fetching an ID the graph does not hold yet
     void publishCreatedEntity(const VarDecl* decl,
                               mlir::Value column,
-                              llvm::ArrayRef<llvm::StringRef> labelNames,
+                              std::span<const LabelRef> labels,
                               llvm::StringRef edgeType,
                               llvm::ArrayRef<llvm::StringRef> propNames,
                               llvm::ArrayRef<mlir::Value> propValues);
@@ -998,7 +1003,7 @@ private:
 
     // Whether the entity of each row carries the named types: every one of them for a
     // node, since labels are a conjunction, any one of them for an edge.
-    mlir::Value checkNodeLabels(mlir::Value nodeColumn, std::span<const std::string_view> labels, bool nullable);
+    mlir::Value checkNodeLabels(mlir::Value nodeColumn, std::span<const LabelRef> labels, bool nullable);
     mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const std::string_view> edgeTypes, bool nullable);
 
     // A named edge variable has one occurrence per time the pattern walks it, all equated

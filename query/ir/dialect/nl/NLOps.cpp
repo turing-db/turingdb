@@ -14,6 +14,7 @@
 #include "PathStepsFormat.h"
 #include "PathHopArguments.h"
 #include "LabelAlternativesFormat.h"
+#include "StorageAttributes.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"

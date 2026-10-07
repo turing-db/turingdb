@@ -90,6 +90,7 @@ set(ast_sources
     expr/CaseExpr.cpp
     NodePattern.cpp
     EdgePattern.cpp
+    Parameter.cpp
     Symbol.cpp
     SymbolChain.cpp
     Literal.cpp

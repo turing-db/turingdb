@@ -51,7 +51,8 @@ QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
                    state.getGraphName(),
                    state.getCommitHash(),
                    state.getChangeID(),
-                   sink);
+                   sink,
+                   state.getParameters());
 
     return status;
 }

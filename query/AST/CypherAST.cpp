@@ -6,6 +6,7 @@
 #include "DiagnosticsManager.h"
 #include "SourceManager.h"
 #include "FunctionInvocation.h"
+#include "Parameter.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 #include "Literal.h"
@@ -53,6 +54,10 @@ ExplainRequest& CypherAST::explainRequest() {
 CypherAST::~CypherAST() {
     delete _sourceManager;
     delete _diagnosticsManager;
+
+    for (Parameter* parameter : _parameters) {
+        delete parameter;
+    }
 
     for (Symbol* symbol : _symbols) {
         delete symbol;
@@ -168,6 +173,10 @@ std::string* CypherAST::createString() {
     _unnamedVarIdentifiers.push_back(name);
 
     return name;
+}
+
+void CypherAST::addParameter(Parameter* parameter) {
+    _parameters.push_back(parameter);
 }
 
 void CypherAST::addSymbol(Symbol* symbol) {

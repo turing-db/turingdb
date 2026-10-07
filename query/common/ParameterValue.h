@@ -15,12 +15,14 @@ class ParameterValue {
 public:
     using List = std::vector<ParameterValue>;
     using Map = std::map<std::string, ParameterValue>;
+    using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map>;
 
     ParameterValue();
     ~ParameterValue();
 
     bool isNull() const;
     ValueType getType() const;
+    std::string_view getTypeName() const;
 
     int64_t getInt64() const;
     double getDouble() const;
@@ -38,7 +40,7 @@ public:
     Map& setMap();
 
 private:
-    std::variant<std::monostate, int64_t, double, bool, std::string, List, Map> _value;
+    Variant _value;
 };
 
 }
