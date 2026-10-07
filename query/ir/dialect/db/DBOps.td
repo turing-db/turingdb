@@ -1380,6 +1380,19 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     that fails it is neither emitted nor expanded. The region reads nothing from outside
     but constants. `columns_to_filter` is the carry set, exactly as on get_out_edges.
 
+    A walk can repeat a body of several steps instead of one hop, the way
+    `MATCH (a)((x)-[:KNOWS]->(y)<-[:LIKES]-(z)){1,2}(c)` repeats two. The direction is then a
+    list with one entry per step, `edge_types` and `hop_labels` hold one list per step, an
+    empty one leaving that step free, and there is one hop region per step, `{}` for a step
+    without a predicate. The hop bounds count repetitions of the body, and a path ends only
+    after a whole number of them. The region of step `k` takes the nodes and edges of the
+    repetition up to its hop, interleaved from the node the repetition started on - `k`
+    earlier nodes and edges, then the hop's source node, edge and end node - and then the
+    hop imports.
+
+      %s, %t, %p = db.explore_paths(%a, {}) [forward, backward] hops 1 to 2
+                     edge_types [["KNOWS"], ["LIKES"]]
+
     `hop_imports` are the columns the hop predicate reads from outside the hop, the way
     `MATCH (n)-[e*1..3 WHERE e.since > n.born]->(m)` reads the seed. Each is row-aligned
     with `input_nodes` and becomes one further block argument of the region, in that order,
@@ -1446,12 +1459,12 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                        Variadic<Column>:$columns_to_filter,
                        Optional<ColumnNodeIDs>:$end_nodes,
                        Variadic<Column>:$hop_imports,
-                       PathDirection:$direction,
+                       DenseI64ArrayAttr:$directions,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
-                       OptionalAttr<StrArrayAttr>:$edge_types,
+                       OptionalAttr<StrArrayArrayAttr>:$edge_types,
                        OptionalAttr<StrArrayAttr>:$end_labels,
-                       OptionalAttr<StrArrayAttr>:$hop_labels,
+                       OptionalAttr<StrArrayArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
@@ -1461,15 +1474,24 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                         ColumnPathRefs:$paths,
                         Variadic<Column>:$filtered_columns);
 
-  let regions = (region MaxSizedRegion<1>:$hop);
+  let regions = (region VariadicRegion<MaxSizedRegion<1>>:$hops);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
-    (`hop_labels` $hop_labels^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` custom<PathDirections>($directions) `hops` $min_hops
+    (`to` $max_hops^)? (`edge_types` custom<StepNames>($edge_types)^)? (`end_labels` $end_labels^)?
+    (`hop_labels` custom<StepNames>($hop_labels)^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
     (`hop_imports` `{` $hop_imports^ `}`)? (`ends_on_seed` $ends_on_seed^)?
-    (`distinct` $distinct^)? ($hop^)?
+    (`distinct` $distinct^)? `` custom<HopRegions>($hops, ref($directions))
     attr-dict `:` functional-type(operands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    size_t getStepCount() { return getDirections().size(); }
+    ::mlir::storage::PathDirection getStepDirection(size_t step);
+
+    // The names of one step, null when the step has none
+    ::mlir::ArrayAttr getStepEdgeTypes(size_t step);
+    ::mlir::ArrayAttr getStepHopLabels(size_t step);
   }];
 
   let hasVerifier = 1;
@@ -1498,6 +1520,14 @@ def ExpandPath : TuringOp<"expand_path", [Pure]> {
 
       %e = db.expand_path(%p, %s) kind edges
              : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
+
+    `step k of n` reads a walk repeating a body of `n` steps: the list holds hop `k` of each
+    repetition alone, one entry per repetition, the way a group variable of a body of several
+    hops binds one entity per repetition. `reversed` reverses that list in turn. `kind nodes`
+    lists every node of the walk and takes no step.
+
+      %y = db.expand_path(%p) kind ends step 0 of 2
+             : (!db.column<!storage.path_ref>) -> !db.column<!storage.list<!storage.node_id>>
   }];
 
   // The seeds are read by whichever kind ends up holding them - `kind sources` in walk
@@ -1505,11 +1535,13 @@ def ExpandPath : TuringOp<"expand_path", [Pure]> {
   let arguments = (ins ColumnPathRefs:$paths,
                        Optional<ColumnNodeIDs>:$srcids,
                        PathExpansionKind:$kind,
-                       UnitAttr:$reversed);
+                       UnitAttr:$reversed,
+                       OptionalAttr<UI64Attr>:$step,
+                       OptionalAttr<UI64Attr>:$steps);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $paths (`,` $srcids^)? `)` `kind` $kind (`reversed` $reversed^)?
+    `(` $paths (`,` $srcids^)? `)` `kind` $kind (`reversed` $reversed^)? (`step` $step^ `of` $steps)?
     attr-dict `:` functional-type(operands, results)
   }];
 

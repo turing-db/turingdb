@@ -480,7 +480,7 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
     const QuantifiedPath* qp = edgePattern->getQuantifiedPath();
     if (!qp) {
-        analyzeEdgeProperties(edgePattern, decl, data, false);
+        analyzeEdgeProperties(edgePattern, decl, data, nullptr);
         return;
     }
 
@@ -507,13 +507,13 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
     decl->setIsQuantifiedPath(true);
 
-    analyzeHop(edgePattern, data);
+    analyzeHops(edgePattern);
 }
 
 void ReadStmtAnalyzer::analyzeEdgeProperties(EdgePattern* edgePattern,
                                              VarDecl* decl,
                                              EdgePatternData* data,
-                                             bool asHopPredicates) {
+                                             EdgePattern* walk) {
     const MapLiteral* properties = edgePattern->getProperties();
     if (!properties) {
         return;
@@ -553,8 +553,8 @@ void ReadStmtAnalyzer::analyzeEdgeProperties(EdgePattern* edgePattern,
 
         const ValueType constraintType = propType ? propType->_valueType : ValueType::Invalid;
 
-        if (asHopPredicates) {
-            edgePattern->addHopPredicate(predExpr);
+        if (walk) {
+            walk->addHopPredicate(predExpr);
         } else {
             data->addExprConstraint(propName->getName(), constraintType, predExpr);
         }
@@ -566,35 +566,53 @@ void ReadStmtAnalyzer::enterScope(DeclContext* scope) {
     _exprAnalyzer->setDeclContext(scope);
 }
 
-void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* data) {
+void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
     DeclContext* outer = _ctxt;
     DeclContext* hopScope = DeclContext::create(_ast, outer);
     hopScope->setReadsEnclosingScope(true);
     enterScope(hopScope);
 
-    VarDecl* hopDecl = nullptr;
-    if (const Symbol* symbol = edgePattern->getSymbol()) {
-        hopDecl = hopScope->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
-    } else {
-        hopDecl = hopScope->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
+    const size_t hopCount = walk->getHopCount();
+    std::vector<const WhereClause*> wheres;
+
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        EdgePattern* hop = walk->getHop(hopIndex);
+
+        VarDecl* hopDecl = nullptr;
+        if (const Symbol* symbol = hop->getSymbol()) {
+            hopDecl = hopScope->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
+        } else {
+            hopDecl = hopScope->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
+        }
+        hop->setHopDecl(hopDecl);
+
+        if (hop != walk) {
+            EdgePatternData* hopData = EdgePatternData::create(_ast);
+            hop->setData(hopData);
+
+            if (const SymbolChain* types = hop->types()) {
+                for (const Symbol* edgeTypeSymbol : *types) {
+                    hopData->addEdgeTypeConstraint(edgeTypeSymbol->getName());
+                }
+            }
+        }
+
+        wheres.push_back(hop->getWhere());
     }
-    edgePattern->setHopDecl(hopDecl);
 
-    NodePattern* source = edgePattern->getHopSource();
-    if (source) {
-        analyze(source);
+    wheres.push_back(walk->getHopWhere());
+
+    for (size_t position = 0; position <= hopCount; position++) {
+        if (NodePattern* node = walk->getHopNode(position)) {
+            analyze(node);
+            wheres.push_back(node->getWhere());
+        }
     }
 
-    NodePattern* end = edgePattern->getHopEnd();
-    if (end) {
-        analyze(end);
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        EdgePattern* hop = walk->getHop(hopIndex);
+        analyzeEdgeProperties(hop, hop->getHopDecl(), hop->getData(), walk);
     }
-
-    analyzeEdgeProperties(edgePattern, hopDecl, data, true);
-
-    const WhereClause* sourceWhere = source ? source->getWhere() : nullptr;
-    const WhereClause* endWhere = end ? end->getWhere() : nullptr;
-    const std::initializer_list<const WhereClause*> wheres {edgePattern->getWhere(), edgePattern->getHopWhere(), sourceWhere, endWhere};
 
     std::vector<const VarDecl*>* const outerSink = _exprAnalyzer->getImportSink();
 
@@ -610,51 +628,63 @@ void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* dat
         _exprAnalyzer->analyzeRootExpr(predicate);
 
         if (predicate->isAggregate()) {
-            throwError("Invalid use of aggregate expression in this context", edgePattern);
+            throwError("Invalid use of aggregate expression in this context", walk);
         }
 
         const EvaluatedType predicateType = predicate->getType();
         if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
-            throwError("WHERE expression must be a boolean", edgePattern);
+            throwError("WHERE expression must be a boolean", walk);
         }
 
-        edgePattern->addHopPredicate(predicate);
+        walk->addHopPredicate(predicate);
     }
 
     _exprAnalyzer->setImportSink(outerSink);
 
     for (const VarDecl* decl : imports) {
-        edgePattern->addHopImport(decl);
+        walk->addHopImport(decl);
     }
 
     enterScope(outer);
 
-    const Symbol* sourceSymbol = source ? source->getSymbol() : nullptr;
-    const Symbol* endSymbol = end ? end->getSymbol() : nullptr;
-
-    throwIfGroupNameIsBound(outer, sourceSymbol, edgePattern);
-    throwIfGroupNameIsBound(outer, endSymbol, edgePattern);
-
-    if (sourceSymbol) {
-        edgePattern->setHopSourceGroup(declareGroupVariable(outer, sourceSymbol->getName()));
+    for (size_t position = 0; position <= hopCount; position++) {
+        const NodePattern* node = walk->getHopNode(position);
+        throwIfGroupNameIsBound(outer, node ? node->getSymbol() : nullptr, walk);
     }
 
-    if (endSymbol) {
-        edgePattern->setHopEndGroup(declareGroupVariable(outer, endSymbol->getName()));
+    if (hopCount > 1) {
+        for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+            throwIfGroupNameIsBound(outer, walk->getHop(hopIndex)->getSymbol(), walk);
+        }
+    }
+
+    for (size_t position = 0; position <= hopCount; position++) {
+        const NodePattern* node = walk->getHopNode(position);
+        const Symbol* symbol = node ? node->getSymbol() : nullptr;
+        walk->addHopNodeGroup(symbol ? declareGroupVariable(outer, EvaluatedType::NodePattern, symbol->getName()) : nullptr);
+    }
+
+    if (hopCount > 1) {
+        for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+            EdgePattern* hop = walk->getHop(hopIndex);
+            if (const Symbol* symbol = hop->getSymbol()) {
+                hop->setDecl(declareGroupVariable(outer, EvaluatedType::EdgePattern, symbol->getName()));
+            }
+        }
     }
 }
 
-void ReadStmtAnalyzer::throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* edgePattern) const {
+void ReadStmtAnalyzer::throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* walk) const {
     if (!symbol || !outer->getDecl(symbol->getName())) {
         return;
     }
 
     throwError(fmt::format("Variable '{}' is already bound: a quantified pattern groups a name of its own", symbol->getName()),
-               edgePattern);
+               walk);
 }
 
-VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, std::string_view name) {
-    VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, name);
+VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, EvaluatedType type, std::string_view name) {
+    VarDecl* group = outer->getOrCreateNamedVariable(_ast, type, name);
     group->setIsQuantifiedPath(true);
 
     return group;

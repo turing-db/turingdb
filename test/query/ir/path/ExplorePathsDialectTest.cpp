@@ -275,7 +275,7 @@ protected:
     static std::vector<std::string> edgeTypeNamesOf(mlir::db::ExplorePaths exploration) {
         std::vector<std::string> names;
 
-        if (const mlir::ArrayAttr edgeTypes = exploration.getEdgeTypesAttr()) {
+        if (const mlir::ArrayAttr edgeTypes = exploration.getStepEdgeTypes(0)) {
             for (const mlir::Attribute name : edgeTypes) {
                 names.push_back(mlir::cast<mlir::StringAttr>(name).getValue().str());
             }
@@ -354,11 +354,11 @@ TEST_F(ExplorePathsDialectTest, roundTripsThroughThePrinter) {
         mlir::db::ExplorePaths copy = findExplorePaths(*reparsed);
         ASSERT_TRUE(original);
         ASSERT_TRUE(copy);
-        EXPECT_EQ(original.getDirection(), copy.getDirection());
+        EXPECT_EQ(original.getStepDirection(0), copy.getStepDirection(0));
         EXPECT_EQ(original.getMinHops(), copy.getMinHops());
         EXPECT_EQ(original.getMaxHops(), copy.getMaxHops());
         EXPECT_EQ(edgeTypeNamesOf(original), edgeTypeNamesOf(copy));
-        EXPECT_EQ(original.getHop().empty(), copy.getHop().empty());
+        EXPECT_EQ(original.getHops()[0].empty(), copy.getHops()[0].empty());
     }
 }
 
@@ -367,11 +367,11 @@ TEST_F(ExplorePathsDialectTest, readsTheAttributesAndTheRegion) {
     ASSERT_TRUE(bounded);
 
     mlir::db::ExplorePaths boundedOp = findExplorePaths(*bounded);
-    EXPECT_EQ(boundedOp.getDirection(), mlir::storage::PathDirection::Forward);
+    EXPECT_EQ(boundedOp.getStepDirection(0), mlir::storage::PathDirection::Forward);
     EXPECT_EQ(boundedOp.getMinHops(), 1u);
     EXPECT_EQ(boundedOp.getMaxHops(), std::optional<uint64_t> {3});
     EXPECT_EQ(edgeTypeNamesOf(boundedOp), std::vector<std::string> {"KNOWS"});
-    EXPECT_TRUE(boundedOp.getHop().empty());
+    EXPECT_TRUE(boundedOp.getHops()[0].empty());
     EXPECT_EQ(boundedOp.getColumnsToFilter().size(), 0u);
 
     const mlir::OwningOpRef<mlir::ModuleOp> disjunction = parse(edgeTypeDisjunctionProgram);
@@ -382,12 +382,12 @@ TEST_F(ExplorePathsDialectTest, readsTheAttributesAndTheRegion) {
     ASSERT_TRUE(region);
 
     mlir::db::ExplorePaths regionOp = findExplorePaths(*region);
-    EXPECT_EQ(regionOp.getDirection(), mlir::storage::PathDirection::Both);
+    EXPECT_EQ(regionOp.getStepDirection(0), mlir::storage::PathDirection::Both);
     EXPECT_EQ(regionOp.getMinHops(), 0u);
     EXPECT_FALSE(regionOp.getMaxHops().has_value());
     EXPECT_TRUE(edgeTypeNamesOf(regionOp).empty());
-    ASSERT_FALSE(regionOp.getHop().empty());
-    EXPECT_EQ(regionOp.getHop().front().getNumArguments(), 3u);
+    ASSERT_FALSE(regionOp.getHops()[0].empty());
+    EXPECT_EQ(regionOp.getHops()[0].front().getNumArguments(), 3u);
     EXPECT_EQ(regionOp.getColumnsToFilter().size(), 1u);
     EXPECT_EQ(regionOp.getFilteredColumns().size(), 1u);
 }
@@ -424,9 +424,9 @@ TEST_F(ExplorePathsDialectTest, trimDropsUnreadCarriesAndKeepsTheRest) {
     EXPECT_EQ(trimmed.getMinHops(), 1u);
     EXPECT_EQ(trimmed.getMaxHops(), std::optional<uint64_t> {2});
     EXPECT_EQ(edgeTypeNamesOf(trimmed), std::vector<std::string> {"KNOWS_WELL"});
-    ASSERT_FALSE(trimmed.getHop().empty());
-    EXPECT_EQ(trimmed.getHop().front().getNumArguments(), 3u);
-    EXPECT_TRUE(mlir::isa<mlir::db::Yield>(trimmed.getHop().front().getTerminator()));
+    ASSERT_FALSE(trimmed.getHops()[0].empty());
+    EXPECT_EQ(trimmed.getHops()[0].front().getNumArguments(), 3u);
+    EXPECT_TRUE(mlir::isa<mlir::db::Yield>(trimmed.getHops()[0].front().getTerminator()));
 }
 
 TEST_F(ExplorePathsDialectTest, pushDownMovesSeedPredicatesAboveAndKeepsEndPredicatesBelow) {
@@ -479,7 +479,7 @@ TEST_F(ExplorePathsDialectTest, lowersToALoopOverThePathIterator) {
 
     ASSERT_TRUE(exploration);
     EXPECT_EQ(forCount, 3u);
-    EXPECT_EQ(exploration.getDirection(), mlir::storage::PathDirection::Both);
+    EXPECT_EQ(exploration.getDirections().front(), static_cast<int64_t>(mlir::storage::PathDirection::Both));
     EXPECT_EQ(exploration.getMinHops(), 0u);
     EXPECT_FALSE(exploration.getMaxHops().has_value());
     EXPECT_EQ(exploration.getColumnsToFilter().size(), 1u);
@@ -491,8 +491,8 @@ TEST_F(ExplorePathsDialectTest, lowersToALoopOverThePathIterator) {
         mlir::cast<mlir::nl::ChunkType>(iterator.getChunkTypes()[2]).getElementType()));
 
     // The hop region came along, ending in a yield of one mask
-    ASSERT_FALSE(exploration.getHop().empty());
-    mlir::Block& hop = exploration.getHop().front();
+    ASSERT_FALSE(exploration.getHops()[0].empty());
+    mlir::Block& hop = exploration.getHops()[0].front();
     EXPECT_EQ(hop.getNumArguments(), 3u);
     auto yield = mlir::dyn_cast<mlir::nl::Yield>(hop.getTerminator());
     ASSERT_TRUE(yield);

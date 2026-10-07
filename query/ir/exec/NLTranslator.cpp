@@ -772,23 +772,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::ExplorePaths, explorePaths.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = explorePaths.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            if (const mlir::Value handle = explorePaths.getEdgeTypes()) {
-                edgeTypeNames(handle, config._edgeTypes);
-            }
-            config._direction = toPathExplorationDir(explorePaths.getDirection());
+            config._explorePaths = explorePaths;
             config._minHops = explorePaths.getMinHops();
             config._maxHops = explorePaths.getMaxHops().value_or(std::numeric_limits<uint64_t>::max());
-            config._hopRegion = &explorePaths.getHop();
             const mlir::OperandRange hopImports = explorePaths.getHopImports();
             config._hopImports.assign(hopImports.begin(), hopImports.end());
             if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
                 for (const mlir::Attribute label : *endLabels) {
                     config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-                }
-            }
-            if (const std::optional<mlir::ArrayAttr> hopLabels = explorePaths.getHopLabels()) {
-                for (const mlir::Attribute label : *hopLabels) {
-                    config._hopLabels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
                 }
             }
             config._endColumn = explorePaths.getEndColumn();
@@ -1980,28 +1971,13 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
 
     const ColumnNodeIDs* inputNodeIDs = static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes));
 
-    // The types are resolved as translateEdgeLoop resolves a by-type hop's: a name absent
-    // from the schema drops out of the set, and a set left empty that way marks the loop
-    // unmatchable
-    const bool filtersByType = !config._edgeTypes.empty();
-    llvm::SmallVector<EdgeTypeID, 4> edgeTypes;
-    bool matchable = true;
-    if (filtersByType) {
-        resolveEdgeTypes(config._edgeTypes, edgeTypes);
-        matchable = !edgeTypes.empty();
-    }
-
     NLExplorePathsLoopData* loopData = _program->allocFunctionData<NLExplorePathsLoopData>(inputNodeIDs,
                                                                                          sources,
                                                                                          targets,
                                                                                          paths,
                                                                                          &_memory->pathTrie(),
-                                                                                         config._direction,
                                                                                          config._minHops,
-                                                                                         config._maxHops,
-                                                                                         filtersByType,
-                                                                                         edgeTypes,
-                                                                                         matchable);
+                                                                                         config._maxHops);
     loopData->setLimit(limit);
     loopData->getIndices()->reserve(_program->getChunkSize());
 
@@ -2011,12 +1987,6 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
         LabelSet endLabels;
         const bool endMatchable = resolveLabelSet(config._labels, endLabels);
         loopData->setEndLabels(endLabels, endMatchable);
-    }
-
-    if (!config._hopLabels.empty()) {
-        LabelSet hopLabels;
-        const bool hopLabelsMatchable = resolveLabelSet(config._hopLabels, hopLabels);
-        loopData->setHopLabels(hopLabels, hopLabelsMatchable);
     }
 
     bindCarriedColumns(config, loopBody, 3, loopData);
@@ -2036,60 +2006,125 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
         loopData->setDistinctEnds();
     }
 
-    if (config._hopRegion && !config._hopRegion->empty()) {
-        mlir::Block& hopBlock = config._hopRegion->front();
-        const size_t chunkSize = _program->getChunkSize();
-
-        ColumnNodeIDs* hopSources = _memory->alloc<ColumnNodeIDs>();
-        hopSources->reserve(chunkSize);
-        ColumnEdgeIDs* hopEdges = _memory->alloc<ColumnEdgeIDs>();
-        hopEdges->reserve(chunkSize);
-        ColumnNodeIDs* hopEnds = _memory->alloc<ColumnNodeIDs>();
-        hopEnds->reserve(chunkSize);
-
-        _valueSlots[hopBlock.getArgument(0)] = hopSources;
-        _valueSlots[hopBlock.getArgument(1)] = hopEdges;
-        _valueSlots[hopBlock.getArgument(2)] = hopEnds;
-
-        for (size_t importIndex = 0; importIndex < config._hopImports.size(); importIndex++) {
-            const mlir::Value importValue = config._hopImports[importIndex];
-            const Column* importColumn = getColumn(importValue);
-            const mlir::BlockArgument importArgument = hopBlock.getArgument(static_cast<unsigned>(3 + importIndex));
-
-            Column* importChunk = nullptr;
-            NLGatherFunction gather = nullptr;
-            if (isConstantColumn(importColumn)) {
-                importChunk = _memory->allocSame(importColumn);
-                gather = NLExecutor::selectConstGatherFunction();
-            } else {
-                importChunk = allocColumnForChunkType(importArgument.getType());
-                gather = selectGatherForChunkType(importValue.getType());
-            }
-            _valueSlots[importArgument] = importChunk;
-
-            loopData->addHopImport(NLHopImport {importColumn, importChunk, gather});
-        }
-
-        translateBlock(hopBlock, loopData->getHopStmts());
-
-        nl::Yield yield = mlir::cast<nl::Yield>(hopBlock.getTerminator());
-        const mlir::Value mask = yield.getColumns().front();
-        const auto maskChunk = mlir::cast<nl::ChunkType>(mask.getType());
-        const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
-        const bool maskIsUntypedNull = isUntypedNullChunk(mask.getType());
-
-        loopData->setHopFilter(hopSources,
-                               hopEdges,
-                               hopEnds,
-                               getColumn(mask),
-                               NLExecutor::selectMaskSurvivorFunction(maskNullable,
-                                                                      maskIsUntypedNull,
-                                                                      isListElementChunk(mask.getType())));
+    nl::ExplorePaths explorePaths = config._explorePaths;
+    const size_t stepCount = explorePaths.getStepCount();
+    for (size_t step = 0; step < stepCount; step++) {
+        translateExploreStep(explorePaths, step, config._hopImports, loopData);
     }
 
     body->emplaceStmt(&NLExecutor::runExplorePathsLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
+                                        size_t step,
+                                        llvm::ArrayRef<mlir::Value> hopImports,
+                                        NLExplorePathsLoopData* loopData) {
+    // The types are resolved as translateEdgeLoop resolves a by-type hop's: a name absent
+    // from the schema drops out of the set, and a set left empty that way marks the step
+    // unmatchable
+    llvm::SmallVector<llvm::StringRef, 4> edgeTypeNamesOfStep;
+    if (const mlir::Value handle = explorePaths.getStepEdgeTypes(step)) {
+        edgeTypeNames(handle, edgeTypeNamesOfStep);
+    }
+
+    const bool filtersByType = !edgeTypeNamesOfStep.empty();
+    llvm::SmallVector<EdgeTypeID, 4> edgeTypes;
+    bool matchable = true;
+    if (filtersByType) {
+        resolveEdgeTypes(edgeTypeNamesOfStep, edgeTypes);
+        matchable = !edgeTypes.empty();
+    }
+
+    const PathExplorationDir direction = toPathExplorationDir(static_cast<storage::PathDirection>(explorePaths.getDirections()[step]));
+    NLExploreStep* exploreStep = loopData->addStep(direction, filtersByType, edgeTypes, matchable);
+
+    if (const std::optional<mlir::ArrayAttr> stepLabels = explorePaths.getHopLabels()) {
+        const mlir::ArrayAttr labelsOfStep = mlir::cast<mlir::ArrayAttr>((*stepLabels)[step]);
+
+        llvm::SmallVector<llvm::StringRef, 4> labelNames;
+        for (const mlir::Attribute label : labelsOfStep) {
+            labelNames.push_back(mlir::cast<mlir::StringAttr>(label).getValue());
+        }
+
+        if (!labelNames.empty()) {
+            LabelSet hopLabels;
+            const bool hopLabelsMatchable = resolveLabelSet(labelNames, hopLabels);
+            exploreStep->setHopLabels(hopLabels, hopLabelsMatchable);
+        }
+    }
+
+    mlir::Region& hop = explorePaths.getHops()[step];
+    if (hop.empty()) {
+        return;
+    }
+
+    mlir::Block& hopBlock = hop.front();
+    const size_t chunkSize = _program->getChunkSize();
+
+    // The hop's own source, edge and end are always filled; the nodes and edges the
+    // repetition took before it only when the predicate reads them
+    const size_t hopArguments = 2 * step + 3;
+    for (size_t argumentIndex = 0; argumentIndex < hopArguments; argumentIndex++) {
+        const mlir::BlockArgument argument = hopBlock.getArgument(static_cast<unsigned>(argumentIndex));
+        const bool ofTheHop = argumentIndex >= 2 * step;
+        const bool isEdge = argumentIndex % 2 == 1;
+
+        if (!ofTheHop && argument.use_empty()) {
+            if (isEdge) {
+                exploreStep->addHopEdge(nullptr);
+            } else {
+                exploreStep->addHopNode(nullptr);
+            }
+
+            continue;
+        }
+
+        if (isEdge) {
+            ColumnEdgeIDs* edges = _memory->alloc<ColumnEdgeIDs>();
+            edges->reserve(chunkSize);
+            _valueSlots[argument] = edges;
+            exploreStep->addHopEdge(edges);
+        } else {
+            ColumnNodeIDs* nodes = _memory->alloc<ColumnNodeIDs>();
+            nodes->reserve(chunkSize);
+            _valueSlots[argument] = nodes;
+            exploreStep->addHopNode(nodes);
+        }
+    }
+
+    for (size_t importIndex = 0; importIndex < hopImports.size(); importIndex++) {
+        const mlir::Value importValue = hopImports[importIndex];
+        const Column* importColumn = getColumn(importValue);
+        const mlir::BlockArgument importArgument = hopBlock.getArgument(static_cast<unsigned>(hopArguments + importIndex));
+
+        Column* importChunk = nullptr;
+        NLGatherFunction gather = nullptr;
+        if (isConstantColumn(importColumn)) {
+            importChunk = _memory->allocSame(importColumn);
+            gather = NLExecutor::selectConstGatherFunction();
+        } else {
+            importChunk = allocColumnForChunkType(importArgument.getType());
+            gather = selectGatherForChunkType(importValue.getType());
+        }
+        _valueSlots[importArgument] = importChunk;
+
+        exploreStep->addHopImport(NLHopImport {importColumn, importChunk, gather});
+    }
+
+    translateBlock(hopBlock, exploreStep->getHopStmts());
+
+    nl::Yield yield = mlir::cast<nl::Yield>(hopBlock.getTerminator());
+    const mlir::Value mask = yield.getColumns().front();
+    const auto maskChunk = mlir::cast<nl::ChunkType>(mask.getType());
+    const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
+    const bool maskIsUntypedNull = isUntypedNullChunk(mask.getType());
+
+    exploreStep->setHopFilter(getColumn(mask),
+                              NLExecutor::selectMaskSurvivorFunction(maskNullable,
+                                                                     maskIsUntypedNull,
+                                                                     isListElementChunk(mask.getType())));
 }
 
 void NLTranslator::translateExpandPath(nl::ExpandPath expand, NLStmtContainer* body) {
@@ -2121,11 +2156,14 @@ void NLTranslator::translateExpandPath(nl::ExpandPath expand, NLStmtContainer* b
         break;
     }
 
+    const PathHopStride hops {._offset = expand.getStep().value_or(0), ._stride = expand.getSteps().value_or(1)};
+
     NLExpandPathData* data = _program->allocFunctionData<NLExpandPathData>(paths,
                                                                            seeds,
                                                                            output,
                                                                            kind,
                                                                            expand.getReversed(),
+                                                                           hops,
                                                                            &_memory->pathTrie(),
                                                                            &_memory->listBuffer());
     body->emplaceStmt(&NLExecutor::runExpandPath, data);

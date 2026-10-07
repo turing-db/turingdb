@@ -125,6 +125,10 @@
     constexpr const char* quantifierTwiceMessage = "A relationship takes one length quantifier: "
                                                    "either [e*1..3] inside the brackets or {1,3} after them";
 
+    constexpr const char* nestedQuantifierMessage = "A quantified pattern cannot repeat a pattern that is quantified itself";
+
+    constexpr const char* hoplessQuantifierMessage = "A quantified pattern repeats at least one relationship";
+
     }
 }
 
@@ -1616,18 +1620,38 @@ patternElemChain
 
         $$ = std::make_pair($1, $3);
     }
-    | OPAREN nodePattern edgePattern nodePattern opt_whereClause CPAREN quantifiedPath nodePattern {
-        EdgePattern* edge = $3;
+    | OPAREN patternElem opt_whereClause CPAREN quantifiedPath nodePattern {
+        const PatternElement* body = $2;
+        const PatternElement::EntityPatterns& entities = body->getEntities();
+        const size_t hopCount = entities.size() / 2;
 
-        if (edge->getQuantifiedPath()) {
-            scanner.syntaxError(@7, quantifierTwiceMessage);
+        if (hopCount == 0) {
+            scanner.syntaxError(@2, hoplessQuantifierMessage);
         }
 
-        edge->setQuantifiedPath($7);
-        edge->setHopSource($2);
-        edge->setHopEnd($4);
-        edge->setHopWhere($5);
-        $$ = std::make_pair(edge, $8);
+        for (auto [hop, node] : body->getElementChain()) {
+            if (hop->getQuantifiedPath()) {
+                scanner.syntaxError(@2, hopCount == 1 ? quantifierTwiceMessage : nestedQuantifierMessage);
+            }
+        }
+
+        EdgePattern* walk = static_cast<EdgePattern*>(entities[1]);
+        if (hopCount > 1) {
+            walk = EdgePattern::create(ast, $5, EdgePattern::Direction::Undirected);
+            LOC(walk, @2);
+
+            for (auto [hop, node] : body->getElementChain()) {
+                walk->addHop(hop);
+            }
+        }
+
+        for (size_t position = 0; position < entities.size(); position += 2) {
+            walk->addHopNode(static_cast<NodePattern*>(entities[position]));
+        }
+
+        walk->setQuantifiedPath($5);
+        walk->setHopWhere($3);
+        $$ = std::make_pair(walk, $6);
     }
     ;
 

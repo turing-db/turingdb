@@ -253,6 +253,9 @@ private:
             const VariableDependency* _path {nullptr};
             // Whether the walk ran against the pattern, its far end having seeded it
             bool _reversed {false};
+            // The step of the walk's body the list reads off each repetition
+            size_t _step {0};
+            size_t _steps {1};
         };
 
         std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
@@ -1266,12 +1269,23 @@ private:
     // Indexes the quantified edge patterns of a part by their declaration
     void collectQuantifiedEdges(std::span<Stmt* const> stmts);
 
-    // Generates the hop region of an exploration from the pattern's hop constraints: the
-    // inner nodes' labels and properties and every hop predicate, over the region's three
-    // block arguments, yielding one mask
+    // Generates the hop regions of an exploration from the pattern's hop constraints: the
+    // inner nodes' labels and properties and every hop predicate, each tested at the first
+    // step of the walk binding what it reads, over that step's block arguments
+    void generateHopRegions(mlir::db::ExplorePaths exploration,
+                            const EdgePattern* pattern,
+                            llvm::ArrayRef<const VarDecl*> imports,
+                            bool reversed);
+
+    // The region of one step, yielding one mask; none when the step tests nothing.
+    // @param declPositions holds the walk position each entity of the pattern is read at.
     void generateHopRegion(mlir::db::ExplorePaths exploration,
                            const EdgePattern* pattern,
-                           llvm::ArrayRef<const VarDecl*> imports);
+                           size_t step,
+                           const std::unordered_map<const VarDecl*, size_t>& declPositions,
+                           std::span<const Expr* const> conjuncts,
+                           llvm::ArrayRef<const VarDecl*> imports,
+                           bool reversed);
 
     // The columns a hop predicate reads from outside the hop, in the order the region's
     // arguments take them

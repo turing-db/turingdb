@@ -7,3 +7,7 @@ PathHopFilter::PathHopFilter() {
 
 PathHopFilter::~PathHopFilter() {
 }
+
+bool PathHopFilter::readsRepetition() const {
+    return false;
+}

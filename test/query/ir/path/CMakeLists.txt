@@ -239,3 +239,5 @@ target_link_libraries(test_query_ir_count_distinct_path PRIVATE
 target_include_directories(test_query_ir_count_distinct_path PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_sum_over_path_relationships SumOverPathRelationshipsTest.cpp)
+
+add_call_v3_test(test_query_ir_quantified_body_cypher QuantifiedBodyCypherTest.cpp)

@@ -6283,10 +6283,19 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
         endNodeSet = buildEndNodeSet(endNodeColumn, inputChunk);
     }
 
-    mlir::Value edgeTypeSet;
-    if (const mlir::ArrayAttr edgeTypes = explorePaths.getEdgeTypesAttr()) {
-        edgeTypeSet = getOrCreateEdgeTypeSetHandle(edgeTypes);
+    const size_t stepCount = explorePaths.getStepCount();
+
+    llvm::SmallVector<mlir::Value, 2> edgeTypeSets;
+    llvm::SmallVector<int64_t, 2> typedSteps;
+    for (size_t step = 0; step < stepCount; step++) {
+        if (const mlir::ArrayAttr edgeTypes = explorePaths.getStepEdgeTypes(step)) {
+            edgeTypeSets.push_back(getOrCreateEdgeTypeSetHandle(edgeTypes));
+            typedSteps.push_back(static_cast<int64_t>(step));
+        }
     }
+
+    const bool typesEveryStep = typedSteps.size() == stepCount || typedSteps.empty();
+    const mlir::DenseI64ArrayAttr edgeTypeSteps = typesEveryStep ? mlir::DenseI64ArrayAttr() : _builder.getDenseI64ArrayAttr(typedSteps);
 
     llvm::SmallVector<mlir::Value, 2> importChunks;
     for (const mlir::Value importColumn : explorePaths.getHopImports()) {
@@ -6299,33 +6308,43 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      inputChunk,
                                                                      carriedChunks,
                                                                      endNodeSet,
-                                                                     edgeTypeSet,
+                                                                     edgeTypeSets,
                                                                      importChunks,
-                                                                     explorePaths.getDirection(),
-                                                                     explorePaths.getMinHops(),
+                                                                     explorePaths.getDirectionsAttr(),
+                                                                     explorePaths.getMinHopsAttr(),
                                                                      explorePaths.getMaxHopsAttr(),
+                                                                     edgeTypeSteps,
                                                                      explorePaths.getEndLabelsAttr(),
                                                                      explorePaths.getHopLabelsAttr(),
                                                                      explorePaths.getEndColumnAttr(),
-                                                                     explorePaths.getEndsOnSeed(),
-                                                                     explorePaths.getDistinct());
+                                                                     explorePaths.getEndsOnSeedAttr(),
+                                                                     explorePaths.getDistinctAttr(),
+                                                                     static_cast<unsigned>(stepCount));
 
-    mlir::Region& dbHop = explorePaths.getHop();
-    if (!dbHop.empty()) {
-        const mlir::OpBuilder::InsertionGuard guard(_builder);
-        lowerHopRegion(dbHop.front(), exploration.getHop(), importChunks);
+    for (size_t step = 0; step < stepCount; step++) {
+        mlir::Region& dbHop = explorePaths.getHops()[step];
+        if (!dbHop.empty()) {
+            const mlir::OpBuilder::InsertionGuard guard(_builder);
+            lowerHopRegion(dbHop.front(), exploration.getHops()[step], step, importChunks);
+        }
     }
 
     buildLoopForSource(exploration.getResult(), explorePaths.getOperation());
 }
 
-void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, mlir::ValueRange imports) {
+void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t step, mlir::ValueRange imports) {
     mlir::MLIRContext* context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
     const mlir::Type nodeChunk = nl::ChunkType::get(context, storage::NodeIDType::get(context));
     const mlir::Type edgeChunk = nl::ChunkType::get(context, storage::EdgeIDType::get(context));
-    llvm::SmallVector<mlir::Type> argumentTypes {nodeChunk, edgeChunk, nodeChunk};
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
+        argumentTypes.push_back(nodeChunk);
+        argumentTypes.push_back(edgeChunk);
+    }
+    argumentTypes.push_back(nodeChunk);
+
     for (const mlir::Value import : imports) {
         argumentTypes.push_back(import.getType());
     }
@@ -6351,7 +6370,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, mlir::V
     }
 
     _builder.setInsertionPoint(placeholder);
-    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(1));
+    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(static_cast<unsigned>(2 * step + 1)));
     _builder.create<nl::Yield>(loc, mlir::ValueRange {maskChunk});
     placeholder.erase();
 }
@@ -6369,8 +6388,10 @@ void DBLowering::lowerExpandPath(mlir::db::ExpandPath expandPath) {
                                                                resultType,
                                                                pathsChunk,
                                                                seedsChunk,
-                                                               expandPath.getKind(),
-                                                               expandPath.getReversed());
+                                                               expandPath.getKindAttr(),
+                                                               expandPath.getReversedAttr(),
+                                                               expandPath.getStepAttr(),
+                                                               expandPath.getStepsAttr());
     _valueMap[expandPath.getResult()] = expansion.getResult();
 }
 
