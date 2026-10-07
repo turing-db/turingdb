@@ -22,7 +22,7 @@ TEST_F(NaNOrderingTest, ordersNaNAfterEveryNumber) {
     StringRowSink sink;
     runQuery("UNWIND [4.0, -1.0, 1.0, 9.0, 0.25] AS x RETURN sqrt(x) AS r ORDER BY r", sink);
 
-    const Rows expected {{"0.5"}, {"1"}, {"2"}, {"3"}, {"-nan"}};
+    const Rows expected {{"0.5"}, {"1"}, {"2"}, {"3"}, {"NaN"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
 
@@ -30,7 +30,7 @@ TEST_F(NaNOrderingTest, ordersNaNFirstDescending) {
     StringRowSink sink;
     runQuery("UNWIND [4.0, -1.0, 1.0, 9.0, 0.25] AS x RETURN sqrt(x) AS r ORDER BY r DESC", sink);
 
-    const Rows expected {{"-nan"}, {"3"}, {"2"}, {"1"}, {"0.5"}};
+    const Rows expected {{"NaN"}, {"3"}, {"2"}, {"1"}, {"0.5"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
 
@@ -38,7 +38,7 @@ TEST_F(NaNOrderingTest, ordersNaNBeforeNull) {
     StringRowSink sink;
     runQuery("UNWIND [2.0, null, -1.0, 1.0] AS x RETURN sqrt(x) AS r ORDER BY r", sink);
 
-    const Rows expected {{"1"}, {"1.4142135623730951"}, {"-nan"}, {"null"}};
+    const Rows expected {{"1"}, {"1.4142135623730951"}, {"NaN"}, {"null"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
 
@@ -51,7 +51,7 @@ TEST_F(NaNOrderingTest, keepsTheSmallestRowsPastNaN) {
 }
 
 TEST_F(NaNOrderingTest, minSkipsNaNAndMaxReturnsIt) {
-    const Rows expected {{"1", "-nan"}};
+    const Rows expected {{"1", "NaN"}};
 
     StringRowSink nanFirst;
     runQuery("UNWIND [-1.0, 1.0] AS x RETURN min(sqrt(x)), max(sqrt(x))", nanFirst);
@@ -69,6 +69,6 @@ TEST_F(NaNOrderingTest, groupedMinSkipsNaNAndMaxReturnsIt) {
     Rows rows;
     sink.sortedRows(rows);
 
-    const Rows expected {{"false", "1", "-nan"}, {"true", "2", "-nan"}};
+    const Rows expected {{"false", "1", "NaN"}, {"true", "2", "NaN"}};
     EXPECT_EQ(rows, expected);
 }

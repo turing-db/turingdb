@@ -1,6 +1,8 @@
 #include "StringRowSink.h"
 
+#include <math.h>
 #include <algorithm>
+#include <concepts>
 #include <optional>
 #include <stdexcept>
 
@@ -24,6 +26,19 @@ using namespace db;
 using namespace turing::test;
 
 namespace {
+
+// x86 and ARM give the NaN of sqrt(-1) opposite sign bits and fmt prints the sign, so
+// every NaN reads as NaN, as the JSON encoder writes it
+template <typename Primitive>
+std::string scalarText(const Primitive& value) {
+    if constexpr (std::floating_point<Primitive>) {
+        if (std::isnan(value)) {
+            return "NaN";
+        }
+    }
+
+    return fmt::format("{}", value);
+}
 
 // An entity an OPTIONAL MATCH did not match is an invalid ID, which reads as null
 template <typename IDType>
@@ -64,7 +79,7 @@ bool textOfConstant(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", column->at(rowIndex));
+    text = scalarText(column->at(rowIndex));
     return true;
 }
 
@@ -86,7 +101,7 @@ bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", column->getRaw()[rowIndex]);
+    text = scalarText(column->getRaw()[rowIndex]);
     return true;
 }
 
@@ -155,7 +170,7 @@ std::string elementText(const ListElementView& element) {
         break;
 
         case ListBufferTypeTag::Double:
-            return fmt::format("{}", element.getAs<double>());
+            return scalarText(element.getAs<double>());
         break;
 
         case ListBufferTypeTag::Bool:
@@ -385,7 +400,7 @@ bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     const std::optional<Primitive>& value = column->getRaw()[rowIndex];
-    text = value ? fmt::format("{}", *value) : "null";
+    text = value ? scalarText(*value) : "null";
     return true;
 }
 
@@ -398,7 +413,7 @@ bool textOfConst(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", (*column)[rowIndex]);
+    text = scalarText((*column)[rowIndex]);
     return true;
 }
 
@@ -410,7 +425,7 @@ bool textOfOptionalConst(const Column* chunk, size_t rowIndex, std::string& text
     }
 
     const std::optional<Primitive>& value = (*column)[rowIndex];
-    text = value ? fmt::format("{}", *value) : "null";
+    text = value ? scalarText(*value) : "null";
     return true;
 }
 
