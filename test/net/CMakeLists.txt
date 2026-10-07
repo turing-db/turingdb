@@ -45,3 +45,8 @@ target_link_libraries(test_net_turing_proto_empty_result PRIVATE
     turing_db_proto_client_s
     turing_testenv_s
     turing_db_examples_s)
+
+add_turing_test(test_net_json_encoder_double JsonEncoderDoubleTest.cpp)
+target_link_libraries(test_net_json_encoder_double PRIVATE
+    turing_db_net_encoders
+    turing_db_memory_s)

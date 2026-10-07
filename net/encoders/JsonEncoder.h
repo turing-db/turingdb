@@ -1,5 +1,7 @@
 #pragma once
 
+#include <math.h>
+#include <charconv>
 #include <ranges>
 #include <span>
 #include <string_view>
@@ -132,7 +134,21 @@ private:
 
     template <std::floating_point T>
     void encodeValue(const T& value) {
-        _writer.write(std::to_string(value));
+        if (std::isnan(value)) {
+            _writer.write("NaN");
+        } else if (std::isinf(value)) {
+            _writer.write(value > 0 ? "Infinity" : "-Infinity");
+        } else {
+            char buffer[32];
+            const std::to_chars_result result = std::to_chars(buffer, buffer + sizeof(buffer), value);
+            const std::string_view text {buffer, result.ptr};
+            _writer.write(text);
+
+            const bool readsAsInteger = text.find_first_of(".e") == std::string_view::npos;
+            if (readsAsInteger) {
+                _writer.write(".0");
+            }
+        }
     }
 
     void encodeValue(bool value) {
@@ -182,10 +198,10 @@ private:
     void encodeValue(types::Embedding::Primitive value) {
         _writer.write("[");
         if (value.size() > 0) {
-            _writer.write(std::to_string(value[0]));
+            encodeValue(value[0]);
             for (size_t i = 1; i < value.size(); i++) {
                 _writer.write(",");
-                _writer.write(std::to_string(value[i]));
+                encodeValue(value[i]);
             }
         }
         _writer.write("]");

@@ -1,3 +1,4 @@
+import json as stdlib_json
 import re
 import time
 from typing import Literal, Optional
@@ -23,6 +24,17 @@ def _duration_microseconds(text: Optional[str]) -> Optional[int]:
         microseconds += -value if sign else value
 
     return microseconds
+
+
+# The server writes non-finite doubles as NaN, Infinity and -Infinity, which orjson
+# rejects as non-RFC 8259; the json module reads them as float nan / inf / -inf
+def _decode_body(text: str):
+    import orjson
+
+    try:
+        return orjson.loads(text)
+    except orjson.JSONDecodeError:
+        return stdlib_json.loads(text)
 
 
 def _column_values(column_type: str, values: list) -> list:
@@ -212,8 +224,6 @@ class HTTPClient:
         data: Optional[dict | str] = None,
         params: Optional[dict] = None,
     ):
-        import orjson
-
         self._query_exec_time = None
         self._total_exec_time = None
         self._t0 = time.time()
@@ -234,8 +244,8 @@ class HTTPClient:
         response.raise_for_status()
 
         try:
-            json = orjson.loads(response.text)
-        except orjson.JSONDecodeError as e:
+            json = _decode_body(response.text)
+        except stdlib_json.JSONDecodeError as e:
             start = max(0, e.pos - 40)
             end = min(len(e.doc), e.pos + 40)
             snippet = e.doc[start:end]
