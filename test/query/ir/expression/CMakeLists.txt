@@ -288,3 +288,6 @@ target_link_libraries(test_query_ir_tagged_cell_arithmetic_equality PRIVATE
         turing_ir_test_rows_s)
 
 add_call_v3_test(test_query_ir_tagged_cell_string_addition TaggedCellStringAdditionTest.cpp)
+
+add_turing_test(test_query_ir_integer_division_overflow IntegerDivisionOverflowTest.cpp)
+target_link_libraries(test_query_ir_integer_division_overflow PRIVATE turing_ir_test_write_query_s)

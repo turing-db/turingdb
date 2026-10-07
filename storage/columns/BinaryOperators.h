@@ -3,6 +3,7 @@
 #include <cmath>
 #include <concepts>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -437,9 +438,21 @@ struct SafeDivides {
     template <typename T, typename U>
         requires (!Temporal<U>) && requires(T&& a, U&& b) { std::divides<> {}(a, b); }
     inline auto operator()(T&& a, U&& b) const {
+        using DecayT = std::decay_t<T>;
+        using DecayU = std::decay_t<U>;
+
         if (b == 0) {
             throw TuringException("Attempted to divide by zero.");
         }
+
+        if constexpr (std::is_integral_v<DecayT> && std::is_signed_v<DecayT>
+                      && std::is_integral_v<DecayU> && std::is_signed_v<DecayU>) {
+            const bool overflows = a == std::numeric_limits<DecayT>::min() && b == -1;
+            if (overflows) {
+                throw TuringException("Division overflow.");
+            }
+        }
+
         return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
     }
 
@@ -452,7 +465,7 @@ struct SafeDivides {
 
 struct SafeModulo {
     template <typename T, typename U>
-        requires std::is_arithmetic_v<std::decay_t<T>> && std::is_arithmetic_v<std::decay_t<U>>
+        requires (!Temporal<T>) && std::is_arithmetic_v<std::decay_t<T>> && std::is_arithmetic_v<std::decay_t<U>>
     inline auto operator()(T&& a, U&& b) const {
         using DecayT = std::decay_t<T>;
         using DecayU = std::decay_t<U>;
@@ -462,6 +475,12 @@ struct SafeModulo {
         }
 
         if constexpr (std::is_integral_v<DecayT> && std::is_integral_v<DecayU>) {
+            if constexpr (std::is_signed_v<DecayT> && std::is_signed_v<DecayU>) {
+                if (b == -1) {
+                    return decltype(a % b) {0};
+                }
+            }
+
             return std::modulus<> {}(std::forward<T>(a), std::forward<U>(b));
         } else {
             return std::fmod(static_cast<double>(a), static_cast<double>(b));
