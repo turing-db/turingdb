@@ -9,9 +9,11 @@ def Storage : Dialect {
     let cppNamespace = "::mlir::storage";
 
     let useDefaultTypePrinterParser = 1;
+    let useDefaultAttributePrinterParser = 1;
 
     let extraClassDeclaration = [{
         void registerTypes();
+        void registerAttributes();
     }];
 }
 

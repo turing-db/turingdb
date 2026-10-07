@@ -33,6 +33,10 @@ ValueType ParameterValue::getType() const {
     }
 }
 
+std::string_view ParameterValue::getTypeName() const {
+    return isNull() ? "Null" : ValueTypeName::value(getType());
+}
+
 int64_t ParameterValue::getInt64() const {
     bioassert(std::holds_alternative<int64_t>(_value), "Parameter is not an Int64");
     return std::get<int64_t>(_value);

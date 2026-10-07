@@ -10,6 +10,7 @@
 #include <range/v3/view/concat.hpp>
 
 #include "DependencyEdge.h"
+#include "decl/PatternData.h"
 
 namespace db {
 
@@ -27,7 +28,7 @@ class VariableDependency {
 public:
     using Edges = std::vector<DependencyEdge*>;
 
-    using LabelNames = std::vector<std::string_view>;
+    using LabelNames = std::vector<LabelRef>;
 
     // A distinct type from LabelNames, not an alias for the same vector: Constraint tells
     // the two apart by type, and a variant of two identical alternatives cannot be
@@ -68,7 +69,7 @@ public:
     void addIncoming(DependencyEdge* newEdge);
     void addOutgoing(DependencyEdge* newEdge);
 
-    void addLabelConstraints(std::span<const std::string_view> labels);
+    void addLabelConstraints(std::span<const LabelRef> labels);
     void setEdgeTypeConstraint(std::span<const std::string_view> types);
 
 private:

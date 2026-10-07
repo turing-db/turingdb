@@ -21,6 +21,7 @@ public:
 
     bool isNull() const;
     ValueType getType() const;
+    std::string_view getTypeName() const;
 
     int64_t getInt64() const;
     double getDouble() const;

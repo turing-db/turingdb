@@ -15,6 +15,7 @@
 #include "PathStepsFormat.h"
 #include "PathHopArguments.h"
 #include "LabelAlternativesFormat.h"
+#include "StorageAttributes.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
@@ -140,7 +141,8 @@ LogicalResult verifyStepNames(Operation* operation, ArrayAttr names, size_t step
     bool namesAny = false;
     for (const Attribute stepNames : names) {
         for (const Attribute name : cast<ArrayAttr>(stepNames)) {
-            if (cast<StringAttr>(name).getValue().empty()) {
+            const StringAttr text = dyn_cast<StringAttr>(name);
+            if (text && text.getValue().empty()) {
                 return operation->emitOpError(what) << " must not hold an empty name";
             }
 
@@ -598,7 +600,8 @@ LogicalResult ExplorePaths::verify() {
         }
 
         for (const Attribute label : *endLabels) {
-            if (cast<StringAttr>(label).getValue().empty()) {
+            const StringAttr name = dyn_cast<StringAttr>(label);
+            if (name && name.getValue().empty()) {
                 return emitOpError("end_labels must name labels");
             }
         }

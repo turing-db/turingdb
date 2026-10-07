@@ -9,6 +9,7 @@ namespace db {
 
 class SourceManager;
 class DiagnosticsManager;
+class Parameter;
 class Symbol;
 class SymbolChain;
 class QualifiedName;
@@ -119,6 +120,7 @@ class ExplainRequest;
 
 class CypherAST {
 public:
+    friend Parameter;
     friend Symbol;
     friend SymbolChain;
     friend QualifiedName;
@@ -233,6 +235,7 @@ public:
     const QueryCommands& queries() const { return _queries; }
 
     const std::vector<Expr*>& getExpressions() const { return _expressions; }
+    const std::vector<SymbolChain*>& getSymbolChains() const { return _symbolChains; }
     const std::vector<EntityPattern*>& getEntityPatterns() const { return _entityPatterns; }
 
     std::string* createString();
@@ -256,6 +259,7 @@ private:
     SourceManager* _sourceManager {nullptr};
     DiagnosticsManager* _diagnosticsManager {nullptr};
 
+    std::vector<Parameter*> _parameters;
     std::vector<Symbol*> _symbols;
     std::vector<SymbolChain*> _symbolChains;
     std::vector<QualifiedName*> _qualifiedNames;
@@ -292,6 +296,7 @@ private:
     std::unique_ptr<ProcedureLookup> _procedureLookup;
     std::unique_ptr<ExplainRequest> _explainRequest;
 
+    void addParameter(Parameter* parameter);
     void addSymbol(Symbol* symbol);
     void addSymbolChain(SymbolChain* symbol);
     void addQualifiedName(QualifiedName* name);

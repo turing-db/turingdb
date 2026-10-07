@@ -9,6 +9,9 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "NLOps.h"
+#include "ParameterMap.h"
+#include "ParameterValue.h"
+#include "StorageAttributes.h"
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
@@ -631,12 +634,14 @@ NLTranslator::NLTranslator(NLProgram* program,
                            LocalMemory* memory,
                            const GraphView* view,
                            MetadataBuilder* metadataBuilder,
-                           const ProcedureContext* procedureContext)
+                           const ProcedureContext* procedureContext,
+                           const ParameterMap* parameters)
     : _program(program),
     _memory(memory),
     _view(view),
     _metadataBuilder(metadataBuilder),
     _procedureContext(procedureContext),
+    _parameters(parameters),
     _systemTranslator(std::make_unique<NLSystemTranslator>(program, memory, &_valueSlots))
 {
 }
@@ -661,9 +666,7 @@ void NLTranslator::translate(const mlir::func::FuncOp& function) {
 template <typename ScanOp>
 void NLTranslator::bindScanEdgesByLabel(ScanOp scan, IteratorKind kind) {
     IteratorConfig config {kind, {}, {}};
-    for (const mlir::Attribute label : scan.getLabels()) {
-        config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-    }
+    labelNames(scan.getLabels(), config._labels);
 
     _iteratorConfigs[scan.getResult()] = config;
 }
@@ -675,9 +678,7 @@ void NLTranslator::bindGetEdgesByLabel(HopOp hop, IteratorKind kind) {
     const mlir::OperandRange carriedColumns = hop.getColumnsToFilter();
     config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
-    for (const mlir::Attribute label : hop.getLabels()) {
-        config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-    }
+    labelNames(hop.getLabels(), config._labels);
 
     _iteratorConfigs[hop.getResult()] = config;
 }
@@ -691,9 +692,7 @@ void NLTranslator::bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind) {
 
     edgeTypeNames(hop.getEdgeTypes(), config._edgeTypes);
 
-    for (const mlir::Attribute label : hop.getLabels()) {
-        config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-    }
+    labelNames(hop.getLabels(), config._labels);
 
     _iteratorConfigs[hop.getResult()] = config;
 }
@@ -704,9 +703,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[scanNodes.getResult()] = IteratorConfig {IteratorKind::ScanNodes, {}, {}};
         } else if (nl::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<nl::ScanNodesByLabel>(operation)) {
             IteratorConfig config {IteratorKind::ScanNodesByLabel, {}, {}};
-            for (const mlir::Attribute label : scanNodesByLabel.getLabels()) {
-                config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-            }
+            labelNames(scanNodesByLabel.getLabels(), config._labels);
             _iteratorConfigs[scanNodesByLabel.getResult()] = config;
         } else if (nl::ConstScanNodes constScanNodes = mlir::dyn_cast<nl::ConstScanNodes>(operation)) {
             IteratorConfig config {IteratorKind::ConstScanNodes, {}, {}};
@@ -717,9 +714,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._property = scanByValue.getProperty();
             config._propertyValue = scanByValue.getValue();
             if (const std::optional<mlir::ArrayAttr> labels = scanByValue.getLabels()) {
-                for (const mlir::Attribute label : *labels) {
-                    config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-                }
+                labelNames(*labels, config._labels);
             }
             _iteratorConfigs[scanByValue.getResult()] = config;
         } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
@@ -781,9 +776,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange hopImports = explorePaths.getHopImports();
             config._hopImports.assign(hopImports.begin(), hopImports.end());
             if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
-                for (const mlir::Attribute label : *endLabels) {
-                    config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-                }
+                labelNames(*endLabels, config._labels);
             }
             config._endColumn = explorePaths.getEndColumn();
             config._endsOnSeed = explorePaths.getEndsOnSeed();
@@ -1324,6 +1317,63 @@ bool NLTranslator::resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, Label
     }
 
     return true;
+}
+
+void NLTranslator::labelNames(mlir::ArrayAttr labels, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    for (const mlir::Attribute label : labels) {
+        if (const mlir::StringAttr name = mlir::dyn_cast<mlir::StringAttr>(label)) {
+            names.push_back(name.getValue());
+        } else {
+            bindLabelParameter(mlir::cast<mlir::storage::ParameterAttr>(label), names);
+        }
+    }
+}
+
+void NLTranslator::bindLabelParameter(mlir::storage::ParameterAttr parameter, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    const llvm::StringRef name = parameter.getName();
+    const ParameterValue* value = _parameters ? _parameters->get(name) : nullptr;
+    if (!value) {
+        throw IRException(fmt::format("Parameter ${} is not defined", name));
+    }
+
+    if (value->isNull()) {
+        throw IRException(fmt::format("Parameter ${} is null: a label is a String or a list of Strings", name));
+    }
+
+    const ValueType type = value->getType();
+    if (type == ValueType::String) {
+        addBoundLabel(name, value->getString(), names);
+    } else if (type == ValueType::List) {
+        const ParameterValue::List& elements = value->getList();
+        if (elements.empty()) {
+            throw IRException(fmt::format("Parameter ${} holds no label", name));
+        }
+
+        for (size_t index = 0; index < elements.size(); index++) {
+            const ParameterValue& element = elements[index];
+            const bool isString = !element.isNull() && element.getType() == ValueType::String;
+            if (!isString) {
+                throw IRException(fmt::format("Element {} of parameter ${} has type {}: a label is a String",
+                                              index,
+                                              name,
+                                              element.getTypeName()));
+            }
+
+            addBoundLabel(name, element.getString(), names);
+        }
+    } else {
+        throw IRException(fmt::format("Parameter ${} has type {}: a label is a String or a list of Strings",
+                                      name,
+                                      ValueTypeName::value(type)));
+    }
+}
+
+void NLTranslator::addBoundLabel(llvm::StringRef parameterName, const std::string& label, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    if (label.empty()) {
+        throw IRException(fmt::format("Parameter ${} holds an empty label name", parameterName));
+    }
+
+    names.push_back(label);
 }
 
 // What this change knows a label by: the graph's schema, plus the names a CREATE earlier in
@@ -2048,14 +2098,12 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
     if (const std::optional<mlir::ArrayAttr> stepLabels = explorePaths.getHopLabels()) {
         const mlir::ArrayAttr labelsOfStep = mlir::cast<mlir::ArrayAttr>((*stepLabels)[step]);
 
-        llvm::SmallVector<llvm::StringRef, 4> labelNames;
-        for (const mlir::Attribute label : labelsOfStep) {
-            labelNames.push_back(mlir::cast<mlir::StringAttr>(label).getValue());
-        }
+        llvm::SmallVector<llvm::StringRef, 4> names;
+        labelNames(labelsOfStep, names);
 
-        if (!labelNames.empty()) {
+        if (!names.empty()) {
             LabelSet hopLabels;
-            const bool hopLabelsMatchable = resolveLabelSet(labelNames, hopLabels);
+            const bool hopLabelsMatchable = resolveLabelSet(names, hopLabels);
             exploreStep->setHopLabels(hopLabels, hopLabelsMatchable);
         }
     }
@@ -2346,9 +2394,7 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     llvm::SmallVector<LabelSet, 4> constraints;
     for (const mlir::Attribute alternative : op.getAlternatives()) {
         llvm::SmallVector<llvm::StringRef> labels;
-        for (const mlir::Attribute labelAttr : mlir::cast<mlir::ArrayAttr>(alternative)) {
-            labels.push_back(mlir::cast<mlir::StringAttr>(labelAttr).getValue());
-        }
+        labelNames(mlir::cast<mlir::ArrayAttr>(alternative), labels);
 
         LabelSet constraint;
         if (resolveLabelSet(labels, constraint)) {
@@ -2432,9 +2478,11 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
         throw IRException("Cannot perform CREATE outside of a write transaction.");
     }
 
+    llvm::SmallVector<llvm::StringRef, 4> names;
+    labelNames(createNode.getLabels(), names);
+
     LabelSet labelset;
-    for (const mlir::Attribute attr : createNode.getLabels()) {
-        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(attr).getValue();
+    for (const llvm::StringRef labelName : names) {
         const LabelID labelID = _metadataBuilder->getOrCreateLabel(labelName);
         labelset.set(labelID);
     }
@@ -2659,9 +2707,11 @@ void NLTranslator::translateMergeNodeSpec(mlir::ArrayAttr labels,
     LabelSet matchLabels;
     bool matchable = true;
 
+    llvm::SmallVector<llvm::StringRef, 4> names;
+    labelNames(labels, names);
+
     const LabelMap& graphLabels = _view->metadata().labels();
-    for (const mlir::Attribute attr : labels) {
-        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(attr).getValue();
+    for (const llvm::StringRef labelName : names) {
         writeLabels.set(_metadataBuilder->getOrCreateLabel(labelName));
 
         const std::optional<LabelID> graphLabel = graphLabels.get(labelName);
@@ -4877,9 +4927,7 @@ void NLTranslator::translateCountScanRows(nl::CountScanRows countScanRows, NLStm
 
     for (const mlir::Attribute scan : scans) {
         llvm::SmallVector<llvm::StringRef, 4> labels;
-        for (const mlir::Attribute label : mlir::cast<mlir::ArrayAttr>(scan)) {
-            labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
-        }
+        labelNames(mlir::cast<mlir::ArrayAttr>(scan), labels);
 
         LabelSet labelset;
         if (!resolveLabelSet(labels, labelset)) {

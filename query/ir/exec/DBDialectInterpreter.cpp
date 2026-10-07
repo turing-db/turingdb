@@ -23,7 +23,8 @@ DBDialectInterpreter::DBDialectInterpreter(const mlir::ModuleOp& module,
                                            CommitWriteBuffer* writeBuffer,
                                            MetadataBuilder* metadataBuilder,
                                            const ProcedureContext* procedureContext,
-                                           const NLSystemContext* system)
+                                           const NLSystemContext* system,
+                                           const ParameterMap* parameters)
     : _module(module),
     _view(view),
     _sink(sink),
@@ -32,7 +33,8 @@ DBDialectInterpreter::DBDialectInterpreter(const mlir::ModuleOp& module,
     _writeBuffer(writeBuffer),
     _metadataBuilder(metadataBuilder),
     _procedureContext(procedureContext),
-    _system(system)
+    _system(system),
+    _parameters(parameters)
 {
 }
 
@@ -67,7 +69,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLTranslator translator(&program, _memory, _view, _metadataBuilder, _procedureContext);
+        NLTranslator translator(&program, _memory, _view, _metadataBuilder, _procedureContext, _parameters);
         translator.translate(nlFunction);
 
         const TimePoint end = Clock::now();

@@ -15,6 +15,7 @@
 
 #include "EntityPattern.h"
 #include "NodePattern.h"
+#include "Parameter.h"
 #include "expr/Operators.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -40,6 +41,7 @@
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "DBSystemProgramGenerator.h"
+#include "StorageAttributes.h"
 #include "StorageDialect.h"
 #include "StorageEnums.h"
 #include "StorageTypes.h"
@@ -269,6 +271,27 @@ mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::stri
     }
 
     return builder.getStrArrayAttr(refs);
+}
+
+mlir::ArrayAttr labelRefsAttr(mlir::OpBuilder& builder, std::span<const LabelRef> labels) {
+    mlir::MLIRContext* const context = builder.getContext();
+    const mlir::Type labelType = mlir::storage::LabelIDType::get(context);
+
+    llvm::SmallVector<mlir::Attribute> refs;
+    for (const LabelRef& label : labels) {
+        const llvm::StringRef name(label._name.data(), label._name.size());
+        if (label._isParameter) {
+            refs.push_back(mlir::storage::ParameterAttr::get(context, name, labelType));
+        } else {
+            refs.push_back(builder.getStringAttr(name));
+        }
+    }
+
+    return builder.getArrayAttr(refs);
+}
+
+bool holdsParameter(std::span<const LabelRef> labels) {
+    return std::ranges::any_of(labels, [](const LabelRef& label) { return label._isParameter; });
 }
 
 // The stage a dump of one pass is reported under: "after fuse_scan_edges", or "after
@@ -1556,7 +1579,7 @@ void DBProgramGenerator::collectHopLabelMask(const NodePattern* node,
         return;
     }
 
-    const std::span<const std::string_view> labels = data->labelConstraints();
+    const std::span<const LabelRef> labels = data->labelConstraints();
     if (labels.empty()) {
         return;
     }
@@ -1566,13 +1589,7 @@ void DBProgramGenerator::collectHopLabelMask(const NodePattern* node,
     const mlir::db::ColumnType labelSetIDType = allocColumnType(mlir::storage::LabelSetIDType::get(_mlirCtxt));
     const mlir::Value labelSetIDs = _opBuilder.create<mlir::db::GetNodeLabelSet>(loc, labelSetIDType, column).getResult();
 
-    llvm::SmallVector<llvm::StringRef> labelNames;
-    for (const std::string_view label : labels) {
-        labelNames.push_back(llvm::StringRef(label.data(), label.size()));
-    }
-
-    const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
-    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({labelsAttr});
+    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({labelRefsAttr(_opBuilder, labels)});
     masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, alternatives).getResult());
 }
 
@@ -4255,7 +4272,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
 
 void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
                                               mlir::Value column,
-                                              llvm::ArrayRef<llvm::StringRef> labelNames,
+                                              std::span<const LabelRef> labels,
                                               llvm::StringRef edgeType,
                                               llvm::ArrayRef<llvm::StringRef> propNames,
                                               llvm::ArrayRef<mlir::Value> propValues) {
@@ -4267,9 +4284,12 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
     PartScope::WrittenEntity& written = _part._writtenEntities[decl];
 
     written._labels.clear();
-    written._labels.reserve(labelNames.size());
-    for (const llvm::StringRef labelName : labelNames) {
-        written._labels.emplace_back(labelName.data(), labelName.size());
+    written._labels.reserve(labels.size());
+    written._labelsKnown = !holdsParameter(labels);
+    for (const LabelRef& label : labels) {
+        if (!label._isParameter) {
+            written._labels.emplace_back(label._name);
+        }
     }
 
     written._edgeType.assign(edgeType.begin(), edgeType.end());
@@ -4522,14 +4542,9 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
         return;
     }
 
-    llvm::SmallVector<llvm::StringRef> labelNames;
-    for (const std::string_view label : data->labelConstraints()) {
-        labelNames.push_back(llvm::StringRef(label.data(), label.size()));
-    }
-
     collectMergeProperties(data, node);
 
-    pattern._nodeLabels.push_back(_opBuilder.getStrArrayAttr(labelNames));
+    pattern._nodeLabels.push_back(labelRefsAttr(_opBuilder, data->labelConstraints()));
     pattern._nodePropNames.push_back(_opBuilder.getStrArrayAttr(node._propNames));
     pattern._nodePropValues.append(node._propValues.begin(), node._propValues.end());
     pattern._nodes.push_back(node);
@@ -4771,18 +4786,11 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
             return knownVars.at(decl);
         }
 
-        llvm::SmallVector<llvm::StringRef> labelNames;
-        const SymbolChain* labels = node->labels();
-        if (labels) {
-            for (const Symbol* sym : *labels) {
-                const std::string_view symName = sym->getName();
-                labelNames.push_back(llvm::StringRef(symName.data(), symName.size()));
-            }
-        }
+        const NodePatternData* data = node->getData();
+        const std::span<const LabelRef> labels = data ? data->labelConstraints() : std::span<const LabelRef> {};
 
         llvm::SmallVector<llvm::StringRef> propNames;
         llvm::SmallVector<mlir::Value> propValues;
-        const NodePatternData* data = node->getData();
         if (data) {
             for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
                 translateExpr(constraint._expr);
@@ -4797,7 +4805,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         mlir::db::CreateNode createNode = _opBuilder.create<mlir::db::CreateNode>(
             loc,
             nodeIDType,
-            _opBuilder.getStrArrayAttr(labelNames),
+            labelRefsAttr(_opBuilder, labels),
             _opBuilder.getStrArrayAttr(propNames),
             mlir::ValueRange{propValues},
             cardinality);
@@ -4805,7 +4813,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
 
         if (decl) {
             knownVars[decl] = nodeValue;
-            publishCreatedEntity(decl, nodeValue, labelNames, {}, propNames, propValues);
+            publishCreatedEntity(decl, nodeValue, labels, {}, propNames, propValues);
         }
 
         return nodeValue;
@@ -4940,7 +4948,7 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
 }
 
 mlir::Value DBProgramGenerator::checkNodeLabels(mlir::Value nodeColumn,
-                                                std::span<const std::string_view> labels,
+                                                std::span<const LabelRef> labels,
                                                 bool nullable) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType labelSetIDType =
@@ -4952,7 +4960,7 @@ mlir::Value DBProgramGenerator::checkNodeLabels(mlir::Value nodeColumn,
         labelSetIDType,
         nodeColumn).getResult();
 
-    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({strArrayAttr(_opBuilder, labels)});
+    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({labelRefsAttr(_opBuilder, labels)});
 
     return _opBuilder.create<mlir::db::CheckLabelConstraint>(
         loc,
@@ -8934,8 +8942,14 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     bioassert(types && !types->empty(), "Type test naming no type.");
 
     llvm::SmallVector<std::string_view> typeNames;
+    llvm::SmallVector<LabelRef> labelRefs;
     for (const Symbol* symbol : *types) {
         typeNames.push_back(symbol->getName());
+        labelRefs.emplace_back(symbol->getName(), false);
+    }
+
+    for (const Parameter* parameter : types->getParameters()) {
+        labelRefs.emplace_back(parameter->getName(), true);
     }
 
     if (const Expr* operand = typeExpr->getOperand()) {
@@ -8948,7 +8962,7 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
             return checkEdgeType(fetchEdgeTypeColumn(entityColumn), typeNames, true);
         }
 
-        return checkNodeLabels(entityColumn, typeNames, true);
+        return checkNodeLabels(entityColumn, labelRefs, true);
     }
 
     const VarDecl* entityDecl = typeExpr->getEntityVarDecl();
@@ -8959,11 +8973,13 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     const bool isEdge = entityType == EvaluatedType::EdgePattern;
     bioassert(isNode || isEdge, "Type test on non-entity variable: {}", varName);
 
-    // What the query wrote is in no graph the test would read, so the labels and the type
-    // the CREATE spelled decide it here, laid out over the rows the entity carries
+    // The labels and the type the CREATE spelled answer a test on what the query wrote
+    // without a read, laid out over the rows the entity carries. A parameter on either
+    // side has no answer before it is bound, so that test reads the pending entity instead
     const PartScope::WrittenEntity* written = findWrittenEntity(entityDecl);
     const bool writtenTypesKnown = written && (isNode ? !written->_labels.empty() : !written->_edgeType.empty());
-    if (writtenTypesKnown) {
+    const bool boundAtRuntime = isNode && (holdsParameter(labelRefs) || (written && !written->_labelsKnown));
+    if (writtenTypesKnown && !boundAtRuntime) {
         const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
         const mlir::Value answer = constantBool(writtenEntityHasTypes(*written, typeNames, isNode));
 
@@ -8980,7 +8996,7 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     const mlir::Value nodeColumn = resolveEntityColumn(entityDecl);
     bioassert(nodeColumn, "Label test on unknown variable: {}", varName);
 
-    return checkNodeLabels(nodeColumn, typeNames, true);
+    return checkNodeLabels(nodeColumn, labelRefs, true);
 }
 
 void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,

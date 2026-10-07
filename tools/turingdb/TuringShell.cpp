@@ -992,7 +992,7 @@ void TuringShell::processLine(std::string& line) {
 
     } else {
         TuringShellNLSink sink(table, rowCount, _quiet);
-        const QueryState state(_graphName, _mem, &_compilerContext, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID);
+        const QueryState state(_graphName, _mem, &_compilerContext, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID, &_parameters);
         res = _turingDB.query(line, state);
     }
 
@@ -1114,7 +1114,7 @@ void TuringShell::printParameters() const {
 
         table.startRow();
         table.addCell(entry->first);
-        table.addCell(value.isNull() ? "Null" : ValueTypeName::value(value.getType()));
+        table.addCell(value.getTypeName());
 
         std::string valueText;
         asString(valueText, value);

@@ -23,7 +23,6 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringSet.h"
 
 #include "CardinalityEstimation.h"
 #include "metadata/GraphMetadata.h"
@@ -3653,25 +3652,27 @@ struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<Fuse
     }
 };
 
-void addLabelNames(ArrayAttr names, llvm::StringSet<>& labels) {
+// A label is known by its attribute: a name, or a parameter, which binds the same value
+// wherever the program writes it
+void addLabelNames(ArrayAttr names, llvm::DenseSet<Attribute>& labels) {
     for (const Attribute name : names) {
-        labels.insert(cast<StringAttr>(name).getValue());
+        labels.insert(name);
     }
 }
 
-void addSharedLabelNames(ArrayAttr alternatives, llvm::StringSet<>& labels) {
+void addSharedLabelNames(ArrayAttr alternatives, llvm::DenseSet<Attribute>& labels) {
     for (const Attribute label : cast<ArrayAttr>(alternatives[0])) {
         const auto asksFor = [label](Attribute alternative) {
             return llvm::is_contained(cast<ArrayAttr>(alternative), label);
         };
 
         if (llvm::all_of(alternatives, asksFor)) {
-            labels.insert(cast<StringAttr>(label).getValue());
+            labels.insert(label);
         }
     }
 }
 
-void addFilterLabels(FilterOp filter, Value filtered, llvm::StringSet<>& labels) {
+void addFilterLabels(FilterOp filter, Value filtered, llvm::DenseSet<Attribute>& labels) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
@@ -3690,7 +3691,7 @@ void addFilterLabels(FilterOp filter, Value filtered, llvm::StringSet<>& labels)
 
 // The labels every node of a column carries, known from where its rows come from: the
 // by-label read that made them and each label filter they passed on the way.
-void collectKnownLabels(Value column, llvm::StringSet<>& labels) {
+void collectKnownLabels(Value column, llvm::DenseSet<Attribute>& labels) {
     constexpr size_t srcResultIndex = 0;
     constexpr size_t tgtResultIndex = 3;
 
@@ -3763,11 +3764,11 @@ bool matchRedundantLabelCheck(FilterOp filter, RedundantLabelCheck& redundant) {
         return false;
     }
 
-    llvm::StringSet<> knownLabels;
+    llvm::DenseSet<Attribute> knownLabels;
     collectKnownLabels(labelSet.getInputNodes(), knownLabels);
 
     const auto isKnown = [&knownLabels](Attribute label) {
-        return knownLabels.contains(cast<StringAttr>(label).getValue());
+        return knownLabels.contains(label);
     };
 
     const auto isGuaranteed = [&isKnown](Attribute alternative) {
@@ -6646,7 +6647,12 @@ bool factorHoldsAProduct(Region& factor) {
 void collectScanLabels(ArrayAttr labelNames, const ::db::GraphMetadata& metadata, ::db::LabelSet& labels) {
     const ::db::LabelMap& labelMap = metadata.labels();
     for (const Attribute labelAttr : labelNames) {
-        const llvm::StringRef name = cast<StringAttr>(labelAttr).getValue();
+        const StringAttr nameAttr = dyn_cast<StringAttr>(labelAttr);
+        if (!nameAttr) {
+            continue;
+        }
+
+        const llvm::StringRef name = nameAttr.getValue();
         const std::optional<::db::LabelID> label = labelMap.get(std::string_view(name.data(), name.size()));
 
         if (label) {

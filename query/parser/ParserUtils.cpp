@@ -28,6 +28,7 @@
 #include "EdgePattern.h"
 #include "Literal.h"
 #include "NodePattern.h"
+#include "Parameter.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Projection.h"
@@ -576,4 +577,10 @@ void ParserUtils::extendComparisonChain(CypherAST* ast,
     chain._rightOperandLocation = rhsLocation;
 
     sourceManager->setLocation(chain._expr, chainLocation);
+}
+
+Parameter* ParserUtils::createNumberedParameter(CypherAST* ast, int64_t number) {
+    std::string* name = ast->createString();
+    name->assign(std::to_string(number));
+    return Parameter::create(ast, *name);
 }

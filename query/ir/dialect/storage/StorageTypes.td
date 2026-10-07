@@ -5,6 +5,7 @@ include "mlir/IR/AttrTypeBase.td"
 
 include "StorageDialect.td"
 include "StorageEnums.td"
+include "StorageAttributes.td"
 
 class StorageType<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<Storage, name, traits> {
@@ -207,5 +208,16 @@ def MapElement : StorageType<"MapElement", "map_element"> {
 // or the property names of each node and each hop. Both db.merge and nl.merge carry
 // these lists, so the constraint lives beside the types the two dialects share.
 def StrArrayArrayAttr : TypedArrayAttrBase<StrArrayAttr, "array of string arrays">;
+
+// A parameter standing in a label list carries the label type: what it binds is checked
+// against that type when the program runs, and nothing else may be written there
+def LabelParameterAttr : Attr<
+    And<[ParameterAttr.predicate,
+         CPred<"::llvm::isa<::mlir::storage::LabelIDType>(::llvm::cast<::mlir::storage::ParameterAttr>($_self).getType())">]>,
+    "parameter of label type">;
+
+def LabelRef : AnyAttrOf<[StrAttr, LabelParameterAttr], "label name or parameter of label type">;
+def LabelRefArrayAttr : TypedArrayAttrBase<LabelRef, "array of label names or parameters">;
+def LabelRefArrayArrayAttr : TypedArrayAttrBase<LabelRefArrayAttr, "array of label conjunctions">;
 
 #endif // STORAGE_TYPES

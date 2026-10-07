@@ -19,6 +19,7 @@ class ListLiteral;
 class MapLiteral;
 class NodePattern;
 class Pattern;
+class Parameter;
 class PatternElement;
 class PropertyExpr;
 class SetStmt;
@@ -42,6 +43,9 @@ public:
     ~ParserUtils() = delete;
 
     static EmbeddingLiteral* listExprToEmbeddingLiteral(CypherAST* ast, const ListLiteral* list);
+
+    // A parameter written as $0, $1, ... is looked up under the digits as its name
+    static Parameter* createNumberedParameter(CypherAST* ast, int64_t number);
 
     // Folds a repeated ON CREATE / ON MATCH clause into the one already held for that
     // outcome, so a MERGE keeps a single SET clause per branch

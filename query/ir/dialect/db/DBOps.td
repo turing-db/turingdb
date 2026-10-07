@@ -50,7 +50,7 @@ def ScanNodesByLabel : TuringOp<"scan_nodes_by_label", [Pure]> {
   // `labels` is the set of symbolic label names. Being an attribute and not an
   // SSA value, it is absent from `operands`; lowering resolves each name to a
   // storage LabelID.
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
   let results   = (outs ColumnNodeIDs:$result);
   let hasVerifier = 1;
 
@@ -171,7 +171,7 @@ def ScanNodesByPropertyValue : TuringOp<"scan_nodes_by_property_value", [Pure]> 
     read, so the op is Pure.
   }];
 
-  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<StrArrayAttr>:$labels);
+  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<LabelRefArrayAttr>:$labels);
   let results   = (outs ColumnNodeIDs:$result);
   let hasVerifier = 1;
 
@@ -888,7 +888,7 @@ def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [Pure, Decl
   // `labels` is the set of symbolic label names the source nodes must carry. Being
   // an attribute and not an SSA value, the op still has no operands; lowering
   // resolves each name to a storage LabelID.
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
 
   let results = (outs ColumnNodeIDs:$srcids,
                       ColumnEdgeIDs:$eids,
@@ -930,7 +930,7 @@ def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [Pure, Declar
     db.scan_edges.
   }];
 
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
 
   let results = (outs ColumnNodeIDs:$srcids,
                       ColumnEdgeIDs:$eids,
@@ -969,7 +969,7 @@ def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [Pure, Decl
     db.scan_edges.
   }];
 
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
 
   let results = (outs ColumnNodeIDs:$srcids,
                       ColumnEdgeIDs:$eids,
@@ -1007,7 +1007,7 @@ def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [Pure, Declar
     db.scan_edges.
   }];
 
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
 
   let results = (outs ColumnNodeIDs:$srcids,
                       ColumnEdgeIDs:$eids,
@@ -1233,7 +1233,7 @@ def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInte
   // `labels` is the label conjunction the target must carry, spelled as in the query.
   // Being an attribute and not an SSA value, it is absent from `operands`; lowering
   // hands the list to the nl hop, which resolves each name once.
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1271,7 +1271,7 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
     absent name yields no rows.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1305,7 +1305,7 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
     match get_out_edges.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1337,7 +1337,7 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
     as on get_in_edges_by_label.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1463,8 +1463,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
                        OptionalAttr<StrArrayArrayAttr>:$edge_types,
-                       OptionalAttr<StrArrayAttr>:$end_labels,
-                       OptionalAttr<StrArrayArrayAttr>:$hop_labels,
+                       OptionalAttr<LabelRefArrayAttr>:$end_labels,
+                       OptionalAttr<LabelRefArrayArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
@@ -1798,7 +1798,7 @@ def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
     null rather than false, as a label test written in an expression must.
   }];
 
-  let arguments = (ins Column:$labelset_ids, StrArrayArrayAttr:$alternatives, UnitAttr:$nullable);
+  let arguments = (ins Column:$labelset_ids, LabelRefArrayArrayAttr:$alternatives, UnitAttr:$nullable);
   let results   = (outs Column:$result);
 
   let hasVerifier = 1;
@@ -2502,7 +2502,7 @@ def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
   // `labels` is one label conjunction per scan, `property` the name whose holders one
   // of them is narrowed to and `propertyScan` which one. Being attributes and not SSA
   // values, they are absent from `operands`; lowering forwards them as-is.
-  let arguments = (ins StrArrayArrayAttr:$labels,
+  let arguments = (ins LabelRefArrayArrayAttr:$labels,
                        OptionalAttr<StrAttr>:$property,
                        OptionalAttr<UI64Attr>:$propertyScan);
   let results   = (outs Column:$result);
@@ -3114,7 +3114,7 @@ def CreateNode : TuringOp<"create_node", [AttrSizedOperandSegments]> {
                 : (!db.column<none>) -> !db.column<!storage.node_id>
   }];
 
-  let arguments = (ins StrArrayAttr:$labels,
+  let arguments = (ins LabelRefArrayAttr:$labels,
                        StrArrayAttr:$prop_names,
                        Variadic<Column>:$prop_values,
                        Optional<Column>:$cardinality);
@@ -3222,7 +3222,7 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
     them and one it emitted nothing for drops them.
   }];
 
-  let arguments = (ins StrArrayArrayAttr:$node_labels,
+  let arguments = (ins LabelRefArrayArrayAttr:$node_labels,
                        StrArrayArrayAttr:$node_prop_names,
                        StrArrayAttr:$edge_types,
                        StrArrayArrayAttr:$edge_prop_names,

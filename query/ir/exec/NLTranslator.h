@@ -18,6 +18,10 @@
 
 #include "NLProgram.h"
 
+namespace mlir::storage {
+class ParameterAttr;
+}
+
 namespace db {
 
 class LocalMemory;
@@ -25,6 +29,7 @@ class GraphView;
 class MetadataBuilder;
 class NLSystemTranslator;
 class Procedure;
+class ParameterMap;
 class ProcedureContext;
 
 // Translates an MLIR func.func in the nl dialect into an NLProgram
@@ -34,7 +39,8 @@ public:
                  LocalMemory* memory,
                  const GraphView* view,
                  MetadataBuilder* metadataBuilder = nullptr,
-                 const ProcedureContext* procedureContext = nullptr);
+                 const ProcedureContext* procedureContext = nullptr,
+                 const ParameterMap* parameters = nullptr);
     ~NLTranslator();
 
     void translate(const mlir::func::FuncOp& function);
@@ -125,7 +131,8 @@ private:
         // iterator filters by, or the end labels an ExplorePaths iterator keeps to; empty
         // for the other kinds. These are views into the op's interned StringAttr storage,
         // which the MLIRContext keeps alive for the whole translation; they are resolved to
-        // a LabelSet as soon as the loop is translated.
+        // a LabelSet as soon as the loop is translated. A name a parameter binds views the
+        // parameter map's string instead, which the caller keeps alive as long.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
         // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
@@ -199,6 +206,10 @@ private:
     // is resolved against. Null when the caller runs without procedures, which only
     // a function containing an nl.procedure notices.
     const ProcedureContext* _procedureContext {nullptr};
+
+    // The values bound to the program's parameters, borrowed from the caller. Null when
+    // it runs without any, which only a parameter in the program notices.
+    const ParameterMap* _parameters {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
 
     // The clock is read once for the whole program, so a query calling datetime() more
@@ -309,6 +320,12 @@ private:
     // Resolve label names into the LabelSet a scan filters by. A node matches when its
     // label set is a superset of this one, so the names are ANDed; false when a name is
     // absent from the schema, which leaves the conjunction unsatisfiable.
+    // The names a label list resolves to: each string as it is, each parameter as the
+    // String or the Strings the parameter map binds to it
+    void labelNames(mlir::ArrayAttr labels, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    void bindLabelParameter(mlir::storage::ParameterAttr parameter, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    void addBoundLabel(llvm::StringRef parameterName, const std::string& label, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+
     bool resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, LabelSet& labelset) const;
 
     // Translate the nl.for over an nl.unwind_const iterator: allocate the single

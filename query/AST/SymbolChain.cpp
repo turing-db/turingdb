@@ -21,3 +21,7 @@ SymbolChain* SymbolChain::create(CypherAST* ast) {
 void SymbolChain::add(Symbol* symbol) {
     _symbols.push_back(symbol);
 }
+
+void SymbolChain::addParameter(Parameter* parameter) {
+    _parameters.push_back(parameter);
+}
