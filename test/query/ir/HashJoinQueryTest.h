@@ -9,6 +9,7 @@
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OwningOpRef.h"
 
 #include "ProcedureManager.h"
 
@@ -39,6 +40,7 @@ public:
 protected:
     void initialize() override;
 
+    void dbModule(std::string_view query, mlir::OwningOpRef<mlir::ModuleOp>& module);
     void dbProgram(std::string_view query, std::string& program);
     void nlProgram(std::string_view query, std::string& program);
 

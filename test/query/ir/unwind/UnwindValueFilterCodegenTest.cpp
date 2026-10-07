@@ -265,15 +265,15 @@ TEST_F(UnwindValueFilterCodegenTest, dropsTheElementsWhenNothingProjectsThem) {
 
 // A part that continues from a WITH crosses the rows it published with the unwind and its
 // scan, so that unwind is a factor of an inner product rather than of the one its equality
-// reads - which this match does not see through. The leading part still folds.
-TEST_F(UnwindValueFilterCodegenTest, foldsOnlyTheUnwindThatIsAFactorOfItsOwnProduct) {
+// reads. regroup_products moves the equality onto the inner product, where it folds too.
+TEST_F(UnwindValueFilterCodegenTest, foldsTheUnwindOfAPartContinuingFromAWith) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("UNWIND [32] AS a MATCH (n {age: a}) "
                  "WITH n UNWIND ['Remy'] AS nm MATCH (m {name: nm}) RETURN n.name, m.name");
 
-    // The published rows crossed with the second part's own product of the list and its scan.
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 2u);
-    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
+    // The published rows crossed with the second part's scan, which the list now filters.
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
 }
 
 TEST_F(UnwindValueFilterCodegenTest, filtersTwoUnwindsOfOneQuery) {

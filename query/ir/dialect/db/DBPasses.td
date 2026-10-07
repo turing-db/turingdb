@@ -13,6 +13,16 @@ def PushDownFilters : Pass<"push_down_filters"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def SinkUnwinds : Pass<"sink_unwinds"> {
+    let summary = "Unwind a list over a cross product in the factor it is read from, or in a factor of its own when it reads no row";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def RegroupProducts : Pass<"regroup_products"> {
+    let summary = "Move a filter over a cross product into the factor it reads, crossing first the two factors a nested product's filter relates";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseUnwindEquality : Pass<"fuse_unwind_equality"> {
     let summary = "Replace a constant unwind crossed into one equality by that equality's disjunction";
     let dependentDialects = ["mlir::db::DB"];
