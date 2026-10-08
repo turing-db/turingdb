@@ -257,6 +257,8 @@ private:
             // The step of the walk's body the list reads off each repetition
             size_t _step {0};
             size_t _steps {1};
+
+            bool readsAsItsEdges() const { return _kind == mlir::storage::PathExpansionKind::Edges && !_reversed && _steps == 1; }
         };
 
         std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
@@ -868,9 +870,9 @@ private:
 
     void bindCSVRowItems(const Projection* projection,
                          VariableColumnMap& itemColumns,
-                         llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const;
+                         llvm::SmallVectorImpl<PublishedColumn>& carriedColumns);
 
-    mlir::Value findCSVRowColumn(const VarDecl* row) const;
+    mlir::Value findCSVRowColumn(const VarDecl* row);
 
     bool carriesCSVRow(const VarDecl* row, const VarDecl* decl, std::string_view name) const;
 
@@ -903,7 +905,7 @@ private:
 
     // Every column in scope, deduplicated by name and in name order so the columns a cut
     // or an OPTIONAL MATCH carries are the query's choice and not the addresses'
-    void collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published) const;
+    void collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published);
 
     // Drops the scope and opens a fresh one holding these columns alone: what a barrier or
     // a cut publishes, and what an OPTIONAL MATCH hands to its pattern and then to the rest
@@ -1304,6 +1306,10 @@ private:
     // or - when it holds paths - the list each path expands to for the variable of
     // @param decl
     mlir::Value listColumnOf(const VarDecl* decl, mlir::Value column);
+
+    // The column a variable leaves its scope as: a path column goes out as its list unless
+    // it reads as its edges, the one reading a path column keeps once its binding is gone
+    mlir::Value columnLeavingScope(const VarDecl* decl, mlir::Value column);
 
     // Expands every projected path column into its list, for the consumers that key on
     // the projection's rows
