@@ -34,6 +34,11 @@ private:
     void initDefault();
 
     FunctionSignature* createFunction(std::string_view fullName);
+
+    // One overload per way of typing the arguments, position i taking any of positionTypes[i]
+    void createOverloads(std::string_view fullName,
+                         const std::vector<std::vector<EvaluatedType>>& positionTypes,
+                         std::vector<FunctionSignature*>& overloads);
 };
 
 }

@@ -52,6 +52,32 @@ bool isContinuationByte(const char byte) {
     return (static_cast<unsigned char>(byte) & 0xC0) == 0x80;
 }
 
+size_t characterOffset(const types::String::Primitive string, const size_t characters) {
+    size_t seen = 0;
+
+    for (size_t offset = 0; offset < string.size(); offset++) {
+        if (isContinuationByte(string[offset])) {
+            continue;
+        }
+
+        if (seen == characters) {
+            return offset;
+        }
+
+        seen++;
+    }
+
+    return string.size();
+}
+
+size_t characterArgument(const types::Int64::Primitive value, std::string_view functionName) {
+    if (value < 0) {
+        throw TuringException(fmt::format("{}() takes no negative position or length, and this row holds {}", functionName, value));
+    }
+
+    return static_cast<size_t>(value);
+}
+
 ListElementView stageCell(QueryListBuffer* listBuffer, const QueryListBuffer::ListItemVariant& element) {
     return listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&element, 1}).front();
 }
@@ -218,6 +244,21 @@ std::optional<types::String::Primitive> db::cellString(const ListElementView cel
     throwCellTypeError(functionName, "a string");
 }
 
+std::optional<types::Int64::Primitive> db::cellInteger(const ListElementView cell, std::string_view functionName) {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::Int) {
+        return cell.getAs<types::Int64::Primitive>();
+    } else if (tag == ListBufferTypeTag::UInt) {
+        const types::UInt64::Primitive value = cell.getAs<types::UInt64::Primitive>();
+        return static_cast<types::Int64::Primitive>(std::min<types::UInt64::Primitive>(value, std::numeric_limits<types::Int64::Primitive>::max()));
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError(functionName, "an integer");
+}
+
 std::string_view db::floatFunctionName(FloatFunctionKind kind) {
     switch (kind) {
         case FloatFunctionKind::Ceil:
@@ -363,6 +404,20 @@ TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const ArgTyp
 
 TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const std::optional<ArgType>& cell) const {
     return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+SubstringFunction::ResultType SubstringFunction::operator()(types::String::Primitive string,
+                                                            types::Int64::Primitive start,
+                                                            types::Int64::Primitive length) const {
+    const size_t startChar = characterArgument(start, NAME);
+    const size_t charCount = characterArgument(length, NAME);
+
+    const size_t startOffset = characterOffset(string, startChar);
+    const types::String::Primitive rest = string.substr(startOffset);
+
+    const size_t endOffset = characterOffset(rest, charCount);
+
+    return rest.substr(0, endOffset);
 }
 
 ReverseFunction::ReverseFunction(StringBuffer* stringBuffer)

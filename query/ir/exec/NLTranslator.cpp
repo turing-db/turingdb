@@ -945,6 +945,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateDynamicMapKey(dynamicMapKey, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
             translateRange(range, body);
+        } else if (nl::Substring substring = mlir::dyn_cast<nl::Substring>(operation)) {
+            translateSubstring(substring, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
@@ -3286,6 +3288,29 @@ void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
                                                                  bound(range.getStep()));
 
     body->emplaceStmt(&NLExecutor::runRange, data);
+}
+
+void NLTranslator::translateSubstring(nl::Substring substring, NLStmtContainer* body) {
+    const mlir::Value resultValue = substring.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const Column* const string = getColumn(substring.getString());
+    const Column* const start = getColumn(substring.getStart());
+
+    NLSubstringData::IntegerArgument length;
+    if (const mlir::Value lengthValue = substring.getLength()) {
+        length._column = getColumn(lengthValue);
+        length._read = NLExecutor::selectIntegerArgumentRead(length._column);
+    }
+
+    const NLSubstringData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
+    const NLSubstringData::IntegerArgument startArgument {start, NLExecutor::selectIntegerArgumentRead(start)};
+
+    NLSubstringData* data = _program->allocFunctionData<NLSubstringData>(result, stringArgument, startArgument, length);
+
+    body->emplaceStmt(&NLExecutor::runSubstring, data);
 }
 
 template <typename Data, typename Op, typename... Extra>

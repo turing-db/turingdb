@@ -8990,6 +8990,9 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     if (funcName == "range") {
         translateRange(expr, args);
         return;
+    } else if (funcName == "substring") {
+        translateSubstring(expr, args);
+        return;
     }
 
     const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
@@ -9088,6 +9091,30 @@ void DBProgramGenerator::translateRange(const Expr* expr, const ExprChain* args)
                                                                step);
 
     _part._exprMap[expr] = range.getResult();
+}
+
+void DBProgramGenerator::translateSubstring(const Expr* expr, const ExprChain* args) {
+    const size_t argCount = args ? args->size() : 0;
+    const bool argumentsGiven = argCount == 2 || argCount == 3;
+    if (!argumentsGiven) {
+        throwError("substring() expects 2 or 3 arguments.", expr);
+    }
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value string = translateArg(argExprs[0]);
+    const mlir::Value start = translateArg(argExprs[1]);
+    const mlir::Value length = argExprs.size() == 3 ? translateArg(argExprs[2]) : mlir::Value {};
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+
+    mlir::db::Substring substring = _opBuilder.create<mlir::db::Substring>(_opBuilder.getUnknownLoc(),
+                                                                           allocColumnType(stringType),
+                                                                           string,
+                                                                           start,
+                                                                           length);
+
+    _part._exprMap[expr] = substring.getResult();
 }
 
 void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {

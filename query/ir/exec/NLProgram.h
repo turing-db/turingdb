@@ -3966,6 +3966,50 @@ private:
     std::vector<Element> _elements;
 };
 
+using NLStringArgumentRead = std::optional<types::String::Primitive> (*)(const Column* input,
+                                                                        size_t row,
+                                                                        std::string_view functionName);
+
+using NLIntegerArgumentRead = std::optional<types::Int64::Primitive> (*)(const Column* input,
+                                                                        size_t row,
+                                                                        std::string_view functionName);
+
+class NLSubstringData : public NLFunctionData {
+public:
+    struct StringArgument {
+        const Column* _column {nullptr};
+        NLStringArgumentRead _read {nullptr};
+    };
+
+    struct IntegerArgument {
+        const Column* _column {nullptr};
+        NLIntegerArgumentRead _read {nullptr};
+    };
+
+    NLSubstringData(Column* result,
+                    const StringArgument& string,
+                    const IntegerArgument& start,
+                    const IntegerArgument& length)
+        : _result(result),
+        _string(string),
+        _start(start),
+        _length(length)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+
+    const StringArgument& getString() const { return _string; }
+    const IntegerArgument& getStart() const { return _start; }
+    const IntegerArgument& getLength() const { return _length; }
+
+private:
+    Column* _result {nullptr};
+    StringArgument _string;
+    IntegerArgument _start;
+    IntegerArgument _length;
+};
+
 // Read the cell one value column holds at @param row as the value the map buffer stores
 // for it. The map sibling of NLListItemReadFunction.
 using NLMapValueReadFunction = MapBuffer<>::MapItemVariant (*)(const Column* input,

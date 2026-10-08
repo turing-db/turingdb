@@ -2782,6 +2782,15 @@ def LTrim : NLUnaryFunctionOp<"ltrim", [ConstantThroughOperands]>;
 def RTrim : NLUnaryFunctionOp<"rtrim", [ConstantThroughOperands]>;
 def Reverse : NLUnaryFunctionOp<"reverse", [ConstantThroughOperands]>;
 
+def Substring : NLOp<"substring", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise substring [start, start + length)";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$start, Optional<NLChunk>:$length);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $start (`,` $length^)? attr-dict `:` functional-type(operands, results)";
+}
+
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 

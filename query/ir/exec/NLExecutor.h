@@ -395,6 +395,8 @@ public:
     // holds at r, in operand order, as one contiguous run of the query's list buffer.
     static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runSubstring(NLExecutionContext* context, NLFunctionData* data);
+
     // Build one map per row (nl.make_map): row r of the result maps each key to what its
     // value column holds at r, as one contiguous run of the query's map buffer.
     static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
@@ -413,6 +415,9 @@ public:
     static NLListReadFunction selectListRead(const Column* input);
     static NLMapReadFunction selectMapRead(const Column* input);
     static NLStringReadFunction selectStringRead(const Column* input);
+
+    static NLStringArgumentRead selectStringArgumentRead(const Column* input);
+    static NLIntegerArgumentRead selectIntegerArgumentRead(const Column* input);
 
     // Build one list per row (nl.list_comprehension): the body runs over the elements of
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own

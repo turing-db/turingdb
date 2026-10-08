@@ -643,6 +643,17 @@ void FunctionDecls::initDefault() {
     reverseCell->setArguments({EvaluatedType::ListItem});
     reverseCell->setReturnTypes({{EvaluatedType::ListItem}});
 
+    const std::vector<EvaluatedType> stringOrCell = {EvaluatedType::String, EvaluatedType::ListItem};
+    const std::vector<EvaluatedType> integerOrCell = {EvaluatedType::Integer, EvaluatedType::ListItem};
+
+    std::vector<FunctionSignature*> substrings;
+    createOverloads("substring", {stringOrCell, integerOrCell, integerOrCell}, substrings);
+
+    for (FunctionSignature* substring : substrings) {
+        substring->setRequiredArgCount(2);
+        substring->setReturnTypes({{EvaluatedType::String}});
+    }
+
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they
     // share is what the call returns.
@@ -668,6 +679,29 @@ FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
     _nameMap[fullName].push_back(ptr);
 
     return ptr;
+}
+
+void FunctionDecls::createOverloads(std::string_view fullName,
+                                    const std::vector<std::vector<EvaluatedType>>& positionTypes,
+                                    std::vector<FunctionSignature*>& overloads) {
+    size_t overloadCount = 1;
+    for (const std::vector<EvaluatedType>& types : positionTypes) {
+        overloadCount *= types.size();
+    }
+
+    for (size_t overloadIndex = 0; overloadIndex < overloadCount; overloadIndex++) {
+        FunctionSignature::ArgumentTypes arguments;
+
+        size_t remaining = overloadIndex;
+        for (const std::vector<EvaluatedType>& types : positionTypes) {
+            arguments.emplace_back(types[remaining % types.size()]);
+            remaining /= types.size();
+        }
+
+        FunctionSignature* overload = createFunction(fullName);
+        overload->setArguments(std::move(arguments));
+        overloads.push_back(overload);
+    }
 }
 
 FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(std::string_view fullName) const {
