@@ -98,6 +98,9 @@ NLExploreStep::NLExploreStep(PathExplorationDir direction,
 {
 }
 
+NLExploreStep::~NLExploreStep() {
+}
+
 NLExploreStep* NLExplorePathsLoopData::addStep(PathExplorationDir direction,
                                                bool filtersByType,
                                                std::span<const EdgeTypeID> edgeTypes,

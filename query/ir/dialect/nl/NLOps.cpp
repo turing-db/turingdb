@@ -416,17 +416,12 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("max_hops must be at least min_hops");
     }
 
+    MutableArrayRef<Region> hops = getHops();
+    if (failed(verifyPathSteps(getOperation(), getDirections(), hops.size()))) {
+        return failure();
+    }
+
     const size_t stepCount = getStepCount();
-    if (stepCount == 0) {
-        return emitOpError("must take at least one step");
-    }
-
-    for (const int64_t direction : getDirections()) {
-        if (!storage::symbolizePathDirection(static_cast<uint64_t>(direction))) {
-            return emitOpError("unknown path direction ") << direction;
-        }
-    }
-
     const size_t edgeTypeCount = getEdgeTypes().size();
     if (const std::optional<llvm::ArrayRef<int64_t>> typedSteps = getEdgeTypeSteps()) {
         if (typedSteps->size() != edgeTypeCount) {
@@ -470,11 +465,6 @@ LogicalResult ExplorePaths::verify() {
 
     const OperandRange imports = getHopImports();
 
-    MutableArrayRef<Region> hops = getHops();
-    if (hops.size() != stepCount) {
-        return emitOpError("expects one hop region per step");
-    }
-
     const bool hasPredicate = hasHopPredicate(hops);
     if (!hasPredicate) {
         if (!imports.empty()) {
@@ -500,19 +490,8 @@ LogicalResult ExplorePaths::verify() {
         }
 
         Block& block = hop.front();
-        llvm::SmallVector<Type> expectedArguments;
-        buildHopArgumentTypes(step, nodeChunk, edgeChunk, imports, expectedArguments);
-
-        if (block.getNumArguments() != expectedArguments.size()) {
-            return emitOpError("hop region ") << step << " must take the node and edge chunks of its repetition "
-                                                         "up to its end node, then one argument per hop import";
-        }
-
-        for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
-            if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
-                return emitOpError("hop region argument ") << argumentIndex << " must be "
-                                                           << expectedArguments[argumentIndex];
-            }
+        if (failed(verifyHopArguments(getOperation(), block, step, nodeChunk, edgeChunk, imports))) {
+            return failure();
         }
 
         Yield yield = dyn_cast_or_null<Yield>(block.empty() ? nullptr : &block.back());

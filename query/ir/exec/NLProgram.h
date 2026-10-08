@@ -885,6 +885,7 @@ public:
                   bool filtersByType,
                   std::span<const EdgeTypeID> edgeTypes,
                   bool matchable);
+    ~NLExploreStep();
 
     PathExplorationDir getDirection() const { return _direction; }
     bool filtersByType() const { return _filtersByType; }

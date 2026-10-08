@@ -4087,9 +4087,8 @@ void DBProgramGenerator::generateUnwind(const UnwindStmt* unwind) {
     VariableColumnMap variableColumns;
     collectVariableColumns(variableColumns);
 
-    // A path unwinds into its edges, so a path column is expanded into that list first
     const Expr* arg = unwind->arg();
-    const mlir::Value source = listColumnOf(arg->getExprVarDecl(), getOrTranslateExprColumn(variableColumns, arg));
+    const mlir::Value source = getOrTranslateExprColumn(variableColumns, arg);
 
     // Everything already in flight rides through the carry set, replicated once per row
     // the cell beside it unwound into, so the rest of the query still reads it row-aligned
@@ -5060,10 +5059,10 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
     if (isEntity) {
         if (variableColumns) {
-            return getOrTranslateExprColumn(*variableColumns, argExpr);
+            return getOrTranslateBoundColumn(*variableColumns, argExpr);
         }
 
-        return getOrTranslateExprColumn(argExpr);
+        return getOrTranslateBoundColumn(argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
         translateExpr(argExpr);
         return alignConstantToDriver(_part._exprMap.at(argExpr));
@@ -6973,8 +6972,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         if (isProjected) {
             keyColumns.push_back(static_cast<int64_t>(std::distance(sortedItems.begin(), sortedItem)));
         } else {
-            const mlir::Value keyColumn = listColumnOf(keyExpr->getExprVarDecl(),
-                                                       getOrTranslateExprColumn(variableColumns, keyExpr));
+            const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, keyExpr);
 
             // A key the projection does not carry is read into a column of its own, which
             // is constant when the key computes over constants alone: one value for every
@@ -7023,6 +7021,13 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
 
 mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap& variableColumns,
                                                          const Expr* expr) {
+    const mlir::Value column = getOrTranslateBoundColumn(variableColumns, expr);
+
+    return expr->getKind() == Expr::Kind::SYMBOL ? readWalkEntities(expr, column) : column;
+}
+
+mlir::Value DBProgramGenerator::getOrTranslateBoundColumn(const VariableColumnMap& variableColumns,
+                                                          const Expr* expr) {
     // One column is held per variable, so an expression only has a column to be found
     // there when it is a variable and nothing else. Anything more is a computation over
     // columns, and has to be translated - as is a symbol naming no variable but the alias
@@ -7042,9 +7047,16 @@ mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap
     return _part._exprMap.at(expr);
 }
 
-// The same, for a caller holding no map: the one name the expression could name is looked
-// up over the bindings rather than every one of them being gathered to answer for it
 mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const Expr* expr) {
+    const mlir::Value column = getOrTranslateBoundColumn(expr);
+
+    return expr->getKind() == Expr::Kind::SYMBOL ? readWalkEntities(expr, column) : column;
+}
+
+// The column as bound, which for a group variable is its walk's handle rather than its list.
+// Without a map, the one name the expression could name is looked up over the bindings
+// rather than every one of them being gathered to answer for it
+mlir::Value DBProgramGenerator::getOrTranslateBoundColumn(const Expr* expr) {
     if (expr->getKind() == Expr::Kind::SYMBOL) {
         const VarDecl* var = expr->getExprVarDecl();
         bioassert(var, "Symbol expression without a declaration.");
@@ -7360,7 +7372,7 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
 void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
                                                         const ListComprehensionExpr* comprehension) {
     const Expr* const sourceExpr = comprehension->getSource();
-    const mlir::Value source = readWalkEntities(sourceExpr, getOrTranslateExprColumn(sourceExpr));
+    const mlir::Value source = getOrTranslateExprColumn(sourceExpr);
 
     CarrySet carrySet;
     collectElementCarrySet(carrySet);
@@ -7384,7 +7396,7 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
 void DBProgramGenerator::translateListPredicateExpr(const Expr* expr, const ListPredicateExpr* predicate) {
     const ListComprehensionExpr* comprehension = predicate->getComprehension();
     const Expr* const sourceExpr = comprehension->getSource();
-    const mlir::Value source = readWalkEntities(sourceExpr, getOrTranslateExprColumn(sourceExpr));
+    const mlir::Value source = getOrTranslateExprColumn(sourceExpr);
 
     CarrySet carrySet;
     collectElementCarrySet(carrySet);
@@ -7632,8 +7644,6 @@ void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
         const unsigned tagArgument = static_cast<unsigned>(carrySet._columns.size());
         registerValue(tagVariable, patternBlock->getArgument(tagArgument));
     }
-
-    _opBuilder.setInsertionPointToStart(patternBlock);
 
     Stmt* const patternStatements[] = {match};
     generatePart(patternStatements);
@@ -9067,7 +9077,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         const EvaluatedType argType = argExpr->getType();
 
         if (argType == EvaluatedType::EdgePattern || argType == EvaluatedType::NodePattern) {
-            const mlir::Value column = getOrTranslateExprColumn(argExpr);
+            const mlir::Value column = getOrTranslateBoundColumn(argExpr);
 
             // An OPTIONAL MATCH hands a walk on as the list of its edges, which size() reads
             // as it reads any other list. A walk's length counts a group's entities only when
@@ -9488,8 +9498,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const Expr* item = std::get<Expr*>(returnItem);
 
         if (!item->isAggregate()) {
-            const mlir::Value keyColumn = listColumnOf(item->getExprVarDecl(),
-                                                       getOrTranslateExprColumn(variableColumns, item));
+            const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, item);
 
             // An aggregate may be taken over the alias of an item declared before it -
             // count(x) of RETURN 1 AS x, count(x) - and the column that alias names is

@@ -3771,9 +3771,28 @@ void collectHopConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts, ll
     }
 }
 
+void setHopMask(Region& hop, Yield yield, llvm::ArrayRef<Value> residual, mlir::RewriterBase& rewriter) {
+    if (residual.empty()) {
+        rewriter.eraseBlock(&hop.front());
+        return;
+    }
+
+    rewriter.setInsertionPoint(yield);
+    const Type boolType = boolColumnType(rewriter.getContext());
+
+    Value mask = residual.front();
+    for (const Value conjunct : llvm::drop_begin(residual)) {
+        mask = rewriter.create<AndOp>(yield.getLoc(), boolType, mask, conjunct).getResult();
+    }
+
+    rewriter.modifyOpInPlace(yield, [&yield, mask]() {
+        yield->setOperand(0, mask);
+    });
+}
+
 // The labels the hop region of a step asks of the hop's end node join the step's labels. The
 // region keeps its other conjuncts, and goes when there is none left.
-bool fuseStepHopLabels(ExplorePaths exploration, size_t step, llvm::SmallVectorImpl<Attribute>& labels, mlir::OpBuilder& builder) {
+bool fuseStepHopLabels(ExplorePaths exploration, size_t step, llvm::SmallVectorImpl<Attribute>& labels, mlir::RewriterBase& rewriter) {
     Region& hop = exploration.getHops()[step];
     if (hop.empty()) {
         return false;
@@ -3813,36 +3832,25 @@ bool fuseStepHopLabels(ExplorePaths exploration, size_t step, llvm::SmallVectorI
         }
     }
 
+    setHopMask(hop, yield, residual, rewriter);
     if (residual.empty()) {
-        hop.dropAllReferences();
-        hop.getBlocks().clear();
         return true;
     }
 
-    builder.setInsertionPoint(yield);
-    const Type boolType = boolColumnType(builder.getContext());
-
-    Value mask = residual.front();
-    for (const Value conjunct : llvm::drop_begin(residual)) {
-        mask = builder.create<AndOp>(yield.getLoc(), boolType, mask, conjunct).getResult();
-    }
-
-    yield->setOperand(0, mask);
-
     for (AndOp join : joins) {
-        join.erase();
+        rewriter.eraseOp(join);
     }
 
     for (CheckLabelConstraint check : checks) {
         Operation* const labelSet = check.getLabelsetIds().getDefiningOp();
-        check.erase();
-        eraseIfUnused(labelSet);
+        rewriter.eraseOp(check);
+        eraseIfUnused(labelSet, rewriter);
     }
 
     return true;
 }
 
-void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
+void fuseHopLabels(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
     const size_t stepCount = exploration.getStepCount();
 
     llvm::SmallVector<Attribute> stepLabels;
@@ -3853,15 +3861,15 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
             labels.append(current.begin(), current.end());
         }
 
-        fused |= fuseStepHopLabels(exploration, step, labels, builder);
-        stepLabels.push_back(builder.getArrayAttr(labels));
+        fused |= fuseStepHopLabels(exploration, step, labels, rewriter);
+        stepLabels.push_back(rewriter.getArrayAttr(labels));
     }
 
     if (!fused) {
         return;
     }
 
-    exploration.setHopLabelsAttr(builder.getArrayAttr(stepLabels));
+    exploration.setHopLabelsAttr(rewriter.getArrayAttr(stepLabels));
 
     const bool hasPredicate = hasHopPredicate(exploration.getHops());
     if (!hasPredicate) {
@@ -3871,9 +3879,9 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
 
 struct FuseExploreHopLabels : public impl::FuseExploreHopLabelsBase<FuseExploreHopLabels> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        getOperation()->walk([&builder](ExplorePaths exploration) {
-            fuseHopLabels(exploration, builder);
+        mlir::IRRewriter rewriter(&getContext());
+        getOperation()->walk([&rewriter](ExplorePaths exploration) {
+            fuseHopLabels(exploration, rewriter);
         });
     }
 };
@@ -5015,23 +5023,12 @@ void hoistHopConjuncts(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
 
     if (residual.size() == conjuncts.size()) {
         return;
-    } else if (residual.empty()) {
-        lastHop.dropAllReferences();
-        lastHop.getBlocks().clear();
+    }
+
+    setHopMask(lastHop, yield, residual, rewriter);
+    if (residual.empty()) {
         return;
     }
-
-    rewriter.setInsertionPoint(yield);
-    const Type boolType = boolColumnType(rewriter.getContext());
-
-    Value mask = residual.front();
-    for (const Value conjunct : llvm::drop_begin(residual)) {
-        mask = rewriter.create<AndOp>(yield.getLoc(), boolType, mask, conjunct).getResult();
-    }
-
-    rewriter.modifyOpInPlace(yield, [&yield, mask]() {
-        yield->setOperand(0, mask);
-    });
 
     llvm::SmallVector<Operation*> computed;
     for (Operation& op : lastBlock.without_terminator()) {

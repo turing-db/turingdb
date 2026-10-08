@@ -173,8 +173,7 @@ private:
 
     // The multi-source search of the distinct mode: one bit per seed of the current batch in
     // the words of every node it reaches, the rows a level gained emitted before the next
-    // level is expanded. A body of several steps reaches a node at each step of it apart, so
-    // each step has a table of its own.
+    // level is expanded
     struct Reachability {
         std::vector<PathReachTable> _reached;
         size_t _step {0};

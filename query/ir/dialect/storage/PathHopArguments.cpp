@@ -1,6 +1,10 @@
 #include "PathHopArguments.h"
 
+#include <optional>
+
 #include "llvm/ADT/STLExtras.h"
+
+#include "StorageEnums.h"
 
 using namespace mlir;
 
@@ -41,4 +45,48 @@ void mlir::buildHopArgumentTypes(size_t step,
     for (const Value import : imports) {
         argumentTypes.push_back(import.getType());
     }
+}
+
+LogicalResult mlir::verifyPathSteps(Operation* op, llvm::ArrayRef<int64_t> directions, size_t regionCount) {
+    const size_t stepCount = directions.size();
+    if (stepCount == 0) {
+        return op->emitOpError("must take at least one step");
+    }
+
+    for (const int64_t direction : directions) {
+        if (!storage::symbolizePathDirection(static_cast<uint64_t>(direction))) {
+            return op->emitOpError("unknown path direction ") << direction;
+        }
+    }
+
+    if (regionCount != stepCount) {
+        return op->emitOpError("expects one hop region per step, but takes ") << stepCount
+                                                                              << " steps and " << regionCount << " regions";
+    }
+
+    return success();
+}
+
+LogicalResult mlir::verifyHopArguments(Operation* op,
+                                       Block& block,
+                                       size_t step,
+                                       Type nodeType,
+                                       Type edgeType,
+                                       ValueRange imports) {
+    llvm::SmallVector<Type> expectedArguments;
+    buildHopArgumentTypes(step, nodeType, edgeType, imports, expectedArguments);
+
+    if (block.getNumArguments() != expectedArguments.size()) {
+        return op->emitOpError("hop region ") << step << " must take the nodes and edges of its repetition up to "
+                                                         "its end node, then one argument per hop import";
+    }
+
+    for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
+        if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
+            return op->emitOpError("hop region argument ") << argumentIndex << " must be "
+                                                           << expectedArguments[argumentIndex];
+        }
+    }
+
+    return success();
 }

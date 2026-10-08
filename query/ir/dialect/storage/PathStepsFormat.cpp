@@ -112,9 +112,10 @@ ParseResult mlir::parseHopRegions(OpAsmParser& parser,
     const size_t stepCount = directions.size();
     const SMLoc location = parser.getCurrentLocation();
 
-    std::unique_ptr<Region> first = std::make_unique<Region>();
-    const OptionalParseResult parsedFirst = parser.parseOptionalRegion(*first);
+    hops.push_back(std::make_unique<Region>());
+    const OptionalParseResult parsedFirst = parser.parseOptionalRegion(*hops.back());
     if (!parsedFirst.has_value()) {
+        hops.pop_back();
         for (size_t step = 0; step < stepCount; step++) {
             hops.push_back(std::make_unique<Region>());
         }
@@ -126,15 +127,11 @@ ParseResult mlir::parseHopRegions(OpAsmParser& parser,
         return failure();
     }
 
-    hops.push_back(std::move(first));
-
     while (succeeded(parser.parseOptionalComma())) {
-        std::unique_ptr<Region> next = std::make_unique<Region>();
-        if (parser.parseRegion(*next)) {
+        hops.push_back(std::make_unique<Region>());
+        if (parser.parseRegion(*hops.back())) {
             return failure();
         }
-
-        hops.push_back(std::move(next));
     }
 
     if (hops.size() != stepCount) {
