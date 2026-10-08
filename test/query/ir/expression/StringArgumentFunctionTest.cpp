@@ -134,6 +134,17 @@ TEST_F(StringArgumentFunctionTest, replaceNullInNullOut) {
                {{"null", "null", "null"}});
 }
 
+TEST_F(StringArgumentFunctionTest, replaceOfANullReadInTheRowIsNull) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) "
+               "RETURN replace(p.nosuch, 'a', 'b'), replace(p.name, p.nosuch, 'b'), replace(p.name, 'R', p.nosuch)",
+               {{"null", "null", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, replaceIsNullOnlyOnTheRowsHoldingANull) {
+    expectRows("UNWIND ['l', null, 'o'] AS s RETURN replace('hello', s, '_'), replace('hello', 'l', s)",
+               {{"he__o", "hello"}, {"null", "null"}, {"hell_", "heooo"}});
+}
+
 TEST_F(StringArgumentFunctionTest, replacesInATaggedCell) {
     expectRows("MATCH (p:Person {name: 'Remy'}) RETURN replace(p.words[0], 'l', 'L'), replace(p.words[2], 'l', 'L')",
                {{"heLLo", "null"}});
