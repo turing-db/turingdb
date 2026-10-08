@@ -9129,6 +9129,9 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     } else if (funcName == "substring") {
         translateSubstring(expr, args);
         return;
+    } else if (funcName == "split") {
+        translateSplit(expr, args);
+        return;
     }
 
     const bool readsTheMapItself = funcName == "properties"
@@ -9255,6 +9258,27 @@ void DBProgramGenerator::translateSubstring(const Expr* expr, const ExprChain* a
                                                                            length);
 
     _part._exprMap[expr] = substring.getResult();
+}
+
+void DBProgramGenerator::translateSplit(const Expr* expr, const ExprChain* args) {
+    if (!args || args->size() != 2) {
+        throwError("split() expects 2 arguments.", expr);
+    }
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value string = translateArg(argExprs[0]);
+    const mlir::Value delimiter = translateArg(argExprs[1]);
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, stringType);
+
+    mlir::db::Split split = _opBuilder.create<mlir::db::Split>(_opBuilder.getUnknownLoc(),
+                                                               allocColumnType(listType),
+                                                               string,
+                                                               delimiter);
+
+    _part._exprMap[expr] = split.getResult();
 }
 
 void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {

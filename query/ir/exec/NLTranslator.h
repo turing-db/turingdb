@@ -1004,6 +1004,7 @@ private:
     // column's cells go into the list buffer through
     void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);
     void translateSubstring(mlir::nl::Substring substring, NLStmtContainer* body);
+    void translateSplit(mlir::nl::Split split, NLStmtContainer* body);
     void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
     void translateStaticMapKey(mlir::nl::StaticMapKey mapKey, NLStmtContainer* body);
     void translateDynamicMapKey(mlir::nl::DynamicMapKey mapKey, NLStmtContainer* body);

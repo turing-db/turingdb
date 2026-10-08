@@ -7390,6 +7390,40 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
 template void NLExecutor::runSubstring<types::String::Primitive>(NLExecutionContext* context, NLFunctionData* data);
 template void NLExecutor::runSubstring<std::optional<types::String::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
 
+template <typename Result>
+void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
+    const NLSplitData* split = static_cast<NLSplitData*>(data);
+
+    const NLSplitData::StringArgument& string = split->getString();
+    const NLSplitData::StringArgument& delimiter = split->getDelimiter();
+
+    const size_t rowCount = string._column->size();
+    bioassert(delimiter._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
+
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(split->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    SplitFunction function(&split->getMemory()->listBuffer());
+    constexpr std::string_view name = SplitFunction::NAME;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, rowIndex, name);
+
+        const bool readsANull = !text.has_value() || !separator.has_value();
+        if (!readsANull) {
+            outputRaw[rowIndex] = function(*text, *separator);
+        } else if constexpr (TypeUtils::is_optional_v<Result>) {
+            outputRaw[rowIndex] = std::nullopt;
+        } else {
+            throw IRException("split() typed as never null read a null argument");
+        }
+    }
+}
+
+template void NLExecutor::runSplit<ListView>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runSplit<std::optional<ListView>>(NLExecutionContext* context, NLFunctionData* data);
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 

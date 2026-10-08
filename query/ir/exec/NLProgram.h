@@ -4029,6 +4029,34 @@ private:
     IntegerArgument _length;
 };
 
+class NLSplitData : public NLFunctionData {
+public:
+    using StringArgument = NLSubstringData::StringArgument;
+
+    NLSplitData(Column* result,
+                LocalMemory* memory,
+                const StringArgument& string,
+                const StringArgument& delimiter)
+        : _result(result),
+        _memory(memory),
+        _string(string),
+        _delimiter(delimiter)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const StringArgument& getString() const { return _string; }
+    const StringArgument& getDelimiter() const { return _delimiter; }
+
+private:
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    StringArgument _string;
+    StringArgument _delimiter;
+};
+
 // Read the cell one value column holds at @param row as the value the map buffer stores
 // for it. The map sibling of NLListItemReadFunction.
 using NLMapValueReadFunction = MapBuffer<>::MapItemVariant (*)(const Column* input,

@@ -1167,6 +1167,7 @@ private:
 
     void translateRange(const Expr* expr, const ExprChain* args);
     void translateSubstring(const Expr* expr, const ExprChain* args);
+    void translateSplit(const Expr* expr, const ExprChain* args);
 
     mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
