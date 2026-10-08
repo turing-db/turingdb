@@ -322,11 +322,11 @@ protected:
     }
 
     static void expectEdgeTypes(mlir::db::ExplorePaths exploration, const std::vector<std::string>& expected) {
-        const std::optional<mlir::ArrayAttr> edgeTypes = exploration.getEdgeTypes();
-        ASSERT_TRUE(edgeTypes.has_value());
+        const mlir::ArrayAttr edgeTypes = exploration.getStepEdgeTypes(0);
+        ASSERT_TRUE(edgeTypes);
 
         std::vector<std::string> names;
-        for (const mlir::Attribute name : *edgeTypes) {
+        for (const mlir::Attribute name : edgeTypes) {
             names.push_back(mlir::cast<mlir::StringAttr>(name).getValue().str());
         }
         EXPECT_EQ(names, expected);

@@ -168,13 +168,22 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         const VarDecl* edgeDecl = edge->getDecl();
         bioassert(edgeDecl, "Edge pattern without declaration.");
 
-        const bool alreadyInElement =
-            std::ranges::find(edgesInElement, edgeDecl) != edgesInElement.end();
-        if (alreadyInElement) {
-            throwError("Re-using the same edge variable in a single pattern is not supported", edge);
-        }
+        const size_t hopCount = edge->getHopCount();
+        for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+            const EdgePattern* hop = edge->getHop(hopIndex);
+            const VarDecl* hopDecl = hop->getDecl();
+            if (!hopDecl) {
+                continue;
+            }
 
-        edgesInElement.push_back(edgeDecl);
+            const bool alreadyInElement =
+                std::ranges::find(edgesInElement, hopDecl) != edgesInElement.end();
+            if (alreadyInElement) {
+                throwError("Re-using the same edge variable in a single pattern is not supported", hop);
+            }
+
+            edgesInElement.push_back(hopDecl);
+        }
 
         VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 

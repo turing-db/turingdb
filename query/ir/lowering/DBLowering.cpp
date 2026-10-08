@@ -23,6 +23,7 @@
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
 #include "MergePatternShape.h"
+#include "PathHopArguments.h"
 #include "Procedure.h"
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
@@ -6321,11 +6322,13 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      explorePaths.getDistinctAttr(),
                                                                      static_cast<unsigned>(stepCount));
 
+    const mlir::MutableArrayRef<mlir::Region> dbHops = explorePaths.getHops();
+    const mlir::MutableArrayRef<mlir::Region> nlHops = exploration.getHops();
     for (size_t step = 0; step < stepCount; step++) {
-        mlir::Region& dbHop = explorePaths.getHops()[step];
+        mlir::Region& dbHop = dbHops[step];
         if (!dbHop.empty()) {
             const mlir::OpBuilder::InsertionGuard guard(_builder);
-            lowerHopRegion(dbHop.front(), exploration.getHops()[step], step, importChunks);
+            lowerHopRegion(dbHop.front(), nlHops[step], step, importChunks);
         }
     }
 
@@ -6339,15 +6342,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     const mlir::Type nodeChunk = nl::ChunkType::get(context, storage::NodeIDType::get(context));
     const mlir::Type edgeChunk = nl::ChunkType::get(context, storage::EdgeIDType::get(context));
     llvm::SmallVector<mlir::Type> argumentTypes;
-    for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
-        argumentTypes.push_back(nodeChunk);
-        argumentTypes.push_back(edgeChunk);
-    }
-    argumentTypes.push_back(nodeChunk);
-
-    for (const mlir::Value import : imports) {
-        argumentTypes.push_back(import.getType());
-    }
+    mlir::buildHopArgumentTypes(step, nodeChunk, edgeChunk, imports, argumentTypes);
 
     const llvm::SmallVector<mlir::Location> argumentLocations(argumentTypes.size(), loc);
 
@@ -6370,7 +6365,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     }
 
     _builder.setInsertionPoint(placeholder);
-    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(static_cast<unsigned>(2 * step + 1)));
+    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(mlir::hopEdgeArgument(step)));
     _builder.create<nl::Yield>(loc, mlir::ValueRange {maskChunk});
     placeholder.erase();
 }

@@ -459,9 +459,18 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
+        if (edgePattern->getQuantifiedPath()) {
+            throwIfGroupNameIsBound(_ctxt, symbol, edgePattern);
+        }
+
         decl = _ctxt->getOrCreateNamedVariable(_ast,
                                                EvaluatedType::EdgePattern,
                                                symbol->getName());
+        if (decl->isQuantifiedPath()) {
+            throwError(fmt::format("Variable '{}' is already bound to the relationships a quantified pattern grouped", symbol->getName()),
+                       edgePattern);
+        }
+
         edgePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
@@ -602,6 +611,11 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
 
     wheres.push_back(walk->getHopWhere());
 
+    std::vector<const VarDecl*>* const outerSink = _exprAnalyzer->getImportSink();
+
+    std::vector<const VarDecl*> imports;
+    _exprAnalyzer->setImportSink(&imports);
+
     for (size_t position = 0; position <= hopCount; position++) {
         if (NodePattern* node = walk->getHopNode(position)) {
             analyze(node);
@@ -613,11 +627,6 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         EdgePattern* hop = walk->getHop(hopIndex);
         analyzeEdgeProperties(hop, hop->getHopDecl(), hop->getData(), walk);
     }
-
-    std::vector<const VarDecl*>* const outerSink = _exprAnalyzer->getImportSink();
-
-    std::vector<const VarDecl*> imports;
-    _exprAnalyzer->setImportSink(&imports);
 
     for (const WhereClause* where : wheres) {
         if (!where) {
@@ -654,7 +663,8 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
 
     if (hopCount > 1) {
         for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
-            throwIfGroupNameIsBound(outer, walk->getHop(hopIndex)->getSymbol(), walk);
+            const EdgePattern* hop = walk->getHop(hopIndex);
+            throwIfGroupNameIsBound(outer, hop->getSymbol(), walk);
         }
     }
 

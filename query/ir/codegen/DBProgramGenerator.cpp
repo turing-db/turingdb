@@ -43,6 +43,7 @@
 #include "StorageDialect.h"
 #include "StorageEnums.h"
 #include "StorageTypes.h"
+#include "PathHopArguments.h"
 #include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRValueTypes.h"
@@ -1511,7 +1512,8 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
     } else {
         for (size_t step = 0; step < hopCount; step++) {
             const EdgePattern* hop = pattern->getHop(reversed ? hopCount - 1 - step : step);
-            const std::span<const std::string_view> names = hop->getData()->edgeTypeConstraints();
+            const EdgePatternData* hopData = hop->getData();
+            const std::span<const std::string_view> names = hopData->edgeTypeConstraints();
             typesAStep |= !names.empty();
 
             directions.push_back(static_cast<int64_t>(walkDirectionOf(hop->getDirection(), reversed)));
@@ -1625,7 +1627,7 @@ void DBProgramGenerator::collectQuantifiedEdges(std::span<Stmt* const> stmts) {
     }
 }
 
-void DBProgramGenerator::collectHopNodeMasks(const NodePattern* node,
+void DBProgramGenerator::collectHopLabelMask(const NodePattern* node,
                                              mlir::Value column,
                                              llvm::SmallVectorImpl<mlir::Value>& masks) {
     const NodePatternData* data = node->getData();
@@ -1633,28 +1635,24 @@ void DBProgramGenerator::collectHopNodeMasks(const NodePattern* node,
         return;
     }
 
+    const std::span<const std::string_view> labels = data->labelConstraints();
+    if (labels.empty()) {
+        return;
+    }
+
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType labelSetIDType = allocColumnType(mlir::storage::LabelSetIDType::get(_mlirCtxt));
+    const mlir::Value labelSetIDs = _opBuilder.create<mlir::db::GetNodeLabelSet>(loc, labelSetIDType, column).getResult();
 
-    const std::span<const std::string_view> labels = data->labelConstraints();
-    if (!labels.empty()) {
-        const mlir::db::ColumnType labelSetIDType = allocColumnType(mlir::storage::LabelSetIDType::get(_mlirCtxt));
-        const mlir::Value labelSetIDs = _opBuilder.create<mlir::db::GetNodeLabelSet>(loc, labelSetIDType, column).getResult();
-
-        llvm::SmallVector<llvm::StringRef> labelNames;
-        for (const std::string_view label : labels) {
-            labelNames.push_back(llvm::StringRef(label.data(), label.size()));
-        }
-
-        const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
-        const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({labelsAttr});
-        masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, alternatives).getResult());
+    llvm::SmallVector<llvm::StringRef> labelNames;
+    for (const std::string_view label : labels) {
+        labelNames.push_back(llvm::StringRef(label.data(), label.size()));
     }
 
-    for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
-        translateExpr(constraint._expr);
-        masks.push_back(_part._exprMap.at(constraint._expr));
-    }
+    const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
+    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({labelsAttr});
+    masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, alternatives).getResult());
 }
 
 void DBProgramGenerator::generateHopRegions(mlir::db::ExplorePaths exploration,
@@ -1680,7 +1678,8 @@ void DBProgramGenerator::generateHopRegions(mlir::db::ExplorePaths exploration,
     }
 
     for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
-        placeDecl(pattern->getHop(hopIndex)->getHopDecl(), 2 * hopIndex + 1);
+        const EdgePattern* hop = pattern->getHop(hopIndex);
+        placeDecl(hop->getHopDecl(), 2 * hopIndex + 1);
     }
 
     std::unordered_map<const VarDecl*, size_t> declSteps;
@@ -1696,6 +1695,18 @@ void DBProgramGenerator::generateHopRegions(mlir::db::ExplorePaths exploration,
 
         for (const Expr* conjunct : conjuncts) {
             stepConjuncts[stepOfConjunct(conjunct, declSteps, hopCount - 1)].push_back(conjunct);
+        }
+    }
+
+    for (size_t position = 0; position <= hopCount; position++) {
+        const NodePattern* node = pattern->getHopNode(position);
+        const NodePatternData* data = node ? node->getData() : nullptr;
+        if (!data) {
+            continue;
+        }
+
+        for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+            stepConjuncts[stepOfConjunct(constraint._expr, declSteps, hopCount - 1)].push_back(constraint._expr);
         }
     }
 
@@ -1728,8 +1739,11 @@ void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
         repeatsAName |= declPositions.at(node->getDecl()) != walkPosition;
     }
 
-    const bool constrainsANode = llvm::any_of(boundNodes, [](const auto& bound) { return constrainsHop(bound.first); });
-    if (conjuncts.empty() && !constrainsANode && !repeatsAName) {
+    const bool labelsANode = llvm::any_of(boundNodes, [](const auto& bound) {
+        const NodePatternData* data = bound.first->getData();
+        return data && !data->labelConstraints().empty();
+    });
+    if (conjuncts.empty() && !labelsANode && !repeatsAName) {
         return;
     }
 
@@ -1738,16 +1752,10 @@ void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
 
     const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType edgeType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
-    const size_t hopArguments = 2 * step + 3;
+    const size_t hopArguments = mlir::hopWalkArgumentCount(step);
 
     llvm::SmallVector<mlir::Type> argumentTypes;
-    for (size_t walkPosition = 0; walkPosition < hopArguments; walkPosition++) {
-        argumentTypes.push_back(walkPosition % 2 == 0 ? nodeType : edgeType);
-    }
-
-    for (const mlir::Value column : exploration.getHopImports()) {
-        argumentTypes.push_back(column.getType());
-    }
+    mlir::buildHopArgumentTypes(step, nodeType, edgeType, exploration.getHopImports(), argumentTypes);
 
     const llvm::SmallVector<mlir::Location> argumentLocations(argumentTypes.size(), loc);
 
@@ -1769,7 +1777,7 @@ void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
     for (const auto& [node, walkPosition] : boundNodes) {
-        collectHopNodeMasks(node, block->getArgument(static_cast<unsigned>(walkPosition)), masks);
+        collectHopLabelMask(node, block->getArgument(static_cast<unsigned>(walkPosition)), masks);
     }
 
     for (const auto& [node, walkPosition] : boundNodes) {

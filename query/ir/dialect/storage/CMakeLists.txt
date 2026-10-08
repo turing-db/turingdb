@@ -25,6 +25,7 @@ add_mlir_library(turing_db_ir_storagedialect_s
   GroupAggregateKindsFormat.cpp
   EdgeDirectionsFormat.cpp
   PathStepsFormat.cpp
+  PathHopArguments.cpp
   LabelAlternativesFormat.cpp
   MergePatternShape.cpp
   ColumnIndicesFormat.cpp

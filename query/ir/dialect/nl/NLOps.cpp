@@ -12,6 +12,7 @@
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
 #include "PathStepsFormat.h"
+#include "PathHopArguments.h"
 #include "LabelAlternativesFormat.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
@@ -391,6 +392,10 @@ LogicalResult ExplorePaths::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+storage::PathDirection ExplorePaths::getStepDirection(size_t step) {
+    return static_cast<storage::PathDirection>(getDirections()[step]);
+}
+
 Value ExplorePaths::getStepEdgeTypes(size_t step) {
     const OperandRange edgeTypes = getEdgeTypes();
     const std::optional<llvm::ArrayRef<int64_t>> typedSteps = getEdgeTypeSteps();
@@ -416,6 +421,12 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("must take at least one step");
     }
 
+    for (const int64_t direction : getDirections()) {
+        if (!storage::symbolizePathDirection(static_cast<uint64_t>(direction))) {
+            return emitOpError("unknown path direction ") << direction;
+        }
+    }
+
     const size_t edgeTypeCount = getEdgeTypes().size();
     if (const std::optional<llvm::ArrayRef<int64_t>> typedSteps = getEdgeTypeSteps()) {
         if (typedSteps->size() != edgeTypeCount) {
@@ -425,7 +436,8 @@ LogicalResult ExplorePaths::verify() {
         for (size_t index = 0; index < typedSteps->size(); index++) {
             const int64_t step = (*typedSteps)[index];
             const bool ascends = index == 0 || (*typedSteps)[index - 1] < step;
-            if (step < 0 || static_cast<size_t>(step) >= stepCount || !ascends) {
+            const bool namesAStep = step >= 0 && static_cast<size_t>(step) < stepCount;
+            if (!namesAStep || !ascends) {
                 return emitOpError("edge_type_steps must name steps in ascending order");
             }
         }
@@ -463,7 +475,7 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("expects one hop region per step");
     }
 
-    const bool hasPredicate = llvm::any_of(hops, [](Region& hop) { return !hop.empty(); });
+    const bool hasPredicate = hasHopPredicate(hops);
     if (!hasPredicate) {
         if (!imports.empty()) {
             return emitOpError("hop imports without a hop region to read them");
@@ -489,15 +501,7 @@ LogicalResult ExplorePaths::verify() {
 
         Block& block = hop.front();
         llvm::SmallVector<Type> expectedArguments;
-        for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
-            expectedArguments.push_back(nodeChunk);
-            expectedArguments.push_back(edgeChunk);
-        }
-        expectedArguments.push_back(nodeChunk);
-
-        for (const Value import : imports) {
-            expectedArguments.push_back(import.getType());
-        }
+        buildHopArgumentTypes(step, nodeChunk, edgeChunk, imports, expectedArguments);
 
         if (block.getNumArguments() != expectedArguments.size()) {
             return emitOpError("hop region ") << step << " must take the node and edge chunks of its repetition "

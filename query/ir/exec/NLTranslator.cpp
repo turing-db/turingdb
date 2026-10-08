@@ -12,6 +12,7 @@
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
+#include "PathHopArguments.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
 #include "map/MapWriteCursor.h"
@@ -2037,7 +2038,7 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
         matchable = !edgeTypes.empty();
     }
 
-    const PathExplorationDir direction = toPathExplorationDir(static_cast<storage::PathDirection>(explorePaths.getDirections()[step]));
+    const PathExplorationDir direction = toPathExplorationDir(explorePaths.getStepDirection(step));
     NLExploreStep* exploreStep = loopData->addStep(direction, filtersByType, edgeTypes, matchable);
 
     if (const std::optional<mlir::ArrayAttr> stepLabels = explorePaths.getHopLabels()) {
@@ -2065,10 +2066,10 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
 
     // The hop's own source, edge and end are always filled; the nodes and edges the
     // repetition took before it only when the predicate reads them
-    const size_t hopArguments = 2 * step + 3;
+    const size_t hopArguments = mlir::hopWalkArgumentCount(step);
     for (size_t argumentIndex = 0; argumentIndex < hopArguments; argumentIndex++) {
         const mlir::BlockArgument argument = hopBlock.getArgument(static_cast<unsigned>(argumentIndex));
-        const bool ofTheHop = argumentIndex >= 2 * step;
+        const bool ofTheHop = argumentIndex >= mlir::hopSourceArgument(step);
         const bool isEdge = argumentIndex % 2 == 1;
 
         if (!ofTheHop && argument.use_empty()) {
@@ -2095,9 +2096,13 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
     }
 
     for (size_t importIndex = 0; importIndex < hopImports.size(); importIndex++) {
+        const mlir::BlockArgument importArgument = hopBlock.getArgument(static_cast<unsigned>(hopArguments + importIndex));
+        if (importArgument.use_empty()) {
+            continue;
+        }
+
         const mlir::Value importValue = hopImports[importIndex];
         const Column* importColumn = getColumn(importValue);
-        const mlir::BlockArgument importArgument = hopBlock.getArgument(static_cast<unsigned>(hopArguments + importIndex));
 
         Column* importChunk = nullptr;
         NLGatherFunction gather = nullptr;

@@ -13,6 +13,7 @@
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
 #include "PathStepsFormat.h"
+#include "PathHopArguments.h"
 #include "LabelAlternativesFormat.h"
 #include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
@@ -119,9 +120,7 @@ LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes)
 LogicalResult verifyStepNames(Operation* operation, ArrayAttr names, size_t stepCount, llvm::StringRef what) {
     if (!names) {
         return success();
-    }
-
-    if (names.size() != stepCount) {
+    } else if (names.size() != stepCount) {
         return operation->emitOpError(what) << " must hold one list per step";
     }
 
@@ -141,6 +140,17 @@ LogicalResult verifyStepNames(Operation* operation, ArrayAttr names, size_t step
     }
 
     return success();
+}
+
+// The names of one step of a path exploration, null when the step leaves them free
+ArrayAttr stepNamesAt(ArrayAttr names, size_t step) {
+    if (!names) {
+        return {};
+    }
+
+    const ArrayAttr stepNames = cast<ArrayAttr>(names[step]);
+
+    return stepNames.empty() ? ArrayAttr() : stepNames;
 }
 
 // The keyword that introduces each factor region in the textual form
@@ -388,15 +398,7 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop, size_t step, ValueRang
     const Type nodeColumn = ColumnType::get(context, storage::NodeIDType::get(context));
     const Type edgeColumn = ColumnType::get(context, storage::EdgeIDType::get(context));
     llvm::SmallVector<Type> expectedArguments;
-    for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
-        expectedArguments.push_back(nodeColumn);
-        expectedArguments.push_back(edgeColumn);
-    }
-    expectedArguments.push_back(nodeColumn);
-
-    for (const Value import : imports) {
-        expectedArguments.push_back(import.getType());
-    }
+    buildHopArgumentTypes(step, nodeColumn, edgeColumn, imports, expectedArguments);
 
     if (block.getNumArguments() != expectedArguments.size()) {
         return op->emitOpError("hop region ") << step << " must take the node and edge columns of its "
@@ -549,25 +551,11 @@ storage::PathDirection ExplorePaths::getStepDirection(size_t step) {
 }
 
 ArrayAttr ExplorePaths::getStepEdgeTypes(size_t step) {
-    const ArrayAttr edgeTypes = getEdgeTypesAttr();
-    if (!edgeTypes) {
-        return {};
-    }
-
-    const ArrayAttr names = cast<ArrayAttr>(edgeTypes[step]);
-
-    return names.empty() ? ArrayAttr() : names;
+    return stepNamesAt(getEdgeTypesAttr(), step);
 }
 
 ArrayAttr ExplorePaths::getStepHopLabels(size_t step) {
-    const ArrayAttr hopLabels = getHopLabelsAttr();
-    if (!hopLabels) {
-        return {};
-    }
-
-    const ArrayAttr names = cast<ArrayAttr>(hopLabels[step]);
-
-    return names.empty() ? ArrayAttr() : names;
+    return stepNamesAt(getHopLabelsAttr(), step);
 }
 
 LogicalResult ExplorePaths::verify() {
@@ -602,11 +590,9 @@ LogicalResult ExplorePaths::verify() {
         }
     }
 
-    if (failed(verifyStepNames(getOperation(), getEdgeTypesAttr(), stepCount, "edge_types"))) {
-        return failure();
-    }
-
-    if (failed(verifyStepNames(getOperation(), getHopLabelsAttr(), stepCount, "hop_labels"))) {
+    const bool stepNamesFail = failed(verifyStepNames(getOperation(), getEdgeTypesAttr(), stepCount, "edge_types"))
+                            || failed(verifyStepNames(getOperation(), getHopLabelsAttr(), stepCount, "hop_labels"));
+    if (stepNamesFail) {
         return failure();
     }
 
@@ -655,7 +641,7 @@ LogicalResult ExplorePaths::verify() {
                                                                           << " steps and " << hops.size() << " regions";
     }
 
-    const bool hasPredicate = llvm::any_of(hops, [](Region& hop) { return !hop.empty(); });
+    const bool hasPredicate = hasHopPredicate(hops);
     if (!hasPredicate) {
         if (!imports.empty()) {
             return emitOpError("hop imports without a hop region to read them");
@@ -701,13 +687,9 @@ LogicalResult ExpandPath::verify() {
     const std::optional<uint64_t> steps = getSteps();
     if (step.has_value() != steps.has_value()) {
         return emitOpError("step and steps name a step of the body together");
-    }
-
-    if (steps && *step >= *steps) {
+    } else if (steps && *step >= *steps) {
         return emitOpError("step ") << *step << " is not one of the " << *steps << " steps of the body";
-    }
-
-    if (steps && kind == storage::PathExpansionKind::Nodes) {
+    } else if (steps && kind == storage::PathExpansionKind::Nodes) {
         return emitOpError("kind nodes lists every node of the walk and takes no step");
     }
 

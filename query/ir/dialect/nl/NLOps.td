@@ -1047,6 +1047,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
 
   let extraClassDeclaration = [{
     size_t getStepCount() { return getDirections().size(); }
+    ::mlir::storage::PathDirection getStepDirection(size_t step);
 
     // The edge type handle filtering one step, null when the step has none
     ::mlir::Value getStepEdgeTypes(size_t step);

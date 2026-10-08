@@ -6391,11 +6391,9 @@ void NLExecutor::runEachRowLoop(NLExecutionContext* context, NLFunctionData* dat
 namespace {
 
 // Runs the hop predicate of one step of an nl.explore_paths over a batch of frames: the
-// candidates are copied a chunk at a time into the hop's edge and end node columns, the
-// columns of the nodes and edges the frame's repetition took before the hop are filled with
-// their one value, the statements compute the mask, and the survivors are compacted to the
-// front of the batch. A chunk may start and end mid-frame. The hop_labels filter, when there
-// is one, cuts the batch first.
+// candidates and the frame's repetition so far are copied a chunk at a time into the columns
+// the hop statements read, and the survivors are compacted to the front of the batch. A chunk
+// may start and end mid-frame. The hop_labels filter, when there is one, cuts the batch first.
 class NLHopFilter : public PathHopFilter {
 public:
     NLHopFilter(NLExecutionContext* context, const NLExploreStep* step, PathHopFilter* labelFilter)
@@ -6419,7 +6417,7 @@ public:
         const size_t chunkSize = _context->getChunkSize();
         const std::span<ColumnNodeIDs* const> nodes = _step->getHopNodes();
         const std::span<ColumnEdgeIDs* const> edges = _step->getHopEdges();
-        const size_t position = edges.size() - 1;
+        const size_t position = _step->getHopPosition();
         ColumnNodeIDs* sources = nodes[position];
         ColumnEdgeIDs* hopEdges = edges[position];
         ColumnNodeIDs* ends = nodes[position + 1];
@@ -6514,7 +6512,7 @@ public:
     bool readsRepetition() const override {
         const std::span<ColumnNodeIDs* const> nodes = _step->getHopNodes();
         const std::span<ColumnEdgeIDs* const> edges = _step->getHopEdges();
-        const size_t position = edges.size() - 1;
+        const size_t position = _step->getHopPosition();
 
         const auto isRead = [](const Column* column) { return column != nullptr; };
 
@@ -6534,10 +6532,13 @@ private:
 // The direction and edge types every step of the body follows together: what a walk can reach
 // over them bounds what the body reaches, so the pruning indexes are built over them
 PathExplorationDir combinedDirection(const NLExplorePathsLoopData* loopData) {
-    const PathExplorationDir first = loopData->getStep(0)->getDirection();
+    const NLExploreStep* firstStep = loopData->getStep(0);
+    const PathExplorationDir first = firstStep->getDirection();
+    const size_t stepCount = loopData->getStepCount();
 
-    for (size_t step = 1; step < loopData->getStepCount(); step++) {
-        if (loopData->getStep(step)->getDirection() != first) {
+    for (size_t step = 1; step < stepCount; step++) {
+        const NLExploreStep* exploreStep = loopData->getStep(step);
+        if (exploreStep->getDirection() != first) {
             return PathExplorationDir::BOTH;
         }
     }
@@ -6549,7 +6550,8 @@ PathExplorationDir combinedDirection(const NLExplorePathsLoopData* loopData) {
 void combinedEdgeTypes(const NLExplorePathsLoopData* loopData, std::vector<EdgeTypeID>& edgeTypes) {
     edgeTypes.clear();
 
-    for (size_t step = 0; step < loopData->getStepCount(); step++) {
+    const size_t stepCount = loopData->getStepCount();
+    for (size_t step = 0; step < stepCount; step++) {
         const NLExploreStep* exploreStep = loopData->getStep(step);
         if (!exploreStep->filtersByType()) {
             edgeTypes.clear();
@@ -6715,9 +6717,10 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const uint64_t maxHops = loopData->isMatchable() ? edgesOfRepetitions(loopData->getMaxHops(), stepCount) : 0;
 
     const GraphView& view = *context->getView();
+    const NLExploreStep* firstStep = loopData->getStep(0);
     PathExplorator explorator(view,
                               inputNodeIDs,
-                              loopData->getStep(0)->getDirection(),
+                              firstStep->getDirection(),
                               minHops,
                               maxHops);
     explorator.setIndices(loopData->getIndices());
