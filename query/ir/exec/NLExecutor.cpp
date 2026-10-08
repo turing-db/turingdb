@@ -7260,6 +7260,35 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
+    const NLSplitData* split = static_cast<NLSplitData*>(data);
+
+    const NLSplitData::StringArgument& string = split->getString();
+    const NLSplitData::StringArgument& delimiter = split->getDelimiter();
+
+    const size_t rowCount = string._column->size();
+    bioassert(delimiter._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
+
+    std::vector<std::optional<ListView>>& outputRaw =
+        static_cast<ColumnOptVector<ListView>*>(split->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    SplitFunction function(&split->getMemory()->listBuffer());
+    constexpr std::string_view name = SplitFunction::NAME;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, rowIndex, name);
+
+        const bool readsANull = !text.has_value() || !separator.has_value();
+        if (readsANull) {
+            outputRaw[rowIndex] = std::nullopt;
+        } else {
+            outputRaw[rowIndex] = function(*text, *separator);
+        }
+    }
+}
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 

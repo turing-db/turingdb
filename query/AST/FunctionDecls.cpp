@@ -654,6 +654,14 @@ void FunctionDecls::initDefault() {
         substring->setReturnTypes({{EvaluatedType::String}});
     }
 
+    std::vector<FunctionSignature*> splits;
+    createOverloads("split", {stringOrCell, stringOrCell}, splits);
+
+    for (FunctionSignature* split : splits) {
+        split->setReturnTypes({{EvaluatedType::List}});
+        split->setReturnedListShape(ListShape(EvaluatedType::String, 1));
+    }
+
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they
     // share is what the call returns.

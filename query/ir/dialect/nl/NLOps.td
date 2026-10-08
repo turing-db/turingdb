@@ -2791,6 +2791,15 @@ def Substring : NLOp<"substring", [Pure, RowAlignedThroughOperands]> {
   let assemblyFormat = "$string `,` $start (`,` $length^)? attr-dict `:` functional-type(operands, results)";
 }
 
+def Split : NLOp<"split", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise split on delimiter";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$delimiter);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $delimiter attr-dict `:` functional-type(operands, results)";
+}
+
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 

@@ -70,6 +70,44 @@ TEST_F(StringArgumentFunctionTest, rejectsANegativeLength) {
     expectError("RETURN substring('hello', -1)", "substring()");
 }
 
+TEST_F(StringArgumentFunctionTest, splitOfALiteral) {
+    expectRows("RETURN split('a,b,c', ','), split('a--b', '--'), split('abc', 'x'), size(split('', ','))",
+               {{"[a, b, c]", "[a, b]", "[abc]", "1"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitKeepsEmptyParts) {
+    expectRows("RETURN split('a,,b,', ','), split(',', ',')", {{"[a, , b, ]", "[, ]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOnNothingSplitsCharacters) {
+    expectRows("RETURN split('été', '')", {{"[é, t, é]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, unwindsASplit) {
+    expectRows("UNWIND split('x y z', ' ') AS w RETURN toUpper(w)", {{"X"}, {"Y"}, {"Z"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitsAProperty) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN split(p.name, 'm')", {{"[Re, y]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitsOnADelimiterPerRow) {
+    expectRows("UNWIND ['a', 'b'] AS d RETURN split('xaybz', d)", {{"[x, ybz]"}, {"[xay, z]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitNullInNullOut) {
+    expectRows("RETURN split(null, ','), split('a', null)", {{"null", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitsATaggedCell) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN split(p.words[0], 'l'), split(p.words[2], 'l')",
+               {{"[he, , o]", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitRejectsATaggedCellOfTheWrongType) {
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN split(p.words[1], ',')", "split()");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

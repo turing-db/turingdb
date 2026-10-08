@@ -420,6 +420,45 @@ SubstringFunction::ResultType SubstringFunction::operator()(types::String::Primi
     return rest.substr(0, endOffset);
 }
 
+SplitFunction::SplitFunction(QueryListBuffer* listBuffer)
+    : _listBuffer(listBuffer)
+{
+}
+
+SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive string, types::String::Primitive delimiter) {
+    _parts.clear();
+
+    if (delimiter.empty()) {
+        size_t partStart = 0;
+
+        while (partStart < string.size()) {
+            const types::String::Primitive rest = string.substr(partStart);
+            const size_t charSize = characterOffset(rest, 1);
+
+            _parts.emplace_back(rest.substr(0, charSize));
+            partStart += charSize;
+        }
+        return _listBuffer->insert(_parts);
+    }
+
+    size_t partStart = 0;
+    size_t delimiterStart = string.find(delimiter);
+
+    while (delimiterStart != std::string_view::npos) {
+        const size_t partSize = delimiterStart - partStart;
+
+        const std::string_view subsec = string.substr(partStart, partSize);
+        _parts.emplace_back(subsec);
+
+        partStart = delimiterStart + delimiter.size();
+        delimiterStart = string.find(delimiter, partStart);
+    }
+
+    _parts.emplace_back(string.substr(partStart));
+
+    return _listBuffer->insert(_parts);
+}
+
 ReverseFunction::ReverseFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {
