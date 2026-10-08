@@ -16,6 +16,7 @@
 #include <unordered_set>
 
 #include <spdlog/fmt/bundled/format.h>
+#include <llvm/Support/MathExtras.h>
 
 #include "TypeUtils.h"
 #include "iterators/GetEdgesIterator.h"
@@ -6568,12 +6569,7 @@ void combinedEdgeTypes(const NLExplorePathsLoopData* loopData, std::vector<EdgeT
 
 // The hop bounds of the loop count repetitions of the body, the walk's count its edges
 uint64_t edgesOfRepetitions(uint64_t repetitions, size_t stepCount) {
-    const uint64_t unbounded = std::numeric_limits<uint64_t>::max();
-    if (repetitions > unbounded / stepCount) {
-        return unbounded;
-    }
-
-    return repetitions * stepCount;
+    return llvm::SaturatingMultiply<uint64_t>(repetitions, stepCount);
 }
 
 // What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
@@ -6596,7 +6592,8 @@ void sampleSeedsOf(const GraphView& view,
         }
 
         PathHopFilter* hopFilter = hopFilters[step];
-        if (hopFilter && !hopFilter->readsRepetition()) {
+        const bool samplesTheFilter = hopFilter && !hopFilter->readsRepetition();
+        if (samplesTheFilter) {
             sampleStep._hopFilter = hopFilter;
         }
     }

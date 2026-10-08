@@ -991,6 +991,8 @@ private:
     // otherwise the column its translation computes
     mlir::Value getOrTranslateExprColumn(const VariableColumnMap& variableColumns, const Expr* expr);
     mlir::Value getOrTranslateExprColumn(const Expr* expr);
+    mlir::Value getOrTranslateBoundColumn(const VariableColumnMap& variableColumns, const Expr* expr);
+    mlir::Value getOrTranslateBoundColumn(const Expr* expr);
 
     mlir::Value resolveEntityColumn(const VarDecl* decl);
 

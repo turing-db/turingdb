@@ -432,7 +432,9 @@ bool PathExplorator::levelsFindTrails() const {
     for (size_t step = 0; step < _steps.size(); step++) {
         const Step& taken = _steps[step];
         const bool walksBothWays = taken._direction == PathExplorationDir::BOTH;
-        if (walksBothWays || !taken._filterByType || taken.readsRepetition()) {
+        const bool takesAnyType = !taken._filterByType;
+        const bool readsRepetition = taken.readsRepetition();
+        if (walksBothWays || takesAnyType || readsRepetition) {
             return false;
         }
 
@@ -456,7 +458,7 @@ PathReachTable& PathExplorator::reachTableAt(uint64_t level) {
 }
 
 bool PathExplorator::searchesSeedCycles() const {
-    return _minHops == 1 && _steps.front()._direction == PathExplorationDir::BOTH;
+    return _steps.size() == 1 && _minHops == 1 && _steps.front()._direction == PathExplorationDir::BOTH;
 }
 
 // Keyed by depth, two arrivals past the minimum differ only by the step of the body they are at

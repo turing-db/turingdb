@@ -1,9 +1,13 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/Region.h"
 #include "mlir/IR/ValueRange.h"
+#include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace mlir {
@@ -27,5 +31,14 @@ void buildHopArgumentTypes(size_t step,
                            Type edgeType,
                            ValueRange imports,
                            llvm::SmallVectorImpl<Type>& argumentTypes);
+
+LogicalResult verifyPathSteps(Operation* op, llvm::ArrayRef<int64_t> directions, size_t regionCount);
+
+LogicalResult verifyHopArguments(Operation* op,
+                                 Block& block,
+                                 size_t step,
+                                 Type nodeType,
+                                 Type edgeType,
+                                 ValueRange imports);
 
 }

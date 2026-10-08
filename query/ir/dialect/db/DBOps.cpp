@@ -397,20 +397,8 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop, size_t step, ValueRang
 
     const Type nodeColumn = ColumnType::get(context, storage::NodeIDType::get(context));
     const Type edgeColumn = ColumnType::get(context, storage::EdgeIDType::get(context));
-    llvm::SmallVector<Type> expectedArguments;
-    buildHopArgumentTypes(step, nodeColumn, edgeColumn, imports, expectedArguments);
-
-    if (block.getNumArguments() != expectedArguments.size()) {
-        return op->emitOpError("hop region ") << step << " must take the node and edge columns of its "
-                                                         "repetition up to its end node, then one argument "
-                                                         "per hop import";
-    }
-
-    for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
-        if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
-            return op->emitOpError("hop region argument ") << argumentIndex << " must be "
-                                                           << expectedArguments[argumentIndex];
-        }
+    if (failed(verifyHopArguments(op, block, step, nodeColumn, edgeColumn, imports))) {
+        return failure();
     }
 
     Yield yield = getFactorYield(hop);
@@ -579,17 +567,12 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("max_hops must be at least min_hops");
     }
 
+    MutableArrayRef<Region> hops = getHops();
+    if (failed(verifyPathSteps(getOperation(), getDirections(), hops.size()))) {
+        return failure();
+    }
+
     const size_t stepCount = getStepCount();
-    if (stepCount == 0) {
-        return emitOpError("must take at least one step");
-    }
-
-    for (const int64_t direction : getDirections()) {
-        if (!storage::symbolizePathDirection(static_cast<uint64_t>(direction))) {
-            return emitOpError("unknown path direction ") << direction;
-        }
-    }
-
     const bool stepNamesFail = failed(verifyStepNames(getOperation(), getEdgeTypesAttr(), stepCount, "edge_types"))
                             || failed(verifyStepNames(getOperation(), getHopLabelsAttr(), stepCount, "hop_labels"));
     if (stepNamesFail) {
@@ -634,12 +617,6 @@ LogicalResult ExplorePaths::verify() {
     }
 
     const OperandRange imports = getHopImports();
-
-    MutableArrayRef<Region> hops = getHops();
-    if (hops.size() != stepCount) {
-        return emitOpError("expects one hop region per step, but takes ") << stepCount
-                                                                          << " steps and " << hops.size() << " regions";
-    }
 
     const bool hasPredicate = hasHopPredicate(hops);
     if (!hasPredicate) {
