@@ -89,6 +89,7 @@
 
 #include "LocalMemory.h"
 #include "IRException.h"
+#include "IRRange.h"
 #include "BioAssert.h"
 
 using namespace db;
@@ -4287,11 +4288,6 @@ Item valueItem(const Column* input, size_t row, LocalMemory*) {
     return Item {*cell};
 }
 
-// A range's list is held in memory in full, and one row of it is enough to exhaust the
-// machine: range(0, 9223372036854775807) asks for 9.2e18 integers. The bound is what a
-// row that overruns it is turned away by.
-constexpr uint64_t rangeLengthLimit = 100000;
-
 // Read one cell of a nullable integer column as a bound of a range: the number it holds,
 // or nothing where the row has none.
 std::optional<ListView> plainListRead(const Column* input, size_t row) {
@@ -7311,18 +7307,14 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
         const bool reachesEnd = ascending ? *from <= *to : *from >= *to;
 
         if (reachesEnd) {
-            // A range's span and its stride can each be wider than an int64 holds, so both
-            // are counted unsigned and every element is offset from the first that way. The
-            // limit bounds the steps: the length over the whole int64 range, 2^64, is one
-            // past what a uint64 holds.
+            // The stride can be wider than an int64 holds, so every element is offset from
+            // the first unsigned
             const uint64_t first = static_cast<uint64_t>(*from);
-            const uint64_t last = static_cast<uint64_t>(*to);
-            const uint64_t span = ascending ? last - first : first - last;
             const uint64_t stride = ascending ? static_cast<uint64_t>(*by) : 0 - static_cast<uint64_t>(*by);
-            const uint64_t steps = span / stride;
+            const uint64_t steps = countRangeSteps(*from, *to, *by);
 
-            if (steps >= rangeLengthLimit) {
-                throw IRException(fmt::format("range() size exceeds {} integers", rangeLengthLimit));
+            if (steps >= RANGE_LENGTH_LIMIT) {
+                throw IRException(fmt::format("range() size exceeds {} integers", RANGE_LENGTH_LIMIT));
             }
 
             const uint64_t length = steps + 1;

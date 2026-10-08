@@ -13,13 +13,8 @@ def PushDownFilters : Pass<"push_down_filters"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
-def SinkUnwinds : Pass<"sink_unwinds"> {
-    let summary = "Unwind a list over a cross product in the factor it is read from, or in a factor of its own when it reads no row";
-    let dependentDialects = ["mlir::db::DB"];
-}
-
-def RegroupProducts : Pass<"regroup_products"> {
-    let summary = "Move a filter over a cross product into the factor it reads, crossing first the two factors a nested product's filter relates";
+def PlaceInFactors : Pass<"place_in_factors"> {
+    let summary = "Move a filter or an unwind over a cross product into the factor it reads, crossing first the two factors a nested product's filter relates, and unwind a list reading no row in a factor of its own";
     let dependentDialects = ["mlir::db::DB"];
 }
 

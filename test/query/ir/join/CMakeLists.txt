@@ -96,6 +96,9 @@ target_link_libraries(test_query_ir_hash_join PRIVATE turing_ir_test_hash_join_s
 add_turing_test(test_query_ir_nested_product_filter NestedProductFilterTest.cpp)
 target_link_libraries(test_query_ir_nested_product_filter PRIVATE turing_ir_test_hash_join_s)
 
+add_turing_test(test_query_ir_predicate_over_kept_rows PredicateOverKeptRowsTest.cpp)
+target_link_libraries(test_query_ir_predicate_over_kept_rows PRIVATE turing_ir_test_hash_join_s)
+
 # The projected-key cases check that a cut still fuses when the query returns the property
 # it joins on, so they need the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join_projected_key HashJoinProjectedKeyTest.cpp)

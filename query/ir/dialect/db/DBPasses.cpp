@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <optional>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -40,8 +41,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
-#define GEN_PASS_DEF_SINKUNWINDS
-#define GEN_PASS_DEF_REGROUPPRODUCTS
+#define GEN_PASS_DEF_PLACEINFACTORS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
 #define GEN_PASS_DEF_FUSESCANEDGES
@@ -142,21 +142,23 @@ void runFilterPass(Operation* root, MatchFilter matchFilter, RewriteFilter rewri
 
 // The ops of one kind a pass has left to try. It listens to the rewriter, so it queues every
 // such op a rewrite creates and drops every op a rewrite erases.
-template <typename OpType>
+template <typename... OpTypes>
 class OpWorklist : public mlir::RewriterBase::Listener {
 public:
     explicit OpWorklist(Operation* root) {
-        root->walk([this](OpType op) {
-            push(op.getOperation());
+        root->walk([this](Operation* op) {
+            if (isa<OpTypes...>(op)) {
+                push(op);
+            }
         });
     }
 
-    OpType pop() {
+    Operation* pop() {
         while (_next < _ops.size()) {
             Operation* const op = _ops[_next++];
             if (op) {
                 _positions.erase(op);
-                return cast<OpType>(op);
+                return op;
             }
         }
 
@@ -164,7 +166,7 @@ public:
     }
 
     void notifyOperationInserted(Operation* op, mlir::OpBuilder::InsertPoint previous) override {
-        if (isa<OpType>(op)) {
+        if (isa<OpTypes...>(op)) {
             push(op);
         }
     }
@@ -191,19 +193,17 @@ private:
 
 // A match can read IR far above its op, so a rewrite can make an op it never touched match.
 // The worklist runs again until a round rewrites nothing, as MLIR's greedy driver does.
-template <typename OpType, typename Match, typename MatchOp, typename RewriteOp>
-void runWorklist(Operation* root, MatchOp matchOp, RewriteOp rewriteOp) {
+template <typename... OpTypes, typename RewriteOp>
+void runWorklist(Operation* root, RewriteOp rewriteOp) {
     bool rewritten = true;
     while (rewritten) {
         rewritten = false;
 
-        OpWorklist<OpType> worklist(root);
+        OpWorklist<OpTypes...> worklist(root);
         mlir::IRRewriter rewriter(root->getContext(), &worklist);
 
-        while (OpType op = worklist.pop()) {
-            Match match;
-            if (matchOp(op, match)) {
-                rewriteOp(match, rewriter);
+        while (Operation* op = worklist.pop()) {
+            if (rewriteOp(op, rewriter)) {
                 rewritten = true;
             }
         }
@@ -212,7 +212,15 @@ void runWorklist(Operation* root, MatchOp matchOp, RewriteOp rewriteOp) {
 
 template <typename Match, typename MatchFilter, typename RewriteFilter>
 void runFilterWorklist(Operation* root, MatchFilter matchFilter, RewriteFilter rewriteFilter) {
-    runWorklist<FilterOp, Match>(root, matchFilter, rewriteFilter);
+    runWorklist<FilterOp>(root, [&matchFilter, &rewriteFilter](Operation* op, mlir::RewriterBase& rewriter) {
+        Match match;
+        if (!matchFilter(cast<FilterOp>(op), match)) {
+            return false;
+        }
+
+        rewriteFilter(match, rewriter);
+        return true;
+    });
 }
 
 void fuseScanByLabel(FilterOp filter, const LabelScanChain& chain, mlir::OpBuilder& builder) {
@@ -533,12 +541,27 @@ struct ConeFrame {
     unsigned _nextOperand {0};
 };
 
+// A cone is what a pass moves onto rows the query may not have run it on, so an op raising
+// on some row's value stays out of it, as one of the cone's inputs
+bool raisesOnSomeRows(Operation* op) {
+    mlir::ConditionallySpeculatable speculation = dyn_cast<mlir::ConditionallySpeculatable>(op);
+
+    return speculation && speculation.getSpeculatability() == mlir::Speculation::NotSpeculatable;
+}
+
 // Gathers the mask's compute cone and the external columns feeding it. Valid
 // even when the cone spans blocks.
-void collectConePostOrder(Value mask, llvm::SmallPtrSet<Operation*, 8>& visited, MaskCone& cone) {
+void collectConePostOrder(Value mask,
+                          llvm::function_ref<bool(Operation*)> inCone,
+                          llvm::SmallPtrSet<Operation*, 8>& visited,
+                          MaskCone& cone) {
+    const auto joinsTheCone = [inCone](Operation* op) {
+        return inCone(op) && !raisesOnSomeRows(op);
+    };
+
     Operation* const maskDef = mask.getDefiningOp();
 
-    if (!maskDef || !isMaskComputeOp(maskDef)) {
+    if (!maskDef || !joinsTheCone(maskDef)) {
         cone._inputs.insert(mask);
         return;
     }
@@ -563,7 +586,7 @@ void collectConePostOrder(Value mask, llvm::SmallPtrSet<Operation*, 8>& visited,
         frame._nextOperand++;
 
         Operation* const operandDef = operand.getDefiningOp();
-        if (!operandDef || !isMaskComputeOp(operandDef)) {
+        if (!operandDef || !joinsTheCone(operandDef)) {
             cone._inputs.insert(operand);
             continue;
         }
@@ -582,7 +605,7 @@ MaskCone collectMaskCone(Value mask) {
     MaskCone cone;
 
     llvm::SmallPtrSet<Operation*, 8> visited;
-    collectConePostOrder(mask, visited, cone);
+    collectConePostOrder(mask, isMaskComputeOp, visited, cone);
 
     return cone;
 }
@@ -1219,9 +1242,8 @@ bool isHop(Operation* op);
 bool computesPerRow(Operation* op);
 Value climbFilters(Value column);
 void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
+Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 
-// An op computing each row of its result from the same row of its operands alone, which
-// holds no rows of its own
 bool computesFromTheRow(Operation* op) {
     if (op->getNumRegions() != 0) {
         return false;
@@ -1233,46 +1255,24 @@ bool computesFromTheRow(Operation* op) {
     return computesAValue || computesPerRow(op) || isa<Range, MakeList, MakeMap, ListSlice>(op);
 }
 
-// The ops of a block computing values row by row, in block order, and the values they read
-// that no such op of the block computes
-struct RowCone {
-    llvm::SmallVector<Operation*> _ops;
-    llvm::SmallSetVector<Value, 4> _inputs;
-};
+void collectRowCone(llvm::ArrayRef<Value> roots, Block* block, MaskCone& cone) {
+    const auto computedInTheBlock = [block](Operation* op) {
+        return op->getBlock() == block && computesFromTheRow(op);
+    };
 
-void collectRowCone(llvm::ArrayRef<Value> roots, Block* block, RowCone& cone) {
-    llvm::SmallPtrSet<Operation*, 16> visited;
-    llvm::SmallVector<Value> pending(roots.begin(), roots.end());
-    while (!pending.empty()) {
-        const Value value = pending.pop_back_val();
-        Operation* const def = value.getDefiningOp();
-
-        const bool computedHere = def && def->getBlock() == block && computesFromTheRow(def);
-        if (!computedHere) {
-            cone._inputs.insert(value);
-            continue;
-        }
-
-        if (!visited.insert(def).second) {
-            continue;
-        }
-
-        cone._ops.push_back(def);
-        llvm::append_range(pending, def->getOperands());
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    for (const Value root : roots) {
+        collectConePostOrder(root, computedInTheBlock, visited, cone);
     }
-
-    llvm::sort(cone._ops, [](Operation* lhs, Operation* rhs) {
-        return lhs->isBeforeInBlock(rhs);
-    });
 }
 
-void cloneRowCone(const RowCone& cone, mlir::IRMapping& mapping, mlir::RewriterBase& rewriter) {
+void cloneRowCone(const MaskCone& cone, mlir::IRMapping& mapping, mlir::RewriterBase& rewriter) {
     for (Operation* const op : cone._ops) {
         rewriter.clone(*op, mapping);
     }
 }
 
-void eraseUnusedRowCone(const RowCone& cone, mlir::RewriterBase& rewriter) {
+void eraseUnusedRowCone(const MaskCone& cone, mlir::RewriterBase& rewriter) {
     for (Operation* const op : llvm::reverse(cone._ops)) {
         eraseIfUnused(op, rewriter);
     }
@@ -1287,20 +1287,103 @@ void collectFactorTypes(Region& leftFactor, Region& rightFactor, llvm::SmallVect
     llvm::append_range(types, factorYieldColumns(rightFactor).getTypes());
 }
 
-// Whether @param reader only feeds the ops of @param chain, directly or through row-wise
-// computations
-bool feedsOnlyTheChain(Operation* reader, const llvm::SmallPtrSetImpl<Operation*>& chain) {
-    Block* const block = reader->getBlock();
+struct FactorReads {
+    llvm::SmallVector<size_t, 4> _leftResults;
+    llvm::SmallVector<size_t, 4> _rightResults;
+    bool _readsElsewhere {false};
+};
 
-    llvm::SmallPtrSet<Operation*, 8> visited;
-    llvm::SmallVector<Operation*> pending {reader};
-    while (!pending.empty()) {
-        Operation* const op = pending.pop_back_val();
-        if (chain.contains(op) || !visited.insert(op).second) {
+struct ConjunctCone {
+    MaskCone _cone;
+    FactorReads _reads;
+};
+
+// The cones and the factor reads the placement matchers derive from the IR, shared between
+// matches until a rewrite changes the IR under them
+class ConeCache {
+public:
+    bool yieldsConstantColumn(Value column) {
+        return ::db::yieldsConstantColumn(column, _constantColumns);
+    }
+
+    const ConjunctCone& getConjunctCone(Value conjunct, CrossProduct product);
+
+    void clear() {
+        _constantColumns.clear();
+        _conjunctCones.clear();
+    }
+
+private:
+    llvm::DenseMap<Value, bool> _constantColumns;
+    llvm::DenseMap<std::pair<Value, Operation*>, std::unique_ptr<ConjunctCone>> _conjunctCones;
+};
+
+void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache, FactorReads& reads) {
+    const size_t leftWidth = leftFactorWidth(product);
+    for (const Value input : cone._inputs) {
+        if (cache.yieldsConstantColumn(input)) {
             continue;
         }
 
-        if (op->getBlock() != block || !computesFromTheRow(op)) {
+        const Value column = climbFilters(input);
+        if (column.getDefiningOp() != product.getOperation()) {
+            reads._readsElsewhere = true;
+            continue;
+        }
+
+        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+        if (resultIndex < leftWidth) {
+            reads._leftResults.push_back(resultIndex);
+        } else {
+            reads._rightResults.push_back(resultIndex);
+        }
+    }
+}
+
+const ConjunctCone& ConeCache::getConjunctCone(Value conjunct, CrossProduct product) {
+    std::unique_ptr<ConjunctCone>& cached = _conjunctCones[{conjunct, product.getOperation()}];
+    if (!cached) {
+        cached = std::make_unique<ConjunctCone>();
+        collectRowCone({conjunct}, product->getBlock(), cached->_cone);
+        collectFactorReads(cached->_cone, product, *this, cached->_reads);
+    }
+
+    return *cached;
+}
+
+void appendCone(const MaskCone& from, llvm::SmallPtrSetImpl<Operation*>& appended, MaskCone& cone) {
+    for (Operation* const op : from._ops) {
+        if (appended.insert(op).second) {
+            cone._ops.push_back(op);
+        }
+    }
+
+    cone._inputs.insert(from._inputs.begin(), from._inputs.end());
+}
+
+void mapFactorReads(const MaskCone& cone, CrossProduct product, mlir::IRMapping& mapping) {
+    for (const Value input : cone._inputs) {
+        const Value column = climbFilters(input);
+        if (column.getDefiningOp() == product.getOperation()) {
+            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+            mapping.map(input, productFactorColumn(product, resultIndex));
+        }
+    }
+}
+
+bool feedsOnlyTheChain(Operation* reader,
+                       const llvm::SmallPtrSetImpl<Operation*>& chain,
+                       llvm::SmallPtrSetImpl<Operation*>& visited) {
+    Block* const block = reader->getBlock();
+
+    llvm::SmallVector<Operation*> pending {reader};
+    while (!pending.empty()) {
+        Operation* const op = pending.pop_back_val();
+        const bool seen = chain.contains(op) || !visited.insert(op).second;
+
+        if (seen) {
+            continue;
+        } else if (op->getBlock() != block || !computesFromTheRow(op)) {
             return false;
         }
 
@@ -1353,9 +1436,10 @@ bool matchFilterChain(Operation* reader,
         }
     }
 
+    llvm::SmallPtrSet<Operation*, 16> visited;
     for (Operation* const level : levels) {
         for (Operation* const levelReader : level->getUsers()) {
-            if (!feedsOnlyTheChain(levelReader, chain)) {
+            if (!feedsOnlyTheChain(levelReader, chain, visited)) {
                 return false;
             }
         }
@@ -1364,40 +1448,33 @@ bool matchFilterChain(Operation* reader,
     return true;
 }
 
-// An unwind repeating the rows of a cross product once per element of its list, and where
-// it goes instead: into the factor the list is read from, or into a factor of its own beside
-// the rows it carries when the list reads no row
 struct UnwindPlacement {
     Unwind _unwind {nullptr};
-    RowCone _source;
+    MaskCone _source;
     CrossProduct _product {nullptr};
     llvm::SmallVector<FilterOp, 2> _filters;
     bool _sinksLeft {false};
     llvm::SmallVector<Operation*> _rowOps;
 };
 
-// The ops of the block making the rows the unwind carries, in block order. False when those
-// rows read anything but a constant from outside them, or when anything but the unwind reads
-// what they make.
-bool collectCarriedRowOps(Unwind unwind, llvm::SmallVectorImpl<Operation*>& rowOps) {
+bool collectCarriedRowOps(Unwind unwind, ConeCache& cache, llvm::SmallVectorImpl<Operation*>& rowOps) {
     Block* const block = unwind->getBlock();
 
     llvm::SmallPtrSet<Operation*, 16> visited;
-    llvm::DenseMap<Value, bool> classified;
     const Operation::operand_range carried = unwind.getColumnsToFilter();
     llvm::SmallVector<Value> pending(carried.begin(), carried.end());
     while (!pending.empty()) {
         const Value value = pending.pop_back_val();
-        if (::db::yieldsConstantColumn(value, classified)) {
+        if (cache.yieldsConstantColumn(value)) {
             continue;
         }
 
         Operation* const def = value.getDefiningOp();
-        if (!def || def->getBlock() != block || !mlir::isPure(def)) {
-            return false;
-        }
+        const bool madeInTheBlock = def && def->getBlock() == block && mlir::isMemoryEffectFree(def);
 
-        if (!visited.insert(def).second) {
+        if (!madeInTheBlock) {
+            return false;
+        } else if (!visited.insert(def).second) {
             continue;
         }
 
@@ -1412,7 +1489,8 @@ bool collectCarriedRowOps(Unwind unwind, llvm::SmallVectorImpl<Operation*>& rowO
     for (Operation* const rowOp : rowOps) {
         for (Operation* const user : rowOp->getUsers()) {
             Operation* const reader = block->findAncestorOpInBlock(*user);
-            if (reader != unwind.getOperation() && !visited.contains(reader)) {
+            const bool readOutsideTheRows = reader != unwind.getOperation() && !visited.contains(reader);
+            if (readOutsideTheRows) {
                 return false;
             }
         }
@@ -1425,19 +1503,19 @@ bool collectCarriedRowOps(Unwind unwind, llvm::SmallVectorImpl<Operation*>& rowO
     return true;
 }
 
-bool matchUnwindBesideItsRows(UnwindPlacement& placement) {
+bool matchUnwindBesideItsRows(UnwindPlacement& placement, ConeCache& cache) {
     Unwind unwind = placement._unwind;
 
     for (const Value column : unwind.getColumnsToFilter()) {
-        if (::db::yieldsConstantColumn(column) || !climbFilters(column).getDefiningOp<CrossProduct>()) {
+        if (cache.yieldsConstantColumn(column) || !climbFilters(column).getDefiningOp<CrossProduct>()) {
             return false;
         }
     }
 
-    return collectCarriedRowOps(unwind, placement._rowOps);
+    return collectCarriedRowOps(unwind, cache, placement._rowOps);
 }
 
-bool matchUnwindIntoAFactor(UnwindPlacement& placement, llvm::ArrayRef<Value> rowInputs) {
+bool matchUnwindIntoAFactor(UnwindPlacement& placement, ConeCache& cache) {
     Unwind unwind = placement._unwind;
 
     CrossProduct product;
@@ -1445,26 +1523,23 @@ bool matchUnwindIntoAFactor(UnwindPlacement& placement, llvm::ArrayRef<Value> ro
         return false;
     }
 
-    const size_t leftWidth = leftFactorWidth(product);
+    FactorReads sourceReads;
+    collectFactorReads(placement._source, product, cache, sourceReads);
 
-    bool readsTheLeft = false;
-    bool readsTheRight = false;
-    for (const Value input : rowInputs) {
-        const Value column = climbFilters(input);
-        if (column.getDefiningOp() != product.getOperation()) {
-            return false;
-        }
-
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        if (resultIndex < leftWidth) {
-            readsTheLeft = true;
-        } else {
-            readsTheRight = true;
-        }
+    const bool readsTheLeft = !sourceReads._leftResults.empty();
+    const bool readsTheRight = !sourceReads._rightResults.empty();
+    if (readsTheLeft == readsTheRight || sourceReads._readsElsewhere) {
+        return false;
     }
 
-    if (readsTheLeft == readsTheRight) {
-        return false;
+    // Sunk below a filter reading the factor, the unwind would repeat the rows that filter
+    // runs on once per element
+    for (FilterOp filter : placement._filters) {
+        const FactorReads& reads = cache.getConjunctCone(filter.getMask(), product)._reads;
+        const bool readsTheFactor = readsTheLeft ? !reads._leftResults.empty() : !reads._rightResults.empty();
+        if (readsTheFactor || reads._readsElsewhere) {
+            return false;
+        }
     }
 
     placement._product = product;
@@ -1473,7 +1548,7 @@ bool matchUnwindIntoAFactor(UnwindPlacement& placement, llvm::ArrayRef<Value> ro
     return true;
 }
 
-bool matchUnwindPlacement(Unwind unwind, UnwindPlacement& placement) {
+bool matchUnwindPlacement(Unwind unwind, ConeCache& cache, UnwindPlacement& placement) {
     if (unwind.getColumnsToFilter().empty()) {
         return false;
     }
@@ -1481,47 +1556,17 @@ bool matchUnwindPlacement(Unwind unwind, UnwindPlacement& placement) {
     placement._unwind = unwind;
     collectRowCone({unwind.getSource()}, unwind->getBlock(), placement._source);
 
-    llvm::SmallVector<Value, 4> rowInputs;
-    for (const Value input : placement._source._inputs) {
-        if (!::db::yieldsConstantColumn(input)) {
-            rowInputs.push_back(input);
-        }
+    const bool readsARow = llvm::any_of(placement._source._inputs, [&cache](Value input) {
+        return !cache.yieldsConstantColumn(input);
+    });
+
+    if (!readsARow) {
+        return matchUnwindBesideItsRows(placement, cache);
     }
 
-    if (rowInputs.empty()) {
-        return matchUnwindBesideItsRows(placement);
-    }
-
-    return matchUnwindIntoAFactor(placement, rowInputs);
+    return matchUnwindIntoAFactor(placement, cache);
 }
 
-// Adds @param element to the carry set of each filter, bottom first, so it reaches the top
-// of the chain row-aligned with the columns the filters keep
-Value carryThroughFilters(llvm::ArrayRef<FilterOp> filters, Value element, mlir::RewriterBase& rewriter) {
-    for (FilterOp filter : llvm::reverse(filters)) {
-        llvm::SmallVector<Value> carried(filter.getColumnsToFilter().begin(), filter.getColumnsToFilter().end());
-        carried.push_back(element);
-
-        llvm::SmallVector<Type> types(filter->getResultTypes().begin(), filter->getResultTypes().end());
-        types.push_back(element.getType());
-
-        rewriter.setInsertionPoint(filter);
-        FilterOp widened = rewriter.create<FilterOp>(filter.getLoc(), types, filter.getMask(), carried);
-
-        const ResultRange filtered = filter.getFilteredColumns();
-        for (size_t index = 0; index < filtered.size(); index++) {
-            rewriter.replaceAllUsesWith(filtered[index], widened.getResult(index));
-        }
-
-        rewriter.eraseOp(filter);
-        element = widened.getResults().back();
-    }
-
-    return element;
-}
-
-// Unwinds the list in the factor it is read from, over every column that factor yields, and
-// widens the factor's yield by the element
 void sinkUnwindIntoFactor(UnwindPlacement& placement, mlir::RewriterBase& rewriter) {
     Unwind unwind = placement._unwind;
     CrossProduct product = placement._product;
@@ -1537,18 +1582,13 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, mlir::RewriterBase& rewrit
     const llvm::SmallVector<Value> yielded(yield.getColumns().begin(), yield.getColumns().end());
 
     mlir::IRMapping mapping;
-    for (const Value input : placement._source._inputs) {
-        const Value column = climbFilters(input);
-        if (column.getDefiningOp() == product.getOperation()) {
-            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-            mapping.map(input, yielded[resultIndex - firstResult]);
-        }
-    }
+    mapFactorReads(placement._source, product, mapping);
 
     rewriter.setInsertionPoint(yield);
     cloneRowCone(placement._source, mapping, rewriter);
 
-    llvm::SmallVector<Type> sunkTypes {unwind.getElement().getType()};
+    const Value unwoundElement = unwind.getElement();
+    llvm::SmallVector<Type> sunkTypes {unwoundElement.getType()};
     for (const Value column : yielded) {
         sunkTypes.push_back(column.getType());
     }
@@ -1580,10 +1620,12 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, mlir::RewriterBase& rewrit
         rewriter.replaceAllUsesWith(result, widened.getResult(shifts ? resultIndex + 1 : resultIndex));
     }
 
-    const Value widenedElement = widened.getResult(firstResult + yielded.size());
-    const Value element = carryThroughFilters(placement._filters, widenedElement, rewriter);
+    Value element = widened.getResult(firstResult + yielded.size());
+    for (FilterOp filter : llvm::reverse(placement._filters)) {
+        element = appendCarriedColumn(filter, element, rewriter);
+    }
 
-    rewriter.replaceAllUsesWith(unwind.getElement(), element);
+    rewriter.replaceAllUsesWith(unwoundElement, element);
 
     const Operation::operand_range carried = unwind.getColumnsToFilter();
     const ResultRange carriedRows = unwind.getCarried();
@@ -1596,16 +1638,16 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, mlir::RewriterBase& rewrit
     rewriter.eraseOp(product);
 }
 
-// Crosses the rows the unwind carried, moved into a factor, with a factor unwinding the list
-// on its own
 void unwindBesideItsRows(UnwindPlacement& placement, mlir::RewriterBase& rewriter) {
     Unwind unwind = placement._unwind;
     const Location loc = unwind.getLoc();
 
     const Operation::operand_range carried = unwind.getColumnsToFilter();
-    const Type elementType = unwind.getElement().getType();
+    const Value unwoundElement = unwind.getElement();
+    const Type elementType = unwoundElement.getType();
 
-    llvm::SmallVector<Type> productTypes(carried.getTypes().begin(), carried.getTypes().end());
+    const Operation::operand_range::type_range carriedTypes = carried.getTypes();
+    llvm::SmallVector<Type> productTypes(carriedTypes.begin(), carriedTypes.end());
     productTypes.push_back(elementType);
 
     rewriter.setInsertionPoint(unwind);
@@ -1634,7 +1676,7 @@ void unwindBesideItsRows(UnwindPlacement& placement, mlir::RewriterBase& rewrite
         rewriter.replaceAllUsesWith(carriedRows[index], product.getResult(index));
     }
 
-    rewriter.replaceAllUsesWith(unwind.getElement(), product.getResult(carriedRows.size()));
+    rewriter.replaceAllUsesWith(unwoundElement, product.getResult(carriedRows.size()));
 
     rewriter.eraseOp(unwind);
     eraseUnusedRowCone(placement._source, rewriter);
@@ -1648,13 +1690,6 @@ void placeUnwind(UnwindPlacement& placement, mlir::RewriterBase& rewriter) {
     }
 }
 
-struct SinkUnwinds : public impl::SinkUnwindsBase<SinkUnwinds> {
-    void runOnOperation() override {
-        runWorklist<Unwind, UnwindPlacement>(getOperation(), matchUnwindPlacement, placeUnwind);
-    }
-};
-
-// The cross product a factor is nothing but, null for any other factor
 CrossProduct matchProductFactor(Region& factor) {
     Block& block = factor.front();
     if (block.getOperations().size() != 2) {
@@ -1675,39 +1710,6 @@ CrossProduct matchProductFactor(Region& factor) {
     return nested;
 }
 
-// Which factors of a product a conjunct reads, and whether it reads anything else that holds
-// rows - a column no factor yields
-struct ConjunctReads {
-    RowCone _cone;
-    llvm::SmallVector<size_t, 4> _leftResults;
-    llvm::SmallVector<size_t, 4> _rightResults;
-    bool _readsElsewhere {false};
-};
-
-void collectConjunctReads(Value conjunct, CrossProduct product, ConjunctReads& reads) {
-    collectRowCone({conjunct}, product->getBlock(), reads._cone);
-
-    const size_t leftWidth = leftFactorWidth(product);
-    for (const Value input : reads._cone._inputs) {
-        if (::db::yieldsConstantColumn(input)) {
-            continue;
-        }
-
-        const Value column = climbFilters(input);
-        if (column.getDefiningOp() != product.getOperation()) {
-            reads._readsElsewhere = true;
-            continue;
-        }
-
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        if (resultIndex < leftWidth) {
-            reads._leftResults.push_back(resultIndex);
-        } else {
-            reads._rightResults.push_back(resultIndex);
-        }
-    }
-}
-
 // A product nested as one factor of another, regrouped so a conjunct reading the other
 // factor and one side of the nested product reads one factor: the nested side it reads and
 // the other factor are crossed first, and the nested side it does not read is crossed after
@@ -1717,21 +1719,17 @@ struct ProductRotation {
     bool _keepsTheNestedLeft {false};
 };
 
-// A filter over the rows of a cross product, through the filters stacked between them, with
-// its conjuncts sorted by the factor that can apply them
 struct ProductCut {
     FilterOp _filter {nullptr};
     CrossProduct _product {nullptr};
     llvm::SmallVector<Value, 2> _leftConjuncts;
     llvm::SmallVector<Value, 2> _rightConjuncts;
     llvm::SmallVector<Value, 2> _keptConjuncts;
-    RowCone _leftCone;
-    RowCone _rightCone;
+    MaskCone _leftCone;
+    MaskCone _rightCone;
     ProductRotation _rotation;
 };
 
-// The side of the nested product each of @param results comes from, through the factor of
-// @param product the nested product is: false when they come from both
 bool readOneNestedSide(CrossProduct product,
                        bool nestedOnTheLeft,
                        llvm::ArrayRef<size_t> results,
@@ -1742,14 +1740,12 @@ bool readOneNestedSide(CrossProduct product,
         return false;
     }
 
-    const Operation::operand_range yielded = factorYieldColumns(factor);
-    const size_t firstResult = nestedOnTheLeft ? 0 : leftFactorWidth(product);
     const size_t nestedLeftWidth = leftFactorWidth(nested);
 
     bool readsTheLeft = false;
     bool readsTheRight = false;
     for (const size_t resultIndex : results) {
-        const Value column = yielded[resultIndex - firstResult];
+        const Value column = productFactorColumn(product, resultIndex);
         const size_t nestedIndex = cast<OpResult>(column).getResultNumber();
         if (nestedIndex < nestedLeftWidth) {
             readsTheLeft = true;
@@ -1763,7 +1759,7 @@ bool readOneNestedSide(CrossProduct product,
     return readsTheLeft != readsTheRight;
 }
 
-bool matchRotation(const ConjunctReads& reads, CrossProduct product, ProductRotation& rotation) {
+bool matchRotation(const FactorReads& reads, CrossProduct product, ProductRotation& rotation) {
     const bool relatesBothFactors = !reads._leftResults.empty() && !reads._rightResults.empty();
     if (!relatesBothFactors || reads._readsElsewhere) {
         return false;
@@ -1781,7 +1777,7 @@ bool matchRotation(const ConjunctReads& reads, CrossProduct product, ProductRota
     return false;
 }
 
-bool matchProductCut(FilterOp filter, ProductCut& cut) {
+bool matchProductCut(FilterOp filter, ConeCache& cache, ProductCut& cut) {
     llvm::SmallVector<FilterOp, 2> filters;
     if (!matchFilterChain(filter, filter.getColumnsToFilter(), cut._product, filters)) {
         return false;
@@ -1792,9 +1788,11 @@ bool matchProductCut(FilterOp filter, ProductCut& cut) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
+    llvm::SmallPtrSet<Operation*, 16> appendedLeft;
+    llvm::SmallPtrSet<Operation*, 16> appendedRight;
     for (const Value conjunct : conjuncts) {
-        ConjunctReads reads;
-        collectConjunctReads(conjunct, cut._product, reads);
+        const ConjunctCone& conjunctCone = cache.getConjunctCone(conjunct, cut._product);
+        const FactorReads& reads = conjunctCone._reads;
 
         const bool readsTheLeft = !reads._leftResults.empty();
         const bool readsTheRight = !reads._rightResults.empty();
@@ -1802,8 +1800,10 @@ bool matchProductCut(FilterOp filter, ProductCut& cut) {
 
         if (readsOneFactor && readsTheLeft) {
             cut._leftConjuncts.push_back(conjunct);
+            appendCone(conjunctCone._cone, appendedLeft, cut._leftCone);
         } else if (readsOneFactor) {
             cut._rightConjuncts.push_back(conjunct);
+            appendCone(conjunctCone._cone, appendedRight, cut._rightCone);
         } else {
             cut._keptConjuncts.push_back(conjunct);
 
@@ -1815,8 +1815,6 @@ bool matchProductCut(FilterOp filter, ProductCut& cut) {
 
     const bool pushes = !cut._leftConjuncts.empty() || !cut._rightConjuncts.empty();
     if (pushes) {
-        collectRowCone(cut._leftConjuncts, cut._product->getBlock(), cut._leftCone);
-        collectRowCone(cut._rightConjuncts, cut._product->getBlock(), cut._rightCone);
         cut._rotation._rotates = false;
     }
 
@@ -1832,12 +1830,10 @@ Value conjoin(llvm::ArrayRef<Value> conjuncts, Location loc, mlir::RewriterBase&
     return mask;
 }
 
-// Applies the conjuncts at the end of the factor, over every column it yields, reading each
-// column the filter read off the product from the factor instead
 void cutFactor(CrossProduct product,
                bool leftFactor,
                llvm::ArrayRef<Value> conjuncts,
-               const RowCone& cone,
+               const MaskCone& cone,
                Location loc,
                mlir::RewriterBase& rewriter) {
     if (conjuncts.empty()) {
@@ -1846,19 +1842,13 @@ void cutFactor(CrossProduct product,
 
     Region& factor = leftFactor ? product.getLeftFactor() : product.getRightFactor();
     Yield yield = cast<Yield>(factor.front().getTerminator());
-    const llvm::SmallVector<Value> yielded(yield.getColumns().begin(), yield.getColumns().end());
+    const Operation::operand_range yieldColumns = yield.getColumns();
+    const llvm::SmallVector<Value> yielded(yieldColumns.begin(), yieldColumns.end());
+    const Operation::operand_range::type_range yieldTypes = yieldColumns.getTypes();
+    const llvm::SmallVector<Type> types(yieldTypes.begin(), yieldTypes.end());
 
     mlir::IRMapping mapping;
-    for (const Value input : cone._inputs) {
-        const Value column = climbFilters(input);
-        if (column.getDefiningOp() != product.getOperation()) {
-            continue;
-        }
-
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        const size_t firstResult = leftFactor ? 0 : leftFactorWidth(product);
-        mapping.map(input, yielded[resultIndex - firstResult]);
-    }
+    mapFactorReads(cone, product, mapping);
 
     rewriter.setInsertionPoint(yield);
     cloneRowCone(cone, mapping, rewriter);
@@ -1869,8 +1859,6 @@ void cutFactor(CrossProduct product,
     }
 
     const Value mask = conjoin(mappedConjuncts, loc, rewriter);
-
-    llvm::SmallVector<Type> types(yield.getColumns().getTypes().begin(), yield.getColumns().getTypes().end());
     FilterOp cut = rewriter.create<FilterOp>(loc, types, mask, yielded);
 
     rewriter.modifyOpInPlace(yield, [&yield, &cut]() {
@@ -1882,7 +1870,8 @@ void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
     llvm::SmallVector<Value> pending {mask};
     while (!pending.empty()) {
         AndOp conjunction = pending.pop_back_val().getDefiningOp<AndOp>();
-        if (!conjunction || !conjunction.getResult().use_empty()) {
+        const bool unusedConjunction = conjunction && conjunction.getResult().use_empty();
+        if (!unusedConjunction) {
             continue;
         }
 
@@ -1901,12 +1890,7 @@ void pushCutIntoFactors(ProductCut& cut, mlir::RewriterBase& rewriter) {
     cutFactor(cut._product, false, cut._rightConjuncts, cut._rightCone, loc, rewriter);
 
     if (cut._keptConjuncts.empty()) {
-        const ResultRange filtered = filter.getFilteredColumns();
-        const Operation::operand_range carried = filter.getColumnsToFilter();
-        for (size_t index = 0; index < filtered.size(); index++) {
-            rewriter.replaceAllUsesWith(filtered[index], carried[index]);
-        }
-
+        bypassFilter(filter);
         rewriter.eraseOp(filter);
     } else {
         rewriter.setInsertionPoint(filter);
@@ -1925,23 +1909,31 @@ void pushCutIntoFactors(ProductCut& cut, mlir::RewriterBase& rewriter) {
 void rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::RewriterBase& rewriter) {
     const Location loc = product.getLoc();
 
-    Region& nestedFactor = rotation._nestedOnTheLeft ? product.getLeftFactor() : product.getRightFactor();
-    Region& otherFactor = rotation._nestedOnTheLeft ? product.getRightFactor() : product.getLeftFactor();
+    Region& leftFactor = product.getLeftFactor();
+    Region& rightFactor = product.getRightFactor();
+    Region& nestedFactor = rotation._nestedOnTheLeft ? leftFactor : rightFactor;
+    Region& otherFactor = rotation._nestedOnTheLeft ? rightFactor : leftFactor;
 
     CrossProduct nested = matchProductFactor(nestedFactor);
     Region& keptFactor = rotation._keepsTheNestedLeft ? nested.getLeftFactor() : nested.getRightFactor();
     Region& restFactor = rotation._keepsTheNestedLeft ? nested.getRightFactor() : nested.getLeftFactor();
 
-    const llvm::SmallVector<Value> nestedYield(factorYieldColumns(nestedFactor).begin(),
-                                               factorYieldColumns(nestedFactor).end());
+    const Operation::operand_range nestedYield = factorYieldColumns(nestedFactor);
 
     const size_t productLeftWidth = leftFactorWidth(product);
     const size_t nestedLeftWidth = leftFactorWidth(nested);
     const size_t keptWidth = factorYieldColumns(keptFactor).size();
     const size_t otherWidth = factorYieldColumns(otherFactor).size();
 
+    // The other factor keeps its side, so an outer factor is not re-run once per chunk of the
+    // nested side it is crossed with
+    Region& innerLeft = rotation._nestedOnTheLeft ? keptFactor : otherFactor;
+    Region& innerRight = rotation._nestedOnTheLeft ? otherFactor : keptFactor;
+    const size_t keptFirst = rotation._nestedOnTheLeft ? 0 : otherWidth;
+    const size_t otherFirstInInner = rotation._nestedOnTheLeft ? keptWidth : 0;
+
     llvm::SmallVector<Type> innerTypes;
-    collectFactorTypes(keptFactor, otherFactor, innerTypes);
+    collectFactorTypes(innerLeft, innerRight, innerTypes);
 
     llvm::SmallVector<Type> rotatedTypes(innerTypes);
     llvm::append_range(rotatedTypes, factorYieldColumns(restFactor).getTypes());
@@ -1954,16 +1946,16 @@ void rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::
     CrossProduct inner = rewriter.create<CrossProduct>(loc, innerTypes);
     rewriter.create<Yield>(loc, inner.getResults());
 
-    inner.getLeftFactor().takeBody(keptFactor);
-    inner.getRightFactor().takeBody(otherFactor);
+    inner.getLeftFactor().takeBody(innerLeft);
+    inner.getRightFactor().takeBody(innerRight);
 
-    // The rotated product holds the kept side's columns, then the other factor's, then the
-    // rest of the nested product's
+    // The rotated product holds the inner product's columns, then the rest of the nested
+    // product's
     const auto rotatedIndex = [&](size_t resultIndex) {
         const bool fromTheNested = (resultIndex < productLeftWidth) == rotation._nestedOnTheLeft;
         if (!fromTheNested) {
             const size_t otherFirst = rotation._nestedOnTheLeft ? productLeftWidth : 0;
-            return keptWidth + (resultIndex - otherFirst);
+            return otherFirstInInner + (resultIndex - otherFirst);
         }
 
         const size_t nestedFirst = rotation._nestedOnTheLeft ? 0 : productLeftWidth;
@@ -1973,7 +1965,7 @@ void rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::
         const bool fromTheLeft = nestedIndex < nestedLeftWidth;
         const size_t sidePosition = fromTheLeft ? nestedIndex : nestedIndex - nestedLeftWidth;
         if (fromTheLeft == rotation._keepsTheNestedLeft) {
-            return sidePosition;
+            return keptFirst + sidePosition;
         }
 
         return keptWidth + otherWidth + sidePosition;
@@ -1989,24 +1981,48 @@ void rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::
 
 // A rotation is pushed through in the same rewrite: the filter then stands in the factor the
 // rotation made, which is no bare product any more, so no other filter can rotate it back
-void regroupProductCut(ProductCut& cut, mlir::RewriterBase& rewriter) {
+void regroupProductCut(ProductCut& cut, ConeCache& cache, mlir::RewriterBase& rewriter) {
     if (!cut._rotation._rotates) {
         pushCutIntoFactors(cut, rewriter);
         return;
     }
 
     rotateProduct(cut._product, cut._rotation, rewriter);
+    cache.clear();
 
     ProductCut rotatedCut;
-    const bool pushes = matchProductCut(cut._filter, rotatedCut) && !rotatedCut._rotation._rotates;
+    const bool pushes = matchProductCut(cut._filter, cache, rotatedCut) && !rotatedCut._rotation._rotates;
     bioassert(pushes, "A rotated product leaves the conjunct that rotated it on one factor");
 
     pushCutIntoFactors(rotatedCut, rewriter);
 }
 
-struct RegroupProducts : public impl::RegroupProductsBase<RegroupProducts> {
+bool placeInAFactor(Operation* op, ConeCache& cache, mlir::RewriterBase& rewriter) {
+    FilterOp filter = dyn_cast<FilterOp>(op);
+
+    ProductCut cut;
+    UnwindPlacement placement;
+    if (filter && matchProductCut(filter, cache, cut)) {
+        regroupProductCut(cut, cache, rewriter);
+    } else if (!filter && matchUnwindPlacement(cast<Unwind>(op), cache, placement)) {
+        placeUnwind(placement, rewriter);
+    } else {
+        return false;
+    }
+
+    cache.clear();
+    return true;
+}
+
+// A filter moved into a factor can let an unwind sink below the filters left over the
+// product, and a sunk unwind can leave a filter over a product it then moves into: one
+// worklist over both drives the two to a fixed point
+struct PlaceInFactors : public impl::PlaceInFactorsBase<PlaceInFactors> {
     void runOnOperation() override {
-        runFilterWorklist<ProductCut>(getOperation(), matchProductCut, regroupProductCut);
+        ConeCache cache;
+        runWorklist<FilterOp, Unwind>(getOperation(), [&cache](Operation* op, mlir::RewriterBase& rewriter) {
+            return placeInAFactor(op, cache, rewriter);
+        });
     }
 };
 
@@ -5709,7 +5725,7 @@ Value cloneResidualMask(llvm::ArrayRef<Value> residual,
     MaskCone cone;
     llvm::SmallPtrSet<Operation*, 8> visited;
     for (const Value conjunct : residual) {
-        collectConePostOrder(conjunct, visited, cone);
+        collectConePostOrder(conjunct, isMaskComputeOp, visited, cone);
     }
 
     mlir::IRMapping mapping;
@@ -5831,7 +5847,7 @@ bool matchPropertyWrite(Operation* op, StringAttr& property, bool& nodeProperty)
 // Widens an op's carry set by one column and hands back the result it comes out as. A carry
 // set is the trailing operands and the trailing results of the op holding it, so the column
 // appends to both; an op's arity is fixed once built, hence the rebuild.
-Value appendCarriedColumn(Operation* op, Value column, mlir::OpBuilder& builder) {
+Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter) {
     llvm::SmallVector<Value> operands;
     llvm::append_range(operands, op->getOperands());
     operands.push_back(column);
@@ -5845,11 +5861,10 @@ Value appendCarriedColumn(Operation* op, Value column, mlir::OpBuilder& builder)
     state.addTypes(types);
     state.addAttributes(op->getAttrs());
 
-    builder.setInsertionPoint(op);
-    Operation* const widened = builder.create(state);
+    rewriter.setInsertionPoint(op);
+    Operation* const widened = rewriter.create(state);
 
-    op->replaceAllUsesWith(widened->getResults().drop_back());
-    op->erase();
+    rewriter.replaceOp(op, widened->getResults().drop_back());
 
     return widened->getResults().back();
 }
@@ -5873,7 +5888,7 @@ Value readStandingBefore(Value column, StringAttr property, bool nodeProperty, O
     return {};
 }
 
-Value carryThrough(Operation* op, Value column, mlir::OpBuilder& builder) {
+Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
     CarrySetLayout layout;
     const bool carries = matchCarrySetLayout(op, layout);
     bioassert(carries, "A row-mapping op has a carry set");
@@ -5885,7 +5900,7 @@ Value carryThrough(Operation* op, Value column, mlir::OpBuilder& builder) {
         }
     }
 
-    return appendCarriedColumn(op, column, builder);
+    return appendCarriedColumn(op, column, rewriter);
 }
 
 // The property columns reuse_property_reads carried down to each row column, so a later read
@@ -5958,7 +5973,7 @@ Value propertyColumnOf(Value column,
                        bool nodeProperty,
                        Operation* useSite,
                        CarriedPropertyColumns& carriedColumns,
-                       mlir::OpBuilder& builder) {
+                       mlir::RewriterBase& rewriter) {
     llvm::SmallVector<Operation*> carriers;
     llvm::SmallVector<size_t> carriedRowsResults;
     Value rows = column;
@@ -5998,7 +6013,7 @@ Value propertyColumnOf(Value column,
         Operation* const carrier = carriers[carrierIndex - 1];
         const llvm::SmallVector<Value> carrierResults(carrier->getResults());
 
-        propertyColumn = carryThrough(carrier, propertyColumn, builder);
+        propertyColumn = carryThrough(carrier, propertyColumn, rewriter);
 
         Operation* const carrying = propertyColumn.getDefiningOp();
         if (carrying != carrier) {
@@ -6033,7 +6048,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             }
         });
 
-        mlir::OpBuilder builder(&getContext());
+        mlir::IRRewriter rewriter(&getContext());
         CarriedPropertyColumns carriedColumns;
         for (Operation* const read : reads) {
             StringAttr property;
@@ -6048,7 +6063,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                 continue;
             }
 
-            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, carriedColumns, builder);
+            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, carriedColumns, rewriter);
             if (!reused) {
                 continue;
             }

@@ -118,7 +118,7 @@ TEST_F(CallDrivenIslandCodegenTest, islandIsCrossedWithTheDrivenComponent) {
 
 // A second yielded column would be left inside the product's factor, out of reach of the
 // clause that reads it, so codegen falls back to matching the pattern and joining it to the
-// call. regroup_products moves that join into the factor holding the call, where the walk
+// call. place_in_factors moves that join into the factor holding the call, where the walk
 // is seeded from the yielded column again.
 TEST_F(CallDrivenIslandCodegenTest, secondYieldedColumnSeedsTheWalkAfterTheFallback) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =

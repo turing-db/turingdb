@@ -4025,10 +4025,10 @@ void DBProgramGenerator::generateUnwind(const UnwindStmt* unwind) {
     InFlightColumns inFlight;
     collectInFlightColumns(inFlight);
 
-    // The element column's value type is the source's to decide and is resolved during
-    // lowering, as a property fetch's value column is. A carried column keeps its own
-    // type: the unwind replicates its rows, it never retypes them.
-    llvm::SmallVector<mlir::Type> resultTypes {mlir::db::ColumnType::get(_mlirCtxt)};
+    // The element column takes the type the source's elements carry. A carried column keeps
+    // its own type: the unwind replicates its rows, it never retypes them.
+    const mlir::Type sourceElement = mlir::cast<mlir::db::ColumnType>(source.getType()).getType();
+    llvm::SmallVector<mlir::Type> resultTypes {allocColumnType(unwoundElementType(_mlirCtxt, sourceElement))};
     for (const mlir::Value column : inFlight._columns) {
         resultTypes.push_back(column.getType());
     }
@@ -8471,16 +8471,13 @@ mlir::Value DBProgramGenerator::constantLabelList(llvm::ArrayRef<std::string> la
     return constant.getResult();
 }
 
-// The graph answers for the type of a property it already carries, so the read is left
-// typed none for the lowering to resolve. A name only this query's CREATE introduces is in
-// no schema the lowering can consult, so the type the analyzer gave it rides on the op
 mlir::Type DBProgramGenerator::propertyValueType(const PropertyExpr* propExpr) {
-    const ValueType created = propExpr->getCreatedValueType();
-    if (created == ValueType::Invalid) {
+    const ValueType valueType = propExpr->getValueType();
+    if (valueType == ValueType::Invalid) {
         return mlir::NoneType::get(_mlirCtxt);
     }
 
-    return mlir::storage::NullableType::get(_mlirCtxt, valueTypeToElementType(_opBuilder, created));
+    return mlir::storage::NullableType::get(_mlirCtxt, valueTypeToElementType(_opBuilder, valueType));
 }
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {

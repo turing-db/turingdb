@@ -24,11 +24,11 @@ public:
 
     void setPropertyName(std::string_view propName) { _propName = propName; }
 
-    // The value type the query will create the property with, for a name the graph does
-    // not carry yet - a CREATE in this same query spells it out. Invalid for every name
-    // the graph already knows, whose type the schema answers for
-    ValueType getCreatedValueType() const { return _createdValueType; }
-    void setCreatedValueType(ValueType valueType) { _createdValueType = valueType; }
+    // The value type of the property read: the schema's, or the one a CREATE in this same
+    // query gives a name the graph does not carry yet. Invalid for a read of a name neither
+    // knows, which reads null
+    ValueType getValueType() const { return _valueType; }
+    void setValueType(ValueType valueType) { _valueType = valueType; }
 
     bool isStringTableHeaderAccess() const { return _stringTableHeaderAccess; }
     void setStringTableHeaderAccess(bool csvHeaderAccess) {
@@ -65,7 +65,7 @@ private:
     VarDecl* _csvFieldDecl {nullptr};
     std::string_view _propName;
     std::string_view _mapKey;
-    ValueType _createdValueType {ValueType::Invalid};
+    ValueType _valueType {ValueType::Invalid};
     DateTimePart _dateTimePart {DateTimePart::Year};
     DurationPart _durationPart {DurationPart::Years};
     bool _stringTableHeaderAccess {false};
