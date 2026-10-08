@@ -1850,6 +1850,13 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
                                                    stepsAttr).getResult();
 }
 
+mlir::Value DBProgramGenerator::columnLeavingScope(const VarDecl* decl, mlir::Value column) {
+    const auto bindingIt = _part._pathBindings.find(decl);
+    const bool readsOtherThanItsEdges = bindingIt != end(_part._pathBindings) && !bindingIt->second.readsAsItsEdges();
+
+    return readsOtherThanItsEdges ? listColumnOf(decl, column) : column;
+}
+
 void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
     const auto& items = projection->items();
     bioassert(projected.size() == items.size(), "One projected column per return item expected");
@@ -5602,7 +5609,7 @@ void DBProgramGenerator::throwCSVRowRead(const Expr* expr, std::string_view rowN
 
 void DBProgramGenerator::bindCSVRowItems(const Projection* projection,
                                          VariableColumnMap& itemColumns,
-                                         llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) const {
+                                         llvm::SmallVectorImpl<PublishedColumn>& carriedColumns) {
     const bool reducesRows = projection->isAggregate() || projection->isDistinct();
 
     for (const Projection::ReturnItem& item : projection->items()) {
@@ -5633,7 +5640,7 @@ void DBProgramGenerator::bindCSVRowItems(const Projection* projection,
     }
 }
 
-mlir::Value DBProgramGenerator::findCSVRowColumn(const VarDecl* row) const {
+mlir::Value DBProgramGenerator::findCSVRowColumn(const VarDecl* row) {
     llvm::SmallVector<PublishedColumn> published;
     collectPublishedColumns(published);
 
@@ -6658,7 +6665,7 @@ void DBProgramGenerator::rebindScopeKeepingWrittenEntities(llvm::ArrayRef<Publis
     }
 }
 
-void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published) const {
+void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published) {
     forEachVariableColumn([&published](const VarDecl* decl, std::string_view name, mlir::Value column) {
         const auto sameName = [name](const PublishedColumn& candidate) {
             return candidate._name == name;
@@ -6674,10 +6681,25 @@ void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<Published
         published.push_back({decl, std::string(name), column});
     });
 
+    // A group variable of a quantified pattern has no column of its own: it is read off the
+    // paths of its walk, which leave the scope without the binding that reads it
+    for (const auto& [groupDecl, binding] : _part._pathBindings) {
+        const bool namesTheWalk = !binding._path || binding._path->getDecl() == groupDecl;
+        if (namesTheWalk) {
+            continue;
+        }
+
+        published.push_back({groupDecl, std::string(groupDecl->getName()), _part._varMap.at(binding._path).back()});
+    }
+
     // Under a name order rather than the map's, so the same query generates the same IR
     std::ranges::sort(published, [](const PublishedColumn& left, const PublishedColumn& right) {
         return left._name < right._name;
     });
+
+    for (PublishedColumn& column : published) {
+        column._column = columnLeavingScope(column._decl, column._column);
+    }
 }
 
 void DBProgramGenerator::publishInFlightColumns() {
@@ -6766,8 +6788,14 @@ void DBProgramGenerator::translateProjection(const Projection* projection,
 
         if constexpr (std::is_same_v<Type, VarDecl*>) {
             const auto findIt = variableColumns.find(item);
-            bioassert(findIt != end(variableColumns), "Return variable '{}' not found", item->getName());
-            return findIt->second;
+            if (findIt != end(variableColumns)) {
+                return columnLeavingScope(item, findIt->second);
+            }
+
+            const mlir::Value resolved = resolveEntityColumn(item);
+            bioassert(resolved, "Return variable '{}' not found", item->getName());
+
+            return resolved;
         } else {
             return getOrTranslateExprColumn(variableColumns, item);
         }
