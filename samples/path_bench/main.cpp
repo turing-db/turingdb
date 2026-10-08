@@ -254,7 +254,9 @@ void timeExploration(const GraphView& view,
     ColumnVector<PathRef> paths;
     PathTrie trie;
 
-    PathExplorator explorator(view, &seeds, PathExplorationDir::FORWARD, minHops, maxHops);
+    PathExplorator explorator(view, &seeds, minHops, maxHops);
+
+    explorator.addStep(PathExplorationDir::FORWARD);
     explorator.setIndices(&indices);
     explorator.setTargets(&targets);
     if (settings._materializePaths && !settings._distinct) {

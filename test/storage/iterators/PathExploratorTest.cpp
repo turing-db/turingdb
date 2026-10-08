@@ -396,7 +396,9 @@ TEST_F(PathExploratorTest, emptyInputYieldsNothing) {
     const ColumnNodeIDs input;
     ColumnVector<size_t> indices;
 
-    PathExplorator explorator(view, &input, PathExplorationDir::BOTH, 0, unbounded);
+    PathExplorator explorator(view, &input, 0, unbounded);
+
+    explorator.addStep(PathExplorationDir::BOTH);
     explorator.setIndices(&indices);
     EXPECT_FALSE(explorator.isValid());
 
@@ -413,7 +415,9 @@ TEST_F(PathExploratorTest, resetRestartsFromTheFirstSeed) {
     const ColumnNodeIDs input {0, 1};
     ColumnVector<size_t> indices;
 
-    PathExplorator explorator(view, &input, PathExplorationDir::FORWARD, 1, 2);
+    PathExplorator explorator(view, &input, 1, 2);
+
+    explorator.addStep(PathExplorationDir::FORWARD);
     explorator.setIndices(&indices);
 
     size_t firstRun = 0;

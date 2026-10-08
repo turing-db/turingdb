@@ -278,11 +278,10 @@ protected:
 
         PathExplorator explorator(view,
                                   _seeds,
-                                  steps.front()._direction,
                                   edgeBound(minRepetitions, stepCount),
                                   edgeBound(maxRepetitions, stepCount));
-        for (size_t step = 1; step < stepCount; step++) {
-            explorator.addStep(steps[step]._direction);
+        for (const BodyStep& step : steps) {
+            explorator.addStep(step._direction);
         }
 
         std::vector<EdgeTypeID> edgeTypes(stepCount);
@@ -563,7 +562,9 @@ TEST_F(PathExploratorBodyTest, readsOneHopOfEachRepetition) {
     PathTrie trie;
     ListBuffer<> buffer;
 
-    PathExplorator explorator(view, &_input, PathExplorationDir::FORWARD, 0, 3 * stepCount);
+    PathExplorator explorator(view, &_input, 0, 3 * stepCount);
+
+    explorator.addStep(PathExplorationDir::FORWARD);
     explorator.addStep(PathExplorationDir::BOTH);
     explorator.setIndices(&indices);
     explorator.setTargets(&targets);

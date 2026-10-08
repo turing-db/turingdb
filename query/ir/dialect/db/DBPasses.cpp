@@ -61,6 +61,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEFETCHNODES
 #define GEN_PASS_DEF_REROOTPATTERNATSEED
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
+#define GEN_PASS_DEF_HOISTHOPCONJUNCTS
 #define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
 #define GEN_PASS_DEF_SINKMAKEPATH
 #define GEN_PASS_DEF_FUSEPATHELEMENTS
@@ -4808,10 +4809,36 @@ Value hopImportArgument(ExplorePaths exploration, size_t step, Value import, mli
     return hopBlock->getArguments().back();
 }
 
+// The yield of a step's hop region, the rewriter left inserting ahead of it: null for a block
+// that yields nothing yet, the rewriter then inserting at its end
+Yield hopYieldOf(Block* hopBlock, mlir::RewriterBase& rewriter) {
+    Yield hopYield = hopBlock->empty() ? Yield {} : dyn_cast<Yield>(hopBlock->getTerminator());
+    if (hopYield) {
+        rewriter.setInsertionPoint(hopYield);
+    } else {
+        rewriter.setInsertionPointToEnd(hopBlock);
+    }
+
+    return hopYield;
+}
+
+// One more test the step's hop must pass, and-ed into what its region yields
+void joinHopTest(Yield hopYield, Value hopTest, Location loc, mlir::RewriterBase& rewriter) {
+    if (hopYield) {
+        const Type boolType = boolColumnType(rewriter.getContext());
+        const Value joined = rewriter.create<AndOp>(loc, boolType, hopYield.getColumns().front(), hopTest).getResult();
+
+        rewriter.modifyOpInPlace(hopYield, [&hopYield, joined]() {
+            hopYield->setOperand(0, joined);
+        });
+    } else {
+        rewriter.create<Yield>(loc, ValueRange {hopTest});
+    }
+}
+
 void addHopTest(const ExploreListPredicate& match, size_t step, mlir::RewriterBase& rewriter) {
     ExplorePaths exploration = match._exploration;
     ListPredicate predicate = match._predicate;
-    const Location loc = predicate.getLoc();
 
     Block* hopBlock = hopBlockOf(exploration, step, rewriter);
 
@@ -4823,25 +4850,10 @@ void addHopTest(const ExploreListPredicate& match, size_t step, mlir::RewriterBa
     ExpandPath expansion = match._expansion;
     const Value hopElement = hopBlock->getArgument(hopArgumentOf(expansion.getKind(), step));
 
-    Yield hopYield = hopBlock->empty() ? Yield {} : dyn_cast<Yield>(hopBlock->getTerminator());
-    if (hopYield) {
-        rewriter.setInsertionPoint(hopYield);
-    } else {
-        rewriter.setInsertionPointToEnd(hopBlock);
-    }
-
+    const Yield hopYield = hopYieldOf(hopBlock, rewriter);
     const Value hopTest = cloneElementTest(predicate, hopElement, hopCarried, rewriter);
 
-    if (hopYield) {
-        const Type boolType = boolColumnType(rewriter.getContext());
-        const Value joined = rewriter.create<AndOp>(loc, boolType, hopYield.getColumns().front(), hopTest).getResult();
-
-        rewriter.modifyOpInPlace(hopYield, [&hopYield, joined]() {
-            hopYield->setOperand(0, joined);
-        });
-    } else {
-        rewriter.create<Yield>(loc, ValueRange {hopTest});
-    }
+    joinHopTest(hopYield, hopTest, predicate.getLoc(), rewriter);
 }
 
 // A list over one step of the body is tested on that step's hops alone, a list over every
@@ -4893,6 +4905,152 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
 struct FuseExploreListPredicate : public impl::FuseExploreListPredicateBase<FuseExploreListPredicate> {
     void runOnOperation() override {
         runFilterWorklist<ExploreListPredicate>(getOperation(), matchExploreListPredicate, fuseExploreListPredicate);
+    }
+};
+
+// The ops of a hop region computing a conjunct, in block order, and the latest step whose
+// region takes every walk argument they read. Arguments past @param walkArguments are
+// imports, which every step takes, and values defined outside the region are constants.
+size_t collectConjunctSlice(Value conjunct, Block& block, size_t walkArguments, llvm::SmallVectorImpl<Operation*>& slice) {
+    size_t step = 0;
+    llvm::SmallPtrSet<Operation*, 16> visited;
+    llvm::SmallVector<Value> pending {conjunct};
+
+    while (!pending.empty()) {
+        const Value value = pending.pop_back_val();
+
+        if (const BlockArgument argument = dyn_cast<BlockArgument>(value)) {
+            const bool readsTheWalk = argument.getOwner() == &block && argument.getArgNumber() < walkArguments;
+            if (readsTheWalk) {
+                step = std::max(step, firstStepTakingHopArgument(argument.getArgNumber()));
+            }
+
+            continue;
+        }
+
+        Operation* const op = value.getDefiningOp();
+        const bool computedHere = op && op->getBlock() == &block;
+        if (!computedHere || !visited.insert(op).second) {
+            continue;
+        }
+
+        slice.push_back(op);
+        op->walk([&pending](Operation* nested) {
+            pending.append(nested->operand_begin(), nested->operand_end());
+        });
+    }
+
+    std::ranges::sort(slice, [](Operation* left, Operation* right) {
+        return left->isBeforeInBlock(right);
+    });
+
+    return step;
+}
+
+// Clones a conjunct of the last step's region into the region of @param step, which takes
+// the same walk arguments up to its own end node and the same imports after them
+void hoistConjunct(ExplorePaths exploration,
+                   Block& lastBlock,
+                   size_t lastWalkArguments,
+                   Value conjunct,
+                   llvm::ArrayRef<Operation*> slice,
+                   size_t step,
+                   mlir::RewriterBase& rewriter) {
+    Block* const hopBlock = hopBlockOf(exploration, step, rewriter);
+    const size_t walkArguments = hopWalkArgumentCount(step);
+
+    mlir::IRMapping mapping;
+    for (const BlockArgument argument : lastBlock.getArguments()) {
+        const size_t argumentNumber = argument.getArgNumber();
+        if (argumentNumber < walkArguments) {
+            mapping.map(argument, hopBlock->getArgument(static_cast<unsigned>(argumentNumber)));
+        } else if (argumentNumber >= lastWalkArguments) {
+            const size_t importIndex = argumentNumber - lastWalkArguments;
+            mapping.map(argument, hopBlock->getArgument(static_cast<unsigned>(walkArguments + importIndex)));
+        }
+    }
+
+    const Yield hopYield = hopYieldOf(hopBlock, rewriter);
+    for (Operation* const op : slice) {
+        rewriter.clone(*op, mapping);
+    }
+
+    joinHopTest(hopYield, mapping.lookupOrDefault(conjunct), conjunct.getLoc(), rewriter);
+}
+
+// Codegen writes the hop predicate in the last step's region, which takes the whole
+// repetition: each conjunct that an earlier step's arguments already cover moves there, so
+// the walk drops a prefix as soon as it fails
+void hoistHopConjuncts(ExplorePaths exploration, mlir::RewriterBase& rewriter) {
+    const size_t lastStep = exploration.getStepCount() - 1;
+    Region& lastHop = exploration.getHops()[lastStep];
+    if (lastStep == 0 || lastHop.empty()) {
+        return;
+    }
+
+    Block& lastBlock = lastHop.front();
+    Yield yield = dyn_cast<Yield>(lastBlock.getTerminator());
+    if (!yield || yield->getNumOperands() != 1) {
+        return;
+    }
+
+    llvm::SmallVector<Value> conjuncts;
+    llvm::SmallVector<AndOp> joins;
+    collectHopConjuncts(yield->getOperand(0), conjuncts, joins);
+
+    const size_t lastWalkArguments = hopWalkArgumentCount(lastStep);
+
+    llvm::SmallVector<Value> residual;
+    llvm::SmallVector<Operation*> slice;
+    for (const Value conjunct : conjuncts) {
+        slice.clear();
+        const size_t step = collectConjunctSlice(conjunct, lastBlock, lastWalkArguments, slice);
+
+        if (step == lastStep) {
+            residual.push_back(conjunct);
+        } else {
+            hoistConjunct(exploration, lastBlock, lastWalkArguments, conjunct, slice, step, rewriter);
+        }
+    }
+
+    if (residual.size() == conjuncts.size()) {
+        return;
+    } else if (residual.empty()) {
+        lastHop.dropAllReferences();
+        lastHop.getBlocks().clear();
+        return;
+    }
+
+    rewriter.setInsertionPoint(yield);
+    const Type boolType = boolColumnType(rewriter.getContext());
+
+    Value mask = residual.front();
+    for (const Value conjunct : llvm::drop_begin(residual)) {
+        mask = rewriter.create<AndOp>(yield.getLoc(), boolType, mask, conjunct).getResult();
+    }
+
+    rewriter.modifyOpInPlace(yield, [&yield, mask]() {
+        yield->setOperand(0, mask);
+    });
+
+    llvm::SmallVector<Operation*> computed;
+    for (Operation& op : lastBlock.without_terminator()) {
+        computed.push_back(&op);
+    }
+
+    for (Operation* const op : llvm::reverse(computed)) {
+        if (op->use_empty()) {
+            rewriter.eraseOp(op);
+        }
+    }
+}
+
+struct HoistHopConjuncts : public impl::HoistHopConjunctsBase<HoistHopConjuncts> {
+    void runOnOperation() override {
+        mlir::IRRewriter rewriter(&getContext());
+        getOperation()->walk([&rewriter](ExplorePaths exploration) {
+            hoistHopConjuncts(exploration, rewriter);
+        });
     }
 };
 

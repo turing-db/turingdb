@@ -6577,22 +6577,33 @@ uint64_t edgesOfRepetitions(uint64_t repetitions, size_t stepCount) {
 }
 
 // What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
-// walk does rather than what the average node carrying the type does. The first hop a seed
-// takes is the body's first step.
+// walk does rather than what the average node carrying the type does. A filter reading the
+// repetition sees none in the sample, so its step is sampled unfiltered.
 void sampleSeedsOf(const GraphView& view,
                    NLExplorePathsLoopData* loopData,
-                   PathHopFilter* hopFilter,
+                   std::span<PathHopFilter* const> hopFilters,
                    PathDistanceIndex::SeedExpansion& expansion) {
-    const NLExploreStep* firstStep = loopData->getStep(0);
+    const size_t stepCount = loopData->getStepCount();
 
-    std::span<const EdgeTypeID> edgeTypes;
-    if (firstStep->filtersByType()) {
-        edgeTypes = firstStep->getEdgeTypes();
+    std::vector<PathDistanceIndex::SampleStep> steps(stepCount);
+    for (size_t step = 0; step < stepCount; step++) {
+        const NLExploreStep* exploreStep = loopData->getStep(step);
+        PathDistanceIndex::SampleStep& sampleStep = steps[step];
+        sampleStep._direction = exploreStep->getDirection();
+
+        if (exploreStep->filtersByType()) {
+            sampleStep._edgeTypes = exploreStep->getEdgeTypes();
+        }
+
+        PathHopFilter* hopFilter = hopFilters[step];
+        if (hopFilter && !hopFilter->readsRepetition()) {
+            sampleStep._hopFilter = hopFilter;
+        }
     }
 
     const PartDirectory parts(view);
 
-    PathDistanceIndex::sampleSeedExpansion(parts, firstStep->getDirection(), edgeTypes, loopData->getInput()->getRaw(), expansion, hopFilter);
+    PathDistanceIndex::sampleSeedExpansion(parts, steps, loopData->getInput()->getRaw(), expansion);
 }
 
 // The distance index of an end-constrained exploration is built at most once per loop, the
@@ -6717,12 +6728,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const uint64_t maxHops = loopData->isMatchable() ? edgesOfRepetitions(loopData->getMaxHops(), stepCount) : 0;
 
     const GraphView& view = *context->getView();
-    const NLExploreStep* firstStep = loopData->getStep(0);
-    PathExplorator explorator(view,
-                              inputNodeIDs,
-                              firstStep->getDirection(),
-                              minHops,
-                              maxHops);
+    PathExplorator explorator(view, inputNodeIDs, minHops, maxHops);
     explorator.setIndices(loopData->getIndices());
     explorator.setTargets(loopData->getTargets());
 
@@ -6732,9 +6738,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     for (size_t step = 0; step < stepCount; step++) {
         const NLExploreStep* exploreStep = loopData->getStep(step);
-        if (step > 0) {
-            explorator.addStep(exploreStep->getDirection());
-        }
+        explorator.addStep(exploreStep->getDirection());
 
         if (exploreStep->filtersByType()) {
             explorator.setEdgeTypeFilter(step, exploreStep->getEdgeTypes());
@@ -6760,7 +6764,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     std::vector<std::optional<NLHopFilter>> hopRegionFilters(stepCount);
     std::vector<std::optional<PathLabelHopFilter>> hopLabelFilters(stepCount);
-    PathHopFilter* firstHopFilter = nullptr;
+    std::vector<PathHopFilter*> hopFilters(stepCount, nullptr);
     for (size_t step = 0; step < stepCount; step++) {
         const NLExploreStep* exploreStep = loopData->getStep(step);
 
@@ -6778,9 +6782,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
             explorator.setHopFilter(step, hopFilter);
         }
 
-        if (step == 0) {
-            firstHopFilter = hopFilter;
-        }
+        hopFilters[step] = hopFilter;
     }
 
     // The level search of the distinct mode prunes by no index
@@ -6795,7 +6797,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     if (prunes) {
         loopData->addSeedsSeen(inputNodeIDs->size());
         if (readsSample) {
-            sampleSeedsOf(view, loopData, firstHopFilter, expansion);
+            sampleSeedsOf(view, loopData, hopFilters, expansion);
         }
     }
 

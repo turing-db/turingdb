@@ -90,12 +90,25 @@ public:
         double _tailPassRate {1.0};
     };
 
-    // Expands a sample of the seeds along the walk's direction, one level at a time. What a
-    // walk costs turns on the fan-out of where it starts, and an average over every node
-    // carrying the type misses that by the exponent of the bound.
+    // One step of the body a walk repeats, as the sample expands it
+    struct SampleStep {
+        PathExplorationDir _direction {PathExplorationDir::FORWARD};
+        std::span<const EdgeTypeID> _edgeTypes;
+        PathHopFilter* _hopFilter {nullptr};
+    };
+
+    // Expands a sample of the seeds along the walk, one level at a time, each level taken by
+    // the step of the body the walk takes it with. What a walk costs turns on the fan-out of
+    // where it starts, and an average over every node carrying the type misses that by the
+    // exponent of the bound.
     // A hop predicate is applied as the walk applies it, so only the candidates it keeps are
     // expanded: a predicate that rejects the hubs keeps the walk off the fan-out they carry,
     // and no pass rate averaged over the graph says which candidates those are.
+    static void sampleSeedExpansion(const PartDirectory& parts,
+                                    std::span<const SampleStep> steps,
+                                    std::span<const NodeID> seeds,
+                                    SeedExpansion& expansion);
+
     static void sampleSeedExpansion(const PartDirectory& parts,
                                     PathExplorationDir direction,
                                     std::span<const EdgeTypeID> edgeTypes,

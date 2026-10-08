@@ -109,7 +109,9 @@ protected:
         ColumnVector<PathRef> paths;
         PathTrie trie;
 
-        PathExplorator explorator(view, &input, PathExplorationDir::FORWARD, 1, maxHops);
+        PathExplorator explorator(view, &input, 1, maxHops);
+
+        explorator.addStep(PathExplorationDir::FORWARD);
         explorator.setIndices(&indices);
         explorator.setTargets(&targets);
         explorator.setPaths(&paths, &trie);
@@ -170,7 +172,8 @@ TEST_F(PathExploratorReclaimTest, exploratorsSharingATrieKeepTheirOwnEntries) {
     ColumnVector<size_t> outerIndices;
     ColumnNodeIDs outerTargets;
     ColumnVector<PathRef> outerPaths;
-    PathExplorator outer(view, &input, PathExplorationDir::FORWARD, 1, 3);
+    PathExplorator outer(view, &input, 1, 3);
+    outer.addStep(PathExplorationDir::FORWARD);
     outer.setIndices(&outerIndices);
     outer.setTargets(&outerTargets);
     outer.setPaths(&outerPaths, &trie);
@@ -182,7 +185,8 @@ TEST_F(PathExploratorReclaimTest, exploratorsSharingATrieKeepTheirOwnEntries) {
         ColumnVector<size_t> innerIndices;
         ColumnNodeIDs innerTargets;
         ColumnVector<PathRef> innerPaths;
-        PathExplorator inner(view, &input, PathExplorationDir::FORWARD, 1, 2);
+        PathExplorator inner(view, &input, 1, 2);
+        inner.addStep(PathExplorationDir::FORWARD);
         inner.setIndices(&innerIndices);
         inner.setTargets(&innerTargets);
         inner.setPaths(&innerPaths, &trie);

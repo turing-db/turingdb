@@ -182,7 +182,9 @@ size_t turing::test::collectPaths(const GraphView& view,
     PathTrie trie;
     ListBuffer<> buffer;
 
-    PathExplorator explorator(view, &input, direction, minHops, maxHops);
+    PathExplorator explorator(view, &input, minHops, maxHops);
+
+    explorator.addStep(direction);
     explorator.setIndices(&indices);
     if (options._collectTargets) {
         explorator.setTargets(&targets);
