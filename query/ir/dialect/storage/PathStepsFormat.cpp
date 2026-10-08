@@ -9,6 +9,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "StorageEnums.h"
+#include "PathHopArguments.h"
 
 using namespace mlir;
 
@@ -145,7 +146,7 @@ ParseResult mlir::parseHopRegions(OpAsmParser& parser,
 }
 
 void mlir::printHopRegions(OpAsmPrinter& printer, Operation* op, MutableArrayRef<Region> hops, DenseI64ArrayAttr directions) {
-    const bool hasPredicate = llvm::any_of(hops, [](Region& hop) { return !hop.empty(); });
+    const bool hasPredicate = hasHopPredicate(hops);
     if (!hasPredicate) {
         return;
     }

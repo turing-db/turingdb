@@ -1293,9 +1293,9 @@ private:
                            llvm::SmallVectorImpl<const VarDecl*>& imports,
                            llvm::SmallVectorImpl<mlir::Value>& columns);
 
-    // Appends the masks of one inner node's label and property constraints, read over the
-    // hop column that node is bound to
-    void collectHopNodeMasks(const NodePattern* node, mlir::Value column, llvm::SmallVectorImpl<mlir::Value>& masks);
+    // Appends the mask of one inner node's label constraint, read over the hop column that
+    // node is bound to
+    void collectHopLabelMask(const NodePattern* node, mlir::Value column, llvm::SmallVectorImpl<mlir::Value>& masks);
 
     // The column a consumer reading a list is handed for @param column: the column itself,
     // or - when it holds paths - the list each path expands to for the variable of

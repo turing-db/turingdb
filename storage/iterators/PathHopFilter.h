@@ -9,9 +9,8 @@ namespace db {
 
 // The candidates leaving one source, held in a batch right after the previous frame's.
 // _seedRow is the input row the walk left from, which is what a predicate reading a
-// column outside the hop reads its one value at. A walk repeating a body of several hops
-// gives the nodes and edges it took earlier in the current repetition, the node it started
-// the repetition from first; the source follows the last of those nodes.
+// column outside the hop reads its one value at. The repetition spans hold what the walk
+// took earlier in the current repetition of a body of several hops, its first node first.
 struct PathHopFrame {
     size_t _seedRow {0};
     NodeID _source;

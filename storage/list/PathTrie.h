@@ -19,18 +19,17 @@ struct PathTrieEntry {
     uint64_t _depth {0};
 };
 
-// The paths one query enumerates, each stored as a chain of parent pointers: a prefix shared
-// by many paths is one chain of entries, and a row holds only the handle of its last entry.
-// Entries live in arenas, one per walk, that grow and shrink with it; a handle names
-// its arena in its high bits and stays valid for the chunk that emitted it.
-// The hops a list is read off: hop _offset, then every _stride-th hop after it. A walk
-// repeating a body of several hops reads each hop of the body as its offset into each
-// repetition; every hop of a walk is offset 0 of stride 1.
+// The hops a list is read off: hop _offset, then every _stride-th hop after it, so each hop
+// of a repeated body reads as its offset into every repetition.
 struct PathHopStride {
     size_t _offset {0};
     size_t _stride {1};
 };
 
+// The paths one query enumerates, each stored as a chain of parent pointers: a prefix shared
+// by many paths is one chain of entries, and a row holds only the handle of its last entry.
+// Entries live in arenas, one per walk, that grow and shrink with it; a handle names
+// its arena in its high bits and stays valid for the chunk that emitted it.
 class PathTrie {
 public:
     static constexpr PathRef ROOT {0};

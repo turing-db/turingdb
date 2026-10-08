@@ -433,8 +433,8 @@ bool PathExplorator::levelsFindTrails() const {
 
     for (size_t step = 0; step < _steps.size(); step++) {
         const Step& taken = _steps[step];
-        const bool readsRepetition = taken._hopFilter && taken._hopFilter->readsRepetition();
-        if (taken._direction == PathExplorationDir::BOTH || !taken._filterByType || readsRepetition) {
+        const bool walksBothWays = taken._direction == PathExplorationDir::BOTH;
+        if (walksBothWays || !taken._filterByType || taken.readsRepetition()) {
             return false;
         }
 
@@ -625,10 +625,7 @@ void PathExplorator::fill(size_t maxCount) {
         _prunes = _expansionSpan < std::numeric_limits<uint64_t>::max() / nodeBound;
     }
 
-    const auto readsRepetition = [](const Step& step) {
-        return step._hopFilter && step._hopFilter->readsRepetition();
-    };
-    _remembersExpansions = _prunes && std::none_of(_steps.begin(), _steps.end(), readsRepetition);
+    _remembersExpansions = _prunes && std::ranges::none_of(_steps, &Step::readsRepetition);
 
     if (_paths) {
         retainWalkedPath();
@@ -948,7 +945,8 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         const bool beyondTarget = !ruledOut && !beyondLabels && checksTarget && !canReachTargetWithin(record._otherID, remainingHops);
 
         if (ruledOut || beyondLabels || beyondTarget) {
-            if (_remembersExpansions && onTrail) {
+            const bool blockedOnlyByTrail = onTrail && !wrongType && !deleted;
+            if (_remembersExpansions && blockedOnlyByTrail) {
                 dependOnBlockedEdge(edge, record._otherID, candidateDepth, heldAt);
             }
 

@@ -31,9 +31,7 @@ class Tombstones;
 
 // Enumerates every trail of minHops to maxHops edges leaving each input node, depth first,
 // as a chunk writer: each fill emits up to maxCount rows of (input row, end node, path).
-// The walk repeats a body of steps, each with its own direction, edge types and hop filter,
-// and ends only after a whole number of repetitions; the body starts as the one step of the
-// direction the walk is made with.
+// The walk repeats a body of steps and ends only after a whole number of repetitions.
 // With end labels, end nodes or an end node set only the paths ending on a node carrying
 // them, on the seed's own target, or on a node of the set are emitted, and with a distance
 // or target index set the prefixes that cannot reach such a node in time are not walked. In
@@ -88,6 +86,8 @@ private:
         std::span<const EdgeTypeID> _edgeTypes;
         std::vector<uint64_t> _edgeTypeWords;
         PathHopFilter* _hopFilter {nullptr};
+
+        bool readsRepetition() const { return _hopFilter && _hopFilter->readsRepetition(); }
     };
 
     // The candidates of one node on the path, a range of the candidate stacks. The held edges

@@ -7,11 +7,9 @@
 
 namespace mlir {
 
-// Custom assembly-format directives shared by db.explore_paths and nl.explore_paths for the
-// body of steps a walk repeats. A body of one step prints as the hop it is - `forward`,
-// `["KNOWS"]`, its region bare - and a longer one as lists: `[forward, backward]`,
-// `[["KNOWS"], []]`, then one region per step, `{}` for a step without a predicate. A body
-// without any predicate prints no region at all.
+// Assembly-format directives of db.explore_paths and nl.explore_paths: a body of one step
+// prints as the hop it is (`forward`, `["KNOWS"]`, its region bare), a longer one as lists
+// with one region per step, `{}` for a step without a predicate.
 ParseResult parsePathDirections(OpAsmParser& parser, DenseI64ArrayAttr& directions);
 
 void printPathDirections(OpAsmPrinter& printer, Operation* op, DenseI64ArrayAttr directions);

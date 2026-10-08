@@ -125,9 +125,9 @@
     constexpr const char* quantifierTwiceMessage = "A relationship takes one length quantifier: "
                                                    "either [e*1..3] inside the brackets or {1,3} after them";
 
-    constexpr const char* nestedQuantifierMessage = "A quantified pattern cannot repeat a pattern that is quantified itself";
+    constexpr const char* NESTED_QUANTIFIER_MESSAGE = "A quantified pattern cannot repeat a pattern that is quantified itself";
 
-    constexpr const char* hoplessQuantifierMessage = "A quantified pattern repeats at least one relationship";
+    constexpr const char* HOPLESS_QUANTIFIER_MESSAGE = "A quantified pattern repeats at least one relationship";
 
     }
 }
@@ -1626,12 +1626,13 @@ patternElemChain
         const size_t hopCount = entities.size() / 2;
 
         if (hopCount == 0) {
-            scanner.syntaxError(@2, hoplessQuantifierMessage);
+            scanner.syntaxError(@2, HOPLESS_QUANTIFIER_MESSAGE);
         }
 
         for (auto [hop, node] : body->getElementChain()) {
             if (hop->getQuantifiedPath()) {
-                scanner.syntaxError(@2, hopCount == 1 ? quantifierTwiceMessage : nestedQuantifierMessage);
+                const bool quantifiesOneRelationshipTwice = hopCount == 1 && !hop->getHopNode(0);
+                scanner.syntaxError(@2, quantifiesOneRelationshipTwice ? quantifierTwiceMessage : NESTED_QUANTIFIER_MESSAGE);
             }
         }
 

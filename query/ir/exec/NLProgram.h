@@ -884,13 +884,7 @@ public:
     NLExploreStep(PathExplorationDir direction,
                   bool filtersByType,
                   std::span<const EdgeTypeID> edgeTypes,
-                  bool matchable)
-        : _direction(direction),
-        _filtersByType(filtersByType),
-        _edgeTypes(edgeTypes.begin(), edgeTypes.end()),
-        _matchable(matchable)
-    {
-    }
+                  bool matchable);
 
     PathExplorationDir getDirection() const { return _direction; }
     bool filtersByType() const { return _filtersByType; }
@@ -920,6 +914,7 @@ public:
 
     std::span<ColumnNodeIDs* const> getHopNodes() const { return _hopNodes; }
     std::span<ColumnEdgeIDs* const> getHopEdges() const { return _hopEdges; }
+    size_t getHopPosition() const { return _hopEdges.size() - 1; }
     std::span<const NLHopImport> getHopImports() const { return _hopImports; }
     const Column* getHopMask() const { return _hopMask; }
     NLMaskSurvivorFunction getHopSurvivors() const { return _hopSurvivors; }
@@ -971,19 +966,12 @@ public:
     NLExploreStep* addStep(PathExplorationDir direction,
                            bool filtersByType,
                            std::span<const EdgeTypeID> edgeTypes,
-                           bool matchable) {
-        _steps.push_back(std::make_unique<NLExploreStep>(direction, filtersByType, edgeTypes, matchable));
-        return _steps.back().get();
-    }
+                           bool matchable);
 
     size_t getStepCount() const { return _steps.size(); }
     NLExploreStep* getStep(size_t step) const { return _steps[step].get(); }
 
-    bool isMatchable() const {
-        return std::ranges::all_of(_steps, [](const std::unique_ptr<NLExploreStep>& step) {
-            return step->isMatchable();
-        });
-    }
+    bool isMatchable() const;
 
     void setEndLabels(const LabelSet& endLabels, bool matchable) {
         _endLabels = endLabels;

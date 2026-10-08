@@ -32,6 +32,7 @@
 
 #include "IRConstantColumn.h"
 #include "PropertyScanLiteral.h"
+#include "PathHopArguments.h"
 #include "DBOps.h"
 
 #include "BioAssert.h"
@@ -3787,7 +3788,7 @@ bool fuseStepHopLabels(ExplorePaths exploration, size_t step, llvm::SmallVectorI
     llvm::SmallVector<AndOp> joins;
     collectHopConjuncts(yield->getOperand(0), conjuncts, joins);
 
-    const BlockArgument end = block.getArgument(static_cast<unsigned>(2 * step + 2));
+    const BlockArgument end = block.getArgument(hopEndArgument(step));
 
     llvm::SmallVector<CheckLabelConstraint> checks;
     llvm::SmallVector<Value> residual;
@@ -3861,7 +3862,7 @@ void fuseHopLabels(ExplorePaths exploration, mlir::OpBuilder& builder) {
 
     exploration.setHopLabelsAttr(builder.getArrayAttr(stepLabels));
 
-    const bool hasPredicate = llvm::any_of(exploration.getHops(), [](Region& hop) { return !hop.empty(); });
+    const bool hasPredicate = hasHopPredicate(exploration.getHops());
     if (!hasPredicate) {
         exploration.getHopImportsMutable().clear();
     }
@@ -4716,30 +4717,20 @@ bool matchExploreListPredicate(FilterOp filter, ExploreListPredicate& match) {
 // The argument of a step's hop region holding the element a list of the expansion kind reads
 // off that hop: the region opens on the step's earlier nodes and edges
 unsigned hopArgumentOf(storage::PathExpansionKind expansionKind, size_t step) {
-    constexpr unsigned HOP_SOURCE_ARGUMENT = 0;
-    constexpr unsigned HOP_EDGE_ARGUMENT = 1;
-    constexpr unsigned HOP_END_ARGUMENT = 2;
-
-    const unsigned stepOffset = static_cast<unsigned>(2 * step);
-
     switch (expansionKind) {
         case storage::PathExpansionKind::Sources:
-            return stepOffset + HOP_SOURCE_ARGUMENT;
+            return hopSourceArgument(step);
         break;
         case storage::PathExpansionKind::Edges:
-            return stepOffset + HOP_EDGE_ARGUMENT;
+            return hopEdgeArgument(step);
         break;
         case storage::PathExpansionKind::Ends:
         case storage::PathExpansionKind::Nodes:
-            return stepOffset + HOP_END_ARGUMENT;
+            return hopEndArgument(step);
         break;
     }
 
     llvm_unreachable("Unknown path expansion kind");
-}
-
-size_t hopArgumentCount(size_t step) {
-    return 2 * step + 3;
 }
 
 // Clones the predicate's body at the rewriter's insertion point over the element column and
@@ -4783,15 +4774,7 @@ Block* hopBlockOf(ExplorePaths exploration, size_t step, mlir::RewriterBase& rew
     const Type edgeType = ColumnType::get(context, storage::EdgeIDType::get(context));
 
     llvm::SmallVector<Type> argumentTypes;
-    for (size_t hopIndex = 0; hopIndex <= step; hopIndex++) {
-        argumentTypes.push_back(nodeType);
-        argumentTypes.push_back(edgeType);
-    }
-    argumentTypes.push_back(nodeType);
-
-    for (const Value import : exploration.getHopImports()) {
-        argumentTypes.push_back(import.getType());
-    }
+    buildHopArgumentTypes(step, nodeType, edgeType, exploration.getHopImports(), argumentTypes);
 
     const llvm::SmallVector<Location> argumentLocations(argumentTypes.size(), exploration.getLoc());
 
@@ -4803,7 +4786,7 @@ Block* hopBlockOf(ExplorePaths exploration, size_t step, mlir::RewriterBase& rew
 // A new import is one more argument of every hop region the exploration has
 Value hopImportArgument(ExplorePaths exploration, size_t step, Value import, mlir::RewriterBase& rewriter) {
     Block* hopBlock = &exploration.getHops()[step].front();
-    const size_t hopArguments = hopArgumentCount(step);
+    const size_t hopArguments = hopWalkArgumentCount(step);
 
     const Operation::operand_range imports = exploration.getHopImports();
     for (size_t importIndex = 0; importIndex < imports.size(); importIndex++) {
@@ -4870,7 +4853,8 @@ void fuseExploreListPredicate(ExploreListPredicate& match, mlir::RewriterBase& r
     ExpandPath expansion = match._expansion;
 
     const std::optional<uint64_t> expandedStep = expansion.getStep();
-    for (size_t step = 0; step < exploration.getStepCount(); step++) {
+    const size_t stepCount = exploration.getStepCount();
+    for (size_t step = 0; step < stepCount; step++) {
         if (!expandedStep || *expandedStep == step) {
             addHopTest(match, step, rewriter);
         }

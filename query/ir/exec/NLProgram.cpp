@@ -87,6 +87,32 @@ NLProcedureState::~NLProcedureState() {
 NLShortestPathState::~NLShortestPathState() {
 }
 
+NLExploreStep::NLExploreStep(PathExplorationDir direction,
+                             bool filtersByType,
+                             std::span<const EdgeTypeID> edgeTypes,
+                             bool matchable)
+    : _direction(direction),
+    _filtersByType(filtersByType),
+    _edgeTypes(edgeTypes.begin(), edgeTypes.end()),
+    _matchable(matchable)
+{
+}
+
+NLExploreStep* NLExplorePathsLoopData::addStep(PathExplorationDir direction,
+                                               bool filtersByType,
+                                               std::span<const EdgeTypeID> edgeTypes,
+                                               bool matchable) {
+    _steps.push_back(std::make_unique<NLExploreStep>(direction, filtersByType, edgeTypes, matchable));
+
+    return _steps.back().get();
+}
+
+bool NLExplorePathsLoopData::isMatchable() const {
+    return std::ranges::all_of(_steps, [](const std::unique_ptr<NLExploreStep>& step) {
+        return step->isMatchable();
+    });
+}
+
 NLNodeSetState::NLNodeSetState() {
 }
 
