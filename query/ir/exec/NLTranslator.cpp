@@ -3292,8 +3292,9 @@ void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
 
 void NLTranslator::translateSubstring(nl::Substring substring, NLStmtContainer* body) {
     const mlir::Value resultValue = substring.getResult();
+    const mlir::Type resultType = resultValue.getType();
 
-    Column* const result = allocColumnForChunkType(resultValue.getType());
+    Column* const result = allocColumnForChunkType(resultType);
     _valueSlots[resultValue] = result;
 
     const Column* const string = getColumn(substring.getString());
@@ -3310,7 +3311,14 @@ void NLTranslator::translateSubstring(nl::Substring substring, NLStmtContainer* 
 
     NLSubstringData* data = _program->allocFunctionData<NLSubstringData>(result, stringArgument, startArgument, length);
 
-    body->emplaceStmt(&NLExecutor::runSubstring, data);
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
+    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
+
+    if (resultNullable) {
+        body->emplaceStmt(&NLExecutor::runSubstring<std::optional<types::String::Primitive>>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runSubstring<types::String::Primitive>, data);
+    }
 }
 
 template <typename Data, typename Op, typename... Extra>
