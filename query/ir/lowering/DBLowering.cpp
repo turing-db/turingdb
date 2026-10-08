@@ -2267,6 +2267,9 @@ void DBLowering::lowerRange(mlir::db::Range range) {
 }
 
 void DBLowering::lowerSubstring(mlir::db::Substring substring) {
+    const mlir::Type stringChunkType = mapValue(substring.getString()).getType();
+    const bool stringMayBeNull = isNullableChunk(stringChunkType) || isTaggedCellChunk(stringChunkType);
+
     llvm::SmallVector<mlir::Value, 3> columns {substring.getString(), substring.getStart()};
 
     const mlir::Value length = substring.getLength();
@@ -2279,7 +2282,8 @@ void DBLowering::lowerSubstring(mlir::db::Substring substring) {
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type stringType = storage::StringType::get(context);
-    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, stringType));
+    const mlir::Type resultElement = stringMayBeNull ? storage::NullableType::get(context, stringType) : stringType;
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     setInsertionForNaryOp(arguments);
 

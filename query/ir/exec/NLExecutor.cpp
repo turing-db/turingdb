@@ -7225,6 +7225,7 @@ void NLExecutor::runMakeMap(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+template <typename Result>
 void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     const NLSubstringData* substring = static_cast<NLSubstringData*>(data);
 
@@ -7237,8 +7238,7 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     bioassert(!length._column || length._column->size() == rowCount,
               "Length column of a substring is not row-aligned with its string.");
 
-    std::vector<std::optional<types::String::Primitive>>& outputRaw =
-        static_cast<ColumnOptVector<types::String::Primitive>*>(substring->getResult())->getRaw();
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(substring->getResult())->getRaw();
     outputRaw.resize(rowCount);
 
     const SubstringFunction function {};
@@ -7254,13 +7254,18 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
         const bool boundIsNull = !from.has_value() || !count.has_value();
         if (boundIsNull) {
             throw IRException("substring() does not take a null start or length");
-        } else if (!text.has_value()) {
+        } else if (text.has_value()) {
+            outputRaw[rowIndex] = function(*text, *from, *count);
+        } else if constexpr (TypeUtils::is_optional_v<Result>) {
             outputRaw[rowIndex] = std::nullopt;
         } else {
-            outputRaw[rowIndex] = function(*text, *from, *count);
+            throw IRException("substring() typed as never null read a null string");
         }
     }
 }
+
+template void NLExecutor::runSubstring<types::String::Primitive>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runSubstring<std::optional<types::String::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
 
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
