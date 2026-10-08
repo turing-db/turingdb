@@ -34,20 +34,19 @@ public:
 
     QuantifiedPath* getQuantifiedPath() const { return _quantifiedPath; }
 
-    // The hops a quantified pattern repeats: (n)((a)-[e]->(b)-[f]->(c) WHERE ...){1,3}(m)
-    // repeats e then f. A pattern of one hop is that hop's own edge pattern, and one of
-    // several an edge pattern of its own holding them.
-    size_t getHopCount() const { return _hops.empty() ? 1 : _hops.size(); }
-    EdgePattern* getHop(size_t hop) { return _hops.empty() ? this : _hops[hop]; }
-    const EdgePattern* getHop(size_t hop) const { return _hops.empty() ? this : _hops[hop]; }
+    // A quantified pattern is a walk holding the hops it repeats: [e*1..3] holds e, and
+    // (n)((a)-[e]->(b)-[f]->(c) WHERE ...){1,3}(m) holds e then f
+    size_t getHopCount() const { return _hops.size(); }
+    EdgePattern* getHop(size_t hop) { return _hops[hop]; }
+    const EdgePattern* getHop(size_t hop) const { return _hops[hop]; }
 
     // The nodes of the parenthesized form, one more than its hops, and the predicate, which
     // constrain every repetition of the pattern. Null for the bracketed form, [e*1..3].
     NodePattern* getHopNode(size_t position) const { return _hopNodes.empty() ? nullptr : _hopNodes[position]; }
     WhereClause* getHopWhere() const { return _hopWhere; }
 
-    // The declarations of a quantified pattern: the single edge a hop's variable is inside
-    // the pattern, and the group variable each named node is outside it
+    // The declarations of a quantified pattern: inside it a hop's variable is the single edge
+    // of its hop decl; outside it the hop's own decl and each named node's group are lists
     VarDecl* getHopDecl() const { return _hopDecl; }
     VarDecl* getHopNodeGroup(size_t position) const { return _hopNodeGroups.empty() ? nullptr : _hopNodeGroups[position]; }
 
@@ -66,7 +65,8 @@ public:
 
     void setQuantifiedPath(QuantifiedPath* quantifiedPath) { _quantifiedPath = quantifiedPath; }
 
-    void addHop(EdgePattern* hop) { _hops.push_back(hop); }
+    // A walk takes the direction its hops share, and is undirected when they differ
+    void addHop(EdgePattern* hop);
     void addHopNode(NodePattern* node) { _hopNodes.push_back(node); }
     void setHopWhere(WhereClause* where) { _hopWhere = where; }
     void setHopDecl(VarDecl* decl) { _hopDecl = decl; }

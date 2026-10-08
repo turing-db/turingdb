@@ -1267,7 +1267,6 @@ private:
                          const VariableDependency* tgt,
                          const std::vector<const VariableDependency*>& carrySet,
                          const EdgeMetadata& metadata,
-                         mlir::storage::PathDirection direction,
                          bool reversed,
                          mlir::Value* joinedTarget);
 
@@ -1371,6 +1370,7 @@ private:
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
     void rebindYieldedColumn(const VarDecl* decl, mlir::TypedValue<mlir::Type> val);
     void rebindNamedPath(const VarDecl* decl, mlir::Value column);
+    void rebindGroupVariable(const VarDecl* decl, mlir::Value column);
 };
 
 }

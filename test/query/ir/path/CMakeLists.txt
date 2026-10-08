@@ -253,3 +253,7 @@ add_call_v3_test(test_query_ir_quantified_nested_body QuantifiedNestedBodyTest.c
 add_call_v3_test(test_query_ir_quantified_walk_bound_name QuantifiedWalkBoundNameTest.cpp)
 
 add_call_v3_test(test_query_ir_quantified_group_across_scopes QuantifiedGroupAcrossScopesTest.cpp)
+
+add_call_v3_test(test_query_ir_walk_list_equality WalkListEqualityTest.cpp)
+
+add_call_v3_test(test_query_ir_quantified_group_key QuantifiedGroupKeyTest.cpp)

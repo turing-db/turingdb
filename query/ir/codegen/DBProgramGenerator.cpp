@@ -572,28 +572,6 @@ void collectDefiningOps(mlir::ValueRange values, llvm::DenseSet<mlir::Operation*
     }
 }
 
-mlir::storage::PathDirection toPathDirection(EdgeMetadata::EdgeType type) {
-    switch (type) {
-        case EdgeMetadata::EdgeType::GET_OUT_EDGES:
-            return mlir::storage::PathDirection::Forward;
-        break;
-
-        case EdgeMetadata::EdgeType::GET_IN_EDGES:
-            return mlir::storage::PathDirection::Backward;
-        break;
-
-        case EdgeMetadata::EdgeType::GET_EDGES:
-            return mlir::storage::PathDirection::Both;
-        break;
-
-        default:
-            throw FatalException("Invalid attempt to explore paths along a non-traversal edge");
-        break;
-    }
-
-    throw FatalException("Uncaught edge type.");
-}
-
 bool constrainsHop(const NodePattern* node) {
     if (!node) {
         return false;
@@ -1030,6 +1008,25 @@ void DBProgramGenerator::rebindNamedPath(const VarDecl* decl, mlir::Value column
     _part._namedPaths[decl] = column;
 }
 
+void DBProgramGenerator::rebindGroupVariable(const VarDecl* decl, mlir::Value column) {
+    const auto bindingIt = _part._pathBindings.find(decl);
+    if (bindingIt == end(_part._pathBindings)) {
+        return;
+    }
+
+    const VariableDependency* walk = bindingIt->second._path;
+    const bool readOffAWalk = walk && walk->getDecl() != decl;
+    if (!readOffAWalk) {
+        return;
+    }
+
+    // The column holds the group's list now, no longer read off the walk's paths
+    _part._pathBindings.erase(bindingIt);
+
+    const VariableDependency* var = _vdg.registerBoundVariable(decl->getName(), decl);
+    registerValue(var, column);
+}
+
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_part._varMap.contains(var), "ScanNodes for registered variable");
 
@@ -1444,27 +1441,13 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                          const VariableDependency* tgt,
                                          const std::vector<const VariableDependency*>& carrySet,
                                          const EdgeMetadata& metadata,
-                                         mlir::storage::PathDirection direction,
                                          bool reversed,
                                          mlir::Value* joinedTarget) {
     bioassert(src, "Null source");
     bioassert(tgt, "Null target");
     bioassert(_part._varMap.contains(src), "Path exploration without source");
 
-    // An anonymous edge variable carries its declaration; a named one is an occurrence the
-    // identity map lists under the declaration the query knows it by
     const VarDecl* edgeDecl = edge->getDecl();
-    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
-    for (const auto& [decl, occurrences] : edgeIdentities) {
-        if (std::ranges::find(occurrences, edge) != occurrences.end()) {
-            edgeDecl = decl;
-
-            if (occurrences.size() > 1) {
-                throw TuringException(fmt::format("Variable '{}' binds a variable-length path and cannot be matched by a second pattern",
-                                                  decl->getName()));
-            }
-        }
-    }
     bioassert(edgeDecl, "Path exploration over an edge without a declaration");
 
     const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
@@ -1481,13 +1464,12 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
     }
 
     const auto patternIt = _part._quantifiedEdges.find(edgeDecl);
-    const EdgePattern* pattern = patternIt != end(_part._quantifiedEdges) ? patternIt->second : nullptr;
+    bioassert(patternIt != end(_part._quantifiedEdges), "Path exploration over a walk the part does not hold");
+    const EdgePattern* pattern = patternIt->second;
 
     llvm::SmallVector<const VarDecl*> hopImports;
     llvm::SmallVector<mlir::Value> hopImportColumns;
-    if (pattern) {
-        collectHopImports(pattern, hopImports, hopImportColumns);
-    }
+    collectHopImports(pattern, hopImports, hopImportColumns);
 
     mlir::IntegerAttr maxHopsAttr;
     if (metadata.getMaxHops() != EdgeMetadata::UNBOUNDED_HOPS) {
@@ -1495,30 +1477,20 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
         maxHopsAttr = mlir::IntegerAttr::get(hopType, metadata.getMaxHops());
     }
 
-    const size_t hopCount = pattern ? pattern->getHopCount() : 1;
+    const size_t hopCount = pattern->getHopCount();
 
-    // A walk of one hop follows the edge the dependency graph oriented; a longer one takes
-    // the pattern's hops in the order it walks them
+    // The walk takes the pattern's hops in the order it walks them
     llvm::SmallVector<int64_t> directions;
     llvm::SmallVector<mlir::Attribute> stepEdgeTypes;
     bool typesAStep = false;
-    if (hopCount == 1) {
-        const std::optional<VariableDependency::Constraint>& constraints = edge->constraints();
-        const auto* edgeTypes = constraints ? std::get_if<VariableDependency::EdgeTypeNames>(&*constraints) : nullptr;
-        typesAStep = edgeTypes && !edgeTypes->_names.empty();
+    for (size_t step = 0; step < hopCount; step++) {
+        const EdgePattern* hop = pattern->getHop(reversed ? hopCount - 1 - step : step);
+        const EdgePatternData* hopData = hop->getData();
+        const std::span<const std::string_view> names = hopData->edgeTypeConstraints();
+        typesAStep |= !names.empty();
 
-        directions.push_back(static_cast<int64_t>(direction));
-        stepEdgeTypes.push_back(typesAStep ? strArrayAttr(_opBuilder, edgeTypes->_names) : _opBuilder.getArrayAttr({}));
-    } else {
-        for (size_t step = 0; step < hopCount; step++) {
-            const EdgePattern* hop = pattern->getHop(reversed ? hopCount - 1 - step : step);
-            const EdgePatternData* hopData = hop->getData();
-            const std::span<const std::string_view> names = hopData->edgeTypeConstraints();
-            typesAStep |= !names.empty();
-
-            directions.push_back(static_cast<int64_t>(walkDirectionOf(hop->getDirection(), reversed)));
-            stepEdgeTypes.push_back(strArrayAttr(_opBuilder, names));
-        }
+        directions.push_back(static_cast<int64_t>(walkDirectionOf(hop->getDirection(), reversed)));
+        stepEdgeTypes.push_back(strArrayAttr(_opBuilder, names));
     }
 
     const mlir::ArrayAttr edgeTypesAttr = typesAStep ? _opBuilder.getArrayAttr(stepEdgeTypes) : mlir::ArrayAttr();
@@ -1553,10 +1525,6 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
 
     _part._pathBindings[edgeDecl] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Edges, src, edge, reversed};
 
-    if (!pattern) {
-        return;
-    }
-
     // A group variable reads its node or edge off each repetition at the step of the walk
     // taking it: the source of that step, or the end of the last one for the node the
     // repetition ends on, which a walk taken against the pattern swaps
@@ -1575,7 +1543,7 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
         _part._pathBindings[group] = PartScope::PathBinding {kind, src, edge, reversed, step, hopCount};
     }
 
-    for (size_t hopIndex = 0; hopCount > 1 && hopIndex < hopCount; hopIndex++) {
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
         const EdgePattern* hop = pattern->getHop(hopIndex);
         if (!hop->getSymbol()) {
             continue;
@@ -3051,7 +3019,7 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     const EdgeMetadata::EdgeType direction = metadata.type();
 
     if (metadata.isQuantified()) {
-        addExplorePaths(source, edge, target, carriedSet, metadata, toPathDirection(direction), /*reversed=*/false, &landed);
+        addExplorePaths(source, edge, target, carriedSet, metadata, /*reversed=*/false, &landed);
     } else {
         switch (direction) {
             case EdgeMetadata::EdgeType::GET_OUT_EDGES:
@@ -3352,7 +3320,7 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
             edgeSrcDefined ? prodType : reverseEdge(prodType);
 
         if (metadata.isQuantified()) {
-            addExplorePaths(src, edge, tgt, carriedSet, metadata, toPathDirection(logicalDir), !edgeSrcDefined, nullptr);
+            addExplorePaths(src, edge, tgt, carriedSet, metadata, !edgeSrcDefined, nullptr);
         } else {
             switch (logicalDir) {
                 case EdgeMetadata::EdgeType::GET_OUT_EDGES:
@@ -5060,8 +5028,8 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
         return namedPathIt->second;
     }
 
-    // A group variable of a quantified pattern is the list of one node per hop, read off
-    // the path the variable's edge binds
+    // A group variable of a quantified pattern is the list of one entity per repetition,
+    // read off the paths of its walk
     const auto pathIt = _part._pathBindings.find(decl);
     if (pathIt != end(_part._pathBindings) && pathIt->second._path) {
         return listColumnOf(decl, _part._varMap.at(pathIt->second._path).back());
@@ -6533,7 +6501,11 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
     const Projection::PublishedDecls& publishedDecls = projection->publishedDecls();
     bioassert(publishedDecls.size() == names.size(), "One declaration per column a WITH publishes expected");
 
+    const auto& items = projection->items();
+    bioassert(items.size() == names.size(), "One item per column a WITH publishes expected");
+
     llvm::SmallVector<PublishedColumn> published;
+    auto itemIt = items.begin();
     for (size_t index = 0; index < names.size(); index++) {
         const llvm::StringRef name = names[index];
 
@@ -6542,7 +6514,9 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
         const VarDecl* decl = publishedDecls[index];
         const VarDecl* boundDecl = decl->getType() == EvaluatedType::StringTable ? nullptr : decl;
 
-        published.push_back({boundDecl, std::string(name.data(), name.size()), columns[index]});
+        const mlir::Value column = columnLeavingScope(declOfReturnItem(*itemIt), columns[index]);
+        published.push_back({boundDecl, std::string(name.data(), name.size()), column});
+        ++itemIt;
     }
 
     CarriedEntities carried;
@@ -6683,17 +6657,6 @@ void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<Published
         published.push_back({decl, std::string(name), column});
     });
 
-    // A group variable of a quantified pattern has no column of its own: it is read off the
-    // paths of its walk, which leave the scope without the binding that reads it
-    for (const auto& [groupDecl, binding] : _part._pathBindings) {
-        const bool namesTheWalk = !binding._path || binding._path->getDecl() == groupDecl;
-        if (namesTheWalk) {
-            continue;
-        }
-
-        published.push_back({groupDecl, std::string(groupDecl->getName()), _part._varMap.at(binding._path).back()});
-    }
-
     // Under a name order rather than the map's, so the same query generates the same IR
     std::ranges::sort(published, [](const PublishedColumn& left, const PublishedColumn& right) {
         return left._name < right._name;
@@ -6739,6 +6702,17 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
 
     for (const auto& [pathDecl, pathColumn] : _part._namedPaths) {
         bind(pathDecl, pathDecl->getName(), pathColumn);
+    }
+
+    // So is each group variable of a quantified pattern, another name for the handle column
+    // of its walk
+    for (const auto& [groupDecl, binding] : _part._pathBindings) {
+        const bool namesTheWalk = !binding._path || binding._path->getDecl() == groupDecl;
+        if (namesTheWalk) {
+            continue;
+        }
+
+        bind(groupDecl, groupDecl->getName(), _part._varMap.at(binding._path).back());
     }
 
     // And so is the element a list comprehension bound, inside its body
@@ -6790,14 +6764,8 @@ void DBProgramGenerator::translateProjection(const Projection* projection,
 
         if constexpr (std::is_same_v<Type, VarDecl*>) {
             const auto findIt = variableColumns.find(item);
-            if (findIt != end(variableColumns)) {
-                return columnLeavingScope(item, findIt->second);
-            }
-
-            const mlir::Value resolved = resolveEntityColumn(item);
-            bioassert(resolved, "Return variable '{}' not found", item->getName());
-
-            return resolved;
+            bioassert(findIt != end(variableColumns), "Return variable '{}' not found", item->getName());
+            return findIt->second;
         } else {
             return getOrTranslateExprColumn(variableColumns, item);
         }
@@ -6991,6 +6959,7 @@ void DBProgramGenerator::rebindDistinctColumns(const Projection* projection,
 
 void DBProgramGenerator::rebindVariableColumn(const VarDecl* decl, mlir::Value column) {
     rebindYieldedColumn(decl, column);
+    rebindGroupVariable(decl, column);
 
     // An edge identity has no variable of its own: its column is published under the
     // traversal variable that produced it, which is where the replacement has to land
@@ -9228,11 +9197,14 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         const EvaluatedType argType = argExpr->getType();
 
         if (argType == EvaluatedType::EdgePattern || argType == EvaluatedType::NodePattern) {
-            const mlir::Value column = translateArg(argExpr);
+            const mlir::Value column = getOrTranslateExprColumn(argExpr);
 
             // An OPTIONAL MATCH hands a walk on as the list of its edges, which size() reads
-            // as it reads any other list
-            if (!isListColumn(column)) {
+            // as it reads any other list. A walk's length counts a group's entities only when
+            // its body is one hop.
+            const auto bindingIt = _part._pathBindings.find(argExpr->getExprVarDecl());
+            const bool countsEveryHop = bindingIt == end(_part._pathBindings) || bindingIt->second._steps == 1;
+            if (!isListColumn(column) && countsEveryHop) {
                 _part._exprMap[expr] = pathLengthColumn(argExpr, column);
                 return;
             }
@@ -9869,6 +9841,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             // one declaration on both a variable and a yielded column, so both are rebound.
             rebindYieldedColumn(keyVarDeclAtPos[i], results[i]);
             rebindNamedPath(keyVarDeclAtPos[i], results[i]);
+            rebindGroupVariable(keyVarDeclAtPos[i], results[i]);
             continue;
         }
 
@@ -9889,6 +9862,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
         rebindYieldedColumn(symDecl, results[i]);
         rebindNamedPath(symDecl, results[i]);
+        rebindGroupVariable(symDecl, results[i]);
 
         const auto identityIt = edgeIdentityVars.find(symDecl);
 

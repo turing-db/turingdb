@@ -6669,8 +6669,11 @@ mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
 // where it is invalid: the handle of a walk of no hops is valid.
 mlir::Value DBLowering::nullTestedChunk(mlir::Value chunk) {
     const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
-    if (mlir::isa<storage::EntityListType, storage::PathRefType>(chunkType.getElementType())) {
+    const mlir::Type element = chunkType.getElementType();
+    if (mlir::isa<storage::EntityListType, storage::PathRefType>(element)) {
         return toNullableChunk(chunk, _builder.getIntegerType(64, /*isSigned=*/false));
+    } else if (mlir::isa<storage::ListType>(element)) {
+        return nullableListChunk(chunk);
     }
 
     return nullableValueChunk(chunk);
