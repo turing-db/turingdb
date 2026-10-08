@@ -1203,13 +1203,14 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         if (!readsAsNull) {
             // Property is meant to be created in this query
             vt = it->second;
-            expr->setCreatedValueType(vt);
+            expr->setValueType(vt);
         }
 
         expr->setPropertyName(name);
     } else {
         // Property already exists
         vt = propTypeFound.value()._valueType;
+        expr->setValueType(vt);
         expr->setPropertyName(propName->getName());
     }
 

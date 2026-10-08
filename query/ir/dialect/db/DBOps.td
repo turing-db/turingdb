@@ -481,7 +481,7 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
 /**
 * Range
 */
-def Range : TuringOp<"range", [Pure]> {
+def Range : TuringOp<"range", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Build one list of the integers a row's bounds span";
 
   let description = [{
@@ -2534,7 +2534,8 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
-class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
+class UnaryFunctionOp<string mnemonic, list<Trait> traits = [Pure]>
+    : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])> {
   let summary = "Apply a unary function row-wise to a value column";
 
   let arguments = (ins Column:$input);
@@ -2542,6 +2543,17 @@ class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThrou
 
   let assemblyFormat = [{
     `(` $input `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+// A unary function reading values of one type raises on a row holding another, which a
+// column of an unresolved type can: it is speculatable over a column of that type alone
+class TypedUnaryFunctionOp<string mnemonic, string readType>
+    : UnaryFunctionOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let extraClassDefinition = [{
+    ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
+      return speculatableOverElement<}] # readType # [{>(getInput());
+    }
   }];
 }
 
@@ -2558,40 +2570,40 @@ def ToInteger : UnaryFunctionOp<"to_integer">;
 def ToFloat : UnaryFunctionOp<"to_float">;
 def ToBoolean : UnaryFunctionOp<"to_boolean">;
 def ToDateTime : UnaryFunctionOp<"to_datetime">;
-def ToDuration : UnaryFunctionOp<"to_duration">;
+def ToDuration : TypedUnaryFunctionOp<"to_duration", "::mlir::IntegerType">;
 def ToString : UnaryFunctionOp<"to_string">;
 
 // The calendar fields of an instant, as integer columns. The sub-second pair reads the
 // fraction of the second truncated to its own precision, so .123456 of a second in is a
 // db.datetime_millisecond of 123 and a db.datetime_microsecond of 123456.
-def DateTimeYear : UnaryFunctionOp<"datetime_year">;
-def DateTimeMonth : UnaryFunctionOp<"datetime_month">;
-def DateTimeDay : UnaryFunctionOp<"datetime_day">;
-def DateTimeHour : UnaryFunctionOp<"datetime_hour">;
-def DateTimeMinute : UnaryFunctionOp<"datetime_minute">;
-def DateTimeSecond : UnaryFunctionOp<"datetime_second">;
-def DateTimeMillisecond : UnaryFunctionOp<"datetime_millisecond">;
-def DateTimeMicrosecond : UnaryFunctionOp<"datetime_microsecond">;
+def DateTimeYear : TypedUnaryFunctionOp<"datetime_year", "::mlir::storage::DateTimeType">;
+def DateTimeMonth : TypedUnaryFunctionOp<"datetime_month", "::mlir::storage::DateTimeType">;
+def DateTimeDay : TypedUnaryFunctionOp<"datetime_day", "::mlir::storage::DateTimeType">;
+def DateTimeHour : TypedUnaryFunctionOp<"datetime_hour", "::mlir::storage::DateTimeType">;
+def DateTimeMinute : TypedUnaryFunctionOp<"datetime_minute", "::mlir::storage::DateTimeType">;
+def DateTimeSecond : TypedUnaryFunctionOp<"datetime_second", "::mlir::storage::DateTimeType">;
+def DateTimeMillisecond : TypedUnaryFunctionOp<"datetime_millisecond", "::mlir::storage::DateTimeType">;
+def DateTimeMicrosecond : TypedUnaryFunctionOp<"datetime_microsecond", "::mlir::storage::DateTimeType">;
 
 // The units of a duration, each the whole count of that unit it spans, as integer columns.
-def DurationYears : UnaryFunctionOp<"duration_years">;
-def DurationQuarters : UnaryFunctionOp<"duration_quarters">;
-def DurationMonths : UnaryFunctionOp<"duration_months">;
-def DurationWeeks : UnaryFunctionOp<"duration_weeks">;
-def DurationDays : UnaryFunctionOp<"duration_days">;
-def DurationHours : UnaryFunctionOp<"duration_hours">;
-def DurationMinutes : UnaryFunctionOp<"duration_minutes">;
-def DurationSeconds : UnaryFunctionOp<"duration_seconds">;
-def DurationMilliseconds : UnaryFunctionOp<"duration_milliseconds">;
-def DurationMicroseconds : UnaryFunctionOp<"duration_microseconds">;
-def DurationQuartersOfYear : UnaryFunctionOp<"duration_quarters_of_year">;
-def DurationMonthsOfYear : UnaryFunctionOp<"duration_months_of_year">;
-def DurationMonthsOfQuarter : UnaryFunctionOp<"duration_months_of_quarter">;
-def DurationDaysOfWeek : UnaryFunctionOp<"duration_days_of_week">;
-def DurationMinutesOfHour : UnaryFunctionOp<"duration_minutes_of_hour">;
-def DurationSecondsOfMinute : UnaryFunctionOp<"duration_seconds_of_minute">;
-def DurationMillisecondsOfSecond : UnaryFunctionOp<"duration_milliseconds_of_second">;
-def DurationMicrosecondsOfSecond : UnaryFunctionOp<"duration_microseconds_of_second">;
+def DurationYears : TypedUnaryFunctionOp<"duration_years", "::mlir::storage::DurationType">;
+def DurationQuarters : TypedUnaryFunctionOp<"duration_quarters", "::mlir::storage::DurationType">;
+def DurationMonths : TypedUnaryFunctionOp<"duration_months", "::mlir::storage::DurationType">;
+def DurationWeeks : TypedUnaryFunctionOp<"duration_weeks", "::mlir::storage::DurationType">;
+def DurationDays : TypedUnaryFunctionOp<"duration_days", "::mlir::storage::DurationType">;
+def DurationHours : TypedUnaryFunctionOp<"duration_hours", "::mlir::storage::DurationType">;
+def DurationMinutes : TypedUnaryFunctionOp<"duration_minutes", "::mlir::storage::DurationType">;
+def DurationSeconds : TypedUnaryFunctionOp<"duration_seconds", "::mlir::storage::DurationType">;
+def DurationMilliseconds : TypedUnaryFunctionOp<"duration_milliseconds", "::mlir::storage::DurationType">;
+def DurationMicroseconds : TypedUnaryFunctionOp<"duration_microseconds", "::mlir::storage::DurationType">;
+def DurationQuartersOfYear : TypedUnaryFunctionOp<"duration_quarters_of_year", "::mlir::storage::DurationType">;
+def DurationMonthsOfYear : TypedUnaryFunctionOp<"duration_months_of_year", "::mlir::storage::DurationType">;
+def DurationMonthsOfQuarter : TypedUnaryFunctionOp<"duration_months_of_quarter", "::mlir::storage::DurationType">;
+def DurationDaysOfWeek : TypedUnaryFunctionOp<"duration_days_of_week", "::mlir::storage::DurationType">;
+def DurationMinutesOfHour : TypedUnaryFunctionOp<"duration_minutes_of_hour", "::mlir::storage::DurationType">;
+def DurationSecondsOfMinute : TypedUnaryFunctionOp<"duration_seconds_of_minute", "::mlir::storage::DurationType">;
+def DurationMillisecondsOfSecond : TypedUnaryFunctionOp<"duration_milliseconds_of_second", "::mlir::storage::DurationType">;
+def DurationMicrosecondsOfSecond : TypedUnaryFunctionOp<"duration_microseconds_of_second", "::mlir::storage::DurationType">;
 
 def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperands]> {
   let summary = "The instant the query runs, as a constant column";
@@ -2776,7 +2788,7 @@ def NeqOp : PredicateOp<"neq", [Pure]> {
   let summary = "Row-wise inequality of two value columns";
 }
 
-def AddOp : BinaryOp<"add", [Pure]> {
+def AddOp : BinaryOp<"add", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise addition of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -2830,7 +2842,7 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
   let assemblyFormat = "$map`,` $key attr-dict `:` functional-type(operands, results)";
 }
 
-def SubOp : BinaryOp<"sub", [Pure]> {
+def SubOp : BinaryOp<"sub", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise subtraction of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -2839,7 +2851,7 @@ def SubOp : BinaryOp<"sub", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def MulOp : BinaryOp<"mul", [Pure]> {
+def MulOp : BinaryOp<"mul", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise multiplication of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -2848,7 +2860,7 @@ def MulOp : BinaryOp<"mul", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def DivOp : BinaryOp<"div", [Pure]> {
+def DivOp : BinaryOp<"div", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise division of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
@@ -2857,7 +2869,7 @@ def DivOp : BinaryOp<"div", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def ModOp : BinaryOp<"mod", [Pure]> {
+def ModOp : BinaryOp<"mod", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Row-wise modulo of two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);

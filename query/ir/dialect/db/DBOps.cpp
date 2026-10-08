@@ -8,6 +8,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "IRLiteralList.h"
+#include "IRRange.h"
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "EdgeDirectionsFormat.h"
@@ -21,10 +22,65 @@ using namespace mlir::db;
 
 namespace storage = mlir::storage;
 
-#define GET_OP_CLASSES
-#include "DBOps.cpp.inc"
-
 namespace {
+
+Type columnElement(Value column) {
+    const Type element = cast<ColumnType>(column.getType()).getType();
+    const storage::NullableType nullable = dyn_cast<storage::NullableType>(element);
+
+    return nullable ? nullable.getValueType() : element;
+}
+
+bool isNumberColumn(Value column) {
+    return isa<IntegerType, FloatType>(columnElement(column));
+}
+
+Speculation::Speculatability speculatableWhen(bool cannotRaise) {
+    return cannotRaise ? Speculation::Speculatable : Speculation::NotSpeculatable;
+}
+
+// Over numbers alone: a duration or an instant overflows, and a column of an unresolved
+// type may hold either
+Speculation::Speculatability speculatableOverNumbers(Operation* op) {
+    return speculatableWhen(llvm::all_of(op->getOperands(), isNumberColumn));
+}
+
+template <typename ElementType>
+Speculation::Speculatability speculatableOverElement(Value input) {
+    return speculatableWhen(isa<ElementType>(columnElement(input)));
+}
+
+bool matchIntegerLiteral(Value column, int64_t& value) {
+    ConstantOp constant = column.getDefiningOp<ConstantOp>();
+    const IntegerAttr integer = constant ? dyn_cast<IntegerAttr>(constant.getValue()) : IntegerAttr();
+    if (!integer) {
+        return false;
+    }
+
+    value = integer.getValue().getSExtValue();
+    return true;
+}
+
+// A literal divisor no row raises on: not 0, and not the -1 that overflows the smallest
+// integer when @param minusOneOverflows
+bool isSafeLiteralDivisor(Value divisor, bool minusOneOverflows) {
+    ConstantOp constant = divisor.getDefiningOp<ConstantOp>();
+    if (!constant) {
+        return false;
+    }
+
+    const Attribute value = constant.getValue();
+    if (const IntegerAttr integer = dyn_cast<IntegerAttr>(value)) {
+        const llvm::APInt number = integer.getValue();
+        const bool overflows = minusOneOverflows && number.isAllOnes();
+
+        return !number.isZero() && !overflows;
+    } else if (const FloatAttr real = dyn_cast<FloatAttr>(value)) {
+        return !real.getValue().isZero();
+    }
+
+    return false;
+}
 
 // What a filter reads as a mask: a boolean column, a boolean literal, one whose values may be
 // null, a property read whose type lowering resolves, or the untyped null an expression over a
@@ -47,7 +103,7 @@ bool isMaskColumn(Type type) {
 
     const Type value = nullable.getValueType();
 
-    return isa<storage::BoolType>(value) || isa<NoneType>(value);
+    return isa<storage::BoolType>(value) || isa<NoneType>(value) || value.isInteger(1);
 }
 
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
@@ -398,6 +454,9 @@ LogicalResult verifySubqueryExpression(SubqueryOp subquery) {
 }
 
 }
+
+#define GET_OP_CLASSES
+#include "DBOps.cpp.inc"
 
 // Ensures each variable has a numeric name
 void ScanEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -2109,4 +2168,41 @@ LogicalResult CallSubquery::verify() {
     }
 
     return success();
+}
+
+Speculation::Speculatability Range::getSpeculatability() {
+    int64_t from = 0;
+    int64_t to = 0;
+    int64_t by = 1;
+
+    const Value step = getStep();
+    const bool literalBounds = matchIntegerLiteral(getStart(), from) && matchIntegerLiteral(getEnd(), to);
+    const bool literalStep = !step || matchIntegerLiteral(step, by);
+    const bool knownList = literalBounds && literalStep && by != 0;
+
+    if (!knownList) {
+        return Speculation::NotSpeculatable;
+    }
+
+    return speculatableWhen(::db::countRangeSteps(from, to, by) < ::db::RANGE_LENGTH_LIMIT);
+}
+
+Speculation::Speculatability AddOp::getSpeculatability() {
+    return speculatableOverNumbers(getOperation());
+}
+
+Speculation::Speculatability SubOp::getSpeculatability() {
+    return speculatableOverNumbers(getOperation());
+}
+
+Speculation::Speculatability MulOp::getSpeculatability() {
+    return speculatableOverNumbers(getOperation());
+}
+
+Speculation::Speculatability DivOp::getSpeculatability() {
+    return speculatableWhen(isNumberColumn(getLhs()) && isSafeLiteralDivisor(getRhs(), true));
+}
+
+Speculation::Speculatability ModOp::getSpeculatability() {
+    return speculatableWhen(isNumberColumn(getLhs()) && isSafeLiteralDivisor(getRhs(), false));
 }

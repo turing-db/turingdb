@@ -3,11 +3,10 @@
   "graph": "simpledb",
   "query": "MATCH (nYIELDp)-->(z), (l)-->(m)MATCH (n)-->(p)-->(q) WHERE m= p.age/-1 AND m.age = p.age+28 RETURN n,m,z,p",
   "expect": {
-    "result": "EXEC ERROR\nCannot compare ID with negative integer.",
-    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"m\",\"z\",\"p\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\",\"UInt64\"]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"Cannot compare ID with negative integer.\"}"
+    "result": "n,m,z,p",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"m\",\"z\",\"p\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\",\"UInt64\"]},\"data\":[]}"
   },
   "tags": [
-    "errors",
     "match",
     "filters",
     "multi-match"

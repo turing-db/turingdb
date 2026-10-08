@@ -834,12 +834,6 @@ private:
     // nullable column, which the value and the list siblings above share
     mlir::Value toNullableChunk(mlir::Value chunk, mlir::Type valueElement);
 
-    // The chunk element type an unwind of @param sourceElement produces: a drained list
-    // gives up the type its own elements carry, falling back to the type-erased
-    // list_element when they share none, and any other source keeps its own element,
-    // its cells being the elements themselves
-    static mlir::Type unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement);
-
     // The element type of the lists @param chunks build: the one type every chunk carries,
     // falling back to the type-erased list_element when they carry no single one - the
     // homogeneity verdict taken over the resolved chunks rather than over the db columns

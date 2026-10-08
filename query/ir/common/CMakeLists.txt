@@ -3,6 +3,7 @@ set(ir_common_sources
     IRModuleInspector.cpp
     ExplainReport.cpp
     IRConstantColumn.cpp
+    IRRange.cpp
     IRRowAlignment.cpp
     IRValueTypes.cpp
     IRException.cpp)

@@ -50,9 +50,9 @@ TEST_F(UnwindOverProductTest, unwindsAListCollectedByAnEarlierPart) {
                       80);
 }
 
-// j = 1 unwinds 31 and 32, j = 2 unwinds 31 to 33: Remy and Adam match once for each j
+// j = 1 unwinds 32 twice, j = 2 unwinds 33 and 31: Remy and Adam match twice for j = 1
 TEST_F(UnwindOverProductTest, unwindsAListReadOffAnotherUnwind) {
-    expectPlacedCount("UNWIND range(1, 2) AS j UNWIND range(31, 31 + j) AS i "
+    expectPlacedCount("UNWIND range(1, 2) AS j UNWIND [31 + j, 33 - j] AS i "
                       "MATCH (a:Person {age: i}) MATCH (b:Interest) RETURN count(*)",
                       40);
 }
@@ -65,15 +65,28 @@ TEST_F(UnwindOverProductTest, unwindsTwoListsCollectedByAnEarlierPart) {
 
 TEST_F(UnwindOverProductTest, unwindsAListReadThroughAFilter) {
     expectPlacedCount("MATCH (a:Person), (b:Interest) WHERE a.name = 'Remy' "
-                      "UNWIND range(1, a.age) AS i RETURN count(*)",
-                      320);
+                      "UNWIND [a.age, a.age + 1] AS i RETURN count(*)",
+                      20);
 }
 
-// 30 pairs of a person and an interest whose name sorts after the person's
-TEST_F(UnwindOverProductTest, unwindsAListReadThroughAFilterOfBothFactors) {
-    expectPlacedCount("MATCH (a:Person), (b:Interest) WHERE a.name < b.name "
-                      "UNWIND [a.name, a.name] AS n RETURN count(*)",
-                      60);
+// 30 pairs of a person and an interest whose name sorts after the person's. Sunk into the
+// factor, the unwind would double the rows the comparison runs on.
+TEST_F(UnwindOverProductTest, unwindsAfterAFilterOfBothFactors) {
+    const std::string_view query = "MATCH (a:Person), (b:Interest) WHERE a.name < b.name "
+                                   "UNWIND [a.name, a.name] AS n RETURN count(*)";
+
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    dbModule(query, module);
+
+    EXPECT_EQ(countUnwindsOverAProduct(module.get()), 1u);
+
+    expectCount(query, 60);
+}
+
+TEST_F(UnwindOverProductTest, unwindsAListDividedByALiteral) {
+    expectPlacedCount("MATCH (a:Person {name: 'Remy'}), (b:Interest) "
+                      "UNWIND [a.age / 2, a.age % 5] AS i RETURN count(*)",
+                      20);
 }
 
 TEST_F(UnwindOverProductTest, keepsTheColumnsOfFilteredFactors) {

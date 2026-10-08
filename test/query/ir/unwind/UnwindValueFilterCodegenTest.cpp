@@ -265,7 +265,7 @@ TEST_F(UnwindValueFilterCodegenTest, dropsTheElementsWhenNothingProjectsThem) {
 
 // A part that continues from a WITH crosses the rows it published with the unwind and its
 // scan, so that unwind is a factor of an inner product rather than of the one its equality
-// reads. regroup_products moves the equality onto the inner product, where it folds too.
+// reads. place_in_factors moves the equality onto the inner product, where it folds too.
 TEST_F(UnwindValueFilterCodegenTest, foldsTheUnwindOfAPartContinuingFromAWith) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("UNWIND [32] AS a MATCH (n {age: a}) "
