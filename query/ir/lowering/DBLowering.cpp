@@ -1175,6 +1175,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerDynamicMapKey(dynamicMapKey);
     } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
         lowerRange(range);
+    } else if (mlir::db::Substring substring = mlir::dyn_cast<mlir::db::Substring>(operation)) {
+        lowerSubstring(substring);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
@@ -2262,6 +2264,32 @@ void DBLowering::lowerRange(mlir::db::Range range) {
                                                  step ? bounds[2] : mlir::Value {});
 
     _valueMap[range.getResult()] = lists.getResult();
+}
+
+void DBLowering::lowerSubstring(mlir::db::Substring substring) {
+    llvm::SmallVector<mlir::Value, 3> columns {substring.getString(), substring.getStart()};
+
+    const mlir::Value length = substring.getLength();
+    if (length) {
+        columns.push_back(length);
+    }
+
+    llvm::SmallVector<mlir::Value, 3> arguments;
+    containerCellChunks(columns, arguments);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type stringType = storage::StringType::get(context);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, stringType));
+
+    setInsertionForNaryOp(arguments);
+
+    nl::Substring substrings = _builder.create<nl::Substring>(_builder.getUnknownLoc(),
+                                                              resultType,
+                                                              arguments[0],
+                                                              arguments[1],
+                                                              length ? arguments[2] : mlir::Value {});
+
+    _valueMap[substring.getResult()] = substrings.getResult();
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

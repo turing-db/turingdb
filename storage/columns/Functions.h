@@ -585,6 +585,8 @@ Result visitNumberCell(const ListElementView cell, std::string_view functionName
 
 std::optional<types::String::Primitive> cellString(const ListElementView cell, std::string_view functionName);
 
+std::optional<types::Int64::Primitive> cellInteger(const ListElementView cell, std::string_view functionName);
+
 // abs keeps the type each cell holds, so its answer is a cell of its own
 class TaggedAbsFunction {
 public:
@@ -834,6 +836,17 @@ public:
 
         return trimmed;
     }
+};
+
+class SubstringFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "substring";
+
+    ResultType operator()(types::String::Primitive string,
+                          types::Int64::Primitive start,
+                          types::Int64::Primitive length) const;
 };
 
 class ListReverseFunction {

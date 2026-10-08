@@ -2651,6 +2651,22 @@ def LTrim : UnaryFunctionOp<"ltrim">;
 def RTrim : UnaryFunctionOp<"rtrim">;
 def Reverse : UnaryFunctionOp<"reverse">;
 
+def Substring : TuringOp<"substring", [Pure, ConstantThroughOperands]> {
+  let summary = "Take the run of each row's string its start and length span";
+
+  let description = [{
+      %s = db.substring(%name, %from, %count) : (!db.column<!storage.string>, !db.column<i64>,
+                                                 !db.column<i64>) -> !db.column<!storage.string>
+  }];
+
+  let arguments = (ins Column:$string, Column:$start, Optional<Column>:$length);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $string `,` $start (`,` $length^)? `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 

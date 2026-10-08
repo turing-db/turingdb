@@ -4356,6 +4356,46 @@ std::optional<types::String::Primitive> stringRead(const Column* input, size_t r
     return (*static_cast<const ColumnT*>(input))[row];
 }
 
+std::optional<types::String::Primitive> stringValueArgument(const Column* input, size_t row, std::string_view) {
+    return (*static_cast<const ColumnOptVector<types::String::Primitive>*>(input))[row];
+}
+
+template <typename ColumnT>
+std::optional<types::String::Primitive> cellStringArgument(const Column* input, size_t row, std::string_view functionName) {
+    const std::optional<ListElementView> cell = (*static_cast<const ColumnT*>(input))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return cellString(*cell, functionName);
+}
+
+std::optional<types::Int64::Primitive> integerValueArgument(const Column* input, size_t row, std::string_view) {
+    return (*static_cast<const ColumnOptVector<types::Int64::Primitive>*>(input))[row];
+}
+
+std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input, size_t row, std::string_view) {
+    const std::optional<types::UInt64::Primitive>& cell =
+        (*static_cast<const ColumnOptVector<types::UInt64::Primitive>*>(input))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    constexpr types::UInt64::Primitive largest = std::numeric_limits<types::Int64::Primitive>::max();
+
+    return static_cast<types::Int64::Primitive>(std::min(*cell, largest));
+}
+
+template <typename ColumnT>
+std::optional<types::Int64::Primitive> cellIntegerArgument(const Column* input, size_t row, std::string_view functionName) {
+    const std::optional<ListElementView> cell = (*static_cast<const ColumnT*>(input))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return cellInteger(*cell, functionName);
+}
+
 // A key spelled null in the query holds no value to name an entry by, on any row
 std::optional<types::String::Primitive> nullStringRead(const Column*, size_t) {
     return std::nullopt;
@@ -7185,6 +7225,41 @@ void NLExecutor::runMakeMap(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
+    const NLSubstringData* substring = static_cast<NLSubstringData*>(data);
+
+    const NLSubstringData::StringArgument& string = substring->getString();
+    const NLSubstringData::IntegerArgument& start = substring->getStart();
+    const NLSubstringData::IntegerArgument& length = substring->getLength();
+
+    const size_t rowCount = string._column->size();
+    bioassert(start._column->size() == rowCount, "Start column of a substring is not row-aligned with its string.");
+    bioassert(!length._column || length._column->size() == rowCount,
+              "Length column of a substring is not row-aligned with its string.");
+
+    std::vector<std::optional<types::String::Primitive>>& outputRaw =
+        static_cast<ColumnOptVector<types::String::Primitive>*>(substring->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    const SubstringFunction function {};
+    constexpr std::string_view name = SubstringFunction::NAME;
+
+    constexpr std::optional<types::Int64::Primitive> toTheEnd = std::numeric_limits<types::Int64::Primitive>::max();
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::Int64::Primitive> from = start._read(start._column, rowIndex, name);
+        const std::optional<types::Int64::Primitive> count = length._column ? length._read(length._column, rowIndex, name) : toTheEnd;
+
+        const bool readsANull = !text.has_value() || !from.has_value() || !count.has_value();
+        if (readsANull) {
+            outputRaw[rowIndex] = std::nullopt;
+        } else {
+            outputRaw[rowIndex] = function(*text, *from, *count);
+        }
+    }
+}
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 
@@ -7581,6 +7656,36 @@ NLStringReadFunction NLExecutor::selectStringRead(const Column* input) {
     }
 
     throw IRException("a dynamic map key read reads its key out of a string column");
+}
+
+NLStringArgumentRead NLExecutor::selectStringArgumentRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnOptVector<types::String::Primitive>::staticKind()) {
+        return &stringValueArgument;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        return &cellStringArgument<ColumnVector<ListElementView>>;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        return &cellStringArgument<ColumnOptVector<ListElementView>>;
+    }
+
+    throw IRException("a string function reads a string argument out of a nullable string column, or a column of tagged cells");
+}
+
+NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    if (kind == ColumnOptVector<types::Int64::Primitive>::staticKind()) {
+        return &integerValueArgument;
+    } else if (kind == ColumnOptVector<types::UInt64::Primitive>::staticKind()) {
+        return &unsignedValueArgument;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        return &cellIntegerArgument<ColumnVector<ListElementView>>;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        return &cellIntegerArgument<ColumnOptVector<ListElementView>>;
+    }
+
+    throw IRException("a string function reads an integer argument out of a nullable integer column, or a column of tagged cells");
 }
 
 // Row r of the result views the entry row r's map already holds under the key, so the

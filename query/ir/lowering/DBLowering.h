@@ -241,6 +241,7 @@ private:
     void lowerMakeList(mlir::db::MakeList makeList);
     void lowerMakeMap(mlir::db::MakeMap makeMap);
     void lowerRange(mlir::db::Range range);
+    void lowerSubstring(mlir::db::Substring substring);
 
     // Lowers `[x IN xs WHERE p(x) | f(x)]`: the body is lowered into a region of its own
     // and the op built around it, since the type of the lists is the type of what that
