@@ -8999,6 +8999,12 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     } else if (funcName == "replace") {
         translateReplace(expr, args);
         return;
+    } else if (funcName == "left") {
+        translateLeftOrRight<mlir::db::Left>(expr, args);
+        return;
+    } else if (funcName == "right") {
+        translateLeftOrRight<mlir::db::Right>(expr, args);
+        return;
     }
 
     const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
@@ -9165,6 +9171,28 @@ void DBProgramGenerator::translateReplace(const Expr* expr, const ExprChain* arg
 
     _part._exprMap[expr] = replace.getResult();
 }
+
+template <typename Op>
+void DBProgramGenerator::translateLeftOrRight(const Expr* expr, const ExprChain* args) {
+    bioassert(args && args->size() == 2, "left() and right() take 2 arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value string = translateArg(argExprs[0]);
+    const mlir::Value length = translateArg(argExprs[1]);
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+
+    Op leftOrRight = _opBuilder.create<Op>(_opBuilder.getUnknownLoc(),
+                                           allocColumnType(stringType),
+                                           string,
+                                           length);
+
+    _part._exprMap[expr] = leftOrRight.getResult();
+}
+
+template void DBProgramGenerator::translateLeftOrRight<mlir::db::Left>(const Expr* expr, const ExprChain* args);
+template void DBProgramGenerator::translateLeftOrRight<mlir::db::Right>(const Expr* expr, const ExprChain* args);
 
 void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {
     bioassert(args && !args->empty(), "coalesce() with no arguments.");

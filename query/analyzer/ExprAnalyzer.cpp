@@ -1807,9 +1807,25 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
             arg->setExprVarDecl(decl);
         }
 
-        const bool readsANull = std::any_of(providedArgs.begin(), providedArgs.end(), [](const Expr* arg) {
-            return arg->getType() == EvaluatedType::Null;
-        });
+        bool readsANull = false;
+        size_t rejectedNullIndex = providedArgs.size();
+
+        for (size_t argIndex = 0; argIndex < providedArgs.size(); argIndex++) {
+            const bool isNull = providedArgs[argIndex]->getType() == EvaluatedType::Null;
+            const bool rejectsNull = argIndex < expectedArgs.size() && expectedArgs[argIndex].rejectsNull();
+
+            if (isNull && rejectsNull) {
+                rejectedNullIndex = argIndex;
+            } else if (isNull) {
+                readsANull = true;
+            }
+        }
+
+        const bool rejectsANull = rejectedNullIndex < providedArgs.size() && !readsANull;
+        if (rejectsANull) {
+            throwError(fmt::format("{}() does not take null as argument {}", name, rejectedNullIndex + 1),
+                       providedArgs[rejectedNullIndex]);
+        }
 
         // Found a valid signature
         if (answersNullOverNull && readsANull) {

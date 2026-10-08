@@ -2699,6 +2699,36 @@ def Replace : TuringOp<"replace", [Pure, ConstantThroughOperands]> {
   }];
 }
 
+def Left : TuringOp<"left", [Pure, ConstantThroughOperands]> {
+  let summary = "String prefix";
+
+  let description = [{
+      %s = db.left(%name, %length) : (!db.column<!storage.string>, !db.column<i64>) -> !db.column<!storage.string>
+  }];
+
+  let arguments = (ins Column:$string, Column:$length);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $string `,` $length `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def Right : TuringOp<"right", [Pure, ConstantThroughOperands]> {
+  let summary = "String suffix";
+
+  let description = [{
+      %s = db.right(%name, %length) : (!db.column<!storage.string>, !db.column<i64>) -> !db.column<!storage.string>
+  }];
+
+  let arguments = (ins Column:$string, Column:$length);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $string `,` $length `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 

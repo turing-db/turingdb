@@ -4038,6 +4038,31 @@ private:
     StringArgument _delimiter;
 };
 
+class NLLeftOrRightData : public NLFunctionData {
+public:
+    using StringArgument = NLSubstringData::StringArgument;
+    using IntegerArgument = NLSubstringData::IntegerArgument;
+
+    NLLeftOrRightData(Column* result,
+                      const StringArgument& string,
+                      const IntegerArgument& length)
+        : _result(result),
+        _string(string),
+        _length(length)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+
+    const StringArgument& getString() const { return _string; }
+    const IntegerArgument& getLength() const { return _length; }
+
+private:
+    Column* _result {nullptr};
+    StringArgument _string;
+    IntegerArgument _length;
+};
+
 class NLReplaceData : public NLFunctionData {
 public:
     using StringArgument = NLSubstringData::StringArgument;

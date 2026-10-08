@@ -7322,6 +7322,40 @@ void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+template <typename Functor>
+void NLExecutor::runLeftOrRight(NLExecutionContext*, NLFunctionData* data) {
+    const NLLeftOrRightData* leftOrRight = static_cast<NLLeftOrRightData*>(data);
+
+    const NLLeftOrRightData::StringArgument& string = leftOrRight->getString();
+    const NLLeftOrRightData::IntegerArgument& length = leftOrRight->getLength();
+
+    const size_t rowCount = string._column->size();
+    bioassert(length._column->size() == rowCount, "Length column is not row-aligned with its string.");
+
+    std::vector<std::optional<types::String::Primitive>>& outputRaw =
+        static_cast<ColumnOptVector<types::String::Primitive>*>(leftOrRight->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    const Functor function {};
+    constexpr std::string_view name = Functor::NAME;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::Int64::Primitive> count = length._read(length._column, rowIndex, name);
+
+        if (!text.has_value()) {
+            outputRaw[rowIndex] = std::nullopt;
+        } else if (!count.has_value()) {
+            throw IRException(fmt::format("{}() does not take a null length", name));
+        } else {
+            outputRaw[rowIndex] = function(*text, *count);
+        }
+    }
+}
+
+template void NLExecutor::runLeftOrRight<LeftFunction>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runLeftOrRight<RightFunction>(NLExecutionContext* context, NLFunctionData* data);
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 

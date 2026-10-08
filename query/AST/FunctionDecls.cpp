@@ -643,8 +643,8 @@ void FunctionDecls::initDefault() {
     reverseCell->setArguments({EvaluatedType::ListItem});
     reverseCell->setReturnTypes({{EvaluatedType::ListItem}});
 
-    const std::vector<EvaluatedType> stringOrCell = {EvaluatedType::String, EvaluatedType::ListItem};
-    const std::vector<EvaluatedType> integerOrCell = {EvaluatedType::Integer, EvaluatedType::ListItem};
+    const std::vector<FunctionArgumentType> stringOrCell = {EvaluatedType::String, EvaluatedType::ListItem};
+    const std::vector<FunctionArgumentType> integerOrCell = {EvaluatedType::Integer, EvaluatedType::ListItem};
 
     std::vector<FunctionSignature*> substrings;
     createOverloads("substring", {stringOrCell, integerOrCell, integerOrCell}, substrings);
@@ -667,6 +667,19 @@ void FunctionDecls::initDefault() {
 
     for (FunctionSignature* replace : replaces) {
         replace->setReturnTypes({{EvaluatedType::String}});
+    }
+
+    std::vector<FunctionArgumentType> nonNullIntegerOrCell = integerOrCell;
+    for (FunctionArgumentType& integer : nonNullIntegerOrCell) {
+        integer.setRejectsNull(true);
+    }
+
+    std::vector<FunctionSignature*> leftsAndRights;
+    createOverloads("left", {stringOrCell, nonNullIntegerOrCell}, leftsAndRights);
+    createOverloads("right", {stringOrCell, nonNullIntegerOrCell}, leftsAndRights);
+
+    for (FunctionSignature* leftOrRight : leftsAndRights) {
+        leftOrRight->setReturnTypes({{EvaluatedType::String}});
     }
 
     // coalesce answers the first of its arguments that is not null, so it takes any number
@@ -697,10 +710,10 @@ FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
 }
 
 void FunctionDecls::createOverloads(std::string_view fullName,
-                                    const std::vector<std::vector<EvaluatedType>>& positionTypes,
+                                    const std::vector<std::vector<FunctionArgumentType>>& positionTypes,
                                     std::vector<FunctionSignature*>& overloads) {
     size_t overloadCount = 1;
-    for (const std::vector<EvaluatedType>& types : positionTypes) {
+    for (const std::vector<FunctionArgumentType>& types : positionTypes) {
         overloadCount *= types.size();
     }
 
@@ -708,8 +721,8 @@ void FunctionDecls::createOverloads(std::string_view fullName,
         FunctionSignature::ArgumentTypes arguments;
 
         size_t remaining = overloadIndex;
-        for (const std::vector<EvaluatedType>& types : positionTypes) {
-            arguments.emplace_back(types[remaining % types.size()]);
+        for (const std::vector<FunctionArgumentType>& types : positionTypes) {
+            arguments.push_back(types[remaining % types.size()]);
             remaining /= types.size();
         }
 

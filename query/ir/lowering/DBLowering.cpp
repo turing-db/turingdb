@@ -1181,6 +1181,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSplit(split);
     } else if (mlir::db::Replace replace = mlir::dyn_cast<mlir::db::Replace>(operation)) {
         lowerReplace(replace);
+    } else if (mlir::isa<mlir::db::Left>(operation)) {
+        lowerLeftOrRight<nl::Left>(&operation);
+    } else if (mlir::isa<mlir::db::Right>(operation)) {
+        lowerLeftOrRight<nl::Right>(&operation);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
@@ -2333,6 +2337,28 @@ void DBLowering::lowerReplace(mlir::db::Replace replace) {
 
     _valueMap[replace.getResult()] = replaced.getResult();
 }
+
+template <typename NLOp>
+void DBLowering::lowerLeftOrRight(mlir::Operation* op) {
+    llvm::SmallVector<mlir::Value, 2> arguments;
+    containerCellChunks(op->getOperands(), arguments);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type stringType = storage::StringType::get(context);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, stringType));
+
+    setInsertionForNaryOp(arguments);
+
+    NLOp leftOrRight = _builder.create<NLOp>(_builder.getUnknownLoc(),
+                                             resultType,
+                                             arguments[0],
+                                             arguments[1]);
+
+    _valueMap[op->getResult(0)] = leftOrRight.getResult();
+}
+
+template void DBLowering::lowerLeftOrRight<nl::Left>(mlir::Operation* op);
+template void DBLowering::lowerLeftOrRight<nl::Right>(mlir::Operation* op);
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
     // The edge sibling of lowerScanNodes: a scan reads no column, so its loop

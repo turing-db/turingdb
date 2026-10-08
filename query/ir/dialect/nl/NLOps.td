@@ -2809,6 +2809,24 @@ def Replace : NLOp<"replace", [Pure, RowAlignedThroughOperands]> {
   let assemblyFormat = "$string `,` $search `,` $replacement attr-dict `:` functional-type(operands, results)";
 }
 
+def Left : NLOp<"left", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise prefix";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$length);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $length attr-dict `:` functional-type(operands, results)";
+}
+
+def Right : NLOp<"right", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise suffix";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$length);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $length attr-dict `:` functional-type(operands, results)";
+}
+
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 

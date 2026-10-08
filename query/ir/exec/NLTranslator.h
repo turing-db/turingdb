@@ -1007,6 +1007,9 @@ private:
     void translateSubstring(mlir::nl::Substring substring, NLStmtContainer* body);
     void translateSplit(mlir::nl::Split split, NLStmtContainer* body);
     void translateReplace(mlir::nl::Replace replace, NLStmtContainer* body);
+
+    template <typename Functor>
+    void translateLeftOrRight(mlir::Operation* op, NLStmtContainer* body);
     void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
     void translateStaticMapKey(mlir::nl::StaticMapKey mapKey, NLStmtContainer* body);
     void translateDynamicMapKey(mlir::nl::DynamicMapKey mapKey, NLStmtContainer* body);

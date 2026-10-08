@@ -880,6 +880,24 @@ private:
     StringBuffer* _stringBuffer {nullptr};
 };
 
+class LeftFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "left";
+
+    ResultType operator()(types::String::Primitive string, types::Int64::Primitive length) const;
+};
+
+class RightFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "right";
+
+    ResultType operator()(types::String::Primitive string, types::Int64::Primitive length) const;
+};
+
 class ListReverseFunction {
 public:
     using ArgType = types::List::Primitive;

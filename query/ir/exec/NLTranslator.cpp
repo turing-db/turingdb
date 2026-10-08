@@ -951,6 +951,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSplit(split, body);
         } else if (nl::Replace replace = mlir::dyn_cast<nl::Replace>(operation)) {
             translateReplace(replace, body);
+        } else if (mlir::isa<nl::Left>(operation)) {
+            translateLeftOrRight<LeftFunction>(&operation, body);
+        } else if (mlir::isa<nl::Right>(operation)) {
+            translateLeftOrRight<RightFunction>(&operation, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
@@ -3356,6 +3360,28 @@ void NLTranslator::translateReplace(nl::Replace replace, NLStmtContainer* body) 
 
     body->emplaceStmt(&NLExecutor::runReplace, data);
 }
+
+template <typename Functor>
+void NLTranslator::translateLeftOrRight(mlir::Operation* op, NLStmtContainer* body) {
+    const mlir::Value resultValue = op->getResult(0);
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const Column* const string = getColumn(op->getOperand(0));
+    const Column* const length = getColumn(op->getOperand(1));
+
+    const NLLeftOrRightData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
+    const NLLeftOrRightData::IntegerArgument lengthArgument {length, NLExecutor::selectIntegerArgumentRead(length)};
+
+    NLLeftOrRightData* data = _program->allocFunctionData<NLLeftOrRightData>(
+        result, stringArgument, lengthArgument);
+
+    body->emplaceStmt(&NLExecutor::runLeftOrRight<Functor>, data);
+}
+
+template void NLTranslator::translateLeftOrRight<LeftFunction>(mlir::Operation* op, NLStmtContainer* body);
+template void NLTranslator::translateLeftOrRight<RightFunction>(mlir::Operation* op, NLStmtContainer* body);
 
 template <typename Data, typename Op, typename... Extra>
 Data* NLTranslator::allocElementData(Op op, Extra... extra) {

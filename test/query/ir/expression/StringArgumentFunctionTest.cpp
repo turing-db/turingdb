@@ -154,6 +154,57 @@ TEST_F(StringArgumentFunctionTest, replaceRejectsATaggedCellOfTheWrongType) {
     expectError("MATCH (p:Person {name: 'Remy'}) RETURN replace(p.words[1], 'a', 'b')", "replace()");
 }
 
+TEST_F(StringArgumentFunctionTest, leftAndRightOfALiteral) {
+    expectRows("RETURN left('hello', 3), right('hello', 3), left('hello', 0), right('hello', 0)",
+               {{"hel", "llo", "", ""}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightPastTheEndReturnTheString) {
+    expectRows("RETURN left('hello', 9), right('hello', 9), left('hello', 3000000000), right('hello', 3000000000)",
+               {{"hello", "hello", "hello", "hello"}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightCountCharactersNotBytes) {
+    expectRows("RETURN left('été', 2), right('été', 2)", {{"ét", "té"}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightOfAProperty) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN left(p.name, 2), right(p.name, 2)", {{"Re", "my"}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightReadALengthPerRow) {
+    expectRows("UNWIND [1, 2] AS n RETURN left('hello', n), right('hello', n)", {{"h", "o"}, {"he", "lo"}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightOfNullAreNull) {
+    expectRows("RETURN left(null, 3), right(null, 3), left(null, null), right(null, null)",
+               {{"null", "null", "null", "null"}});
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN left(p.nosuch, 3), right(p.nosuch, p.nosuch)",
+               {{"null", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightRejectANullLength) {
+    expectError("RETURN left('hello', null)", "left()");
+    expectError("RETURN right('hello', null)", "right()");
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN left(p.name, p.nosuch)", "left()");
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN right(p.name, p.words[2])", "right()");
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightRejectANegativeLength) {
+    expectError("RETURN left('hello', -1)", "left()");
+    expectError("RETURN right('hello', -1)", "right()");
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightOfATaggedCell) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN left(p.words[0], 2), right(p.words[0], p.words[1]), left(p.words[2], 1)",
+               {{"he", "llo", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, leftAndRightRejectATaggedCellOfTheWrongType) {
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN left(p.words[1], 2)", "left()");
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN right('hello', p.words[0])", "right()");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

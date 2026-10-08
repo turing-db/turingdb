@@ -510,6 +510,27 @@ ReplaceFunction::ResultType ReplaceFunction::operator()(types::String::Primitive
     return {replaced.data(), replaced.size()};
 }
 
+LeftFunction::ResultType LeftFunction::operator()(types::String::Primitive string,
+                                                  types::Int64::Primitive length) const {
+    const size_t charCount = characterArgument(length, NAME);
+    const size_t endOffset = characterOffset(string, charCount);
+
+    return string.substr(0, endOffset);
+}
+
+RightFunction::ResultType
+RightFunction::operator()(types::String::Primitive string,
+                          types::Int64::Primitive length) const {
+    const size_t charCount = characterArgument(length, NAME);
+    const size_t stringCharCount = static_cast<size_t>(characterCount(string));
+
+    const size_t skippedCharCount =
+        stringCharCount - std::min(charCount, stringCharCount);
+    const size_t startOffset = characterOffset(string, skippedCharCount);
+
+    return string.substr(startOffset);
+}
+
 ReverseFunction::ReverseFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {
