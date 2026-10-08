@@ -9094,11 +9094,7 @@ void DBProgramGenerator::translateRange(const Expr* expr, const ExprChain* args)
 }
 
 void DBProgramGenerator::translateSubstring(const Expr* expr, const ExprChain* args) {
-    const size_t argCount = args ? args->size() : 0;
-    const bool argumentsGiven = argCount == 2 || argCount == 3;
-    if (!argumentsGiven) {
-        throwError("substring() expects 2 or 3 arguments.", expr);
-    }
+    bioassert(args && (args->size() == 2 || args->size() == 3), "substring() takes 2 or 3 arguments.");
 
     const ExprChain::ExprVector& argExprs = args->getExprs();
 

@@ -587,6 +587,8 @@ std::optional<types::String::Primitive> cellString(const ListElementView cell, s
 
 std::optional<types::Int64::Primitive> cellInteger(const ListElementView cell, std::string_view functionName);
 
+types::Int64::Primitive unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName);
+
 // abs keeps the type each cell holds, so its answer is a cell of its own
 class TaggedAbsFunction {
 public:

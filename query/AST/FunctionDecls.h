@@ -13,6 +13,7 @@ namespace db {
 class FunctionDecls : public FunctionResolver {
 public:
     using FunctionSignatures = std::vector<FunctionSignature*>;
+    using PossibleArgTypes = std::vector<FunctionArgumentType>;
 
     ~FunctionDecls() override;
 
@@ -37,7 +38,7 @@ private:
 
     // One overload per way of typing the arguments, position i taking any of positionTypes[i]
     void createOverloads(std::string_view fullName,
-                         const std::vector<std::vector<FunctionArgumentType>>& positionTypes,
+                         const std::vector<PossibleArgTypes>& positionTypes,
                          std::vector<FunctionSignature*>& overloads);
 };
 

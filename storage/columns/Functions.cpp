@@ -70,13 +70,18 @@ size_t characterOffset(const types::String::Primitive string, const size_t chara
     return string.size();
 }
 
+template <typename Integer>
+[[noreturn]] void throwCharacterArgumentError(const Integer value, std::string_view functionName) {
+    throw TuringException(fmt::format("{}() takes a position or length from 0 to {}, and this row holds {}",
+                                      functionName,
+                                      SubstringFunction::MAX_ARGUMENT,
+                                      value));
+}
+
 size_t characterArgument(const types::Int64::Primitive value, std::string_view functionName) {
     const bool outOfRange = value < 0 || value > SubstringFunction::MAX_ARGUMENT;
     if (outOfRange) {
-        throw TuringException(fmt::format("{}() takes a position or length from 0 to {}, and this row holds {}",
-                                          functionName,
-                                          SubstringFunction::MAX_ARGUMENT,
-                                          value));
+        throwCharacterArgumentError(value, functionName);
     }
 
     return static_cast<size_t>(value);
@@ -254,13 +259,21 @@ std::optional<types::Int64::Primitive> db::cellInteger(const ListElementView cel
     if (tag == ListBufferTypeTag::Int) {
         return cell.getAs<types::Int64::Primitive>();
     } else if (tag == ListBufferTypeTag::UInt) {
-        const types::UInt64::Primitive value = cell.getAs<types::UInt64::Primitive>();
-        return static_cast<types::Int64::Primitive>(std::min<types::UInt64::Primitive>(value, std::numeric_limits<types::Int64::Primitive>::max()));
+        return unsignedCharacterArgument(cell.getAs<types::UInt64::Primitive>(), functionName);
     } else if (tag == ListBufferTypeTag::Null) {
         return std::nullopt;
     }
 
     throwCellTypeError(functionName, "an integer");
+}
+
+types::Int64::Primitive db::unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName) {
+    const types::UInt64::Primitive largest = static_cast<types::UInt64::Primitive>(SubstringFunction::MAX_ARGUMENT);
+    if (value > largest) {
+        throwCharacterArgumentError(value, functionName);
+    }
+
+    return static_cast<types::Int64::Primitive>(value);
 }
 
 std::string_view db::floatFunctionName(FloatFunctionKind kind) {
@@ -418,6 +431,11 @@ SubstringFunction::ResultType SubstringFunction::operator()(types::String::Primi
 
     const size_t startOffset = characterOffset(string, startChar);
     const types::String::Primitive rest = string.substr(startOffset);
+
+    const bool runsToTheEnd = charCount >= rest.size();
+    if (runsToTheEnd) {
+        return rest;
+    }
 
     const size_t endOffset = characterOffset(rest, charCount);
 
