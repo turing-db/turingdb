@@ -64,6 +64,20 @@ TEST_F(StringArgumentFunctionTest, substringRejectsAStartOrLengthPastTheLargestI
     expectRows("RETURN substring('hello', 2147483647), substring('hello', 0, 2147483647)", {{"", "hello"}});
 }
 
+TEST_F(StringArgumentFunctionTest, substringOfConstantsIsLaidOutOverEveryRow) {
+    expectRows("UNWIND [3, 1, 2] AS n RETURN n, substring('hello', 1) AS s ORDER BY n",
+               {{"1", "ello"}, {"2", "ello"}, {"3", "ello"}});
+}
+
+TEST_F(StringArgumentFunctionTest, substringOfNullWithANullStartIsNull) {
+    expectRows("RETURN substring(null, null)", {{"null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, substringRejectsANullStartOnlyWhereItIsEvaluated) {
+    expectRows("RETURN CASE WHEN false THEN substring('a', null) ELSE 'ok' END", {{"ok"}});
+    expectRows("UNWIND [] AS x RETURN substring('a', null)", {});
+}
+
 TEST_F(StringArgumentFunctionTest, absentPropertyIsNull) {
     expectRows("MATCH (p:Person {name: 'Remy'}) RETURN substring(p.nosuch, 1)", {{"null"}});
 }

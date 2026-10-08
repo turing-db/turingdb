@@ -4362,7 +4362,8 @@ std::optional<types::String::Primitive> stringValueArgument(const Column* input,
 
 template <typename ColumnT>
 std::optional<types::String::Primitive> cellStringArgument(const Column* input, size_t row, std::string_view functionName) {
-    const std::optional<ListElementView> cell = (*static_cast<const ColumnT*>(input))[row];
+    const auto* col = static_cast<const ColumnT*>(input);
+    const std::optional<ListElementView> cell = col->operator[](row);
     if (!cell.has_value()) {
         return std::nullopt;
     }
@@ -4374,16 +4375,14 @@ std::optional<types::Int64::Primitive> integerValueArgument(const Column* input,
     return (*static_cast<const ColumnOptVector<types::Int64::Primitive>*>(input))[row];
 }
 
-std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input, size_t row, std::string_view) {
+std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input, size_t row, std::string_view functionName) {
     const std::optional<types::UInt64::Primitive>& cell =
         (*static_cast<const ColumnOptVector<types::UInt64::Primitive>*>(input))[row];
     if (!cell.has_value()) {
         return std::nullopt;
     }
 
-    constexpr types::UInt64::Primitive largest = std::numeric_limits<types::Int64::Primitive>::max();
-
-    return static_cast<types::Int64::Primitive>(std::min(*cell, largest));
+    return unsignedCharacterArgument(*cell, functionName);
 }
 
 template <typename ColumnT>
@@ -7252,14 +7251,16 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
         const std::optional<types::Int64::Primitive> count = length._column ? length._read(length._column, rowIndex, name) : toTheEnd;
 
         const bool boundIsNull = !from.has_value() || !count.has_value();
-        if (boundIsNull) {
+        if (!text.has_value()) {
+            if constexpr (TypeUtils::is_optional_v<Result>) {
+                outputRaw[rowIndex] = std::nullopt;
+            } else {
+                throw IRException("substring() typed as never null read a null string");
+            }
+        } else if (boundIsNull) {
             throw IRException("substring() does not take a null start or length");
-        } else if (text.has_value()) {
-            outputRaw[rowIndex] = function(*text, *from, *count);
-        } else if constexpr (TypeUtils::is_optional_v<Result>) {
-            outputRaw[rowIndex] = std::nullopt;
         } else {
-            throw IRException("substring() typed as never null read a null string");
+            outputRaw[rowIndex] = function(*text, *from, *count);
         }
     }
 }
