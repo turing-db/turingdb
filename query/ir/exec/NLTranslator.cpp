@@ -947,6 +947,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateRange(range, body);
         } else if (nl::Substring substring = mlir::dyn_cast<nl::Substring>(operation)) {
             translateSubstring(substring, body);
+        } else if (nl::Split split = mlir::dyn_cast<nl::Split>(operation)) {
+            translateSplit(split, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
@@ -3318,6 +3320,31 @@ void NLTranslator::translateSubstring(nl::Substring substring, NLStmtContainer* 
         body->emplaceStmt(&NLExecutor::runSubstring<std::optional<types::String::Primitive>>, data);
     } else {
         body->emplaceStmt(&NLExecutor::runSubstring<types::String::Primitive>, data);
+    }
+}
+
+void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
+    const mlir::Value resultValue = split.getResult();
+    const mlir::Type resultType = resultValue.getType();
+
+    Column* const result = allocColumnForChunkType(resultType);
+    _valueSlots[resultValue] = result;
+
+    const Column* const string = getColumn(split.getString());
+    const Column* const delimiter = getColumn(split.getDelimiter());
+
+    const NLSplitData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
+    const NLSplitData::StringArgument delimiterArgument {delimiter, NLExecutor::selectStringArgumentRead(delimiter)};
+
+    NLSplitData* data = _program->allocFunctionData<NLSplitData>(result, _memory, stringArgument, delimiterArgument);
+
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
+    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
+
+    if (resultNullable) {
+        body->emplaceStmt(&NLExecutor::runSplit<std::optional<ListView>>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runSplit<ListView>, data);
     }
 }
 

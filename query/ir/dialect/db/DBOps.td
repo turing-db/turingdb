@@ -2679,6 +2679,22 @@ def Substring : TuringOp<"substring", [Pure]> {
   }];
 }
 
+def Split : TuringOp<"split", [Pure, ConstantThroughOperands]> {
+  let summary = "Split on delimiter";
+
+  let description = [{
+      %parts = db.split(%name, %delimiter) : (!db.column<!storage.string>, !db.column<!storage.string>)
+                                           -> !db.column<!storage.list<!storage.string>>
+  }];
+
+  let arguments = (ins Column:$string, Column:$delimiter);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $string `,` $delimiter `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 

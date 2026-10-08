@@ -397,6 +397,8 @@ public:
 
     template <typename Result>
     static void runSubstring(NLExecutionContext* context, NLFunctionData* data);
+    template <typename Result>
+    static void runSplit(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one map per row (nl.make_map): row r of the result maps each key to what its
     // value column holds at r, as one contiguous run of the query's map buffer.

@@ -853,6 +853,21 @@ public:
                           types::Int64::Primitive length) const;
 };
 
+class SplitFunction {
+public:
+    using ResultType = types::List::Primitive;
+
+    static constexpr std::string_view NAME = "split";
+
+    explicit SplitFunction(QueryListBuffer* listBuffer);
+
+    ResultType operator()(types::String::Primitive string, types::String::Primitive delimiter);
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+    std::vector<QueryListBuffer::ListItemVariant> _parts;
+};
+
 class ListReverseFunction {
 public:
     using ArgType = types::List::Primitive;
