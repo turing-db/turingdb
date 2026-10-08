@@ -2651,7 +2651,7 @@ def LTrim : UnaryFunctionOp<"ltrim">;
 def RTrim : UnaryFunctionOp<"rtrim">;
 def Reverse : UnaryFunctionOp<"reverse">;
 
-def Substring : TuringOp<"substring", [Pure, ConstantThroughOperands]> {
+def Substring : TuringOp<"substring", [Pure]> {
   let summary = "Take the run of each row's string its start and length span";
 
   let description = [{
