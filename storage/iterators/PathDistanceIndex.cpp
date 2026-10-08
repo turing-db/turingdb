@@ -463,14 +463,19 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
                                             std::span<const NodeID> seeds,
                                             SeedExpansion& expansion,
                                             PathHopFilter* hopFilter) {
+    const SampleStep step {._direction = direction, ._edgeTypes = edgeTypes, ._hopFilter = hopFilter};
+    sampleSeedExpansion(parts, std::span<const SampleStep>(&step, 1), seeds, expansion);
+}
+
+void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
+                                            std::span<const SampleStep> steps,
+                                            std::span<const NodeID> seeds,
+                                            SeedExpansion& expansion) {
     expansion = SeedExpansion {};
 
-    if (seeds.empty() || parts.getAllocatedNodeCount() == 0) {
+    if (seeds.empty() || steps.empty() || parts.getAllocatedNodeCount() == 0) {
         return;
     }
-
-    const bool walksOuts = direction != PathExplorationDir::BACKWARD;
-    const bool walksIns = direction != PathExplorationDir::FORWARD;
 
     const size_t stride = std::max<size_t>(1, seeds.size() / seedSampleTarget);
 
@@ -482,6 +487,9 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
     }
 
     double survivorsPerSeed = 1.0;
+    double passRate = 1.0;
+    std::array<double, SeedExpansion::maxLevels> levelFanOuts {};
+    std::array<double, SeedExpansion::maxLevels> levelPassRates {};
 
     std::vector<NodeID> next;
     std::vector<size_t> nextRows;
@@ -491,6 +499,12 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
     for (size_t level = 0; level < seedSampleLevels && !frontier.empty(); level++) {
         next.clear();
         nextRows.clear();
+
+        const SampleStep& step = steps[level % steps.size()];
+        const std::span<const EdgeTypeID> edgeTypes = step._edgeTypes;
+        PathHopFilter* const hopFilter = step._hopFilter;
+        const bool walksOuts = step._direction != PathExplorationDir::BACKWARD;
+        const bool walksIns = step._direction != PathExplorationDir::FORWARD;
 
         double arrivals = 0.0;
         double offered = 0.0;
@@ -558,18 +572,38 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
         const double levelFanOut = offered / arrivals;
         const double checksPerSeed = survivorsPerSeed * levelFanOut;
 
-        expansion._frontierPerSeed[expansion._levels] = checksPerSeed;
-        expansion._levels++;
-        expansion._tailFanOut = levelFanOut;
         if (offered > 0.0) {
-            expansion._tailPassRate = kept / offered;
+            passRate = kept / offered;
         }
 
-        survivorsPerSeed = checksPerSeed * expansion._tailPassRate;
+        expansion._frontierPerSeed[expansion._levels] = checksPerSeed;
+        levelFanOuts[expansion._levels] = levelFanOut;
+        levelPassRates[expansion._levels] = passRate;
+        expansion._levels++;
+
+        survivorsPerSeed = checksPerSeed * passRate;
 
         std::swap(frontier, next);
         std::swap(frontierRows, nextRows);
     }
+
+    // Past the levels it measured the walk goes on repeating its body, so the tail grows by
+    // the body's fan-out spread over its steps: the geometric mean of its last levels
+    const size_t tailLevels = std::min(steps.size(), expansion._levels);
+    if (tailLevels == 0) {
+        return;
+    }
+
+    double fanOutProduct = 1.0;
+    double passRateProduct = 1.0;
+    for (size_t level = expansion._levels - tailLevels; level < expansion._levels; level++) {
+        fanOutProduct *= levelFanOuts[level];
+        passRateProduct *= levelPassRates[level];
+    }
+
+    const double tailExponent = 1.0 / static_cast<double>(tailLevels);
+    expansion._tailFanOut = pow(fanOutProduct, tailExponent);
+    expansion._tailPassRate = pow(passRateProduct, tailExponent);
 }
 
 double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,

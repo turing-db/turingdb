@@ -344,7 +344,6 @@ const PathExplorator::DependencyList* PathExplorator::ExpansionMemo::find(uint64
 
 PathExplorator::PathExplorator(const GraphView& view,
                                const ColumnNodeIDs* inputNodeIDs,
-                               PathExplorationDir direction,
                                uint64_t minHops,
                                uint64_t maxHops)
     : _view(view),
@@ -355,7 +354,6 @@ PathExplorator::PathExplorator(const GraphView& view,
     _tombstones(&view.tombstones()),
     _filterTombstones(view.tombstones().hasEdges())
 {
-    addStep(direction);
     reset();
 }
 
@@ -605,6 +603,8 @@ void PathExplorator::reset() {
 }
 
 void PathExplorator::fill(size_t maxCount) {
+    bioassert(!_steps.empty(), "A path exploration walks a body of at least one step");
+
     if (searchesLevels()) {
         fillDistinct(maxCount);
         return;

@@ -16,6 +16,10 @@ unsigned hopSourceArgument(size_t step);
 unsigned hopEdgeArgument(size_t step);
 unsigned hopEndArgument(size_t step);
 
+// The earliest step whose hop region takes the walk argument at @param walkPosition: the
+// first step takes its source, and every step its edge and end node
+size_t firstStepTakingHopArgument(size_t walkPosition);
+
 bool hasHopPredicate(MutableArrayRef<Region> hops);
 
 void buildHopArgumentTypes(size_t step,

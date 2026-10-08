@@ -118,6 +118,11 @@ def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def HoistHopConjuncts : Pass<"hoist_hop_conjuncts"> {
+    let summary = "Move each conjunct of a path exploration's hop predicate to the earliest step of its body that binds every node and edge it reads";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreHopLabels : Pass<"fuse_explore_hop_labels"> {
     let summary = "Move the labels the hop region of a path exploration asks of each hop's end node out of the region into hop labels";
     let dependentDialects = ["mlir::db::DB"];

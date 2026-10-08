@@ -43,7 +43,6 @@ public:
 
     PathExplorator(const GraphView& view,
                    const ColumnNodeIDs* inputNodeIDs,
-                   PathExplorationDir direction,
                    uint64_t minHops,
                    uint64_t maxHops);
     ~PathExplorator();

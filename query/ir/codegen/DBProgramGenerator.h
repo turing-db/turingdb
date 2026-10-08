@@ -1273,21 +1273,12 @@ private:
     // Indexes the quantified edge patterns of a part by their declaration
     void collectQuantifiedEdges(std::span<Stmt* const> stmts);
 
-    // Generates the hop regions of an exploration from the pattern's hop constraints: the
-    // inner nodes' labels and properties and every hop predicate, each tested at the first
-    // step of the walk binding what it reads, over that step's block arguments
-    void generateHopRegions(mlir::db::ExplorePaths exploration,
-                            const EdgePattern* pattern,
-                            llvm::ArrayRef<const VarDecl*> imports,
-                            bool reversed);
-
-    // The region of one step, yielding one mask; none when the step tests nothing.
-    // @param declPositions holds the walk position each entity of the pattern is read at.
+    // Generates the hop predicate of an exploration from the pattern's hop constraints: the
+    // inner nodes' labels and properties and every hop predicate, in the region of the body's
+    // last step, which takes every node and edge of a repetition. HoistHopConjuncts moves each
+    // conjunct to the earliest step binding what it reads.
     void generateHopRegion(mlir::db::ExplorePaths exploration,
                            const EdgePattern* pattern,
-                           size_t step,
-                           const std::unordered_map<const VarDecl*, size_t>& declPositions,
-                           std::span<const Expr* const> conjuncts,
                            llvm::ArrayRef<const VarDecl*> imports,
                            bool reversed);
 

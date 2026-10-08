@@ -20,6 +20,10 @@ unsigned mlir::hopEndArgument(size_t step) {
     return static_cast<unsigned>(2 * step + 2);
 }
 
+size_t mlir::firstStepTakingHopArgument(size_t walkPosition) {
+    return walkPosition == 0 ? 0 : (walkPosition - 1) / 2;
+}
+
 bool mlir::hasHopPredicate(MutableArrayRef<Region> hops) {
     return llvm::any_of(hops, [](Region& hop) { return !hop.empty(); });
 }
