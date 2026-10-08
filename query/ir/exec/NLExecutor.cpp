@@ -7244,15 +7244,17 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     const SubstringFunction function {};
     constexpr std::string_view name = SubstringFunction::NAME;
 
-    constexpr std::optional<types::Int64::Primitive> toTheEnd = std::numeric_limits<types::Int64::Primitive>::max();
+    constexpr std::optional<types::Int64::Primitive> toTheEnd = SubstringFunction::MAX_ARGUMENT;
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
         const std::optional<types::Int64::Primitive> from = start._read(start._column, rowIndex, name);
         const std::optional<types::Int64::Primitive> count = length._column ? length._read(length._column, rowIndex, name) : toTheEnd;
 
-        const bool readsANull = !text.has_value() || !from.has_value() || !count.has_value();
-        if (readsANull) {
+        const bool boundIsNull = !from.has_value() || !count.has_value();
+        if (boundIsNull) {
+            throw IRException("substring() does not take a null start or length");
+        } else if (!text.has_value()) {
             outputRaw[rowIndex] = std::nullopt;
         } else {
             outputRaw[rowIndex] = function(*text, *from, *count);

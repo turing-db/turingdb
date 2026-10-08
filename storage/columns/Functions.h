@@ -844,6 +844,8 @@ public:
 
     static constexpr std::string_view NAME = "substring";
 
+    static constexpr types::Int64::Primitive MAX_ARGUMENT = std::numeric_limits<int32_t>::max();
+
     ResultType operator()(types::String::Primitive string,
                           types::Int64::Primitive start,
                           types::Int64::Primitive length) const;

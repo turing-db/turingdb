@@ -37,7 +37,7 @@ private:
 
     // One overload per way of typing the arguments, position i taking any of positionTypes[i]
     void createOverloads(std::string_view fullName,
-                         const std::vector<std::vector<EvaluatedType>>& positionTypes,
+                         const std::vector<std::vector<FunctionArgumentType>>& positionTypes,
                          std::vector<FunctionSignature*>& overloads);
 };
 

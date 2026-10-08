@@ -71,8 +71,12 @@ size_t characterOffset(const types::String::Primitive string, const size_t chara
 }
 
 size_t characterArgument(const types::Int64::Primitive value, std::string_view functionName) {
-    if (value < 0) {
-        throw TuringException(fmt::format("{}() takes no negative position or length, and this row holds {}", functionName, value));
+    const bool outOfRange = value < 0 || value > SubstringFunction::MAX_ARGUMENT;
+    if (outOfRange) {
+        throw TuringException(fmt::format("{}() takes a position or length from 0 to {}, and this row holds {}",
+                                          functionName,
+                                          SubstringFunction::MAX_ARGUMENT,
+                                          value));
     }
 
     return static_cast<size_t>(value);

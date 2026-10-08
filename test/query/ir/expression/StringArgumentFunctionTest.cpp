@@ -47,9 +47,21 @@ TEST_F(StringArgumentFunctionTest, readsAnArgumentPerRow) {
     expectRows("UNWIND [1, 2, 3] AS n RETURN substring('hello', 0, n), substring('hello', n)", {{"h", "ello"}, {"he", "llo"}, {"hel", "lo"}});
 }
 
-TEST_F(StringArgumentFunctionTest, nullInNullOut) {
-    expectRows("RETURN substring(null, 1), substring('a', null), substring('a', 0, null)",
-               {{"null", "null", "null"}});
+TEST_F(StringArgumentFunctionTest, substringOfNullIsNull) {
+    expectRows("RETURN substring(null, 1), substring(null, 1, 2)", {{"null", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, substringRejectsANullStartOrLength) {
+    expectError("RETURN substring('hello', null)", "substring()");
+    expectError("RETURN substring('hello', 0, null)", "substring()");
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN substring(p.name, p.nosuch)", "substring()");
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN substring(p.name, 0, p.words[2])", "substring()");
+}
+
+TEST_F(StringArgumentFunctionTest, substringRejectsAStartOrLengthPastTheLargestInteger) {
+    expectError("RETURN substring('hello', 2147483648)", "substring()");
+    expectError("RETURN substring('hello', 0, 2147483648)", "substring()");
+    expectRows("RETURN substring('hello', 2147483647), substring('hello', 0, 2147483647)", {{"", "hello"}});
 }
 
 TEST_F(StringArgumentFunctionTest, absentPropertyIsNull) {
