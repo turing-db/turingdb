@@ -108,6 +108,41 @@ TEST_F(StringArgumentFunctionTest, splitRejectsATaggedCellOfTheWrongType) {
     expectError("MATCH (p:Person {name: 'Remy'}) RETURN split(p.words[1], ',')", "split()");
 }
 
+TEST_F(StringArgumentFunctionTest, replaceOfALiteral) {
+    expectRows("RETURN replace('hello', 'l', 'L'), replace('hello', 'x', 'y'), replace('hello', 'll', ''), replace('', 'a', 'b')",
+               {{"heLLo", "hello", "heo", ""}});
+}
+
+TEST_F(StringArgumentFunctionTest, replaceDoesNotOverlapMatches) {
+    expectRows("RETURN replace('aaa', 'aa', 'b'), replace('abab', 'ab', 'abab')", {{"ba", "abababab"}});
+}
+
+TEST_F(StringArgumentFunctionTest, replaceOfNothingLeavesTheString) {
+    expectRows("RETURN replace('ab', '', '-'), replace('', '', '-')", {{"ab", ""}});
+}
+
+TEST_F(StringArgumentFunctionTest, replacesInAProperty) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN replace(p.name, 'R', 'J')", {{"Jemy"}});
+}
+
+TEST_F(StringArgumentFunctionTest, replacesPerRow) {
+    expectRows("UNWIND ['l', 'o'] AS s RETURN replace('hello', s, '_')", {{"he__o"}, {"hell_"}});
+}
+
+TEST_F(StringArgumentFunctionTest, replaceNullInNullOut) {
+    expectRows("RETURN replace(null, 'a', 'b'), replace('a', null, 'b'), replace('a', 'a', null)",
+               {{"null", "null", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, replacesInATaggedCell) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN replace(p.words[0], 'l', 'L'), replace(p.words[2], 'l', 'L')",
+               {{"heLLo", "null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, replaceRejectsATaggedCellOfTheWrongType) {
+    expectError("MATCH (p:Person {name: 'Remy'}) RETURN replace(p.words[1], 'a', 'b')", "replace()");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

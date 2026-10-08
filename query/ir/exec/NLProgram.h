@@ -4038,6 +4038,38 @@ private:
     StringArgument _delimiter;
 };
 
+class NLReplaceData : public NLFunctionData {
+public:
+    using StringArgument = NLSubstringData::StringArgument;
+
+    NLReplaceData(Column* result,
+                  LocalMemory* memory,
+                  const StringArgument& string,
+                  const StringArgument& search,
+                  const StringArgument& replacement)
+        : _result(result),
+        _memory(memory),
+        _string(string),
+        _search(search),
+        _replacement(replacement)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const StringArgument& getString() const { return _string; }
+    const StringArgument& getSearch() const { return _search; }
+    const StringArgument& getReplacement() const { return _replacement; }
+
+private:
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    StringArgument _string;
+    StringArgument _search;
+    StringArgument _replacement;
+};
+
 // Read the cell one value column holds at @param row as the value the map buffer stores
 // for it. The map sibling of NLListItemReadFunction.
 using NLMapValueReadFunction = MapBuffer<>::MapItemVariant (*)(const Column* input,

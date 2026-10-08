@@ -7289,6 +7289,39 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
+    const NLReplaceData* replace = static_cast<NLReplaceData*>(data);
+
+    const NLReplaceData::StringArgument& string = replace->getString();
+    const NLReplaceData::StringArgument& search = replace->getSearch();
+    const NLReplaceData::StringArgument& replacement = replace->getReplacement();
+
+    const size_t rowCount = string._column->size();
+    bioassert(search._column->size() == rowCount, "Search column of a replace is not row-aligned with its string.");
+    bioassert(replacement._column->size() == rowCount,
+              "Replacement column of a replace is not row-aligned with its string.");
+
+    std::vector<std::optional<types::String::Primitive>>& outputRaw =
+        static_cast<ColumnOptVector<types::String::Primitive>*>(replace->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    const ReplaceFunction function(&replace->getMemory()->stringBuffer());
+    constexpr std::string_view name = ReplaceFunction::NAME;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::String::Primitive> searched = search._read(search._column, rowIndex, name);
+        const std::optional<types::String::Primitive> substitute = replacement._read(replacement._column, rowIndex, name);
+
+        const bool readsANull = !text.has_value() || !searched.has_value() || !substitute.has_value();
+        if (readsANull) {
+            outputRaw[rowIndex] = std::nullopt;
+        } else {
+            outputRaw[rowIndex] = function(*text, *searched, *substitute);
+        }
+    }
+}
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 

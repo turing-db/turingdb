@@ -949,6 +949,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSubstring(substring, body);
         } else if (nl::Split split = mlir::dyn_cast<nl::Split>(operation)) {
             translateSplit(split, body);
+        } else if (nl::Replace replace = mlir::dyn_cast<nl::Replace>(operation)) {
+            translateReplace(replace, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
@@ -3330,6 +3332,29 @@ void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
     NLSplitData* data = _program->allocFunctionData<NLSplitData>(result, _memory, stringArgument, delimiterArgument);
 
     body->emplaceStmt(&NLExecutor::runSplit, data);
+}
+
+void NLTranslator::translateReplace(nl::Replace replace, NLStmtContainer* body) {
+    const mlir::Value resultValue = replace.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const Column* const string = getColumn(replace.getString());
+    const Column* const search = getColumn(replace.getSearch());
+    const Column* const replacement = getColumn(replace.getReplacement());
+
+    const NLReplaceData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
+    const NLReplaceData::StringArgument searchArgument {search, NLExecutor::selectStringArgumentRead(search)};
+    const NLReplaceData::StringArgument replacementArgument {replacement, NLExecutor::selectStringArgumentRead(replacement)};
+
+    NLReplaceData* data = _program->allocFunctionData<NLReplaceData>(result,
+                                                                     _memory,
+                                                                     stringArgument,
+                                                                     searchArgument,
+                                                                     replacementArgument);
+
+    body->emplaceStmt(&NLExecutor::runReplace, data);
 }
 
 template <typename Data, typename Op, typename... Extra>

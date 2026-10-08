@@ -2800,6 +2800,15 @@ def Split : NLOp<"split", [Pure, RowAlignedThroughOperands]> {
   let assemblyFormat = "$string `,` $delimiter attr-dict `:` functional-type(operands, results)";
 }
 
+def Replace : NLOp<"replace", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise replacement of pattern";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$search, NLChunk:$replacement);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $search `,` $replacement attr-dict `:` functional-type(operands, results)";
+}
+
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 

@@ -2683,6 +2683,22 @@ def Split : TuringOp<"split", [Pure, ConstantThroughOperands]> {
   }];
 }
 
+def Replace : TuringOp<"replace", [Pure, ConstantThroughOperands]> {
+  let summary = "Replace every occurrence of search";
+
+  let description = [{
+      %s = db.replace(%name, %search, %replacement) : (!db.column<!storage.string>, !db.column<!storage.string>,
+                                                       !db.column<!storage.string>) -> !db.column<!storage.string>
+  }];
+
+  let arguments = (ins Column:$string, Column:$search, Column:$replacement);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $string `,` $search `,` $replacement `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure, ConstantThroughOperands]> {
   let summary = "Apply a binary function row-wise to two value columns";
 

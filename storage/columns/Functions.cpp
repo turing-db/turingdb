@@ -459,6 +459,57 @@ SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive str
     return _listBuffer->insert(_parts);
 }
 
+ReplaceFunction::ReplaceFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
+ReplaceFunction::ResultType ReplaceFunction::operator()(types::String::Primitive string,
+                                                        types::String::Primitive search,
+                                                        types::String::Primitive replacement) const {
+    if (search.empty()) {
+        // TODO: Verify this is the behaviour we want
+        return string;
+    }
+
+    size_t matchCount = 0;
+    size_t matchStart = string.find(search);
+
+    while (matchStart != std::string_view::npos) {
+        matchCount++;
+        matchStart = string.find(search, matchStart + search.size());
+    }
+
+    if (matchCount == 0) {
+        return string;
+    }
+
+    const size_t removedSize = matchCount * search.size();
+    const size_t addedSize = matchCount * replacement.size();
+
+    const size_t replacedSize = string.size() - removedSize + addedSize;
+    const std::span<char> replaced = _stringBuffer->allocate(replacedSize);
+
+    std::span<char>::iterator output = replaced.begin();
+    size_t copyStart = 0;
+    matchStart = string.find(search);
+
+    while (matchStart != std::string_view::npos) {
+        const types::String::Primitive kept = string.substr(copyStart, matchStart - copyStart);
+
+        output = std::copy(kept.begin(), kept.end(), output);
+        output = std::copy(replacement.begin(), replacement.end(), output);
+
+        copyStart = matchStart + search.size();
+        matchStart = string.find(search, copyStart);
+    }
+
+    const types::String::Primitive tail = string.substr(copyStart);
+    std::ranges::copy(tail, output);
+
+    return {replaced.data(), replaced.size()};
+}
+
 ReverseFunction::ReverseFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {

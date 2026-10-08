@@ -1179,6 +1179,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSubstring(substring);
     } else if (mlir::db::Split split = mlir::dyn_cast<mlir::db::Split>(operation)) {
         lowerSplit(split);
+    } else if (mlir::db::Replace replace = mlir::dyn_cast<mlir::db::Replace>(operation)) {
+        lowerReplace(replace);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
@@ -2311,6 +2313,25 @@ void DBLowering::lowerSplit(mlir::db::Split split) {
                                                  arguments[1]);
 
     _valueMap[split.getResult()] = parts.getResult();
+}
+
+void DBLowering::lowerReplace(mlir::db::Replace replace) {
+    llvm::SmallVector<mlir::Value, 3> arguments;
+    containerCellChunks(replace->getOperands(), arguments);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type stringType = storage::StringType::get(context);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, stringType));
+
+    setInsertionForNaryOp(arguments);
+
+    nl::Replace replaced = _builder.create<nl::Replace>(_builder.getUnknownLoc(),
+                                                        resultType,
+                                                        arguments[0],
+                                                        arguments[1],
+                                                        arguments[2]);
+
+    _valueMap[replace.getResult()] = replaced.getResult();
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

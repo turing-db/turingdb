@@ -8996,6 +8996,9 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     } else if (funcName == "split") {
         translateSplit(expr, args);
         return;
+    } else if (funcName == "replace") {
+        translateReplace(expr, args);
+        return;
     }
 
     const Expr* const pathExpr = args && args->size() == 1 ? args->front() : nullptr;
@@ -9139,6 +9142,28 @@ void DBProgramGenerator::translateSplit(const Expr* expr, const ExprChain* args)
                                                                delimiter);
 
     _part._exprMap[expr] = split.getResult();
+}
+
+void DBProgramGenerator::translateReplace(const Expr* expr, const ExprChain* args) {
+    if (!args || args->size() != 3) {
+        throwError("replace() expects 3 arguments.", expr);
+    }
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value string = translateArg(argExprs[0]);
+    const mlir::Value search = translateArg(argExprs[1]);
+    const mlir::Value replacement = translateArg(argExprs[2]);
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+
+    mlir::db::Replace replace = _opBuilder.create<mlir::db::Replace>(_opBuilder.getUnknownLoc(),
+                                                                     allocColumnType(stringType),
+                                                                     string,
+                                                                     search,
+                                                                     replacement);
+
+    _part._exprMap[expr] = replace.getResult();
 }
 
 void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {

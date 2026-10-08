@@ -864,6 +864,22 @@ private:
     std::vector<QueryListBuffer::ListItemVariant> _parts;
 };
 
+class ReplaceFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "replace";
+
+    explicit ReplaceFunction(StringBuffer* stringBuffer);
+
+    ResultType operator()(types::String::Primitive string,
+                          types::String::Primitive search,
+                          types::String::Primitive replacement) const;
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+};
+
 class ListReverseFunction {
 public:
     using ArgType = types::List::Primitive;
