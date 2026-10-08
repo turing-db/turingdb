@@ -643,11 +643,17 @@ void FunctionDecls::initDefault() {
     reverseCell->setArguments({EvaluatedType::ListItem});
     reverseCell->setReturnTypes({{EvaluatedType::ListItem}});
 
-    const std::vector<EvaluatedType> stringOrCell = {EvaluatedType::String, EvaluatedType::ListItem};
-    const std::vector<EvaluatedType> integerOrCell = {EvaluatedType::Integer, EvaluatedType::ListItem};
+    const std::vector<FunctionArgumentType> stringOrCell = {EvaluatedType::String, EvaluatedType::ListItem};
+
+    std::vector<FunctionArgumentType> nonNullIntegerOrCell;
+    for (const EvaluatedType etype : {EvaluatedType::Integer, EvaluatedType::ListItem}) {
+        FunctionArgumentType integer(etype);
+        integer.setRejectsNull(true);
+        nonNullIntegerOrCell.push_back(integer);
+    }
 
     std::vector<FunctionSignature*> substrings;
-    createOverloads("substring", {stringOrCell, integerOrCell, integerOrCell}, substrings);
+    createOverloads("substring", {stringOrCell, nonNullIntegerOrCell, nonNullIntegerOrCell}, substrings);
 
     for (FunctionSignature* substring : substrings) {
         substring->setRequiredArgCount(2);
@@ -682,10 +688,10 @@ FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
 }
 
 void FunctionDecls::createOverloads(std::string_view fullName,
-                                    const std::vector<std::vector<EvaluatedType>>& positionTypes,
+                                    const std::vector<std::vector<FunctionArgumentType>>& positionTypes,
                                     std::vector<FunctionSignature*>& overloads) {
     size_t overloadCount = 1;
-    for (const std::vector<EvaluatedType>& types : positionTypes) {
+    for (const std::vector<FunctionArgumentType>& types : positionTypes) {
         overloadCount *= types.size();
     }
 
@@ -693,8 +699,8 @@ void FunctionDecls::createOverloads(std::string_view fullName,
         FunctionSignature::ArgumentTypes arguments;
 
         size_t remaining = overloadIndex;
-        for (const std::vector<EvaluatedType>& types : positionTypes) {
-            arguments.emplace_back(types[remaining % types.size()]);
+        for (const std::vector<FunctionArgumentType>& types : positionTypes) {
+            arguments.push_back(types[remaining % types.size()]);
             remaining /= types.size();
         }
 

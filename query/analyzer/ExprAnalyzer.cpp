@@ -1807,6 +1807,16 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
             arg->setExprVarDecl(decl);
         }
 
+        for (size_t argIndex = 0; argIndex < declaredArgs; argIndex++) {
+            const Expr* arg = providedArgs[argIndex];
+
+            const bool isNull = arg->getType() == EvaluatedType::Null;
+            const bool rejectedNull = expectedArgs[argIndex].rejectsNull() && isNull;
+            if (rejectedNull) {
+                throwError(fmt::format("{}() does not take null as argument {}", name, argIndex + 1), arg);
+            }
+        }
+
         const bool readsANull = std::any_of(providedArgs.begin(), providedArgs.end(), [](const Expr* arg) {
             return arg->getType() == EvaluatedType::Null;
         });
