@@ -10,6 +10,7 @@
 namespace db {
 
 class CypherAST;
+class EdgePattern;
 class EmbeddingLiteral;
 class EntityTypeExpr;
 class ExistsExpr;
@@ -53,6 +54,10 @@ public:
 
     // `MATCH (a WHERE p)-[r WHERE q]->(b) WHERE w` filters as `WHERE p AND q AND w`
     static void foldEntityWheres(CypherAST* ast, Pattern* pattern);
+
+    // A relationship quantified as [e*1..3] or -[e]->{1,3} becomes the walk repeating it,
+    // which takes the quantifier off it; any other relationship is returned as it is
+    static EdgePattern* createQuantifiedWalk(CypherAST* ast, EdgePattern* edge, const SourceLocation& location);
 
     static NodePattern* createNodePattern(CypherAST* ast,
                                           Symbol* symbol,

@@ -459,10 +459,6 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
-        if (edgePattern->getQuantifiedPath()) {
-            throwIfGroupNameIsBound(_ctxt, symbol, edgePattern);
-        }
-
         decl = _ctxt->getOrCreateNamedVariable(_ast,
                                                EvaluatedType::EdgePattern,
                                                symbol->getName());
@@ -595,14 +591,12 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         }
         hop->setHopDecl(hopDecl);
 
-        if (hop != walk) {
-            EdgePatternData* hopData = EdgePatternData::create(_ast);
-            hop->setData(hopData);
+        EdgePatternData* hopData = EdgePatternData::create(_ast);
+        hop->setData(hopData);
 
-            if (const SymbolChain* types = hop->types()) {
-                for (const Symbol* edgeTypeSymbol : *types) {
-                    hopData->addEdgeTypeConstraint(edgeTypeSymbol->getName());
-                }
+        if (const SymbolChain* types = hop->types()) {
+            for (const Symbol* edgeTypeSymbol : *types) {
+                hopData->addEdgeTypeConstraint(edgeTypeSymbol->getName());
             }
         }
 
@@ -661,11 +655,9 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         throwIfGroupNameIsBound(outer, node ? node->getSymbol() : nullptr, walk);
     }
 
-    if (hopCount > 1) {
-        for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
-            const EdgePattern* hop = walk->getHop(hopIndex);
-            throwIfGroupNameIsBound(outer, hop->getSymbol(), walk);
-        }
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        const EdgePattern* hop = walk->getHop(hopIndex);
+        throwIfGroupNameIsBound(outer, hop->getSymbol(), walk);
     }
 
     for (size_t position = 0; position <= hopCount; position++) {
@@ -674,12 +666,10 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         walk->addHopNodeGroup(symbol ? declareGroupVariable(outer, EvaluatedType::NodePattern, symbol->getName()) : nullptr);
     }
 
-    if (hopCount > 1) {
-        for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
-            EdgePattern* hop = walk->getHop(hopIndex);
-            if (const Symbol* symbol = hop->getSymbol()) {
-                hop->setDecl(declareGroupVariable(outer, EvaluatedType::EdgePattern, symbol->getName()));
-            }
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        EdgePattern* hop = walk->getHop(hopIndex);
+        if (const Symbol* symbol = hop->getSymbol()) {
+            hop->setDecl(declareGroupVariable(outer, EvaluatedType::EdgePattern, symbol->getName()));
         }
     }
 }

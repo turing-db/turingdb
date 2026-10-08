@@ -1618,7 +1618,7 @@ patternElemChain
             $1->setQuantifiedPath($2);
         }
 
-        $$ = std::make_pair($1, $3);
+        $$ = std::make_pair(ParserUtils::createQuantifiedWalk(ast, $1, @1), $3);
     }
     | OPAREN patternElem opt_whereClause CPAREN quantifiedPath nodePattern {
         const PatternElement* body = $2;
@@ -1636,21 +1636,17 @@ patternElemChain
             }
         }
 
-        EdgePattern* walk = static_cast<EdgePattern*>(entities[1]);
-        if (hopCount > 1) {
-            walk = EdgePattern::create(ast, $5, EdgePattern::Direction::Undirected);
-            LOC(walk, @2);
+        EdgePattern* walk = EdgePattern::create(ast, $5, EdgePattern::Direction::Undirected);
+        LOC(walk, @2);
 
-            for (auto [hop, node] : body->getElementChain()) {
-                walk->addHop(hop);
-            }
+        for (auto [hop, node] : body->getElementChain()) {
+            walk->addHop(hop);
         }
 
         for (size_t position = 0; position < entities.size(); position += 2) {
             walk->addHopNode(static_cast<NodePattern*>(entities[position]));
         }
 
-        walk->setQuantifiedPath($5);
         walk->setHopWhere($3);
         $$ = std::make_pair(walk, $6);
     }
@@ -1665,7 +1661,7 @@ exprPatternElemChain
 
             $1->setQuantifiedPath($2);
         }
-        $$ = std::make_pair($1, $3);
+        $$ = std::make_pair(ParserUtils::createQuantifiedWalk(ast, $1, @1), $3);
     }
     ;
 

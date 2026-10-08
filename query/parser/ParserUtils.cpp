@@ -129,6 +129,21 @@ PatternElement* createHop(CypherAST* ast, Expr* lhs, Expr* rhs, const SourceLoca
 
 }
 
+EdgePattern* ParserUtils::createQuantifiedWalk(CypherAST* ast, EdgePattern* edge, const SourceLocation& location) {
+    QuantifiedPath* quantified = edge->getQuantifiedPath();
+    if (!quantified) {
+        return edge;
+    }
+
+    edge->setQuantifiedPath(nullptr);
+
+    EdgePattern* walk = EdgePattern::create(ast, quantified, EdgePattern::Direction::Undirected);
+    ast->getSourceManager()->setLocation(walk, location);
+    walk->addHop(edge);
+
+    return walk;
+}
+
 void ParserUtils::listExprToFloatVector(const ListLiteral* list, std::vector<float>& out) {
     out.clear();
     out.reserve(list->size());
