@@ -528,7 +528,7 @@ bool isMaskComputeOp(Operation* op) {
                AndOp, OrOp, XorOp, NotOp,
                AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp,
                ConstantOp,
-               GetNodeProperties, GetEdgeProperties>(op);
+               GetNodeProperties, GetEdgeProperties, ElementID>(op);
 }
 
 struct MaskCone {
@@ -841,6 +841,15 @@ void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source, co
     eraseIfUnused(source);
 }
 
+// The node column a side of an id comparison names, compared as itself or through id()
+Value comparedNodeColumn(Value side) {
+    if (ElementID id = side.getDefiningOp<ElementID>()) {
+        side = id.getInput();
+    }
+
+    return isNodeColumn(side) ? side : Value();
+}
+
 bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
@@ -851,9 +860,9 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
     const Value rhs = equality.getRhs();
 
     Value constantSide;
-    if (lhs == scanColumn) {
+    if (comparedNodeColumn(lhs) == scanColumn) {
         constantSide = rhs;
-    } else if (rhs == scanColumn) {
+    } else if (comparedNodeColumn(rhs) == scanColumn) {
         constantSide = lhs;
     } else {
         return false;
@@ -895,6 +904,42 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImp
         nodeIDs.push_back(nodeID);
     }
 
+    return true;
+}
+
+// eq(get_node_properties(column, property), constant), with the constant on either side
+struct PropertyEquality {
+    GetNodeProperties _read;
+    TypedAttr _value;
+};
+
+bool matchPropertyEquality(EqOp equality, PropertyEquality& match) {
+    const Value lhs = equality.getLhs();
+    const Value rhs = equality.getRhs();
+
+    GetNodeProperties read = lhs.getDefiningOp<GetNodeProperties>();
+    Value constantSide = rhs;
+    if (!read) {
+        read = rhs.getDefiningOp<GetNodeProperties>();
+        constantSide = lhs;
+    }
+
+    if (!read) {
+        return false;
+    }
+
+    ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
+    if (!constant) {
+        return false;
+    }
+
+    const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
+    if (!literal || !storage::isPropertyScanLiteral(literal)) {
+        return false;
+    }
+
+    match._read = read;
+    match._value = literal;
     return true;
 }
 
@@ -2010,6 +2055,44 @@ void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
     }
 }
 
+// Drops a conjunct the filter's rows now hold without it from its mask, and the ops that
+// computed nothing else
+void dropConjunct(FilterOp filter, Value conjunct, mlir::RewriterBase& rewriter) {
+    const Value mask = filter.getMask();
+
+    if (mask == conjunct) {
+        bypassFilter(filter);
+        rewriter.eraseOp(filter);
+    } else {
+        AndOp conjunction = cast<AndOp>(*conjunct.getUsers().begin());
+        const Value other = conjunction.getLhs() == conjunct ? conjunction.getRhs() : conjunction.getLhs();
+
+        conjunction.getResult().replaceAllUsesWith(other);
+        rewriter.eraseOp(conjunction);
+    }
+
+    llvm::SmallVector<Operation*> dead {conjunct.getDefiningOp()};
+    llvm::SmallPtrSet<Operation*, 8> erased;
+    while (!dead.empty()) {
+        Operation* const op = dead.pop_back_val();
+        if (erased.contains(op) || !op->use_empty()) {
+            continue;
+        }
+
+        llvm::SmallVector<Operation*> operandDefs;
+        for (const Value operand : op->getOperands()) {
+            Operation* const def = operand.getDefiningOp();
+            if (def && computesFromTheRow(def)) {
+                operandDefs.push_back(def);
+            }
+        }
+
+        erased.insert(op);
+        rewriter.eraseOp(op);
+        dead.append(operandDefs.begin(), operandDefs.end());
+    }
+}
+
 void cutFactors(ProductCut& cut, ConeCache& cache, mlir::RewriterBase& rewriter) {
     const Location loc = cut._filter.getLoc();
 
@@ -2218,14 +2301,14 @@ Value disjunctionColumn(Value mask) {
     }
 
     const Value lhs = equality.getLhs();
-    return lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs;
+    return comparedNodeColumn(lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs);
 }
 
-bool keepsTheScannedNode(Operation& op) {
+bool keepsTheSourceRows(Operation& op) {
     ExplorePaths exploration = dyn_cast<ExplorePaths>(op);
     const bool walksEachSeed = exploration && !exploration.getDistinct();
 
-    return isa<FilterOp>(op) || walksEachSeed || isHop(&op) || computesPerRow(&op);
+    return isa<FilterOp>(op) || walksEachSeed || isEdgeHop(&op) || computesPerRow(&op);
 }
 
 // Whether the rows the source starts reach the filter only through ops keepsTheRows accepts,
@@ -2271,7 +2354,7 @@ bool matchPatternScanSource(FilterOp filter, Value column, LineageClimbs& climbs
         return false;
     }
 
-    if (!rowsReachTheFilter(scan, filter, keepsTheScannedNode)) {
+    if (!rowsReachTheFilter(scan, filter, keepsTheSourceRows)) {
         return false;
     }
 
@@ -3616,6 +3699,61 @@ Operation* createEndpointLabelledHop(Operation* hop, ArrayAttr labels, mlir::OpB
     }
 }
 
+template <typename HopOp, typename ByTypeOp, typename ByLabelOp, typename ByTypeAndLabelOp>
+Operation* createHop(Location loc,
+                     TypeRange types,
+                     Value from,
+                     ArrayAttr edgeTypes,
+                     ArrayAttr labels,
+                     ValueRange carried,
+                     mlir::OpBuilder& builder) {
+    const bool asksLabels = labels && !labels.empty();
+
+    if (edgeTypes && asksLabels) {
+        return builder.create<ByTypeAndLabelOp>(loc, types, from, edgeTypes, labels, carried).getOperation();
+    } else if (edgeTypes) {
+        return builder.create<ByTypeOp>(loc, types, from, edgeTypes, carried).getOperation();
+    } else if (asksLabels) {
+        return builder.create<ByLabelOp>(loc, types, from, labels, carried).getOperation();
+    } else {
+        return builder.create<HopOp>(loc, types, from, carried).getOperation();
+    }
+}
+
+// The hop over @param hop's edges walked the other way, from @param from, asking the node it
+// reaches for @param labels. The labels @param hop asked of its own reached node are dropped,
+// since that node is now the one walked from; get_edges walks both ways and asks for none.
+Operation* createReversedHop(Operation* hop, Value from, ArrayAttr labels, ValueRange carried, mlir::OpBuilder& builder) {
+    const Location loc = hop->getLoc();
+    const ArrayAttr edgeTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
+
+    llvm::SmallVector<Type> types;
+    for (size_t index = 0; index < hopFixedResultCount; index++) {
+        types.push_back(hop->getResult(index).getType());
+    }
+    llvm::append_range(types, carried.getTypes());
+
+    if (isa<GetEdges>(hop)) {
+        return builder.create<GetEdges>(loc, types, from, carried).getOperation();
+    } else if (isReverseHop(hop)) {
+        return createHop<GetOutEdges, GetOutEdgesByType, GetOutEdgesByLabel, GetOutEdgesByTypeAndLabel>(loc,
+                                                                                                         types,
+                                                                                                         from,
+                                                                                                         edgeTypes,
+                                                                                                         labels,
+                                                                                                         carried,
+                                                                                                         builder);
+    } else {
+        return createHop<GetInEdges, GetInEdgesByType, GetInEdgesByLabel, GetInEdgesByTypeAndLabel>(loc,
+                                                                                                     types,
+                                                                                                     from,
+                                                                                                     edgeTypes,
+                                                                                                     labels,
+                                                                                                     carried,
+                                                                                                     builder);
+    }
+}
+
 void fuseEdgesByEndpointLabel(FilterOp filter, const EndpointLabelledHop& labelledHop, mlir::OpBuilder& builder) {
     Operation* const hop = labelledHop._hop;
 
@@ -3724,6 +3862,20 @@ void collectKnownLabels(Value column, llvm::StringSet<>& labels) {
             const Value filtered = filter.getColumnsToFilter()[resultIndex];
             addFilterLabels(filter, filtered, labels);
             column = filtered;
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
+            constexpr size_t TARGET_RESULT_INDEX = 1;
+
+            if (resultIndex == 0) {
+                column = exploration.getInputNodes();
+            } else if (resultIndex >= pathFixedResultCount) {
+                column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
+            } else {
+                const std::optional<ArrayAttr> endLabels = exploration.getEndLabels();
+                if (resultIndex == TARGET_RESULT_INDEX && endLabels) {
+                    addLabelNames(*endLabels, labels);
+                }
+                return;
+            }
         } else if (isEdgeHop(def)) {
             const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
             const size_t reachedResultIndex = isReverseHop(def) ? srcResultIndex : tgtResultIndex;
@@ -4636,110 +4788,219 @@ struct FuseExploreEndFactor : public impl::FuseExploreEndFactorBase<FuseExploreE
     }
 };
 
-// A path exploration whose rows are then cut down to those ending on a node whose property
-// holds a literal: the end set spelled the long way, since the nodes holding the value can
-// be scanned before the walk and handed to it as the set to head for, and the prefixes that
-// cannot reach one are then not walked. The end's labels go into that scan.
-struct EndSetExploration {
-    ExplorePaths _exploration;
-    GetNodeProperties _read;
-    EqOp _equality;
-    ConstantOp _constant;
+// A conjunct a scan of the graph answers on its own, over the node column it reads: the nodes
+// holding a property value, or the nodes listed by id
+struct NodeScanPredicate {
+    Value _column;
+    StringAttr _property;
+    TypedAttr _value;
+    llvm::SmallVector<int64_t> _nodeIDs;
 };
 
-bool matchEndSetExploration(FilterOp filter, EndSetExploration& endSet) {
-    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
-    if (!equality || !equality.getResult().hasOneUse()) {
+bool matchNodeIDPredicate(Value conjunct, NodeScanPredicate& predicate) {
+    const Value column = disjunctionColumn(conjunct);
+    if (!column || !collectNodeIDDisjunction(conjunct, column, predicate._nodeIDs)) {
         return false;
     }
 
-    // One side reads the property of the end nodes, the other is the literal
-    GetNodeProperties read = equality.getLhs().getDefiningOp<GetNodeProperties>();
-    Value literalSide = equality.getRhs();
-    if (!read) {
-        read = equality.getRhs().getDefiningOp<GetNodeProperties>();
-        literalSide = equality.getLhs();
-    }
-
-    // A read of the write buffer sees nodes no scan of the graph does
-    const bool readsCommittedEnds = read && !read.getPending() && !read.getAllPending() && read.getResult().hasOneUse();
-    if (!readsCommittedEnds) {
-        return false;
-    }
-
-    const Value ends = read.getInputNodes();
-    ExplorePaths exploration = ends.getDefiningOp<ExplorePaths>();
-    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes());
-    if (!exploration || ends != exploration.getTgtids() || alreadyBound) {
-        return false;
-    }
-
-    ConstantOp constant = literalSide.getDefiningOp<ConstantOp>();
-    if (!constant) {
-        return false;
-    }
-
-    const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
-    if (!literal || !storage::isPropertyScanLiteral(literal)) {
-        return false;
-    }
-
-    for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != exploration.getOperation()) {
-            return false;
-        }
-    }
-
-    for (const Value result : exploration.getResults()) {
-        for (Operation* const user : result.getUsers()) {
-            const bool readsThePair = user == filter.getOperation() || user == read.getOperation();
-            if (!readsThePair) {
-                return false;
-            }
-        }
-    }
-
-    endSet = EndSetExploration {._exploration = exploration, ._read = read, ._equality = equality, ._constant = constant};
+    llvm::sort(predicate._nodeIDs);
+    predicate._nodeIDs.erase(std::unique(predicate._nodeIDs.begin(), predicate._nodeIDs.end()), predicate._nodeIDs.end());
+    predicate._column = column;
 
     return true;
 }
 
-void fuseExploreEndSet(FilterOp filter, const EndSetExploration& endSet, mlir::OpBuilder& builder) {
-    ExplorePaths exploration = endSet._exploration;
-    GetNodeProperties read = endSet._read;
-    EqOp equality = endSet._equality;
-    ConstantOp constant = endSet._constant;
-
-    // Lowering fills the set in a loop of its own that has to close before the walk's opens,
-    // so the scan stands at the head of the function, ahead of whatever feeds the seeds
-    mlir::func::FuncOp function = exploration->getParentOfType<mlir::func::FuncOp>();
-    builder.setInsertionPointToStart(&function.getBody().front());
-
-    ScanNodesByPropertyValue set = builder.create<ScanNodesByPropertyValue>(exploration.getLoc(),
-                                                                            exploration.getTgtids().getType(),
-                                                                            read.getPropertyAttr(),
-                                                                            cast<TypedAttr>(constant.getValue()),
-                                                                            exploration.getEndLabelsAttr());
-
-    exploration.getEndNodesMutable().assign(set.getResult());
-    exploration.removeEndLabelsAttr();
-
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
+bool matchNodeScanPredicate(Value conjunct, NodeScanPredicate& predicate) {
+    EqOp equality = conjunct.getDefiningOp<EqOp>();
+    PropertyEquality property;
+    if (!equality || !matchPropertyEquality(equality, property)) {
+        return matchNodeIDPredicate(conjunct, predicate);
     }
 
-    filter.erase();
-    eraseIfUnused(equality);
-    eraseIfUnused(read);
-    eraseIfUnused(constant);
+    // A read of the write buffer sees nodes no scan of the graph does
+    GetNodeProperties read = property._read;
+    if (read.getPending() || read.getAllPending()) {
+        return false;
+    }
+
+    predicate._column = read.getInputNodes();
+    predicate._property = read.getPropertyAttr();
+    predicate._value = property._value;
+
+    return true;
+}
+
+// The labels every node of the column carries, as a by-label read asks for them, or null
+ArrayAttr knownLabelsOf(Value column, mlir::OpBuilder& builder) {
+    llvm::StringSet<> known;
+    collectKnownLabels(column, known);
+    if (known.empty()) {
+        return ArrayAttr();
+    }
+
+    llvm::SmallVector<llvm::StringRef> names(known.keys());
+    llvm::sort(names);
+
+    llvm::SmallVector<Attribute> labels;
+    for (const llvm::StringRef name : names) {
+        labels.push_back(builder.getStringAttr(name));
+    }
+
+    return builder.getArrayAttr(labels);
+}
+
+Value buildNodeScan(const NodeScanPredicate& predicate, ArrayAttr labels, Location loc, mlir::OpBuilder& builder) {
+    const Type nodeColumnType = predicate._column.getType();
+
+    if (predicate._property) {
+        ScanNodesByPropertyValue scan = builder.create<ScanNodesByPropertyValue>(loc,
+                                                                                 nodeColumnType,
+                                                                                 predicate._property,
+                                                                                 predicate._value,
+                                                                                 labels);
+        return scan.getResult();
+    }
+
+    ConstScanNodes listed = builder.create<ConstScanNodes>(loc, nodeColumnType, predicate._nodeIDs);
+    llvm::SmallVector<Value> nodes {listed.getResult()};
+    if (labels) {
+        keepLabelledRows(nodes, labels, loc, builder);
+    }
+
+    return nodes.front();
+}
+
+// The nodes a column holds on every row that satisfies a scannable predicate some hops away:
+// the predicate's scan, walked back over each hop that bound its node from the one before.
+// _hops runs from the predicate's node back to _column, which no hop bound; with no hop the
+// set is the predicate itself. Nothing in it reads a row, so it can be built ahead of them all.
+struct NodeSetChain {
+    NodeScanPredicate _predicate;
+    llvm::SmallVector<Operation*> _hops;
+    Value _column;
+};
+
+void deriveNodeSetChain(const NodeScanPredicate& predicate, LineageClimbs& climbs, NodeSetChain& chain) {
+    chain._predicate = predicate;
+
+    Value column = climbs.anchorOf(predicate._column);
+    while (column) {
+        Operation* const hop = column.getDefiningOp();
+        const bool reachedByHop = hop && isEdgeHop(hop) && cast<OpResult>(column).getResultNumber() == hopReachedResult(hop);
+        if (!reachedByHop) {
+            break;
+        }
+
+        chain._hops.push_back(hop);
+        column = climbs.anchorOf(hop->getOperand(0));
+    }
+
+    chain._column = column;
+}
+
+// Builds the set at the builder's insertion point. A hop reaches a node once per edge, so
+// each node is walked back from once
+Value buildNodeSetChain(const NodeSetChain& chain, Location loc, mlir::OpBuilder& builder) {
+    const NodeScanPredicate& predicate = chain._predicate;
+    Value nodes = buildNodeScan(predicate, knownLabelsOf(predicate._column, builder), loc, builder);
+
+    for (size_t index = 0; index < chain._hops.size(); index++) {
+        Operation* const hop = chain._hops[index];
+
+        if (index > 0) {
+            RemoveDuplicates distinct = builder.create<RemoveDuplicates>(loc, TypeRange {nodes.getType()}, ValueRange {nodes}, Value());
+            nodes = distinct.getResult(0);
+        }
+
+        const ArrayAttr labels = knownLabelsOf(hop->getOperand(0), builder);
+        Operation* const reversed = createReversedHop(hop, nodes, labels, ValueRange(), builder);
+        nodes = reversed->getResult(hopReachedResult(reversed));
+    }
+
+    return nodes;
+}
+
+// A path exploration whose rows a filter then cuts to those whose end is, or reaches over a
+// chain of hops, a node a scan of the graph can list: the walk can head for the ends that
+// chain leads back to, and leave unwalked the prefixes that cannot reach one. With no hop
+// between, the predicate holds of the end itself and leaves the filter.
+struct ExploreEndSet {
+    FilterOp _filter;
+    ExplorePaths _exploration;
+    Value _conjunct;
+    NodeSetChain _chain;
+};
+
+bool matchExploreEndSet(FilterOp filter, LineageClimbs& climbs, ExploreEndSet& endSet) {
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    for (const Value conjunct : conjuncts) {
+        NodeScanPredicate predicate;
+        if (!matchNodeScanPredicate(conjunct, predicate)) {
+            continue;
+        }
+
+        NodeSetChain chain;
+        deriveNodeSetChain(predicate, climbs, chain);
+
+        ExplorePaths exploration = chain._column ? chain._column.getDefiningOp<ExplorePaths>() : nullptr;
+        if (!exploration || chain._column != exploration.getTgtids()) {
+            continue;
+        }
+
+        // Every row the walk emits has to reach the filter, or a reader of the rows it cut
+        // would miss them
+        const bool alreadyBound = exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes();
+        const bool besideTheFilter = exploration->getBlock() == filter->getBlock();
+        if (alreadyBound || !besideTheFilter || !rowsReachTheFilter(exploration, filter, keepsTheSourceRows)) {
+            continue;
+        }
+
+        endSet = ExploreEndSet {._filter = filter, ._exploration = exploration, ._conjunct = conjunct, ._chain = chain};
+        return true;
+    }
+
+    return false;
+}
+
+void fuseExploreEndSet(ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
+    ExplorePaths exploration = endSet._exploration;
+    const NodeSetChain& chain = endSet._chain;
+
+    // Lowering fills the set in a loop of its own that has to close before the walk's opens,
+    // so it is built at the head of the function, ahead of whatever feeds the seeds
+    mlir::func::FuncOp function = exploration->getParentOfType<mlir::func::FuncOp>();
+    rewriter.setInsertionPointToStart(&function.getBody().front());
+    const Value set = buildNodeSetChain(chain, exploration.getLoc(), rewriter);
+
+    const bool endsOnThePredicate = chain._hops.empty();
+    rewriter.modifyOpInPlace(exploration, [&exploration, set, endsOnThePredicate]() {
+        exploration.getEndNodesMutable().assign(set);
+        if (endsOnThePredicate) {
+            exploration.removeEndLabelsAttr();
+        }
+    });
+
+    if (endsOnThePredicate && endSet._conjunct.hasOneUse()) {
+        dropConjunct(endSet._filter, endSet._conjunct, rewriter);
+    }
 }
 
 struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<EndSetExploration>(getOperation(), matchEndSetExploration, fuseExploreEndSet, builder);
+        LineageClimbs climbs;
+
+        const auto match = [&climbs](FilterOp filter, ExploreEndSet& endSet) {
+            return matchExploreEndSet(filter, climbs, endSet);
+        };
+
+        const auto rewrite = [&climbs](ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
+            fuseExploreEndSet(endSet, rewriter);
+            climbs.clear();
+        };
+
+        runFilterWorklist<ExploreEndSet>(getOperation(), match, rewrite);
     }
 };
 
@@ -5991,37 +6252,6 @@ struct PropertyValueScanChain {
     llvm::SmallVector<Value> _residual;
 };
 
-// eq(get_node_properties(scan, property), constant), with the constant on either side
-bool matchPropertyEquality(EqOp equality, Value scanColumn, PropertyValueScanChain& chain) {
-    const Value lhs = equality.getLhs();
-    const Value rhs = equality.getRhs();
-
-    GetNodeProperties read = lhs.getDefiningOp<GetNodeProperties>();
-    Value constantSide = rhs;
-    if (!read) {
-        read = rhs.getDefiningOp<GetNodeProperties>();
-        constantSide = lhs;
-    }
-
-    if (!read || read.getInputNodes() != scanColumn) {
-        return false;
-    }
-
-    ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
-    if (!constant) {
-        return false;
-    }
-
-    const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
-    if (!literal || !storage::isPropertyScanLiteral(literal)) {
-        return false;
-    }
-
-    chain._property = read.getPropertyAttr();
-    chain._value = literal;
-    return true;
-}
-
 // The conjuncts of a mask, as an `and` tree spells them: the predicates that all have to
 // hold, one of which can become the fused scan while the others stay a filter.
 void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts) {
@@ -6077,9 +6307,17 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
     // unselective conjunct and leaves the selective one a residual filter.
     for (size_t candidate = 0; candidate < conjuncts.size(); candidate++) {
         EqOp equality = conjuncts[candidate].getDefiningOp<EqOp>();
-        if (!equality || !matchPropertyEquality(equality, chain._source._column, chain)) {
+        PropertyEquality property;
+        if (!equality || !matchPropertyEquality(equality, property)) {
             continue;
         }
+
+        if (property._read.getInputNodes() != chain._source._column) {
+            continue;
+        }
+
+        chain._property = property._read.getPropertyAttr();
+        chain._value = property._value;
 
         for (size_t other = 0; other < conjuncts.size(); other++) {
             if (other == candidate) {
@@ -8093,18 +8331,10 @@ private:
     void walkBackward(const PatternStep& step) {
         llvm::SmallVector<Value> columns;
         llvm::SmallVector<Type> types;
-        hopTypes(step._op, types);
         carried(columns, types);
 
         const Value from = _current.lookup(step._to);
-        Operation* walked = nullptr;
-        if (isa<GetOutEdges>(step._op)) {
-            walked = _builder.create<GetInEdges>(_loc, types, from, columns).getOperation();
-        } else if (isa<GetInEdges>(step._op)) {
-            walked = _builder.create<GetOutEdges>(_loc, types, from, columns).getOperation();
-        } else {
-            walked = _builder.create<GetEdges>(_loc, types, from, columns).getOperation();
-        }
+        Operation* const walked = createReversedHop(step._op, from, ArrayAttr(), columns, _builder);
 
         bindHop(step, walked, hopReachedResult(walked), hopInputResult(walked));
     }
@@ -8138,44 +8368,6 @@ private:
         bind(exploration.getPaths(), walked.getPaths());
     }
 };
-
-// Drops the equality from the filter's mask: the rebuilt rows hold it on every row
-void dropSeedEquality(FilterOp filter, EqOp equality, mlir::RewriterBase& rewriter) {
-    const Value mask = filter.getMask();
-    const Value equal = equality.getResult();
-
-    if (mask == equal) {
-        bypassFilter(filter);
-        rewriter.eraseOp(filter);
-    } else {
-        AndOp conjunction = cast<AndOp>(*equal.getUsers().begin());
-        const Value other = conjunction.getLhs() == equal ? conjunction.getRhs() : conjunction.getLhs();
-
-        conjunction.getResult().replaceAllUsesWith(other);
-        rewriter.eraseOp(conjunction);
-    }
-
-    llvm::SmallVector<Operation*> dead {equality.getOperation()};
-    llvm::SmallPtrSet<Operation*, 8> erased;
-    while (!dead.empty()) {
-        Operation* const op = dead.pop_back_val();
-        if (erased.contains(op) || !op->use_empty()) {
-            continue;
-        }
-
-        llvm::SmallVector<Operation*> operandDefs;
-        for (const Value operand : op->getOperands()) {
-            Operation* const def = operand.getDefiningOp();
-            if (def && computesPerRow(def)) {
-                operandDefs.push_back(def);
-            }
-        }
-
-        erased.insert(op);
-        rewriter.eraseOp(op);
-        dead.append(operandDefs.begin(), operandDefs.end());
-    }
-}
 
 Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& seedColumns, mlir::OpBuilder& builder) {
     llvm::SmallVector<Value> worklist {ids};
@@ -8292,7 +8484,7 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
         seedResult.replaceAllUsesWith(replay.currentOf(seedResult));
     }
 
-    dropSeedEquality(seed._filter, seed._equality, rewriter);
+    dropConjunct(seed._filter, seed._equality.getResult(), rewriter);
 
     if (junction._seedFactor) {
         rewriter.eraseOp(junctionOp);
