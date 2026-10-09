@@ -13,6 +13,34 @@
 
 using namespace db;
 
+namespace {
+
+void compactExtremes(NLCompactingValueStore& extremes,
+                     std::vector<NLGroupAggregateState::Aggregate>& aggregates,
+                     size_t groupCount) {
+    size_t liveCount = 0;
+    for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+        if (aggregate._reown) {
+            liveCount += groupCount;
+        }
+    }
+
+    if (!extremes.needsCompaction(liveCount)) {
+        return;
+    }
+
+    NLValueStore& spare = extremes.getSpare();
+    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+        if (aggregate._reown) {
+            aggregate._reown(aggregate._accumulator, spare);
+        }
+    }
+
+    extremes.flip();
+}
+
+}
+
 NLProgram::NLProgram() {
 }
 
@@ -71,10 +99,14 @@ NLProcedureState::NLProcedureState(const Procedure* procedure,
                                    ProcedureData* data,
                                    const ProcedureContext* context)
     : _procedure(procedure),
-    _data(data)
+    _data(data),
+    _context(*context)
 {
+    _context.setListBuffer(&_stepBuffers.listBuffer());
+    _context.setStringBuffer(&_stepBuffers.stringBuffer());
+
     _procedureState.setData(data);
-    _procedureState.setContext(context);
+    _procedureState.setContext(&_context);
 }
 
 NLProcedureState::~NLProcedureState() {
@@ -188,6 +220,8 @@ void NLProcedureState::reset() {
 }
 
 void NLProcedureState::execute() {
+    _stepBuffers.clear();
+
     _procedureState.setStep(ProcedureState::Step::EXECUTE);
     _procedureState.clearFinished();
     _procedure->getExecCallback()(&_procedureState);
@@ -244,6 +278,7 @@ void NLOptionalState::reset() {
         buffer->clear();
     }
 
+    _values.clear();
     _matched.assign(getRowCount(), false);
 
     _missedRows.clear();
@@ -321,12 +356,13 @@ void NLPatternComprehensionState::reset(size_t rowCount) {
     _rowCount = rowCount;
     _values.clear();
     _rows.clear();
+    _stagedValues.clear();
 }
 
 void NLPatternComprehensionState::stage(size_t row, const ListBuffer<>::ListItemVariant& value) {
     bioassert(row < _rowCount, "Row tag {} is outside the {} rows of the step", row, _rowCount);
 
-    _values.push_back(value);
+    _values.push_back(_stagedValues.ownItem(value));
     _rows.push_back(row);
 }
 
@@ -370,7 +406,7 @@ void NLSortState::reset() {
         buffer->clear();
     }
 
-    _listBuffer.clear();
+    _values.clear();
     _permutation.clear();
     _sorted = false;
 }
@@ -388,7 +424,7 @@ void NLUnionState::reset() {
         buffer->clear();
     }
 
-    _listBuffer.clear();
+    _values.clear();
 }
 
 void NLHashJoinState::reset() {
@@ -396,6 +432,7 @@ void NLHashJoinState::reset() {
         buffer->clear();
     }
 
+    _values.clear();
     _index.clear();
 }
 
@@ -416,7 +453,8 @@ void NLGroupTable::clear() {
 
 void NLGroupAggregateState::reset() {
     _groupTable.clear();
-    _listBuffer.clear();
+    _keyValues.clear();
+    _extremeValues.clear();
 
     for (KeyColumn& key : _keyColumns) {
         key._buffer->clear();
@@ -432,6 +470,14 @@ void NLGroupAggregateState::reset() {
         aggregate._counts.clear();
         aggregate._distinct.clear();
     }
+}
+
+void NLGroupAggregateState::compactExtremeValues() {
+    compactExtremes(_extremeValues, _aggregates, _groupTable.getGroupCount());
+}
+
+void NLCollectState::compactExtremeValues() {
+    compactExtremes(_extremeValues, _aggregates, _groupTable.getGroupCount());
 }
 
 NLCollectState::ValueColumn& NLCollectState::unwoundColumn() {
@@ -459,6 +505,9 @@ void NLCollectState::reset() {
     }
 
     _listBuffer.clear();
+    _keyValues.clear();
+    _collectedValues.clear();
+    _extremeValues.clear();
 
     for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
         if (aggregate._accumulator) {
@@ -642,9 +691,9 @@ NLMergeData::NLMergeData(NLMergePendingEdges* pendingEdges, ColumnMask* created)
 NLMergeData::~NLMergeData() {
 }
 
-NLMakeMapData::NLMakeMapData(Column* result, LocalMemory* memory)
+NLMakeMapData::NLMakeMapData(Column* result, NLStepBuffers* stepBuffers)
     : _result(result),
-    _memory(memory)
+    _stepBuffers(stepBuffers)
 {
 }
 

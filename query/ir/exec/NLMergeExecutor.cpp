@@ -44,6 +44,7 @@ void appendMergeKey(const std::vector<Property>& properties, size_t row, std::st
 template <typename ID, typename T>
 void fetchMergeProperty(const GraphView& view,
                         NLWrittenValues& written,
+                        NLValueStore& readValues,
                         PropertyTypeID propertyTypeID,
                         const ColumnVector<ID>* ids,
                         Column* output) {
@@ -62,17 +63,18 @@ void fetchMergeProperty(const GraphView& view,
     for (size_t row = 0; row < entities.size(); row++) {
         const NLWrittenValues::Value* update = written.findUpdate(entities[row], propertyTypeID);
         if (update) {
-            values[row] = written.read<T>(*update);
+            values[row] = written.read<T>(*update, readValues);
         }
     }
 }
 
 void fetchMergeNodeProperty(const GraphView& view,
                             NLWrittenValues& written,
+                            NLValueStore& readValues,
                             const NLMergeScanProperty& property,
                             const ColumnNodeIDs* nodes) {
     const auto fetch = [&]<SupportedType T>() {
-        fetchMergeProperty<NodeID, T>(view, written, property._propertyType._id, nodes, property._values);
+        fetchMergeProperty<NodeID, T>(view, written, readValues, property._propertyType._id, nodes, property._values);
     };
 
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
@@ -80,10 +82,11 @@ void fetchMergeNodeProperty(const GraphView& view,
 
 void fetchMergeEdgeProperty(const GraphView& view,
                             NLWrittenValues& written,
+                            NLValueStore& readValues,
                             const NLMergeScanProperty& property,
                             const ColumnEdgeIDs* edges) {
     const auto fetch = [&]<SupportedType T>() {
-        fetchMergeProperty<EdgeID, T>(view, written, property._propertyType._id, edges, property._values);
+        fetchMergeProperty<EdgeID, T>(view, written, readValues, property._propertyType._id, edges, property._values);
     };
 
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
@@ -92,6 +95,7 @@ void fetchMergeEdgeProperty(const GraphView& view,
 // The value a pending entity was written with for one property, as the single row of the
 // property's scratch column: null when it was written without one
 void readPendingValue(NLWrittenValues& written,
+                      NLValueStore& readValues,
                       const CommitWriteBuffer::UntypedProperties& values,
                       const NLMergeScanProperty& property) {
     const auto read = [&]<SupportedType T>() {
@@ -100,7 +104,7 @@ void readPendingValue(NLWrittenValues& written,
 
         for (const CommitWriteBuffer::UntypedProperty& value : values) {
             if (value.propertyID == property._propertyType._id) {
-                column->push_back(written.read<T>(value.value));
+                column->push_back(written.read<T>(value.value, readValues));
                 return;
             }
         }
@@ -114,11 +118,14 @@ void readPendingValue(NLWrittenValues& written,
 // The key a pending entity's own values serialize into, which a row's asked-for values are
 // compared against
 void appendPendingKey(NLWrittenValues& written,
+                      NLValueStore& readValues,
                       const NLMergeScanProperties& properties,
                       const CommitWriteBuffer::UntypedProperties& values,
                       std::string& key) {
+    readValues.clear();
+
     for (const NLMergeScanProperty& property : properties) {
-        readPendingValue(written, values, property);
+        readPendingValue(written, readValues, values, property);
         property._keyAppend(property._values, 0, key);
     }
 }
@@ -264,8 +271,9 @@ void NLMergeExecutor::buildNodeIndex(NLMergeNodeIndex* index) {
             continue;
         }
 
+        _readValues.clear();
         for (const NLMergeScanProperty& property : scanProperties) {
-            fetchMergeNodeProperty(*_view, written, property, nodes);
+            fetchMergeNodeProperty(*_view, written, _readValues, property, nodes);
         }
 
         for (size_t row = 0; row < rowCount; row++) {
@@ -379,7 +387,7 @@ void NLMergeExecutor::appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef
     NLWrittenValues& written = _context->getWrittenValues();
 
     if (node._pending) {
-        appendPendingKey(written, keyProperties, _writeBuffer->getPendingNode(node._id).properties, key);
+        appendPendingKey(written, _readValues, keyProperties, _writeBuffer->getPendingNode(node._id).properties, key);
         return;
     }
 
@@ -389,8 +397,9 @@ void NLMergeExecutor::appendCurrentKey(NLMergeNodeIndex* index, const NLMergeRef
 
     written.indexUpdates(_writeBuffer);
 
+    _readValues.clear();
     for (const NLMergeScanProperty& property : keyProperties) {
-        fetchMergeNodeProperty(*_view, written, property, nodes);
+        fetchMergeNodeProperty(*_view, written, _readValues, property, nodes);
         property._keyAppend(property._values, 0, key);
     }
 }
@@ -433,7 +442,7 @@ void NLMergeExecutor::absorbPendingNodes(NLMergeNodeIndex* index) {
         }
 
         key.clear();
-        appendPendingKey(written, index->writtenProperties(), node.properties, key);
+        appendPendingKey(written, _readValues, index->writtenProperties(), node.properties, key);
 
         index->add(key, {._id=offset, ._pending=true});
     }
@@ -469,7 +478,7 @@ bool NLMergeExecutor::holdsTheHopValues(const NLMergeData::Hop& hop, uint64_t of
     key.clear();
 
     const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
-    appendPendingKey(_context->getWrittenValues(), hop._writtenProperties, edge.properties, key);
+    appendPendingKey(_context->getWrittenValues(), _readValues, hop._writtenProperties, edge.properties, key);
 
     return key == _work->_hopKey;
 }
@@ -691,8 +700,9 @@ void NLMergeExecutor::dropExtensionsWithOtherProperties(const NLMergeData::Hop& 
     NLWrittenValues& written = _context->getWrittenValues();
     written.indexUpdates(_writeBuffer);
 
+    _readValues.clear();
     for (const NLMergeScanProperty& property : scanProperties) {
-        fetchMergeEdgeProperty(*_view, written, property, edges);
+        fetchMergeEdgeProperty(*_view, written, _readValues, property, edges);
     }
 
     std::vector<NLMergeExtension>& kept = _work->_keptExtensions;

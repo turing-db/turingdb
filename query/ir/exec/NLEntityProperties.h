@@ -15,6 +15,7 @@ namespace db {
 class GraphView;
 class MetadataBuilder;
 class NLExecutionContext;
+class NLValueStore;
 class NLWrittenValues;
 
 // The properties of a node or an edge as a read in this query sees them: the newest value
@@ -24,7 +25,7 @@ class NLEntityProperties {
 public:
     using Entry = MapBuffer<>::MapKeyValuePair;
 
-    explicit NLEntityProperties(NLExecutionContext* context);
+    NLEntityProperties(NLExecutionContext* context, NLValueStore* readValues);
     ~NLEntityProperties();
 
     template <TypedInternalID IDT>
@@ -43,6 +44,7 @@ private:
     const GraphView* _view {nullptr};
     const CommitWriteBuffer* _writeBuffer {nullptr};
     NLWrittenValues* _written {nullptr};
+    NLValueStore* _readValues {nullptr};
     const MetadataBuilder* _metadataBuilder {nullptr};
     size_t _committedNodeCount {0};
     size_t _committedEdgeCount {0};
