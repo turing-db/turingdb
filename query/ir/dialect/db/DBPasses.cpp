@@ -526,7 +526,7 @@ bool isMaskComputeOp(Operation* op) {
                AndOp, OrOp, XorOp, NotOp,
                AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp,
                ConstantOp,
-               GetNodeProperties, GetEdgeProperties>(op);
+               GetNodeProperties, GetEdgeProperties, ElementID>(op);
 }
 
 struct MaskCone {
@@ -839,6 +839,15 @@ void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source, co
     eraseIfUnused(source);
 }
 
+// The node column a side of an id comparison names, compared as itself or through id()
+Value comparedNodeColumn(Value side) {
+    if (ElementID id = side.getDefiningOp<ElementID>()) {
+        side = id.getInput();
+    }
+
+    return isNodeColumn(side) ? side : Value();
+}
+
 bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
@@ -849,9 +858,9 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
     const Value rhs = equality.getRhs();
 
     Value constantSide;
-    if (lhs == scanColumn) {
+    if (comparedNodeColumn(lhs) == scanColumn) {
         constantSide = rhs;
-    } else if (rhs == scanColumn) {
+    } else if (comparedNodeColumn(rhs) == scanColumn) {
         constantSide = lhs;
     } else {
         return false;
@@ -2216,7 +2225,7 @@ Value disjunctionColumn(Value mask) {
     }
 
     const Value lhs = equality.getLhs();
-    return lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs;
+    return comparedNodeColumn(lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs);
 }
 
 bool keepsTheScannedNode(Operation& op) {

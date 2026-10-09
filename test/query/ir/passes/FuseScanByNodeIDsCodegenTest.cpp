@@ -255,3 +255,35 @@ TEST_F(FuseScanByNodeIDsCodegenTest, filteredClauseExpandedByALaterClause) {
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
 }
+
+TEST_F(FuseScanByNodeIDsCodegenTest, idDisjunctionBecomesConstScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n) WHERE id(n) = 5 OR id(n) = 2 RETURN n");
+
+    llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+    ASSERT_EQ(constScans.size(), 1u);
+
+    std::vector<int64_t> nodeIDs;
+    nodeIDsOf(constScans.front(), nodeIDs);
+    const std::vector<int64_t> expected {2, 5};
+    EXPECT_EQ(nodeIDs, expected);
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
+}
+
+TEST_F(FuseScanByNodeIDsCodegenTest, idDisjunctionOnAnExpandedRootFeedsTheHop) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n)-->(m) WHERE id(n) = 1 OR id(n) = 3 RETURN n, m");
+
+    llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+    ASSERT_EQ(constScans.size(), 1u);
+
+    std::vector<int64_t> nodeIDs;
+    nodeIDsOf(constScans.front(), nodeIDs);
+    const std::vector<int64_t> expected {1, 3};
+    EXPECT_EQ(nodeIDs, expected);
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ElementID>(*module), 0u);
+}
