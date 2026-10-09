@@ -3327,7 +3327,18 @@ void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
     const mlir::Value resultValue = split.getResult();
     const mlir::Type resultType = resultValue.getType();
 
-    Column* const result = allocColumnForChunkType(resultType);
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
+    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
+
+    Column* result = nullptr;
+    if (!yieldsConstantColumn(resultValue)) {
+        result = allocColumnForChunkType(resultType);
+    } else if (resultNullable) {
+        result = _memory->alloc<ColumnConst<std::optional<ListView>>>();
+    } else {
+        result = _memory->alloc<ColumnConst<ListView>>();
+    }
+
     _valueSlots[resultValue] = result;
 
     const Column* const string = getColumn(split.getString());
@@ -3337,9 +3348,6 @@ void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
     const NLSplitData::StringArgument delimiterArgument {delimiter, NLExecutor::selectStringArgumentRead(delimiter)};
 
     NLSplitData* data = _program->allocFunctionData<NLSplitData>(result, _memory, stringArgument, delimiterArgument);
-
-    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
-    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
 
     if (resultNullable) {
         body->emplaceStmt(&NLExecutor::runSplit<std::optional<ListView>>, data);

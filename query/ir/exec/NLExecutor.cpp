@@ -18,6 +18,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "TypeUtils.h"
+#include "columns/ContainerKind.h"
 #include "iterators/GetEdgesIterator.h"
 #include "ID.h"
 #include "iterators/GetEdgeTypesIterator.h"
@@ -4352,8 +4353,9 @@ std::optional<types::String::Primitive> stringRead(const Column* input, size_t r
     return (*static_cast<const ColumnT*>(input))[row];
 }
 
+template <typename ColumnT>
 std::optional<types::String::Primitive> stringValueArgument(const Column* input, size_t row, std::string_view) {
-    return (*static_cast<const ColumnOptVector<types::String::Primitive>*>(input))[row];
+    return (*static_cast<const ColumnT*>(input))[row];
 }
 
 template <typename ColumnT>
@@ -7271,28 +7273,54 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     const NLSplitData::StringArgument& string = split->getString();
     const NLSplitData::StringArgument& delimiter = split->getDelimiter();
 
-    const size_t rowCount = string._column->size();
-    bioassert(delimiter._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
-
-    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(split->getResult())->getRaw();
-    outputRaw.resize(rowCount);
-
     SplitFunction function(&split->getMemory()->listBuffer());
     constexpr std::string_view name = SplitFunction::NAME;
 
-    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
-        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, rowIndex, name);
+    const auto partsAt = [&string, &delimiter, &function, name](size_t row) -> Result {
+        const std::optional<types::String::Primitive> text = string._read(string._column, row, name);
+        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, row, name);
 
         const bool readsANull = !text.has_value() || !separator.has_value();
         if (!readsANull) {
-            outputRaw[rowIndex] = function(*text, *separator);
+            return function(*text, *separator);
         } else if constexpr (TypeUtils::is_optional_v<Result>) {
-            outputRaw[rowIndex] = std::nullopt;
+            return std::nullopt;
         } else {
             throw IRException("split() typed as never null read a null argument");
         }
-    }
+    };
+
+    Column* const result = split->getResult();
+
+    const auto fn = [&]<typename TypedColumn>(const TypedColumn*) {
+        TypedColumn* col = static_cast<TypedColumn*>(result);
+
+        if constexpr (std::is_same_v<TypedColumn, ColumnConst<Result>>) {
+            constexpr size_t onlyRow = 0; // cyrus wuz here 09.10.26
+            const Result& res = partsAt(onlyRow);
+            col->set(res);
+        } else if constexpr (std::is_same_v<TypedColumn, ColumnVector<Result>>) {
+            const size_t rowCount = string._column->size();
+            bioassert(delimiter._column->size() == rowCount, "Misaligned columns.");
+
+            auto& outRaw = col->getRaw();
+            outRaw.resize(rowCount);
+
+            for (size_t row = 0; row < rowCount; row++) {
+                outRaw[row] = partsAt(row);
+            }
+        } else {
+            static_assert(false, "Updated cases for newly supported type");
+        }
+    };
+
+    using ResultTypes = std::tuple<Result>;
+    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
+                                        ContainerKind::code<ColumnMask>()>;
+
+    using Functor = decltype(fn);
+
+    ColumnSingleDispatcher<ResultTypes, Functor, Excluded>::dispatch(result, fn);
 }
 
 template void NLExecutor::runSplit<ListView>(NLExecutionContext* context, NLFunctionData* data);
@@ -7696,11 +7724,19 @@ NLStringArgumentRead NLExecutor::selectStringArgumentRead(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
     if (kind == ColumnOptVector<types::String::Primitive>::staticKind()) {
-        return &stringValueArgument;
+        return &stringValueArgument<ColumnOptVector<types::String::Primitive>>;
+    } else if (kind == ColumnConst<types::String::Primitive>::staticKind()) {
+        return &stringValueArgument<ColumnConst<types::String::Primitive>>;
+    } else if (kind == ColumnConst<std::optional<types::String::Primitive>>::staticKind()) {
+        return &stringValueArgument<ColumnConst<std::optional<types::String::Primitive>>>;
     } else if (kind == ColumnVector<ListElementView>::staticKind()) {
         return &cellStringArgument<ColumnVector<ListElementView>>;
     } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
         return &cellStringArgument<ColumnOptVector<ListElementView>>;
+    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+        return &cellStringArgument<ColumnConst<ListElementView>>;
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        return &cellStringArgument<ColumnConst<std::optional<ListElementView>>>;
     }
 
     throw IRException("a string function reads a string argument out of a nullable string column, or a column of tagged cells");

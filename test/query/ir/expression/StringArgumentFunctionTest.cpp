@@ -109,6 +109,10 @@ TEST_F(StringArgumentFunctionTest, splitOnNothingSplitsCharacters) {
     expectRows("RETURN split('été', '')", {{"[é, t, é]"}});
 }
 
+TEST_F(StringArgumentFunctionTest, splitOfAnEmptyStringIsOneEmptyPart) {
+    expectRows("RETURN size(split('', '')), split('', '')[0] = '', size(split('', ','))", {{"1", "true", "1"}});
+}
+
 TEST_F(StringArgumentFunctionTest, unwindsASplit) {
     expectRows("UNWIND split('x y z', ' ') AS w RETURN toUpper(w)", {{"X"}, {"Y"}, {"Z"}});
 }
@@ -119,6 +123,32 @@ TEST_F(StringArgumentFunctionTest, splitsAProperty) {
 
 TEST_F(StringArgumentFunctionTest, splitsOnADelimiterPerRow) {
     expectRows("UNWIND ['a', 'b'] AS d RETURN split('xaybz', d)", {{"[x, ybz]"}, {"[xay, z]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOfConstantsIsLaidOutOverEveryRow) {
+    expectRows("UNWIND [3, 1, 2] AS n RETURN n, split('a,b', ',') AS s ORDER BY n",
+               {{"1", "[a, b]"}, {"2", "[a, b]"}, {"3", "[a, b]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOfConstantsUnderLimitAndSkip) {
+    expectRows("MATCH (p:Person) RETURN p.name, split('a,b', ',') ORDER BY p.name LIMIT 2",
+               {{"Adam", "[a, b]"}, {"Cyrus", "[a, b]"}});
+    expectRows("MATCH (p:Person) RETURN p.name, split('a,b', ',') ORDER BY p.name SKIP 6",
+               {{"Remy", "[a, b]"}, {"Suhas", "[a, b]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOfConstantsThroughAFilteredWith) {
+    expectRows("MATCH (p:Person) WITH p.name AS name, split('a,b', ',') AS s WHERE name STARTS WITH 'R' RETURN name, s",
+               {{"Remy", "[a, b]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOfConstantsBesideAnAggregate) {
+    expectRows("MATCH (p:Person) RETURN split('a,b', ','), count(p)", {{"[a, b]", "8"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOfAConstantListElementIsLaidOutOverEveryRow) {
+    expectRows("UNWIND [2, 1] AS n RETURN n, split(['a,b', null][0], ','), split(['a,b', null][1], ',') ORDER BY n",
+               {{"1", "[a, b]", "null"}, {"2", "[a, b]", "null"}});
 }
 
 TEST_F(StringArgumentFunctionTest, splitNullInNullOut) {

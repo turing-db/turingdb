@@ -450,6 +450,11 @@ SplitFunction::SplitFunction(QueryListBuffer* listBuffer)
 SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive string, types::String::Primitive delimiter) {
     _parts.clear();
 
+    if (string.empty()) {
+        _parts.emplace_back(string);
+        return _listBuffer->insert(_parts);
+    }
+
     if (delimiter.empty()) {
         size_t partStart = 0;
 
