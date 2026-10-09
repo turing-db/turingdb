@@ -36,6 +36,7 @@
 #include "iterators/PathTargetIndex.h"
 #include "iterators/PathHopFilter.h"
 #include "iterators/PathLabelHopFilter.h"
+#include "iterators/ReversedPathExplorator.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanInEdgesByTargetLabelIterator.h"
@@ -6591,6 +6592,71 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
     return index;
 }
 
+// A walk to an end set emits the same rows from either end when nothing in it tells the two
+// apart: no path is read, no hop test sees which way the hop was taken, and no edge of this
+// change is walked beside the graph's. It then runs from whichever end fans out less.
+bool walksFromTheEndSet(const GraphView& view,
+                        NLExplorePathsLoopData* loopData,
+                        const PathHopFilter* hopFilter,
+                        bool hasWriteBuffer,
+                        std::span<const NodeID> endNodes,
+                        uint64_t maxHops,
+                        PathDistanceIndex::SeedExpansion& fromEnds) {
+    if (loopData->getPaths() || hopFilter || hasWriteBuffer) {
+        return false;
+    }
+
+    std::span<const EdgeTypeID> edgeTypes;
+    if (loopData->filtersByType()) {
+        edgeTypes = loopData->getEdgeTypes();
+    }
+
+    const PartDirectory parts(view);
+    const std::vector<NodeID>& seeds = loopData->getInput()->getRaw();
+
+    return ReversedPathExplorator::isCheaper(parts, loopData->getDirection(), edgeTypes, seeds, endNodes, maxHops, fromEnds);
+}
+
+void runFromTheEndSet(NLExecutionContext* context,
+                      NLExplorePathsLoopData* loopData,
+                      std::span<const NodeID> endNodes,
+                      uint64_t maxHops,
+                      const PathDistanceIndex::SeedExpansion& fromEnds) {
+    const GraphView& view = *context->getView();
+    const LabelSet* endLabels = loopData->filtersByEndLabels() ? &loopData->getEndLabels() : nullptr;
+    const PathExplorationDir direction = loopData->getDirection();
+
+    ReversedPathExplorator explorator(view,
+                                      loopData->getInput(),
+                                      endNodes,
+                                      endLabels,
+                                      direction,
+                                      loopData->getMinHops(),
+                                      maxHops);
+    explorator.setIndices(loopData->getIndices());
+    explorator.setTargets(loopData->getTargets());
+    explorator.setDistinctEnds(loopData->isDistinctEnds());
+
+    std::span<const EdgeTypeID> edgeTypes;
+    if (loopData->filtersByType()) {
+        edgeTypes = loopData->getEdgeTypes();
+        explorator.setEdgeTypeFilter(edgeTypes);
+    }
+
+    // The seeds are what this walk heads for, so they are the set its index is searched from
+    PathTargetIndex seedIndex;
+    const std::span<const NodeID> seedNodes = explorator.getSeedNodes();
+    const PathExplorationDir reversed = reverseOf(direction);
+    const bool indexesSeeds = !loopData->isDistinctEnds()
+                           && PathTargetIndex::isWorthBuildingSet(view, reversed, edgeTypes, fromEnds, endNodes.size(), seedNodes.size(), maxHops);
+    if (indexesSeeds) {
+        seedIndex.buildSet(view, seedNodes, reversed, edgeTypes, maxHops);
+        explorator.setTargetIndex(&seedIndex);
+    }
+
+    runEdgeLoopSteps(context, loopData, &explorator, nullptr, loopData->getSources());
+}
+
 }
 
 void NLExecutor::runNodeSetReset(NLExecutionContext* context, NLFunctionData* data) {
@@ -6682,6 +6748,12 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     if (hopFilter) {
         explorator.setHopFilter(hopFilter);
+    }
+
+    PathDistanceIndex::SeedExpansion fromEnds;
+    if (endNodeSet && walksFromTheEndSet(view, loopData, hopFilter, writeBuffer != nullptr, endNodes, maxHops, fromEnds)) {
+        runFromTheEndSet(context, loopData, endNodes, maxHops, fromEnds);
+        return;
     }
 
     // The level search of the distinct mode prunes by no index
