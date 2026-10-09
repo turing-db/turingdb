@@ -5,18 +5,20 @@ include "mlir/IR/EnumAttr.td"
 
 // The reduction an aggregate applies to a column of property values. It is used
 // by the nl dialect (the three nl.aggregate ops carry it) and set by the lowering
-// from each db aggregate op (db.sum / db.min / db.max / db.avg), so it lives in
-// the storage dialect the way the value/nullable types do, rather than being
-// defined in a single dialect.
+// from each db aggregate op (db.sum / db.min / db.max / db.avg / db.stdev /
+// db.stdevp), so it lives in the storage dialect the way the value/nullable types
+// do, rather than being defined in a single dialect.
 //
 // COUNT is deliberately not a case here: it tallies rows regardless of value and
-// has its own op family (db.count, nl.count*). These four all reduce the values
+// has its own op family (db.count, nl.count*). These all reduce the values
 // themselves and share the create/update/result shape, so one enum drives them.
 def AggregateKind : I64EnumAttr<"AggregateKind", "A property-value aggregate", [
     I64EnumAttrCase<"Sum", 0, "sum">,
     I64EnumAttrCase<"Min", 1, "min">,
     I64EnumAttrCase<"Max", 2, "max">,
     I64EnumAttrCase<"Avg", 3, "avg">,
+    I64EnumAttrCase<"StDev", 4, "stdev">,
+    I64EnumAttrCase<"StDevP", 5, "stdevp">,
 ]> {
     let cppNamespace = "::mlir::storage";
 }
@@ -48,11 +50,11 @@ def AggregateKind : I64EnumAttr<"AggregateKind", "A property-value aggregate", [
 // its rows, a nullable property column included. COUNT is count(x) and keeps its
 // null-skipping tally.
 //
-// SUM_DISTINCT and AVG_DISTINCT are the same for Cypher's sum(DISTINCT x) and
-// avg(DISTINCT x): they reduce each group's distinct non-null values and keep the
-// result shape of SUM and AVG. MIN and MAX need no such kind - dropping repeated
-// values cannot move an extremum, so min(DISTINCT x) is min(x) and the frontend
-// emits the plain kind.
+// SUM_DISTINCT, AVG_DISTINCT and the two STDEV ones are the same for Cypher's
+// sum(DISTINCT x), avg(DISTINCT x) and stDev(DISTINCT x): they reduce each group's
+// distinct non-null values and keep the result shape of the plain kind. MIN and
+// MAX need no such kind - dropping repeated values cannot move an extremum, so
+// min(DISTINCT x) is min(x) and the frontend emits the plain kind.
 def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate function", [
     I64EnumAttrCase<"Count", 0, "count">,
     I64EnumAttrCase<"Sum", 1, "sum">,
@@ -63,6 +65,10 @@ def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate 
     I64EnumAttrCase<"SumDistinct", 6, "sum_distinct">,
     I64EnumAttrCase<"AvgDistinct", 7, "avg_distinct">,
     I64EnumAttrCase<"CountRows", 8, "count_rows">,
+    I64EnumAttrCase<"StDev", 9, "stdev">,
+    I64EnumAttrCase<"StDevP", 10, "stdevp">,
+    I64EnumAttrCase<"StDevDistinct", 11, "stdev_distinct">,
+    I64EnumAttrCase<"StDevPDistinct", 12, "stdevp_distinct">,
 ]> {
     let cppNamespace = "::mlir::storage";
 }

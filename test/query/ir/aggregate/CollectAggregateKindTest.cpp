@@ -35,8 +35,8 @@ std::string collectAndReduceProgram(int64_t kind) {
 // count, the first kind of GroupAggregateKind
 constexpr int64_t countKind = 0;
 
-// One past count_rows, the last kind
-constexpr int64_t unknownKind = 9;
+// One past stdevp_distinct, the last kind
+constexpr int64_t unknownKind = 13;
 
 }
 

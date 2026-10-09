@@ -10,6 +10,12 @@ using namespace mlir::storage;
 
 #include "StorageEnums.cpp.inc"
 
+bool mlir::storage::reducesToADouble(AggregateKind kind) {
+    return kind == AggregateKind::Avg
+        || kind == AggregateKind::StDev
+        || kind == AggregateKind::StDevP;
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "StorageTypes.cpp.inc"
 

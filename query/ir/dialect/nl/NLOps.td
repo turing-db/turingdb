@@ -396,6 +396,29 @@ def ListSlice : NLOp<"list_slice", [Pure, RowAlignedThroughOperands, AttrSizedOp
 }
 
 /**
+* PercentileCont / PercentileDisc
+*/
+// Imperative counterparts of db.percentile_cont and db.percentile_disc. Row r of the
+// result is the percentile row r's percentile names of the numbers row r's list holds,
+// null where the list holds none. The percentile carries rows - lowering lays a constant
+// one out over them first - and is read as a nullable value chunk.
+//
+//   %m = nl.percentile_cont %values, %p
+//          : (!nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.nullable<f64>>)
+//          -> !nl.chunk<!storage.nullable<f64>>
+class NLPercentileOp<string mnemonic> : NLOp<mnemonic, [NoMemoryEffect, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of a percentile of the numbers a list holds";
+
+  let arguments = (ins NLChunk:$list, NLChunk:$percentile);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$list `,` $percentile attr-dict `:` functional-type(operands, results)";
+}
+
+def PercentileCont : NLPercentileOp<"percentile_cont">;
+def PercentileDisc : NLPercentileOp<"percentile_disc">;
+
+/**
 * ListComprehension
 */
 def ListComprehension : NLOp<"list_comprehension", [Pure, RowAlignedThroughOperands]> {
