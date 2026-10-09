@@ -1,8 +1,6 @@
 #pragma once
 
 #include "HTTPResponseWriter.h"
-#include "versioning/ChangeID.h"
-#include "versioning/CommitHash.h"
 
 namespace net {
 
@@ -47,19 +45,6 @@ private:
     const net::HTTP::Info& getHttpInfo() const;
 
     void query();
-
-    struct TransactionInfo {
-        std::string graphName;
-        CommitHash commit;
-        ChangeID change;
-    };
-
-    TransactionInfo getTransactionInfo() const;
-
-    void queryImpl(std::string_view query,
-                   std::string_view graphName = "",
-                   CommitHash commit = CommitHash::head(),
-                   ChangeID change = ChangeID::head());
 };
 
 }

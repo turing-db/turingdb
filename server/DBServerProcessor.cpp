@@ -3,6 +3,7 @@
 #include "TuringDB.h"
 #include "JsonEncoder.h"
 #include "DBServerNlSink.h"
+#include "DBTransactionInfo.h"
 #include "QueryState.h"
 
 #include "DBThreadContext.h"
@@ -62,64 +63,6 @@ const net::HTTP::Info& DBServerProcessor::getHttpInfo() const {
 
 void DBServerProcessor::query() {
     const net::HTTP::Info& httpInfo = getHttpInfo();
-    const TransactionInfo transactionInfo = getTransactionInfo();
-
-    queryImpl(httpInfo.getPayload(),
-              transactionInfo.graphName,
-              transactionInfo.commit,
-              transactionInfo.change);
-}
-
-DBServerProcessor::TransactionInfo DBServerProcessor::getTransactionInfo() const {
-    auto& parser = _connection.getParser<net::HTTPParser<DBURIParser>>();
-    const auto& httpInfo = parser.getHttpInfo();
-    std::string_view graphNameView = httpInfo.getParams()[(size_t)DBHTTPParams::graph];
-    std::string_view commitHashStr = httpInfo.getParams()[(size_t)DBHTTPParams::commit];
-    std::string_view changeHashStr = httpInfo.getParams()[(size_t)DBHTTPParams::change];
-
-    if (graphNameView.empty()) {
-        graphNameView = "default";
-    }
-
-    if (commitHashStr.empty()) {
-        commitHashStr = "head";
-    }
-
-    if (changeHashStr.empty()) {
-        changeHashStr = "head";
-    }
-
-    const auto commitHashRes = CommitHash::fromString(commitHashStr);
-
-    if (!commitHashRes) {
-        return {
-            .graphName = std::string {graphNameView},
-            .commit = CommitHash::head(),
-            .change = ChangeID::head(),
-        };
-    }
-
-    const auto changeHashRes = ChangeID::fromString(changeHashStr);
-
-    if (!changeHashRes) {
-        return {
-            .graphName = std::string {graphNameView},
-            .commit = commitHashRes.value(),
-            .change = ChangeID::head(),
-        };
-    }
-
-    return {
-        .graphName = std::string {graphNameView},
-        .commit = commitHashRes.value(),
-        .change = changeHashRes.value(),
-    };
-}
-
-void DBServerProcessor::queryImpl(std::string_view query,
-                                  std::string_view graphName,
-                                  CommitHash commit,
-                                  ChangeID change) {
     LocalMemory& mem = _threadContext->getLocalMemory();
     CompilerContext& compilerContext = _threadContext->getCompilerContext();
 
@@ -135,8 +78,14 @@ void DBServerProcessor::queryImpl(std::string_view query,
 
     DBServerNlSink sink(&encoder);
 
-    const QueryState state(graphName, &mem, &compilerContext, &_db.getDefaultQueryConfig(), &sink, commit, change);
-    const QueryStatus status = _db.query(query, state);
+    DBTransactionInfo transactionInfo;
+    QueryStatus status;
+    DBTransactionInfo::read(httpInfo, transactionInfo, status);
+
+    if (status.isOk()) {
+        const QueryState state(transactionInfo.graphName, &mem, &compilerContext, &_db.getDefaultQueryConfig(), &sink, transactionInfo.commit, transactionInfo.change);
+        status = _db.query(httpInfo.getPayload(), state);
+    }
 
     if (!status.isOk()) {
         encoder.encodeError(status.getStatus(), status.getError());
