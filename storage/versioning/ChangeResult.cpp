@@ -9,6 +9,15 @@ std::string ChangeError::fmtMessage() const {
                            CommitErrorTypeDescription::value(_commitError->getType()));
     }
 
-    return std::string {ChangeErrorTypeDescription::value(_type)};
+    switch (_type) {
+        case ChangeErrorType::GRAPH_NOT_FOUND:
+            return fmt::format("Graph '{}' does not exist", _graphName);
+        break;
+        case ChangeErrorType::GRAPH_NOT_LOADED:
+            return fmt::format("Graph '{0}' is on disk but not loaded - use LOAD GRAPH {0} to load it", _graphName);
+        break;
+        default:
+            return std::string {ChangeErrorTypeDescription::value(_type)};
+        break;
+    }
 }
-

@@ -35,6 +35,28 @@
 
 using namespace db;
 
+namespace {
+
+QueryStatus::Status toQueryStatus(ChangeErrorType type) {
+    switch (type) {
+        case ChangeErrorType::GRAPH_NOT_FOUND:
+        case ChangeErrorType::GRAPH_NOT_LOADED:
+            return QueryStatus::Status::GRAPH_NOT_FOUND;
+        break;
+        case ChangeErrorType::CHANGE_NOT_FOUND:
+            return QueryStatus::Status::CHANGE_NOT_FOUND;
+        break;
+        case ChangeErrorType::COMMIT_NOT_LOADED:
+            return QueryStatus::Status::COMMIT_NOT_LOADED;
+        break;
+        default:
+            return QueryStatus::Status::COMMIT_NOT_FOUND;
+        break;
+    }
+}
+
+}
+
 QueryInterpreterV3::QueryInterpreterV3(SystemManager* sysMan, LocalMemory* mem, CompilerContext* compilerContext)
     : _sysMan(sysMan),
     _mem(mem),
@@ -68,29 +90,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
 
     auto txRes = system.openTransaction(graphName, hash, changeID);
     if (!txRes) {
-        switch (txRes.error().getType()) {
-            case ChangeErrorType::GRAPH_NOT_FOUND: {
-                status.setStatus(QueryStatus::Status::GRAPH_NOT_FOUND);
-                return;
-            }
-            break;
-            case ChangeErrorType::CHANGE_NOT_FOUND: {
-                status.setStatus(QueryStatus::Status::CHANGE_NOT_FOUND);
-                return;
-            }
-            break;
-            case ChangeErrorType::COMMIT_NOT_LOADED: {
-                status.setStatus(QueryStatus::Status::COMMIT_NOT_LOADED);
-                status.setMessage(txRes.error().fmtMessage());
-                return;
-            }
-            break;
-            default: {
-                status.setStatus(QueryStatus::Status::COMMIT_NOT_FOUND);
-                return;
-            }
-            break;
-        }
+        const ChangeError& error = txRes.error();
+        status.setStatus(toQueryStatus(error.getType()));
+        status.setMessage(error.fmtMessage());
+        return;
     }
 
     GraphView view = txRes->viewGraph();
