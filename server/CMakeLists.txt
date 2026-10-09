@@ -3,6 +3,7 @@ set(server_sources
     AuthGate.cpp
     DBServerNlSink.cpp
     DBServerProcessor.cpp
+    DBTransactionInfo.cpp
     TuringProtoServerNlSink.cpp
     TuringProtoServerProcessor.cpp
     TuringServer.cpp

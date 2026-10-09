@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <array>
+#include <optional>
 
 #include "BasicResult.h"
 #include "HTTP.h"
@@ -13,7 +14,7 @@ static inline constexpr size_t MAX_PARAM_COUNT = 8;
 using Uri = std::string_view;
 using Path = std::string_view;
 using Payload = std::string_view;
-using Params = std::array<std::string_view, (size_t)MAX_PARAM_COUNT>;
+using Params = std::array<std::optional<std::string_view>, (size_t)MAX_PARAM_COUNT>;
 using EndpointIndex = int64_t;
 
 template <class TValue>
@@ -59,7 +60,7 @@ public:
         _authorization = "";
 
         for (auto& p : _params) {
-            p = "";
+            p.reset();
         }
     }
 

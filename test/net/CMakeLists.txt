@@ -58,3 +58,11 @@ target_link_libraries(test_net_request_too_large PRIVATE
     turing_testenv_s
     turing_db_examples_s
     nlohmann_json)
+
+add_turing_test(test_net_version_param VersionParamTest.cpp)
+target_link_libraries(test_net_version_param PRIVATE
+    turing_db_server_s
+    turing_db_proto_common_s
+    turing_testenv_s
+    turing_db_examples_s
+    nlohmann_json)
