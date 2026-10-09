@@ -8,3 +8,6 @@ function(add_db_system_tests exe_name cpp_file)
 endfunction()
 
 add_db_system_tests(test_system SystemTest.cpp)
+
+add_db_system_tests(test_system_version_not_found VersionNotFoundTest.cpp)
+target_link_libraries(test_system_version_not_found PRIVATE turing_db_examples_s)

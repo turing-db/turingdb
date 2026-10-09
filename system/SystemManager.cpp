@@ -284,14 +284,14 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
         // Determine why it failed
         const Commit* commit = graph->getVersionController().getCommitSafe(commitHash);
         if (commit != nullptr && !commit->hasData()) {
-            return ChangeError::result(ChangeErrorType::COMMIT_NOT_LOADED);
+            return ChangeError::result(ChangeErrorType::COMMIT_NOT_LOADED, commitHash);
         }
-        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+        return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND, commitHash);
     }
 
     const auto changeRes = _graphManager.getChange(graph, changeID);
     if (!changeRes) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        return BadResult<ChangeError>(changeRes.error());
     }
 
     // In a valid change
@@ -303,7 +303,7 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
             return tx;
         }
 
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND, changeID);
     }
 
     // if hash != head: Requesting a read on a specific commit (either pending or frozen)
@@ -319,10 +319,10 @@ ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphN
     {
         const Commit* commit = graph->getVersionController().getCommitSafe(commitHash);
         if (commit != nullptr && !commit->hasData()) {
-            return ChangeError::result(ChangeErrorType::COMMIT_NOT_LOADED);
+            return ChangeError::result(ChangeErrorType::COMMIT_NOT_LOADED, commitHash);
         }
     }
-    return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND);
+    return ChangeError::result(ChangeErrorType::COMMIT_NOT_FOUND, commitHash);
 }
 
 DumpResult<void> SystemManager::loadCommit(std::string_view graphName, CommitHash hash) {

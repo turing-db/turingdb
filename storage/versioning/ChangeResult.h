@@ -6,6 +6,8 @@
 
 #include "BasicResult.h"
 #include "EnumToString.h"
+#include "versioning/ChangeID.h"
+#include "versioning/CommitHash.h"
 #include "versioning/CommitResult.h"
 
 namespace db {
@@ -48,10 +50,13 @@ public:
     }
 
     ChangeError(ChangeErrorType type, std::string_view graphName)
-        : _graphName(graphName),
+        : _name(graphName),
           _type(type)
     {
     }
+
+    ChangeError(ChangeErrorType type, ChangeID changeID);
+    ChangeError(ChangeErrorType type, CommitHash commitHash);
 
     [[nodiscard]] ChangeErrorType getType() const { return _type; }
     [[nodiscard]] std::string fmtMessage() const;
@@ -66,13 +71,21 @@ public:
         return BadResult<ChangeError>(ChangeError(type, commitError));
     }
 
+    static BadResult<ChangeError> result(ChangeErrorType type, ChangeID changeID) {
+        return BadResult<ChangeError>(ChangeError(type, changeID));
+    }
+
+    static BadResult<ChangeError> result(ChangeErrorType type, CommitHash commitHash) {
+        return BadResult<ChangeError>(ChangeError(type, commitHash));
+    }
+
     static BadResult<ChangeError> graphResult(ChangeErrorType type, std::string_view graphName) {
         return BadResult<ChangeError>(ChangeError(type, graphName));
     }
 
 private:
     std::optional<CommitError> _commitError;
-    std::string _graphName;
+    std::string _name;
     ChangeErrorType _type {ChangeErrorType::GRAPH_NOT_FOUND};
 };
 

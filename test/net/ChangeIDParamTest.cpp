@@ -210,6 +210,22 @@ TEST_F(ChangeIDParamTest, aChangeIdThatIsNotDecimalIsRejected) {
     }
 }
 
+TEST_F(ChangeIDParamTest, aChangeIdThatDoesNotExistIsNamed) {
+    startServer();
+
+    std::vector<uint64_t> changeIDs;
+    openChanges(changeIDs);
+
+    const std::string missing = std::to_string(changeIDs.back() + 1);
+
+    nlohmann::json json;
+    post("&change=" + missing, "MATCH (n) RETURN count(n)", json);
+
+    EXPECT_EQ(json["error"], "CHANGE_NOT_FOUND") << json.dump();
+    EXPECT_EQ(json["error_details"], fmt::format("Change '{}' does not exist", missing));
+    EXPECT_FALSE(json.contains("data"));
+}
+
 TEST_F(ChangeIDParamTest, theBinaryClientSendsTheChangeIdItIsGiven) {
     ProtoEnvScope protoScope;
     startServer();
