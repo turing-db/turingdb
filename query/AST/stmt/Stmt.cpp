@@ -76,9 +76,7 @@ bool Stmt::readsTheGraph(const Stmt* stmt) {
             return static_cast<const CallSubqueryStmt*>(stmt)->readsTheGraph();
         break;
 
-        // A MERGE matches before it creates, so it goes to the graph as a MATCH does
         case Kind::MATCH:
-        case Kind::MERGE:
         case Kind::CALL:
         case Kind::SHORTESTPATH:
         case Kind::LOAD_CSV:
@@ -86,7 +84,10 @@ bool Stmt::readsTheGraph(const Stmt* stmt) {
             return true;
         break;
 
+        // A MERGE matches the writes buffered above it as well as the graph, so it is
+        // hidden from nothing
         case Kind::CREATE:
+        case Kind::MERGE:
         case Kind::SET:
         case Kind::REMOVE:
         case Kind::DELETE:

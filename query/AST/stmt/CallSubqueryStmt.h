@@ -49,6 +49,7 @@ public:
     size_t getDedupedBranchCount() const;
 
     bool hasScopeClause() const { return _hasScopeClause; }
+    bool importsEverything() const { return _importsEverything; }
     bool isOptional() const { return _optional; }
 
     // A body ending on RETURN adds its columns to the rows in flight; one ending on an
@@ -62,11 +63,13 @@ public:
     void addImport(const Symbol* symbol);
 
     void setHasScopeClause(bool hasScopeClause) { _hasScopeClause = hasScopeClause; }
+    void setImportsEverything(bool importsEverything) { _importsEverything = importsEverything; }
     void setOptional(bool optional) { _optional = optional; }
 
 private:
     Branches _branches;
     bool _hasScopeClause {false};
+    bool _importsEverything {false};
     bool _optional {false};
 
     explicit CallSubqueryStmt(const Branches& branches);

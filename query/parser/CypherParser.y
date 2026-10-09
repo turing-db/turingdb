@@ -187,6 +187,7 @@
 %token<std::string_view> SINGLE
 %token<std::string_view> SCALAR
 %token<std::string_view> UNWIND
+%token<std::string_view> FOREACH
 %token<std::string_view> REMOVE
 %token<std::string_view> RETURN
 %token<std::string_view> CREATE
@@ -425,6 +426,8 @@
 %type<db::ShortestPathStmt*> shortestPathSt
 %type<db::CallStmt*> callSt
 %type<db::CallSubqueryStmt*> callSubquerySt
+%type<db::CallSubqueryStmt*> foreachSt
+%type<db::StmtContainer*> foreachUpdates
 %type<db::CallSubqueryStmt::Branches> callSubqueryBody
 %type<db::CallSubqueryStmt::Branches> conditionalBranches
 %type<db::CallSubqueryStmt::Branches> whenBranches
@@ -1074,6 +1077,18 @@ updatingStatement
     | deleteSt { $$ = $1; }
     | setSt { $$ = $1; }
     | removeSt { $$ = $1; }
+    | foreachSt { $$ = $1; }
+    ;
+
+foreachSt
+    : FOREACH OPAREN symbol IN expr PIPE foreachUpdates CPAREN {
+        $$ = ParserUtils::createForeach(ast, $3, $5, $7, @$);
+      }
+    ;
+
+foreachUpdates
+    : updatingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
+    | foreachUpdates updatingStatement { $$ = $1; $$->add($2); }
     ;
  
 deleteSt
@@ -1148,6 +1163,12 @@ callSubquerySt
         }
         LOC($$, @$);
     }
+    | CALL OPAREN MULT CPAREN OBRACE callSubqueryBody CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $6);
+        $$->setHasScopeClause(true);
+        $$->setImportsEverything(true);
+        LOC($$, @$);
+    }
     | OPTIONAL CALL OBRACE callSubqueryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $4);
         $$->setOptional(true);
@@ -1166,6 +1187,13 @@ callSubquerySt
         for (const Symbol* symbol : $4) {
             $$->addImport(symbol);
         }
+        LOC($$, @$);
+    }
+    | OPTIONAL CALL OPAREN MULT CPAREN OBRACE callSubqueryBody CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $7);
+        $$->setHasScopeClause(true);
+        $$->setImportsEverything(true);
+        $$->setOptional(true);
         LOC($$, @$);
     }
     ;
@@ -2155,6 +2183,7 @@ reservedWord
     | SHOW { $$ = Symbol::create(ast, $1); }
     | INSTALL { $$ = Symbol::create(ast, $1); }
     | EXPLAIN { $$ = Symbol::create(ast, $1); }
+    | FOREACH { $$ = Symbol::create(ast, $1); }
     | EXTENSIONS { $$ = Symbol::create(ast, $1); }
     | SKIP { $$ = Symbol::create(ast, $1); }
     | WITH { $$ = Symbol::create(ast, $1); }

@@ -478,6 +478,10 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     CallSubqueryStmt::Branches& branches = subquery->branches();
     const bool conditional = subquery->isConditional();
 
+    if (subquery->importsEverything()) {
+        importEveryVariable(subquery);
+    }
+
     for (CallSubqueryStmt::Branch& branch : branches) {
         if (!subquery->hasScopeClause()) {
             importThroughLeadingWith(branch);
@@ -749,6 +753,23 @@ void CypherAnalyzer::throwOnPatternPredicateVariable(const Pattern* pattern, con
                            entity);
             }
         }
+    }
+}
+
+void CypherAnalyzer::importEveryVariable(CallSubqueryStmt* subquery) const {
+    for (const VarDecl* decl : _ctxt->decls()) {
+        if (decl->isUnnamed()) {
+            continue;
+        }
+
+        const std::string_view name = decl->getName();
+        const bool shadowed = _ctxt->getDecl(name) != decl;
+
+        if (shadowed) {
+            continue;
+        }
+
+        subquery->addImport(Symbol::create(_ast, name));
     }
 }
 

@@ -22,6 +22,7 @@ class PatternElement;
 class PropertyExpr;
 class SetStmt;
 class SinglePartQuery;
+class StmtContainer;
 class Symbol;
 class SymbolChain;
 class WhereClause;
@@ -66,6 +67,13 @@ public:
                                   const CallSubqueryStmt::Branches& branches,
                                   const SourceLocation& location,
                                   UnionQuery::Branch& operand);
+
+    // `FOREACH (x IN list | updates)` is `CALL (*) { UNWIND list AS x updates }`
+    static CallSubqueryStmt* createForeach(CypherAST* ast,
+                                           Symbol* variable,
+                                           Expr* list,
+                                           StmtContainer* updates,
+                                           const SourceLocation& location);
 
     static SinglePartQuery* createPatternBody(CypherAST* ast,
                                               Pattern* pattern,
