@@ -383,10 +383,11 @@ analyzer reads its items as the import list and then analyzes it as an ordinary 
 the outer scope is rejected. A returning subquery after an updating clause of the same
 part is rejected by the read-after-update rule when its body goes to the graph for rows,
 which is what the buffered write above it would be invisible to: a body holding a MATCH, a
-MERGE, a procedure call, a SHORTESTPATH, a LOAD CSV or a vector search, or a nested
-subquery whose own body holds one (`Stmt::readsTheGraph`). A body that only writes is kept,
-since there is no read for the write to hide from: `CREATE (n:A) CALL { CREATE (m:B) RETURN
-m } RETURN n, m` runs. A WITH between the write and the subquery lifts the rule either way.
+procedure call, a SHORTESTPATH, a LOAD CSV or a vector search, or a nested subquery whose
+own body holds one (`Stmt::readsTheGraph`). A body that only writes is kept, since there is
+no read for the write to hide from: `CREATE (n:A) CALL { CREATE (m:B) RETURN m } RETURN n,
+m` runs. So is a body that merges, since a MERGE matches the buffered writes as well as the
+graph. A WITH between the write and the subquery lifts the rule either way.
 
 Tests: `CallSubqueryTest.cpp` (carrying bodies and scoping), `CallSubqueryWriteTest.cpp`
 (unit bodies), `CallSubqueryPerRowTest.cpp` (aggregation, ORDER BY, SKIP, LIMIT and
@@ -431,6 +432,14 @@ other query: `{ WHEN ... } UNION { WHEN ... }`. The parser writes each braced WH
 imports, so the union handles it as any other side. Not done yet: a UNION inside a WHEN
 branch, and WHEN in an EXISTS or COUNT body.
 
-Still open: the vectorised forms of section 4, `CALL (*)`, an import
-read below a keyless reduction in the body, and trimming inside the region. The scope
+`CALL (*) { ... }` imports every variable in scope: the analyzer fills the import list from
+the scope's named declarations (`CypherAnalyzer::importEveryVariable`), and the body then
+reads them as it reads what a scope clause names. `FOREACH (x IN list | updates)` is parsed
+as `CALL (*) { UNWIND list AS x updates }` (`ParserUtils::createForeach`), a unit
+subquery: the rows pass through, and nothing the body declares is visible after it. The
+body takes updating clauses only, FOREACH included. Tests: `ForeachTest.cpp`,
+`CallSubqueryImportEverythingTest.cpp`.
+
+Still open: the vectorised forms of section 4, an import read below a keyless reduction in
+the body, and trimming inside the region. The scope
 clause alias is settled: the grammar rejects `CALL (t AS teams)`, as Neo4j does.

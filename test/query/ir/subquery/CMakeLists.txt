@@ -14,6 +14,10 @@ target_include_directories(test_query_ir_call_subquery PRIVATE ${IR_TEST_DIR})
 add_turing_test(test_query_ir_call_subquery_write CallSubqueryWriteTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_write PRIVATE turing_ir_test_write_query_s)
 
+# CALL (*) { ... }: a body importing every variable in scope.
+add_turing_test(test_query_ir_call_subquery_import_everything CallSubqueryImportEverythingTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_import_everything PRIVATE turing_ir_test_write_query_s)
+
 # Subqueries whose body aggregates, sorts, cuts or dedups, run one input row at a time.
 add_turing_test(test_query_ir_call_subquery_per_row CallSubqueryPerRowTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_per_row PRIVATE

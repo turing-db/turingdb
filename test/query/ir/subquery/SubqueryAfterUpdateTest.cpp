@@ -52,10 +52,18 @@ TEST_F(SubqueryAfterUpdateTest, rejectsABodyThatMatchesAfterACreate) {
                    "A reading clause cannot follow an updating clause");
 }
 
-// A MERGE matches before it creates, so a body ending on one goes to the graph for rows
-TEST_F(SubqueryAfterUpdateTest, rejectsAMergingBodyAfterACreate) {
-    expectRejected("CREATE (n:A) CALL { MERGE (m:B) RETURN m } RETURN n, m",
-                   "A reading clause cannot follow an updating clause");
+// A MERGE matches the buffered writes above it, so nothing is hidden from a body ending on one
+TEST_F(SubqueryAfterUpdateTest, keepsAMergingBodyAfterACreate) {
+    expectWriteRows("CREATE (:Tag {name: 'x'}) CALL { MERGE (u:Tag {name: 'x'}) RETURN u } RETURN u.name",
+                    {{"x"}});
+
+    expectRows("MATCH (t:Tag) RETURN count(t)", {{"1"}});
+}
+
+TEST_F(SubqueryAfterUpdateTest, keepsAMergingUnitBodyAfterACreate) {
+    applyWrite("CREATE (:Tag {name: 'x'}) CALL { MERGE (:Tag {name: 'x'}) }");
+
+    expectRows("MATCH (t:Tag) RETURN count(t)", {{"1"}});
 }
 
 // A nested body answers for the one around it

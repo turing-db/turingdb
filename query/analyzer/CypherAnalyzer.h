@@ -149,6 +149,9 @@ private:
     // what the body reads
     void importThroughLeadingWith(CallSubqueryStmt::Branch& branch) const;
 
+    // `CALL (*)` imports every variable in scope
+    void importEveryVariable(CallSubqueryStmt* subquery) const;
+
     // Analyzes one query of a CALL body under its own scope, seeded with what it imports
     void analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause);
     void importIntoBranch(const CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);

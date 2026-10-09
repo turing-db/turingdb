@@ -22,6 +22,7 @@
 #include "stmt/MatchStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/StmtContainer.h"
+#include "stmt/UnwindStmt.h"
 #include "CypherAST.h"
 #include "EdgePattern.h"
 #include "Literal.h"
@@ -273,6 +274,35 @@ bool ParserUtils::createWhenOperand(CypherAST* ast,
     query->setReturnStmt(returnStmt);
 
     return true;
+}
+
+CallSubqueryStmt* ParserUtils::createForeach(CypherAST* ast,
+                                             Symbol* variable,
+                                             Expr* list,
+                                             StmtContainer* updates,
+                                             const SourceLocation& location) {
+    SourceManager* sourceManager = ast->getSourceManager();
+
+    UnwindStmt* unwind = UnwindStmt::create(ast, list, variable);
+    sourceManager->setLocation(unwind, location);
+
+    StmtContainer* stmts = StmtContainer::create(ast);
+    stmts->add(unwind);
+    for (Stmt* update : updates->stmts()) {
+        stmts->add(update);
+    }
+    sourceManager->setLocation(stmts, location);
+
+    SinglePartQuery* body = SinglePartQuery::create(ast);
+    body->setStmts(stmts);
+    sourceManager->setLocation(body, location);
+
+    CallSubqueryStmt* call = CallSubqueryStmt::create(ast, {{body, false, {}}});
+    call->setHasScopeClause(true);
+    call->setImportsEverything(true);
+    sourceManager->setLocation(call, location);
+
+    return call;
 }
 
 SinglePartQuery* ParserUtils::createPatternBody(CypherAST* ast,

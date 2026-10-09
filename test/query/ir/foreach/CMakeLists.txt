@@ -1,0 +1,2 @@
+add_turing_test(test_query_ir_foreach ForeachTest.cpp)
+target_link_libraries(test_query_ir_foreach PRIVATE turing_ir_test_write_query_s)
