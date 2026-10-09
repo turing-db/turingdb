@@ -915,7 +915,7 @@ struct UnwindEqualityCross {
 // besides the yield of its one column.
 UnwindConst matchUnwindFactor(Region& factor) {
     Block& block = factor.front();
-    if (block.getOperations().size() != 2) {
+    if (!llvm::hasNItems(block.getOperations(), 2)) {
         return nullptr;
     }
 
@@ -1308,14 +1308,20 @@ public:
 
     const ConjunctCone& getConjunctCone(Value conjunct, CrossProduct product);
 
+    // Each filter column climbs once, so the columns of a stack of N filters cost N steps
+    // in all rather than N per column
+    Value climbFilters(Value column);
+
     void clear() {
         _constantColumns.clear();
         _conjunctCones.clear();
+        _climbedColumns.clear();
     }
 
 private:
     llvm::DenseMap<Value, bool> _constantColumns;
     llvm::DenseMap<std::pair<Value, Operation*>, std::unique_ptr<ConjunctCone>> _conjunctCones;
+    llvm::DenseMap<Value, Value> _climbedColumns;
 };
 
 void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache, FactorReads& reads) {
@@ -1325,7 +1331,7 @@ void collectFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& c
             continue;
         }
 
-        const Value column = climbFilters(input);
+        const Value column = cache.climbFilters(input);
         if (column.getDefiningOp() != product.getOperation()) {
             reads._readsElsewhere = true;
             continue;
@@ -1351,6 +1357,27 @@ const ConjunctCone& ConeCache::getConjunctCone(Value conjunct, CrossProduct prod
     return *cached;
 }
 
+Value ConeCache::climbFilters(Value column) {
+    llvm::SmallVector<Value> climbing;
+    Value climbed = column;
+    while (FilterOp filter = climbed.getDefiningOp<FilterOp>()) {
+        const auto climbedIt = _climbedColumns.find(climbed);
+        if (climbedIt != _climbedColumns.end()) {
+            climbed = climbedIt->second;
+            break;
+        }
+
+        climbing.push_back(climbed);
+        climbed = filter.getColumnsToFilter()[cast<OpResult>(climbed).getResultNumber()];
+    }
+
+    for (const Value filtered : climbing) {
+        _climbedColumns[filtered] = climbed;
+    }
+
+    return climbed;
+}
+
 void appendCone(const MaskCone& from, llvm::SmallPtrSetImpl<Operation*>& appended, MaskCone& cone) {
     for (Operation* const op : from._ops) {
         if (appended.insert(op).second) {
@@ -1361,9 +1388,9 @@ void appendCone(const MaskCone& from, llvm::SmallPtrSetImpl<Operation*>& appende
     cone._inputs.insert(from._inputs.begin(), from._inputs.end());
 }
 
-void mapFactorReads(const MaskCone& cone, CrossProduct product, mlir::IRMapping& mapping) {
+void mapFactorReads(const MaskCone& cone, CrossProduct product, ConeCache& cache, mlir::IRMapping& mapping) {
     for (const Value input : cone._inputs) {
-        const Value column = climbFilters(input);
+        const Value column = cache.climbFilters(input);
         if (column.getDefiningOp() == product.getOperation()) {
             const size_t resultIndex = cast<OpResult>(column).getResultNumber();
             mapping.map(input, productFactorColumn(product, resultIndex));
@@ -1447,6 +1474,109 @@ bool matchFilterChain(Operation* reader,
 
     return true;
 }
+
+CrossProduct stackedProduct(FilterOp filter) {
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    if (columns.empty()) {
+        return nullptr;
+    }
+
+    CrossProduct product = columns.front().getDefiningOp<CrossProduct>();
+    if (!product || product->getBlock() != filter->getBlock()) {
+        return nullptr;
+    }
+
+    for (const Value column : columns) {
+        if (column.getDefiningOp() != product.getOperation()) {
+            return nullptr;
+        }
+    }
+
+    return product;
+}
+
+// The rows of a cross product and of the filters stacked over it, climbed one filter at a
+// time. It answers matchFilterChain's question for each filter of the stack, while following
+// the readers of each level once rather than once per filter above it.
+class FilterStack {
+public:
+    explicit FilterStack(CrossProduct product)
+        : _block(product->getBlock()),
+        _top(product)
+    {
+        followReaders(product);
+    }
+
+    FilterOp getReader() const {
+        if (_readElsewhere) {
+            return nullptr;
+        }
+
+        FilterOp reader = nullptr;
+        for (Operation* const user : _top->getUsers()) {
+            FilterOp filter = dyn_cast<FilterOp>(user);
+            if (!filter || filter == reader || !readsTheTop(filter)) {
+                continue;
+            } else if (reader) {
+                return nullptr;
+            }
+
+            reader = filter;
+        }
+
+        return reader;
+    }
+
+    // Whether nothing but the stack's filters and @param reader sees the rows of the stack
+    bool isExclusiveTo(FilterOp reader) const {
+        return !_readElsewhere && llvm::all_of(_pendingFilters, [&reader](Operation* filter) {
+            return filter == reader.getOperation();
+        });
+    }
+
+    void climbTo(FilterOp reader) {
+        _pendingFilters.erase(reader);
+        _top = reader;
+        followReaders(reader);
+    }
+
+private:
+    Block* _block {nullptr};
+    Operation* _top {nullptr};
+    llvm::SmallPtrSet<Operation*, 16> _visited;
+    llvm::SmallPtrSet<Operation*, 4> _pendingFilters;
+    bool _readElsewhere {false};
+
+    bool readsTheTop(FilterOp filter) const {
+        const Operation::operand_range columns = filter.getColumnsToFilter();
+        if (columns.empty() || filter->getBlock() != _block) {
+            return false;
+        }
+
+        return llvm::all_of(columns, [this](Value column) {
+            return column.getDefiningOp() == _top;
+        });
+    }
+
+    void followReaders(Operation* level) {
+        llvm::SmallVector<Operation*> pending(level->getUsers().begin(), level->getUsers().end());
+        while (!pending.empty()) {
+            Operation* const op = pending.pop_back_val();
+            if (!_visited.insert(op).second) {
+                continue;
+            }
+
+            const bool inTheBlock = op->getBlock() == _block;
+            if (inTheBlock && computesFromTheRow(op)) {
+                llvm::append_range(pending, op->getUsers());
+            } else if (inTheBlock && isa<FilterOp>(op)) {
+                _pendingFilters.insert(op);
+            } else {
+                _readElsewhere = true;
+            }
+        }
+    }
+};
 
 struct UnwindPlacement {
     Unwind _unwind {nullptr};
@@ -1567,7 +1697,7 @@ bool matchUnwindPlacement(Unwind unwind, ConeCache& cache, UnwindPlacement& plac
     return matchUnwindIntoAFactor(placement, cache);
 }
 
-void sinkUnwindIntoFactor(UnwindPlacement& placement, mlir::RewriterBase& rewriter) {
+void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::RewriterBase& rewriter) {
     Unwind unwind = placement._unwind;
     CrossProduct product = placement._product;
 
@@ -1582,7 +1712,7 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, mlir::RewriterBase& rewrit
     const llvm::SmallVector<Value> yielded(yield.getColumns().begin(), yield.getColumns().end());
 
     mlir::IRMapping mapping;
-    mapFactorReads(placement._source, product, mapping);
+    mapFactorReads(placement._source, product, cache, mapping);
 
     rewriter.setInsertionPoint(yield);
     cloneRowCone(placement._source, mapping, rewriter);
@@ -1682,9 +1812,9 @@ void unwindBesideItsRows(UnwindPlacement& placement, mlir::RewriterBase& rewrite
     eraseUnusedRowCone(placement._source, rewriter);
 }
 
-void placeUnwind(UnwindPlacement& placement, mlir::RewriterBase& rewriter) {
+void placeUnwind(UnwindPlacement& placement, ConeCache& cache, mlir::RewriterBase& rewriter) {
     if (placement._product) {
-        sinkUnwindIntoFactor(placement, rewriter);
+        sinkUnwindIntoFactor(placement, cache, rewriter);
     } else {
         unwindBesideItsRows(placement, rewriter);
     }
@@ -1692,7 +1822,7 @@ void placeUnwind(UnwindPlacement& placement, mlir::RewriterBase& rewriter) {
 
 CrossProduct matchProductFactor(Region& factor) {
     Block& block = factor.front();
-    if (block.getOperations().size() != 2) {
+    if (!llvm::hasNItems(block.getOperations(), 2)) {
         return nullptr;
     }
 
@@ -1777,13 +1907,9 @@ bool matchRotation(const FactorReads& reads, CrossProduct product, ProductRotati
     return false;
 }
 
-bool matchProductCut(FilterOp filter, ConeCache& cache, ProductCut& cut) {
-    llvm::SmallVector<FilterOp, 2> filters;
-    if (!matchFilterChain(filter, filter.getColumnsToFilter(), cut._product, filters)) {
-        return false;
-    }
-
+bool matchProductCut(FilterOp filter, CrossProduct product, ConeCache& cache, ProductCut& cut) {
     cut._filter = filter;
+    cut._product = product;
 
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
@@ -1835,6 +1961,7 @@ void cutFactor(CrossProduct product,
                llvm::ArrayRef<Value> conjuncts,
                const MaskCone& cone,
                Location loc,
+               ConeCache& cache,
                mlir::RewriterBase& rewriter) {
     if (conjuncts.empty()) {
         return;
@@ -1848,7 +1975,7 @@ void cutFactor(CrossProduct product,
     const llvm::SmallVector<Type> types(yieldTypes.begin(), yieldTypes.end());
 
     mlir::IRMapping mapping;
-    mapFactorReads(cone, product, mapping);
+    mapFactorReads(cone, product, cache, mapping);
 
     rewriter.setInsertionPoint(yield);
     cloneRowCone(cone, mapping, rewriter);
@@ -1881,13 +2008,17 @@ void eraseUnusedConjunction(Value mask, mlir::RewriterBase& rewriter) {
     }
 }
 
-void pushCutIntoFactors(ProductCut& cut, mlir::RewriterBase& rewriter) {
+void cutFactors(ProductCut& cut, ConeCache& cache, mlir::RewriterBase& rewriter) {
+    const Location loc = cut._filter.getLoc();
+
+    cutFactor(cut._product, true, cut._leftConjuncts, cut._leftCone, loc, cache, rewriter);
+    cutFactor(cut._product, false, cut._rightConjuncts, cut._rightCone, loc, cache, rewriter);
+}
+
+void keepUncutConjuncts(ProductCut& cut, mlir::RewriterBase& rewriter) {
     FilterOp filter = cut._filter;
     const Location loc = filter.getLoc();
     const Value mask = filter.getMask();
-
-    cutFactor(cut._product, true, cut._leftConjuncts, cut._leftCone, loc, rewriter);
-    cutFactor(cut._product, false, cut._rightConjuncts, cut._rightCone, loc, rewriter);
 
     if (cut._keptConjuncts.empty()) {
         bypassFilter(filter);
@@ -1906,7 +2037,7 @@ void pushCutIntoFactors(ProductCut& cut, mlir::RewriterBase& rewriter) {
     eraseUnusedRowCone(cut._rightCone, rewriter);
 }
 
-void rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::RewriterBase& rewriter) {
+CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::RewriterBase& rewriter) {
     const Location loc = product.getLoc();
 
     Region& leftFactor = product.getLeftFactor();
@@ -1977,41 +2108,83 @@ void rotateProduct(CrossProduct product, const ProductRotation& rotation, mlir::
     }
 
     rewriter.eraseOp(product);
+
+    return rotated;
 }
 
 // A rotation is pushed through in the same rewrite: the filter then stands in the factor the
 // rotation made, which is no bare product any more, so no other filter can rotate it back
 void regroupProductCut(ProductCut& cut, ConeCache& cache, mlir::RewriterBase& rewriter) {
-    if (!cut._rotation._rotates) {
-        pushCutIntoFactors(cut, rewriter);
-        return;
-    }
-
-    rotateProduct(cut._product, cut._rotation, rewriter);
+    const CrossProduct rotated = rotateProduct(cut._product, cut._rotation, rewriter);
     cache.clear();
 
     ProductCut rotatedCut;
-    const bool pushes = matchProductCut(cut._filter, cache, rotatedCut) && !rotatedCut._rotation._rotates;
+    const bool pushes = matchProductCut(cut._filter, rotated, cache, rotatedCut) && !rotatedCut._rotation._rotates;
     bioassert(pushes, "A rotated product leaves the conjunct that rotated it on one factor");
 
-    pushCutIntoFactors(rotatedCut, rewriter);
+    cutFactors(rotatedCut, cache, rewriter);
+    keepUncutConjuncts(rotatedCut, rewriter);
+}
+
+// Moves into the factors of the product under @param bottom what each filter stacked over it
+// reads of one factor, bottom first, in one walk up the stack. The filters are only erased once
+// the walk ends, so the stack and the climbs the cache holds stay valid throughout
+bool placeFilterStack(FilterOp bottom, ConeCache& cache, mlir::RewriterBase& rewriter) {
+    const CrossProduct product = stackedProduct(bottom);
+    if (!product) {
+        return false;
+    }
+
+    std::vector<std::unique_ptr<ProductCut>> cuts;
+    FilterStack stack(product);
+    for (FilterOp filter = bottom; filter; filter = stack.getReader()) {
+        const bool exclusive = stack.isExclusiveTo(filter);
+        stack.climbTo(filter);
+
+        if (!exclusive) {
+            continue;
+        }
+
+        ProductCut& cut = *cuts.emplace_back(std::make_unique<ProductCut>());
+        if (!matchProductCut(filter, product, cache, cut)) {
+            cuts.pop_back();
+        } else if (cut._rotation._rotates) {
+            break;
+        } else {
+            cutFactors(cut, cache, rewriter);
+        }
+    }
+
+    for (const std::unique_ptr<ProductCut>& cut : cuts) {
+        if (!cut->_rotation._rotates) {
+            keepUncutConjuncts(*cut, rewriter);
+        }
+    }
+
+    if (!cuts.empty() && cuts.back()->_rotation._rotates) {
+        regroupProductCut(*cuts.back(), cache, rewriter);
+    }
+
+    return !cuts.empty();
 }
 
 bool placeInAFactor(Operation* op, ConeCache& cache, mlir::RewriterBase& rewriter) {
     FilterOp filter = dyn_cast<FilterOp>(op);
 
-    ProductCut cut;
+    bool placed = false;
     UnwindPlacement placement;
-    if (filter && matchProductCut(filter, cache, cut)) {
-        regroupProductCut(cut, cache, rewriter);
-    } else if (!filter && matchUnwindPlacement(cast<Unwind>(op), cache, placement)) {
-        placeUnwind(placement, rewriter);
-    } else {
-        return false;
+    if (filter) {
+        placed = placeFilterStack(filter, cache, rewriter);
+    } else if (matchUnwindPlacement(cast<Unwind>(op), cache, placement)) {
+        placeUnwind(placement, cache, rewriter);
+        placed = true;
     }
 
-    cache.clear();
-    return true;
+    if (placed) {
+        cache.clear();
+    }
+
+    return placed;
 }
 
 // A filter moved into a factor can let an unwind sink below the filters left over the
@@ -6748,7 +6921,7 @@ bool isFactorOfTheScanAlone(Block* block) {
     const bool inAProduct = isa_and_nonnull<CrossProduct>(block->getParentOp());
 
     return inAProduct
-        && block->getOperations().size() == 2
+        && llvm::hasNItems(block->getOperations(), 2)
         && cast<Yield>(block->getTerminator()).getNumOperands() == 1;
 }
 
