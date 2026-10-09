@@ -99,7 +99,7 @@ TEST_F(VersionNotFoundTest, aCommitNotLoadedIsNamedInTheLoadCommitItSuggests) {
         ASSERT_TRUE(system.loadGraph(GRAPH_NAME));
     }
 
-    const std::string hash = fmt::format("{:x}", skeletonHash.get());
+    const std::string hash = fmt::format("{}", skeletonHash);
     expectOpenError(skeletonHash,
                     ChangeID::head(),
                     ChangeErrorType::COMMIT_NOT_LOADED,
@@ -139,5 +139,5 @@ TEST_F(VersionNotFoundTest, submitChangeNamesTheChange) {
 
     ASSERT_FALSE(result);
     EXPECT_EQ(result.error().getType(), ChangeErrorType::CHANGE_NOT_FOUND);
-    EXPECT_EQ(result.error().fmtMessage(), fmt::format("Change '{}' does not exist", unregistered->id().get()));
+    EXPECT_EQ(result.error().fmtMessage(), fmt::format("Change '{}' does not exist", unregistered->id()));
 }

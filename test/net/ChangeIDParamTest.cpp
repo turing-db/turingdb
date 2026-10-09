@@ -249,24 +249,24 @@ TEST_F(ChangeIDParamTest, theBinaryClientSendsTheChangeIdItIsGiven) {
     for (const ChangeID changeID : changeIDs) {
         client.setChangeID(changeID);
 
-        const QueryStatus createStatus = client.sendQuery(fmt::format("CREATE (:Marker {{name: 'change-{}'}})", changeID.get()),
+        const QueryStatus createStatus = client.sendQuery(fmt::format("CREATE (:Marker {{name: 'change-{}'}})", changeID),
                                                           ignoreOutput);
-        ASSERT_TRUE(createStatus.isOk()) << changeID.get() << ": " << createStatus.getError();
+        ASSERT_TRUE(createStatus.isOk()) << changeID << ": " << createStatus.getError();
 
         const QueryStatus commitStatus = client.sendQuery("COMMIT", ignoreOutput);
-        ASSERT_TRUE(commitStatus.isOk()) << changeID.get() << ": " << commitStatus.getError();
+        ASSERT_TRUE(commitStatus.isOk()) << changeID << ": " << commitStatus.getError();
     }
 
     for (const ChangeID changeID : changeIDs) {
         client.setChangeID(changeID);
 
         size_t rowCount = 0;
-        const QueryStatus status = client.sendQuery(fmt::format("MATCH (m:Marker) WHERE m.name = 'change-{}' RETURN m", changeID.get()),
+        const QueryStatus status = client.sendQuery(fmt::format("MATCH (m:Marker) WHERE m.name = 'change-{}' RETURN m", changeID),
                                                     [&rowCount](const Dataframe* dataframe) {
                                                         rowCount += dataframe->getLogicalRowCount();
                                                     });
-        ASSERT_TRUE(status.isOk()) << changeID.get() << ": " << status.getError();
-        EXPECT_EQ(rowCount, 1u) << changeID.get();
+        ASSERT_TRUE(status.isOk()) << changeID << ": " << status.getError();
+        EXPECT_EQ(rowCount, 1u) << changeID;
     }
 
     client.disconnect();

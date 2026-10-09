@@ -479,19 +479,19 @@ std::string TuringShell::composePrompt() {
         const auto remoteGraph = _client.getGraphName();
         return remoteCommit == CommitHash::head()
                  ? fmt::format("{}:{}> ", _remoteAddress, remoteGraph)
-                 : fmt::format("{}:{}(detached {:x})> ", _remoteAddress, remoteGraph, remoteCommit.get());
+                 : fmt::format("{}:{}(detached {})> ", _remoteAddress, remoteGraph, remoteCommit);
     }
 
     const std::string basePrompt = "turing";
     if (_changeID == ChangeID::head()) {
         return _hash == CommitHash::head()
                  ? fmt::format("{}:{}> ", basePrompt, _graphName)
-                 : fmt::format("{}:{}(detached {:x})> ", basePrompt, _graphName, _hash.get());
+                 : fmt::format("{}:{}(detached {})> ", basePrompt, _graphName, _hash);
     }
 
     return _hash == CommitHash::head()
-             ? fmt::format("{}:{}@{}> ", basePrompt, _graphName, _changeID.get())
-             : fmt::format("{}:{}@{}(detached {:x})> ", basePrompt, _graphName, _changeID.get(), _hash.get());
+             ? fmt::format("{}:{}@{}> ", basePrompt, _graphName, _changeID)
+             : fmt::format("{}:{}@{}(detached {})> ", basePrompt, _graphName, _changeID, _hash);
 }
 
 void asString(std::string& out, const db::Path& path) {
@@ -967,7 +967,7 @@ bool TuringShell::setCommitHash(CommitHash hash) {
     if (!tx) {
         if (tx.error().getType() == ChangeErrorType::COMMIT_NOT_LOADED) {
             // Commit exists but isn't hydrated — load it now
-            spdlog::info("Loading commit {:x}...", hash.get());
+            spdlog::info("Loading commit {}...", hash);
             auto loadRes = system.loadCommit(_graphName, hash);
             if (!loadRes) {
                 spdlog::error("Failed to load commit: {}", loadRes.error().fmtMessage());
@@ -1056,7 +1056,7 @@ void TuringShell::checkShellContext() {
     }
 
     if (change == nullptr) {
-        fmt::print("Change '{}' does not exist anymore, switching back to head\n", _changeID.get());
+        fmt::print("Change '{}' does not exist anymore, switching back to head\n", _changeID);
         setChangeID(ChangeID::head());
         return;
     }
@@ -1065,6 +1065,6 @@ void TuringShell::checkShellContext() {
         return;
     }
 
-    fmt::print("No commit matches hash {:x}, switching back to head\n", _hash.get());
+    fmt::print("No commit matches hash {}, switching back to head\n", _hash);
     setCommitHash(CommitHash::head());
 }

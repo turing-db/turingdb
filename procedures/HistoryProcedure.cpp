@@ -60,8 +60,8 @@ void writeChunk(Data* data,
 
         if (commitCol) {
             const std::string hash = isHead
-                ? fmt::format("{:x}(HEAD)", commit->hash().get())
-                : fmt::format("{:x}", commit->hash().get());
+                ? fmt::format("{}(HEAD)", commit->hash())
+                : fmt::format("{}", commit->hash());
 
             commitCol->push_back(stringBuffer->insert(hash));
         }

@@ -115,19 +115,33 @@ struct std::hash<db::TemplateCommitHash<i, radix>> {
     }
 };
 
+namespace db {
+
+template <int i, int radix>
+std::ostream& operator<<(std::ostream& os, TemplateCommitHash<i, radix> hash) {
+    std::string text;
+    hash.appendString(text);
+    return os << text;
+}
+
+}
+
 namespace std {
 
 template <int i, int radix>
-inline string to_string(db::TemplateCommitHash<i, radix> h) {
-    return to_string(h.get());
-}
-
-template <typename T, int i, int radix>
-ostream& operator<<(ostream& os, db::TemplateCommitHash<i, radix> h) {
-    return os << h.get();
+inline string to_string(db::TemplateCommitHash<i, radix> hash) {
+    string text;
+    hash.appendString(text);
+    return text;
 }
 
 }
 
 template <int i, int radix>
-struct fmt::formatter<db::TemplateCommitHash<i, radix>> : ostream_formatter {};
+struct fmt::formatter<db::TemplateCommitHash<i, radix>> : fmt::formatter<std::string_view> {
+    auto format(db::TemplateCommitHash<i, radix> hash, fmt::format_context& context) const {
+        std::string text;
+        hash.appendString(text);
+        return fmt::formatter<std::string_view>::format(text, context);
+    }
+};

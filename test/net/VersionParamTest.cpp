@@ -30,7 +30,7 @@ constexpr const char* COUNT_QUERY = "MATCH (n) RETURN count(n)";
 constexpr uint64_t SIMPLEDB_NODE_COUNT = 18;
 
 std::string toHex(CommitHash hash) {
-    return fmt::format("{:x}", hash.get());
+    return fmt::format("{}", hash);
 }
 
 std::string commitError(std::string_view value) {
