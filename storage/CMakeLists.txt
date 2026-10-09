@@ -86,6 +86,7 @@ set(storage_sources
         iterators/PathLabelHopFilter.cpp
         iterators/PathReachTable.cpp
         iterators/PathTargetIndex.cpp
+        iterators/ReversedPathExplorator.cpp
 
         iterators/TombstoneFilter.cpp
 
