@@ -130,8 +130,8 @@ std::string valueToString(const ID<T, tag> value) {
     return std::to_string(value.getValue());
 }
 
-template <int I>
-std::string valueToString(const TemplateCommitHash<I> value) {
+template <int I, int Radix>
+std::string valueToString(const TemplateCommitHash<I, Radix> value) {
     return std::to_string(value.get());
 }
 

@@ -490,8 +490,8 @@ std::string TuringShell::composePrompt() {
     }
 
     return _hash == CommitHash::head()
-             ? fmt::format("{}:{}@{:x}> ", basePrompt, _graphName, _changeID.get())
-             : fmt::format("{}:{}@{:x}(detached {:x})> ", basePrompt, _graphName, _changeID.get(), _hash.get());
+             ? fmt::format("{}:{}@{}> ", basePrompt, _graphName, _changeID.get())
+             : fmt::format("{}:{}@{}(detached {:x})> ", basePrompt, _graphName, _changeID.get(), _hash.get());
 }
 
 void asString(std::string& out, const db::Path& path) {
@@ -547,9 +547,9 @@ void asString(std::string& out, const db::Duration v) {
     db::Duration::format(out, v);
 }
 
-template <int I>
-void asString(std::string& out, const TemplateCommitHash<I>& hash) {
-    out += fmt::format("{:x}", hash.get());
+template <int I, int Radix>
+void asString(std::string& out, const TemplateCommitHash<I, Radix>& hash) {
+    hash.appendString(out);
 }
 
 void asString(std::string& out, const PropertyNull) {
@@ -1056,7 +1056,7 @@ void TuringShell::checkShellContext() {
     }
 
     if (change == nullptr) {
-        fmt::print("Change '{:x}' does not exist anymore, switching back to head\n", _changeID.get());
+        fmt::print("Change '{}' does not exist anymore, switching back to head\n", _changeID.get());
         setChangeID(ChangeID::head());
         return;
     }

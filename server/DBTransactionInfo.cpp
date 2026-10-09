@@ -36,7 +36,7 @@ void DBTransactionInfo::read(const net::HTTP::Info& httpInfo, DBTransactionInfo&
         const auto changeResult = ChangeID::fromString(change.value());
         if (!changeResult) {
             status = QueryStatus(QueryStatus::Status::CHANGE_NOT_FOUND,
-                                 fmt::format("The change parameter '{}' is not a hexadecimal change ID or 'head'", change.value()));
+                                 fmt::format("The change parameter '{}' is not a decimal change ID or 'head'", change.value()));
             return;
         }
 

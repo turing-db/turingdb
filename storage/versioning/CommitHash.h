@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <charconv>
 #include <stdint.h>
 #include <limits>
@@ -11,7 +12,7 @@
 
 namespace db {
 
-template <int = 0>
+template <int = 0, int Radix = 16>
 class TemplateCommitHash {
 public:
     using ValueType = uint64_t;
@@ -73,7 +74,7 @@ public:
 
         const char* begin = str.data();
         const char* end = str.data() + str.size();
-        const auto res = std::from_chars(begin, end, hashValue, 16);
+        const auto res = std::from_chars(begin, end, hashValue, Radix);
 
         if (res.ec == std::errc::result_out_of_range) {
             return BadResult<std::string_view>("Too large hash value");
@@ -86,6 +87,17 @@ public:
         return TemplateCommitHash(hashValue);
     }
 
+    void appendString(std::string& out) const {
+        if (*this == head()) {
+            out += "head";
+            return;
+        }
+
+        std::array<char, std::numeric_limits<ValueType>::digits> buffer;
+        const auto res = std::to_chars(buffer.data(), buffer.data() + buffer.size(), _value, Radix);
+        out.append(buffer.data(), res.ptr);
+    }
+
     bool isValid() { return _value == 0; }
 
 private:
@@ -96,26 +108,26 @@ using CommitHash = TemplateCommitHash<0>;
 
 }
 
-template <int i>
-struct std::hash<db::TemplateCommitHash<i>> {
-    size_t operator()(const db::TemplateCommitHash<i>& h) const {
+template <int i, int radix>
+struct std::hash<db::TemplateCommitHash<i, radix>> {
+    size_t operator()(const db::TemplateCommitHash<i, radix>& h) const {
         return h.get();
     }
 };
 
 namespace std {
 
-template <int i>
-inline string to_string(db::TemplateCommitHash<i> h) {
+template <int i, int radix>
+inline string to_string(db::TemplateCommitHash<i, radix> h) {
     return to_string(h.get());
 }
 
-template <typename T, int i>
-ostream& operator<<(ostream& os, db::TemplateCommitHash<i> h) {
+template <typename T, int i, int radix>
+ostream& operator<<(ostream& os, db::TemplateCommitHash<i, radix> h) {
     return os << h.get();
 }
 
 }
 
-template <int i>
-struct fmt::formatter<db::TemplateCommitHash<i>> : ostream_formatter {};
+template <int i, int radix>
+struct fmt::formatter<db::TemplateCommitHash<i, radix>> : ostream_formatter {};
