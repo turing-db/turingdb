@@ -51,6 +51,24 @@ Graph* GraphManager::getGraph(std::string_view graphName) const {
     return slot->getObject();
 }
 
+ChangeResult<Graph*> GraphManager::findGraph(std::string_view graphName) const {
+    Graph* graph = getGraph(graphName);
+    if (graph) {
+        return graph;
+    }
+
+    const fs::Path& graphsDir = _config->getGraphsDir();
+    const fs::Path graphPath = graphsDir / graphName;
+    const bool isOnDisk = _config->isSyncedOnDisk()
+                       && graphPath.isSubDirectory(graphsDir)
+                       && graphPath.exists();
+    if (isOnDisk) {
+        return ChangeError::graphResult(ChangeErrorType::GRAPH_NOT_LOADED, graphName);
+    }
+
+    return ChangeError::graphResult(ChangeErrorType::GRAPH_NOT_FOUND, graphName);
+}
+
 Graph* GraphManager::createGraph(std::string_view name) {
     const fs::Path path = _config->getGraphsDir() / name;
 
@@ -432,12 +450,12 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
 }
 
 ChangeResult<Change*> GraphManager::newChange(std::string_view graphName, CommitHash baseHash) {
-    Graph* graph = getGraph(graphName);
+    const ChangeResult<Graph*> graph = findGraph(graphName);
     if (!graph) {
-        return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
+        return BadResult<ChangeError>(graph.error());
     }
 
-    return _changes.createChange(graph, baseHash);
+    return _changes.createChange(graph.value(), baseHash);
 }
 
 ChangeResult<Change*> GraphManager::getChange(const Graph* graph, ChangeID changeID) {

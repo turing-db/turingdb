@@ -261,10 +261,18 @@ DataPartMergeResult<void> SystemManager::mergeDataParts(Graph* graph) {
 ChangeResult<Transaction> SystemManager::openTransaction(std::string_view graphName,
                                                          CommitHash commitHash,
                                                          ChangeID changeID) {
-    Graph* graph = graphName.empty() ? this->getDefaultGraph()
-                                     : this->getGraph(graphName);
+    Graph* graph = this->getDefaultGraph();
+    if (!graphName.empty()) {
+        const ChangeResult<Graph*> foundGraph = _graphManager.findGraph(graphName);
+        if (!foundGraph) {
+            return BadResult<ChangeError>(foundGraph.error());
+        }
+
+        graph = foundGraph.value();
+    }
+
     if (!graph) {
-        return ChangeError::result(ChangeErrorType::GRAPH_NOT_FOUND);
+        return ChangeError::graphResult(ChangeErrorType::GRAPH_NOT_FOUND, graphName);
     }
 
     if (changeID == ChangeID::head()) {

@@ -33,6 +33,7 @@ public:
     // Graph access
     Graph* getDefaultGraph() const { return _defaultGraph.load(); }
     Graph* getGraph(std::string_view graphName) const;
+    ChangeResult<Graph*> findGraph(std::string_view graphName) const;
     size_t getGraphCount() const { return _graphs.size(); }
 
     // Graph operations
