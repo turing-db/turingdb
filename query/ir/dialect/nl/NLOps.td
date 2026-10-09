@@ -2791,7 +2791,7 @@ def Substring : NLOp<"substring", [Pure, RowAlignedThroughOperands]> {
   let assemblyFormat = "$string `,` $start (`,` $length^)? attr-dict `:` functional-type(operands, results)";
 }
 
-def Split : NLOp<"split", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+def Split : NLOp<"split", [Pure, RowAlignedThroughOperands]> {
   let summary = "Row-wise split on delimiter";
 
   let arguments = (ins NLChunk:$string, NLChunk:$delimiter);

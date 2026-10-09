@@ -7273,54 +7273,28 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
     const NLSplitData::StringArgument& string = split->getString();
     const NLSplitData::StringArgument& delimiter = split->getDelimiter();
 
+    const size_t rowCount = string._column->size();
+    bioassert(delimiter._column->size() == rowCount, "Delimiter column of a split is not row-aligned with its string.");
+
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(split->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
     SplitFunction function(&split->getMemory()->listBuffer());
     constexpr std::string_view name = SplitFunction::NAME;
 
-    const auto partsAt = [&string, &delimiter, &function, name](size_t row) -> Result {
-        const std::optional<types::String::Primitive> text = string._read(string._column, row, name);
-        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, row, name);
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::String::Primitive> separator = delimiter._read(delimiter._column, rowIndex, name);
 
         const bool readsANull = !text.has_value() || !separator.has_value();
         if (!readsANull) {
-            return function(*text, *separator);
+            outputRaw[rowIndex] = function(*text, *separator);
         } else if constexpr (TypeUtils::is_optional_v<Result>) {
-            return std::nullopt;
+            outputRaw[rowIndex] = std::nullopt;
         } else {
             throw IRException("split() typed as never null read a null argument");
         }
-    };
-
-    Column* const result = split->getResult();
-
-    const auto fn = [&]<typename TypedColumn>(const TypedColumn*) {
-        TypedColumn* col = static_cast<TypedColumn*>(result);
-
-        if constexpr (std::is_same_v<TypedColumn, ColumnConst<Result>>) {
-            constexpr size_t onlyRow = 0; // cyrus wuz here 09.10.26
-            const Result& res = partsAt(onlyRow);
-            col->set(res);
-        } else if constexpr (std::is_same_v<TypedColumn, ColumnVector<Result>>) {
-            const size_t rowCount = string._column->size();
-            bioassert(delimiter._column->size() == rowCount, "Misaligned columns.");
-
-            auto& outRaw = col->getRaw();
-            outRaw.resize(rowCount);
-
-            for (size_t row = 0; row < rowCount; row++) {
-                outRaw[row] = partsAt(row);
-            }
-        } else {
-            static_assert(false, "Updated cases for newly supported type");
-        }
-    };
-
-    using ResultTypes = std::tuple<Result>;
-    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                        ContainerKind::code<ColumnMask>()>;
-
-    using Functor = decltype(fn);
-
-    ColumnSingleDispatcher<ResultTypes, Functor, Excluded>::dispatch(result, fn);
+    }
 }
 
 template void NLExecutor::runSplit<ListView>(NLExecutionContext* context, NLFunctionData* data);

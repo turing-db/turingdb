@@ -2679,7 +2679,7 @@ def Substring : TuringOp<"substring", [Pure]> {
   }];
 }
 
-def Split : TuringOp<"split", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Split : TuringOp<"split", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Split on delimiter";
 
   let description = [{

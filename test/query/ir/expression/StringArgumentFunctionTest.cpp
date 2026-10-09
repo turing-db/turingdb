@@ -187,6 +187,12 @@ TEST_F(StringArgumentFunctionTest, splitRejectsATaggedCellOfTheWrongType) {
     expectError("MATCH (p:Person {name: 'Remy'}) RETURN split(p.words[1], ',')", "split()");
 }
 
+TEST_F(StringArgumentFunctionTest, splitRejectsATaggedCellOfTheWrongTypeOnlyWhereItIsEvaluated) {
+    expectRows("UNWIND [] AS x RETURN split([1, 'a'][0], ',')", {});
+    expectRows("MATCH (p:Person {name: 'Nobody'}) RETURN split([1, 'a'][0], ',')", {});
+    expectError("UNWIND [1, 2] AS x RETURN split([1, 'a'][0], ',')", "split()");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

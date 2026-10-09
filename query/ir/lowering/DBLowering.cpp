@@ -2242,25 +2242,14 @@ void DBLowering::lowerSubstring(mlir::db::Substring substring) {
 }
 
 void DBLowering::lowerSplit(mlir::db::Split split) {
-    const mlir::Value stringChunk = mapValue(split.getString());
-    const mlir::Value delimiterChunk = mapValue(split.getDelimiter());
-
-    const mlir::Type stringChunkType = stringChunk.getType();
-    const mlir::Type delimiterChunkType = delimiterChunk.getType();
+    const mlir::Type stringChunkType = mapValue(split.getString()).getType();
+    const mlir::Type delimiterChunkType = mapValue(split.getDelimiter()).getType();
 
     const bool stringMayBeNull = mayHoldANull(stringChunkType);
     const bool delimiterMayBeNull = mayHoldANull(delimiterChunkType);
 
-    const bool readsConstantsAlone = yieldsConstantColumn(stringChunk, _constantColumns)
-                                  && yieldsConstantColumn(delimiterChunk, _constantColumns);
-
     llvm::SmallVector<mlir::Value, 2> arguments;
-    if (readsConstantsAlone) {
-        arguments.push_back(stringChunk);
-        arguments.push_back(delimiterChunk);
-    } else {
-        containerCellChunks(split->getOperands(), arguments);
-    }
+    containerCellChunks(split->getOperands(), arguments);
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type stringType = storage::StringType::get(context);

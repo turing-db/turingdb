@@ -3330,15 +3330,7 @@ void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
     const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
     const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
 
-    Column* result = nullptr;
-    if (!yieldsConstantColumn(resultValue)) {
-        result = allocColumnForChunkType(resultType);
-    } else if (resultNullable) {
-        result = _memory->alloc<ColumnConst<std::optional<ListView>>>();
-    } else {
-        result = _memory->alloc<ColumnConst<ListView>>();
-    }
-
+    Column* const result = allocColumnForChunkType(resultType);
     _valueSlots[resultValue] = result;
 
     const Column* const string = getColumn(split.getString());
