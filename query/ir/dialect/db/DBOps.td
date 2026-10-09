@@ -2689,6 +2689,7 @@ def Split : TuringOp<"split", [Pure, ConstantThroughOperands]> {
 
   let arguments = (ins Column:$string, Column:$delimiter);
   let results   = (outs Column:$result);
+  let hasVerifier = 1;
 
   let assemblyFormat = [{
     `(` $string `,` $delimiter `)` attr-dict `:` functional-type(operands, results)

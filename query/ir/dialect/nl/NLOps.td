@@ -2796,6 +2796,7 @@ def Split : NLOp<"split", [Pure, ConstantThroughOperands, RowAlignedThroughOpera
 
   let arguments = (ins NLChunk:$string, NLChunk:$delimiter);
   let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
 
   let assemblyFormat = "$string `,` $delimiter attr-dict `:` functional-type(operands, results)";
 }

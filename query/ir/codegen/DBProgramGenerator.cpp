@@ -9114,9 +9114,7 @@ void DBProgramGenerator::translateSubstring(const Expr* expr, const ExprChain* a
 }
 
 void DBProgramGenerator::translateSplit(const Expr* expr, const ExprChain* args) {
-    if (!args || args->size() != 2) {
-        throwError("split() expects 2 arguments.", expr);
-    }
+    bioassert(args && args->size() == 2, "split() takes 2 arguments.");
 
     const ExprChain::ExprVector& argExprs = args->getExprs();
 

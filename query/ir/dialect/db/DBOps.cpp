@@ -106,6 +106,19 @@ bool isMaskColumn(Type type) {
     return isa<storage::BoolType>(value) || isa<NoneType>(value) || value.isInteger(1);
 }
 
+bool isStringColumn(Type type) {
+    const auto column = dyn_cast<ColumnType>(type);
+    if (!column) {
+        return false;
+    }
+
+    const Type element = column.getType();
+    const auto nullable = dyn_cast<storage::NullableType>(element);
+    const Type value = nullable ? nullable.getValueType() : element;
+
+    return isa<storage::StringType, storage::ListElementType, NoneType>(value);
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -1894,6 +1907,23 @@ LogicalResult Range::verify() {
 
     if (!llvm::isa<mlir::IntegerType>(listType.getElementType())) {
         return emitOpError("result must be a column of integer lists");
+    }
+
+    return success();
+}
+
+LogicalResult Split::verify() {
+    const bool readsStrings = isStringColumn(getString().getType()) && isStringColumn(getDelimiter().getType());
+    if (!readsStrings) {
+        return emitOpError("operands must be string columns");
+    }
+
+    const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
+    const storage::ListType listType = resultColumn ? llvm::dyn_cast<storage::ListType>(resultColumn.getType())
+                                                    : storage::ListType {};
+
+    if (!listType || !llvm::isa<storage::StringType>(listType.getElementType())) {
+        return emitOpError("result must be a column of string lists");
     }
 
     return success();
