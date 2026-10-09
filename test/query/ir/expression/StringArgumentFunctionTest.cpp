@@ -113,6 +113,29 @@ TEST_F(StringArgumentFunctionTest, splitOfAnEmptyStringIsOneEmptyPart) {
     expectRows("RETURN size(split('', '')), split('', '')[0] = '', size(split('', ','))", {{"1", "true", "1"}});
 }
 
+TEST_F(StringArgumentFunctionTest, splitIsNullOnlyOnTheRowsHoldingANullString) {
+    expectRows("UNWIND ['a,b', null, 'c'] AS s RETURN split(s, ',')", {{"[a, b]"}, {"null"}, {"[c]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOfANullDelimiterReadInTheRowIsNull) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN split('a,b', p.nosuch)", {{"null"}});
+    expectRows("UNWIND [',', null] AS d RETURN split('a,b', d)", {{"[a, b]"}, {"null"}});
+}
+
+TEST_F(StringArgumentFunctionTest, splitOnNothingKeepsFourByteCharactersWhole) {
+    expectRows("RETURN split('a😀b', '')", {{"[a, 😀, b]"}});
+}
+
+TEST_F(StringArgumentFunctionTest, filtersOnASplit) {
+    expectRows("MATCH (p:Person) WHERE size(split(p.name, 'a')) = 3 RETURN p.name", {{"Martina"}});
+}
+
+TEST_F(StringArgumentFunctionTest, storesASplit) {
+    applyWrite("MATCH (p:Person {name: 'Remy'}) SET p.parts = split('a,b', ',')");
+
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.parts, size(p.parts)", {{"[a, b]", "2"}});
+}
+
 TEST_F(StringArgumentFunctionTest, unwindsASplit) {
     expectRows("UNWIND split('x y z', ' ') AS w RETURN toUpper(w)", {{"X"}, {"Y"}, {"Z"}});
 }
