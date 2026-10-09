@@ -19,6 +19,9 @@
 #include "ID.h"
 #include "LocalMemory.h"
 #include "NLHashJoinIndex.h"
+#include "NLStepBuffers.h"
+#include "NLValueStore.h"
+#include "ProcedureContext.h"
 #include "ProcedureState.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
@@ -44,7 +47,6 @@ class NLFunctionData;
 struct NLMergeWorkingSet;
 class NLShortestPathLoopData;
 class Procedure;
-class ProcedureContext;
 class ProcedureData;
 class LocalMemory;
 class StringBuffer;
@@ -1263,12 +1265,16 @@ public:
     bool isAllPending() const { return _allPending; }
     void setAllPending(bool allPending) { _allPending = allPending; }
 
+    // The values this change wrote that a run fetched, copied in and emptied at the next run
+    NLValueStore& fetchedValues() { return _fetchedValues; }
+
 private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
     const ColumnMask* _pending {nullptr};
     PropertyTypeID _propertyTypeID;
     bool _allPending {false};
+    NLValueStore _fetchedValues;
 };
 
 class NLGetNodeLabelSetData : public NLFunctionData {
@@ -1652,9 +1658,9 @@ private:
 // translation, the same way the gather and broadcast families are.
 using NLAppendFunction = void (*)(const Column* input, Column* buffer);
 
-// Appends a chunk of lists onto the tail of a buffer, storing each list in @param lists so
-// the buffer owns what it holds rather than viewing the buffer the chunk was built in
-using NLListAppendFunction = void (*)(const Column* input, Column* buffer, QueryListBuffer& lists);
+// Appends a chunk of views onto the tail of a buffer, copying each value into @param values
+// so the buffer owns what it holds rather than viewing the buffer the chunk was built in
+using NLOwnedAppendFunction = void (*)(const Column* input, Column* buffer, NLValueStore& values);
 
 // Type of handle that 3-way compares two rows of one sort key column: negative
 // if row a sorts before row b, positive if after, zero if they tie on this key.
@@ -1724,10 +1730,10 @@ public:
 
     const ColumnVector<size_t>& permutation() const { return _permutation; }
 
-    // The lists the buffers hold. A collected list is copied in here, because the views a
-    // chunk carries point into the buffer the producing step built them in, and that step
+    // The values the buffers hold. A collected view is copied in here, because the views a
+    // chunk carries point into the buffers the producing step built them in, and that step
     // comes round again long before the emit loop reads them.
-    QueryListBuffer& listBuffer() { return _listBuffer; }
+    NLValueStore& values() { return _values; }
 
 private:
     // Strict-weak-ordering row comparison by the keys, most significant first;
@@ -1754,7 +1760,7 @@ private:
     // The kept-row indices a trim selects, fed to the per-buffer gather.
     ColumnVector<size_t> _keptIndices;
 
-    QueryListBuffer _listBuffer;
+    NLValueStore _values;
 
     // The top-K bound (valid only when _bounded); 0 with _bounded means keep none.
     size_t _topK {0};
@@ -1788,9 +1794,9 @@ public:
         Column* _buffer {nullptr};
         NLAppendFunction _append {nullptr};
 
-        // Set in place of _append for a column of lists, which the accumulator takes a
+        // Set in place of _append for a column of views, which the accumulator takes a
         // copy of rather than a view of
-        NLListAppendFunction _appendLists {nullptr};
+        NLOwnedAppendFunction _appendOwned {nullptr};
     };
 
     NLSortCollectData(NLSortState* state)
@@ -1903,11 +1909,15 @@ public:
     NLHashJoinIndex& getIndex() { return _index; }
     const NLHashJoinIndex& getIndex() const { return _index; }
 
+    // The values the buffers hold, copied in as NLSortState::values' are
+    NLValueStore& values() { return _values; }
+
 private:
     // One buffer per collected build column, row-aligned, grown by nl.hash_join_collect.
     std::vector<Column*> _buffers;
 
     NLHashJoinIndex _index;
+    NLValueStore _values;
 };
 
 // nl.hash_join_buffer data: empties a build side each time the block it lives in runs -
@@ -2358,13 +2368,14 @@ public:
     void setCount(size_t count) { _count = count; }
     void addCount(size_t count) { _count += count; }
 
-    // The lists a min/max accumulator holds, copied in as NLSortState::listBuffer's are
-    QueryListBuffer& listBuffer() { return _listBuffer; }
+    // A min/max accumulator holds one extreme, so a new one is copied into the spare store
+    // and the stores flip at once
+    NLCompactingValueStore& extremeValues() { return _extremeValues; }
 
 private:
     Column* _accumulator {nullptr};
     size_t _count {0};
-    QueryListBuffer _listBuffer;
+    NLCompactingValueStore _extremeValues;
 };
 
 // Handlers of one aggregate, selected during translation from the reduction and
@@ -2497,7 +2508,8 @@ private:
 // selected during translation the way the gather and append families are.
 using NLGroupKeyGatherFunction = void (*)(const Column* input,
                                           const std::vector<size_t>& rows,
-                                          Column* buffer);
+                                          Column* buffer,
+                                          NLValueStore& values);
 
 // Grow one aggregate's per-group state to hold groupCount groups, initializing the
 // newly added groups to the reduction's identity - a present zero (sum/avg), a
@@ -2514,13 +2526,18 @@ using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
 // value type. The parameters are the union of what any reduction needs, so each fold
 // reads only its own: sum/min/max ignore counts, count ignores the accumulator, only
 // the distinct kinds touch the tally of already-charged (group, value) pairs, and only
-// min/max store the lists they keep in lists.
+// min/max copy the extremes they keep into values.
 using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
                                               const Column* input,
                                               const std::vector<size_t>& groups,
                                               NLGroupDistinctTally& distinct,
-                                              QueryListBuffer& lists);
+                                              NLValueStore& values);
+
+// Copy every view a column holds - or only those of @param rows - into @param values, so
+// the store they were copied into before can be emptied
+using NLReownFunction = void (*)(Column* column, NLValueStore& values);
+using NLReownRowsFunction = void (*)(Column* column, const std::vector<size_t>& rows, NLValueStore& values);
 
 // Materialize the reduction of groups [begin, begin + count) into an emit output
 // column: a copy of the accumulator slice (sum/min/max), a per-group divide
@@ -2612,6 +2629,7 @@ public:
         NLGroupAggregateGrowFunction _grow {nullptr};
         NLGroupAggregateFoldFunction _fold {nullptr};
         NLGroupAggregateEmitFunction _emit {nullptr};
+        NLReownFunction _reown {nullptr};
     };
 
     void addKeyColumn(const KeyColumn& key) { _keyColumns.push_back(key); }
@@ -2624,8 +2642,12 @@ public:
 
     NLGroupTable& groupTable() { return _groupTable; }
 
-    // The lists the min/max accumulators hold, copied in as NLSortState::listBuffer's are
-    QueryListBuffer& listBuffer() { return _listBuffer; }
+    // The group keys the key buffers hold, copied in as NLSortState::values' are
+    NLValueStore& keyValues() { return _keyValues; }
+
+    // The extremes the min/max accumulators hold
+    NLValueStore& extremeValues() { return _extremeValues.getActive(); }
+    void compactExtremeValues();
 
     // Scratch reused per update step: the row key being built, the per-row group
     // index map, and the incoming rows that created a new group this step.
@@ -2643,7 +2665,8 @@ private:
     std::vector<Aggregate> _aggregates;
 
     NLGroupTable _groupTable;
-    QueryListBuffer _listBuffer;
+    NLValueStore _keyValues;
+    NLCompactingValueStore _extremeValues;
 
     std::string _key;
     std::vector<size_t> _groupIndices;
@@ -2779,6 +2802,11 @@ private:
     ProcedureData* _data {nullptr};
     ProcedureState _procedureState;
     std::vector<size_t> _yieldIndices;
+
+    // The query's procedure context, with the lists and strings a step builds kept in
+    // buffers of this call's own, emptied at the next step
+    ProcedureContext _context;
+    NLStepBuffers _stepBuffers;
     std::vector<Column*> _resultColumns;
     bool _prepared {false};
 
@@ -2854,7 +2882,8 @@ using NLCollectFoldFunction = void (*)(Column* values,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
                                        std::vector<std::vector<size_t>>& groupPositions,
-                                       NLGroupDistinctTally& distinct);
+                                       NLGroupDistinctTally& distinct,
+                                       NLValueStore& store);
 
 // Emit a chunk of unwound values (the nl.unwind_collect drain): for each flat-buffer position
 // this chunk covers, write the present value into the nullable value output. One per
@@ -2944,6 +2973,16 @@ public:
     // collected column shares it, since each run is contiguous per insert.
     ListBuffer<>& listBuffer() { return _listBuffer; }
 
+    // The group keys and collected values the buffers hold, copied in as
+    // NLSortState::values' are
+    NLValueStore& keyValues() { return _keyValues; }
+    NLValueStore& collectedValues() { return _collectedValues; }
+
+    // The extremes the side min/max accumulators hold, compacted as
+    // NLGroupAggregateState's are
+    NLValueStore& extremeValues() { return _extremeValues.getActive(); }
+    void compactExtremeValues();
+
     // Scratch reused per update step: the row key being built, the per-row group index
     // map, and the incoming rows that created a new group this step.
     std::string& keyScratch() { return _key; }
@@ -2962,6 +3001,9 @@ private:
     std::vector<ValueColumn> _valueColumns;
 
     ListBuffer<> _listBuffer;
+    NLValueStore _keyValues;
+    NLValueStore _collectedValues;
+    NLCompactingValueStore _extremeValues;
 
     std::vector<NLGroupAggregateState::Aggregate> _aggregates;
 
@@ -3809,16 +3851,16 @@ private:
 };
 
 // Binary function to execute
-using NLBinaryFn = void (*)(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem);
+using NLBinaryFn = void (*)(Column* result, const Column* lhs, const Column* rhs, NLStepBuffers* stepBuffers);
 
 class NLBinaryData : public NLFunctionData {
 public:
-    NLBinaryData(const Column* lhs, const Column* rhs, Column* result, NLBinaryFn fn, LocalMemory* mem)
+    NLBinaryData(const Column* lhs, const Column* rhs, Column* result, NLBinaryFn fn, NLStepBuffers* stepBuffers)
         : _lhs(lhs),
         _rhs(rhs),
         _result(result),
         _fn(fn),
-        _mem(mem)
+        _stepBuffers(stepBuffers)
     {
     }
 
@@ -3826,14 +3868,14 @@ public:
     const Column* getRhs() const { return _rhs; }
     Column* getResult() const { return _result; }
     NLBinaryFn getFn() const { return _fn; }
-    LocalMemory* getMemory() const { return _mem; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
     const Column* _lhs {nullptr};
     const Column* _rhs {nullptr};
     Column* _result {nullptr};
     NLBinaryFn _fn {nullptr};
-    LocalMemory* _mem {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // Unary function to execute
@@ -3932,7 +3974,7 @@ private:
 // characters copies them into, as the concatenation kernel copies its result.
 using NLListItemReadFunction = ListBuffer<>::ListItemVariant (*)(const Column* input,
                                                                  size_t row,
-                                                                 LocalMemory* memory);
+                                                                 NLStepBuffers* stepBuffers);
 
 // Row-wise list build (nl.make_list): row r of the result is the list of row r of every
 // element column, written into the query's list buffer as one contiguous run. Every
@@ -3945,14 +3987,14 @@ public:
         NLListItemReadFunction _read {nullptr};
     };
 
-    NLMakeListData(Column* result, LocalMemory* memory)
+    NLMakeListData(Column* result, NLStepBuffers* stepBuffers)
         : _result(result),
-        _memory(memory)
+        _stepBuffers(stepBuffers)
     {
     }
 
     Column* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const std::vector<Element>& elements() const { return _elements; }
 
@@ -3962,7 +4004,7 @@ public:
 
 private:
     Column* _result {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     std::vector<Element> _elements;
 };
 
@@ -4014,7 +4056,7 @@ private:
 // for it. The map sibling of NLListItemReadFunction.
 using NLMapValueReadFunction = MapBuffer<>::MapItemVariant (*)(const Column* input,
                                                               size_t row,
-                                                              LocalMemory* memory);
+                                                              NLStepBuffers* stepBuffers);
 
 // Row-wise map build (nl.make_map): row r of the result maps each key to row r of its
 // value column, written into the query's map buffer as one contiguous run.
@@ -4026,11 +4068,11 @@ public:
         NLMapValueReadFunction _read {nullptr};
     };
 
-    NLMakeMapData(Column* result, LocalMemory* memory);
+    NLMakeMapData(Column* result, NLStepBuffers* stepBuffers);
     ~NLMakeMapData() override;
 
     Column* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const std::vector<Entry>& entries() const { return _entries; }
 
@@ -4038,7 +4080,7 @@ public:
 
 private:
     Column* _result {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     std::vector<Entry> _entries;
 };
 
@@ -4095,14 +4137,14 @@ public:
                         const Column* key,
                         NLStringReadFunction keyRead,
                         MapEntryView absent,
-                        LocalMemory* memory)
+                        NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
         _mapRead(mapRead),
         _key(key),
         _keyRead(keyRead),
         _absent(absent),
-        _memory(memory)
+        _stepBuffers(stepBuffers)
     {
     }
 
@@ -4111,7 +4153,7 @@ public:
     NLMapReadFunction getMapRead() const { return _mapRead; }
     const Column* getKey() const { return _key; }
     NLStringReadFunction getKeyRead() const { return _keyRead; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     // The entry a row holding no key reads: no key to name it by, so one keyless null entry
     // serves every such row. A row whose key the map does not hold is named by that key, so
@@ -4125,7 +4167,7 @@ private:
     const Column* _key {nullptr};
     NLStringReadFunction _keyRead {nullptr};
     MapEntryView _absent;
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 
@@ -4150,12 +4192,12 @@ public:
     };
 
     NLRangeData(Column* result,
-                LocalMemory* memory,
+                NLStepBuffers* stepBuffers,
                 const Bound& start,
                 const Bound& end,
                 const Bound& step)
         : _result(result),
-        _memory(memory),
+        _stepBuffers(stepBuffers),
         _start(start),
         _end(end),
         _step(step)
@@ -4163,7 +4205,7 @@ public:
     }
 
     Column* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const Bound& getStart() const { return _start; }
     const Bound& getEnd() const { return _end; }
@@ -4171,7 +4213,7 @@ public:
 
 private:
     Column* _result {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     Bound _start;
     Bound _end;
     Bound _step;
@@ -4300,28 +4342,33 @@ public:
                             Column* elementOutput,
                             ColumnVector<uint64_t>* rowTags,
                             Column* result,
-                            LocalMemory* memory)
+                            NLStepBuffers* stepBuffers)
         : NLElementBodyData(source, elementCount, elementEmit, cellAbsent, elementOutput, rowTags),
         _result(result),
-        _memory(memory)
+        _stepBuffers(stepBuffers)
     {
     }
 
     Column* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     NLListItemReadFunction getValueRead() const { return _valueRead; }
     void setValueRead(NLListItemReadFunction valueRead) { _valueRead = valueRead; }
 
     std::vector<ListBuffer<>::ListItemVariant>& stagedElements() { return _stagedElements; }
+
+    // The copies of the staged elements, which the body's later runs would otherwise empty
+    // the buffers of
+    NLValueStore& stagedValues() { return _stagedValues; }
     std::vector<size_t>& stagedCounts() { return _stagedCounts; }
 
 private:
     Column* _result {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     NLListItemReadFunction _valueRead {nullptr};
 
     std::vector<ListBuffer<>::ListItemVariant> _stagedElements;
+    NLValueStore _stagedValues;
     std::vector<size_t> _stagedCounts;
 };
 
@@ -4402,7 +4449,7 @@ public:
                  Column* elementOutput,
                  const Column* initialValue,
                  Column* result,
-                 LocalMemory* memory)
+                 NLStepBuffers* stepBuffers)
         : _source(source),
         _elementCount(elementCount),
         _elementEmit(elementEmit),
@@ -4410,7 +4457,7 @@ public:
         _elementOutput(elementOutput),
         _initialValue(initialValue),
         _result(result),
-        _memory(memory)
+        _stepBuffers(stepBuffers)
     {
     }
 
@@ -4421,7 +4468,7 @@ public:
     Column* getElementOutput() const { return _elementOutput; }
     const Column* getInitialValue() const { return _initialValue; }
     Column* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const CarriedColumns& carriedColumns() const { return _carriedColumns; }
 
@@ -4452,6 +4499,18 @@ public:
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
+    // The accumulators, copied in as they are written: the body computing the next one
+    // empties the buffers the last one was built in. A tagged cell is built owned, so only
+    // a typed accumulator of views has its written rows copied.
+    NLCompactingValueStore& accumulatorValues() { return _accumulatorValues; }
+    NLReownFunction getReown() const { return _reown; }
+    NLReownRowsFunction getReownRows() const { return _reownRows; }
+
+    void setReowns(NLReownFunction reown, NLReownRowsFunction reownRows) {
+        _reown = reown;
+        _reownRows = reownRows;
+    }
+
 private:
     const Column* _source {nullptr};
     NLUnwindElementCountFunction _elementCount {nullptr};
@@ -4460,11 +4519,14 @@ private:
     Column* _elementOutput {nullptr};
     const Column* _initialValue {nullptr};
     Column* _result {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     const Column* _value {nullptr};
     NLCaseResetFn _reset {nullptr};
     NLReduceWrite _initialWrite;
     NLReduceWrite _valueWrite;
+    NLCompactingValueStore _accumulatorValues;
+    NLReownFunction _reown {nullptr};
+    NLReownRowsFunction _reownRows {nullptr};
 
     CarriedColumns _carriedColumns;
     NLStmtContainer _stmts;
@@ -4478,31 +4540,31 @@ private:
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context,
                                        Column* result,
                                        const Column* input,
-                                       LocalMemory* mem);
+                                       NLStepBuffers* stepBuffers);
 
 class NLUnaryFunctionData : public NLFunctionData {
 public:
     NLUnaryFunctionData(const Column* input,
                         Column* result,
                         NLUnaryFunctionKernel kernel,
-                        LocalMemory* mem)
+                        NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
         _kernel(kernel),
-        _mem(mem)
+        _stepBuffers(stepBuffers)
     {
     }
 
     const Column* getInput() const { return _input; }
     Column* getResult() const { return _result; }
     NLUnaryFunctionKernel getKernel() const { return _kernel; }
-    LocalMemory* getMemory() const { return _mem; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
     NLUnaryFunctionKernel _kernel {nullptr};
-    LocalMemory* _mem {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // Type of handle that fills a column with a run of null rows - for an ID column an
@@ -4567,9 +4629,13 @@ public:
     // the drain pays for the sweep once however many chunks it emits.
     const ColumnVector<size_t>& missedRows();
 
+    // The values the buffers hold, copied in as NLSortState::values' are
+    NLValueStore& values() { return _values; }
+
 private:
     std::vector<const Column*> _inputColumns;
     std::vector<Column*> _buffers;
+    NLValueStore _values;
 
     // One flag per row of this step's input chunks, cleared by the reset and set by the
     // collect through the row tag.
@@ -4603,12 +4669,6 @@ private:
 // the other, as nl.sort_collect's do.
 class NLOptionalCollectData : public NLFunctionData {
 public:
-    struct Append {
-        const Column* _input {nullptr};
-        Column* _buffer {nullptr};
-        NLAppendFunction _append {nullptr};
-    };
-
     NLOptionalCollectData(NLOptionalState* state)
         : _state(state)
     {
@@ -4621,14 +4681,14 @@ public:
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
     void setTag(const ColumnVector<uint64_t>* tag) { _tag = tag; }
 
-    const std::vector<Append>& appends() const { return _appends; }
+    const std::vector<NLSortCollectData::Append>& appends() const { return _appends; }
 
-    void addAppend(const Append& append) { _appends.push_back(append); }
+    void addAppend(const NLSortCollectData::Append& append) { _appends.push_back(append); }
 
 private:
     NLOptionalState* _state {nullptr};
     const ColumnVector<uint64_t>* _tag {nullptr};
-    std::vector<Append> _appends;
+    std::vector<NLSortCollectData::Append> _appends;
 };
 
 // Runtime state of one pattern comprehension over one step of the rows it is read on: how
@@ -4655,6 +4715,10 @@ private:
     // to: they are staged in the order the pattern walked them, which is not the rows'.
     std::vector<ListBuffer<>::ListItemVariant> _values;
     std::vector<size_t> _rows;
+
+    // The copies of the staged values, which the pattern's later steps would otherwise
+    // empty the buffers of
+    NLValueStore _stagedValues;
 
     // The values under the row they belong to, where each row's run of them starts and how
     // far that run has been filled: held here so a step pays for the buffers once rather
@@ -4697,12 +4761,12 @@ public:
                                       const ColumnVector<uint64_t>* tag,
                                       const Column* value,
                                       NLListItemReadFunction valueRead,
-                                      LocalMemory* memory)
+                                      NLStepBuffers* stepBuffers)
         : _state(state),
         _tag(tag),
         _value(value),
         _valueRead(valueRead),
-        _memory(memory)
+        _stepBuffers(stepBuffers)
     {
     }
 
@@ -4710,14 +4774,14 @@ public:
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
     const Column* getValue() const { return _value; }
     NLListItemReadFunction getValueRead() const { return _valueRead; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
     NLPatternComprehensionState* _state {nullptr};
     const ColumnVector<uint64_t>* _tag {nullptr};
     const Column* _value {nullptr};
     NLListItemReadFunction _valueRead {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // nl.pattern_comprehension data: the build phase of a pattern comprehension, writing one
@@ -4726,21 +4790,21 @@ class NLPatternComprehensionData : public NLFunctionData {
 public:
     NLPatternComprehensionData(NLPatternComprehensionState* state,
                                ColumnVector<ListView>* result,
-                               LocalMemory* memory)
+                               NLStepBuffers* stepBuffers)
         : _state(state),
         _result(result),
-        _memory(memory)
+        _stepBuffers(stepBuffers)
     {
     }
 
     NLPatternComprehensionState* getState() const { return _state; }
     ColumnVector<ListView>* getResult() const { return _result; }
-    LocalMemory* getMemory() const { return _memory; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
     NLPatternComprehensionState* _state {nullptr};
     ColumnVector<ListView>* _result {nullptr};
-    LocalMemory* _memory {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // nl.for over nl.optional_drain data: the emit phase of an OPTIONAL MATCH. Holds the
@@ -4938,12 +5002,12 @@ public:
     // Clear every buffer; runs each time nl.union_buffer's block runs
     void reset();
 
-    // The lists the buffers hold, copied in as NLSortState::listBuffer's are
-    QueryListBuffer& listBuffer() { return _listBuffer; }
+    // The values the buffers hold, copied in as NLSortState::values' are
+    NLValueStore& values() { return _values; }
 
 private:
     std::vector<Column*> _buffers;
-    QueryListBuffer _listBuffer;
+    NLValueStore _values;
 };
 
 // nl.union_buffer data: resets an accumulator to empty each time its block runs
@@ -5029,6 +5093,12 @@ public:
         DataType* dataPtr = data.get();
         _functionData.push_back(std::move(data));
         return dataPtr;
+    }
+
+    // Allocate the buffers one op builds a run's values in, owned by the program
+    NLStepBuffers* allocStepBuffers() {
+        _stepBuffers.push_back(std::make_unique<NLStepBuffers>());
+        return _stepBuffers.back().get();
     }
 
     // Allocate one LIMIT's runtime counter, owned by the program; the
@@ -5232,6 +5302,7 @@ private:
     // that emits nothing.
     NLOutputData* _outputData {nullptr};
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
+    std::vector<std::unique_ptr<NLStepBuffers>> _stepBuffers;
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;
     std::vector<std::unique_ptr<NLSortState>> _sortStates;

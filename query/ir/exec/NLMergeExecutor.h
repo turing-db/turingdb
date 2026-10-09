@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "NLValueStore.h"
 #include "versioning/CommitWriteBuffer.h"
 
 #include "NLMergeWorkingSet.h"
@@ -31,6 +32,9 @@ private:
     NLMergeWorkingSet* _work {nullptr};
     CommitWriteBuffer* _writeBuffer {nullptr};
     const GraphView* _view {nullptr};
+
+    // The written values a key is read from, emptied before the next key is read
+    NLValueStore _readValues;
 
     // A ref this step holds names a pending entity by its write-buffer offset, while the
     // columns it reads and fills name one by the ID it will commit as: one past the last

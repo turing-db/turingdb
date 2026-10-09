@@ -62,14 +62,15 @@ MapEntryView* MapEntryViewBuffer<N>::reserveAndCommit(size_t numViews) {
 
 template <size_t N>
 void MapEntryViewBuffer<N>::clear() {
-    auto* cur = _first;
+    auto* cur = _first->_next;
     while (cur) {
         auto* next = cur->_next;
         delete cur;
         cur = next;
     }
 
-    _first = new Chunk();
+    _first->_next = nullptr;
+    _first->_size = 0;
     _last = _first;
 }
 

@@ -4,6 +4,8 @@ set(exec_sources
     NLOutputSink.cpp
     NLExecutionContext.cpp
     NLWriteProperties.cpp
+    NLStepBuffers.cpp
+    NLValueStore.cpp
     NLWrittenValues.cpp
     NLExecutor.cpp
     NLMergeExecutor.cpp

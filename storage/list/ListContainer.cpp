@@ -78,6 +78,20 @@ ListView ListContainer::copy(ListView list) {
     std::vector<ListItemVariant> elements;
     elements.reserve(list.size());
 
+    for (const ListElementView element : list) {
+        elements.push_back(ownedItem(element));
+    }
+
+    return insert(elements);
+}
+
+ListElementView ListContainer::copy(ListElementView element) {
+    const ListItemVariant item = ownedItem(element);
+
+    return insert(std::span<const ListItemVariant> {&item, 1}).front();
+}
+
+ListContainer::ListItemVariant ListContainer::ownedItem(ListElementView element) {
     const auto asVariant = [this]<typename T>(const ListElementView view) -> ListItemVariant {
         if constexpr (std::same_as<T, ListView>) {
             return copy(view.getAs<ListView>());
@@ -88,12 +102,9 @@ ListView ListContainer::copy(ListView list) {
         }
     };
 
-    for (const ListElementView element : list) {
-        const ListTagDispatcher dispatcher {element.getTag()};
-        elements.push_back(dispatcher.execute(asVariant, element));
-    }
+    const ListTagDispatcher dispatcher {element.getTag()};
 
-    return insert(elements);
+    return dispatcher.execute(asVariant, element);
 }
 
 ListContainer::ListItemVariant ListContainer::own(const ListItemVariant& element) {

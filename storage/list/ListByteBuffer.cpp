@@ -98,16 +98,15 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
 
 template <size_t N>
 void ListByteBuffer<N>::clear() {
-    // Delete all chunks
-    auto* cur = _first;
+    auto* cur = _first->_next;
     while (cur) {
         auto* next = cur->_next;
         delete cur;
         cur = next;
     }
 
-    // Create new first chunk
-    _first = new ByteChunk();
+    _first->_next = nullptr;
+    _first->_size = 0;
     _last = _first;
 }
 

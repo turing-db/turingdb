@@ -11,6 +11,7 @@
 
 #include "LocalMemory.h"
 #include "NLOutputSink.h"
+#include "NLValueStore.h"
 #include "Path.h"
 #include "QueryState.h"
 #include "QueryStatus.h"
@@ -40,8 +41,21 @@ public:
         allocChunkColumns(names, chunks, _bufferedDf, _dfMan, _localMem, &_nameStorage);
     }
 
+    // The views a chunk carries point into buffers the query empties as it runs, and the
+    // result is read once the query is gone, so the rows appended are copied in
     void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
+        const auto& columns = _bufferedDf->cols();
+
+        _firstRows.clear();
+        for (const auto* column : columns) {
+            _firstRows.push_back(column->getColumn()->size());
+        }
+
         appendChunkColumns(chunks, offset, rowCount, _bufferedDf);
+
+        for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+            _values.ownColumnRows(columns[columnIndex]->getColumn(), _firstRows[columnIndex]);
+        }
     }
 
 private:
@@ -50,6 +64,8 @@ private:
     db::LocalMemory* _localMem {nullptr};
     // Owning storage for column names - see allocColumns docs.
     std::vector<std::string> _nameStorage;
+    db::NLValueStore _values;
+    std::vector<size_t> _firstRows;
 };
 
 }
