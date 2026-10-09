@@ -5869,25 +5869,6 @@ Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewri
     return widened->getResults().back();
 }
 
-Value readStandingBefore(Value column, StringAttr property, bool nodeProperty, Operation* useSite) {
-    for (Operation* const user : column.getUsers()) {
-        StringAttr userProperty;
-        bool userReadsNodes = false;
-        if (user == useSite || !matchPropertyRead(user, userProperty, userReadsNodes)) {
-            continue;
-        }
-
-        const bool readsTheSameProperty = userReadsNodes == nodeProperty && userProperty == property;
-        const bool standsBeforeTheUse = user->getBlock() == useSite->getBlock() && user->isBeforeInBlock(useSite);
-
-        if (readsTheSameProperty && standsBeforeTheUse) {
-            return user->getResult(0);
-        }
-    }
-
-    return {};
-}
-
 Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
     CarrySetLayout layout;
     const bool carries = matchCarrySetLayout(op, layout);
@@ -5903,31 +5884,48 @@ Value carryThrough(Operation* op, Value column, mlir::RewriterBase& rewriter) {
     return appendCarriedColumn(op, column, rewriter);
 }
 
-// The property columns reuse_property_reads carried down to each row column, so a later read
-// of those rows stops where an earlier one left the property rather than climbing back to
-// the read it came from
-class CarriedPropertyColumns {
+// The property columns reuse_property_reads can hand a later read of the same rows: the
+// reads it kept, each serving the ops after it in its block, and the columns it carried down
+// to a row column, which serve every op reading those rows. Keyed by the row column, so a
+// read finds an earlier one without visiting every other user of its rows
+class KnownPropertyColumns {
 public:
-    Value find(Value rows, StringAttr property, bool nodeProperty) const {
+    Value find(Value rows, StringAttr property, bool nodeProperty, Operation* useSite) const {
         const auto rowsIt = _columns.find(rows);
         if (rowsIt == _columns.end()) {
             return {};
         }
 
-        for (const CarriedProperty& carried : rowsIt->second) {
-            if (carried._property == property && carried._nodeProperty == nodeProperty) {
-                return carried._column;
+        Value carriedColumn;
+        for (const KnownProperty& known : rowsIt->second) {
+            if (known._property != property || known._nodeProperty != nodeProperty) {
+                continue;
+            }
+
+            if (!known._read) {
+                carriedColumn = carriedColumn ? carriedColumn : known._column;
+                continue;
+            }
+
+            const bool standsBeforeTheUse = known._read->getBlock() == useSite->getBlock()
+                                            && known._read->isBeforeInBlock(useSite);
+            if (standsBeforeTheUse) {
+                return known._column;
             }
         }
 
-        return {};
+        return carriedColumn;
     }
 
-    void add(Value rows, StringAttr property, bool nodeProperty, Value column) {
-        _columns[rows].push_back(CarriedProperty {property, nodeProperty, column});
+    void addRead(Operation* read, StringAttr property, bool nodeProperty) {
+        _columns[read->getOperand(0)].push_back(KnownProperty {property, nodeProperty, read->getResult(0), read});
     }
 
-    // Moves what was carried to @param replacedResults, the results of an op since widened
+    void addCarried(Value rows, StringAttr property, bool nodeProperty, Value column) {
+        _columns[rows].push_back(KnownProperty {property, nodeProperty, column, nullptr});
+    }
+
+    // Moves what is known of @param replacedResults, the results of an op since widened
     // into @param widened, onto the results of @param widened at the same positions
     void rebind(llvm::ArrayRef<Value> replacedResults, Operation* widened) {
         llvm::DenseMap<Value, size_t> replacedIndices;
@@ -5941,28 +5939,29 @@ public:
                 continue;
             }
 
-            llvm::SmallVector<CarriedProperty, 1> carried = rowsIt->second;
+            llvm::SmallVector<KnownProperty, 1> known = rowsIt->second;
             _columns.erase(rowsIt);
 
-            for (CarriedProperty& property : carried) {
+            for (KnownProperty& property : known) {
                 const auto columnIt = replacedIndices.find(property._column);
                 if (columnIt != replacedIndices.end()) {
                     property._column = widened->getResult(columnIt->second);
                 }
             }
 
-            _columns[widened->getResult(index)] = carried;
+            _columns[widened->getResult(index)] = known;
         }
     }
 
 private:
-    struct CarriedProperty {
+    struct KnownProperty {
         StringAttr _property;
         bool _nodeProperty {false};
         Value _column;
+        Operation* _read {nullptr};
     };
 
-    llvm::DenseMap<Value, llvm::SmallVector<CarriedProperty, 1>> _columns;
+    llvm::DenseMap<Value, llvm::SmallVector<KnownProperty, 1>> _columns;
 };
 
 // The column holding `property` for the rows of `column`, taken from a read already
@@ -5972,16 +5971,13 @@ Value propertyColumnOf(Value column,
                        StringAttr property,
                        bool nodeProperty,
                        Operation* useSite,
-                       CarriedPropertyColumns& carriedColumns,
+                       KnownPropertyColumns& knownColumns,
                        mlir::RewriterBase& rewriter) {
     llvm::SmallVector<Operation*> carriers;
     llvm::SmallVector<size_t> carriedRowsResults;
     Value rows = column;
 
-    Value propertyColumn = readStandingBefore(rows, property, nodeProperty, useSite);
-    if (!propertyColumn) {
-        propertyColumn = carriedColumns.find(rows, property, nodeProperty);
-    }
+    Value propertyColumn = knownColumns.find(rows, property, nodeProperty, useSite);
 
     while (!propertyColumn) {
         Operation* const def = rows.getDefiningOp();
@@ -6003,10 +5999,7 @@ Value propertyColumnOf(Value column,
         carriedRowsResults.push_back(resultIndex);
         rows = def->getOperand(sourceOperandIndex);
 
-        propertyColumn = readStandingBefore(rows, property, nodeProperty, def);
-        if (!propertyColumn) {
-            propertyColumn = carriedColumns.find(rows, property, nodeProperty);
-        }
+        propertyColumn = knownColumns.find(rows, property, nodeProperty, def);
     }
 
     for (size_t carrierIndex = carriers.size(); carrierIndex > 0; carrierIndex--) {
@@ -6017,10 +6010,10 @@ Value propertyColumnOf(Value column,
 
         Operation* const carrying = propertyColumn.getDefiningOp();
         if (carrying != carrier) {
-            carriedColumns.rebind(carrierResults, carrying);
+            knownColumns.rebind(carrierResults, carrying);
         }
 
-        carriedColumns.add(carrying->getResult(carriedRowsResults[carrierIndex - 1]), property, nodeProperty, propertyColumn);
+        knownColumns.addCarried(carrying->getResult(carriedRowsResults[carrierIndex - 1]), property, nodeProperty, propertyColumn);
     }
 
     return propertyColumn;
@@ -6049,7 +6042,7 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         });
 
         mlir::IRRewriter rewriter(&getContext());
-        CarriedPropertyColumns carriedColumns;
+        KnownPropertyColumns knownColumns;
         for (Operation* const read : reads) {
             StringAttr property;
             bool nodeProperty = false;
@@ -6063,8 +6056,9 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
                 continue;
             }
 
-            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, carriedColumns, rewriter);
+            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, knownColumns, rewriter);
             if (!reused) {
+                knownColumns.addRead(read, property, nodeProperty);
                 continue;
             }
 
