@@ -71,6 +71,20 @@ MapView MapContainer::copy(MapView map) {
     std::vector<MapKeyValuePair> entries;
     entries.reserve(map.size());
 
+    for (const MapEntryView entry : map) {
+        entries.push_back(ownedEntry(entry));
+    }
+
+    return insert(entries);
+}
+
+MapEntryView MapContainer::copy(MapEntryView entry) {
+    const MapKeyValuePair owned = ownedEntry(entry);
+
+    return insert(std::span<const MapKeyValuePair> {&owned, 1}).front();
+}
+
+MapContainer::MapKeyValuePair MapContainer::ownedEntry(MapEntryView entry) {
     const auto asVariant = [this]<typename T>(const MapEntryView view) -> MapBuffer<>::MapItemVariant {
         if constexpr (std::same_as<T, MapView>) {
             return copy(view.getValueAs<MapView>());
@@ -81,11 +95,7 @@ MapView MapContainer::copy(MapView map) {
         }
     };
 
-    for (const MapEntryView entry : map) {
-        entries.push_back({entry.getKey(), dispatchMapEntry(asVariant, entry)});
-    }
-
-    return insert(entries);
+    return {entry.getKey(), dispatchMapEntry(asVariant, entry)};
 }
 
 MapContainer::MapKeyValuePair MapContainer::own(const MapKeyValuePair& entry) {

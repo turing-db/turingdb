@@ -64,6 +64,9 @@ public:
     /// storing that view as a value of its own
     ListView copy(ListView list);
 
+    /// Copies @param element into this container and returns a view of the copy
+    ListElementView copy(ListElementView element);
+
     /// The store the map elements of this container's lists live in, created on first use
     MapContainer& getMaps();
 
@@ -86,6 +89,7 @@ private:
     ViewVector _views;
 
     ListItemVariant own(const ListItemVariant& element);
+    ListItemVariant ownedItem(ListElementView element);
 };
 
 }

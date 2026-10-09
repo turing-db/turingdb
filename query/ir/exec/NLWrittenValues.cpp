@@ -8,17 +8,6 @@ using namespace db;
 
 namespace {
 
-// A column of strings or embeddings borrows what it holds, and the change rewrites its
-// own values as the query runs, so those are copied where the column can outlive them
-template <SupportedType T>
-const NLWrittenValues::Value& retainIfBorrowed(NLWrittenValues& written, const NLWrittenValues::Value& value) {
-    if constexpr (std::is_same_v<T, types::String> || std::is_same_v<T, types::Embedding>) {
-        return written.retain(value);
-    } else {
-        return value;
-    }
-}
-
 void addUpdatedProperty(std::vector<PropertyTypeID>& properties, PropertyTypeID property) {
     if (std::ranges::find(properties, property) == properties.end()) {
         properties.push_back(property);
@@ -119,7 +108,7 @@ void NLWrittenValues::indexUpdatedProperties() {
 }
 
 template <SupportedType T>
-std::optional<typename T::Primitive> NLWrittenValues::read(const Value& value) {
+std::optional<typename T::Primitive> NLWrittenValues::read(const Value& value, NLValueStore& values) {
     using Primitive = typename T::Primitive;
 
     const auto convert = [&](const auto& held) -> std::optional<Primitive> {
@@ -133,31 +122,19 @@ std::optional<typename T::Primitive> NLWrittenValues::read(const Value& value) {
                 return std::nullopt;
             }
 
-            return decode(*held);
+            return values.decode(*held);
         } else if constexpr (std::is_convertible_v<const Inner&, Primitive>) {
             if (!held) {
                 return std::nullopt;
             }
 
-            return Primitive(*held);
+            return values.ownElement(Primitive(*held));
         } else {
             return std::nullopt;
         }
     };
 
-    return std::visit(convert, retainIfBorrowed<T>(*this, value));
-}
-
-const NLWrittenValues::Value& NLWrittenValues::retain(const Value& value) {
-    return _retained.emplace_back(value);
-}
-
-ListView NLWrittenValues::decode(const EncodedList& list) {
-    return list.decodeInto(_decodedLists);
-}
-
-MapView NLWrittenValues::decode(const EncodedMap& map) {
-    return map.decodeInto(_decodedMaps);
+    return std::visit(convert, value);
 }
 
 namespace db {
@@ -168,15 +145,15 @@ template const NLWrittenValues::Value* NLWrittenValues::findUpdate<EdgeID>(EdgeI
 template std::span<const PropertyTypeID> NLWrittenValues::findUpdatedProperties<NodeID>(NodeID entity);
 template std::span<const PropertyTypeID> NLWrittenValues::findUpdatedProperties<EdgeID>(EdgeID entity);
 
-template std::optional<types::Int64::Primitive> NLWrittenValues::read<types::Int64>(const Value& value);
-template std::optional<types::UInt64::Primitive> NLWrittenValues::read<types::UInt64>(const Value& value);
-template std::optional<types::Double::Primitive> NLWrittenValues::read<types::Double>(const Value& value);
-template std::optional<types::String::Primitive> NLWrittenValues::read<types::String>(const Value& value);
-template std::optional<types::Bool::Primitive> NLWrittenValues::read<types::Bool>(const Value& value);
-template std::optional<types::Embedding::Primitive> NLWrittenValues::read<types::Embedding>(const Value& value);
-template std::optional<types::List::Primitive> NLWrittenValues::read<types::List>(const Value& value);
-template std::optional<types::Map::Primitive> NLWrittenValues::read<types::Map>(const Value& value);
-template std::optional<types::DateTime::Primitive> NLWrittenValues::read<types::DateTime>(const Value& value);
-template std::optional<types::Duration::Primitive> NLWrittenValues::read<types::Duration>(const Value& value);
+template std::optional<types::Int64::Primitive> NLWrittenValues::read<types::Int64>(const Value& value, NLValueStore& values);
+template std::optional<types::UInt64::Primitive> NLWrittenValues::read<types::UInt64>(const Value& value, NLValueStore& values);
+template std::optional<types::Double::Primitive> NLWrittenValues::read<types::Double>(const Value& value, NLValueStore& values);
+template std::optional<types::String::Primitive> NLWrittenValues::read<types::String>(const Value& value, NLValueStore& values);
+template std::optional<types::Bool::Primitive> NLWrittenValues::read<types::Bool>(const Value& value, NLValueStore& values);
+template std::optional<types::Embedding::Primitive> NLWrittenValues::read<types::Embedding>(const Value& value, NLValueStore& values);
+template std::optional<types::List::Primitive> NLWrittenValues::read<types::List>(const Value& value, NLValueStore& values);
+template std::optional<types::Map::Primitive> NLWrittenValues::read<types::Map>(const Value& value, NLValueStore& values);
+template std::optional<types::DateTime::Primitive> NLWrittenValues::read<types::DateTime>(const Value& value, NLValueStore& values);
+template std::optional<types::Duration::Primitive> NLWrittenValues::read<types::Duration>(const Value& value, NLValueStore& values);
 
 }
