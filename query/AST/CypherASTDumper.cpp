@@ -866,7 +866,11 @@ void CypherASTDumper::dump(std::ostream& out, const EdgePattern* edge) {
     const auto* types = edge->types();
     if (types) {
         for (const Symbol* type : *types) {
-            out << "        EdgeType _" << type << "\n";
+            out << "        EdgeType " << type->getName() << "\n";
+        }
+
+        for (const Parameter* parameter : types->getParameters()) {
+            out << "        EdgeTypeParameter $" << parameter->getName() << "\n";
         }
     }
 

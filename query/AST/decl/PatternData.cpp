@@ -4,10 +4,6 @@
 
 using namespace db;
 
-bool LabelRef::operator==(const LabelRef& other) const {
-    return _name == other._name && _isParameter == other._isParameter;
-}
-
 // PatternData
 PatternData::PatternData()
 {
@@ -34,12 +30,8 @@ NodePatternData* NodePatternData::create(CypherAST* ast) {
     return data;
 }
 
-void NodePatternData::addLabelConstraint(std::string_view label) {
-    _labelConstraints.emplace_back(label, false);
-}
-
-void NodePatternData::addLabelParameter(std::string_view name) {
-    _labelConstraints.emplace_back(name, true);
+void NodePatternData::addLabelConstraints(const SymbolChain* labels) {
+    collectSchemaNames(labels, _labelConstraints);
 }
 
 // EdgePatternData
@@ -56,6 +48,6 @@ EdgePatternData* EdgePatternData::create(CypherAST* ast) {
     return data;
 }
 
-void EdgePatternData::addEdgeTypeConstraint(std::string_view edgeType) {
-    _edgeTypeConstraints.push_back(edgeType);
+void EdgePatternData::addEdgeTypeConstraints(const SymbolChain* edgeTypes) {
+    collectSchemaNames(edgeTypes, _edgeTypeConstraints);
 }

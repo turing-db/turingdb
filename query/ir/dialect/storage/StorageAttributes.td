@@ -14,6 +14,7 @@ def ParameterAttr : AttrDef<Storage, "Parameter", [TypedAttrInterface]> {
     let parameters = (ins StringRefParameter<"name">:$name, AttributeSelfTypeParameter<"">:$type);
 
     let assemblyFormat = "`<` $name `>`";
+    let genVerifyDecl = 1;
 }
 
 #endif // STORAGE_ATTRIBUTES

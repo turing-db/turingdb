@@ -29,13 +29,7 @@ public:
     using Edges = std::vector<DependencyEdge*>;
 
     using LabelNames = std::vector<LabelRef>;
-
-    // A distinct type from LabelNames, not an alias for the same vector: Constraint tells
-    // the two apart by type, and a variant of two identical alternatives cannot be
-    // assigned or read by type at all.
-    struct EdgeTypeNames {
-        std::vector<std::string_view> _names;
-    };
+    using EdgeTypeNames = std::vector<EdgeTypeRef>;
 
     using Constraint = std::variant<LabelNames, EdgeTypeNames>;
 
@@ -70,7 +64,7 @@ public:
     void addOutgoing(DependencyEdge* newEdge);
 
     void addLabelConstraints(std::span<const LabelRef> labels);
-    void setEdgeTypeConstraint(std::span<const std::string_view> types);
+    void setEdgeTypeConstraint(std::span<const EdgeTypeRef> types);
 
 private:
     friend VariableDependencyGraph;

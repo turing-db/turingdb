@@ -1,55 +1,19 @@
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser/Parser.h"
-
-#include "Graph.h"
-#include "JobSystem.h"
-#include "CompilerException.h"
-#include "DBDialect.h"
-#include "DBDialectInterpreter.h"
-#include "LocalMemory.h"
-#include "NLDialect.h"
 #include "ParameterMap.h"
-#include "ParameterValue.h"
-#include "StorageDialect.h"
-#include "iterators/ChunkConfig.h"
-#include "reader/GraphReader.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
 
-#include "SimpleGraph.h"
+#include "ParameterBindingTest.h"
+#include "ParameterTestHelpers.h"
 #include "StringRowSink.h"
-#include "TuringTest.h"
 
 using namespace db;
 using namespace turing::test;
 
 namespace {
-
-void setString(ParameterMap& parameters, std::string_view name, std::string_view value) {
-    ParameterValue parameter;
-    parameter.setString(value);
-    parameters.set(name, parameter);
-}
-
-void setStrings(ParameterMap& parameters, std::string_view name, std::span<const std::string_view> values) {
-    ParameterValue parameter;
-    ParameterValue::List& list = parameter.setList();
-    for (const std::string_view value : values) {
-        list.emplace_back().setString(value);
-    }
-
-    parameters.set(name, parameter);
-}
 
 constexpr const char* scanByParameterLabel = R"mlir(
 func.func @main() {
@@ -80,68 +44,7 @@ func.func @main() {
 
 }
 
-// Runs a db program parsed from text on the SimpleGraph fixture, with the parameter map
-// the translator binds the program's parameters from.
-class LabelParameterBindingTest : public TuringTest {
-protected:
-    void initialize() override {
-        _jobSystem = std::make_unique<JobSystem>();
-        _jobSystem->init();
-
-        _graph = Graph::create();
-        SimpleGraph::createSimpleGraph(_graph.get());
-    }
-
-    void terminate() override {
-        _jobSystem->terminate();
-    }
-
-    void execute(const char* programText, const ParameterMap* parameters, StringRowSink& sink) {
-        mlir::MLIRContext context;
-        context.getOrLoadDialect<mlir::func::FuncDialect>();
-        context.getOrLoadDialect<mlir::storage::Storage>();
-        context.getOrLoadDialect<mlir::db::DB>();
-        context.getOrLoadDialect<mlir::nl::NL>();
-
-        const mlir::ParserConfig parserConfig(&context);
-        const mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
-        ASSERT_TRUE(module);
-
-        const FrozenCommitTx transaction = _graph->openTransaction();
-        const GraphReader reader = transaction.readGraph();
-        const GraphView& view = reader.getView();
-
-        LocalMemory memory;
-        DBDialectInterpreter interpreter(*module, &view, &sink, &memory, ChunkConfig::CHUNK_SIZE, nullptr, nullptr, nullptr, nullptr, parameters);
-        interpreter.run();
-    }
-
-    void expectRows(const char* programText, const ParameterMap& parameters, const std::vector<StringRowSink::Row>& expected) {
-        StringRowSink sink;
-        execute(programText, &parameters, sink);
-
-        std::vector<StringRowSink::Row> rows;
-        sink.sortedRows(rows);
-        EXPECT_EQ(rows, expected);
-    }
-
-    void expectError(const char* programText, const ParameterMap* parameters, std::string_view reason) {
-        StringRowSink sink;
-        std::string error;
-
-        try {
-            execute(programText, parameters, sink);
-        } catch (const CompilerException& e) {
-            error = e.what();
-        }
-
-        ASSERT_FALSE(error.empty()) << "accepted: " << programText;
-        EXPECT_NE(error.find(reason), std::string::npos) << error;
-    }
-
-private:
-    std::unique_ptr<JobSystem> _jobSystem;
-    std::unique_ptr<Graph> _graph;
+class LabelParameterBindingTest : public ParameterBindingTest {
 };
 
 TEST_F(LabelParameterBindingTest, aStringBindsOneLabel) {

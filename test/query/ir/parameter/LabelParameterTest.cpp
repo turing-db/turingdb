@@ -6,33 +6,13 @@
 #include <vector>
 
 #include "ParameterMap.h"
-#include "ParameterValue.h"
 
 #include "CallV3Test.h"
+#include "ParameterTestHelpers.h"
 #include "StringRowSink.h"
 
 using namespace db;
 using namespace turing::test;
-
-namespace {
-
-void setString(ParameterMap& parameters, std::string_view name, std::string_view value) {
-    ParameterValue parameter;
-    parameter.setString(value);
-    parameters.set(name, parameter);
-}
-
-void setStrings(ParameterMap& parameters, std::string_view name, std::span<const std::string_view> values) {
-    ParameterValue parameter;
-    ParameterValue::List& list = parameter.setList();
-    for (const std::string_view value : values) {
-        list.emplace_back().setString(value);
-    }
-
-    parameters.set(name, parameter);
-}
-
-}
 
 class LabelParameterTest : public CallV3Test {
 };
@@ -195,6 +175,39 @@ TEST_F(LabelParameterTest, aLabelTestMissesANodeWrittenWithAnotherParameter) {
     runWrite("CREATE (n:$label {name: 'Ceres'}) WITH n WHERE n:Interest RETURN n.name", parameters, sink);
 
     EXPECT_TRUE(sink.getRows().empty());
+}
+
+TEST_F(LabelParameterTest, labelsOfANodeWrittenWithAParameter) {
+    ParameterMap parameters;
+    setString(parameters, "label", "Planet");
+
+    StringRowSink sink;
+    runWrite("CREATE (n:$label) RETURN labels(n)", parameters, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Planet"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(LabelParameterTest, labelsOfANodeWrittenWithALiteralAndAParameter) {
+    ParameterMap parameters;
+    setString(parameters, "label", "Planet");
+
+    StringRowSink sink;
+    runWrite("CREATE (n:Body:$label) RETURN labels(n)", parameters, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Body, Planet"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(LabelParameterTest, labelsOfNodesWrittenInTwoBranches) {
+    ParameterMap parameters;
+    setString(parameters, "label", "Planet");
+
+    StringRowSink sink;
+    runWrite("CALL { CREATE (n:Body) RETURN n UNION ALL CREATE (n:Body:$label) RETURN n } RETURN labels(n)", parameters, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Body"}, {"Body, Planet"}};
+    EXPECT_EQ(sink.getRows(), expected);
 }
 
 TEST_F(LabelParameterTest, aParameterLabelTestReadsAWrittenNode) {

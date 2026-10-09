@@ -7,6 +7,7 @@
 
 #include "CypherAST.h"
 #include "Literal.h"
+#include "Parameter.h"
 #include "Symbol.h"
 #include "QualifiedName.h"
 #include "SymbolChain.h"
@@ -56,9 +57,19 @@ protected:
     }
 
     EntityTypeExpr* typeTest(std::string_view variable, const std::vector<std::string_view>& types) {
+        return typeTest(variable, types, {});
+    }
+
+    EntityTypeExpr* typeTest(std::string_view variable,
+                             const std::vector<std::string_view>& types,
+                             const std::vector<std::string_view>& parameters) {
         SymbolChain* chain = SymbolChain::create(&_ast);
         for (const std::string_view type : types) {
             chain->add(Symbol::create(&_ast, type));
+        }
+
+        for (const std::string_view parameter : parameters) {
+            chain->addParameter(Parameter::create(&_ast, parameter));
         }
 
         return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, variable), chain);
@@ -199,6 +210,17 @@ TEST_F(StructuralExpressionComparatorTest, labelTestsOfDifferentTypesDiffer) {
 TEST_F(StructuralExpressionComparatorTest, labelTestsCompareTheChainInOrder) {
     EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person", "Founder"}),
                                                        typeTest("n", {"Founder", "Person"})));
+}
+
+TEST_F(StructuralExpressionComparatorTest, labelTestsCompareTheirParameters) {
+    EXPECT_TRUE(StructuralExpressionComparator::equal(typeTest("n", {}, {"label"}),
+                                                      typeTest("n", {}, {"label"})));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {}, {"first"}),
+                                                       typeTest("n", {}, {"second"})));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person"}, {"label"}),
+                                                       typeTest("n", {"Person"})));
 }
 
 // Two keys of one map are two values, exactly as two calendar fields of one instant are, so

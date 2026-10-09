@@ -8,6 +8,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "StorageAttributes.h"
 #include "StorageEnums.h"
 #include "PathHopArguments.h"
 
@@ -79,7 +80,7 @@ ParseResult mlir::parseStepNames(OpAsmParser& parser, ArrayAttr& names) {
         return failure();
     }
 
-    const bool namesOneStep = parsed.empty() || isa<StringAttr>(parsed[0]);
+    const bool namesOneStep = parsed.empty() || isa<StringAttr, storage::ParameterAttr>(parsed[0]);
     if (namesOneStep) {
         names = parser.getBuilder().getArrayAttr({parsed});
         return success();
@@ -87,7 +88,9 @@ ParseResult mlir::parseStepNames(OpAsmParser& parser, ArrayAttr& names) {
 
     for (const Attribute stepNames : parsed) {
         const auto list = dyn_cast<ArrayAttr>(stepNames);
-        const bool listsNames = list && llvm::all_of(list, [](Attribute name) { return isa<StringAttr>(name); });
+        const bool listsNames = list && llvm::all_of(list, [](Attribute name) {
+            return isa<StringAttr, storage::ParameterAttr>(name);
+        });
         if (!listsNames) {
             return parser.emitError(location) << "expects a list of names, or one list of names per step";
         }

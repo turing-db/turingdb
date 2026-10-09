@@ -228,9 +228,12 @@ private:
             std::vector<std::string> _labels;
             std::string _edgeType;
 
-            // False when a label of the entity is a parameter, so the labels it carries are
-            // only known once the program runs
+            // False when a label or the edge type of the entity is a parameter, so what it
+            // carries is only known once the program runs
             bool _labelsKnown {true};
+            bool _edgeTypeKnown {true};
+
+            bool operator==(const WrittenEntity& other) const;
         };
 
         std::unordered_map<const VarDecl*, WrittenEntity> _writtenEntities;
@@ -602,7 +605,7 @@ private:
     void publishCreatedEntity(const VarDecl* decl,
                               mlir::Value column,
                               std::span<const LabelRef> labels,
-                              llvm::StringRef edgeType,
+                              const EdgeTypeRef& edgeType,
                               llvm::ArrayRef<llvm::StringRef> propNames,
                               llvm::ArrayRef<mlir::Value> propValues);
 
@@ -1004,7 +1007,7 @@ private:
     // Whether the entity of each row carries the named types: every one of them for a
     // node, since labels are a conjunction, any one of them for an edge.
     mlir::Value checkNodeLabels(mlir::Value nodeColumn, std::span<const LabelRef> labels, bool nullable);
-    mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const std::string_view> edgeTypes, bool nullable);
+    mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const EdgeTypeRef> edgeTypes, bool nullable);
 
     // A named edge variable has one occurrence per time the pattern walks it, all equated
     // by the identity filter, so the first one's type column answers for the variable. Null

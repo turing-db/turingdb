@@ -220,4 +220,14 @@ def LabelRef : AnyAttrOf<[StrAttr, LabelParameterAttr], "label name or parameter
 def LabelRefArrayAttr : TypedArrayAttrBase<LabelRef, "array of label names or parameters">;
 def LabelRefArrayArrayAttr : TypedArrayAttrBase<LabelRefArrayAttr, "array of label conjunctions">;
 
+// The edge type sibling: a parameter in an edge type list carries the edge type id type
+def EdgeTypeParameterAttr : Attr<
+    And<[ParameterAttr.predicate,
+         CPred<"::llvm::isa<::mlir::storage::EdgeTypeIDType>(::llvm::cast<::mlir::storage::ParameterAttr>($_self).getType())">]>,
+    "parameter typed edge_type_id">;
+
+def EdgeTypeRef : AnyAttrOf<[StrAttr, EdgeTypeParameterAttr], "edge type name or parameter typed edge_type_id">;
+def EdgeTypeRefArrayAttr : TypedArrayAttrBase<EdgeTypeRef, "array of edge type names or parameters">;
+def EdgeTypeRefArrayArrayAttr : TypedArrayAttrBase<EdgeTypeRefArrayAttr, "array of edge type disjunctions">;
+
 #endif // STORAGE_TYPES

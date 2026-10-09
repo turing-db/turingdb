@@ -110,6 +110,51 @@ func.func @main() {
 }
 )mlir";
 
+constexpr const char* edgeTypeParameterScan = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges_by_type([#storage.parameter<"type"> : !storage.edge_type_id]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+constexpr const char* labelTypedParameterEdgeScan = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges_by_type([#storage.parameter<"type"> : !storage.label_id]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+constexpr const char* emptyNameParameterScan = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges_by_type([#storage.parameter<""> : !storage.edge_type_id]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+constexpr const char* exploreWithAParameterStep = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%a, {}) forward hops 1 edge_types [#storage.parameter<"type"> : !storage.edge_type_id] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  return
+}
+)mlir";
+
+constexpr const char* exploreWithAParameterPerStep = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%a, {}) [forward, forward] hops 2 edge_types [["KNOWS_WELL"], [#storage.parameter<"type"> : !storage.edge_type_id]] hop_labels [["Person"], [#storage.parameter<"label"> : !storage.label_id]] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  return
+}
+)mlir";
+
+constexpr const char* edgeTypeParameterCheck = R"mlir(
+func.func @main() {
+  %s, %e, %et, %t = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %ok = db.check_edge_type_constraint(%et, ["KNOWS_WELL", #storage.parameter<"type"> : !storage.edge_type_id]) : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
+  return
+}
+)mlir";
+
 }
 
 TEST_F(ParameterAttributeTest, carriesANameAndAType) {
@@ -171,4 +216,34 @@ TEST_F(ParameterAttributeTest, aLabelScanRejectsAnUntypedParameter) {
 
 TEST_F(ParameterAttributeTest, aLabelConstraintRejectsAParameterOfAnotherType) {
     EXPECT_FALSE(parses(stringTypedParameterInAnAlternative));
+}
+
+TEST_F(ParameterAttributeTest, anEdgeTypeScanTakesAParameterOfEdgeTypeType) {
+    EXPECT_TRUE(parses(edgeTypeParameterScan));
+}
+
+TEST_F(ParameterAttributeTest, anEdgeTypeScanRejectsAParameterOfLabelType) {
+    EXPECT_FALSE(parses(labelTypedParameterEdgeScan));
+}
+
+TEST_F(ParameterAttributeTest, anEmptyParameterNameIsRejected) {
+    EXPECT_FALSE(parses(emptyNameParameterScan));
+}
+
+TEST_F(ParameterAttributeTest, anExploreStepTakesAParameterType) {
+    const std::string printed = roundTrip(exploreWithAParameterStep);
+    EXPECT_NE(printed.find("edge_types [#storage.parameter<\"type\"> : !storage.edge_type_id]"), std::string::npos) << printed;
+}
+
+TEST_F(ParameterAttributeTest, exploreStepsTakeAParameterPerStep) {
+    const std::string printed = roundTrip(exploreWithAParameterPerStep);
+    EXPECT_NE(printed.find("edge_types [[\"KNOWS_WELL\"], [#storage.parameter<\"type\"> : !storage.edge_type_id]]"), std::string::npos) << printed;
+    EXPECT_NE(printed.find("hop_labels [[\"Person\"], [#storage.parameter<\"label\"> : !storage.label_id]]"), std::string::npos) << printed;
+}
+
+TEST_F(ParameterAttributeTest, anEdgeTypeCheckMixesNamesAndParameters) {
+    const std::string printed = roundTrip(edgeTypeParameterCheck);
+
+    ASSERT_FALSE(printed.empty());
+    EXPECT_NE(printed.find("[\"KNOWS_WELL\", #storage.parameter<\"type\"> : !storage.edge_type_id]"), std::string::npos) << printed;
 }

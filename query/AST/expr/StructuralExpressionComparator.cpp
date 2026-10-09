@@ -5,6 +5,7 @@
 #include "FunctionInvocation.h"
 #include "Literal.h"
 #include "QualifiedName.h"
+#include "Parameter.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 
@@ -246,7 +247,12 @@ bool StructuralExpressionComparator::equalSymbolChains(const SymbolChain* lhs, c
         return left->getName() == right->getName();
     };
 
-    return std::ranges::equal(*lhs, *rhs, sameName);
+    const auto sameParameter = [](const Parameter* left, const Parameter* right) {
+        return left->getName() == right->getName();
+    };
+
+    return std::ranges::equal(*lhs, *rhs, sameName)
+        && std::ranges::equal(lhs->getParameters(), rhs->getParameters(), sameParameter);
 }
 
 bool StructuralExpressionComparator::readsThePropertyOfComponent(const Expr* candidate, const PropertyExpr* component) {

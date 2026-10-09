@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string_view>
 #include <memory>
 #include <optional>
 #include <span>
@@ -30,6 +31,7 @@ class MetadataBuilder;
 class NLSystemTranslator;
 class Procedure;
 class ParameterMap;
+class ParameterValue;
 class ProcedureContext;
 
 // Translates an MLIR func.func in the nl dialect into an NLProgram
@@ -46,6 +48,15 @@ public:
     void translate(const mlir::func::FuncOp& function);
 
 private:
+    // The nouns the binding errors use for a label or an edge type
+    struct SchemaNameNouns {
+        std::string_view _noun;
+        std::string_view _withArticle;
+    };
+
+    static constexpr SchemaNameNouns LABEL_NOUNS {"label", "a label"};
+    static constexpr SchemaNameNouns EDGE_TYPE_NOUNS {"edge type", "an edge type"};
+
     // Kind of iterators passed to each for loop
     enum class IteratorKind {
         ScanNodes,
@@ -137,9 +148,8 @@ private:
 
         // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
         // iterator filters by, as a disjunction; empty for the other kinds. Like
-        // _labels, views into the op's interned StringAttr storage, which the
-        // MLIRContext keeps alive for the whole translation; resolved to EdgeTypeIDs
-        // when the loop is translated.
+        // _labels, views into the op's interned StringAttr storage or into the
+        // parameter map's strings; resolved to EdgeTypeIDs when the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _edgeTypes;
 
         // What an ExplorePaths iterator walks: the op, whose steps each give a direction,
@@ -317,15 +327,27 @@ private:
                                           NLLimitState* limit,
                                           NLStmtContainer* body);
 
+    // The names a label or edge type list resolves to: each string as it is, each parameter
+    // as the String or the Strings the parameter map binds to it
+    void resolveLabelNames(mlir::ArrayAttr labels, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    void resolveEdgeTypeNames(mlir::ArrayAttr edgeTypes, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    void resolveEdgeTypeNames(mlir::Value handle, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    llvm::StringRef resolveEdgeTypeName(mlir::Attribute edgeType) const;
+
+    void resolveSchemaNames(mlir::ArrayAttr refs,
+                            const SchemaNameNouns& nouns,
+                            llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    void bindParameterSchemaNames(mlir::storage::ParameterAttr parameter,
+                                  const SchemaNameNouns& nouns,
+                                  llvm::SmallVectorImpl<llvm::StringRef>& names) const;
+    const ParameterValue& lookupParameter(llvm::StringRef name) const;
+    llvm::StringRef boundSchemaName(llvm::StringRef parameterName,
+                                    const SchemaNameNouns& nouns,
+                                    const std::string& name) const;
+
     // Resolve label names into the LabelSet a scan filters by. A node matches when its
     // label set is a superset of this one, so the names are ANDed; false when a name is
     // absent from the schema, which leaves the conjunction unsatisfiable.
-    // The names a label list resolves to: each string as it is, each parameter as the
-    // String or the Strings the parameter map binds to it
-    void labelNames(mlir::ArrayAttr labels, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
-    void bindLabelParameter(mlir::storage::ParameterAttr parameter, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
-    void addBoundLabel(llvm::StringRef parameterName, const std::string& label, llvm::SmallVectorImpl<llvm::StringRef>& names) const;
-
     bool resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, LabelSet& labelset) const;
 
     // Translate the nl.for over an nl.unwind_const iterator: allocate the single

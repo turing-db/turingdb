@@ -868,7 +868,7 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMe
   // `edge_types` are the symbolic relationship-type names. Being an attribute and
   // not an SSA value, the op still has no operands; lowering hoists them into an
   // nl.get_edge_type_set handle so they are resolved once above the loops.
-  let arguments = (ins StrArrayAttr:$edge_types);
+  let arguments = (ins EdgeTypeRefArrayAttr:$edge_types);
 
   let results = (outs ColumnNodeIDs:$srcids,
                       ColumnEdgeIDs:$eids,
@@ -1177,7 +1177,7 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
   // not an SSA value, they are absent from `operands`; lowering hoists them into an
   // nl.get_edge_type_set handle so they are resolved once above the loops.
   // `columns_to_filter` is the variadic carry set.
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1215,7 +1215,7 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
     nothing resolved into, or an empty one a pass wrote, yields no rows.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1331,7 +1331,7 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
     match get_out_edges.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1363,7 +1363,7 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
     as on get_in_edges_by_label.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1490,7 +1490,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                        DenseI64ArrayAttr:$directions,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
-                       OptionalAttr<StrArrayArrayAttr>:$edge_types,
+                       OptionalAttr<EdgeTypeRefArrayArrayAttr>:$edge_types,
                        OptionalAttr<LabelRefArrayAttr>:$end_labels,
                        OptionalAttr<LabelRefArrayArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
@@ -1855,7 +1855,7 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
     db.check_label_constraint.
   }];
 
-  let arguments = (ins Column:$edge_type_ids, StrArrayAttr:$edge_types, UnitAttr:$nullable);
+  let arguments = (ins Column:$edge_type_ids, EdgeTypeRefArrayAttr:$edge_types, UnitAttr:$nullable);
   let results   = (outs Column:$result);
 
   let hasVerifier = 1;
@@ -3181,7 +3181,7 @@ def CreateEdge : TuringOp<"create_edge", [AttrSizedOperandSegments]> {
 
   let arguments = (ins Column:$src_ids,
                        Column:$tgt_ids,
-                       StrAttr:$edge_type,
+                       EdgeTypeRef:$edge_type,
                        StrArrayAttr:$prop_names,
                        Variadic<Column>:$prop_values,
                        Optional<Column>:$src_pending,
@@ -3257,7 +3257,7 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
 
   let arguments = (ins LabelRefArrayArrayAttr:$node_labels,
                        StrArrayArrayAttr:$node_prop_names,
-                       StrArrayAttr:$edge_types,
+                       EdgeTypeRefArrayAttr:$edge_types,
                        StrArrayArrayAttr:$edge_prop_names,
                        DenseI64ArrayAttr:$edge_directions,
                        DenseI64ArrayAttr:$pending_nodes,

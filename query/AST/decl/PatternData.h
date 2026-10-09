@@ -6,24 +6,18 @@
 
 #include "metadata/PropertyType.h"
 
+#include "SchemaNameRef.h"
+
 namespace db {
 
 class CypherAST;
 class Expr;
+class SymbolChain;
 
 struct EntityPropertyConstraint {
     std::string_view _propTypeName;
     ValueType _valueType {ValueType::Invalid};
     Expr* _expr {nullptr};
-};
-
-// A label a pattern asks for: a name the query wrote, or the parameter the name is bound
-// from when the program runs
-struct LabelRef {
-    std::string_view _name;
-    bool _isParameter {false};
-
-    bool operator==(const LabelRef& other) const;
 };
 
 class PatternData {
@@ -49,8 +43,7 @@ public:
 
     std::span<const LabelRef> labelConstraints() const { return _labelConstraints; }
 
-    void addLabelConstraint(std::string_view label);
-    void addLabelParameter(std::string_view name);
+    void addLabelConstraints(const SymbolChain* labels);
 
 private:
     std::vector<LabelRef> _labelConstraints;
@@ -65,12 +58,12 @@ public:
 
     static EdgePatternData* create(CypherAST* ast);
 
-    std::span<const std::string_view> edgeTypeConstraints() const { return _edgeTypeConstraints; }
+    std::span<const EdgeTypeRef> edgeTypeConstraints() const { return _edgeTypeConstraints; }
 
-    void addEdgeTypeConstraint(std::string_view edgeType);
+    void addEdgeTypeConstraints(const SymbolChain* edgeTypes);
 
 private:
-    std::vector<std::string_view> _edgeTypeConstraints;
+    std::vector<EdgeTypeRef> _edgeTypeConstraints;
 
     EdgePatternData();
     ~EdgePatternData() override;

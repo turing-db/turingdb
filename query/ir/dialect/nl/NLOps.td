@@ -1228,7 +1228,7 @@ def GetEdgeTypeSet : NLOp<"get_edge_type_set", [Pure]> {
   }];
 
   // The edge type names, the same `KNOWS|LIKES` spelled in the query.
-  let arguments = (ins StrArrayAttr:$names);
+  let arguments = (ins EdgeTypeRefArrayAttr:$names);
   let results   = (outs NLEdgeTypeSet:$result);
 
   // No operands and a constant result type, so nothing is printed after the names.
@@ -1382,7 +1382,7 @@ def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure, RowAlign
     type in the change's schema.
   }];
 
-  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, StrArrayAttr:$edge_types);
+  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, EdgeTypeRefArrayAttr:$edge_types);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
@@ -3265,7 +3265,7 @@ def CreateEdge : NLOp<"create_edge", [AttrSizedOperandSegments, RowAlignedThroug
 
   let arguments = (ins NLNodeIDChunk:$src_ids,
                        NLNodeIDChunk:$tgt_ids,
-                       StrAttr:$edge_type,
+                       EdgeTypeRef:$edge_type,
                        StrArrayAttr:$prop_names,
                        Variadic<NLChunk>:$prop_values,
                        Optional<NLBoolChunk>:$src_pending,
@@ -3323,7 +3323,7 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
 
   let arguments = (ins LabelRefArrayArrayAttr:$node_labels,
                        StrArrayArrayAttr:$node_prop_names,
-                       StrArrayAttr:$edge_types,
+                       EdgeTypeRefArrayAttr:$edge_types,
                        StrArrayArrayAttr:$edge_prop_names,
                        DenseI64ArrayAttr:$edge_directions,
                        DenseI64ArrayAttr:$pending_nodes,

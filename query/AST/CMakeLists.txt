@@ -11,6 +11,7 @@ set(ast_sources
     decl/DeclContext.cpp
     decl/ListShape.cpp
     decl/PatternData.cpp
+    decl/SchemaNameRef.cpp
     decl/VarDecl.cpp
 
     expr/ExprChain.cpp

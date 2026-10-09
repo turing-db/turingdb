@@ -1171,7 +1171,8 @@ LogicalResult CreateNode::verify() {
 }
 
 LogicalResult CreateEdge::verify() {
-    if (getEdgeType().empty()) {
+    const StringAttr edgeType = dyn_cast<StringAttr>(getEdgeType());
+    if (edgeType && edgeType.getValue().empty()) {
         return emitOpError("requires a non-empty edge type");
     }
 

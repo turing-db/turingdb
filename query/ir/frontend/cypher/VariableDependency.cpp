@@ -49,7 +49,7 @@ void VariableDependency::addLabelConstraints(std::span<const LabelRef> labels) {
     appendUnique(labels, labelNames);
 }
 
-void VariableDependency::setEdgeTypeConstraint(std::span<const std::string_view> types) {
+void VariableDependency::setEdgeTypeConstraint(std::span<const EdgeTypeRef> types) {
     if (types.empty()) {
         return;
     }
@@ -60,5 +60,5 @@ void VariableDependency::setEdgeTypeConstraint(std::span<const std::string_view>
 
     EdgeTypeNames& edgeTypeNames = std::get<EdgeTypeNames>(*_constraints);
 
-    appendUnique(types, edgeTypeNames._names);
+    appendUnique(types, edgeTypeNames);
 }

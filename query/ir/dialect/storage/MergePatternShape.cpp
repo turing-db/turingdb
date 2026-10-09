@@ -110,7 +110,8 @@ LogicalResult mlir::verifyMergePattern(Operation* op,
 
     size_t expectedEdgeValues = 0;
     for (size_t hop = 0; hop < hopCount; hop++) {
-        if (cast<StringAttr>(edgeTypes[hop]).getValue().empty()) {
+        const StringAttr edgeType = dyn_cast<StringAttr>(edgeTypes[hop]);
+        if (edgeType && edgeType.getValue().empty()) {
             return op->emitOpError("hop ") << hop << " requires a non-empty edge type";
         }
 

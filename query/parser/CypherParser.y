@@ -1769,8 +1769,11 @@ edgeRange
 
 edgeTypes
     : COLON name { $$ = SymbolChain::create(ast); $$->add($2); }
+    | COLON parameter { $$ = SymbolChain::create(ast); $$->addParameter($2); }
     | edgeTypes PIPE name { $$ = $1; $$->add($3); }
+    | edgeTypes PIPE parameter { $$ = $1; $$->addParameter($3); }
     | edgeTypes PIPE COLON name { $$ = $1; $$->add($4); }
+    | edgeTypes PIPE COLON parameter { $$ = $1; $$->addParameter($4); }
     ;
 
 unionSt

@@ -239,21 +239,6 @@ Column* allocProcedureChunkColumn(LocalMemory* memory, size_t chunkSize, bool nu
     return allocPlainChunkColumn<T>(memory, chunkSize);
 }
 
-// The edge type names carried by the nl.get_edge_type_set handle a by-type hop's
-// edge_types operand names. They live on the handle op, not the hop, so they are
-// resolved once above the loops; a hop reads them back through its operand here (the
-// same way translatePropertyFetch reads a property name off nl.get_property_type).
-void edgeTypeNames(mlir::Value handle, llvm::SmallVectorImpl<llvm::StringRef>& names) {
-    nl::GetEdgeTypeSet handleOp = handle.getDefiningOp<nl::GetEdgeTypeSet>();
-    if (!handleOp) {
-        throw IRException("edge_types operand must come from nl.get_edge_type_set");
-    }
-
-    for (const mlir::Attribute nameAttr : handleOp.getNames()) {
-        names.push_back(mlir::cast<mlir::StringAttr>(nameAttr).getValue());
-    }
-}
-
 llvm::StringRef propertyTypeName(mlir::Value handle) {
     nl::GetPropertyType handleOp = handle.getDefiningOp<nl::GetPropertyType>();
     if (!handleOp) {
@@ -694,7 +679,7 @@ void NLTranslator::translate(const mlir::func::FuncOp& function) {
 template <typename ScanOp>
 void NLTranslator::bindScanEdgesByLabel(ScanOp scan, IteratorKind kind) {
     IteratorConfig config {kind, {}, {}};
-    labelNames(scan.getLabels(), config._labels);
+    resolveLabelNames(scan.getLabels(), config._labels);
 
     _iteratorConfigs[scan.getResult()] = config;
 }
@@ -706,7 +691,7 @@ void NLTranslator::bindGetEdgesByLabel(HopOp hop, IteratorKind kind) {
     const mlir::OperandRange carriedColumns = hop.getColumnsToFilter();
     config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
-    labelNames(hop.getLabels(), config._labels);
+    resolveLabelNames(hop.getLabels(), config._labels);
 
     _iteratorConfigs[hop.getResult()] = config;
 }
@@ -718,9 +703,9 @@ void NLTranslator::bindGetEdgesByTypeAndLabel(HopOp hop, IteratorKind kind) {
     const mlir::OperandRange carriedColumns = hop.getColumnsToFilter();
     config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
-    edgeTypeNames(hop.getEdgeTypes(), config._edgeTypes);
+    resolveEdgeTypeNames(hop.getEdgeTypes(), config._edgeTypes);
 
-    labelNames(hop.getLabels(), config._labels);
+    resolveLabelNames(hop.getLabels(), config._labels);
 
     _iteratorConfigs[hop.getResult()] = config;
 }
@@ -731,7 +716,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[scanNodes.getResult()] = IteratorConfig {IteratorKind::ScanNodes, {}, {}};
         } else if (nl::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<nl::ScanNodesByLabel>(operation)) {
             IteratorConfig config {IteratorKind::ScanNodesByLabel, {}, {}};
-            labelNames(scanNodesByLabel.getLabels(), config._labels);
+            resolveLabelNames(scanNodesByLabel.getLabels(), config._labels);
             _iteratorConfigs[scanNodesByLabel.getResult()] = config;
         } else if (nl::ConstScanNodes constScanNodes = mlir::dyn_cast<nl::ConstScanNodes>(operation)) {
             IteratorConfig config {IteratorKind::ConstScanNodes, {}, {}};
@@ -742,14 +727,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._property = scanByValue.getProperty();
             config._propertyValue = scanByValue.getValue();
             if (const std::optional<mlir::ArrayAttr> labels = scanByValue.getLabels()) {
-                labelNames(*labels, config._labels);
+                resolveLabelNames(*labels, config._labels);
             }
             _iteratorConfigs[scanByValue.getResult()] = config;
         } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
             _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
         } else if (nl::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<nl::ScanEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::ScanEdgesByType, {}, {}};
-            edgeTypeNames(scanEdgesByType.getEdgeTypes(), config._edgeTypes);
+            resolveEdgeTypeNames(scanEdgesByType.getEdgeTypes(), config._edgeTypes);
             _iteratorConfigs[scanEdgesByType.getResult()] = config;
         } else if (nl::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc = mlir::dyn_cast<nl::ScanOutEdgesByLabelSrc>(operation)) {
             bindScanEdgesByLabel(scanOutEdgesByLabelSrc, IteratorKind::ScanEdgesBySourceLabel);
@@ -778,13 +763,13 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::GetOutEdgesByType, getOutEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            edgeTypeNames(getOutEdgesByType.getEdgeTypes(), config._edgeTypes);
+            resolveEdgeTypeNames(getOutEdgesByType.getEdgeTypes(), config._edgeTypes);
             _iteratorConfigs[getOutEdgesByType.getResult()] = config;
         } else if (nl::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<nl::GetInEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::GetInEdgesByType, getInEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getInEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            edgeTypeNames(getInEdgesByType.getEdgeTypes(), config._edgeTypes);
+            resolveEdgeTypeNames(getInEdgesByType.getEdgeTypes(), config._edgeTypes);
             _iteratorConfigs[getInEdgesByType.getResult()] = config;
         } else if (nl::GetOutEdgesByLabel getOutEdgesByLabel = mlir::dyn_cast<nl::GetOutEdgesByLabel>(operation)) {
             bindGetEdgesByLabel(getOutEdgesByLabel, IteratorKind::GetOutEdgesByLabel);
@@ -804,7 +789,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange hopImports = explorePaths.getHopImports();
             config._hopImports.assign(hopImports.begin(), hopImports.end());
             if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
-                labelNames(*endLabels, config._labels);
+                resolveLabelNames(*endLabels, config._labels);
             }
             config._endColumn = explorePaths.getEndColumn();
             config._endsOnSeed = explorePaths.getEndsOnSeed();
@@ -1349,61 +1334,117 @@ bool NLTranslator::resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, Label
     return true;
 }
 
-void NLTranslator::labelNames(mlir::ArrayAttr labels, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
-    for (const mlir::Attribute label : labels) {
-        if (const mlir::StringAttr name = mlir::dyn_cast<mlir::StringAttr>(label)) {
+void NLTranslator::resolveLabelNames(mlir::ArrayAttr labels, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    resolveSchemaNames(labels, LABEL_NOUNS, names);
+}
+
+void NLTranslator::resolveEdgeTypeNames(mlir::ArrayAttr edgeTypes, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    resolveSchemaNames(edgeTypes, EDGE_TYPE_NOUNS, names);
+}
+
+// A by-type hop carries the nl.get_edge_type_set handle, not the names: they sit on the
+// handle op, resolved once above the loops, and a hop reads them back through its operand
+void NLTranslator::resolveEdgeTypeNames(mlir::Value handle, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    nl::GetEdgeTypeSet handleOp = handle.getDefiningOp<nl::GetEdgeTypeSet>();
+    if (!handleOp) {
+        throw IRException("edge_types operand must come from nl.get_edge_type_set");
+    }
+
+    resolveEdgeTypeNames(handleOp.getNames(), names);
+}
+
+llvm::StringRef NLTranslator::resolveEdgeTypeName(mlir::Attribute edgeType) const {
+    if (const mlir::StringAttr name = mlir::dyn_cast<mlir::StringAttr>(edgeType)) {
+        return name.getValue();
+    }
+
+    const mlir::storage::ParameterAttr parameter = mlir::cast<mlir::storage::ParameterAttr>(edgeType);
+    const llvm::StringRef name = parameter.getName();
+    const ParameterValue& value = lookupParameter(name);
+
+    if (value.isNull()) {
+        throw IRException(fmt::format("Parameter ${} is null: an edge is written with one edge type, a String", name));
+    }
+
+    const ValueType type = value.getType();
+    if (type != ValueType::String) {
+        throw IRException(fmt::format("Parameter ${} has type {}: an edge is written with one edge type, a String",
+                                      name,
+                                      ValueTypeName::value(type)));
+    }
+
+    return boundSchemaName(name, EDGE_TYPE_NOUNS, value.getString());
+}
+
+void NLTranslator::resolveSchemaNames(mlir::ArrayAttr refs,
+                                      const SchemaNameNouns& nouns,
+                                      llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+    for (const mlir::Attribute ref : refs) {
+        if (const mlir::StringAttr name = mlir::dyn_cast<mlir::StringAttr>(ref)) {
             names.push_back(name.getValue());
         } else {
-            bindLabelParameter(mlir::cast<mlir::storage::ParameterAttr>(label), names);
+            bindParameterSchemaNames(mlir::cast<mlir::storage::ParameterAttr>(ref), nouns, names);
         }
     }
 }
 
-void NLTranslator::bindLabelParameter(mlir::storage::ParameterAttr parameter, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
+void NLTranslator::bindParameterSchemaNames(mlir::storage::ParameterAttr parameter,
+                                            const SchemaNameNouns& nouns,
+                                            llvm::SmallVectorImpl<llvm::StringRef>& names) const {
     const llvm::StringRef name = parameter.getName();
-    const ParameterValue* value = _parameters ? _parameters->get(name) : nullptr;
-    if (!value) {
-        throw IRException(fmt::format("Parameter ${} is not defined", name));
+    const ParameterValue& value = lookupParameter(name);
+
+    if (value.isNull()) {
+        throw IRException(fmt::format("Parameter ${} is null: {} is a String or a list of Strings", name, nouns._withArticle));
     }
 
-    if (value->isNull()) {
-        throw IRException(fmt::format("Parameter ${} is null: a label is a String or a list of Strings", name));
-    }
-
-    const ValueType type = value->getType();
+    const ValueType type = value.getType();
     if (type == ValueType::String) {
-        addBoundLabel(name, value->getString(), names);
+        names.push_back(boundSchemaName(name, nouns, value.getString()));
     } else if (type == ValueType::List) {
-        const ParameterValue::List& elements = value->getList();
+        const ParameterValue::List& elements = value.getList();
         if (elements.empty()) {
-            throw IRException(fmt::format("Parameter ${} holds no label", name));
+            throw IRException(fmt::format("Parameter ${} holds no {}", name, nouns._noun));
         }
 
         for (size_t index = 0; index < elements.size(); index++) {
             const ParameterValue& element = elements[index];
             const bool isString = !element.isNull() && element.getType() == ValueType::String;
             if (!isString) {
-                throw IRException(fmt::format("Element {} of parameter ${} has type {}: a label is a String",
+                throw IRException(fmt::format("Element {} of parameter ${} has type {}: {} is a String",
                                               index,
                                               name,
-                                              element.getTypeName()));
+                                              element.getTypeName(),
+                                              nouns._withArticle));
             }
 
-            addBoundLabel(name, element.getString(), names);
+            names.push_back(boundSchemaName(name, nouns, element.getString()));
         }
     } else {
-        throw IRException(fmt::format("Parameter ${} has type {}: a label is a String or a list of Strings",
+        throw IRException(fmt::format("Parameter ${} has type {}: {} is a String or a list of Strings",
                                       name,
-                                      ValueTypeName::value(type)));
+                                      ValueTypeName::value(type),
+                                      nouns._withArticle));
     }
 }
 
-void NLTranslator::addBoundLabel(llvm::StringRef parameterName, const std::string& label, llvm::SmallVectorImpl<llvm::StringRef>& names) const {
-    if (label.empty()) {
-        throw IRException(fmt::format("Parameter ${} holds an empty label name", parameterName));
+const ParameterValue& NLTranslator::lookupParameter(llvm::StringRef name) const {
+    const ParameterValue* value = _parameters ? _parameters->get(name) : nullptr;
+    if (!value) {
+        throw IRException(fmt::format("Parameter ${} is not defined", name));
     }
 
-    names.push_back(label);
+    return *value;
+}
+
+llvm::StringRef NLTranslator::boundSchemaName(llvm::StringRef parameterName,
+                                              const SchemaNameNouns& nouns,
+                                              const std::string& name) const {
+    if (name.empty()) {
+        throw IRException(fmt::format("Parameter ${} holds an empty {} name", parameterName, nouns._noun));
+    }
+
+    return name;
 }
 
 // What this change knows a label by: the graph's schema, plus the names a CREATE earlier in
@@ -1896,9 +1937,7 @@ void NLTranslator::resolveEdgeTypes(llvm::ArrayRef<llvm::StringRef> names,
 void NLTranslator::resolveEdgeTypes(mlir::ArrayAttr names,
                                     llvm::SmallVectorImpl<EdgeTypeID>& resolved) const {
     llvm::SmallVector<llvm::StringRef, 4> nameRefs;
-    for (const mlir::Attribute nameAttr : names) {
-        nameRefs.push_back(mlir::cast<mlir::StringAttr>(nameAttr).getValue());
-    }
+    resolveEdgeTypeNames(names, nameRefs);
 
     resolveEdgeTypes(nameRefs, resolved);
 }
@@ -2111,7 +2150,7 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
     // unmatchable
     llvm::SmallVector<llvm::StringRef, 4> edgeTypeNamesOfStep;
     if (const mlir::Value handle = explorePaths.getStepEdgeTypes(step)) {
-        edgeTypeNames(handle, edgeTypeNamesOfStep);
+        resolveEdgeTypeNames(handle, edgeTypeNamesOfStep);
     }
 
     const bool filtersByType = !edgeTypeNamesOfStep.empty();
@@ -2129,7 +2168,7 @@ void NLTranslator::translateExploreStep(nl::ExplorePaths explorePaths,
         const mlir::ArrayAttr labelsOfStep = mlir::cast<mlir::ArrayAttr>((*stepLabels)[step]);
 
         llvm::SmallVector<llvm::StringRef, 4> names;
-        labelNames(labelsOfStep, names);
+        resolveLabelNames(labelsOfStep, names);
 
         if (!names.empty()) {
             LabelSet hopLabels;
@@ -2424,7 +2463,7 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     llvm::SmallVector<LabelSet, 4> constraints;
     for (const mlir::Attribute alternative : op.getAlternatives()) {
         llvm::SmallVector<llvm::StringRef> labels;
-        labelNames(mlir::cast<mlir::ArrayAttr>(alternative), labels);
+        resolveLabelNames(mlir::cast<mlir::ArrayAttr>(alternative), labels);
 
         LabelSet constraint;
         if (resolveLabelSet(labels, constraint)) {
@@ -2509,7 +2548,7 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
     }
 
     llvm::SmallVector<llvm::StringRef, 4> names;
-    labelNames(createNode.getLabels(), names);
+    resolveLabelNames(createNode.getLabels(), names);
 
     LabelSet labelset;
     for (const llvm::StringRef labelName : names) {
@@ -2552,7 +2591,7 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
         throw IRException("Cannot perform CREATE outside of a write transaction.");
     }
 
-    const llvm::StringRef edgeTypeName = createEdge.getEdgeType();
+    const llvm::StringRef edgeTypeName = resolveEdgeTypeName(createEdge.getEdgeType());
     const EdgeTypeID edgeTypeID = _metadataBuilder->getOrCreateEdgeType(edgeTypeName);
 
     const mlir::Value srcValue = createEdge.getSrcIds();
@@ -2657,7 +2696,7 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
 
     size_t edgeValueIndex = 0;
     for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
-        const llvm::StringRef edgeTypeName = mlir::cast<mlir::StringAttr>(edgeTypes[hopIndex]).getValue();
+        const llvm::StringRef edgeTypeName = resolveEdgeTypeName(edgeTypes[hopIndex]);
         const mlir::ArrayAttr propNames = mlir::cast<mlir::ArrayAttr>(edgePropNames[hopIndex]);
 
         NLMergeData::Hop hop;
@@ -2738,7 +2777,7 @@ void NLTranslator::translateMergeNodeSpec(mlir::ArrayAttr labels,
     bool matchable = true;
 
     llvm::SmallVector<llvm::StringRef, 4> names;
-    labelNames(labels, names);
+    resolveLabelNames(labels, names);
 
     const LabelMap& graphLabels = _view->metadata().labels();
     for (const llvm::StringRef labelName : names) {
@@ -5005,7 +5044,7 @@ void NLTranslator::translateCountScanRows(nl::CountScanRows countScanRows, NLStm
 
     for (const mlir::Attribute scan : scans) {
         llvm::SmallVector<llvm::StringRef, 4> labels;
-        labelNames(mlir::cast<mlir::ArrayAttr>(scan), labels);
+        resolveLabelNames(mlir::cast<mlir::ArrayAttr>(scan), labels);
 
         LabelSet labelset;
         if (!resolveLabelSet(labels, labelset)) {

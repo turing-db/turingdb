@@ -29,7 +29,6 @@
 #include "QualifiedName.h"
 #include "Pattern.h"
 #include "PatternElement.h"
-#include "Parameter.h"
 #include "Symbol.h"
 #include "Literal.h"
 #include "WhereClause.h"
@@ -410,13 +409,7 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
     const auto& labels = nodePattern->labels();
     if (labels && !labels->empty()) {
-        for (const Symbol* label : *labels) {
-            data->addLabelConstraint(label->getName());
-        }
-
-        for (const Parameter* parameter : labels->getParameters()) {
-            data->addLabelParameter(parameter->getName());
-        }
+        data->addLabelConstraints(labels);
     }
 
     const MapLiteral* properties = nodePattern->getProperties();
@@ -483,9 +476,7 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
     const auto& types = edgePattern->types();
     if (types && !types->empty()) {
-        for (const Symbol* edgeTypeSymbol : *types) {
-            data->addEdgeTypeConstraint(edgeTypeSymbol->getName());
-        }
+        data->addEdgeTypeConstraints(types);
     }
 
     const QuantifiedPath* qp = edgePattern->getQuantifiedPath();
@@ -600,9 +591,7 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         hop->setData(hopData);
 
         if (const SymbolChain* types = hop->types()) {
-            for (const Symbol* edgeTypeSymbol : *types) {
-                hopData->addEdgeTypeConstraint(edgeTypeSymbol->getName());
-            }
+            hopData->addEdgeTypeConstraints(types);
         }
 
         wheres.push_back(hop->getWhere());

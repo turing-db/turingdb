@@ -13,7 +13,6 @@
 #include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
-#include "Parameter.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 #include "decl/DeclContext.h"
@@ -228,13 +227,7 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
         throwError("Node pattern must have at least one label", nodePattern);
     }
 
-    for (const Symbol* label : *labels) {
-        data->addLabelConstraint(label->getName());
-    }
-
-    for (const Parameter* parameter : labels->getParameters()) {
-        data->addLabelParameter(parameter->getName());
-    }
+    data->addLabelConstraints(labels);
 
     const MapLiteral* properties = nodePattern->getProperties();
     if (properties) {
@@ -303,12 +296,13 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     }
 
     const auto& types = edgePattern->types();
+    const SymbolChain::ParameterVector& typeParameters = types->getParameters();
 
-    if (types->size() > 1) {
+    if (types->size() + typeParameters.size() > 1) {
         throwError("An edge cannot have more than one edge type", edgePattern);
     }
 
-    data->addEdgeTypeConstraint(types->front()->getName());
+    data->addEdgeTypeConstraints(types);
 
     const MapLiteral* properties = edgePattern->getProperties();
     if (properties) {

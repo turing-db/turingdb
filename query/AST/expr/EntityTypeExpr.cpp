@@ -2,6 +2,8 @@
 
 #include "CypherAST.h"
 
+#include "BioAssert.h"
+
 using namespace db;
 
 EntityTypeExpr::EntityTypeExpr(Symbol* symbol, Expr* operand, SymbolChain* types)
@@ -27,4 +29,14 @@ EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, Expr* operand, SymbolChai
     EntityTypeExpr* expr = new EntityTypeExpr(nullptr, operand, types);
     ast->addExpr(expr);
     return expr;
+}
+
+void EntityTypeExpr::collectLabels() {
+    bioassert(_types, "Type test naming no type.");
+    collectSchemaNames(_types, _labels);
+}
+
+void EntityTypeExpr::collectEdgeTypes() {
+    bioassert(_types, "Type test naming no type.");
+    collectSchemaNames(_types, _edgeTypes);
 }

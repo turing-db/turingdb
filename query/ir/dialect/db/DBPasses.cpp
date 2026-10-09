@@ -2780,6 +2780,12 @@ bool matchCombinedTypeChecks(Operation* op, CombinedTypeChecks& combined) {
     return true;
 }
 
+// A parameter names no edge type before the program runs: a union lists it beside the
+// names, where an intersection over it has no answer
+bool holdsParameter(ArrayAttr names) {
+    return llvm::any_of(names, [](Attribute name) { return isa<storage::ParameterAttr>(name); });
+}
+
 void combineEdgeTypes(bool isUnion,
                       ArrayAttr left,
                       ArrayAttr right,
@@ -2810,6 +2816,11 @@ void fuseTypeChecks(Operation* op, const CombinedTypeChecks& combined, mlir::OpB
     // accessors be called
     CheckEdgeTypeConstraint left = combined._left;
     CheckEdgeTypeConstraint right = combined._right;
+
+    const bool intersectsAParameter = !isUnion && (holdsParameter(left.getEdgeTypes()) || holdsParameter(right.getEdgeTypes()));
+    if (intersectsAParameter) {
+        return;
+    }
 
     llvm::SmallVector<Attribute, 4> edgeTypes;
     combineEdgeTypes(isUnion, left.getEdgeTypes(), right.getEdgeTypes(), edgeTypes);
@@ -3331,7 +3342,18 @@ bool matchTypeCheckOverRead(FilterOp filter, TypeCheckOverRead& matched) {
     }
 
     const ArrayAttr readTypes = read->getAttrOfType<ArrayAttr>("edge_types");
-    combineEdgeTypes(false, readTypes, check.getEdgeTypes(), matched._intersection);
+    const ArrayAttr checkTypes = check.getEdgeTypes();
+
+    const bool readIsWithinCheck = llvm::all_of(readTypes, [checkTypes](Attribute edgeType) {
+        return llvm::is_contained(checkTypes, edgeType);
+    });
+
+    const bool holdsAParameter = holdsParameter(readTypes) || holdsParameter(checkTypes);
+    if (holdsAParameter && !readIsWithinCheck) {
+        return false;
+    }
+
+    combineEdgeTypes(false, readTypes, checkTypes, matched._intersection);
 
     // An empty intersection is a read that matches no edge, which an empty type set on the
     // read says outright: the loop is then unmatchable and walks nothing.
