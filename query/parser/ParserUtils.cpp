@@ -13,6 +13,7 @@
 #include "expr/ListComprehensionExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
+#include "expr/LogicalExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
@@ -166,7 +167,7 @@ void ParserUtils::mergeSetClauses(SetStmt*& held, SetStmt* addition) {
 }
 
 void ParserUtils::foldEntityWheres(CypherAST* ast, Pattern* pattern) {
-    Expr* conjunction = nullptr;
+    std::vector<Expr*> predicates;
 
     for (const PatternElement* element : pattern->elements()) {
         for (const EntityPattern* entity : element->getEntities()) {
@@ -181,24 +182,33 @@ void ParserUtils::foldEntityWheres(CypherAST* ast, Pattern* pattern) {
                 continue;
             }
 
-            Expr* predicate = entityWhere->getExpr();
-
-            if (conjunction) {
-                conjunction = BinaryExpr::create(ast, BinaryOperator::And, conjunction, predicate);
-            } else {
-                conjunction = predicate;
-            }
+            predicates.push_back(entityWhere->getExpr());
         }
     }
 
-    if (!conjunction) {
+    if (predicates.empty()) {
         return;
     }
 
     WhereClause* where = pattern->getWhere();
 
     if (where) {
-        where->setExpr(BinaryExpr::create(ast, BinaryOperator::And, conjunction, where->getExpr()));
+        predicates.push_back(where->getExpr());
+    }
+
+    Expr* conjunction = predicates.front();
+
+    if (predicates.size() > 1) {
+        LogicalExpr* predicateConjunction = LogicalExpr::create(ast, LogicalOperator::And);
+        for (Expr* predicate : predicates) {
+            predicateConjunction->addOperand(predicate);
+        }
+
+        conjunction = predicateConjunction;
+    }
+
+    if (where) {
+        where->setExpr(conjunction);
     } else {
         pattern->setWhere(WhereClause::create(ast, conjunction));
     }
@@ -516,7 +526,7 @@ void ParserUtils::extendComparisonChain(CypherAST* ast,
     BinaryExpr* const comparison = BinaryExpr::create(ast, op, chain._rightOperand, rhs);
     sourceManager->setLocation(comparison, comparisonLocation);
 
-    chain._expr = BinaryExpr::createComparisonChain(ast, chain._expr, comparison);
+    chain._expr = LogicalExpr::appendComparison(ast, chain._expr, comparison);
     chain._rightOperand = rhs;
     chain._rightOperandLocation = rhsLocation;
 

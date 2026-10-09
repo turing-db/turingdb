@@ -1349,17 +1349,17 @@ pattern
 
 expr
     : xorExpr { $$ = $1; }
-    | expr OR xorExpr { $$ = BinaryExpr::create(ast, BinaryOperator::Or, $1, $3); LOC($$, @$); }
+    | expr OR xorExpr { $$ = LogicalExpr::append(ast, LogicalOperator::Or, $1, $3); LOC($$, @$); }
     ;
 
 xorExpr
     : andExpr { $$ = $1; }
-    | xorExpr XOR andExpr  { $$ = BinaryExpr::create(ast, BinaryOperator::Xor, $1, $3); LOC($$, @$); }
+    | xorExpr XOR andExpr  { $$ = LogicalExpr::append(ast, LogicalOperator::Xor, $1, $3); LOC($$, @$); }
     ;
 
 andExpr
     : notExpr { $$ = $1; }
-    | andExpr AND notExpr { $$ = BinaryExpr::create(ast, BinaryOperator::And, $1, $3); LOC($$, @$); }
+    | andExpr AND notExpr { $$ = LogicalExpr::append(ast, LogicalOperator::And, $1, $3); LOC($$, @$); }
     ;
 
 notExpr

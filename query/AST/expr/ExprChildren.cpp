@@ -15,6 +15,7 @@
 #include "ListSliceExpr.h"
 #include "ListExpr.h"
 #include "LiteralExpr.h"
+#include "LogicalExpr.h"
 #include "PropertyLookupExpr.h"
 #include "ReduceExpr.h"
 #include "StringExpr.h"
@@ -35,6 +36,17 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
 
             children.push_back(binary->getLHS());
             children.push_back(binary->getRHS());
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::LOGICAL: {
+            const LogicalExpr* logical = static_cast<const LogicalExpr*>(expr);
+
+            for (const Expr* operand : logical->getOperands()) {
+                children.push_back(operand);
+            }
 
             return true;
         }

@@ -61,12 +61,59 @@ TEST_F(DeepExpressionTest, rejectsAHundredThousandTerms) {
     runQueryExpectingError(query, "nested deeper than");
 }
 
-TEST_F(DeepExpressionTest, rejectsAHundredThousandDisjuncts) {
+TEST_F(DeepExpressionTest, filtersOnAHundredThousandDisjuncts) {
     std::string query = "MATCH (n) WHERE n.age = 0";
     for (size_t age = 1; age < 100000; age++) {
         query += " OR n.age = " + std::to_string(age);
     }
-    query += " RETURN n.name";
+    query += " RETURN n.name ORDER BY n.name";
+
+    StringRowSink sink;
+    runQuery(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Adam"}, {"Remy"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepExpressionTest, filtersOnAHundredThousandConjuncts) {
+    std::string query = "MATCH (n) WHERE n.age < 33";
+    for (size_t bound = 34; bound < 100033; bound++) {
+        query += " AND n.age < " + std::to_string(bound);
+    }
+    query += " RETURN n.name ORDER BY n.name";
+
+    StringRowSink sink;
+    runQuery(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Adam"}, {"Remy"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepExpressionTest, filtersOnAHundredThousandAndOneExclusiveTerms) {
+    std::string query = "MATCH (n) WHERE n.age = 32";
+    for (size_t term = 0; term < 100000; term++) {
+        query += " XOR n.age = 32";
+    }
+    query += " RETURN n.name ORDER BY n.name";
+
+    StringRowSink sink;
+    runQuery(query, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Adam"}, {"Remy"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(DeepExpressionTest, rejectsDisjunctionsNestedInParentheses) {
+    std::string query = "RETURN ";
+    for (size_t level = 0; level < maxDepth; level++) {
+        query += "(";
+    }
+
+    query += "false";
+
+    for (size_t level = 0; level < maxDepth; level++) {
+        query += " OR false)";
+    }
 
     runQueryExpectingError(query, "nested deeper than");
 }

@@ -36,6 +36,7 @@ class Region;
 namespace db {
 
 class BinaryExpr;
+class LogicalExpr;
 class DBPassPipeline;
 class ExplainReport;
 class FunctionInvocationExpr;
@@ -1073,6 +1074,8 @@ private:
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
+    void translateLogicalExpr(const Expr* expr, const LogicalExpr* logicalExpr);
+    mlir::Value translateLogicalOperator(LogicalOperator op, mlir::Value lhs, mlir::Value rhs);
     void translateStringExpr(const Expr* expr);
     void translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr);
 

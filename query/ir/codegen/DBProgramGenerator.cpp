@@ -95,6 +95,7 @@
 #include "expr/ListExpr.h"
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
+#include "expr/LogicalExpr.h"
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/PropertyLookupExpr.h"
@@ -767,18 +768,19 @@ mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
 }
 
 void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
-    if (expr->getKind() == Expr::Kind::BINARY) {
-        const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
+    if (expr->getKind() == Expr::Kind::LOGICAL) {
+        const LogicalExpr* logicalExpr = static_cast<const LogicalExpr*>(expr);
 
-        // Both sides of a comparison chain read the same operand, so a filter standing
-        // between them would leave the second side reading a column laid out over rows the
+        // Two links of a comparison chain read the same operand, so a filter standing
+        // between them would leave the second link reading a column laid out over rows the
         // first one cut. The chain is one predicate and filters once
-        const bool splitsInTwo = binaryExpr->getOperator() == BinaryOperator::And
-                                 && !binaryExpr->isComparisonChain();
+        const bool splits = logicalExpr->getOperator() == LogicalOperator::And
+                            && !logicalExpr->isComparisonChain();
 
-        if (splitsInTwo) {
-            flattenConjuncts(binaryExpr->getLHS(), conjuncts);
-            flattenConjuncts(binaryExpr->getRHS(), conjuncts);
+        if (splits) {
+            for (const Expr* operand : logicalExpr->getOperands()) {
+                flattenConjuncts(operand, conjuncts);
+            }
             return;
         }
     }
@@ -7076,6 +7078,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::LOGICAL: {
+            const LogicalExpr* logicalExpr = static_cast<const LogicalExpr*>(expr);
+            translateLogicalExpr(expr, logicalExpr);
+        }
+        break;
+
         case Expr::Kind::SYMBOL: {
             const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
             const VarDecl* decl = symbolExpr->getDecl();
@@ -8052,6 +8060,48 @@ mlir::Value DBProgramGenerator::translateCaseTest(const Expr* subjectExpr,
     }
 }
 
+void DBProgramGenerator::translateLogicalExpr(const Expr* expr, const LogicalExpr* logicalExpr) {
+    const LogicalOperator op = logicalExpr->getOperator();
+
+    mlir::Value result;
+    for (const Expr* operandExpr : logicalExpr->getOperands()) {
+        translateExpr(operandExpr);
+        bioassert(_part._exprMap.contains(operandExpr), "Logical operation with unknown operand.");
+
+        const mlir::Value operand = _part._exprMap.at(operandExpr);
+        result = result ? translateLogicalOperator(op, result, operand) : operand;
+    }
+
+    _part._exprMap[expr] = result;
+}
+
+mlir::Value DBProgramGenerator::translateLogicalOperator(LogicalOperator op, mlir::Value lhs, mlir::Value rhs) {
+    // AND, OR and XOR read a null side as an unknown boolean, which the runtime truth
+    // tables answer against the other side's value per row. With both sides null there is
+    // no value to answer against and the result is null, whichever of the three it is
+    if (isUntypedNullColumn(lhs) && isUntypedNullColumn(rhs)) {
+        return nullConstantColumn();
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    switch (op) {
+        case LogicalOperator::And:
+            return _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case LogicalOperator::Or:
+            return _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case LogicalOperator::Xor:
+            return _opBuilder.create<mlir::db::XorOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        default:
+            throwError("Unknown logical operator.");
+        break;
+    }
+}
+
 void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr) {
     const Expr* lhsExpr = binExpr->getLHS();
     const Expr* rhsExpr = binExpr->getRHS();
@@ -8081,17 +8131,6 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     const bool comparesDisjointTypes = comparesAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
 
     const bool testsKnownNull = lhsExpr->getType() == EvaluatedType::Null || isUntypedNullColumn(lhs);
-
-    // AND, OR and XOR read a null side as an unknown boolean, which the runtime truth
-    // tables answer against the other side's value per row. With both sides null there is
-    // no value to answer against and the result is null, whichever of the three it is
-    const bool isThreeValuedLogic = op == BinaryOperator::And
-                                    || op == BinaryOperator::Or
-                                    || op == BinaryOperator::Xor;
-    if (isThreeValuedLogic && isUntypedNullColumn(lhs) && isUntypedNullColumn(rhs)) {
-        _part._exprMap[expr] = nullConstantColumn();
-        return;
-    }
 
     // Arithmetic or concatenation over an unknown value is unknown, and the null names no
     // column the result could be carried in, so the analyzer types such an expression Null.
@@ -8132,12 +8171,6 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
             }
-        break;
-        case BinaryOperator::And:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhs, rhs).getResult();
-        break;
-        case BinaryOperator::Or:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Add: {
             const EvaluatedType resultType = binExpr->getType();
@@ -8207,9 +8240,6 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
             }
-        break;
-        case BinaryOperator::Xor:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::XorOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Mod:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::ModOp>(loc, noneType, lhs, rhs).getResult();

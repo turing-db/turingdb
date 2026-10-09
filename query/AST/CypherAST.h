@@ -28,6 +28,7 @@ class EmbeddingLiteral;
 class Expr;
 class ExprChain;
 class BinaryExpr;
+class LogicalExpr;
 class LiteralExpr;
 class EntityTypeExpr;
 class ExistsExpr;
@@ -136,6 +137,7 @@ public:
     friend EmbeddingLiteral;
     friend ExprChain;
     friend BinaryExpr;
+    friend LogicalExpr;
     friend LiteralExpr;
     friend EntityTypeExpr;
     friend ExistsExpr;

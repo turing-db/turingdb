@@ -288,6 +288,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::BINARY:
             analyzeBinaryExpr(static_cast<BinaryExpr*>(expr));
         break;
+        case Expr::Kind::LOGICAL:
+            analyzeLogicalExpr(static_cast<LogicalExpr*>(expr));
+        break;
         case Expr::Kind::UNARY:
             analyzeUnaryExpr(static_cast<UnaryExpr*>(expr));
         break;
@@ -386,25 +389,6 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     const TypePairBitset pair(a, b);
 
     switch (expr->getOperator()) {
-        case BinaryOperator::Or:
-        case BinaryOperator::Xor:
-        case BinaryOperator::And: {
-            type = EvaluatedType::Bool;
-
-            if (pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)) {
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands must be booleans, not '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
-        } break;
-
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal: {
             type = EvaluatedType::Bool;
@@ -838,6 +822,38 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     // Create a variable declaration for the binary expression so that it can be retrieved
     // later (for projection or in an expression / filter), e.g. RETURN COUNT(5 + 5)
     const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, expr->getType());
+    expr->setExprVarDecl(decl);
+}
+
+void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
+    const std::string_view op = LogicalOperatorDescription::value(expr->getOperator());
+
+    for (Expr* operand : expr->getOperands()) {
+        analyzeExpr(operand);
+
+        const EvaluatedType operandType = operand->getType();
+        const bool isATruthValue = operandType == EvaluatedType::Bool
+                                   || operandType == EvaluatedType::Null;
+
+        if (!isATruthValue) {
+            const std::string error = fmt::format("{} operand must be a boolean, not '{}'",
+                                                  op,
+                                                  EvaluatedTypeName::value(operandType));
+            throwError(error, operand);
+        }
+
+        if (operand->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        if (operand->isAggregate()) {
+            expr->setAggregate();
+        }
+    }
+
+    expr->setType(EvaluatedType::Bool);
+
+    const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool);
     expr->setExprVarDecl(decl);
 }
 

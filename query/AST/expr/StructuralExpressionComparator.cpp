@@ -17,6 +17,7 @@
 #include "IndexExpr.h"
 #include "ListExpr.h"
 #include "LiteralExpr.h"
+#include "LogicalExpr.h"
 #include "PropertyExpr.h"
 #include "PropertyLookupExpr.h"
 #include "StringExpr.h"
@@ -50,6 +51,16 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             return sameOperator
                    && equal(lhsBinary->getLHS(), rhsBinary->getLHS())
                    && equal(lhsBinary->getRHS(), rhsBinary->getRHS());
+        }
+        break;
+
+        case Expr::Kind::LOGICAL: {
+            const LogicalExpr* lhsLogical = static_cast<const LogicalExpr*>(lhs);
+            const LogicalExpr* rhsLogical = static_cast<const LogicalExpr*>(rhs);
+
+            const bool sameOperator = lhsLogical->getOperator() == rhsLogical->getOperator();
+
+            return sameOperator && equalExprLists(lhsLogical->getOperands(), rhsLogical->getOperands());
         }
         break;
 

@@ -15,10 +15,3 @@ BinaryExpr* BinaryExpr::create(CypherAST* ast,
     ast->addExpr(expr);
     return expr;
 }
-
-BinaryExpr* BinaryExpr::createComparisonChain(CypherAST* ast, Expr* lhs, Expr* rhs) {
-    BinaryExpr* const chain = create(ast, BinaryOperator::And, lhs, rhs);
-    chain->_comparisonChain = true;
-
-    return chain;
-}

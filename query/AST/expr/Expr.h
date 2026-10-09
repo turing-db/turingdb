@@ -18,6 +18,7 @@ public:
 
     enum class Kind : uint8_t {
         BINARY = 0,
+        LOGICAL,
         UNARY,
         STRING,
         ENTITY_TYPES,
@@ -119,6 +120,7 @@ private:
 
 using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::BINARY, "BINARY">,
+    EnumStringPair<Expr::Kind::LOGICAL, "LOGICAL">,
     EnumStringPair<Expr::Kind::UNARY, "UNARY">,
     EnumStringPair<Expr::Kind::STRING, "STRING">,
     EnumStringPair<Expr::Kind::ENTITY_TYPES, "ENTITY_TYPES">,
