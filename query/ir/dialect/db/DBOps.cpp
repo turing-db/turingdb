@@ -2266,6 +2266,13 @@ Speculation::Speculatability Range::getSpeculatability() {
     return speculatableWhen(::db::countRangeSteps(from, to, by) < ::db::RANGE_LENGTH_LIMIT);
 }
 
+Speculation::Speculatability Split::getSpeculatability() {
+    const bool readsAString = isa<storage::StringType>(columnElement(getString()));
+    const bool splitsOnAString = isa<storage::StringType>(columnElement(getDelimiter()));
+
+    return speculatableWhen(readsAString && splitsOnAString);
+}
+
 Speculation::Speculatability AddOp::getSpeculatability() {
     return speculatableOverNumbers(getOperation());
 }

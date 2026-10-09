@@ -43,3 +43,9 @@ TEST_F(PredicateOverKeptRowsTest, multipliesADurationAfterAFilterOfBothFactors) 
                 "WITH a, b WHERE duration(300000000000000000) * a.age IS NULL RETURN count(*)",
                 6);
 }
+
+TEST_F(PredicateOverKeptRowsTest, splitsAfterAFilterOfBothFactors) {
+    expectCount("MATCH (a:Person), (b:Person) WHERE a.name = b.name AND b.age IS NULL "
+                "WITH a, b WHERE split([a.age, a.name][0], ',') IS NULL RETURN count(*)",
+                6);
+}

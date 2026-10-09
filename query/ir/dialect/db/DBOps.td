@@ -2713,7 +2713,7 @@ def Substring : TuringOp<"substring", [Pure]> {
   }];
 }
 
-def Split : TuringOp<"split", [Pure, ConstantThroughOperands]> {
+def Split : TuringOp<"split", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Split on delimiter";
 
   let description = [{
