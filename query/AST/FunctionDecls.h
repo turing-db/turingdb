@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <string_view>
 #include <memory>
 #include <unordered_map>
@@ -28,7 +29,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<FunctionSignature>> _owned;
-    std::unordered_map<std::string_view, FunctionSignatures> _nameMap;
+    std::unordered_map<std::string, FunctionSignatures> _nameMap;
 
     FunctionDecls();
 
