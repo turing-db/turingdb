@@ -700,6 +700,10 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::ListElementType, storage::MapElementType>(chunk.getElementType());
 }
 
+bool mayHoldANull(mlir::Type chunkType) {
+    return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
+}
+
 // A list element's null rides the column's optional, so a plain list_element column holds
 // none. A map value's null rides the entry's own tag, so even a plain column can answer
 // one - which is what makes comparing it three-valued whatever the column's shape.
@@ -2216,7 +2220,7 @@ void DBLowering::lowerRange(mlir::db::Range range) {
 
 void DBLowering::lowerSubstring(mlir::db::Substring substring) {
     const mlir::Type stringChunkType = mapValue(substring.getString()).getType();
-    const bool stringMayBeNull = isNullableChunk(stringChunkType) || isTaggedCellChunk(stringChunkType);
+    const bool stringMayBeNull = mayHoldANull(stringChunkType);
 
     llvm::SmallVector<mlir::Value, 3> columns {substring.getString(), substring.getStart()};
 
@@ -2251,8 +2255,8 @@ void DBLowering::lowerSplit(mlir::db::Split split) {
     const mlir::Type stringChunkType = stringChunk.getType();
     const mlir::Type delimiterChunkType = delimiterChunk.getType();
 
-    const bool stringMayBeNull = isNullableChunk(stringChunkType) || isTaggedCellChunk(stringChunkType);
-    const bool delimiterMayBeNull = isNullableChunk(delimiterChunkType) || isTaggedCellChunk(delimiterChunkType);
+    const bool stringMayBeNull = mayHoldANull(stringChunkType);
+    const bool delimiterMayBeNull = mayHoldANull(delimiterChunkType);
 
     const bool readsConstantsAlone = yieldsConstantColumn(stringChunk, _constantColumns)
                                   && yieldsConstantColumn(delimiterChunk, _constantColumns);
@@ -5626,8 +5630,8 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
 
     // A tagged cell holds its null in its own tag, and the comparison reads that tag, so
     // such a column is compared as it stands.
-    const bool lhsReadsItsOwnNull = isNullableChunk(lhsChunkType) || isTaggedCellChunk(lhsChunkType);
-    const bool rhsReadsItsOwnNull = isNullableChunk(rhsChunkType) || isTaggedCellChunk(rhsChunkType);
+    const bool lhsReadsItsOwnNull = mayHoldANull(lhsChunkType);
+    const bool rhsReadsItsOwnNull = mayHoldANull(rhsChunkType);
 
     const bool nullAgainstRhs = readsScalarOperands
                              && isUntypedNullChunk(rhsChunkType)
@@ -6040,10 +6044,7 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
 
     const mlir::Type baseElement = spec->element(_builder, inputValueElement);
 
-    // A tagged cell is always there, but the value it holds may be the null its tag says
-    // it is, so what a function reads out of one can be absent as a nullable column's is
-    const bool inputCanBeNull = inputNullableElement != nullptr
-                             || isTaggedCellChunk(inputChunk.getType());
+    const bool inputCanBeNull = mayHoldANull(inputChunk.getType());
 
     const bool alwaysNull = spec->nullability == ResultNullability::AlwaysNullable;
     const bool specNull = spec->nullability == ResultNullability::FollowsInput && inputCanBeNull;

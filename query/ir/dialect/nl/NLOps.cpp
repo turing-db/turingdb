@@ -32,6 +32,13 @@ Type getNodeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::NodeIDType::get(context));
 }
 
+Type valueElementOf(Type chunkType) {
+    const Type element = llvm::cast<ChunkType>(chunkType).getElementType();
+    const auto nullable = llvm::dyn_cast<storage::NullableType>(element);
+
+    return nullable ? nullable.getValueType() : element;
+}
+
 Type getEdgeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::EdgeIDType::get(context));
 }
@@ -840,6 +847,23 @@ LogicalResult Range::verify() {
 
     if (!llvm::isa<mlir::IntegerType>(listType.getElementType())) {
         return emitOpError("result must be a chunk of integer lists");
+    }
+
+    return success();
+}
+
+LogicalResult Split::verify() {
+    const bool readsStrings = llvm::isa<storage::StringType, storage::ListElementType>(
+                                  valueElementOf(getString().getType()))
+                           && llvm::isa<storage::StringType, storage::ListElementType>(
+                                  valueElementOf(getDelimiter().getType()));
+    if (!readsStrings) {
+        return emitOpError("operands must be string chunks or chunks of tagged cells");
+    }
+
+    const storage::ListType listType = llvm::dyn_cast<storage::ListType>(valueElementOf(getResult().getType()));
+    if (!listType || !llvm::isa<storage::StringType>(listType.getElementType())) {
+        return emitOpError("result must be a chunk of string lists");
     }
 
     return success();
