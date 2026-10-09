@@ -100,6 +100,23 @@ TEST_F(ExpressionTest, MaxSizeStringLiteralAccepted) {
         EXPECT_THROW(_analyzer->analyzeRootExpr(expr), AnalyzeException); \
     }
 
+#define EXPECT_LOGICAL_VALID(a, op, b)                                    \
+    {                                                                     \
+        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                 \
+        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                 \
+        LogicalExpr* expr = LogicalExpr::append(&_ast, op, lhs, rhs);     \
+        EXPECT_NO_THROW(_analyzer->analyzeRootExpr(expr));                \
+        EXPECT_EQ(expr->getType(), EvaluatedType::Bool);                  \
+    }
+
+#define EXPECT_LOGICAL_INVALID(a, op, b)                                  \
+    {                                                                     \
+        LiteralExpr* lhs = LiteralExpr::create(&_ast, a);                 \
+        LiteralExpr* rhs = LiteralExpr::create(&_ast, b);                 \
+        LogicalExpr* expr = LogicalExpr::append(&_ast, op, lhs, rhs);     \
+        EXPECT_THROW(_analyzer->analyzeRootExpr(expr), AnalyzeException); \
+    }
+
 TEST_F(ExpressionTest, BinaryExpressionTest) {
     // Type pairs
     {
@@ -119,17 +136,17 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     /// Valid
     BoolLiteral* trueLiteral = BoolLiteral::create(&_ast, true);
     BoolLiteral* falseLiteral = BoolLiteral::create(&_ast, false);
-    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::Or, trueLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_VALID(falseLiteral, BinaryOperator::Or, trueLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::Xor, falseLiteral, EvaluatedType::Bool);
-    EXPECT_BINARY_VALID(falseLiteral, BinaryOperator::And, falseLiteral, EvaluatedType::Bool);
+    EXPECT_LOGICAL_VALID(trueLiteral, LogicalOperator::Or, trueLiteral);
+    EXPECT_LOGICAL_VALID(falseLiteral, LogicalOperator::Or, trueLiteral);
+    EXPECT_LOGICAL_VALID(trueLiteral, LogicalOperator::Xor, falseLiteral);
+    EXPECT_LOGICAL_VALID(falseLiteral, LogicalOperator::And, falseLiteral);
     /// Invalid
     IntegerLiteral* fiveLiteral = IntegerLiteral::create(&_ast, 5);
-    EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::Or, fiveLiteral);
-    EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::Or, trueLiteral);
-    EXPECT_BINARY_INVALID(StringLiteral::create(&_ast, "test"), BinaryOperator::Or, fiveLiteral);
-    EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::Xor, trueLiteral);
-    EXPECT_BINARY_INVALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::And, trueLiteral);
+    EXPECT_LOGICAL_INVALID(trueLiteral, LogicalOperator::Or, fiveLiteral);
+    EXPECT_LOGICAL_INVALID(fiveLiteral, LogicalOperator::Or, trueLiteral);
+    EXPECT_LOGICAL_INVALID(StringLiteral::create(&_ast, "test"), LogicalOperator::Or, fiveLiteral);
+    EXPECT_LOGICAL_INVALID(DoubleLiteral::create(&_ast, 5.5), LogicalOperator::Xor, trueLiteral);
+    EXPECT_LOGICAL_INVALID(CharLiteral::create(&_ast, 'c'), LogicalOperator::And, trueLiteral);
 
     // NotEqual - Equal (Equality comparisons)
     /// Valid

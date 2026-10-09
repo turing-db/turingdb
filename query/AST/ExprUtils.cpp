@@ -2,6 +2,7 @@
 
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
+#include "expr/LogicalExpr.h"
 #include "expr/Operators.h"
 
 using namespace db;
@@ -13,20 +14,28 @@ bool ExprUtils::collectFromHomogeneousBinaryChain(const Expr* root,
     using AnchorExpr = typename Traits::AnchorExpr;
     using ValueExpr = typename Traits::ValueExpr;
 
+    if (root->getKind() == Expr::Kind::LOGICAL) {
+        const LogicalExpr* logicalExpr = static_cast<const LogicalExpr*>(root);
+        if (logicalExpr->getOperator() != Traits::chainOp) {
+            return false;
+        }
+
+        for (const Expr* operand : logicalExpr->getOperands()) {
+            if (!collectFromHomogeneousBinaryChain<Traits>(operand, var, result)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     if (root->getKind() != Expr::Kind::BINARY) {
         return false;
     }
 
     const auto* binExpr = static_cast<const BinaryExpr*>(root);
-    const BinaryOperator op = binExpr->getOperator();
 
-    // Recurse down the chain
-    if (op == Traits::chainOp) {
-        return collectFromHomogeneousBinaryChain<Traits>(binExpr->getLHS(), var, result)
-            && collectFromHomogeneousBinaryChain<Traits>(binExpr->getRHS(), var, result);
-    }
-
-    if (op != Traits::matchOp) {
+    if (binExpr->getOperator() != Traits::matchOp) {
         return false;
     }
 

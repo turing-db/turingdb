@@ -901,6 +901,9 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::BINARY:
             dump(out, dynamic_cast<const BinaryExpr*>(expr));
             break;
+        case Expr::Kind::LOGICAL:
+            dump(out, dynamic_cast<const LogicalExpr*>(expr));
+            break;
         case Expr::Kind::UNARY:
             dump(out, dynamic_cast<const UnaryExpr*>(expr));
             break;
@@ -991,15 +994,6 @@ void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
     out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
 
     switch (expr->getOperator()) {
-        case BinaryOperator::And:
-            out << "        Operator AND\n";
-            break;
-        case BinaryOperator::Xor:
-            out << "        Operator XOR\n";
-            break;
-        case BinaryOperator::Or:
-            out << "        Operator OR\n";
-            break;
         case BinaryOperator::NotEqual:
             out << "        Operator NOT_EQUAL\n";
             break;
@@ -1062,6 +1056,20 @@ void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
     out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << right << " : \"\"\n";
 
     dump(out, right);
+}
+
+void CypherASTDumper::dump(std::ostream& out, const LogicalExpr* expr) {
+    out << "    _" << std::hex << expr << " {\n";
+    out << "        ASTType LogicalExpression\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
+    out << "        Operator " << LogicalOperatorDescription::value(expr->getOperator()) << "\n";
+    out << "    }\n";
+
+    for (const Expr* operand : expr->getOperands()) {
+        out << "    _" << std::hex << expr << " ||--o{ _" << std::hex << operand << " : \"\"\n";
+
+        dump(out, operand);
+    }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const UnaryExpr* expr) {

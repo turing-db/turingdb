@@ -45,7 +45,7 @@ struct ExprUtils::NodeIDEqualsOR {
     using ValidatorType = const VarDecl*;
 
     // The operator used to connect each leaf (e.g. x = 10 *OR* x = 20)
-    static constexpr BinaryOperator chainOp = BinaryOperator::Or;
+    static constexpr LogicalOperator chainOp = LogicalOperator::Or;
     // The operator used in each leaf comparison (e.g. x *=* 10 OR x *=* 20)
     static constexpr BinaryOperator matchOp = BinaryOperator::Equal;
 
@@ -90,7 +90,7 @@ struct ExprUtils::PropertyEqualsOR {
     using ValidatorType = const PropertyExpr*;
 
     // The operator used to connect each leaf (e.g. x = 10 *OR* x = 20)
-    static constexpr BinaryOperator chainOp = BinaryOperator::Or;
+    static constexpr LogicalOperator chainOp = LogicalOperator::Or;
     // The operator used in each leaf comparison (e.g. x *=* 10 OR x *=* 20)
     static constexpr BinaryOperator matchOp = BinaryOperator::Equal;
 

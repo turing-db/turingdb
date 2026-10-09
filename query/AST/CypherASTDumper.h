@@ -30,6 +30,7 @@ class NodePattern;
 class EdgePattern;
 class MapLiteral;
 class BinaryExpr;
+class LogicalExpr;
 class UnaryExpr;
 class SymbolExpr;
 class LiteralExpr;
@@ -117,6 +118,7 @@ private:
     void dump(std::ostream& out, const MapLiteral* map);
     void dump(std::ostream& out, const Expr* expr);
     void dump(std::ostream& out, const BinaryExpr* expr);
+    void dump(std::ostream& out, const LogicalExpr* expr);
     void dump(std::ostream& out, const UnaryExpr* expr);
     void dump(std::ostream& out, const SymbolExpr* expr);
     void dump(std::ostream& out, const LiteralExpr* expr);

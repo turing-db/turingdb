@@ -15,6 +15,7 @@ set(ast_sources
 
     expr/ExprChain.cpp
     expr/BinaryExpr.cpp
+    expr/LogicalExpr.cpp
     expr/LiteralExpr.cpp
     expr/EntityTypeExpr.cpp
     expr/PropertyExpr.cpp

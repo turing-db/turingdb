@@ -25,6 +25,7 @@ class LoadCSVStmt;
 class VarDecl;
 class Expr;
 class BinaryExpr;
+class LogicalExpr;
 class UnaryExpr;
 class SymbolExpr;
 class LiteralExpr;
@@ -86,6 +87,7 @@ public:
     void analyzeRootExpr(Expr* expr);
     void analyzeExpr(Expr* expr);
     void analyzeBinaryExpr(BinaryExpr* expr);
+    void analyzeLogicalExpr(LogicalExpr* expr);
     void analyzeUnaryExpr(UnaryExpr* expr);
     void analyzeSymbolExpr(SymbolExpr* expr);
     void analyzeLiteralExpr(LiteralExpr* expr);

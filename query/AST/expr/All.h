@@ -4,6 +4,7 @@
 #include "expr/SymbolExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/BinaryExpr.h"
+#include "expr/LogicalExpr.h"
 #include "expr/UnaryExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/PropertyLookupExpr.h"
