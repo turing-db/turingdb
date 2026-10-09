@@ -5017,12 +5017,16 @@ bool aggregatesDistinctly(llvm::ArrayRef<int64_t> kinds) {
             case storage::GroupAggregateKind::CountDistinct:
             case storage::GroupAggregateKind::SumDistinct:
             case storage::GroupAggregateKind::AvgDistinct:
+            case storage::GroupAggregateKind::StDevDistinct:
+            case storage::GroupAggregateKind::StDevPDistinct:
             break;
 
             case storage::GroupAggregateKind::Count:
             case storage::GroupAggregateKind::Sum:
             case storage::GroupAggregateKind::Avg:
             case storage::GroupAggregateKind::CountRows:
+            case storage::GroupAggregateKind::StDev:
+            case storage::GroupAggregateKind::StDevP:
                 return false;
             break;
         }

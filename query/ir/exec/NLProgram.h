@@ -2337,6 +2337,8 @@ enum class AggregateKind {
     Min,
     Max,
     Avg,
+    StDev,
+    StDevP,
 };
 
 // Runtime state of one SUM/MIN/MAX/AVG: the running accumulator. The value
@@ -2353,7 +2355,7 @@ public:
     Column* getAccumulator() const { return _accumulator; }
     void setAccumulator(Column* accumulator) { _accumulator = accumulator; }
 
-    // The number of non-null rows folded in so far, used only by avg.
+    // The number of non-null rows folded in so far, used only by avg and stdev.
     size_t getCount() const { return _count; }
     void setCount(size_t count) { _count = count; }
     void addCount(size_t count) { _count += count; }
@@ -2459,6 +2461,10 @@ enum class GroupAggregateKind {
     SumDistinct,
     AvgDistinct,
     CountRows,
+    StDev,
+    StDevP,
+    StDevDistinct,
+    StDevPDistinct,
 };
 
 // The (group, value) pairs one DISTINCT aggregate has already charged. A single set
@@ -4138,6 +4144,40 @@ using NLRangeBoundReadFunction = std::optional<types::Int64::Primitive> (*)(cons
 // The list one column of an nl.list_slice holds at @param row, or nothing where the row
 // holds none. One per list column kind, selected during translation.
 using NLListReadFunction = std::optional<ListView> (*)(const Column* input, size_t row);
+
+using NLPercentileReadFunction = std::optional<types::Double::Primitive> (*)(const Column* input, size_t row);
+
+// nl.percentile_cont / nl.percentile_disc data: the list column with the read telling an
+// absent cell from a list, the percentile with the read its number type takes, and the
+// column the step fills.
+class NLPercentileData : public NLFunctionData {
+public:
+    NLPercentileData(const Column* list,
+                     NLListReadFunction listRead,
+                     const Column* percentile,
+                     NLPercentileReadFunction percentileRead,
+                     Column* result)
+        : _list(list),
+        _listRead(listRead),
+        _percentile(percentile),
+        _percentileRead(percentileRead),
+        _result(result)
+    {
+    }
+
+    const Column* getList() const { return _list; }
+    NLListReadFunction getListRead() const { return _listRead; }
+    const Column* getPercentile() const { return _percentile; }
+    NLPercentileReadFunction getPercentileRead() const { return _percentileRead; }
+    Column* getResult() const { return _result; }
+
+private:
+    const Column* _list {nullptr};
+    NLListReadFunction _listRead {nullptr};
+    const Column* _percentile {nullptr};
+    NLPercentileReadFunction _percentileRead {nullptr};
+    Column* _result {nullptr};
+};
 
 // Row-wise list build (nl.range): row r of the result counts from row r of the start to
 // row r of the end by row r of the step, written into the query's list buffer as one

@@ -407,6 +407,14 @@ AggregateKind toRuntimeAggregateKind(storage::AggregateKind kind) {
         case storage::AggregateKind::Avg:
             return AggregateKind::Avg;
         break;
+
+        case storage::AggregateKind::StDev:
+            return AggregateKind::StDev;
+        break;
+
+        case storage::AggregateKind::StDevP:
+            return AggregateKind::StDevP;
+        break;
     }
 
     throw IRException("Unhandled aggregate kind");
@@ -451,6 +459,22 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
 
         case storage::GroupAggregateKind::CountRows:
             return GroupAggregateKind::CountRows;
+        break;
+
+        case storage::GroupAggregateKind::StDev:
+            return GroupAggregateKind::StDev;
+        break;
+
+        case storage::GroupAggregateKind::StDevP:
+            return GroupAggregateKind::StDevP;
+        break;
+
+        case storage::GroupAggregateKind::StDevDistinct:
+            return GroupAggregateKind::StDevDistinct;
+        break;
+
+        case storage::GroupAggregateKind::StDevPDistinct:
+            return GroupAggregateKind::StDevPDistinct;
         break;
     }
 
@@ -937,6 +961,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakeList(makeList, body);
         } else if (nl::ListSlice listSlice = mlir::dyn_cast<nl::ListSlice>(operation)) {
             translateListSlice(listSlice, body);
+        } else if (mlir::isa<nl::PercentileCont, nl::PercentileDisc>(operation)) {
+            translatePercentile(&operation, body);
         } else if (nl::MakeMap makeMap = mlir::dyn_cast<nl::MakeMap>(operation)) {
             translateMakeMap(makeMap, body);
         } else if (nl::StaticMapKey mapKey = mlir::dyn_cast<nl::StaticMapKey>(operation)) {
@@ -3264,6 +3290,54 @@ void NLTranslator::translateListSlice(nl::ListSlice slice, NLStmtContainer* body
     body->emplaceStmt(&NLExecutor::runListSlice, data);
 }
 
+void NLTranslator::translatePercentile(mlir::Operation* operation, NLStmtContainer* body) {
+    const mlir::Value resultValue = operation->getResult(0);
+    const mlir::Value percentileValue = operation->getOperand(1);
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const Column* const list = getColumn(operation->getOperand(0));
+    const Column* const percentile = getColumn(percentileValue);
+
+    NLPercentileData* data = _program->allocFunctionData<NLPercentileData>(list,
+                                                                           NLExecutor::selectListRead(list),
+                                                                           percentile,
+                                                                           NLExecutor::selectPercentileRead(nullableChunkValueType(percentileValue.getType())),
+                                                                           result);
+
+    if (mlir::isa<nl::PercentileCont>(operation)) {
+        body->emplaceStmt(&NLExecutor::runPercentileCont, data);
+        return;
+    }
+
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultValue.getType()).getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(resultElement);
+
+    if (!nullable) {
+        body->emplaceStmt(&NLExecutor::runPercentileDisc<ListElementView>, data);
+        return;
+    }
+
+    switch (valueTypeFromElementType(nullable.getValueType())) {
+        case ValueType::Int64:
+            body->emplaceStmt(&NLExecutor::runPercentileDisc<std::optional<types::Int64::Primitive>>, data);
+        break;
+
+        case ValueType::UInt64:
+            body->emplaceStmt(&NLExecutor::runPercentileDisc<std::optional<types::UInt64::Primitive>>, data);
+        break;
+
+        case ValueType::Double:
+            body->emplaceStmt(&NLExecutor::runPercentileDisc<std::optional<types::Double::Primitive>>, data);
+        break;
+
+        default:
+            throw IRException("nl.percentile_disc answers a number or a tagged cell");
+        break;
+    }
+}
+
 void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
     const mlir::Value resultValue = range.getResult();
 
@@ -5038,9 +5112,13 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
         case GroupAggregateKind::Min:
         case GroupAggregateKind::Max:
         case GroupAggregateKind::Avg:
-        case GroupAggregateKind::AvgDistinct: {
-            // sum/min/max/avg reduce the values themselves, so the input must be a
-            // nullable value chunk; avg accumulates as f64, the rest in the input's
+        case GroupAggregateKind::AvgDistinct:
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct: {
+            // sum/min/max/avg/stdev reduce the values themselves, so the input must be a
+            // nullable value chunk; avg and stdev accumulate as f64, the rest in the input's
             // own type. nullableChunkValueType rejects an ID chunk here. The distinct
             // kinds keep the shape of the kind they mirror and differ only in the
             // fold, which charges each of a group's values once.
@@ -5054,9 +5132,12 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
 
             const bool isExtremum = (kind == GroupAggregateKind::Min) || (kind == GroupAggregateKind::Max);
             const bool keepsTaggedCells = reducesTaggedCells && isExtremum;
-            const bool accumulatesAsDouble = (reducesTaggedCells && !isExtremum)
-                                          || (kind == GroupAggregateKind::Avg)
-                                          || (kind == GroupAggregateKind::AvgDistinct);
+            const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
+            const bool deviates = (kind == GroupAggregateKind::StDev)
+                               || (kind == GroupAggregateKind::StDevP)
+                               || (kind == GroupAggregateKind::StDevDistinct)
+                               || (kind == GroupAggregateKind::StDevPDistinct);
+            const bool accumulatesAsDouble = (reducesTaggedCells && !isExtremum) || averages || deviates;
 
             const ValueType inputType = reducesTaggedCells ? ValueType::Double
                                                            : nullableChunkValueType(chunkType);

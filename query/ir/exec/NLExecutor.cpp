@@ -3021,9 +3021,203 @@ double taggedNumericValue(const ListElementView element) {
         break;
 
         default:
-            throw IRException("sum/avg over type-erased cells requires a numeric column");
+            throw IRException("sum/avg/stdev over type-erased cells requires a numeric column");
         break;
     }
+}
+
+// A standard deviation holds two doubles per group, side by side in its accumulator: the
+// mean of the values folded so far, then the sum of their squared deviations from it.
+// Welford's update keeps both accurate for values far from 0, where a sum of squares
+// minus a squared sum cancels to noise.
+constexpr size_t DEVIATION_SLOT_COUNT = 2;
+
+template <typename Primitive>
+double numberOf(const Primitive& value) {
+    return static_cast<double>(value);
+}
+
+double numberOf(const ListElementView element) {
+    return taggedNumericValue(element);
+}
+
+void foldDeviation(double value, double& mean, double& squaredDeviations, uint64_t& count) {
+    count++;
+
+    const double distanceToOldMean = value - mean;
+    mean += distanceToOldMean / static_cast<double>(count);
+    squaredDeviations += distanceToOldMean * (value - mean);
+}
+
+// Too few values to spread - none, or the one a sample has no second for - spread by 0
+template <bool Population>
+double deviation(double squaredDeviations, uint64_t count) {
+    if constexpr (Population) {
+        if (count == 0) {
+            return 0.0;
+        } else {
+            return std::sqrt(squaredDeviations / static_cast<double>(count));
+        }
+    } else {
+        if (count < 2) {
+            return 0.0;
+        } else {
+            return std::sqrt(squaredDeviations / static_cast<double>(count - 1));
+        }
+    }
+}
+
+void aggregateResetDeviation(NLAggregateState* state) {
+    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
+    accumulator->getRaw().assign(DEVIATION_SLOT_COUNT, std::optional<double>(0.0));
+    state->setCount(0);
+}
+
+template <typename Cell>
+void aggregateUpdateDeviation(NLAggregateState* state, const Column* input) {
+    auto& slots = static_cast<ColumnOptVector<double>*>(state->getAccumulator())->getRaw();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    double mean = slots[0].value();
+    double squaredDeviations = slots[1].value();
+    uint64_t count = state->getCount();
+
+    for (const Cell& cell : inputRaw) {
+        const auto value = presentCell(cell);
+        if (value.has_value()) {
+            foldDeviation(numberOf(*value), mean, squaredDeviations, count);
+        }
+    }
+
+    slots[0] = mean;
+    slots[1] = squaredDeviations;
+    state->setCount(count);
+}
+
+template <bool Population>
+void aggregateResultDeviation(const NLAggregateState* state, Column* output) {
+    const auto& slots = static_cast<const ColumnOptVector<double>*>(state->getAccumulator())->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
+
+    outputRaw.assign(1, deviation<Population>(slots[1].value(), state->getCount()));
+}
+
+void groupGrowDeviation(Column* accumulator,
+                        std::vector<uint64_t>& counts,
+                        size_t groupCount) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    raw.resize(groupCount * DEVIATION_SLOT_COUNT, std::optional<double>(0.0));
+    counts.resize(groupCount, 0);
+}
+
+// stDev(DISTINCT x) moves a group's slots once per distinct value it sees
+template <typename Cell, bool Distinct>
+void groupFoldDeviation(Column* accumulator,
+                        std::vector<uint64_t>& counts,
+                        const Column* input,
+                        const std::vector<size_t>& groups,
+                        NLGroupDistinctTally& distinct,
+                        QueryListBuffer& lists) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const auto value = presentCell(inputRaw[row]);
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        if constexpr (Distinct) {
+            distinct.beginKey(group);
+
+            if constexpr (std::is_same_v<Cell, ListElementView> || std::is_same_v<Cell, std::optional<ListElementView>>) {
+                distinctAppendElementBytes(distinct.getKey(), *value);
+            } else {
+                distinctAppendValueBytes(distinct.getKey(), *value);
+            }
+
+            if (!distinct.insertIfNew()) {
+                continue;
+            }
+        }
+
+        std::optional<double>& mean = raw[group * DEVIATION_SLOT_COUNT];
+        std::optional<double>& squaredDeviations = raw[group * DEVIATION_SLOT_COUNT + 1];
+
+        double groupMean = mean.value();
+        double groupSquaredDeviations = squaredDeviations.value();
+        foldDeviation(numberOf(*value), groupMean, groupSquaredDeviations, counts[group]);
+
+        mean = groupMean;
+        squaredDeviations = groupSquaredDeviations;
+    }
+}
+
+template <bool Population>
+void groupEmitDeviation(const Column* accumulator,
+                        const std::vector<uint64_t>& counts,
+                        size_t begin,
+                        size_t count,
+                        Column* output) {
+    const auto& raw = static_cast<const ColumnOptVector<double>*>(accumulator)->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
+    outputRaw.resize(count);
+
+    for (size_t index = 0; index < count; index++) {
+        const size_t group = begin + index;
+        const double squaredDeviations = raw[group * DEVIATION_SLOT_COUNT + 1].value();
+
+        outputRaw[index] = deviation<Population>(squaredDeviations, counts[group]);
+    }
+}
+
+// The fold of a standard deviation over a column of this value type: like avg's, a
+// numeric column only
+template <bool Distinct>
+NLGroupAggregateFoldFunction selectGroupDeviationFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &groupFoldDeviation<std::optional<types::Int64::Primitive>, Distinct>;
+        break;
+
+        case ValueType::UInt64:
+            return &groupFoldDeviation<std::optional<types::UInt64::Primitive>, Distinct>;
+        break;
+
+        case ValueType::Double:
+            return &groupFoldDeviation<std::optional<types::Double::Primitive>, Distinct>;
+        break;
+
+        default:
+            throw IRException("stdev requires a numeric column");
+        break;
+    }
+
+    return nullptr;
+}
+
+NLAggregateUpdateFunction selectDeviationUpdate(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateUpdateDeviation<std::optional<types::Int64::Primitive>>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateUpdateDeviation<std::optional<types::UInt64::Primitive>>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateUpdateDeviation<std::optional<types::Double::Primitive>>;
+        break;
+
+        default:
+            throw IRException("stdev requires a numeric column");
+        break;
+    }
+
+    return nullptr;
 }
 
 // Fold a chunk of tagged cells into a running f64 sum, counting the ones folded so avg
@@ -3065,6 +3259,11 @@ NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
 
         case AggregateKind::Avg:
             return &aggregateUpdateNumericTagged<Cell, /*CountsRows=*/true>;
+        break;
+
+        case AggregateKind::StDev:
+        case AggregateKind::StDevP:
+            return &aggregateUpdateDeviation<Cell>;
         break;
 
         case AggregateKind::Min:
@@ -3423,6 +3622,16 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
 
         case GroupAggregateKind::AvgDistinct:
             return &groupFoldNumericTagged<Cell, /*CountsRows=*/true, /*Distinct=*/true>;
+        break;
+
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+            return &groupFoldDeviation<Cell, /*Distinct=*/false>;
+        break;
+
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct:
+            return &groupFoldDeviation<Cell, /*Distinct=*/true>;
         break;
 
         case GroupAggregateKind::Min:
@@ -4443,6 +4652,125 @@ std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t ro
     }
 
     return static_cast<types::Int64::Primitive>(*cell);
+}
+
+template <typename Primitive>
+std::optional<types::Double::Primitive> percentileArgument(const Column* input, size_t row) {
+    const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return static_cast<types::Double::Primitive>(*cell);
+}
+
+// The numbers one row's list holds, sorted. A percentile is taken of numbers alone, so any
+// other element is the error the row raises.
+void sortListNumbers(const ListView list, std::vector<ListElementView>& numbers, std::string_view functionName) {
+    numbers.clear();
+
+    for (const ListElementView element : list) {
+        const ListBufferTypeTag tag = element.getTag();
+        const bool isNumber = tag == ListBufferTypeTag::Int
+                           || tag == ListBufferTypeTag::UInt
+                           || tag == ListBufferTypeTag::Double;
+
+        if (tag == ListBufferTypeTag::Null) {
+            continue;
+        } else if (!isNumber) {
+            throw IRException(fmt::format("{}() takes the percentile of numbers only", functionName));
+        }
+
+        numbers.push_back(element);
+    }
+
+    std::ranges::sort(numbers, std::less<> {});
+}
+
+void throwIfNotAPercentile(double percentile, std::string_view functionName) {
+    const bool isAFraction = percentile >= 0.0 && percentile <= 1.0;
+    if (!isAFraction) {
+        throw IRException(fmt::format("{}() takes a percentile between 0.0 and 1.0, not {}", functionName, percentile));
+    }
+}
+
+// The value at the percentile's position among the sorted numbers, interpolated between
+// the two around it where the position falls between them
+double continuousPercentile(const std::vector<ListElementView>& sorted, double percentile) {
+    const double position = percentile * static_cast<double>(sorted.size() - 1);
+    const size_t below = static_cast<size_t>(position);
+    const size_t above = static_cast<size_t>(std::ceil(position));
+
+    const double lower = taggedNumericValue(sorted[below]);
+    if (below == above) {
+        return lower;
+    }
+
+    const double upper = taggedNumericValue(sorted[above]);
+
+    return lower * (static_cast<double>(above) - position) + upper * (position - static_cast<double>(below));
+}
+
+// The first of the sorted numbers at or past the percentile's share of them
+size_t discretePercentilePosition(size_t count, double percentile) {
+    const size_t covering = static_cast<size_t>(std::ceil(percentile * static_cast<double>(count)));
+
+    return covering == 0 ? 0 : covering - 1;
+}
+
+template <typename Result>
+Result absentPercentile() {
+    if constexpr (std::is_same_v<Result, ListElementView>) {
+        return ListElementView::nullElement();
+    } else {
+        return std::nullopt;
+    }
+}
+
+template <typename Result>
+Result percentileElement(const ListElementView element) {
+    if constexpr (std::is_same_v<Result, ListElementView>) {
+        return element;
+    } else {
+        return element.getAs<typename Result::value_type>();
+    }
+}
+
+// Row r of the result is what @param percentileOf answers for the sorted numbers of row
+// r's list, or no value where the list holds none
+template <typename Result, typename PercentileOf>
+void runPercentileRows(const NLPercentileData* data, std::string_view functionName, PercentileOf percentileOf) {
+    const Column* const list = data->getList();
+    const NLListReadFunction listRead = data->getListRead();
+    const Column* const percentile = data->getPercentile();
+    const NLPercentileReadFunction percentileRead = data->getPercentileRead();
+
+    const size_t rowCount = list->size();
+    bioassert(percentile->size() == rowCount, "Percentile column of a {}() is not row-aligned with its lists.", functionName);
+
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(data->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::vector<ListElementView> numbers;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<ListView> values = listRead(list, rowIndex);
+        const std::optional<double> fraction = percentileRead(percentile, rowIndex);
+
+        if (!values || !fraction) {
+            outputRaw[rowIndex] = absentPercentile<Result>();
+            continue;
+        }
+
+        throwIfNotAPercentile(*fraction, functionName);
+        sortListNumbers(*values, numbers, functionName);
+
+        if (numbers.empty()) {
+            outputRaw[rowIndex] = absentPercentile<Result>();
+        } else {
+            outputRaw[rowIndex] = percentileOf(numbers, *fraction);
+        }
+    }
 }
 
 // The sibling of valueItem for a column whose cells are present in every row: a nested
@@ -7186,6 +7514,28 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runPercentileCont(NLExecutionContext*, NLFunctionData* data) {
+    const auto interpolate = [](const std::vector<ListElementView>& sorted, double percentile) {
+        return std::optional<double>(continuousPercentile(sorted, percentile));
+    };
+
+    runPercentileRows<std::optional<double>>(static_cast<NLPercentileData*>(data), "percentileCont", interpolate);
+}
+
+template <typename Result>
+void NLExecutor::runPercentileDisc(NLExecutionContext*, NLFunctionData* data) {
+    const auto pick = [](const std::vector<ListElementView>& sorted, double percentile) {
+        return percentileElement<Result>(sorted[discretePercentilePosition(sorted.size(), percentile)]);
+    };
+
+    runPercentileRows<Result>(static_cast<NLPercentileData*>(data), "percentileDisc", pick);
+}
+
+template void NLExecutor::runPercentileDisc<std::optional<types::Int64::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runPercentileDisc<std::optional<types::UInt64::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runPercentileDisc<std::optional<types::Double::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runPercentileDisc<ListElementView>(NLExecutionContext* context, NLFunctionData* data);
+
 void NLExecutor::runMakeMap(NLExecutionContext*, NLFunctionData* data) {
     const NLMakeMapData* makeMap = static_cast<NLMakeMapData*>(data);
 
@@ -7825,6 +8175,26 @@ NLRangeBoundReadFunction NLExecutor::selectRangeBoundRead(ValueType valueType) {
 
         default:
             throw IRException("nl.range reads its bounds out of integer columns");
+        break;
+    }
+}
+
+NLPercentileReadFunction NLExecutor::selectPercentileRead(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &percentileArgument<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &percentileArgument<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &percentileArgument<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a percentile is read out of a number column");
         break;
     }
 }
@@ -10604,6 +10974,10 @@ NLCountFunction NLExecutor::selectOptCountFunction(ValueType valueType) {
 }
 
 NLAggregateResetFunction NLExecutor::selectAggregateReset(AggregateKind kind, ValueType accumulatorType) {
+    if (kind == AggregateKind::StDev || kind == AggregateKind::StDevP) {
+        return &aggregateResetDeviation;
+    }
+
     // sum/avg reset to a present zero (their identity); min/max reset to null. Both
     // resets compile for any value type and lowering has already validated the
     // kind / type pairing (and the update selector re-checks it), so a single
@@ -10628,6 +11002,11 @@ NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, 
 
         case AggregateKind::Avg:
             return selectAvgUpdate(inputType);
+        break;
+
+        case AggregateKind::StDev:
+        case AggregateKind::StDevP:
+            return selectDeviationUpdate(inputType);
         break;
 
         case AggregateKind::Min:
@@ -10664,6 +11043,10 @@ NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, 
         // avg always emits an f64 (the running sum divided by the count), whatever
         // the input type was.
         return &aggregateResultAvg;
+    } else if (kind == AggregateKind::StDev) {
+        return &aggregateResultDeviation</*Population=*/false>;
+    } else if (kind == AggregateKind::StDevP) {
+        return &aggregateResultDeviation</*Population=*/true>;
     }
 
     // sum/min/max hold the reduced value in the result's own type, so the emit is a
@@ -10693,6 +11076,13 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
         case GroupAggregateKind::Avg:
         case GroupAggregateKind::AvgDistinct:
             return &groupGrowAvg;
+        break;
+
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct:
+            return &groupGrowDeviation;
         break;
 
         case GroupAggregateKind::Sum:
@@ -10777,6 +11167,16 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
 
         case GroupAggregateKind::AvgDistinct:
             return selectGroupAvgDistinctFold(inputType);
+        break;
+
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevP:
+            return selectGroupDeviationFold</*Distinct=*/false>(inputType);
+        break;
+
+        case GroupAggregateKind::StDevDistinct:
+        case GroupAggregateKind::StDevPDistinct:
+            return selectGroupDeviationFold</*Distinct=*/true>(inputType);
         break;
 
         case GroupAggregateKind::Min:
@@ -10966,6 +11366,16 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
         case GroupAggregateKind::AvgDistinct:
             // avg emits the running f64 sum divided by the count, per group.
             return &groupEmitAvg;
+        break;
+
+        case GroupAggregateKind::StDev:
+        case GroupAggregateKind::StDevDistinct:
+            return &groupEmitDeviation</*Population=*/false>;
+        break;
+
+        case GroupAggregateKind::StDevP:
+        case GroupAggregateKind::StDevPDistinct:
+            return &groupEmitDeviation</*Population=*/true>;
         break;
 
         case GroupAggregateKind::Sum:

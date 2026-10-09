@@ -412,6 +412,14 @@ public:
     // its bounds, which copies nothing - a slice of a list is a run of the same elements.
     static void runListSlice(NLExecutionContext* context, NLFunctionData* data);
 
+    // Read one percentile per row (nl.percentile_cont / nl.percentile_disc) of the numbers
+    // its list holds. The discrete one answers a value of the list as @tparam Result: a
+    // nullable number where the list names its number type, a tagged cell where it does not.
+    static void runPercentileCont(NLExecutionContext* context, NLFunctionData* data);
+
+    template <typename Result>
+    static void runPercentileDisc(NLExecutionContext* context, NLFunctionData* data);
+
     // Read the list one column holds at a row, for the slice that reads it
     static NLListReadFunction selectListRead(const Column* input);
     static NLMapReadFunction selectMapRead(const Column* input);
@@ -866,6 +874,8 @@ public:
     // The read an nl.range takes one bound out of a column with, which is a nullable
     // integer one however the query wrote the bound.
     static NLRangeBoundReadFunction selectRangeBoundRead(ValueType valueType);
+
+    static NLPercentileReadFunction selectPercentileRead(ValueType valueType);
 
     // Whether a cell of a list comprehension's source holds no list: a null one where a
     // column carries nulls, a cell tagged null where it carries tagged scalars, and never

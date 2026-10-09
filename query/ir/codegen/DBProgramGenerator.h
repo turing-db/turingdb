@@ -1066,6 +1066,10 @@ private:
     // them all. One collect needs no help: its own translation is that op.
     void generateKeylessCollect(const Projection* projection);
 
+    // What an aggregate gathering its values answers from @param listColumn, the list of a
+    // group's values: collect the list itself, percentileCont and percentileDisc its percentile
+    mlir::Value reduceGatheredValues(const FunctionInvocation* invocation, mlir::Value listColumn);
+
     // Reduces every aggregate of a keyless projection before its items are built, so what an
     // item computes beside an aggregate reads the one row the reduction leaves. Each reads
     // its input over the rows @param inputAggregateOp left, not over an earlier sibling's row.

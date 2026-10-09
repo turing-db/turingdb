@@ -416,6 +416,48 @@ void FunctionDecls::initDefault() {
     sumListItems->setReturnTypes({{EvaluatedType::Double}});
     sumListItems->setIsAggregate(true);
 
+    // stDev spreads the values as a sample of a population, stDevP as the whole of it. Too
+    // few values to spread - none, or the one a sample has no second for - spread by 0
+    // rather than by null.
+    const std::vector<EvaluatedType> numbers = {
+        EvaluatedType::Integer,
+        EvaluatedType::Double,
+        EvaluatedType::ListItem,
+        EvaluatedType::Null,
+    };
+
+    for (const std::string_view name : {"stDev", "stDevP"}) {
+        for (const EvaluatedType number : numbers) {
+            FunctionSignature* deviation = createFunction(name);
+            deviation->setArguments({number});
+            deviation->setReturnTypes({{EvaluatedType::Double}});
+            deviation->setIsAggregate(true);
+        }
+    }
+
+    // The percentile has to be the same for every value of a group, so it may not read a
+    // row. percentileCont interpolates between two values, which makes a double of them;
+    // percentileDisc answers one of the values as it is.
+    for (const EvaluatedType percentileType : {EvaluatedType::Double, EvaluatedType::Integer}) {
+        FunctionArgumentType percentile(percentileType);
+        percentile.setName("percentile");
+        percentile.setConstant(true);
+
+        for (const EvaluatedType number : numbers) {
+            const bool valuesAreNull = number == EvaluatedType::Null;
+
+            FunctionSignature* continuous = createFunction("percentileCont");
+            continuous->setArguments({number, percentile});
+            continuous->setReturnTypes({{valuesAreNull ? EvaluatedType::Null : EvaluatedType::Double}});
+            continuous->setIsAggregate(true);
+
+            FunctionSignature* discrete = createFunction("percentileDisc");
+            discrete->setArguments({number, percentile});
+            discrete->setReturnTypes({{number}});
+            discrete->setIsAggregate(true);
+        }
+    }
+
     // List functions.
     FunctionSignature* size = createFunction("size");
     size->setArguments({EvaluatedType::List});

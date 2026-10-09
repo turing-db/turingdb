@@ -428,13 +428,13 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, const NamedProcedureT
 
 // The accumulator (and result) element type of an aggregate over a column whose
 // nullable value chunk wraps inputElement - or over a type-erased column, whose
-// inputElement is the tagged cell itself. avg always reduces to an f64; sum,
+// inputElement is the tagged cell itself. avg and stdev always reduce to an f64; sum,
 // min and max keep the input's own type. Throws for a value type the reduction
-// cannot handle: sum/avg need a numeric column, min/max an orderable one (so a
+// cannot handle: sum/avg/stdev need a numeric column, min/max an orderable one (so a
 // string sum, a bool sum or an embedding min is rejected, matching Cypher). A tagged
-// cell is numeric only once read, so sum and avg accept one - both landing on the f64
-// mixed numeric tags reduce to - where min/max would have to hand the winning cell back
-// under its own type, which no single result type names.
+// cell is numeric only once read, so sum, avg and stdev accept one - all landing on the
+// f64 mixed numeric tags reduce to - where min/max would have to hand the winning cell
+// back under its own type, which no single result type names.
 mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
                                       storage::AggregateKind kind,
                                       mlir::Type inputElement) {
@@ -450,11 +450,11 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
     // or the null literal - so every reduction over it sees nothing: min, max and avg
-    // answer null and sum answers 0. It names no value type either, so the answer rides
-    // the integer column an untyped null is laid out over anywhere else, except avg's,
-    // which is a float whatever it reduced.
+    // answer null, sum answers 0 and stdev 0.0. It names no value type either, so the
+    // answer rides the integer column an untyped null is laid out over anywhere else,
+    // except avg's and stdev's, which are floats whatever they reduced.
     if (mlir::isa<mlir::NoneType>(inputElement)) {
-        if (kind == storage::AggregateKind::Avg) {
+        if (storage::reducesToADouble(kind)) {
             return builder.getF64Type();
         }
 
@@ -473,6 +473,15 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         case storage::AggregateKind::Avg: {
             if (!isNumeric && !isTaggedCell) {
                 throw IRException("db.avg requires a numeric column");
+            }
+            return builder.getF64Type();
+        }
+        break;
+
+        case storage::AggregateKind::StDev:
+        case storage::AggregateKind::StDevP: {
+            if (!isNumeric && !isTaggedCell) {
+                throw IRException("db.stdev/db.stdevp requires a numeric column");
             }
             return builder.getF64Type();
         }
@@ -753,6 +762,16 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
             return storage::AggregateKind::Avg;
         break;
 
+        case storage::GroupAggregateKind::StDev:
+        case storage::GroupAggregateKind::StDevDistinct:
+            return storage::AggregateKind::StDev;
+        break;
+
+        case storage::GroupAggregateKind::StDevP:
+        case storage::GroupAggregateKind::StDevPDistinct:
+            return storage::AggregateKind::StDevP;
+        break;
+
         case storage::GroupAggregateKind::Count:
         case storage::GroupAggregateKind::CountDistinct:
         case storage::GroupAggregateKind::CountRows:
@@ -774,6 +793,10 @@ bool reducesValues(storage::GroupAggregateKind kind) {
         case storage::GroupAggregateKind::Max:
         case storage::GroupAggregateKind::Avg:
         case storage::GroupAggregateKind::AvgDistinct:
+        case storage::GroupAggregateKind::StDev:
+        case storage::GroupAggregateKind::StDevP:
+        case storage::GroupAggregateKind::StDevDistinct:
+        case storage::GroupAggregateKind::StDevPDistinct:
             return true;
         break;
 
@@ -812,13 +835,17 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
         case storage::GroupAggregateKind::Min:
         case storage::GroupAggregateKind::Max:
         case storage::GroupAggregateKind::Avg:
-        case storage::GroupAggregateKind::AvgDistinct: {
+        case storage::GroupAggregateKind::AvgDistinct:
+        case storage::GroupAggregateKind::StDev:
+        case storage::GroupAggregateKind::StDevP:
+        case storage::GroupAggregateKind::StDevDistinct:
+        case storage::GroupAggregateKind::StDevPDistinct: {
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const mlir::Type inputElement = inputChunkType.getElementType();
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputElement);
             const bool taggedCells = mlir::isa<storage::ListElementType>(inputElement);
             if (!inputNullable && !taggedCells) {
-                throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
+                throw IRException("db.group_aggregate sum/min/max/avg/stdev requires a property value column");
             }
 
             const mlir::Type resultElement = aggregateResultElementType(builder,
@@ -959,7 +986,9 @@ bool reducesToOneRow(mlir::Operation* operation) {
                      mlir::db::Sum,
                      mlir::db::Min,
                      mlir::db::Max,
-                     mlir::db::Avg>(operation);
+                     mlir::db::Avg,
+                     mlir::db::StDev,
+                     mlir::db::StDevP>(operation);
 }
 
 // Passes some of its rows on and keeps the rest back, so the rows reaching a cut below it
@@ -1163,6 +1192,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSubstring(substring);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
+    } else if (mlir::isa<mlir::db::PercentileCont, mlir::db::PercentileDisc>(operation)) {
+        lowerPercentile(&operation);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
         lowerListComprehension(listComprehension);
     } else if (mlir::db::ListPredicate listPredicate = mlir::dyn_cast<mlir::db::ListPredicate>(operation)) {
@@ -1275,6 +1306,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(max.getInput(), max.getResult(), storage::AggregateKind::Max, max.getDistinct());
     } else if (mlir::db::Avg avg = mlir::dyn_cast<mlir::db::Avg>(operation)) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg, avg.getDistinct());
+    } else if (mlir::db::StDev stDev = mlir::dyn_cast<mlir::db::StDev>(operation)) {
+        lowerAggregate(stDev.getInput(), stDev.getResult(), storage::AggregateKind::StDev, stDev.getDistinct());
+    } else if (mlir::db::StDevP stDevP = mlir::dyn_cast<mlir::db::StDevP>(operation)) {
+        lowerAggregate(stDevP.getInput(), stDevP.getResult(), storage::AggregateKind::StDevP, stDevP.getDistinct());
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
     } else if (mlir::db::CurrentDateTime currentDateTime = mlir::dyn_cast<mlir::db::CurrentDateTime>(operation)) {
@@ -2157,6 +2192,52 @@ void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     nl::ListSlice run = _builder.create<nl::ListSlice>(loc, resultType, listChunk, fromChunk, toChunk);
 
     _valueMap[slice.getResult()] = run.getResult();
+}
+
+void DBLowering::lowerPercentile(mlir::Operation* operation) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    mlir::Value listChunk = mapValue(operation->getOperand(0));
+    mlir::Value percentileChunk = mapValue(operation->getOperand(1));
+
+    const mlir::Value cardinality = cardinalityDriver({listChunk, percentileChunk});
+    listChunk = rowAlignedChunk(listChunk, cardinality);
+    percentileChunk = nullableValueChunk(rowAlignedChunk(percentileChunk, cardinality));
+
+    // percentileDisc answers one of the values, which keeps the number type a list of
+    // numbers names; a list of tagged cells - or of untyped nulls - answers the tagged
+    // cell, which carries its own null
+    const mlir::Type listElement = mlir::cast<nl::ChunkType>(listChunk.getType()).getElementType();
+    const auto listType = mlir::dyn_cast<storage::ListType>(listElement);
+    const mlir::Type valueType = listType ? listType.getElementType() : mlir::Type {};
+
+    const auto integerType = mlir::dyn_cast_if_present<mlir::IntegerType>(valueType);
+    const bool listsIntegers = integerType && integerType.getWidth() == 64;
+    const bool listsDoubles = valueType && mlir::isa<mlir::Float64Type>(valueType);
+
+    const bool interpolates = mlir::isa<mlir::db::PercentileCont>(operation);
+    const bool listsNumbers = listsIntegers || listsDoubles;
+
+    mlir::Type resultElement = storage::ListElementType::get(context);
+    if (interpolates) {
+        resultElement = storage::NullableType::get(context, _builder.getF64Type());
+    } else if (listsNumbers) {
+        resultElement = storage::NullableType::get(context, valueType);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+
+    setInsertionForNaryOp({listChunk, percentileChunk});
+
+    mlir::Value result;
+    if (interpolates) {
+        result = _builder.create<nl::PercentileCont>(loc, resultType, listChunk, percentileChunk).getResult();
+    } else {
+        result = _builder.create<nl::PercentileDisc>(loc, resultType, listChunk, percentileChunk).getResult();
+    }
+
+    _valueMap[operation->getResult(0)] = result;
 }
 
 void DBLowering::lowerMakeMap(mlir::db::MakeMap makeMap) {

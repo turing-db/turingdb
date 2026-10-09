@@ -548,6 +548,32 @@ def ListSlice : TuringOp<"list_slice", [Pure, AttrSizedOperandSegments]> {
 }
 
 /**
+* PercentileCont / PercentileDisc
+*/
+// Cypher's percentileCont(x, p) and percentileDisc(x, p) are a db.collect of the values
+// followed by one of these, which reads each row's list and sorts the numbers in it.
+// percentileCont interpolates between the two values around the percentile, so it is a
+// float; percentileDisc answers the value at it, with the type the list holds. A list
+// holding no value has no percentile, so its row is null. A percentile outside 0.0 to 1.0,
+// and an element that is no number, is the error the row raises - which is why the op
+// is not speculatable.
+//
+//   %m = db.percentile_cont(%values, %p) : (!db.column<none>, !db.column<f64>) -> !db.column<none>
+class PercentileOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect]> {
+  let summary = "Read a percentile of the numbers each row's list holds";
+
+  let arguments = (ins Column:$list, Column:$percentile);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $list `,` $percentile `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def PercentileCont : PercentileOp<"percentile_cont">;
+def PercentileDisc : PercentileOp<"percentile_disc">;
+
+/**
 * ListComprehension
 */
 def ListComprehension : TuringOp<"list_comprehension", [Pure]> {
@@ -2487,7 +2513,7 @@ def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
 }
 
 /**
-* Aggregates: Sum / Min / Max / Avg
+* Aggregates: Sum / Min / Max / Avg / StDev / StDevP
 */
 // The value-reducing counterparts of db.count. Each consumes the whole dataflow of
 // one property column and produces a single-row column holding the reduction.
@@ -2533,6 +2559,11 @@ def Sum : AggregateOp<"sum">;
 def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
+
+// The sample and the population standard deviation. Both are floats, and 0 rather than
+// null where there are too few values to spread: none, or one for the sample.
+def StDev : AggregateOp<"stdev">;
+def StDevP : AggregateOp<"stdevp">;
 
 class UnaryFunctionOp<string mnemonic, list<Trait> traits = [Pure]>
     : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])> {

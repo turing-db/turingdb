@@ -1,5 +1,6 @@
 #include "DBProgramGenerator.h"
 
+#include <ctype.h>
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -883,7 +884,17 @@ int64_t evaluateConstantInteger(const DiagnosticsManager* diagnostics, const Exp
     }
 }
 
-bool isCollectInvocation(const Expr* item) {
+// A percentile is read off every value of its group at once, so it gathers them the way
+// collect does
+bool takesAPercentile(std::string_view funcName) {
+    return funcName == "percentileCont" || funcName == "percentileDisc";
+}
+
+bool gathersItsValues(std::string_view funcName) {
+    return funcName == "collect" || takesAPercentile(funcName);
+}
+
+bool gathersItsValues(const Expr* item) {
     if (item->getKind() != Expr::Kind::FUNCTION_INVOCATION) {
         return false;
     }
@@ -891,7 +902,7 @@ bool isCollectInvocation(const Expr* item) {
     const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(item);
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
 
-    return invocation->getSignature()->getFullName() == "collect";
+    return gathersItsValues(invocation->getSignature()->getFullName());
 }
 
 // The collects that dedupe, by their position among the collected columns: db.collect
@@ -8925,14 +8936,21 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
         _part._exprMap[expr] = _opBuilder.create<mlir::db::Max>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
     } else if (funcName == "avg") {
         _part._exprMap[expr] = _opBuilder.create<mlir::db::Avg>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
-    } else if (funcName == "collect") {
+    } else if (funcName == "stDev") {
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::StDev>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
+    } else if (funcName == "stDevP") {
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::StDevP>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
+    } else if (gathersItsValues(funcName)) {
         llvm::SmallVector<int64_t> distinctValues;
         if (reducesDistinctValues) {
             distinctValues.push_back(0);
         }
 
+        // createCollect names the collect as the aggregate, which a percentile read off its
+        // list is not
         mlir::db::Collect collectOp = createCollect({}, {inputColumn}, distinctValues);
-        _part._exprMap[expr] = collectOp.getResults().back();
+        _part._exprMap[expr] = reduceGatheredValues(invocation, collectOp.getResults().back());
+        return;
     } else {
         throwError(fmt::format("Unsupported aggregate function: {}", funcName), expr);
     }
@@ -9249,7 +9267,7 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
 
     llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
     for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
-        if (isCollectInvocation(aggregateExpr)) {
+        if (gathersItsValues(aggregateExpr)) {
             collectExprs.push_back(aggregateExpr);
         }
     }
@@ -9280,16 +9298,37 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
 
     for (size_t collectIndex = 0; collectIndex < collectExprs.size(); collectIndex++) {
         const FunctionInvocationExpr* collectExpr = collectExprs[collectIndex];
-        const mlir::Value listColumn = results[collectIndex];
+        const mlir::Value reducedColumn = reduceGatheredValues(collectExpr->getFunctionInvocation(), results[collectIndex]);
 
-        _part._exprMap[collectExpr] = listColumn;
+        _part._exprMap[collectExpr] = reducedColumn;
 
         // The alias of a collect names its list, so a later item spelling that alias
         // reads this column instead of collecting a second time
         const VarDecl* collectDecl = collectExpr->getExprVarDecl();
         if (collectDecl) {
-            _part._projectedColumns[collectDecl] = listColumn;
+            _part._projectedColumns[collectDecl] = reducedColumn;
         }
+    }
+}
+
+mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* invocation, mlir::Value listColumn) {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+    if (!takesAPercentile(funcName)) {
+        return listColumn;
+    }
+
+    const ExprChain* args = invocation->getArguments();
+    bioassert(args && args->size() == 2, "{}() without its percentile.", funcName);
+
+    const mlir::Value percentile = translateArg(args->getExprs().back());
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    if (funcName == "percentileCont") {
+        return _opBuilder.create<mlir::db::PercentileCont>(loc, noneType, listColumn, percentile).getResult();
+    } else {
+        return _opBuilder.create<mlir::db::PercentileDisc>(loc, noneType, listColumn, percentile).getResult();
     }
 }
 
@@ -9499,7 +9538,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
         const Expr* argExpr = args->front();
 
-        if (funcName == "collect") {
+        if (gathersItsValues(funcName)) {
             const mlir::Value collectInput = translateAggregateInput(argExpr, &variableColumns);
 
             collectInputColumns.push_back(readWalkEntities(argExpr, collectInput));
@@ -9519,6 +9558,9 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         // count(*) reads no value, so a null of the column it is anchored on is a row
         // all the same: that is a kind of its own
         std::string kindName {funcName};
+        std::ranges::transform(kindName, kindName.begin(), [](unsigned char letter) {
+            return static_cast<char>(tolower(letter));
+        });
         if (countsRows) {
             kindName += "_rows";
         } else if (reducesDistinctValues) {
@@ -9693,7 +9735,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
     for (size_t i = 0; i < aggregateItems.size(); i++) {
         const FunctionInvocationExpr* aggregateItem = aggregateItems[i];
-        const mlir::Value aggregateColumn = results[keyCount + i];
+        const mlir::Value aggregateColumn = reduceGatheredValues(aggregateItem->getFunctionInvocation(), results[keyCount + i]);
 
         _part._exprMap[aggregateItem] = aggregateColumn;
         groupedColumns.emplace_back(aggregateItem, aggregateColumn);

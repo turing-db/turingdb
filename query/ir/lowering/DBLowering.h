@@ -290,6 +290,7 @@ private:
     mlir::Value promotedToAccumulated(mlir::Value chunk, mlir::Type accumulated);
 
     void lowerListSlice(mlir::db::ListSlice slice);
+    void lowerPercentile(mlir::Operation* operation);
     void lowerPatternComprehension(mlir::db::PatternComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
