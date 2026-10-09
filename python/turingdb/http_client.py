@@ -37,6 +37,20 @@ def _decode_body(text: str):
         return stdlib_json.loads(text)
 
 
+def _raise_if_error(json) -> None:
+    if not isinstance(json, dict):
+        return
+
+    err = json.get("error")
+    if err is None:
+        return
+
+    details = json.get("error_details")
+    if details is not None:
+        err = f"{err}: {details}"
+    raise TuringDBException(err)
+
+
 def _column_values(column_type: str, values: list) -> list:
     if column_type == "Duration":
         return [_duration_microseconds(value) for value in values]
@@ -241,7 +255,12 @@ class HTTPClient:
             response = self._client.post(
                 url, content=data, params=params, headers=self._headers
             )
-        response.raise_for_status()
+        if response.is_error:
+            try:
+                _raise_if_error(_decode_body(response.text))
+            except stdlib_json.JSONDecodeError:
+                pass
+            response.raise_for_status()
 
         try:
             json = _decode_body(response.text)
@@ -257,13 +276,7 @@ class HTTPClient:
                 f"  {pointer}"
             )
 
-        if isinstance(json, dict):
-            err = json.get("error")
-            if err is not None:
-                details = json.get("error_details")
-                if details is not None:
-                    err = f"{err}: {details}"
-                raise TuringDBException(err)
+        _raise_if_error(json)
 
         self._t1 = time.time()
         self._total_exec_time = (self._t1 - self._t0) * 1000

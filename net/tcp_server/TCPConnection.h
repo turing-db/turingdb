@@ -39,10 +39,12 @@ public:
     void setStorage(TCPConnectionStorage* storage) { _storage = storage; }
     void setStorageIndex(size_t index) { _storageIndex = index; }
     void setCloseRequired(bool v) { _closeRequired = v; }
+    void setBytesToDiscard(size_t bytes) { _bytesToDiscard = bytes; }
 
     utils::DataSocket getSocket() const { return _socket; }
     bool isOpen() const;
     bool isCloseRequired() const { return _closeRequired; }
+    size_t getBytesToDiscard() const { return _bytesToDiscard; }
     size_t getStorageIndex() const { return _storageIndex; }
     NetBuffer& getInputBuffer() { return _inputBuffer; }
 
@@ -76,5 +78,6 @@ private:
     std::unique_ptr<AbstractTCPWriter> _writer;
     std::unique_ptr<AbstractTCPParser> _parser;
     bool _closeRequired {false};
+    size_t _bytesToDiscard {0};
 };
 }

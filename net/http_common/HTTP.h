@@ -3,6 +3,7 @@
 #include <string_view>
 #include <stdint.h>
 #include <array>
+#include <string>
 
 #include "EnumToString.h"
 
@@ -22,6 +23,18 @@ enum class Error {
 
     _SIZE,
 };
+
+using ErrorName = EnumToString<Error>::Create<
+    EnumStringPair<Error::UNKNOWN, "UNKNOWN">,
+    EnumStringPair<Error::HEADER_INCOMPLETE, "HEADER_INCOMPLETE">,
+    EnumStringPair<Error::REQUEST_TOO_BIG, "REQUEST_TOO_BIG">,
+    EnumStringPair<Error::NO_METHOD, "NO_METHOD">,
+    EnumStringPair<Error::NO_URI, "NO_URI">,
+    EnumStringPair<Error::INVALID_METHOD, "INVALID_METHOD">,
+    EnumStringPair<Error::INVALID_CONTENT_LENGTH, "INVALID_CONTENT_LENGTH">,
+    EnumStringPair<Error::INVALID_URI, "INVALID_URI">,
+    EnumStringPair<Error::UNKNOWN_ENDPOINT, "UNKNOWN_ENDPOINT">,
+    EnumStringPair<Error::TOO_MANY_PARAMS, "TOO_MANY_PARAMS">>;
 
 enum class Status {
     OK = 0,
@@ -103,6 +116,8 @@ static constexpr size_t getCode(HTTP::Status status) {
 }
 
 HTTP::Status codeToStatus(size_t httpCode);
+
+void describeError(HTTP::Error error, std::string& details);
 
 }
 

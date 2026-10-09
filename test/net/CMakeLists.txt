@@ -50,3 +50,11 @@ add_turing_test(test_net_json_encoder_double JsonEncoderDoubleTest.cpp)
 target_link_libraries(test_net_json_encoder_double PRIVATE
     turing_db_net_encoders
     turing_db_memory_s)
+
+add_turing_test(test_net_request_too_large RequestTooLargeTest.cpp)
+target_link_libraries(test_net_request_too_large PRIVATE
+    turing_db_server_s
+    turing_db_proto_client_s
+    turing_testenv_s
+    turing_db_examples_s
+    nlohmann_json)
