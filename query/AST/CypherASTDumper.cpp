@@ -8,6 +8,7 @@
 #include "ChangeQuery.h"
 #include "CommitQuery.h"
 #include "MergeDataPartsQuery.h"
+#include "Parameter.h"
 #include "SymbolChain.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
@@ -833,6 +834,10 @@ void CypherASTDumper::dump(std::ostream& out, const NodePattern* node) {
         for (const Symbol* type : *labels) {
             out << "        Label " << type->getName() << "\n";
         }
+
+        for (const Parameter* parameter : labels->getParameters()) {
+            out << "        LabelParameter $" << parameter->getName() << "\n";
+        }
     }
 
     if (const MapLiteral* properties = node->getProperties()) {
@@ -1188,6 +1193,10 @@ void CypherASTDumper::dump(std::ostream& out, const EntityTypeExpr* expr) {
     if (labels) {
         for (const auto& label : *labels) {
             out << "        Label " << label->getName() << "\n";
+        }
+
+        for (const Parameter* parameter : labels->getParameters()) {
+            out << "        LabelParameter $" << parameter->getName() << "\n";
         }
     }
 

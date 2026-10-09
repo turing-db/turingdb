@@ -13,6 +13,7 @@
 #include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "Parameter.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 #include "decl/DeclContext.h"
@@ -229,6 +230,10 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
     for (const Symbol* label : *labels) {
         data->addLabelConstraint(label->getName());
+    }
+
+    for (const Parameter* parameter : labels->getParameters()) {
+        data->addLabelParameter(parameter->getName());
     }
 
     const MapLiteral* properties = nodePattern->getProperties();

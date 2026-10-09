@@ -1,0 +1,10 @@
+add_call_v3_test(test_query_ir_label_parameter LabelParameterTest.cpp)
+target_link_libraries(test_query_ir_label_parameter PRIVATE turing_db_query_common_s)
+
+add_ir_tests(test_query_ir_parameter_attribute ParameterAttributeTest.cpp)
+
+add_ir_tests(test_query_ir_label_parameter_binding LabelParameterBindingTest.cpp)
+target_sources(test_query_ir_label_parameter_binding PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_link_libraries(test_query_ir_label_parameter_binding PRIVATE turing_db_examples_s turing_db_query_common_s)
+
+add_ir_tests(test_query_ir_label_parameter_pass LabelParameterPassTest.cpp)

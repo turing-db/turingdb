@@ -12,6 +12,7 @@
 #include "versioning/ChangeID.h"
 
 #include "CompilerContext.h"
+#include "ParameterMap.h"
 #include "TuringClient.h"
 
 #include "ShellCompletion.h"
@@ -67,8 +68,12 @@ private:
     LineNoiseHandle* _lineNoiseHandle {nullptr};
     std::unordered_map<std::string_view, Command> _localCommands;
     ShellCompletion _completion;
+    ParameterMap _parameters;
 
     void processLine(std::string& line);
+    bool processParameterCommand(const std::string& line);
+    void setParameter(std::string_view arguments);
+    void printParameters() const;
     void formatMessage(std::string& msg);
     std::string composePrompt();
     void checkShellContext();

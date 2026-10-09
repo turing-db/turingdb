@@ -53,10 +53,26 @@ void CallV3Test::runQuery(std::string_view query, NLOutputSink& sink) {
     ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 }
 
+void CallV3Test::runQuery(std::string_view query, const ParameterMap& parameters, NLOutputSink& sink) {
+    QueryStatus status;
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink, &parameters);
+    ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
+}
+
 void CallV3Test::runQueryExpectingError(std::string_view query, std::string_view reason) {
     NullSink sink;
     QueryStatus status;
     _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink);
+    ASSERT_FALSE(status.isOk()) << "accepted: " << query;
+
+    const std::string error = status.getError();
+    EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
+}
+
+void CallV3Test::runQueryExpectingError(std::string_view query, const ParameterMap& parameters, std::string_view reason) {
+    NullSink sink;
+    QueryStatus status;
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &sink, &parameters);
     ASSERT_FALSE(status.isOk()) << "accepted: " << query;
 
     const std::string error = status.getError();
@@ -79,6 +95,22 @@ void CallV3Test::runWrite(std::string_view query, NLOutputSink& sink) {
     submitChange(changeID);
 }
 
+void CallV3Test::runWrite(std::string_view query, const ParameterMap& parameters) {
+    NullSink sink;
+    runWrite(query, parameters, sink);
+}
+
+void CallV3Test::runWrite(std::string_view query, const ParameterMap& parameters, NLOutputSink& sink) {
+    ChangeID changeID;
+    newChange(changeID);
+
+    QueryStatus status;
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink, &parameters);
+    ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
+
+    submitChange(changeID);
+}
+
 void CallV3Test::runWriteExpectingError(std::string_view query, std::string_view reason) {
     ChangeID changeID;
     newChange(changeID);
@@ -86,6 +118,19 @@ void CallV3Test::runWriteExpectingError(std::string_view query, std::string_view
     NullSink sink;
     QueryStatus status;
     _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink);
+    ASSERT_FALSE(status.isOk()) << "accepted: " << query;
+
+    const std::string error = status.getError();
+    EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
+}
+
+void CallV3Test::runWriteExpectingError(std::string_view query, const ParameterMap& parameters, std::string_view reason) {
+    ChangeID changeID;
+    newChange(changeID);
+
+    NullSink sink;
+    QueryStatus status;
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &sink, &parameters);
     ASSERT_FALSE(status.isOk()) << "accepted: " << query;
 
     const std::string error = status.getError();

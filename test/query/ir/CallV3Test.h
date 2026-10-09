@@ -11,6 +11,7 @@
 
 namespace db {
 class NLOutputSink;
+class ParameterMap;
 class QueryInterpreterV3;
 }
 
@@ -30,12 +31,17 @@ public:
 
 protected:
     void runQuery(std::string_view query, db::NLOutputSink& sink);
+    void runQuery(std::string_view query, const db::ParameterMap& parameters, db::NLOutputSink& sink);
     void runQueryExpectingError(std::string_view query, std::string_view reason);
+    void runQueryExpectingError(std::string_view query, const db::ParameterMap& parameters, std::string_view reason);
     void runWrite(std::string_view query);
+    void runWrite(std::string_view query, const db::ParameterMap& parameters);
+    void runWrite(std::string_view query, const db::ParameterMap& parameters, db::NLOutputSink& sink);
 
     // The rows a write reports, for a query whose WITH or RETURN projects what it wrote
     void runWrite(std::string_view query, db::NLOutputSink& sink);
     void runWriteExpectingError(std::string_view query, std::string_view reason);
+    void runWriteExpectingError(std::string_view query, const db::ParameterMap& parameters, std::string_view reason);
 
     // Two writing queries in one change, with no commit between them: what @param first
     // wrote is staged, and @param second reads the change's committed tip - so the rows it

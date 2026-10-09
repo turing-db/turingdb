@@ -4,6 +4,8 @@
 
 #include "llvm/ADT/STLExtras.h"
 
+#include "StorageAttributes.h"
+
 using namespace mlir;
 
 ParseResult mlir::parseLabelAlternatives(OpAsmParser& parser, ArrayAttr& alternatives) {
@@ -13,7 +15,7 @@ ParseResult mlir::parseLabelAlternatives(OpAsmParser& parser, ArrayAttr& alterna
     }
 
     const bool isConjunction = llvm::all_of(written, [](Attribute label) {
-        return isa<StringAttr>(label);
+        return isa<StringAttr, storage::ParameterAttr>(label);
     });
 
     if (isConjunction) {

@@ -19,6 +19,7 @@ class LocalMemory;
 class CompilerContext;
 class ExplainReport;
 class GraphView;
+class ParameterMap;
 
 class QueryInterpreterV3 {
 public:
@@ -34,6 +35,14 @@ public:
                  ChangeID changeID,
                  NLOutputSink* sink);
 
+    void execute(QueryStatus& status,
+                 std::string_view query,
+                 std::string_view graphName,
+                 CommitHash hash,
+                 ChangeID changeID,
+                 NLOutputSink* sink,
+                 const ParameterMap* parameters);
+
 private:
     SystemManager* _sysMan {nullptr};
     LocalMemory* _mem {nullptr};
@@ -45,7 +54,8 @@ private:
                      std::string_view graphName,
                      CommitHash hash,
                      ChangeID changeID,
-                     NLOutputSink* sink);
+                     NLOutputSink* sink,
+                     const ParameterMap* parameters);
 
     // Emits the dumps an explained query collected, by compiling and running the
     // small program that reports them - so an EXPLAIN returns its rows through the

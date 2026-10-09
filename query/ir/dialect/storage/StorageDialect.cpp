@@ -1,4 +1,5 @@
 #include "StorageDialect.h"
+#include "StorageAttributes.h"
 #include "StorageTypes.h"
 
 using namespace mlir;
@@ -8,4 +9,5 @@ using namespace mlir::storage;
 
 void Storage::initialize() {
     registerTypes();
+    registerAttributes();
 }

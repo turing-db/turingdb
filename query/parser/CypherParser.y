@@ -43,6 +43,7 @@
     #include "stmt/DeleteStmt.h"
     #include "expr/All.h"
     #include "Literal.h"
+    #include "Parameter.h"
     #include "Symbol.h"
     #include "SymbolChain.h"
     #include "QuantifiedPath.h"
@@ -303,6 +304,7 @@
 %type<db::FunctionInvocation*> functionInvocation
 %type<db::FunctionInvocation*> countFunc
 
+%type<db::Parameter*> parameter
 %type<db::SymbolChain*> nodeLabels
 %type<db::SymbolChain*> edgeTypes
 %type<db::MapLiteral*> properties
@@ -1356,9 +1358,9 @@ setItem
 
 nodeLabels
     : COLON name { $$ = SymbolChain::create(ast); $$->add($2); }
-    | COLON parameter { scanner.notImplemented(@$, "Parameters"); }
+    | COLON parameter { $$ = SymbolChain::create(ast); $$->addParameter($2); }
     | nodeLabels COLON name { $$ = $1; $$->add($3); }
-    | nodeLabels COLON parameter { $$ = $1; scanner.notImplemented(@$, "Parameters"); }
+    | nodeLabels COLON parameter { $$ = $1; $$->addParameter($3); }
     ;
 
 createSt
@@ -2032,8 +2034,8 @@ caseComparisonSign
     ;
 
 parameter
-    : DOLLAR symbol { scanner.notImplemented(@$, "Parameters"); }
-    | DOLLAR numLit { scanner.notImplemented(@$, "Parameters"); }
+    : DOLLAR symbol { $$ = Parameter::create(ast, $2->getName()); LOC($$, @$); }
+    | DOLLAR DIGIT { $$ = ParserUtils::createNumberedParameter(ast, $2); LOC($$, @$); }
     ;
 
 literal

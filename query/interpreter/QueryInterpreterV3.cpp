@@ -51,8 +51,18 @@ void QueryInterpreterV3::execute(QueryStatus& status,
                                  CommitHash hash,
                                  ChangeID changeID,
                                  NLOutputSink* sink) {
+    execute(status, query, graphName, hash, changeID, sink, nullptr);
+}
+
+void QueryInterpreterV3::execute(QueryStatus& status,
+                                 std::string_view query,
+                                 std::string_view graphName,
+                                 CommitHash hash,
+                                 ChangeID changeID,
+                                 NLOutputSink* sink,
+                                 const ParameterMap* parameters) {
     const TimePoint start = Clock::now();
-    executeImpl(status, query, graphName, hash, changeID, sink);
+    executeImpl(status, query, graphName, hash, changeID, sink, parameters);
     const TimePoint end = Clock::now();
 
     status.setTotalTime(end - start);
@@ -63,7 +73,8 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      std::string_view graphName,
                                      CommitHash hash,
                                      ChangeID changeID,
-                                     NLOutputSink* sink) {
+                                     NLOutputSink* sink,
+                                     const ParameterMap* parameters) {
     SystemAccessor system = _sysMan->accessShared();
 
     auto txRes = system.openTransaction(graphName, hash, changeID);
@@ -230,7 +241,8 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      writeBuffer,
                                      metadataBuilder,
                                      &procedureContext,
-                                     &systemContext);
+                                     &systemContext,
+                                     parameters);
     try {
         if (explain) {
             interpreter.explain(*explain);

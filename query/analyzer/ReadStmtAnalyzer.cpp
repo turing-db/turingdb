@@ -29,6 +29,7 @@
 #include "QualifiedName.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "Parameter.h"
 #include "Symbol.h"
 #include "Literal.h"
 #include "WhereClause.h"
@@ -411,6 +412,10 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     if (labels && !labels->empty()) {
         for (const Symbol* label : *labels) {
             data->addLabelConstraint(label->getName());
+        }
+
+        for (const Parameter* parameter : labels->getParameters()) {
+            data->addLabelParameter(parameter->getName());
         }
     }
 

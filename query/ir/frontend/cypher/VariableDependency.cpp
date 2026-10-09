@@ -9,8 +9,9 @@ using namespace db;
 
 namespace {
 
-void appendUnique(std::span<const std::string_view> names, std::vector<std::string_view>& out) {
-    for (const std::string_view name : names) {
+template <typename T>
+void appendUnique(std::span<const T> names, std::vector<T>& out) {
+    for (const T& name : names) {
         const bool alreadyPresent = std::ranges::find(out, name) != out.end();
         if (alreadyPresent) {
             continue;
@@ -30,7 +31,7 @@ void VariableDependency::addOutgoing(DependencyEdge* newEdge) {
     _outgoing.push_back(newEdge);
 }
 
-void VariableDependency::addLabelConstraints(std::span<const std::string_view> labels) {
+void VariableDependency::addLabelConstraints(std::span<const LabelRef> labels) {
     if (labels.empty()) {
         return;
     }

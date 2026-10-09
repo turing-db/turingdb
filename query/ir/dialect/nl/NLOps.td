@@ -43,7 +43,7 @@ def ScanNodesByLabel : NLOp<"scan_nodes_by_label", [Pure, InferTypeOpAdaptor]> {
     their shape, so - like nl.scan_nodes - the result is always
     !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
   }];
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(` $labels `)` attr-dict";
 }
@@ -93,7 +93,7 @@ def ScanNodesByPropertyValue : NLOp<"scan_nodes_by_property_value", [Pure, Infer
     nl.scan_nodes - the result is always !nl.iter<!nl.chunk<!storage.node_id>>
     and is inferred, not spelled out.
   }];
-  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<StrArrayAttr>:$labels);
+  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<LabelRefArrayAttr>:$labels);
   let results   = (outs NLIterator:$result);
   let hasVerifier = 1;
   let assemblyFormat = "`(` $property `,` $value (`,` $labels^)? `)` attr-dict";
@@ -620,7 +620,7 @@ def ScanOutEdgesByLabelSrc : NLOp<"scan_out_edges_by_label_src", [Pure, InferTyp
     same four-chunk edge iterator nl.scan_edges produces and is inferred, not
     spelled out.
   }];
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(` $labels `)` attr-dict";
 }
@@ -645,7 +645,7 @@ def ScanInEdgesByLabelTgt : NLOp<"scan_in_edges_by_label_tgt", [Pure, InferTypeO
     conjunction unsatisfiable, so the loop yields no chunk. The result is the same
     four-chunk edge iterator nl.scan_edges produces and is inferred, not spelled out.
   }];
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(` $labels `)` attr-dict";
 }
@@ -668,7 +668,7 @@ def ScanOutEdgesByLabelTgt : NLOp<"scan_out_edges_by_label_tgt", [Pure, InferTyp
     conjunction unsatisfiable, so the loop yields no chunk. The result is the same
     four-chunk edge iterator nl.scan_edges produces and is inferred, not spelled out.
   }];
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(` $labels `)` attr-dict";
 }
@@ -691,7 +691,7 @@ def ScanInEdgesByLabelSrc : NLOp<"scan_in_edges_by_label_src", [Pure, InferTypeO
     conjunction unsatisfiable, so the loop yields no chunk. The result is the same
     four-chunk edge iterator nl.scan_edges produces and is inferred, not spelled out.
   }];
-  let arguments = (ins StrArrayAttr:$labels);
+  let arguments = (ins LabelRefArrayAttr:$labels);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(` $labels `)` attr-dict";
 }
@@ -871,7 +871,7 @@ def GetOutEdgesByLabel : NLOp<"get_out_edges_by_label", [Pure, InferTypeOpAdapto
     carried chunk types are spelled out, after the colon.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, LabelRefArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
@@ -896,7 +896,7 @@ def GetInEdgesByLabel : NLOp<"get_in_edges_by_label", [Pure, InferTypeOpAdaptor]
     resolved the same way and an absent name yields no chunk.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, LabelRefArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
@@ -923,7 +923,7 @@ def GetOutEdgesByTypeAndLabel : NLOp<"get_out_edges_by_type_and_label", [Pure, I
     resolved into, or a label absent from the schema, yields no chunk.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, LabelRefArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
@@ -944,7 +944,7 @@ def GetInEdgesByTypeAndLabel : NLOp<"get_in_edges_by_type_and_label", [Pure, Inf
     nl.get_in_edges.
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_types, LabelRefArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
@@ -1027,8 +1027,8 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
                        OptionalAttr<DenseI64ArrayAttr>:$edge_type_steps,
-                       OptionalAttr<StrArrayAttr>:$end_labels,
-                       OptionalAttr<StrArrayArrayAttr>:$hop_labels,
+                       OptionalAttr<LabelRefArrayAttr>:$end_labels,
+                       OptionalAttr<LabelRefArrayArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
@@ -1335,7 +1335,7 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThrou
     the create has been translated.
   }];
 
-  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, StrArrayArrayAttr:$alternatives);
+  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, LabelRefArrayArrayAttr:$alternatives);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
@@ -2202,7 +2202,7 @@ def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
     so the result type is inferred, not spelled out.
   }];
 
-  let arguments = (ins StrArrayArrayAttr:$labels,
+  let arguments = (ins LabelRefArrayArrayAttr:$labels,
                        OptionalAttr<StrAttr>:$property,
                        OptionalAttr<UI64Attr>:$propertyScan);
   let results   = (outs NLChunk:$result);
@@ -3214,7 +3214,7 @@ def CreateNode : NLOp<"create_node", [AttrSizedOperandSegments, RowAlignedThroug
       }
   }];
 
-  let arguments = (ins StrArrayAttr:$labels,
+  let arguments = (ins LabelRefArrayAttr:$labels,
                        StrArrayAttr:$prop_names,
                        Variadic<NLChunk>:$prop_values,
                        Optional<NLChunk>:$cardinality);
@@ -3298,7 +3298,7 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
     merging the same node twice in one query writes it once.
   }];
 
-  let arguments = (ins StrArrayArrayAttr:$node_labels,
+  let arguments = (ins LabelRefArrayArrayAttr:$node_labels,
                        StrArrayArrayAttr:$node_prop_names,
                        StrArrayAttr:$edge_types,
                        StrArrayArrayAttr:$edge_prop_names,

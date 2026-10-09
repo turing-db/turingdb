@@ -3,6 +3,8 @@
 #include <signal.h>
 #include <regex>
 #include <stdlib.h>
+#include <strings.h>
+#include <limits>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <termios.h>
@@ -10,6 +12,7 @@
 
 #include <argparse.hpp>
 #include <linenoise.h>
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -27,6 +30,7 @@
 #include "ShellCompletion.h"
 #include "ShellTable.h"
 #include "LocalMemory.h"
+#include "ParameterValue.h"
 
 #include "NLOutputSink.h"
 
@@ -107,6 +111,61 @@ void extractWords(std::vector<std::string>& words, const std::string& line) {
         words.emplace_back(std::string(line.c_str() + pos, newPos - pos));
         pos = newPos;
     }
+}
+
+void parseJsonParameter(const nlohmann::json& json, ParameterValue& value) {
+    if (json.is_null()) {
+        value.setNull();
+    } else if (json.is_boolean()) {
+        value.setBool(json.get<bool>());
+    } else if (json.is_number_unsigned()) {
+        const uint64_t number = json.get<uint64_t>();
+        if (number > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            throw TuringException(fmt::format("Integer {} exceeds the Int64 range", number));
+        }
+
+        value.setInt64(static_cast<int64_t>(number));
+    } else if (json.is_number_integer()) {
+        value.setInt64(json.get<int64_t>());
+    } else if (json.is_number_float()) {
+        value.setDouble(json.get<double>());
+    } else if (json.is_string()) {
+        value.setString(json.get_ref<const std::string&>());
+    } else if (json.is_array()) {
+        ParameterValue::List& list = value.setList();
+        for (const nlohmann::json& element : json) {
+            parseJsonParameter(element, list.emplace_back());
+        }
+    } else {
+        ParameterValue::Map& map = value.setMap();
+        for (const auto& [key, entry] : json.items()) {
+            parseJsonParameter(entry, map[key]);
+        }
+    }
+}
+
+bool isParameterName(std::string_view name) {
+    if (name.empty()) {
+        return false;
+    }
+
+    return std::all_of(name.begin(), name.end(), [](char ch) { return isalnum(ch) || ch == '_'; });
+}
+
+bool isShowParametersCommand(const std::string& line) {
+    std::vector<std::string> words;
+    extractWords(words, line);
+
+    if (words.size() != 2) {
+        return false;
+    }
+
+    std::string& lastWord = words.back();
+    if (lastWord.ends_with(';')) {
+        lastWord.pop_back();
+    }
+
+    return strcasecmp(words[0].c_str(), "SHOW") == 0 && strcasecmp(lastWord.c_str(), "PARAMETERS") == 0;
 }
 
 // Commands
@@ -683,6 +742,65 @@ void asString(std::string& out, const MapView mv) {
     out += '}';
 }
 
+void asString(std::string& out, const ParameterValue& value) {
+    if (value.isNull()) {
+        out += "null";
+        return;
+    }
+
+    switch (value.getType()) {
+        case ValueType::Int64:
+            asString(out, value.getInt64());
+        break;
+        case ValueType::Double:
+            asString(out, value.getDouble());
+        break;
+        case ValueType::Bool:
+            out += value.getBool() ? "true" : "false";
+        break;
+        case ValueType::String:
+            out += value.getString();
+        break;
+        case ValueType::List: {
+            out += '[';
+
+            bool first = true;
+            for (const ParameterValue& element : value.getList()) {
+                if (!first) {
+                    out += ", ";
+                }
+
+                asString(out, element);
+                first = false;
+            }
+
+            out += ']';
+        }
+        break;
+        case ValueType::Map: {
+            out += '{';
+
+            bool first = true;
+            for (const auto& [key, entry] : value.getMap()) {
+                if (!first) {
+                    out += ", ";
+                }
+
+                out += key;
+                out += " : ";
+                asString(out, entry);
+                first = false;
+            }
+
+            out += '}';
+        }
+        break;
+        default:
+            throw TuringException(fmt::format("Unsupported parameter type {}", ValueTypeName::value(value.getType())));
+        break;
+    }
+}
+
 template <typename T>
 void writeValue(ShellTable& table, const T& value) {
     std::string out;
@@ -822,6 +940,10 @@ void TuringShell::processLine(std::string& line) {
     // Remove leading whitespace
     trim(line);
 
+    if (processParameterCommand(line)) {
+        return;
+    }
+
     // Check if it is a local command
     const auto cmdName = getFirstWord(line);
     const auto localCmdIt = _localCommands.find(cmdName);
@@ -870,7 +992,7 @@ void TuringShell::processLine(std::string& line) {
 
     } else {
         TuringShellNLSink sink(table, rowCount, _quiet);
-        const QueryState state(_graphName, _mem, &_compilerContext, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID);
+        const QueryState state(_graphName, _mem, &_compilerContext, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID, &_parameters);
         res = _turingDB.query(line, state);
     }
 
@@ -911,6 +1033,96 @@ void TuringShell::processLine(std::string& line) {
     if (_remoteConnected) {
         std::cout << "Remote query executed in " << remoteQueryTime.count() << " ms.\n";
     }
+}
+
+bool TuringShell::processParameterCommand(const std::string& line) {
+    constexpr std::string_view PARAM_COMMAND = ":param";
+
+    if (getFirstWord(line) == PARAM_COMMAND) {
+        setParameter(std::string_view(line).substr(PARAM_COMMAND.size()));
+        return true;
+    } else if (isShowParametersCommand(line)) {
+        printParameters();
+        return true;
+    }
+
+    return false;
+}
+
+void TuringShell::setParameter(std::string_view arguments) {
+    constexpr std::string_view ARROW = "=>";
+    constexpr std::string_view USAGE = "Usage: :param <name> => <json value>, or :param clear";
+
+    std::string trimmed(arguments);
+    trim(trimmed);
+
+    if (trimmed == "clear") {
+        _parameters.clear();
+        return;
+    }
+
+    const size_t arrowPos = trimmed.find(ARROW);
+    if (arrowPos == std::string::npos) {
+        spdlog::error("{}", USAGE);
+        return;
+    }
+
+    std::string name = trimmed.substr(0, arrowPos);
+    name.erase(name.find_last_not_of(whiteChars) + 1);
+
+    if (!isParameterName(name)) {
+        spdlog::error("Invalid parameter name '{}'. {}", name, USAGE);
+        return;
+    }
+
+    ParameterValue value;
+    try {
+        const nlohmann::json json = nlohmann::json::parse(trimmed.substr(arrowPos + ARROW.size()));
+        parseJsonParameter(json, value);
+    } catch (const nlohmann::json::exception& e) {
+        spdlog::error("Invalid value for parameter {}: {}", name, e.what());
+        return;
+    } catch (const TuringException& e) {
+        spdlog::error("Invalid value for parameter {}: {}", name, e.what());
+        return;
+    }
+
+    _parameters.set(name, value);
+}
+
+void TuringShell::printParameters() const {
+    using Entry = ParameterMap::Values::value_type;
+
+    const ParameterMap::Values& values = _parameters.getValues();
+
+    std::vector<const Entry*> entries;
+    entries.reserve(values.size());
+    for (const Entry& entry : values) {
+        entries.push_back(&entry);
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const Entry* lhs, const Entry* rhs) { return lhs->first < rhs->first; });
+
+    ShellTable table;
+    table.startRow();
+    table.addCell("name");
+    table.addCell("type");
+    table.addCell("value");
+
+    for (const Entry* entry : entries) {
+        const ParameterValue& value = entry->second;
+
+        table.startRow();
+        table.addCell(entry->first);
+        table.addCell(value.getTypeName());
+
+        std::string valueText;
+        asString(valueText, value);
+        table.addCell(valueText);
+    }
+
+    table.print(std::cout);
+    std::cout << "\n";
 }
 
 bool TuringShell::setGraphName(const std::string& graphName) {
