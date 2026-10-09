@@ -1,6 +1,21 @@
 #include "FunctionDecls.h"
 
+#include <ctype.h>
+#include <algorithm>
+
 using namespace db;
+
+namespace {
+
+// Cypher matches a function name whatever its case: stdev is stDev and COUNT is count
+void foldCase(std::string_view name, std::string& folded) {
+    folded.resize(name.size());
+    std::ranges::transform(name, folded.begin(), [](unsigned char letter) {
+        return static_cast<char>(tolower(letter));
+    });
+}
+
+}
 
 FunctionDecls::FunctionDecls()
 {
@@ -724,7 +739,10 @@ FunctionSignature* FunctionDecls::createFunction(std::string_view fullName) {
     auto func = std::make_unique<FunctionSignature>(fullName);
     FunctionSignature* ptr = func.get();
     _owned.push_back(std::move(func));
-    _nameMap[fullName].push_back(ptr);
+
+    std::string foldedName;
+    foldCase(fullName, foldedName);
+    _nameMap[foldedName].push_back(ptr);
 
     return ptr;
 }
@@ -753,7 +771,10 @@ void FunctionDecls::createOverloads(std::string_view fullName,
 }
 
 FunctionResolver::FunctionSignatureRange FunctionDecls::lookup(std::string_view fullName) const {
-    const auto it = _nameMap.find(fullName);
+    std::string foldedName;
+    foldCase(fullName, foldedName);
+
+    const auto it = _nameMap.find(foldedName);
     if (it == _nameMap.end()) {
         return FunctionSignatureRange();
     }
