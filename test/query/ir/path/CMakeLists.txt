@@ -28,6 +28,11 @@ target_link_libraries(test_query_ir_explore_end_property PRIVATE
         turing_testenv_s
         turing_db_system_s)
 
+add_ir_tests(test_query_ir_explore_end_set_past_hops ExploreEndSetPastHopsTest.cpp)
+target_link_libraries(test_query_ir_explore_end_set_past_hops PRIVATE turing_ir_test_rows_s turing_db_examples_s)
+
+add_call_v3_test(test_query_ir_explore_end_set_past_hops_cypher ExploreEndSetPastHopsCypherTest.cpp)
+
 add_ir_tests(test_query_ir_explore_distinct_ends ExploreDistinctEndsTest.cpp)
 target_link_libraries(test_query_ir_explore_distinct_ends PRIVATE turing_ir_test_rows_s turing_db_examples_s)
 

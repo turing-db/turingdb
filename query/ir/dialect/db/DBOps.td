@@ -1415,11 +1415,13 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
       %s, %t, %p, %b2 = db.explore_paths(%a, {%b}) forward hops 1 end_column 0
 
     `end_nodes` binds the end to one set of nodes every seed shares, the way
-    `MATCH (a)-[e]->+(b {name:"Adam"})` ends on the nodes named Adam: where `end_column`
-    gives each row its own target, this gives the whole walk the same ones. The column is
-    consumed in full before the walk runs, as db.shortest_path consumes its two node columns,
-    so it is a pipeline breaker on that operand: it comes from a scan of its own, standing
-    ahead of the one the seeds come from, and lowering rejects a set the walk would outrun.
+    `MATCH (a)-[e]->+(b {name:"Adam"})` ends on the nodes named Adam, and
+    `MATCH (a)-[e]->+(b)-->(c {name:"Adam"})` on the nodes with an edge to one: where
+    `end_column` gives each row its own target, this gives the whole walk the same ones. The
+    column is consumed in full before the walk runs, as db.shortest_path consumes its two node
+    columns, so it is a pipeline breaker on that operand: it comes from a scan of its own and
+    the hops walked from it, standing ahead of the scan the seeds come from, and lowering
+    rejects a set the walk would outrun.
     Only the paths ending on a node of the set are emitted, the prefixes that cannot reach one
     in time are not walked, and an empty set emits nothing.
 
