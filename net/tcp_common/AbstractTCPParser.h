@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <functional>
 #include <memory>
 
@@ -25,6 +26,7 @@ public:
 
     virtual void reset() = 0;
     [[nodiscard]] virtual AnalyzeResult analyze() = 0;
+    [[nodiscard]] virtual size_t getUnreceivedRequestBytes() const = 0;
     virtual void handleAnalyzeError(AnalyzeError error, AbstractTCPWriter& writer) = 0;
 
 protected:

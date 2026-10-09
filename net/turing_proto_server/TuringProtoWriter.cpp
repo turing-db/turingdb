@@ -3,7 +3,9 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <string>
 
+#include "HTTP.h"
 #include "HTTPUtils.h"
 #include "NetException.h"
 #include "QueryStatus.h"
@@ -116,13 +118,16 @@ void TuringProtoWriter::writeProtocolError(std::string_view message) {
     writePacket(MessageTypes::PROTOCOL_ERROR);
 }
 
-void TuringProtoWriter::writeAnalyzeError(int32_t) {
+void TuringProtoWriter::writeAnalyzeError(int32_t error) {
+    std::string details;
+    net::HTTP::describeError(static_cast<net::HTTP::Error>(error), details);
+
     // The request failed HTTP framing analysis before dispatch, so no response has been
     // started yet. Open the 200 OK envelope, send one PROTOCOL_ERROR packet and the chunk
     // terminator, and swallow a send failure: the connection is closed right after.
     try {
         startResponse(net::ConnectionHeader::CLOSE);
-        writeProtocolError("Malformed request rejected before dispatch");
+        writeProtocolError(details);
         flush();
     } catch (const NetException&) {
     }

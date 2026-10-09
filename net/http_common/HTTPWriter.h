@@ -295,7 +295,9 @@ public:
     }
 
     void writeAnalyzeError(int32_t error) override {
-        switch (static_cast<HTTP::Error>(error)) {
+        const HTTP::Error httpError = static_cast<HTTP::Error>(error);
+
+        switch (httpError) {
             case net::HTTP::Error::REQUEST_TOO_BIG:
                 setFirstLine(net::HTTP::Status::CONTENT_TOO_LARGE);
             break;
@@ -330,6 +332,16 @@ public:
         addChunkedTransferEncoding();
         addContentType(net::ContentType::JSON);
         flushHeader();
+
+        std::string details;
+        HTTP::describeError(httpError, details);
+
+        write("{\"error\":\"");
+        write(HTTP::ErrorName::value(httpError));
+        write("\",\"error_details\":\"");
+        write(details);
+        write("\"}");
+        flush();
         flush();
     }
 
