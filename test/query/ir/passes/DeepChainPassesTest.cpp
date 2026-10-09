@@ -144,3 +144,47 @@ func.func @main() {
 
     EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(*module), 1u);
 }
+
+TEST_F(DeepChainPassesTest, placesALongStackOfFiltersOverAProduct) {
+    std::string program = R"mlir(
+func.func @main() {
+  %f0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
+  }
+)mlir";
+
+    // An odd link relates both factors and stays over the product, an even link reads the
+    // left factor alone and moves into it, past every odd link below it
+    for (size_t link = 1; link <= CHAIN_LENGTH; link++) {
+        const std::string index = std::to_string(link);
+        const std::string previous = "%f" + std::to_string(link - 1);
+        const std::string right = link % 2 == 1 ? previous + "#1" : previous + "#0";
+
+        program += "  %m" + index + " = db.neq " + previous + "#0, " + right
+                 + " : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>\n";
+        program += "  %f" + index + ":2 = db.filter(%m" + index + ", {" + previous + "#0, " + previous + "#1})"
+                   " : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)"
+                   " -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)\n";
+    }
+
+    const std::string last = "%f" + std::to_string(CHAIN_LENGTH);
+    program += "  db.output(" + last + "#0, " + last + "#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>\n  return\n}\n";
+
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPass(*module, mlir::db::createPlaceInFactors()));
+
+    size_t filtersInTheFactors = 0;
+    for (mlir::db::FilterOp filter : collect<mlir::db::FilterOp>(*module)) {
+        if (mlir::isa<mlir::db::CrossProduct>(filter->getParentOp())) {
+            filtersInTheFactors++;
+        }
+    }
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), CHAIN_LENGTH);
+    EXPECT_EQ(filtersInTheFactors, CHAIN_LENGTH / 2);
+}
