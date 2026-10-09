@@ -17,6 +17,14 @@ namespace turing::test {
 // the timeout elapses. Returns true if the listener is reachable.
 [[nodiscard]] bool waitUntilListening(uint16_t port, std::chrono::milliseconds timeout);
 
+struct HttpResponse {
+    std::string statusLine;
+    std::string body;
+};
+
+// Posts the query on a fresh connection and reads a chunked response.
+void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response);
+
 // USE_TURING_PROTO is read once during TuringServer::start() to choose the
 // binary protocol over HTTP. RAII scope that sets it for the lifetime of the
 // scope and restores any prior value on destruction so tests don't leak the

@@ -178,7 +178,7 @@ public:
     }
 
     void value(ChangeID changeID) {
-        value(std::to_string(changeID.get()));
+        value(std::to_string(changeID));
     }
 
     void nullValue() {

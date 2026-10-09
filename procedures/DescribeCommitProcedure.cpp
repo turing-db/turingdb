@@ -37,23 +37,19 @@ void getCommitStats(CommitStats* stats,
     stats->_edgeCount = 0;
     stats->_partCount = 0;
 
-    std::string lower(inputHash);
-    std::transform(lower.begin(), lower.end(), lower.begin(),
-                   [](char c) { return std::tolower(c); });
-
     //Strip away the '(HEAD)' substring from the head hash value
-    const size_t parenPos = lower.find('(');
-    if (parenPos != std::string::npos) {
-        lower.resize(parenPos);
+    const std::string_view hashText = inputHash.substr(0, inputHash.find('('));
+
+    const auto hash = CommitHash::fromString(hashText);
+    if (!hash) {
+        return;
     }
 
     const Commit* commit = headCommit;
 
     // Traverse the commit history chain to find the relevant commit
     while (commit) {
-        const std::string hashStr = fmt::format("{:x}", commit->hash().get());
-
-        if (lower == hashStr) {
+        if (commit->hash() == hash.value()) {
             stats->_nodeCount = commit->getNumNodes();
             stats->_edgeCount = commit->getNumEdges();
             stats->_partCount = commit->getNumDataParts();

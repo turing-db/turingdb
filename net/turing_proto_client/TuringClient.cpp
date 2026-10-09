@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <charconv>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -177,32 +176,16 @@ void TuringClient::disconnect() {
     }
 }
 
-// Server-side ChangeID/CommitHash::fromString() parses with std::from_chars(..., 16),
-// so the wire encoding must be hex. std::to_string() would silently emit decimal,
-// which matches hex only for values 0-9 and then misroutes everything from 10 on.
-static std::string toHexString(uint64_t value) {
-    std::array<char, 17> buffer;
-    const auto res = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, 16);
-    return std::string(buffer.data(), res.ptr);
-}
-
 void TuringClient::sendRequest(const std::string& query) {
     std::string headers;
     headers.reserve(256);
 
-    const std::string commitParam = (_commitHash.get() == db::CommitHash::head().get())
-                                      ? std::string("head")
-                                      : toHexString(_commitHash.get());
-    const std::string changeParam = (_changeID.get() == db::ChangeID::head().get())
-                                      ? std::string("head")
-                                      : toHexString(_changeID.get());
-
     headers += "POST /query?graph=";
     headers += _graphName;
     headers += "&commit=";
-    headers += commitParam;
+    _commitHash.appendString(headers);
     headers += "&change=";
-    headers += changeParam;
+    _changeID.appendString(headers);
     headers += " HTTP/1.1\r\n";
 
     headers += "Host: ";

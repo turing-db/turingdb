@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <charconv>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -76,15 +75,6 @@ size_t parseHexU32(std::string_view hexDigits) {
         value = (value << 4) | digit;
     }
     return value;
-}
-
-// Server-side ChangeID/CommitHash::fromString() parses with std::from_chars(..., 16),
-// so the wire encoding must be hex. std::to_string() would silently emit decimal,
-// which matches hex only for values 0-9 and then misroutes everything from 10 on.
-static std::string toHexString(uint64_t value) {
-    std::array<char, 17> buffer;
-    const auto res = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, 16);
-    return std::string(buffer.data(), res.ptr);
 }
 
 // Classifies the result of a recv/recvmsg/send syscall. Throws on a fatal error or a peer
@@ -474,19 +464,12 @@ void TuringAsyncClient::buildRequest(const std::string& query) {
     _sendBuffer.clear();
     _sendBuffer.reserve(query.size() + 256);
 
-    const std::string commitParam = (_commitHash.get() == db::CommitHash::head().get())
-                                      ? std::string("head")
-                                      : toHexString(_commitHash.get());
-    const std::string changeParam = (_changeID.get() == db::ChangeID::head().get())
-                                      ? std::string("head")
-                                      : toHexString(_changeID.get());
-
     _sendBuffer += "POST /query?graph=";
     _sendBuffer += _graphName;
     _sendBuffer += "&commit=";
-    _sendBuffer += commitParam;
+    _commitHash.appendString(_sendBuffer);
     _sendBuffer += "&change=";
-    _sendBuffer += changeParam;
+    _changeID.appendString(_sendBuffer);
     _sendBuffer += " HTTP/1.1\r\n";
 
     _sendBuffer += "Host: ";

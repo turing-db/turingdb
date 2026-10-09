@@ -109,6 +109,7 @@ target_sources(test_storage_path_branching_sample PRIVATE iterators/PathExplorat
 add_storage_tests(test_storage_metadatarebaser versioning/MetadataRebaserTest.cpp)
 add_storage_tests(test_storage_datapartmerger versioning/DatapartMergerTest.cpp)
 add_storage_tests(test_storage_pending_adjacency versioning/PendingAdjacencyTest.cpp)
+add_storage_tests(test_storage_commit_hash_format versioning/CommitHashFormatTest.cpp)
 
 add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
 add_storage_tests(test_storage_listorder ListOrderTest.cpp)

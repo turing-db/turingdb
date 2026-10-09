@@ -114,7 +114,7 @@ protected:
 
     void headCommitHash(std::string& hash) const {
         const Transaction transaction(_graph->openTransaction());
-        hash = fmt::format("{:x}", transaction.getCommitHash().get());
+        hash = fmt::format("{}", transaction.getCommitHash());
     }
 
     ProcedureManager _procedures;

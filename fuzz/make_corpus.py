@@ -83,7 +83,7 @@ HTTP_REQUEST = (
 # On main, inside a change, on a commit, and with a token.
 HTTP_CLIENT_STATES = [
     ("graph=default", ""),
-    ("graph=default&change=1f", ""),
+    ("graph=default&change=31", ""),
     ("graph=default&commit=0123456789abcdef", ""),
     ("graph=default", "Authorization: Bearer token\r\n"),
 ]

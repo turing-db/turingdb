@@ -105,11 +105,11 @@ class BinaryClient(CypherHelpersMixin):
             self._change = None
             return
         if isinstance(change, str):
-            change_int = int(change, 16)
+            change_int = int(change)
             change_str = change
         else:
             change_int = change
-            change_str = f"{change:x}"
+            change_str = str(change)
         self._call(self._inner.set_change_id, change_int)
         self._change = change_str
 

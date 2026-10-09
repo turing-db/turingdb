@@ -176,7 +176,7 @@ class HTTPClient:
 
     def set_change(self, change: int | str):
         if isinstance(change, int):
-            change = f"{change:x}"
+            change = str(change)
         self._params["change"] = change
 
     def checkout(self, change: int | Literal["main"] = "main", commit: str = "HEAD"):

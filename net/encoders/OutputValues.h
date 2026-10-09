@@ -24,8 +24,8 @@ class EntityList;
 template <typename T>
 struct IsHash : std::false_type {};
 
-template <int N>
-struct IsHash<TemplateCommitHash<N>> : std::true_type {};
+template <int N, int Radix>
+struct IsHash<TemplateCommitHash<N, Radix>> : std::true_type {};
 
 template <typename T>
 concept Hash = IsHash<T>::value;

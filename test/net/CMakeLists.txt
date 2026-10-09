@@ -66,3 +66,11 @@ target_link_libraries(test_net_version_param PRIVATE
     turing_testenv_s
     turing_db_examples_s
     nlohmann_json)
+
+add_turing_test(test_net_change_id_param ChangeIDParamTest.cpp)
+target_link_libraries(test_net_change_id_param PRIVATE
+    turing_db_server_s
+    turing_db_proto_client_s
+    turing_testenv_s
+    turing_db_examples_s
+    nlohmann_json)

@@ -185,11 +185,11 @@ class PacketAssembler {
     }
 }
 
-// 'main'/'head'/'HEAD' select the tip; a number, BigInt or hex string selects a
-// specific change/commit. The server parses these query params as hex.
-function normalizeRef(value) {
+// 'main'/'head'/'HEAD' select the tip; a number, BigInt or string selects a specific
+// change/commit. The server reads a change ID in decimal and a commit hash in hex.
+function normalizeRef(value, radix) {
     if (typeof value === "number" || typeof value === "bigint") {
-        return value.toString(16);
+        return value.toString(radix);
     }
     const text = String(value).toLowerCase();
     return text === "main" || text === "head" ? "head" : text;
@@ -589,11 +589,11 @@ export class TuringClient {
     }
 
     setChange(change) {
-        this._change = normalizeRef(change);
+        this._change = normalizeRef(change, 10);
     }
 
     setCommit(commit) {
-        this._commit = normalizeRef(commit);
+        this._commit = normalizeRef(commit, 16);
     }
 
     setAuthToken(token) {
@@ -605,8 +605,8 @@ export class TuringClient {
     // options: { graph, change, commit, signal } override the client state for this call.
     async query(cypher, options = {}) {
         const graph = options.graph ?? this._graph;
-        const change = options.change !== undefined ? normalizeRef(options.change) : this._change;
-        const commit = options.commit !== undefined ? normalizeRef(options.commit) : this._commit;
+        const change = options.change !== undefined ? normalizeRef(options.change, 10) : this._change;
+        const commit = options.commit !== undefined ? normalizeRef(options.commit, 16) : this._commit;
 
         const url = `${this._url}?graph=${encodeURIComponent(graph)}`
             + `&commit=${encodeURIComponent(commit)}&change=${encodeURIComponent(change)}`;

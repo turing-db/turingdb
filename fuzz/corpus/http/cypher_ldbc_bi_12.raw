@@ -1,4 +1,4 @@
-POST /query?graph=default&change=1f HTTP/1.1
+POST /query?graph=default&change=31 HTTP/1.1
 Host: localhost:6666
 Accept-Encoding: gzip, deflate
 Connection: keep-alive

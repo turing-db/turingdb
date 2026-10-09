@@ -38,7 +38,7 @@ ChangeResult<Change*> ChangeManager::getChange(const Graph* graph, ChangeID chan
 
     const auto it = _changes.find(GraphChangePair {graph, changeID});
     if (it == _changes.end()) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND, changeID);
     }
 
     return it->second.get();
@@ -50,7 +50,7 @@ ChangeResult<void> ChangeManager::submitChange(ChangeAccessor& access, JobSystem
 
     const auto findIt = _changes.find(GraphChangePair {graph, access.getID()});
     if (findIt == _changes.end()) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND, access.getID());
     }
 
     auto& change = findIt->second;
@@ -70,7 +70,7 @@ ChangeResult<void> ChangeManager::deleteChange(ChangeAccessor& access, ChangeID 
 
     const auto it = _changes.find(GraphChangePair {graph, changeID});
     if (it == _changes.end()) {
-        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND);
+        return ChangeError::result(ChangeErrorType::CHANGE_NOT_FOUND, changeID);
     }
 
     access.release();

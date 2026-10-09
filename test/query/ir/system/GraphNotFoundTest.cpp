@@ -99,13 +99,13 @@ TEST_F(GraphNotFoundTest, aChangeThatDoesNotExistHasAMessage) {
     runQuery(status, "MATCH (n) RETURN count(n)", _graphName, CommitHash::head(), ChangeID {12345});
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::CHANGE_NOT_FOUND);
-    EXPECT_EQ(status.getError(), "Change does not exist");
+    EXPECT_EQ(status.getError(), "Change '12345' does not exist");
 }
 
 TEST_F(GraphNotFoundTest, aCommitThatDoesNotExistHasAMessage) {
     QueryStatus status;
-    runQuery(status, "MATCH (n) RETURN count(n)", _graphName, CommitHash {12345}, ChangeID::head());
+    runQuery(status, "MATCH (n) RETURN count(n)", _graphName, CommitHash {0x12345}, ChangeID::head());
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::COMMIT_NOT_FOUND);
-    EXPECT_EQ(status.getError(), "Commit does not exist");
+    EXPECT_EQ(status.getError(), "Commit '12345' does not exist");
 }

@@ -78,8 +78,8 @@ template <db::IntegralType T, int tag>
     return std::to_string(value.getValue());
 }
 
-template <int I>
-[[maybe_unused]] std::string valueToString(const db::TemplateCommitHash<I>& value) {
+template <int I, int Radix>
+[[maybe_unused]] std::string valueToString(const db::TemplateCommitHash<I, Radix>& value) {
     return std::to_string(value.get());
 }
 
