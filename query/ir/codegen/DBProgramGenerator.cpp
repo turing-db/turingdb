@@ -7907,6 +7907,10 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
                        expr);
         break;
 
+        case Expr::Kind::PARAMETER:
+            throwError("Parameters in expressions are not implemented yet.", expr);
+        break;
+
         case Expr::Kind::_SIZE:
             throw FatalException("Invalid expression kind.");
         break;

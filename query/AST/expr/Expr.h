@@ -38,6 +38,7 @@ public:
         EXISTS,
         COUNT_SUBQUERY,
         COLLECT_SUBQUERY,
+        PARAMETER,
 
         _SIZE
     };
@@ -147,7 +148,8 @@ using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::CASE, "CASE">,
     EnumStringPair<Expr::Kind::EXISTS, "EXISTS">,
     EnumStringPair<Expr::Kind::COUNT_SUBQUERY, "COUNT_SUBQUERY">,
-    EnumStringPair<Expr::Kind::COLLECT_SUBQUERY, "COLLECT_SUBQUERY">
+    EnumStringPair<Expr::Kind::COLLECT_SUBQUERY, "COLLECT_SUBQUERY">,
+    EnumStringPair<Expr::Kind::PARAMETER, "PARAMETER">
 >;
 
 }
