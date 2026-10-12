@@ -6735,7 +6735,8 @@ bool walksFromTheEndSet(const GraphView& view,
     sampledBodyOf(loopData, hopFilters, body);
 
     const PartDirectory parts(view);
-    const std::vector<NodeID>& seeds = loopData->getInput()->getRaw();
+    const ColumnNodeIDs* input = loopData->getInput();
+    const std::vector<NodeID>& seeds = input->getRaw();
 
     return ReversedPathExplorator::isCheaper(parts, body, seeds, endNodes, maxHops, fromEnds);
 }
@@ -6759,7 +6760,8 @@ void runFromTheEndSet(NLExecutionContext* context,
                                       maxHops);
     explorator.setIndices(loopData->getIndices());
     explorator.setTargets(loopData->getTargets());
-    explorator.setDistinctEnds(loopData->isDistinctEnds());
+    const bool distinctEnds = loopData->isDistinctEnds();
+    explorator.setDistinctEnds(distinctEnds);
 
     std::vector<EdgeTypeID> edgeTypes;
     combinedEdgeTypes(loopData, edgeTypes);
@@ -6768,7 +6770,7 @@ void runFromTheEndSet(NLExecutionContext* context,
     PathTargetIndex seedIndex;
     const std::span<const NodeID> seedNodes = explorator.getSeedNodes();
     const PathExplorationDir reversed = reverseOf(combinedDirection(loopData));
-    const bool indexesSeeds = !loopData->isDistinctEnds()
+    const bool indexesSeeds = !distinctEnds
                            && PathTargetIndex::isWorthBuildingSet(view, reversed, edgeTypes, fromEnds, endNodes.size(), seedNodes.size(), maxHops);
     if (indexesSeeds) {
         seedIndex.buildSet(view, seedNodes, reversed, edgeTypes, maxHops);

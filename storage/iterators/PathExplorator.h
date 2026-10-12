@@ -47,6 +47,9 @@ public:
                    uint64_t maxHops);
     ~PathExplorator();
 
+    // The labels of a node, wherever it lives: a data part, or this change's buffer
+    LabelSetHandle labelSetOf(NodeID node) const;
+
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
     void setTargets(ColumnNodeIDs* targets) { _targets = targets; }
     void setPaths(ColumnVector<PathRef>* paths, PathTrie* trie);
@@ -296,8 +299,6 @@ private:
     bool isPendingNode(NodeID node) const;
     size_t nodeIDBound() const;
 
-    // The labels of a node, wherever it lives: a data part, or this change's buffer
-    LabelSetHandle labelSetOf(NodeID node) const;
 
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;

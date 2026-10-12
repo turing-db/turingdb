@@ -904,6 +904,9 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImp
         nodeIDs.push_back(nodeID);
     }
 
+    llvm::sort(nodeIDs);
+    nodeIDs.erase(std::unique(nodeIDs.begin(), nodeIDs.end()), nodeIDs.end());
+
     return true;
 }
 
@@ -1290,6 +1293,7 @@ bool computesPerRow(Operation* op);
 Value climbFilters(Value column);
 void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
+Value seedColumnOf(ExplorePaths exploration, Value column);
 
 bool computesFromTheRow(Operation* op) {
     if (op->getNumRegions() != 0) {
@@ -2388,10 +2392,6 @@ bool matchNodeIDScanChain(FilterOp filter, LineageClimbs& climbs, NodeIDScanChai
 
         chain._afterThePattern = true;
     }
-
-    // A scan yields each node once in ID order, so the filter did too.
-    llvm::sort(chain._nodeIDs);
-    chain._nodeIDs.erase(std::unique(chain._nodeIDs.begin(), chain._nodeIDs.end()), chain._nodeIDs.end());
 
     return true;
 }
@@ -3699,6 +3699,12 @@ Operation* createEndpointLabelledHop(Operation* hop, ArrayAttr labels, mlir::OpB
     }
 }
 
+void hopTypes(Operation* hop, llvm::SmallVectorImpl<Type>& types) {
+    for (size_t index = 0; index < hopFixedResultCount; index++) {
+        types.push_back(hop->getResult(index).getType());
+    }
+}
+
 template <typename HopOp, typename ByTypeOp, typename ByLabelOp, typename ByTypeAndLabelOp>
 Operation* createHop(Location loc,
                      TypeRange types,
@@ -3728,9 +3734,7 @@ Operation* createReversedHop(Operation* hop, Value from, ArrayAttr labels, Value
     const ArrayAttr edgeTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
 
     llvm::SmallVector<Type> types;
-    for (size_t index = 0; index < hopFixedResultCount; index++) {
-        types.push_back(hop->getResult(index).getType());
-    }
+    hopTypes(hop, types);
     llvm::append_range(types, carried.getTypes());
 
     if (isa<GetEdges>(hop)) {
@@ -3863,19 +3867,17 @@ void collectKnownLabels(Value column, llvm::StringSet<>& labels) {
             addFilterLabels(filter, filtered, labels);
             column = filtered;
         } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
-            constexpr size_t TARGET_RESULT_INDEX = 1;
+            const std::optional<ArrayAttr> endLabels = exploration.getEndLabels();
+            if (column == exploration.getTgtids() && endLabels) {
+                addLabelNames(*endLabels, labels);
+            }
 
-            if (resultIndex == 0) {
-                column = exploration.getInputNodes();
-            } else if (resultIndex >= pathFixedResultCount) {
-                column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
-            } else {
-                const std::optional<ArrayAttr> endLabels = exploration.getEndLabels();
-                if (resultIndex == TARGET_RESULT_INDEX && endLabels) {
-                    addLabelNames(*endLabels, labels);
-                }
+            const Value seed = seedColumnOf(exploration, column);
+            if (!seed) {
                 return;
             }
+
+            column = seed;
         } else if (isEdgeHop(def)) {
             const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
             const size_t reachedResultIndex = isReverseHop(def) ? srcResultIndex : tgtResultIndex;
@@ -4803,8 +4805,6 @@ bool matchNodeIDPredicate(Value conjunct, NodeScanPredicate& predicate) {
         return false;
     }
 
-    llvm::sort(predicate._nodeIDs);
-    predicate._nodeIDs.erase(std::unique(predicate._nodeIDs.begin(), predicate._nodeIDs.end()), predicate._nodeIDs.end());
     predicate._column = column;
 
     return true;
@@ -4931,10 +4931,45 @@ struct ExploreEndSet {
     NodeSetChain _chain;
 };
 
-bool matchExploreEndSet(FilterOp filter, LineageClimbs& climbs, ExploreEndSet& endSet) {
+bool isGraphWrite(Operation* op) {
+    return isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op);
+}
+
+// The first op of the function's body that writes the graph or holds a write, null if none
+Operation* firstGraphWriteOf(mlir::func::FuncOp function) {
+    for (Operation& op : function.getBody().front()) {
+        const WalkResult walked = op.walk([](Operation* nested) {
+            return isGraphWrite(nested) ? WalkResult::interrupt() : WalkResult::advance();
+        });
+
+        if (walked.wasInterrupted()) {
+            return &op;
+        }
+    }
+
+    return nullptr;
+}
+
+// The end set is built ahead of the whole function, so it leaves out what the query writes
+// before the walk
+bool writesAheadOf(Operation* firstWrite, Operation* op) {
+    if (!firstWrite) {
+        return false;
+    }
+
+    Operation* const holder = firstWrite->getBlock()->findAncestorOpInBlock(*op);
+
+    return !holder || holder == firstWrite || firstWrite->isBeforeInBlock(holder);
+}
+
+bool matchExploreEndSet(FilterOp filter,
+                        LineageClimbs& climbs,
+                        const llvm::DenseMap<Operation*, Operation*>& firstWrites,
+                        ExploreEndSet& endSet) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
+    bool matched = false;
     for (const Value conjunct : conjuncts) {
         NodeScanPredicate predicate;
         if (!matchNodeScanPredicate(conjunct, predicate)) {
@@ -4957,19 +4992,30 @@ bool matchExploreEndSet(FilterOp filter, LineageClimbs& climbs, ExploreEndSet& e
             continue;
         }
 
-        endSet = ExploreEndSet {._filter = filter, ._exploration = exploration, ._conjunct = conjunct, ._chain = chain};
-        return true;
+        Operation* const firstWrite = firstWrites.lookup(exploration->getParentOfType<mlir::func::FuncOp>());
+        if (writesAheadOf(firstWrite, exploration)) {
+            continue;
+        }
+
+        // A predicate on the end itself is the exact set, and leaves the filter
+        const bool endsOnThePredicate = chain._hops.empty();
+        if (!matched || endsOnThePredicate) {
+            endSet = ExploreEndSet {._filter = filter, ._exploration = exploration, ._conjunct = conjunct, ._chain = chain};
+            matched = true;
+        }
+
+        if (endsOnThePredicate) {
+            break;
+        }
     }
 
-    return false;
+    return matched;
 }
 
 void fuseExploreEndSet(ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
     ExplorePaths exploration = endSet._exploration;
     const NodeSetChain& chain = endSet._chain;
 
-    // Lowering fills the set in a loop of its own that has to close before the walk's opens,
-    // so it is built at the head of the function, ahead of whatever feeds the seeds
     mlir::func::FuncOp function = exploration->getParentOfType<mlir::func::FuncOp>();
     rewriter.setInsertionPointToStart(&function.getBody().front());
     const Value set = buildNodeSetChain(chain, exploration.getLoc(), rewriter);
@@ -4989,10 +5035,15 @@ void fuseExploreEndSet(ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
 
 struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet> {
     void runOnOperation() override {
+        llvm::DenseMap<Operation*, Operation*> firstWrites;
+        getOperation()->walk([&firstWrites](mlir::func::FuncOp function) {
+            firstWrites[function.getOperation()] = firstGraphWriteOf(function);
+        });
+
         LineageClimbs climbs;
 
-        const auto match = [&climbs](FilterOp filter, ExploreEndSet& endSet) {
-            return matchExploreEndSet(filter, climbs, endSet);
+        const auto match = [&climbs, &firstWrites](FilterOp filter, ExploreEndSet& endSet) {
+            return matchExploreEndSet(filter, climbs, firstWrites, endSet);
         };
 
         const auto rewrite = [&climbs](ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
@@ -8259,11 +8310,17 @@ private:
         return llvm::all_of(inputs, [this](void* input) { return isAvailable(Value::getFromOpaquePointer(input)); });
     }
 
-    void carried(llvm::SmallVectorImpl<Value>& columns, llvm::SmallVectorImpl<Type>& types) const {
+    void carried(llvm::SmallVectorImpl<Value>& columns) const {
         for (const Value origin : _inFlight) {
-            const Value current = _current.lookup(origin);
-            columns.push_back(current);
-            types.push_back(current.getType());
+            columns.push_back(_current.lookup(origin));
+        }
+    }
+
+    void carried(llvm::SmallVectorImpl<Value>& columns, llvm::SmallVectorImpl<Type>& types) const {
+        const size_t first = columns.size();
+        carried(columns);
+        for (size_t index = first; index < columns.size(); index++) {
+            types.push_back(columns[index].getType());
         }
     }
 
@@ -8301,12 +8358,6 @@ private:
         bind(step._op->getResult(2), walked->getResult(2));
     }
 
-    void hopTypes(Operation* hop, llvm::SmallVectorImpl<Type>& types) const {
-        for (size_t index = 0; index < hopFixedResultCount; index++) {
-            types.push_back(hop->getResult(index).getType());
-        }
-    }
-
     void walkForward(const PatternStep& step) {
         if (ExplorePaths exploration = dyn_cast<ExplorePaths>(step._op)) {
             walkExploration(exploration, step);
@@ -8330,8 +8381,7 @@ private:
     // An out-hop reversed is an in-hop from the node it reached, over the same edges
     void walkBackward(const PatternStep& step) {
         llvm::SmallVector<Value> columns;
-        llvm::SmallVector<Type> types;
-        carried(columns, types);
+        carried(columns);
 
         const Value from = _current.lookup(step._to);
         Operation* const walked = createReversedHop(step._op, from, ArrayAttr(), columns, _builder);
@@ -8689,7 +8739,7 @@ void countFromMetadata(Count count, const ScanTally& tally, mlir::OpBuilder& bui
 // writes, so none of its counts can be read off them.
 bool writesTheGraph(Operation* root) {
     const WalkResult walked = root->walk([](Operation* op) {
-        if (isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op)) {
+        if (isGraphWrite(op)) {
             return WalkResult::interrupt();
         }
 

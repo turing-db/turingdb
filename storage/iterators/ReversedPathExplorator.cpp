@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include "PathTargetIndex.h"
-#include "datapart/NodeContainer.h"
 #include "metadata/LabelSetHandle.h"
 
 #include "BioAssert.h"
@@ -11,17 +10,6 @@
 using namespace db;
 
 namespace {
-
-bool carriesLabels(const PartDirectory& parts, NodeID node, const LabelSet& labels) {
-    const size_t owner = parts.ownerIndex(node);
-    if (owner == parts.size()) {
-        return false;
-    }
-
-    const LabelSetHandle nodeLabels = parts.get(owner)._nodes->getNodeLabelSet(node);
-
-    return nodeLabels.isValid() && nodeLabels.hasAtLeastLabels(LabelSetHandle(labels));
-}
 
 void reverseBody(ReversedPathExplorator::Body body, std::vector<PathDistanceIndex::SampleStep>& reversed) {
     reversed.assign(body.rbegin(), body.rend());
@@ -52,9 +40,10 @@ ReversedPathExplorator::ReversedPathExplorator(const GraphView& view,
         }
     }
 
-    const PartDirectory parts(view);
     for (const NodeID end : endNodeSet) {
-        if (!endLabels || carriesLabels(parts, end, *endLabels)) {
+        const LabelSetHandle labels = endLabels ? _explorator.labelSetOf(end) : LabelSetHandle {};
+        const bool carriesEndLabels = !endLabels || (labels.isValid() && labels.hasAtLeastLabels(LabelSetHandle(*endLabels)));
+        if (carriesEndLabels) {
             _ends.push_back(end);
         }
     }

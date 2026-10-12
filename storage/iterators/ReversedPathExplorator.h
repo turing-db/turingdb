@@ -18,11 +18,10 @@ namespace db {
 
 class PathTargetIndex;
 
-// The rows of an exploration ending on a set of nodes, enumerated by walking from the set back
-// to the seeds: a trail from an end to a seed is the row of every input row holding that seed,
-// (input row, end node), as the walk from the seeds emits it. The body is the seeds' walk's,
-// and is walked last step first, each step reversed. It writes no path, since the trail it
-// holds runs from the end.
+// The rows of an exploration ending on a set of nodes, found by walking from the set back to
+// the seeds: a trail from an end to a seed is the row (input row, end) of every input row
+// holding that seed. The body is walked last step first, each step reversed, and no path is
+// written, since the trail runs from the end.
 class ReversedPathExplorator {
 public:
     using Body = std::span<const PathDistanceIndex::SampleStep>;
