@@ -554,9 +554,9 @@ def ListSlice : TuringOp<"list_slice", [Pure, AttrSizedOperandSegments]> {
 // followed by one of these, which reads each row's list and sorts the numbers in it.
 // percentileCont interpolates between the two values around the percentile, so it is a
 // float; percentileDisc answers the value at it, with the type the list holds. A list
-// holding no value has no percentile, so its row is null. A percentile outside 0.0 to 1.0,
-// and an element that is no number, is the error the row raises - which is why the op
-// is not speculatable.
+// holding no value has no percentile, so its row is null. Beside a list holding numbers,
+// a percentile that is null or outside 0.0 to 1.0 is the error the row raises, as is an
+// element that is no number - which is why the op is not speculatable.
 //
 //   %m = db.percentile_cont(%values, %p) : (!db.column<none>, !db.column<f64>) -> !db.column<none>
 class PercentileOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect]> {

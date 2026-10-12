@@ -55,6 +55,10 @@ def AggregateKind : I64EnumAttr<"AggregateKind", "A property-value aggregate", [
 // distinct non-null values and keep the result shape of the plain kind. MIN and
 // MAX need no such kind - dropping repeated values cannot move an extremum, so
 // min(DISTINCT x) is min(x) and the frontend emits the plain kind.
+//
+// FIRST is no Cypher function: it keeps the first non-null value of each group. A
+// percentileCont(x, p) whose p reads a row takes p from the group's first row holding an
+// x, as Neo4j does, which is a FIRST of p over the rows x is not null on.
 def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate function", [
     I64EnumAttrCase<"Count", 0, "count">,
     I64EnumAttrCase<"Sum", 1, "sum">,
@@ -69,6 +73,7 @@ def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate 
     I64EnumAttrCase<"StDevP", 10, "stdevp">,
     I64EnumAttrCase<"StDevDistinct", 11, "stdev_distinct">,
     I64EnumAttrCase<"StDevPDistinct", 12, "stdevp_distinct">,
+    I64EnumAttrCase<"First", 13, "first">,
 ]> {
     let cppNamespace = "::mlir::storage";
 }

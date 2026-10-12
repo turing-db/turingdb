@@ -487,13 +487,11 @@ void FunctionDecls::initDefault() {
         }
     }
 
-    // The percentile has to be the same for every value of a group, so it may not read a
-    // row. percentileCont interpolates between two values, which makes a double of them;
+    // percentileCont interpolates between two values, which makes a double of them;
     // percentileDisc answers one of the values as it is.
     for (const EvaluatedType percentileType : {EvaluatedType::Double, EvaluatedType::Integer}) {
         FunctionArgumentType percentile(percentileType);
         percentile.setName("percentile");
-        percentile.setConstant(true);
 
         for (const EvaluatedType number : numbers) {
             const bool valuesAreNull = number == EvaluatedType::Null;

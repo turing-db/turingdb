@@ -5251,6 +5251,7 @@ bool aggregatesDistinctly(llvm::ArrayRef<int64_t> kinds) {
             case storage::GroupAggregateKind::CountRows:
             case storage::GroupAggregateKind::StDev:
             case storage::GroupAggregateKind::StDevP:
+            case storage::GroupAggregateKind::First:
                 return false;
             break;
         }

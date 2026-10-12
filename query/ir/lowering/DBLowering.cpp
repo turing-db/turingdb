@@ -788,6 +788,10 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
         case storage::GroupAggregateKind::CountRows:
             throw IRException("count has no value-reduction kind");
         break;
+
+        case storage::GroupAggregateKind::First:
+            throw IRException("first has no value-reduction kind");
+        break;
     }
 
     throw IRException("Unhandled group aggregate kind");
@@ -808,6 +812,7 @@ bool reducesValues(storage::GroupAggregateKind kind) {
         case storage::GroupAggregateKind::StDevP:
         case storage::GroupAggregateKind::StDevDistinct:
         case storage::GroupAggregateKind::StDevPDistinct:
+        case storage::GroupAggregateKind::First:
             return true;
         break;
 
@@ -850,18 +855,20 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
         case storage::GroupAggregateKind::StDev:
         case storage::GroupAggregateKind::StDevP:
         case storage::GroupAggregateKind::StDevDistinct:
-        case storage::GroupAggregateKind::StDevPDistinct: {
+        case storage::GroupAggregateKind::StDevPDistinct:
+        case storage::GroupAggregateKind::First: {
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const mlir::Type inputElement = inputChunkType.getElementType();
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputElement);
             const bool taggedCells = mlir::isa<storage::ListElementType>(inputElement);
             if (!inputNullable && !taggedCells) {
-                throw IRException("db.group_aggregate sum/min/max/avg/stdev requires a property value column");
+                throw IRException("db.group_aggregate sum/min/max/avg/stdev/first requires a property value column");
             }
 
-            const mlir::Type resultElement = aggregateResultElementType(builder,
-                                                                        groupKindToAggregateKind(kind),
-                                                                        taggedCells ? inputElement : inputNullable.getValueType());
+            const mlir::Type inputValue = taggedCells ? inputElement : inputNullable.getValueType();
+            const bool keepsTheValue = kind == storage::GroupAggregateKind::First;
+            const mlir::Type resultElement = keepsTheValue ? inputValue
+                                                           : aggregateResultElementType(builder, groupKindToAggregateKind(kind), inputValue);
             const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
 
             return nl::ChunkType::get(context, resultNullable);

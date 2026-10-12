@@ -1074,8 +1074,18 @@ private:
     void generateKeylessCollect(const Projection* projection);
 
     // What an aggregate gathering its values answers from @param listColumn, the list of a
-    // group's values: collect the list itself, percentileCont and percentileDisc its percentile
-    mlir::Value reduceGatheredValues(const FunctionInvocation* invocation, mlir::Value listColumn);
+    // group's values: collect the list itself, percentileCont and percentileDisc its percentile.
+    // @param groupPercentile is the group's percentile when it reads a row, null otherwise.
+    mlir::Value reduceGatheredValues(const FunctionInvocation* invocation,
+                                     mlir::Value listColumn,
+                                     mlir::Value groupPercentile);
+
+    // The percentile of each row holding one of @param valueColumn's values, null on the
+    // others, whose first per group is the group's percentile; null when the call takes no
+    // percentile or one reading no row.
+    mlir::Value translateRowPercentile(const FunctionInvocation* invocation,
+                                       mlir::Value valueColumn,
+                                       const VariableColumnMap* variableColumns);
 
     // Reduces every aggregate of a keyless projection before its items are built, so what an
     // item computes beside an aggregate reads the one row the reduction leaves. Each reads

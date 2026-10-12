@@ -9052,10 +9052,22 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
             distinctValues.push_back(0);
         }
 
+        llvm::SmallVector<mlir::Value, 1> percentileColumns;
+        const mlir::Value rowPercentile = translateRowPercentile(invocation, inputColumn, nullptr);
+        if (rowPercentile) {
+            percentileColumns.push_back(rowPercentile);
+        }
+
+        const llvm::SmallVector<mlir::storage::GroupAggregateKind, 1> percentileKinds(percentileColumns.size(),
+                                                                                      mlir::storage::GroupAggregateKind::First);
+
         // createCollect names the collect as the aggregate, which a percentile read off its
         // list is not
-        mlir::db::Collect collectOp = createCollect({}, {inputColumn}, distinctValues);
-        _part._exprMap[expr] = reduceGatheredValues(invocation, collectOp.getResults().back());
+        mlir::db::Collect collectOp = createCollect({}, {inputColumn}, distinctValues, percentileColumns, percentileKinds);
+        const mlir::ResultRange results = collectOp.getResults();
+        const mlir::Value groupPercentile = rowPercentile ? results.back() : mlir::Value {};
+
+        _part._exprMap[expr] = reduceGatheredValues(invocation, results.front(), groupPercentile);
         return;
     } else {
         throwError(fmt::format("Unsupported aggregate function: {}", funcName), expr);
@@ -9420,24 +9432,43 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
     collectVariableColumns(variableColumns);
 
     llvm::SmallVector<mlir::Value> valueColumns;
+    llvm::SmallVector<mlir::Value> percentileColumns;
+    llvm::SmallVector<std::optional<size_t>> percentileIndices;
+
     for (const FunctionInvocationExpr* collectExpr : collectExprs) {
         const FunctionInvocation* invocation = collectExpr->getFunctionInvocation();
 
         const ExprChain* args = invocation->getArguments();
         bioassert(args && !args->empty(), "collect() with no arguments.");
 
-        valueColumns.push_back(readWalkEntities(args->front(), translateAggregateInput(args->front(), &variableColumns)));
+        const mlir::Value valueColumn = readWalkEntities(args->front(), translateAggregateInput(args->front(), &variableColumns));
+        valueColumns.push_back(valueColumn);
+
+        const mlir::Value rowPercentile = translateRowPercentile(invocation, valueColumn, &variableColumns);
+        if (rowPercentile) {
+            percentileIndices.push_back(percentileColumns.size());
+            percentileColumns.push_back(rowPercentile);
+        } else {
+            percentileIndices.push_back(std::nullopt);
+        }
     }
 
     llvm::SmallVector<int64_t> distinctValues;
     collectDistinctValueIndices(collectExprs, distinctValues);
 
-    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues);
+    const llvm::SmallVector<mlir::storage::GroupAggregateKind> percentileKinds(percentileColumns.size(),
+                                                                               mlir::storage::GroupAggregateKind::First);
+
+    mlir::db::Collect collectOp = createCollect({}, valueColumns, distinctValues, percentileColumns, percentileKinds);
     const mlir::ResultRange results = collectOp.getResults();
 
     for (size_t collectIndex = 0; collectIndex < collectExprs.size(); collectIndex++) {
         const FunctionInvocationExpr* collectExpr = collectExprs[collectIndex];
-        const mlir::Value reducedColumn = reduceGatheredValues(collectExpr->getFunctionInvocation(), results[collectIndex]);
+        const std::optional<size_t> percentileIndex = percentileIndices[collectIndex];
+        const mlir::Value groupPercentile = percentileIndex ? results[collectExprs.size() + *percentileIndex] : mlir::Value {};
+        const mlir::Value reducedColumn = reduceGatheredValues(collectExpr->getFunctionInvocation(),
+                                                               results[collectIndex],
+                                                               groupPercentile);
 
         _part._exprMap[collectExpr] = reducedColumn;
 
@@ -9450,7 +9481,9 @@ void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
     }
 }
 
-mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* invocation, mlir::Value listColumn) {
+mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* invocation,
+                                                     mlir::Value listColumn,
+                                                     mlir::Value groupPercentile) {
     const std::string_view funcName = invocation->getSignature()->getFullName();
     if (!takesAPercentile(funcName)) {
         return listColumn;
@@ -9459,7 +9492,7 @@ mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* i
     const ExprChain* args = invocation->getArguments();
     bioassert(args && args->size() == 2, "{}() without its percentile.", funcName);
 
-    const mlir::Value percentile = translateArg(args->getExprs().back());
+    const mlir::Value percentile = groupPercentile ? groupPercentile : translateArg(args->getExprs().back());
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
@@ -9469,6 +9502,38 @@ mlir::Value DBProgramGenerator::reduceGatheredValues(const FunctionInvocation* i
     } else {
         return _opBuilder.create<mlir::db::PercentileDisc>(loc, noneType, listColumn, percentile).getResult();
     }
+}
+
+mlir::Value DBProgramGenerator::translateRowPercentile(const FunctionInvocation* invocation,
+                                                       mlir::Value valueColumn,
+                                                       const VariableColumnMap* variableColumns) {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+    if (!takesAPercentile(funcName)) {
+        return {};
+    }
+
+    const ExprChain* args = invocation->getArguments();
+    bioassert(args && args->size() == 2, "{}() without its percentile.", funcName);
+
+    const Expr* percentileExpr = args->getExprs().back();
+    if (!percentileExpr->isDynamic()) {
+        return {};
+    }
+
+    const mlir::Value percentile = translateAggregateInput(percentileExpr, variableColumns);
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const mlir::Value holdsAValue = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, valueColumn, nullConstantColumn()).getResult();
+
+    return _opBuilder.create<mlir::db::Case>(loc,
+                                             noneType,
+                                             mlir::ValueRange {holdsAValue},
+                                             mlir::ValueRange {percentile},
+                                             mlir::Value {})
+        .getResult();
 }
 
 void DBProgramGenerator::generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp) {
@@ -9535,6 +9600,10 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
     llvm::SmallVector<mlir::Value> collectInputColumns;
     llvm::SmallVector<const FunctionInvocationExpr*> collectFuncExprs;
+
+    // The percentiles reading a row, and where each collect's sits among them
+    llvm::SmallVector<mlir::Value> percentileColumns;
+    llvm::SmallVector<std::optional<size_t>> percentileIndices;
 
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -9677,10 +9746,19 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const Expr* argExpr = args->front();
 
         if (gathersItsValues(funcName)) {
-            const mlir::Value collectInput = translateAggregateInput(argExpr, &variableColumns);
+            const mlir::Value collectInput = readWalkEntities(argExpr, translateAggregateInput(argExpr, &variableColumns));
 
-            collectInputColumns.push_back(readWalkEntities(argExpr, collectInput));
+            collectInputColumns.push_back(collectInput);
             collectFuncExprs.push_back(funcExpr);
+
+            const mlir::Value rowPercentile = translateRowPercentile(invocation, collectInput, &variableColumns);
+            if (rowPercentile) {
+                percentileIndices.push_back(percentileColumns.size());
+                percentileColumns.push_back(rowPercentile);
+            } else {
+                percentileIndices.push_back(std::nullopt);
+            }
+
             continue;
         }
 
@@ -9771,11 +9849,17 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         llvm::SmallVector<int64_t> distinctCollects;
         collectDistinctValueIndices(collectFuncExprs, distinctCollects);
 
+        llvm::SmallVector<mlir::Value> collectAggregateColumns(aggInputColumns.begin(), aggInputColumns.end());
+        collectAggregateColumns.append(percentileColumns.begin(), percentileColumns.end());
+
+        llvm::SmallVector<mlir::storage::GroupAggregateKind> collectAggregateKinds(aggKinds.begin(), aggKinds.end());
+        collectAggregateKinds.append(percentileColumns.size(), mlir::storage::GroupAggregateKind::First);
+
         mlir::db::Collect collectOp = createCollect(keyColumns,
                                                     collectInputColumns,
                                                     distinctCollects,
-                                                    aggInputColumns,
-                                                    aggKinds);
+                                                    collectAggregateColumns,
+                                                    collectAggregateKinds);
         aggregateOp = collectOp.getOperation();
     } else {
         llvm::SmallVector<mlir::Value> allColumns;
@@ -9875,7 +9959,15 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
     for (size_t i = 0; i < aggregateItems.size(); i++) {
         const FunctionInvocationExpr* aggregateItem = aggregateItems[i];
-        const mlir::Value aggregateColumn = reduceGatheredValues(aggregateItem->getFunctionInvocation(), results[keyCount + i]);
+
+        // The group percentiles follow every list and every reduction
+        const std::optional<size_t> percentileIndex = i < collectCount ? percentileIndices[i] : std::nullopt;
+        const mlir::Value groupPercentile = percentileIndex ? results[keyCount + collectCount + aggCount + *percentileIndex]
+                                                            : mlir::Value {};
+
+        const mlir::Value aggregateColumn = reduceGatheredValues(aggregateItem->getFunctionInvocation(),
+                                                                 results[keyCount + i],
+                                                                 groupPercentile);
 
         _part._exprMap[aggregateItem] = aggregateColumn;
         groupedColumns.emplace_back(aggregateItem, aggregateColumn);

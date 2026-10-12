@@ -479,6 +479,10 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
         case storage::GroupAggregateKind::StDevPDistinct:
             return GroupAggregateKind::StDevPDistinct;
         break;
+
+        case storage::GroupAggregateKind::First:
+            return GroupAggregateKind::First;
+        break;
     }
 
     throw IRException("Unhandled group aggregate kind");
@@ -5188,28 +5192,31 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
         case GroupAggregateKind::StDev:
         case GroupAggregateKind::StDevP:
         case GroupAggregateKind::StDevDistinct:
-        case GroupAggregateKind::StDevPDistinct: {
-            // sum/min/max/avg/stdev reduce the values themselves, so the input must be a
-            // nullable value chunk; avg and stdev accumulate as f64, the rest in the input's
+        case GroupAggregateKind::StDevPDistinct:
+        case GroupAggregateKind::First: {
+            // sum/min/max/avg/stdev/first reduce the values themselves, so the input must be
+            // a nullable value chunk; avg and stdev accumulate as f64, the rest in the input's
             // own type. nullableChunkValueType rejects an ID chunk here. The distinct
             // kinds keep the shape of the kind they mirror and differ only in the
             // fold, which charges each of a group's values once.
             //
             // A type-erased input carries a type per cell, so sum and avg reduce it by tag
-            // into the f64 its mixed numeric tags land on, and min/max keep the winning cell.
+            // into the f64 its mixed numeric tags land on, and min/max/first keep the cell.
             const mlir::Type reducedElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
             const bool reducesNullableTaggedCells = isNullableListElement(reducedElement);
             const bool reducesTaggedCells = mlir::isa<storage::ListElementType>(reducedElement)
                                          || reducesNullableTaggedCells;
 
-            const bool isExtremum = (kind == GroupAggregateKind::Min) || (kind == GroupAggregateKind::Max);
-            const bool keepsTaggedCells = reducesTaggedCells && isExtremum;
+            const bool keepsAValue = (kind == GroupAggregateKind::Min)
+                                  || (kind == GroupAggregateKind::Max)
+                                  || (kind == GroupAggregateKind::First);
+            const bool keepsTaggedCells = reducesTaggedCells && keepsAValue;
             const bool averages = (kind == GroupAggregateKind::Avg) || (kind == GroupAggregateKind::AvgDistinct);
             const bool deviates = (kind == GroupAggregateKind::StDev)
                                || (kind == GroupAggregateKind::StDevP)
                                || (kind == GroupAggregateKind::StDevDistinct)
                                || (kind == GroupAggregateKind::StDevPDistinct);
-            const bool accumulatesAsDouble = (reducesTaggedCells && !isExtremum) || averages || deviates;
+            const bool accumulatesAsDouble = (reducesTaggedCells && !keepsAValue) || averages || deviates;
 
             const ValueType inputType = reducesTaggedCells ? ValueType::Double
                                                            : nullableChunkValueType(chunkType);

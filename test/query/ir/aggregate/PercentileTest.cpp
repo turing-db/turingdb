@@ -217,8 +217,65 @@ TEST_F(PercentileTest, percentileOutsideZeroToOneIsRejected) {
     expectError("UNWIND [10, 20] AS v RETURN percentileDisc(v, -0.5)", "between 0.0 and 1.0");
 }
 
-TEST_F(PercentileTest, percentileReadingARowIsRejected) {
-    expectError("UNWIND [10, 20] AS v RETURN percentileCont(v, v / 100.0)", "must be constant");
+TEST_F(PercentileTest, emptyGroupIgnoresItsPercentile) {
+    expectRows("MATCH (n) WHERE n.name = 'Nobody' RETURN percentileCont(n.age, 2.0), percentileDisc(n.age, -1)",
+               {{"null", "null"}});
+}
+
+TEST_F(PercentileTest, percentileReadFromTheRow) {
+    expectRows("UNWIND [10, 20, 30, 40] AS v WITH v, 0.25 AS p RETURN percentileCont(v, p), percentileDisc(v, p)",
+               {{"17.5", "10"}});
+}
+
+TEST_F(PercentileTest, percentileSetByTheGroupingKey) {
+    const Rows expected = {
+        {"0", "2", "2"},
+        {"1", "5", "5"},
+    };
+
+    expectRows("UNWIND [1, 2, 3, 4, 5, 6] AS x "
+               "RETURN x % 2 AS parity, percentileCont(x, x % 2), percentileDisc(x, x % 2 * 1.0) ORDER BY parity",
+               expected);
+}
+
+TEST_F(PercentileTest, percentileOfEachGroupReadFromItsRows) {
+    const Rows expected = {
+        {"0", "6", "2, 4, 6"},
+        {"1", "1", "1, 3, 5"},
+    };
+
+    expectRows("UNWIND [1, 2, 3, 4, 5, 6] AS x WITH x, x % 2 AS parity, 1.0 - x % 2 AS p "
+               "RETURN parity, percentileDisc(x, p), collect(x) ORDER BY parity",
+               expected);
+}
+
+// The percentile is the one on the first row holding a value, as in Neo4j: the rows
+// before it and after it are not read
+TEST_F(PercentileTest, percentileOfTheFirstRowHoldingAValue) {
+    expectRows("UNWIND [null, 10, 20, 30] AS v "
+               "WITH v, CASE WHEN v IS NULL THEN 1.0 WHEN v = 10 THEN 0.5 ELSE 7.0 END AS p "
+               "RETURN percentileCont(v, p), percentileDisc(v, p)",
+               {{"20", "20"}});
+}
+
+TEST_F(PercentileTest, rowPercentilesBesideCollects) {
+    expectRows("UNWIND [3, 1, 2, 3] AS v WITH v, 0.5 AS p "
+               "RETURN collect(v), percentileCont(v, p), percentileDisc(DISTINCT v, p), sum(v)",
+               {{"3, 1, 2, 3", "2.5", "2", "9"}});
+}
+
+TEST_F(PercentileTest, distinctPercentileReadFromTheRow) {
+    expectRows("UNWIND [1, 1, 1, 3] AS v WITH v, 0.5 AS p RETURN percentileCont(v, p), percentileCont(DISTINCT v, p)",
+               {{"1", "2"}});
+}
+
+TEST_F(PercentileTest, rowPercentileOutsideZeroToOneIsRejected) {
+    expectError("UNWIND [10, 20] AS v WITH v, v / 5.0 AS p RETURN percentileCont(v, p)", "between 0.0 and 1.0");
+}
+
+TEST_F(PercentileTest, nullPercentileOfAGroupWithValuesIsRejected) {
+    expectError("UNWIND [10, 20] AS v WITH v, CASE WHEN v > 100 THEN 0.5 END AS p RETURN percentileDisc(v, p)",
+                "not null");
 }
 
 TEST_F(PercentileTest, percentileOfAStringIsRejected) {

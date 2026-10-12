@@ -2484,6 +2484,7 @@ enum class GroupAggregateKind {
     StDevP,
     StDevDistinct,
     StDevPDistinct,
+    First,
 };
 
 // The (group, value) pairs one DISTINCT aggregate has already charged. A single set

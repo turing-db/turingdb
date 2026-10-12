@@ -2987,18 +2987,18 @@ bool replacesExtremum(const Primitive& current, const Primitive& value) {
     }
 }
 
-// The value an extremum keeps, which outlives the step that read it: a list or a cell
+// The value an accumulator keeps, which outlives the step that read it: a list or a cell
 // goes into the accumulator's own buffer, as appendOwnedListColumn's lists do.
 template <typename Primitive>
-Primitive ownedExtremum(const Primitive& value, QueryListBuffer& lists) {
+Primitive ownedValue(const Primitive& value, QueryListBuffer& lists) {
     return value;
 }
 
-ListView ownedExtremum(const ListView& list, QueryListBuffer& lists) {
+ListView ownedValue(const ListView& list, QueryListBuffer& lists) {
     return lists.copy(list);
 }
 
-ListElementView ownedExtremum(const ListElementView& element, QueryListBuffer& lists) {
+ListElementView ownedValue(const ListElementView& element, QueryListBuffer& lists) {
     return lists.copy(element);
 }
 
@@ -3026,7 +3026,7 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
     }
 
     if (replaced) {
-        current = ownedExtremum(*current, state->listBuffer());
+        current = ownedValue(*current, state->listBuffer());
     }
 }
 
@@ -3627,7 +3627,32 @@ void groupFoldMinMax(Column* accumulator,
 
         std::optional<Primitive>& current = raw[groups[row]];
         if (!current.has_value() || replacesExtremum<Primitive, IsMax>(*current, *value)) {
-            current = ownedExtremum(*value, lists);
+            current = ownedValue(*value, lists);
+        }
+    }
+}
+
+// Fold a chunk's present values into per-group first accumulators: the first present
+// value of a group is kept and every later one passed over.
+template <typename Primitive, typename Cell = std::optional<Primitive>>
+void groupFoldFirst(Column* accumulator,
+                    std::vector<uint64_t>& counts,
+                    const Column* input,
+                    const std::vector<size_t>& groups,
+                    NLGroupDistinctTally& distinct,
+                    QueryListBuffer& lists) {
+    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
+    const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        std::optional<Primitive>& current = raw[groups[row]];
+        if (current.has_value()) {
+            continue;
+        }
+
+        const std::optional<Primitive> value = presentCell(inputRaw[row]);
+        if (value.has_value()) {
+            current = ownedValue(*value, lists);
         }
     }
 }
@@ -3667,6 +3692,10 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
 
         case GroupAggregateKind::Max:
             return &groupFoldMinMax<ListElementView, /*IsMax=*/true, Cell>;
+        break;
+
+        case GroupAggregateKind::First:
+            return &groupFoldFirst<ListElementView, Cell>;
         break;
 
         case GroupAggregateKind::Count:
@@ -4765,7 +4794,8 @@ Result percentileElement(const ListElementView element) {
 }
 
 // Row r of the result is what @param percentileOf answers for the sorted numbers of row
-// r's list, or no value where the list holds none
+// r's list, or no value where the list holds none. The percentile is checked only beside
+// numbers, as Neo4j reads it only off a row holding one.
 template <typename Result, typename PercentileOf>
 void runPercentileRows(const NLPercentileData* data, std::string_view functionName, PercentileOf percentileOf) {
     const Column* const list = data->getList();
@@ -4783,21 +4813,24 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<ListView> values = listRead(list, rowIndex);
-        const std::optional<double> fraction = percentileRead(percentile, rowIndex);
+        if (values) {
+            sortListNumbers(*values, numbers, functionName);
+        } else {
+            numbers.clear();
+        }
 
-        if (!values || !fraction) {
+        if (numbers.empty()) {
             outputRaw[rowIndex] = absentPercentile<Result>();
             continue;
         }
 
-        throwIfNotAPercentile(*fraction, functionName);
-        sortListNumbers(*values, numbers, functionName);
-
-        if (numbers.empty()) {
-            outputRaw[rowIndex] = absentPercentile<Result>();
-        } else {
-            outputRaw[rowIndex] = percentileOf(numbers, *fraction);
+        const std::optional<double> fraction = percentileRead(percentile, rowIndex);
+        if (!fraction) {
+            throw IRException(fmt::format("{}() takes a percentile between 0.0 and 1.0, not null", functionName));
         }
+
+        throwIfNotAPercentile(*fraction, functionName);
+        outputRaw[rowIndex] = percentileOf(numbers, *fraction);
     }
 }
 
@@ -5055,6 +5088,54 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
 
         default:
             throw IRException("min/max requires an orderable column");
+        break;
+    }
+
+    return nullptr;
+}
+
+// The grouped first fold for a column of this value type. The kept value outlives its
+// step as an extremum does, so first holds the types min/max hold.
+NLGroupAggregateFoldFunction selectGroupFirstFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &groupFoldFirst<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &groupFoldFirst<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &groupFoldFirst<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &groupFoldFirst<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &groupFoldFirst<types::String::Primitive>;
+        break;
+
+        case ValueType::DateTime:
+            return &groupFoldFirst<types::DateTime::Primitive>;
+        break;
+
+        case ValueType::Duration:
+            return &groupFoldFirst<types::Duration::Primitive>;
+        break;
+
+        case ValueType::List:
+            return &groupFoldFirst<types::List::Primitive>;
+        break;
+
+        case ValueType::Map:
+            return &groupFoldFirst<types::Map::Primitive>;
+        break;
+
+        default:
+            throw IRException("first requires a column of scalars, lists or maps");
         break;
     }
 
@@ -11288,9 +11369,10 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
         case GroupAggregateKind::Sum:
         case GroupAggregateKind::SumDistinct:
         case GroupAggregateKind::Min:
-        case GroupAggregateKind::Max: {
+        case GroupAggregateKind::Max:
+        case GroupAggregateKind::First: {
             // sum grows each new group to a present zero (its additive identity),
-            // min/max to null (no extreme seen yet); neither carries a per-group
+            // min/max/first to null (no value seen yet); neither carries a per-group
             // tally. Both compile for any value type, and lowering has already
             // validated the kind / type pairing (and the fold selector re-checks it),
             // so one dispatch over the accumulator type suffices - the grouped sibling
@@ -11385,6 +11467,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
 
         case GroupAggregateKind::Max:
             return selectGroupMinMaxFold</*IsMax=*/true>(inputType);
+        break;
+
+        case GroupAggregateKind::First:
+            return selectGroupFirstFold(inputType);
         break;
     }
 
@@ -11581,8 +11667,9 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
         case GroupAggregateKind::Sum:
         case GroupAggregateKind::SumDistinct:
         case GroupAggregateKind::Min:
-        case GroupAggregateKind::Max: {
-            // sum/min/max hold each group's reduced value in the result's own type, so
+        case GroupAggregateKind::Max:
+        case GroupAggregateKind::First: {
+            // sum/min/max/first hold each group's reduced value in the result's own type, so
             // the emit copies the accumulator slice - valid for any value type, the
             // grouped sibling of selectAggregateResult.
             NLGroupAggregateEmitFunction emit = nullptr;
