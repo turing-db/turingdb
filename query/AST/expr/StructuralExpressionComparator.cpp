@@ -21,6 +21,7 @@
 #include "IndexExpr.h"
 #include "ListExpr.h"
 #include "LiteralExpr.h"
+#include "ParameterExpr.h"
 #include "LogicalExpr.h"
 #include "PropertyExpr.h"
 #include "PropertyLookupExpr.h"
@@ -150,6 +151,14 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const LiteralExpr* rhsLiteral = static_cast<const LiteralExpr*>(rhs);
 
             return equalLiterals(lhsLiteral->getLiteral(), rhsLiteral->getLiteral());
+        }
+        break;
+
+        case Expr::Kind::PARAMETER: {
+            const ParameterExpr* lhsParameter = static_cast<const ParameterExpr*>(lhs);
+            const ParameterExpr* rhsParameter = static_cast<const ParameterExpr*>(rhs);
+
+            return lhsParameter->getParameter()->getName() == rhsParameter->getParameter()->getName();
         }
         break;
 

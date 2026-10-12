@@ -1610,7 +1610,7 @@ atomExpr
         $$ = ParserUtils::createPatternPredicate(ast, element, @$);
       }
     | literal { $$ = LiteralExpr::create(ast, $1); LOC($$, @$); }
-    | parameter { scanner.notImplemented(@$, "Parameters"); }
+    | parameter { $$ = ParameterExpr::create(ast, $1); LOC($$, @$); }
     | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | normalizeFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }

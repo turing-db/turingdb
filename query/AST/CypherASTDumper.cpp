@@ -978,6 +978,9 @@ void CypherASTDumper::dump(std::ostream& out, const Expr* expr) {
         case Expr::Kind::LITERAL:
             dump(out, dynamic_cast<const LiteralExpr*>(expr));
             break;
+        case Expr::Kind::PARAMETER:
+            dump(out, dynamic_cast<const ParameterExpr*>(expr));
+            break;
         case Expr::Kind::FUNCTION_INVOCATION:
             dump(out, dynamic_cast<const FunctionInvocationExpr*>(expr));
             break;
@@ -1167,6 +1170,14 @@ void CypherASTDumper::dump(std::ostream& out, const SymbolExpr* expr) {
     if (VarDecl* decl = expr->getDecl()) {
         out << "    _" << std::hex << expr << " ||--o{ VAR_" << decl << " : \"\"\n";
     }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const ParameterExpr* expr) {
+    out << "    _" << std::hex << expr << " {\n";
+    out << "        ASTType ParameterExpr\n";
+    out << "        ValueType " << EvaluatedTypeName::value(expr->getType()) << "\n";
+    out << "        Name " << expr->getParameter()->getName() << "\n";
+    out << "    }\n";
 }
 
 void CypherASTDumper::dump(std::ostream& out, const LiteralExpr* expr) {

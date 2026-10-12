@@ -233,6 +233,8 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::LITERAL:
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
         break;
+        case Expr::Kind::PARAMETER:
+        break;
         case Expr::Kind::FUNCTION_INVOCATION:
             analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr), &FunctionDecls::getBuiltins());
         break;
