@@ -283,6 +283,10 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.duration_milliseconds_of_second", {&emitNLUnaryFunction<nl::DurationMillisecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
     {"db.duration_microseconds_of_second", {&emitNLUnaryFunction<nl::DurationMicrosecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
     {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>,  &stringFunctionElement,      ResultNullability::FollowsInput}},
+    {"db.to_integer_or_null", {&emitNLUnaryFunction<nl::ToIntegerOrNull>, &integerFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.to_float_or_null",   {&emitNLUnaryFunction<nl::ToFloatOrNull>,   &floatFunctionElement,   ResultNullability::AlwaysNullable}},
+    {"db.to_boolean_or_null", {&emitNLUnaryFunction<nl::ToBooleanOrNull>, &booleanFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.to_string_or_null",  {&emitNLUnaryFunction<nl::ToStringOrNull>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
@@ -1213,6 +1217,12 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSubstring(substring);
     } else if (mlir::db::Split split = mlir::dyn_cast<mlir::db::Split>(operation)) {
         lowerSplit(split);
+    } else if (mlir::db::Left left = mlir::dyn_cast<mlir::db::Left>(operation)) {
+        lowerStringEnd<nl::Left>(left);
+    } else if (mlir::db::Right right = mlir::dyn_cast<mlir::db::Right>(operation)) {
+        lowerStringEnd<nl::Right>(right);
+    } else if (mlir::db::Replace replace = mlir::dyn_cast<mlir::db::Replace>(operation)) {
+        lowerReplace(replace);
     } else if (mlir::db::ListSlice listSlice = mlir::dyn_cast<mlir::db::ListSlice>(operation)) {
         lowerListSlice(listSlice);
     } else if (mlir::isa<mlir::db::PercentileCont, mlir::db::PercentileDisc>(operation)) {
@@ -2409,6 +2419,53 @@ void DBLowering::lowerSplit(mlir::db::Split split) {
                                                  arguments[1]);
 
     _valueMap[split.getResult()] = parts.getResult();
+}
+
+template <typename NLStringEndOp, typename StringEndOp>
+void DBLowering::lowerStringEnd(StringEndOp stringEnd) {
+    const mlir::Type stringChunkType = mapValue(stringEnd.getString()).getType();
+    const bool stringMayBeNull = mayHoldANull(stringChunkType);
+
+    llvm::SmallVector<mlir::Value, 2> arguments;
+    containerCellChunks(stringEnd->getOperands(), arguments);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type stringType = storage::StringType::get(context);
+    const mlir::Type resultElement = stringMayBeNull ? storage::NullableType::get(context, stringType) : stringType;
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+
+    setInsertionForNaryOp(arguments);
+
+    NLStringEndOp ends = _builder.create<NLStringEndOp>(_builder.getUnknownLoc(),
+                                                        resultType,
+                                                        arguments[0],
+                                                        arguments[1]);
+
+    _valueMap[stringEnd.getResult()] = ends.getResult();
+}
+
+void DBLowering::lowerReplace(mlir::db::Replace replace) {
+    const bool anArgumentMayBeNull = llvm::any_of(replace->getOperands(), [this](mlir::Value operand) {
+        return mayHoldANull(mapValue(operand).getType());
+    });
+
+    llvm::SmallVector<mlir::Value, 3> arguments;
+    containerCellChunks(replace->getOperands(), arguments);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type stringType = storage::StringType::get(context);
+    const mlir::Type resultElement = anArgumentMayBeNull ? storage::NullableType::get(context, stringType) : stringType;
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+
+    setInsertionForNaryOp(arguments);
+
+    nl::Replace replaced = _builder.create<nl::Replace>(_builder.getUnknownLoc(),
+                                                        resultType,
+                                                        arguments[0],
+                                                        arguments[1],
+                                                        arguments[2]);
+
+    _valueMap[replace.getResult()] = replaced.getResult();
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

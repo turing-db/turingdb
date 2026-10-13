@@ -449,10 +449,16 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"toFloat", &emitUnaryFunction<mlir::db::ToFloat>},
     {"toString", &emitUnaryFunction<mlir::db::ToString>},
     {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},
+    {"toIntegerOrNull", &emitUnaryFunction<mlir::db::ToIntegerOrNull>},
+    {"toFloatOrNull", &emitUnaryFunction<mlir::db::ToFloatOrNull>},
+    {"toStringOrNull", &emitUnaryFunction<mlir::db::ToStringOrNull>},
+    {"toBooleanOrNull", &emitUnaryFunction<mlir::db::ToBooleanOrNull>},
     {"datetime", &emitUnaryFunction<mlir::db::ToDateTime>},
     {"duration", &emitUnaryFunction<mlir::db::ToDuration>},
     {"size", &emitUnaryFunction<mlir::db::Size>},
     {"length", &emitUnaryFunction<mlir::db::Size>},
+    {"char_length", &emitUnaryFunction<mlir::db::Size>},
+    {"character_length", &emitUnaryFunction<mlir::db::Size>},
     {"head", &emitUnaryFunction<mlir::db::Head>},
     {"last", &emitUnaryFunction<mlir::db::Last>},
     {"tail", &emitUnaryFunction<mlir::db::Tail>},
@@ -9192,6 +9198,15 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     } else if (funcName == "split") {
         translateSplit(expr, args);
         return;
+    } else if (funcName == "left") {
+        translateStringEnd<mlir::db::Left>(expr, args);
+        return;
+    } else if (funcName == "right") {
+        translateStringEnd<mlir::db::Right>(expr, args);
+        return;
+    } else if (funcName == "replace") {
+        translateReplace(expr, args);
+        return;
     }
 
     const bool readsTheMapItself = funcName == "properties"
@@ -9337,6 +9352,45 @@ void DBProgramGenerator::translateSplit(const Expr* expr, const ExprChain* args)
                                                                delimiter);
 
     _part._exprMap[expr] = split.getResult();
+}
+
+template <typename StringEndOp>
+void DBProgramGenerator::translateStringEnd(const Expr* expr, const ExprChain* args) {
+    bioassert(args && args->size() == 2, "left() and right() take 2 arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value string = translateArg(argExprs[0]);
+    const mlir::Value length = translateArg(argExprs[1]);
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+
+    StringEndOp stringEnd = _opBuilder.create<StringEndOp>(_opBuilder.getUnknownLoc(),
+                                                           allocColumnType(stringType),
+                                                           string,
+                                                           length);
+
+    _part._exprMap[expr] = stringEnd.getResult();
+}
+
+void DBProgramGenerator::translateReplace(const Expr* expr, const ExprChain* args) {
+    bioassert(args && args->size() == 3, "replace() takes 3 arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value string = translateArg(argExprs[0]);
+    const mlir::Value search = translateArg(argExprs[1]);
+    const mlir::Value replacement = translateArg(argExprs[2]);
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+
+    mlir::db::Replace replace = _opBuilder.create<mlir::db::Replace>(_opBuilder.getUnknownLoc(),
+                                                                     allocColumnType(stringType),
+                                                                     string,
+                                                                     search,
+                                                                     replacement);
+
+    _part._exprMap[expr] = replace.getResult();
 }
 
 void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {

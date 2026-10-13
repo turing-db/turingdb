@@ -2767,6 +2767,11 @@ def ToDateTime : NLUnaryFunctionOp<"to_datetime", [ConstantThroughOperands]>;
 def ToDuration : NLUnaryFunctionOp<"to_duration", [ConstantThroughOperands]>;
 def ToString : NLUnaryFunctionOp<"to_string", [ConstantThroughOperands]>;
 
+def ToIntegerOrNull : NLUnaryFunctionOp<"to_integer_or_null", [ConstantThroughOperands]>;
+def ToFloatOrNull : NLUnaryFunctionOp<"to_float_or_null", [ConstantThroughOperands]>;
+def ToBooleanOrNull : NLUnaryFunctionOp<"to_boolean_or_null", [ConstantThroughOperands]>;
+def ToStringOrNull : NLUnaryFunctionOp<"to_string_or_null", [ConstantThroughOperands]>;
+
 // The db.datetime_* family lowers to these. Each reads one instant and answers one
 // integer, so a constant instant - what datetime() and datetime('...') are - keeps its
 // constancy through the field read.
@@ -2869,6 +2874,27 @@ def Split : NLOp<"split", [Pure, RowAlignedThroughOperands]> {
   let hasVerifier = 1;
 
   let assemblyFormat = "$string `,` $delimiter attr-dict `:` functional-type(operands, results)";
+}
+
+class NLStringEndOp<string mnemonic> : NLOp<mnemonic, [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise run of characters at one end of a string";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$length);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $length attr-dict `:` functional-type(operands, results)";
+}
+
+def Left : NLStringEndOp<"left">;
+def Right : NLStringEndOp<"right">;
+
+def Replace : NLOp<"replace", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise replacement of every occurrence of a search string";
+
+  let arguments = (ins NLChunk:$string, NLChunk:$search, NLChunk:$replacement);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$string `,` $search `,` $replacement attr-dict `:` functional-type(operands, results)";
 }
 
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {

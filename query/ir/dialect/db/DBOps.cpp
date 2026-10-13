@@ -122,6 +122,37 @@ bool isStringColumn(Type type) {
     return isa<storage::StringType, storage::ListElementType, NoneType>(value);
 }
 
+bool isIntegerColumn(Type type) {
+    const auto column = dyn_cast<ColumnType>(type);
+    if (!column) {
+        return false;
+    }
+
+    const Type element = column.getType();
+    const auto nullable = dyn_cast<storage::NullableType>(element);
+    const Type value = nullable ? nullable.getValueType() : element;
+
+    return isa<IntegerType, storage::ListElementType, NoneType>(value);
+}
+
+LogicalResult verifyStringResult(Operation* op, Value result) {
+    const ColumnType resultColumn = dyn_cast<ColumnType>(result.getType());
+    if (!resultColumn || !isa<storage::StringType>(resultColumn.getType())) {
+        return op->emitOpError("result must be a column of strings");
+    }
+
+    return success();
+}
+
+LogicalResult verifyStringEnd(Operation* op, Value string, Value length, Value result) {
+    const bool readsAStringAndALength = isStringColumn(string.getType()) && isIntegerColumn(length.getType());
+    if (!readsAStringAndALength) {
+        return op->emitOpError("operands must be a string column and an integer column");
+    }
+
+    return verifyStringResult(op, result);
+}
+
 LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
     if (edgeTypes.empty()) {
         return operation->emitOpError("requires at least one edge type");
@@ -1978,6 +2009,18 @@ LogicalResult Range::verify() {
     return success();
 }
 
+LogicalResult Replace::verify() {
+    const bool readsStrings = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
+        return isStringColumn(operand.getType());
+    });
+
+    if (!readsStrings) {
+        return emitOpError("operands must be string columns");
+    }
+
+    return verifyStringResult(getOperation(), getResult());
+}
+
 LogicalResult Split::verify() {
     const bool readsStrings = isStringColumn(getString().getType()) && isStringColumn(getDelimiter().getType());
     if (!readsStrings) {
@@ -2286,6 +2329,14 @@ Speculation::Speculatability Range::getSpeculatability() {
 Speculation::Speculatability UnwindRange::getSpeculatability() {
     int64_t by = 0;
     return speculatableWhen(matchIntegerLiteral(getStep(), by) && by != 0);
+}
+
+Speculation::Speculatability Replace::getSpeculatability() {
+    const bool readsStrings = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
+        return isa<storage::StringType>(columnElement(operand));
+    });
+
+    return speculatableWhen(readsStrings);
 }
 
 Speculation::Speculatability Split::getSpeculatability() {

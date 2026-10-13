@@ -2672,6 +2672,11 @@ def ToDateTime : UnaryFunctionOp<"to_datetime">;
 def ToDuration : TypedUnaryFunctionOp<"to_duration", "::mlir::IntegerType">;
 def ToString : UnaryFunctionOp<"to_string">;
 
+def ToIntegerOrNull : UnaryFunctionOp<"to_integer_or_null">;
+def ToFloatOrNull : UnaryFunctionOp<"to_float_or_null">;
+def ToBooleanOrNull : UnaryFunctionOp<"to_boolean_or_null">;
+def ToStringOrNull : UnaryFunctionOp<"to_string_or_null">;
+
 // The calendar fields of an instant, as integer columns. The sub-second pair reads the
 // fraction of the second truncated to its own precision, so .123456 of a second in is a
 // db.datetime_millisecond of 123 and a db.datetime_microsecond of 123456.
@@ -2792,6 +2797,53 @@ def Split : TuringOp<"split", [NoMemoryEffect, DeclareOpInterfaceMethods<Conditi
 
   let assemblyFormat = [{
     `(` $string `,` $delimiter `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "Take the run of characters at one end of each row's string";
+
+  let description = [{
+      %s = db.left(%name, %count) : (!db.column<!storage.string>, !db.column<i64>) -> !db.column<!storage.string>
+  }];
+
+  let arguments = (ins Column:$string, Column:$length);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $string `,` $length `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  // A negative length raises, whichever row holds it
+  let extraClassDefinition = [{
+    ::mlir::LogicalResult $cppClass::verify() {
+      return verifyStringEnd(getOperation(), getString(), getLength(), getResult());
+    }
+
+    ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
+      return ::mlir::Speculation::NotSpeculatable;
+    }
+  }];
+}
+
+def Left : StringEndOp<"left">;
+def Right : StringEndOp<"right">;
+
+def Replace : TuringOp<"replace", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "Replace every occurrence of a search string in each row's string";
+
+  let description = [{
+      %s = db.replace(%name, %search, %replacement) : (!db.column<!storage.string>, !db.column<!storage.string>,
+                                                       !db.column<!storage.string>) -> !db.column<!storage.string>
+  }];
+
+  let arguments = (ins Column:$string, Column:$search, Column:$replacement);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $string `,` $search `,` $replacement `)` attr-dict `:` functional-type(operands, results)
   }];
 }
 

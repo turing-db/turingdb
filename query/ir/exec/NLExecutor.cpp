@@ -8059,6 +8059,82 @@ void NLExecutor::runSplit(NLExecutionContext*, NLFunctionData* data) {
 template void NLExecutor::runSplit<ListView>(NLExecutionContext* context, NLFunctionData* data);
 template void NLExecutor::runSplit<std::optional<ListView>>(NLExecutionContext* context, NLFunctionData* data);
 
+template <typename Function, typename Result>
+void NLExecutor::runStringEnd(NLExecutionContext*, NLFunctionData* data) {
+    const NLStringEndData* stringEnd = static_cast<NLStringEndData*>(data);
+
+    const NLStringEndData::StringArgument& string = stringEnd->getString();
+    const NLStringEndData::IntegerArgument& length = stringEnd->getLength();
+
+    const size_t rowCount = string._column->size();
+    bioassert(length._column->size() == rowCount, "Length column of a string end is not row-aligned with its string.");
+
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(stringEnd->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    const Function function {};
+    constexpr std::string_view name = Function::NAME;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::Int64::Primitive> count = length._read(length._column, rowIndex, name);
+
+        if (!text.has_value()) {
+            if constexpr (TypeUtils::is_optional_v<Result>) {
+                outputRaw[rowIndex] = std::nullopt;
+            } else {
+                throw IRException(fmt::format("{}() typed as never null read a null string", name));
+            }
+        } else if (!count.has_value()) {
+            throw IRException(fmt::format("{}() does not take a null length", name));
+        } else {
+            outputRaw[rowIndex] = function(*text, *count);
+        }
+    }
+}
+
+template void NLExecutor::runStringEnd<LeftFunction, types::String::Primitive>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runStringEnd<LeftFunction, std::optional<types::String::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runStringEnd<RightFunction, types::String::Primitive>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runStringEnd<RightFunction, std::optional<types::String::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
+
+template <typename Result>
+void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
+    const NLReplaceData* replace = static_cast<NLReplaceData*>(data);
+
+    const NLReplaceData::StringArgument& string = replace->getString();
+    const NLReplaceData::StringArgument& search = replace->getSearch();
+    const NLReplaceData::StringArgument& replacement = replace->getReplacement();
+
+    const size_t rowCount = string._column->size();
+    bioassert(search._column->size() == rowCount, "Search column of a replace is not row-aligned with its string.");
+    bioassert(replacement._column->size() == rowCount, "Replacement column of a replace is not row-aligned with its string.");
+
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(replace->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    ReplaceFunction function(&replace->getMemory()->stringBuffer());
+    constexpr std::string_view name = ReplaceFunction::NAME;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
+        const std::optional<types::String::Primitive> searched = search._read(search._column, rowIndex, name);
+        const std::optional<types::String::Primitive> replacing = replacement._read(replacement._column, rowIndex, name);
+
+        const bool readsANull = !text.has_value() || !searched.has_value() || !replacing.has_value();
+        if (!readsANull) {
+            outputRaw[rowIndex] = function(*text, *searched, *replacing);
+        } else if constexpr (TypeUtils::is_optional_v<Result>) {
+            outputRaw[rowIndex] = std::nullopt;
+        } else {
+            throw IRException("replace() typed as never null read a null argument");
+        }
+    }
+}
+
+template void NLExecutor::runReplace<types::String::Primitive>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runReplace<std::optional<types::String::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
+
 void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     const NLRangeData* range = static_cast<NLRangeData*>(data);
 
@@ -9246,6 +9322,20 @@ NLUnaryFunctionKernel NLExecutor::selectToString(const Column* input, bool input
 
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToIntegerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+template <auto StrictSelector, typename TaggedFunctor>
+NLUnaryFunctionKernel NLExecutor::selectOrNull(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedFunctor>(input, inputNullable, memory, result);
+    }
+
+    return StrictSelector(input, inputNullable, memory, result);
+}
+
+template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToIntegerFunction>, TaggedToIntegerOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToFloatFunction>, TaggedToFloatOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectFunction<ToBoolFunction>, TaggedToBooleanOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectToString, TaggedToStringOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLSortResetData* reset = static_cast<NLSortResetData*>(data);

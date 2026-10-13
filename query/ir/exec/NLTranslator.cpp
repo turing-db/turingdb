@@ -129,6 +129,10 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_float",   &NLExecutor::selectConversion<ToFloatFunction>},
     {"nl.to_string",  &NLExecutor::selectToString},
     {"nl.to_boolean", &NLExecutor::selectFunction<ToBoolFunction>},
+    {"nl.to_integer_or_null", &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToIntegerFunction>, TaggedToIntegerOrNullFunction>},
+    {"nl.to_float_or_null",   &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToFloatFunction>, TaggedToFloatOrNullFunction>},
+    {"nl.to_boolean_or_null", &NLExecutor::selectOrNull<&NLExecutor::selectFunction<ToBoolFunction>, TaggedToBooleanOrNullFunction>},
+    {"nl.to_string_or_null",  &NLExecutor::selectOrNull<&NLExecutor::selectToString, TaggedToStringOrNullFunction>},
     {"nl.to_datetime", &NLExecutor::selectDateTimeConversion},
     {"nl.to_duration", &NLExecutor::selectDurationConversion},
 
@@ -960,6 +964,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSubstring(substring, body);
         } else if (nl::Split split = mlir::dyn_cast<nl::Split>(operation)) {
             translateSplit(split, body);
+        } else if (nl::Left left = mlir::dyn_cast<nl::Left>(operation)) {
+            translateStringEnd<LeftFunction>(left, body);
+        } else if (nl::Right right = mlir::dyn_cast<nl::Right>(operation)) {
+            translateStringEnd<RightFunction>(right, body);
+        } else if (nl::Replace replace = mlir::dyn_cast<nl::Replace>(operation)) {
+            translateReplace(replace, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (nl::ListPredicate listPredicate = mlir::dyn_cast<nl::ListPredicate>(operation)) {
@@ -3579,6 +3589,63 @@ void NLTranslator::translateSplit(nl::Split split, NLStmtContainer* body) {
         body->emplaceStmt(&NLExecutor::runSplit<std::optional<ListView>>, data);
     } else {
         body->emplaceStmt(&NLExecutor::runSplit<ListView>, data);
+    }
+}
+
+template <typename Function, typename StringEndOp>
+void NLTranslator::translateStringEnd(StringEndOp stringEnd, NLStmtContainer* body) {
+    const mlir::Value resultValue = stringEnd.getResult();
+    const mlir::Type resultType = resultValue.getType();
+
+    Column* const result = allocColumnForChunkType(resultType);
+    _valueSlots[resultValue] = result;
+
+    const Column* const string = getColumn(stringEnd.getString());
+    const Column* const length = getColumn(stringEnd.getLength());
+
+    const NLStringEndData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
+    const NLStringEndData::IntegerArgument lengthArgument {length, NLExecutor::selectIntegerArgumentRead(length)};
+
+    NLStringEndData* data = _program->allocFunctionData<NLStringEndData>(result, stringArgument, lengthArgument);
+
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
+    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
+
+    if (resultNullable) {
+        body->emplaceStmt(&NLExecutor::runStringEnd<Function, std::optional<types::String::Primitive>>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runStringEnd<Function, types::String::Primitive>, data);
+    }
+}
+
+void NLTranslator::translateReplace(nl::Replace replace, NLStmtContainer* body) {
+    const mlir::Value resultValue = replace.getResult();
+    const mlir::Type resultType = resultValue.getType();
+
+    Column* const result = allocColumnForChunkType(resultType);
+    _valueSlots[resultValue] = result;
+
+    const Column* const string = getColumn(replace.getString());
+    const Column* const search = getColumn(replace.getSearch());
+    const Column* const replacement = getColumn(replace.getReplacement());
+
+    const NLReplaceData::StringArgument stringArgument {string, NLExecutor::selectStringArgumentRead(string)};
+    const NLReplaceData::StringArgument searchArgument {search, NLExecutor::selectStringArgumentRead(search)};
+    const NLReplaceData::StringArgument replacementArgument {replacement, NLExecutor::selectStringArgumentRead(replacement)};
+
+    NLReplaceData* data = _program->allocFunctionData<NLReplaceData>(result,
+                                                                     _memory,
+                                                                     stringArgument,
+                                                                     searchArgument,
+                                                                     replacementArgument);
+
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
+    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
+
+    if (resultNullable) {
+        body->emplaceStmt(&NLExecutor::runReplace<std::optional<types::String::Primitive>>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runReplace<types::String::Primitive>, data);
     }
 }
 

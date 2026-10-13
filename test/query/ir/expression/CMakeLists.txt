@@ -104,3 +104,5 @@ add_call_v3_test(test_query_ir_function_name_case FunctionNameCaseTest.cpp)
 
 add_turing_test(test_query_ir_entity_negative_integer EntityNegativeIntegerTest.cpp)
 target_link_libraries(test_query_ir_entity_negative_integer PRIVATE turing_ir_test_hash_join_s)
+
+add_turing_test(test_query_ir_opencypher_string_function OpenCypherStringFunctionTest.cpp)

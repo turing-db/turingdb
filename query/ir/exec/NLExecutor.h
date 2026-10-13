@@ -405,6 +405,10 @@ public:
     static void runSubstring(NLExecutionContext* context, NLFunctionData* data);
     template <typename Result>
     static void runSplit(NLExecutionContext* context, NLFunctionData* data);
+    template <typename Function, typename Result>
+    static void runStringEnd(NLExecutionContext* context, NLFunctionData* data);
+    template <typename Result>
+    static void runReplace(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one map per row (nl.make_map): row r of the result maps each key to what its
     // value column holds at r, as one contiguous run of the query's map buffer.
@@ -501,6 +505,11 @@ public:
     // toString reads one more column shape than its siblings - a boolean converts to text
     // where it converts to no number.
     static NLUnaryFunctionKernel selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    // An OrNull conversion converts a typed column as its strict sibling does, and reads a
+    // type-erased cell through a functor answering null where no conversion rule applies.
+    template <auto StrictSelector, typename TaggedFunctor>
+    static NLUnaryFunctionKernel selectOrNull(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // datetime() reads text or a count of seconds since the epoch, so it picks its functor
     // from the argument column as a conversion does. It is not selectConversion itself
