@@ -502,10 +502,6 @@ public:
     template <typename StringFunctor>
     static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
-    // toString reads one more column shape than its siblings - a boolean converts to text
-    // where it converts to no number.
-    static NLUnaryFunctionKernel selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-
     // An OrNull conversion converts a typed column as its strict sibling does, and reads a
     // type-erased cell through a functor answering null where no conversion rule applies.
     template <auto StrictSelector, typename TaggedFunctor>

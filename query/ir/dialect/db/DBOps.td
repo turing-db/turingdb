@@ -2736,6 +2736,7 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 def ElementID : UnaryFunctionOp<"element_id">;
 
 def Size : UnaryFunctionOp<"size">;
+def CharLength : UnaryFunctionOp<"char_length">;
 def Head : UnaryFunctionOp<"head">;
 def Last : UnaryFunctionOp<"last">;
 def Tail : UnaryFunctionOp<"tail">;

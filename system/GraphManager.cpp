@@ -138,11 +138,11 @@ void GraphManager::listAvailableGraphs(std::vector<std::string>& names) const {
         names.emplace_back(path.filename());
     }
 
+    _graphLoadStatus.listLoadingGraphs(names);
+
     std::vector<std::string_view> loadedNames;
     _graphs.listNames(loadedNames);
     names.insert(names.end(), loadedNames.begin(), loadedNames.end());
-
-    _graphLoadStatus.listLoadingGraphs(names);
 
     std::ranges::sort(names);
     const auto [duplicatesBegin, duplicatesEnd] = std::ranges::unique(names);
@@ -280,9 +280,9 @@ Graph* GraphManager::loadBinaryDB(std::string_view graphName,
         return nullptr;
     }
 
-    _graphLoadStatus.removeLoadingGraph(graphName);
-
     reservation.publish(std::move(graph));
+
+    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
@@ -347,9 +347,9 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
         }
     }
 
-    _graphLoadStatus.removeLoadingGraph(graphName);
-
     reservation.publish(std::move(graph));
+
+    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
@@ -391,9 +391,9 @@ Graph* GraphManager::loadGmlDB(std::string_view graphName,
         }
     }
 
-    _graphLoadStatus.removeLoadingGraph(graphName);
-
     reservation.publish(std::move(graph));
+
+    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }
@@ -464,9 +464,9 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
         }
     }
 
-    _graphLoadStatus.removeLoadingGraph(graphName);
-
     reservation.publish(std::move(graph));
+
+    _graphLoadStatus.removeLoadingGraph(graphName);
 
     return graphPtr;
 }

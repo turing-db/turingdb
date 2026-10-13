@@ -133,12 +133,12 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.end_node",   &NLExecutor::selectFunction<EndNodeFunction>},
     {"nl.to_integer", &NLExecutor::selectConversion<ToIntegerFunction>},
     {"nl.to_float",   &NLExecutor::selectConversion<ToFloatFunction>},
-    {"nl.to_string",  &NLExecutor::selectToString},
-    {"nl.to_boolean", &NLExecutor::selectFunction<ToBoolFunction>},
+    {"nl.to_string",  &NLExecutor::selectConversion<ToStringFunction>},
+    {"nl.to_boolean", &NLExecutor::selectConversion<ToBoolFunction>},
     {"nl.to_integer_or_null", &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToIntegerFunction>, TaggedToIntegerOrNullFunction>},
     {"nl.to_float_or_null",   &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToFloatFunction>, TaggedToFloatOrNullFunction>},
-    {"nl.to_boolean_or_null", &NLExecutor::selectOrNull<&NLExecutor::selectFunction<ToBoolFunction>, TaggedToBooleanOrNullFunction>},
-    {"nl.to_string_or_null",  &NLExecutor::selectOrNull<&NLExecutor::selectToString, TaggedToStringOrNullFunction>},
+    {"nl.to_boolean_or_null", &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToBoolFunction>, TaggedToBooleanOrNullFunction>},
+    {"nl.to_string_or_null",  &NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToStringFunction>, TaggedToStringOrNullFunction>},
     {"nl.to_datetime", &NLExecutor::selectDateTimeConversion},
     {"nl.to_duration", &NLExecutor::selectDurationConversion},
 
@@ -172,6 +172,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
 
     {"nl.element_id", &NLExecutor::selectId},
     {"nl.size",       &NLExecutor::selectSize},
+    {"nl.char_length", &NLExecutor::selectFunction<CharLengthFunction>},
     {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
     {"nl.last",       &NLExecutor::selectFunction<ListLastFunction>},
     {"nl.tail",       &NLExecutor::selectFunction<ListTailFunction>},
@@ -3621,10 +3622,7 @@ void NLTranslator::translateStringEnd(StringEndOp stringEnd, NLStmtContainer* bo
 
     NLStringEndData* data = _program->allocFunctionData<NLStringEndData>(result, stringArgument, lengthArgument);
 
-    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
-    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
-
-    if (resultNullable) {
+    if (isNullableChunk(resultType)) {
         body->emplaceStmt(&NLExecutor::runStringEnd<Function, std::optional<types::String::Primitive>>, data);
     } else {
         body->emplaceStmt(&NLExecutor::runStringEnd<Function, types::String::Primitive>, data);
@@ -3652,10 +3650,7 @@ void NLTranslator::translateReplace(nl::Replace replace, NLStmtContainer* body) 
                                                                      searchArgument,
                                                                      replacementArgument);
 
-    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
-    const bool resultNullable = mlir::isa<storage::NullableType>(resultElement);
-
-    if (resultNullable) {
+    if (isNullableChunk(resultType)) {
         body->emplaceStmt(&NLExecutor::runReplace<std::optional<types::String::Primitive>>, data);
     } else {
         body->emplaceStmt(&NLExecutor::runReplace<types::String::Primitive>, data);

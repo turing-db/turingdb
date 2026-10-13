@@ -2826,6 +2826,7 @@ def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, R
 def ElementID : NLUnaryFunctionOp<"element_id", [ConstantThroughOperands]>;
 
 def Size : NLUnaryFunctionOp<"size", [ConstantThroughOperands]>;
+def CharLength : NLUnaryFunctionOp<"char_length", [ConstantThroughOperands]>;
 def Head : NLUnaryFunctionOp<"head", [ConstantThroughOperands]>;
 def Last : NLUnaryFunctionOp<"last", [ConstantThroughOperands]>;
 def Tail : NLUnaryFunctionOp<"tail", [ConstantThroughOperands]>;

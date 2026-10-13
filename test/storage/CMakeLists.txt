@@ -125,3 +125,5 @@ add_turing_test(test_storage_dump_map_datetime_graph dump/MapDateTimeGraphDumpLo
 add_turing_test(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_turing_test(test_storage_objectmap ObjectMapTest.cpp)
 
+
+add_turing_test(test_storage_integer_conversion_of_unsigned IntegerConversionOfUnsignedTest.cpp)

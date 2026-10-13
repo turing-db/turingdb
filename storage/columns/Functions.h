@@ -202,30 +202,6 @@ public:
     ResultType operator()(const IDT id) const { return static_cast<types::Int64::Primitive>(id.getValue()); }
 };
 
-class ToIntegerFunction {
-public:
-    using ArgType = types::String::Primitive;
-    using ResultType = std::optional<types::Int64::Primitive>;
-
-    ResultType operator()(std::string_view sv) {
-        types::Int64::Primitive result = 0;
-
-        const auto* start = sv.data();
-        const auto* end = sv.data() + sv.size();
-
-        auto [ptr, ec] = std::from_chars(start, end, result);
-
-        const bool success = ec == std::errc {};
-        const bool parsedAll = ptr == end;
-
-        if (!success || !parsedAll) {
-            return std::nullopt;
-        }
-
-        return result;
-    }
-};
-
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
 class ToFloatFunction {
 public:
@@ -256,6 +232,17 @@ public:
 
 private:
     std::string _buf; // Temporary buffer to null-terminate string view
+};
+
+class ToIntegerFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(std::string_view text);
+
+private:
+    ToFloatFunction _fromDecimal;
 };
 
 class ToBoolFunction {
@@ -528,6 +515,13 @@ public:
             }
 
             return static_cast<types::Int64::Primitive>(truncated);
+        } else if constexpr (std::is_unsigned_v<Number>) {
+            const bool representable = value <= static_cast<Number>(std::numeric_limits<types::Int64::Primitive>::max());
+            if (!representable) {
+                return std::nullopt;
+            }
+
+            return static_cast<types::Int64::Primitive>(value);
         } else {
             return static_cast<types::Int64::Primitive>(value);
         }
@@ -545,9 +539,63 @@ public:
     }
 };
 
+class ToIntegerFromBoolFunction {
+public:
+    using ArgType = types::Bool::Primitive;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(const types::Bool::Primitive value) const {
+        return value ? 1 : 0;
+    }
+};
+
+// toBoolean() of an integer is whether it is non-zero
+template <typename Value>
+class ToBoolFromValueFunction {
+public:
+    using ArgType = Value;
+    using ResultType = std::optional<types::Bool::Primitive>;
+
+    ResultType operator()(const Value value) const {
+        return types::Bool::Primitive(static_cast<bool>(value));
+    }
+};
+
+template <typename Temporal>
+class ToStringFromTemporalFunction {
+public:
+    using ArgType = Temporal;
+    using ResultType = types::String::Primitive;
+
+    explicit ToStringFromTemporalFunction(StringBuffer* stringBuffer)
+        : _stringBuffer(stringBuffer)
+    {
+    }
+
+    ResultType operator()(const Temporal value) {
+        _formatted.clear();
+        Temporal::format(_formatted, value);
+
+        return _stringBuffer->insert(_formatted);
+    }
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+    std::string _formatted;
+};
+
 template <typename Argument>
 concept ConvertibleNumber = std::is_arithmetic_v<Argument>
                             && !std::is_same_v<Argument, types::Bool::Primitive>;
+
+template <typename Argument>
+concept ConvertibleToBool = std::is_same_v<Argument, types::Int64::Primitive>
+                            || std::is_same_v<Argument, types::UInt64::Primitive>
+                            || std::is_same_v<Argument, types::Bool::Primitive>;
+
+template <typename Argument>
+concept TemporalValue = std::is_same_v<Argument, types::DateTime::Primitive>
+                        || std::is_same_v<Argument, types::Duration::Primitive>;
 
 // The element a column of the given type converts, with any optional unwrapped: what a
 // conversion is applied to row by row.
@@ -555,7 +603,7 @@ template <typename ColumnType>
 using ConversionArgument = TypeUtils::unwrap_inner_t<TypeUtils::decay_col_t<ColumnType>>;
 
 // The conversion a column of the given element type goes through. A conversion names its
-// string form, which stays the one every non-numeric element converts through.
+// string form, which stays the one every element without a rule of its own converts through.
 template <typename StringFunctor, typename Argument>
 struct ConversionFunctorFor {
     using Type = StringFunctor;
@@ -574,6 +622,26 @@ struct ConversionFunctorFor<ToFloatFunction, Argument> {
 template <ConvertibleNumber Argument>
 struct ConversionFunctorFor<ToStringFunction, Argument> {
     using Type = ToStringFromValueFunction<Argument>;
+};
+
+template <>
+struct ConversionFunctorFor<ToStringFunction, types::Bool::Primitive> {
+    using Type = ToStringFromValueFunction<types::Bool::Primitive>;
+};
+
+template <TemporalValue Argument>
+struct ConversionFunctorFor<ToStringFunction, Argument> {
+    using Type = ToStringFromTemporalFunction<Argument>;
+};
+
+template <>
+struct ConversionFunctorFor<ToIntegerFunction, types::Bool::Primitive> {
+    using Type = ToIntegerFromBoolFunction;
+};
+
+template <ConvertibleToBool Argument>
+struct ConversionFunctorFor<ToBoolFunction, Argument> {
+    using Type = ToBoolFromValueFunction<Argument>;
 };
 
 // A function over a type-erased cell finds out per row what the cell holds. A null answers
@@ -1072,6 +1140,25 @@ public:
     using ArgType = types::String::Primitive;
     using ResultType = types::Int64::Primitive;
     using TaggedCounterpart = TaggedSizeFunction;
+
+    ResultType operator()(const ArgType string) const;
+};
+
+class TaggedCharLengthFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+// char_length() counts the characters of a string alone, where size() reads a list too
+class CharLengthFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::Int64::Primitive;
+    using TaggedCounterpart = TaggedCharLengthFunction;
 
     ResultType operator()(const ArgType string) const;
 };

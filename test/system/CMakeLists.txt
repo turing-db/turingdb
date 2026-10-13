@@ -1,3 +1,7 @@
 add_turing_test(test_system SystemTest.cpp)
 
 add_turing_test(test_system_version_not_found VersionNotFoundTest.cpp)
+
+add_turing_test(test_system_list_available_graphs_during_import ListAvailableGraphsDuringImportTest.cpp)
+
+add_turing_test(test_system_failed_import_clears_loading FailedImportClearsLoadingTest.cpp)

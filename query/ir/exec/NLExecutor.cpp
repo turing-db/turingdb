@@ -713,6 +713,24 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     bioassert(false, "Function operand has an unexpected column type.");
 }
 
+// A boolean chunk with no null is a mask, whose rows are the booleans the functor reads
+template <typename Functor>
+void functionMaskKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
+    using Res = typename Functor::ResultType;
+
+    const std::vector<ColumnMask::Bool_t>& inputRaw = static_cast<const ColumnMask*>(input)->getRaw();
+    const size_t size = inputRaw.size();
+
+    ColumnVector<Res>* output = static_cast<ColumnVector<Res>*>(result);
+    output->resize(size);
+    auto& outputRaw = output->getRaw();
+
+    Functor functor = makeFunctor<Functor>(context, memory);
+    for (size_t row = 0; row < size; row++) {
+        outputRaw[row] = functor(types::Bool::Primitive {static_cast<bool>(inputRaw[row])});
+    }
+}
+
 // The nullable-input kernel of a function that reads its own nulls: the absent value goes
 // to the functor as it is, so the result rides the plain column its answers always fill.
 template <typename Functor>
@@ -888,6 +906,18 @@ bool columnHoldsElement(const Column* column) {
            || dynamic_cast<const ColumnVector<std::optional<Element>>*>(column)
            || dynamic_cast<const ColumnConst<Element>*>(column)
            || dynamic_cast<const ColumnConst<std::optional<Element>>*>(column);
+}
+
+// A conversion of a boolean reads a mask too, the chunk a boolean with no null is
+template <typename Element>
+bool columnHoldsConvertible(const Column* column) {
+    if constexpr (std::is_same_v<Element, types::Bool::Primitive>) {
+        if (column->getContainerKind() == ContainerKind::code<ColumnMask>()) {
+            return true;
+        }
+    }
+
+    return columnHoldsElement<Element>(column);
 }
 
 template <ColumnOperator Op>
@@ -8073,20 +8103,18 @@ void NLExecutor::runStringEnd(NLExecutionContext*, NLFunctionData* data) {
     outputRaw.resize(rowCount);
 
     const Function function {};
-    constexpr std::string_view name = Function::NAME;
-
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
-        const std::optional<types::Int64::Primitive> count = length._read(length._column, rowIndex, name);
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, Function::NAME);
+        const std::optional<types::Int64::Primitive> count = length._read(length._column, rowIndex, Function::NAME);
 
         if (!text.has_value()) {
             if constexpr (TypeUtils::is_optional_v<Result>) {
                 outputRaw[rowIndex] = std::nullopt;
             } else {
-                throw IRException(fmt::format("{}() typed as never null read a null string", name));
+                throw IRException(fmt::format("{}() typed as never null read a null string", Function::NAME));
             }
         } else if (!count.has_value()) {
-            throw IRException(fmt::format("{}() does not take a null length", name));
+            throw IRException(fmt::format("{}() does not take a null length", Function::NAME));
         } else {
             outputRaw[rowIndex] = function(*text, *count);
         }
@@ -8114,12 +8142,10 @@ void NLExecutor::runReplace(NLExecutionContext*, NLFunctionData* data) {
     outputRaw.resize(rowCount);
 
     ReplaceFunction function(&replace->getMemory()->stringBuffer());
-    constexpr std::string_view name = ReplaceFunction::NAME;
-
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);
-        const std::optional<types::String::Primitive> searched = search._read(search._column, rowIndex, name);
-        const std::optional<types::String::Primitive> replacing = replacement._read(replacement._column, rowIndex, name);
+        const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, ReplaceFunction::NAME);
+        const std::optional<types::String::Primitive> searched = search._read(search._column, rowIndex, ReplaceFunction::NAME);
+        const std::optional<types::String::Primitive> replacing = replacement._read(replacement._column, rowIndex, ReplaceFunction::NAME);
 
         const bool readsANull = !text.has_value() || !searched.has_value() || !replacing.has_value();
         if (!readsANull) {
@@ -9075,6 +9101,13 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
         }
     }
 
+    if constexpr (std::is_same_v<Arg, types::Bool::Primitive>) {
+        if (input->getContainerKind() == ContainerKind::code<ColumnMask>()) {
+            result = memory->alloc<ColumnVector<Res>>();
+            return &functionMaskKernel<Functor>;
+        }
+    }
+
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
         return &functionConstKernel<Functor>;
@@ -9111,18 +9144,27 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
 
 template <typename StringFunctor>
 NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
-    if (columnHoldsElement<types::Int64::Primitive>(input)) {
-        using Functor = ConversionFunctorFor<StringFunctor, types::Int64::Primitive>::Type;
+    NLUnaryFunctionKernel kernel = nullptr;
 
-        return selectFunction<Functor>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
-        using Functor = ConversionFunctorFor<StringFunctor, types::UInt64::Primitive>::Type;
+    const auto selectForElement = [&]<typename Element>() {
+        using Functor = ConversionFunctorFor<StringFunctor, Element>::Type;
 
-        return selectFunction<Functor>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
-        using Functor = ConversionFunctorFor<StringFunctor, types::Double::Primitive>::Type;
+        if constexpr (!std::is_same_v<Functor, StringFunctor>) {
+            if (!kernel && columnHoldsConvertible<Element>(input)) {
+                kernel = selectFunction<Functor>(input, inputNullable, memory, result);
+            }
+        }
+    };
 
-        return selectFunction<Functor>(input, inputNullable, memory, result);
+    selectForElement.template operator()<types::Int64::Primitive>();
+    selectForElement.template operator()<types::UInt64::Primitive>();
+    selectForElement.template operator()<types::Double::Primitive>();
+    selectForElement.template operator()<types::Bool::Primitive>();
+    selectForElement.template operator()<types::DateTime::Primitive>();
+    selectForElement.template operator()<types::Duration::Primitive>();
+
+    if (kernel) {
+        return kernel;
     }
 
     return selectFunction<StringFunctor>(input, inputNullable, memory, result);
@@ -9264,7 +9306,6 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const 
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<ToBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ToDateTimeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EpochSecondsToDateTimeFunction<types::Int64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EpochSecondsToDateTimeFunction<types::UInt64::Primitive>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
@@ -9300,28 +9341,17 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<DurationComponentFunct
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListLastFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<CharLengthFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ToUpperFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ToLowerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<TrimFunction<TrimSide::Start>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<TrimFunction<TrimSide::End>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<TrimFunction<TrimSide::Both>>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
-NLUnaryFunctionKernel NLExecutor::selectToString(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
-    if (columnHoldsElement<types::Int64::Primitive>(input)) {
-        return selectFunction<ToStringFromValueFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
-        return selectFunction<ToStringFromValueFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
-        return selectFunction<ToStringFromValueFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
-    } else if (columnHoldsElement<types::Bool::Primitive>(input)) {
-        return selectFunction<ToStringFromValueFunction<types::Bool::Primitive>>(input, inputNullable, memory, result);
-    }
-
-    return selectFunction<ToStringFunction>(input, inputNullable, memory, result);
-}
-
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToIntegerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectConversion<ToFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectConversion<ToStringFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectConversion<ToBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 template <auto StrictSelector, typename TaggedFunctor>
 NLUnaryFunctionKernel NLExecutor::selectOrNull(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
@@ -9334,8 +9364,8 @@ NLUnaryFunctionKernel NLExecutor::selectOrNull(const Column* input, bool inputNu
 
 template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToIntegerFunction>, TaggedToIntegerOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToFloatFunction>, TaggedToFloatOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectFunction<ToBoolFunction>, TaggedToBooleanOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectToString, TaggedToStringOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToBoolFunction>, TaggedToBooleanOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectOrNull<&NLExecutor::selectConversion<ToStringFunction>, TaggedToStringOrNullFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLSortResetData* reset = static_cast<NLSortResetData*>(data);

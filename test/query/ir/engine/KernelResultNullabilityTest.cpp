@@ -55,7 +55,7 @@ private:
 };
 
 // MATCH (n) WHERE n.age = 32 RETURN n
-constexpr const char* nullableComparisonFilterProgram = R"mlir(
+constexpr const char* NULLABLE_COMPARISON_FILTER_PROGRAM = R"mlir(
 func.func @main() {
   %age = nl.get_property_type("age")
   %k = nl.constant(32 : i64)
@@ -71,7 +71,7 @@ func.func @main() {
 )mlir";
 
 // The same comparison declared two-valued: its kernel still writes a nullable mask
-constexpr const char* nullableComparisonDeclaredTwoValuedProgram = R"mlir(
+constexpr const char* NULLABLE_COMPARISON_DECLARED_TWO_VALUED_PROGRAM = R"mlir(
 func.func @main() {
   %age = nl.get_property_type("age")
   %k = nl.constant(32 : i64)
@@ -87,7 +87,7 @@ func.func @main() {
 )mlir";
 
 // MATCH (n) WHERE n = 1 RETURN n
-constexpr const char* twoValuedComparisonFilterProgram = R"mlir(
+constexpr const char* TWO_VALUED_COMPARISON_FILTER_PROGRAM = R"mlir(
 func.func @main() {
   %k = nl.constant(1 : i64)
   %nodes = nl.scan_nodes()
@@ -101,7 +101,7 @@ func.func @main() {
 )mlir";
 
 // The same comparison declared three-valued: its kernel still writes a plain mask
-constexpr const char* twoValuedComparisonDeclaredNullableProgram = R"mlir(
+constexpr const char* TWO_VALUED_COMPARISON_DECLARED_NULLABLE_PROGRAM = R"mlir(
 func.func @main() {
   %k = nl.constant(1 : i64)
   %nodes = nl.scan_nodes()
@@ -115,7 +115,7 @@ func.func @main() {
 )mlir";
 
 // MATCH (n) WHERE NOT n.age = 32 RETURN n, with the NOT declared two-valued
-constexpr const char* notOfNullablePredicateDeclaredTwoValuedProgram = R"mlir(
+constexpr const char* NOT_OF_NULLABLE_PREDICATE_DECLARED_TWO_VALUED_PROGRAM = R"mlir(
 func.func @main() {
   %age = nl.get_property_type("age")
   %k = nl.constant(32 : i64)
@@ -132,7 +132,7 @@ func.func @main() {
 )mlir";
 
 // MATCH (n) WHERE n.age + 1 = 33 RETURN n, with the sum declared never null
-constexpr const char* nullableSumDeclaredPlainProgram = R"mlir(
+constexpr const char* NULLABLE_SUM_DECLARED_PLAIN_PROGRAM = R"mlir(
 func.func @main() {
   %age = nl.get_property_type("age")
   %one = nl.constant(1 : i64)
@@ -196,7 +196,7 @@ protected:
 
 TEST_F(KernelResultNullabilityTest, nullableComparisonFilter) {
     NodeIDSink sink;
-    runProgram(nullableComparisonFilterProgram, sink);
+    runProgram(NULLABLE_COMPARISON_FILTER_PROGRAM, sink);
 
     std::vector<uint64_t> nodes;
     sink.sortedNodes(nodes);
@@ -207,7 +207,7 @@ TEST_F(KernelResultNullabilityTest, nullableComparisonFilter) {
 
 TEST_F(KernelResultNullabilityTest, twoValuedComparisonFilter) {
     NodeIDSink sink;
-    runProgram(twoValuedComparisonFilterProgram, sink);
+    runProgram(TWO_VALUED_COMPARISON_FILTER_PROGRAM, sink);
 
     std::vector<uint64_t> nodes;
     sink.sortedNodes(nodes);
@@ -217,17 +217,17 @@ TEST_F(KernelResultNullabilityTest, twoValuedComparisonFilter) {
 }
 
 TEST_F(KernelResultNullabilityTest, nullableComparisonDeclaredTwoValuedIsRejected) {
-    expectRejected(nullableComparisonDeclaredTwoValuedProgram, "nl.eq declares a !nl.chunk<i1> result");
+    expectRejected(NULLABLE_COMPARISON_DECLARED_TWO_VALUED_PROGRAM, "nl.eq declares a !nl.chunk<i1> result");
 }
 
 TEST_F(KernelResultNullabilityTest, twoValuedComparisonDeclaredNullableIsRejected) {
-    expectRejected(twoValuedComparisonDeclaredNullableProgram, "nl.eq declares a !nl.chunk<!storage.nullable<i1>> result");
+    expectRejected(TWO_VALUED_COMPARISON_DECLARED_NULLABLE_PROGRAM, "nl.eq declares a !nl.chunk<!storage.nullable<i1>> result");
 }
 
 TEST_F(KernelResultNullabilityTest, notOfNullablePredicateDeclaredTwoValuedIsRejected) {
-    expectRejected(notOfNullablePredicateDeclaredTwoValuedProgram, "nl.not declares a !nl.chunk<i1> result");
+    expectRejected(NOT_OF_NULLABLE_PREDICATE_DECLARED_TWO_VALUED_PROGRAM, "nl.not declares a !nl.chunk<i1> result");
 }
 
 TEST_F(KernelResultNullabilityTest, nullableSumDeclaredPlainIsRejected) {
-    expectRejected(nullableSumDeclaredPlainProgram, "nl.add declares a !nl.chunk<i64> result");
+    expectRejected(NULLABLE_SUM_DECLARED_PLAIN_PROGRAM, "nl.add declares a !nl.chunk<i64> result");
 }

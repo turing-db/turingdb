@@ -657,49 +657,50 @@ Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> anchorEq
     return {};
 }
 
-// Whether @param first is written before @param second in the function, an op coming before
-// the ops it holds
-bool comesBefore(Operation* first, Operation* second) {
-    if (first->isAncestor(second)) {
-        return first != second;
-    } else if (second->isAncestor(first)) {
-        return false;
+// The ops of a function numbered in the order they are written, an op before the ops it holds,
+// so an op is written before another exactly when its position is lower
+class WrittenOrder {
+public:
+    explicit WrittenOrder(Operation* function)
+    {
+        function->walk([this](Operation* op, const mlir::WalkStage& stage) {
+            if (stage.isBeforeAllRegions()) {
+                const size_t position = _count++;
+                _positions[op] = position;
+
+                if (isGraphWrite(op)) {
+                    _writePositions.push_back(position);
+                }
+            }
+
+            if (stage.isAfterAllRegions() && op->getNumRegions() > 0) {
+                _lastHeldPositions[op] = _count - 1;
+            }
+        });
     }
 
-    Operation* firstHolder = first;
-    Region* firstRegion = first->getParentRegion();
-    Operation* secondHolder = firstHolder->getBlock()->findAncestorOpInBlock(*second);
-    while (!secondHolder) {
-        firstRegion = firstHolder->getParentRegion();
-        firstHolder = firstHolder->getParentOp();
-        secondHolder = firstHolder->getBlock()->findAncestorOpInBlock(*second);
+    // A filter pushed to just after @param anchorProducer cuts the rows of every op between the
+    // two, so a write among them would no longer run on the rows the filter drops. A write the
+    // producer holds has run on every row by then.
+    bool writesBetween(Operation* anchorProducer, Operation* filter) const {
+        const auto lastHeld = _lastHeldPositions.find(anchorProducer);
+        const size_t afterProducer = lastHeld != _lastHeldPositions.end() ? lastHeld->second : _positions.at(anchorProducer);
+        const size_t filterPosition = _positions.at(filter);
+
+        const size_t* const firstWriteAfter = llvm::upper_bound(_writePositions, afterProducer);
+
+        return firstWriteAfter != _writePositions.end() && *firstWriteAfter < filterPosition;
     }
 
-    if (firstHolder != secondHolder) {
-        return firstHolder->isBeforeInBlock(secondHolder);
-    }
-
-    for (Region& region : firstHolder->getRegions()) {
-        if (&region == firstRegion) {
-            return true;
-        } else if (region.findAncestorOpInRegion(*second)) {
-            return false;
-        }
-    }
-
-    return false;
-}
-
-// A filter pushed to just after @param anchorProducer cuts the rows of every op between the two,
-// so a write among them would no longer run on the rows the filter drops
-bool writesBetween(llvm::ArrayRef<Operation*> writes, Operation* anchorProducer, Operation* filter) {
-    return llvm::any_of(writes, [anchorProducer, filter](Operation* write) {
-        return comesBefore(anchorProducer, write) && comesBefore(write, filter);
-    });
-}
+private:
+    llvm::DenseMap<Operation*, size_t> _positions;
+    llvm::DenseMap<Operation*, size_t> _lastHeldPositions;
+    llvm::SmallVector<size_t> _writePositions;
+    size_t _count {0};
+};
 
 bool matchPushablePredicate(FilterOp filter,
-                            llvm::ArrayRef<Operation*> writes,
+                            const WrittenOrder& order,
                             LineageClimbs& climbs,
                             PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
@@ -741,7 +742,7 @@ bool matchPushablePredicate(FilterOp filter,
         return false;
     }
 
-    return !writesBetween(writes, pushable._anchor.getDefiningOp(), filter.getOperation());
+    return !order.writesBetween(pushable._anchor.getDefiningOp(), filter.getOperation());
 }
 
 void bypassFilter(FilterOp filter) {
@@ -810,19 +811,16 @@ struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
         mlir::OpBuilder builder(&getContext());
 
         llvm::SmallVector<FilterOp> filters;
-        llvm::SmallVector<Operation*> writes;
-        getOperation()->walk([&filters, &writes](Operation* op) {
-            if (FilterOp filter = dyn_cast<FilterOp>(op)) {
-                filters.push_back(filter);
-            } else if (isGraphWrite(op)) {
-                writes.push_back(op);
-            }
+        getOperation()->walk([&filters](FilterOp filter) {
+            filters.push_back(filter);
         });
+
+        const WrittenOrder order(getOperation());
 
         LineageClimbs climbs;
         for (FilterOp filter : filters) {
             PushablePredicate pushable;
-            if (!matchPushablePredicate(filter, writes, climbs, pushable)) {
+            if (!matchPushablePredicate(filter, order, climbs, pushable)) {
                 continue;
             }
 
