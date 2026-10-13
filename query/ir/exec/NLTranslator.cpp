@@ -1,10 +1,14 @@
 #include "NLTranslator.h"
 
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -25,6 +29,7 @@
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "Procedure.h"
 #include "ProcedureContext.h"
@@ -42,6 +47,7 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
+#include "TypeUtils.h"
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
 
@@ -627,6 +633,21 @@ void appendMergeNodeSignature(const LabelSet& labels,
 
 bool isConstantColumn(const Column* column) {
     return column->getContainerKind() == ContainerKind::code<ColumnConst>();
+}
+
+template <size_t... Indices>
+consteval std::array<bool, InternalKind::Count + 1> collectNullHoldingInternalKinds(std::index_sequence<Indices...>) {
+    return {false,
+            (TypeUtils::is_optional_v<InternalKind::Types::TypeAt<Indices>>
+             || std::is_same_v<InternalKind::Types::TypeAt<Indices>, PropertyNull>)...};
+}
+
+constexpr std::array<bool, InternalKind::Count + 1> NULL_HOLDING_INTERNAL_KINDS =
+    collectNullHoldingInternalKinds(std::make_index_sequence<InternalKind::Count>());
+
+bool columnHoldsNulls(const Column* column) {
+    const InternalKind::Code internalKind = ColumnKind::extractInternalKind(column->getKind());
+    return NULL_HOLDING_INTERNAL_KINDS[internalKind];
 }
 
 // A drain wires its emit loop's variables into the accumulator's one output slot per
@@ -3177,9 +3198,7 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
 
     Column* result = nullptr;
     const NLBinaryFn fn = NLExecutor::selectBinary<Op>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate binary operator result.");
-
-    _valueSlots[op.getResult()] = result;
+    bindKernelResult(op.getResult(), result);
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
@@ -3214,9 +3233,7 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
         }
     }
 
-    bioassert(result, "Failed to translate list index result.");
-
-    _valueSlots[index.getResult()] = result;
+    bindKernelResult(index.getResult(), result);
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
@@ -3227,9 +3244,7 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
 
     Column* result = nullptr;
     const NLUnaryFn fn = NLExecutor::selectNot(operand, _memory, result);
-    bioassert(result, "Failed to allocate NOT result column.");
-
-    _valueSlots[notOp.getResult()] = result;
+    bindKernelResult(notOp.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
@@ -3277,9 +3292,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     } else {
         fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
     }
-    bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
-
-    _valueSlots[toNullable.getResult()] = result;
+    bindKernelResult(toNullable.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
@@ -3883,7 +3896,7 @@ void NLTranslator::translateIsNotTrue(nl::IsNotTrue isNotTrue, NLStmtContainer* 
                                                      _memory,
                                                      result);
 
-    _valueSlots[isNotTrue.getResult()] = result;
+    bindKernelResult(isNotTrue.getResult(), result);
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
@@ -3929,9 +3942,7 @@ void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* 
 
     Column* result = nullptr;
     const NLUnaryFunctionKernel kernel = select(input, inputNullable, _memory, result);
-    bioassert(result, "Failed to allocate unary function result column.");
-
-    _valueSlots[op->getResult(0)] = result;
+    bindKernelResult(op->getResult(0), result);
 
     NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel, _memory);
     body->emplaceStmt(&NLExecutor::runUnaryFunction, data);
@@ -3946,9 +3957,7 @@ void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer*
 
     Column* result = nullptr;
     const NLBinaryFn fn = select(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to allocate binary function result column.");
-
-    _valueSlots[op->getResult(0)] = result;
+    bindKernelResult(op->getResult(0), result);
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
@@ -6917,6 +6926,27 @@ Column* NLTranslator::allocColumnIfUsed(mlir::Value chunkValue) {
     }
 
     return allocColumn(chunkValue);
+}
+
+void NLTranslator::bindKernelResult(mlir::Value resultValue, Column* result) {
+    bioassert(result, "The kernel allocated no result column");
+
+    const mlir::Type resultType = resultValue.getType();
+    const bool declaredNullable = isNullableChunk(resultType);
+
+    if (declaredNullable != columnHoldsNulls(result)) {
+        std::string declaredType;
+        llvm::raw_string_ostream stream(declaredType);
+        resultType.print(stream);
+
+        const llvm::StringRef opName = resultValue.getDefiningOp()->getName().getStringRef();
+        throw IRException(fmt::format("{} declares a {} result, but its kernel writes a {}",
+                                      std::string_view(opName.data(), opName.size()),
+                                      declaredType,
+                                      result->getTypeName()));
+    }
+
+    _valueSlots[resultValue] = result;
 }
 
 // Pool-allocate a chunk column of the right concrete type from the external

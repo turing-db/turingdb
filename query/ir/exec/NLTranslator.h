@@ -1169,6 +1169,11 @@ private:
 
     Column* allocColumn(mlir::Value chunkValue);
     Column* allocColumnIfUsed(mlir::Value chunkValue);
+
+    // A kernel allocates its result column from its operands' column types, while every
+    // consumer reads that column through the result's declared chunk type
+    void bindKernelResult(mlir::Value resultValue, Column* result);
+
     Column* allocColumnForKind(NLChunkKind kind);
 
     // Allocate a nullable value column for the value type's primitive. The
