@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -41,6 +42,7 @@ public:
     LoadGraphResult<Graph*> loadGraph(std::string_view name);
     void setDefaultGraph(std::string_view name);
     void listGraphs(std::vector<std::string_view>& names) const;
+    void listAvailableGraphs(std::vector<std::string>& names) const;
 
     // Initialise the default graph, loading it from disk or creating it
     void loadOrCreateDefaultGraph();
