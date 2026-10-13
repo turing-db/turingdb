@@ -22,3 +22,7 @@ target_include_directories(test_query_ir_failed_graph_load PRIVATE ${IR_TEST_DIR
 add_turing_test(test_query_ir_graph_not_found GraphNotFoundTest.cpp)
 target_sources(test_query_ir_graph_not_found PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_graph_not_found PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_list_available_graphs ListAvailableGraphsTest.cpp)
+target_sources(test_query_ir_list_available_graphs PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_list_available_graphs PRIVATE ${IR_TEST_DIR})

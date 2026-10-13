@@ -122,12 +122,12 @@ def ListGraphs : SystemOp<"list_graphs"> {
 * ListAvailableGraphs
 */
 def ListAvailableGraphs : SystemOp<"list_available_graphs"> {
-  let summary = "Name every graph on disk, with its current load state";
+  let summary = "Name every graph on disk or in memory, with its current load state";
   let description = [{
-    `LIST AVAILABLE GRAPHS`. The on-disk counterpart of db.list_graphs: one row
-    per graph in the data directory - loaded or not - carrying its name and the
-    two flags that say whether it is already in memory and whether a load of it
-    is in flight. The three columns are row-aligned.
+    `LIST AVAILABLE GRAPHS`. One row per graph in the graphs directory - loaded
+    or not - and per graph held or being loaded in memory, carrying its name and
+    the two flags that say whether it is already in memory and whether a load of
+    it is in flight. The three columns are row-aligned.
 
       %names, %loaded, %loading = db.list_available_graphs
         : !db.column<!storage.string>, !db.column<!storage.bool>, !db.column<!storage.bool>

@@ -1,5 +1,6 @@
 #include "GraphManager.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -125,6 +126,27 @@ void GraphManager::setDefaultGraph(std::string_view name) {
 
 void GraphManager::listGraphs(std::vector<std::string_view>& names) const {
     _graphs.listNames(names);
+}
+
+void GraphManager::listAvailableGraphs(std::vector<std::string>& names) const {
+    const auto list = _config->getGraphsDir().listDir();
+    if (!list) {
+        throw TuringException("Can not list graphs in turing directory");
+    }
+
+    for (const auto& path : list.value()) {
+        names.emplace_back(path.filename());
+    }
+
+    std::vector<std::string_view> loadedNames;
+    _graphs.listNames(loadedNames);
+    names.insert(names.end(), loadedNames.begin(), loadedNames.end());
+
+    _graphLoadStatus.listLoadingGraphs(names);
+
+    std::ranges::sort(names);
+    const auto [duplicatesBegin, duplicatesEnd] = std::ranges::unique(names);
+    names.erase(duplicatesBegin, duplicatesEnd);
 }
 
 void GraphManager::loadOrCreateDefaultGraph() {

@@ -21,7 +21,6 @@
 #include "SystemEventHandler.h"
 
 #include "Panic.h"
-#include "TuringException.h"
 
 using namespace db;
 
@@ -216,14 +215,7 @@ bool SystemManager::isGraphLoading(std::string_view graphName) const {
 }
 
 void SystemManager::listAvailableGraphs(std::vector<std::string>& names) const {
-    const auto list = _config->getGraphsDir().listDir();
-    if (!list) {
-        throw TuringException("Can not list graphs in turing directory");
-    }
-
-    for (const auto& path : list.value()) {
-        names.emplace_back(path.filename());
-    }
+    _graphManager.listAvailableGraphs(names);
 }
 
 ChangeResult<Change*> SystemManager::newChange(std::string_view graphName, CommitHash baseHash) {

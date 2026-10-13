@@ -124,7 +124,7 @@ private:
     NLViewColumn* _graphs {nullptr};
 };
 
-// LIST AVAILABLE GRAPHS: the three row-aligned columns each on-disk graph is
+// LIST AVAILABLE GRAPHS: the three row-aligned columns each available graph is
 // reported in.
 class NLListAvailableGraphsData : public NLFunctionData {
 public:
