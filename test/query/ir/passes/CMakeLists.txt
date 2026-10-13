@@ -119,3 +119,5 @@ add_call_v3_test(test_query_ir_reroot_at_scanned_nodes RerootAtScannedNodesTest.
 add_turing_test(test_query_ir_reroot_pattern_at_seed RerootPatternAtSeedTest.cpp)
 target_sources(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_push_down_filters_past_writes PushDownFiltersPastWritesTest.cpp)

@@ -253,6 +253,10 @@ struct FuseScanByLabel : public impl::FuseScanByLabelBase<FuseScanByLabel> {
     }
 };
 
+bool isGraphWrite(Operation* op) {
+    return isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op);
+}
+
 bool isNodeSource(Operation* op) {
     return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes, ScanNodesByPropertyValue>(op);
 }
@@ -653,7 +657,51 @@ Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> anchorEq
     return {};
 }
 
-bool matchPushablePredicate(FilterOp filter, LineageClimbs& climbs, PushablePredicate& pushable) {
+// Whether @param first is written before @param second in the function, an op coming before
+// the ops it holds
+bool comesBefore(Operation* first, Operation* second) {
+    if (first->isAncestor(second)) {
+        return first != second;
+    } else if (second->isAncestor(first)) {
+        return false;
+    }
+
+    Operation* firstHolder = first;
+    Region* firstRegion = first->getParentRegion();
+    Operation* secondHolder = firstHolder->getBlock()->findAncestorOpInBlock(*second);
+    while (!secondHolder) {
+        firstRegion = firstHolder->getParentRegion();
+        firstHolder = firstHolder->getParentOp();
+        secondHolder = firstHolder->getBlock()->findAncestorOpInBlock(*second);
+    }
+
+    if (firstHolder != secondHolder) {
+        return firstHolder->isBeforeInBlock(secondHolder);
+    }
+
+    for (Region& region : firstHolder->getRegions()) {
+        if (&region == firstRegion) {
+            return true;
+        } else if (region.findAncestorOpInRegion(*second)) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+// A filter pushed to just after @param anchorProducer cuts the rows of every op between the two,
+// so a write among them would no longer run on the rows the filter drops
+bool writesBetween(llvm::ArrayRef<Operation*> writes, Operation* anchorProducer, Operation* filter) {
+    return llvm::any_of(writes, [anchorProducer, filter](Operation* write) {
+        return comesBefore(anchorProducer, write) && comesBefore(write, filter);
+    });
+}
+
+bool matchPushablePredicate(FilterOp filter,
+                            llvm::ArrayRef<Operation*> writes,
+                            LineageClimbs& climbs,
+                            PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
     if (!maskDef || !isMaskComputeOp(maskDef)) {
         return false;
@@ -689,7 +737,11 @@ bool matchPushablePredicate(FilterOp filter, LineageClimbs& climbs, PushablePred
     // Crossing only filters leaves the predicate over the rows the anchor produced already:
     // moving it would swap two filters over the same rows, or step between a constraint
     // filter and the op that is about to absorb it.
-    return crossedProducer;
+    if (!crossedProducer) {
+        return false;
+    }
+
+    return !writesBetween(writes, pushable._anchor.getDefiningOp(), filter.getOperation());
 }
 
 void bypassFilter(FilterOp filter) {
@@ -758,14 +810,19 @@ struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
         mlir::OpBuilder builder(&getContext());
 
         llvm::SmallVector<FilterOp> filters;
-        getOperation()->walk([&filters](FilterOp filter) {
-            filters.push_back(filter);
+        llvm::SmallVector<Operation*> writes;
+        getOperation()->walk([&filters, &writes](Operation* op) {
+            if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+                filters.push_back(filter);
+            } else if (isGraphWrite(op)) {
+                writes.push_back(op);
+            }
         });
 
         LineageClimbs climbs;
         for (FilterOp filter : filters) {
             PushablePredicate pushable;
-            if (!matchPushablePredicate(filter, climbs, pushable)) {
+            if (!matchPushablePredicate(filter, writes, climbs, pushable)) {
                 continue;
             }
 
@@ -4995,10 +5052,6 @@ struct ExploreEndSet {
     Value _conjunct;
     NodeSetChain _chain;
 };
-
-bool isGraphWrite(Operation* op) {
-    return isa<CreateNode, CreateEdge, Merge, SetNodeProperty, SetEdgeProperty, DeleteNode, DeleteEdge>(op);
-}
 
 // The first op of the function's body that writes the graph or holds a write, null if none
 Operation* firstGraphWriteOf(mlir::func::FuncOp function) {
