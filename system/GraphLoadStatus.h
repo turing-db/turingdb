@@ -4,6 +4,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "RWSpinLock.h"
 
@@ -14,6 +15,7 @@ public:
     bool addLoadingGraph(std::string_view graphName);
     void removeLoadingGraph(std::string_view graphName);
     bool isGraphLoading(std::string_view graphName) const;
+    void listLoadingGraphs(std::vector<std::string>& names) const;
 
 private:
     mutable RWSpinLock _guard;

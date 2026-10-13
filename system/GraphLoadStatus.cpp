@@ -30,3 +30,9 @@ bool GraphLoadStatus::isGraphLoading(std::string_view graphName) const {
 
     return _loadingGraphs.contains(graphName);
 }
+
+void GraphLoadStatus::listLoadingGraphs(std::vector<std::string>& names) const {
+    std::shared_lock lock(_guard);
+
+    names.insert(names.end(), _loadingGraphs.begin(), _loadingGraphs.end());
+}

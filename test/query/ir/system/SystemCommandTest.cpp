@@ -178,9 +178,6 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// LIST AVAILABLE GRAPHS reads the graphs directory, so a graph is only available
-// once it is on disk - which, in full in-memory mode, it never becomes: creating one
-// writes nothing and dumping one is a no-op that reports success.
 class SystemCommandOnDiskTest : public SystemCommandTest {
 public:
     SystemCommandOnDiskTest() {

@@ -101,10 +101,10 @@ def ListGraphs : NLSystemOp<"list_graphs"> {
 * ListAvailableGraphs
 */
 def ListAvailableGraphs : NLSystemOp<"list_available_graphs"> {
-  let summary = "Name every graph on disk, with its current load state";
+  let summary = "Name every graph on disk or in memory, with its current load state";
   let description = [{
     Imperative counterpart of db.list_available_graphs. Fills its three
-    row-aligned chunks with one row per on-disk graph.
+    row-aligned chunks with one row per available graph.
 
       %names, %loaded, %loading = nl.list_available_graphs
         : !nl.chunk<!storage.string>, !nl.chunk<!storage.bool>, !nl.chunk<!storage.bool>
