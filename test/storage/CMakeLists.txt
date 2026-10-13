@@ -137,3 +137,5 @@ add_storage_tests(test_storage_dump_map_datetime_graph dump/MapDateTimeGraphDump
 add_storage_tests(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
 add_storage_tests(test_storage_objectmap ObjectMapTest.cpp)
 
+
+add_storage_tests(test_storage_integer_conversion_of_unsigned IntegerConversionOfUnsignedTest.cpp)

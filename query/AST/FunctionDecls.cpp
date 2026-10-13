@@ -615,50 +615,73 @@ void FunctionDecls::initDefault() {
     relationshipsPath->setReturnTypes({{EvaluatedType::List}});
     relationshipsPath->setReturnedListShape(ListShape(EvaluatedType::EdgePattern, 1));
 
-    // Conversion functions
-    FunctionSignature* toInteger = createFunction("toInteger");
-    toInteger->setArguments({EvaluatedType::String});
-    toInteger->setReturnTypes({{EvaluatedType::Integer}});
+    // A conversion and its OrNull sibling convert the same argument types. The sibling also
+    // converts a type-erased cell per row, and answers null for a type no rule converts.
+    struct Conversion {
+        std::string_view _name;
+        std::string_view _orNullName;
+        EvaluatedType _result {EvaluatedType::Invalid};
+        std::vector<EvaluatedType> _converted;
+        std::vector<EvaluatedType> _unconvertible;
+    };
 
-    FunctionSignature* toIntegerOfInteger = createFunction("toInteger");
-    toIntegerOfInteger->setArguments({EvaluatedType::Integer});
-    toIntegerOfInteger->setReturnTypes({{EvaluatedType::Integer}});
+    const std::vector<Conversion> conversions = {
+        {
+            "toInteger",
+            "toIntegerOrNull",
+            EvaluatedType::Integer,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool},
+            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+        },
+        {
+            "toFloat",
+            "toFloatOrNull",
+            EvaluatedType::Double,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double},
+            {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+        },
+        {
+            "toBoolean",
+            "toBooleanOrNull",
+            EvaluatedType::Bool,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Bool},
+            {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+        },
+        {
+            "toString",
+            "toStringOrNull",
+            EvaluatedType::String,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool,
+             EvaluatedType::DateTime, EvaluatedType::Duration},
+            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::Embedding},
+        },
+    };
 
-    FunctionSignature* toIntegerOfDouble = createFunction("toInteger");
-    toIntegerOfDouble->setArguments({EvaluatedType::Double});
-    toIntegerOfDouble->setReturnTypes({{EvaluatedType::Integer}});
+    for (const Conversion& conversion : conversions) {
+        for (const EvaluatedType converted : conversion._converted) {
+            FunctionSignature* strict = createFunction(conversion._name);
+            strict->setArguments({converted});
+            strict->setReturnTypes({{conversion._result}});
 
-    FunctionSignature* toFloat = createFunction("toFloat");
-    toFloat->setArguments({EvaluatedType::String});
-    toFloat->setReturnTypes({{EvaluatedType::Double}});
+            FunctionSignature* orNull = createFunction(conversion._orNullName);
+            orNull->setArguments({converted});
+            orNull->setReturnTypes({{conversion._result}});
+        }
 
-    FunctionSignature* toFloatOfInteger = createFunction("toFloat");
-    toFloatOfInteger->setArguments({EvaluatedType::Integer});
-    toFloatOfInteger->setReturnTypes({{EvaluatedType::Double}});
+        FunctionSignature* orNullOfACell = createFunction(conversion._orNullName);
+        orNullOfACell->setArguments({EvaluatedType::ListItem});
+        orNullOfACell->setReturnTypes({{conversion._result}});
 
-    FunctionSignature* toFloatOfDouble = createFunction("toFloat");
-    toFloatOfDouble->setArguments({EvaluatedType::Double});
-    toFloatOfDouble->setReturnTypes({{EvaluatedType::Double}});
-
-    FunctionSignature* toStringOfString = createFunction("toString");
-    toStringOfString->setArguments({EvaluatedType::String});
-    toStringOfString->setReturnTypes({{EvaluatedType::String}});
-
-    FunctionSignature* toStringOfInteger = createFunction("toString");
-    toStringOfInteger->setArguments({EvaluatedType::Integer});
-    toStringOfInteger->setReturnTypes({{EvaluatedType::String}});
-
-    FunctionSignature* toStringOfDouble = createFunction("toString");
-    toStringOfDouble->setArguments({EvaluatedType::Double});
-    toStringOfDouble->setReturnTypes({{EvaluatedType::String}});
-
-    FunctionSignature* toStringOfBool = createFunction("toString");
-    toStringOfBool->setArguments({EvaluatedType::Bool});
-    toStringOfBool->setReturnTypes({{EvaluatedType::String}});
-
-    FunctionSignature* toBoolean = createFunction("toBoolean");
-    toBoolean->setArguments({EvaluatedType::String});
-    toBoolean->setReturnTypes({{EvaluatedType::Bool}});
+        for (const EvaluatedType unconvertible : conversion._unconvertible) {
+            FunctionSignature* unconverted = createFunction(conversion._orNullName);
+            unconverted->setArguments({unconvertible});
+            unconverted->setReturnTypes({{EvaluatedType::Null}});
+        }
+    }
 
     // An argument is required on the two overloads that take one, so that datetime() picks
     // the nullary overload rather than matching these with nothing to convert.
@@ -781,60 +804,6 @@ void FunctionDecls::initDefault() {
             FunctionSignature* charLength = createFunction(name);
             charLength->setArguments({argumentType});
             charLength->setReturnTypes({{EvaluatedType::Integer}});
-        }
-    }
-
-    // The OrNull conversions convert what their strict sibling converts, and answer null for
-    // a value of a type no conversion rule covers. A type-erased cell is converted per row.
-    struct OrNullConversion {
-        std::string_view _name;
-        EvaluatedType _result {EvaluatedType::Invalid};
-        std::vector<EvaluatedType> _converted;
-        std::vector<EvaluatedType> _unconvertible;
-    };
-
-    const std::vector<OrNullConversion> orNullConversions = {
-        {
-            "toIntegerOrNull",
-            EvaluatedType::Integer,
-            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::ListItem},
-            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
-        },
-        {
-            "toFloatOrNull",
-            EvaluatedType::Double,
-            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::ListItem},
-            {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
-        },
-        {
-            "toBooleanOrNull",
-            EvaluatedType::Bool,
-            {EvaluatedType::String, EvaluatedType::ListItem},
-            {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
-        },
-        {
-            "toStringOrNull",
-            EvaluatedType::String,
-            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool, EvaluatedType::ListItem},
-            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
-             EvaluatedType::GraphPath, EvaluatedType::Embedding},
-        },
-    };
-
-    for (const OrNullConversion& conversion : orNullConversions) {
-        for (const EvaluatedType converted : conversion._converted) {
-            FunctionSignature* convertible = createFunction(conversion._name);
-            convertible->setArguments({converted});
-            convertible->setReturnTypes({{conversion._result}});
-        }
-
-        for (const EvaluatedType unconvertible : conversion._unconvertible) {
-            FunctionSignature* unconverted = createFunction(conversion._name);
-            unconverted->setArguments({unconvertible});
-            unconverted->setReturnTypes({{EvaluatedType::Null}});
         }
     }
 

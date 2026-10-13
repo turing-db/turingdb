@@ -122,17 +122,8 @@ bool isStringColumn(Type type) {
     return isa<storage::StringType, storage::ListElementType, NoneType>(value);
 }
 
-bool isIntegerColumn(Type type) {
-    const auto column = dyn_cast<ColumnType>(type);
-    if (!column) {
-        return false;
-    }
-
-    const Type element = column.getType();
-    const auto nullable = dyn_cast<storage::NullableType>(element);
-    const Type value = nullable ? nullable.getValueType() : element;
-
-    return isa<IntegerType, storage::ListElementType, NoneType>(value);
+bool isIntegerColumn(Value column) {
+    return isa<ColumnType>(column.getType()) && isa<IntegerType, storage::ListElementType, NoneType>(columnElement(column));
 }
 
 LogicalResult verifyStringResult(Operation* op, Value result) {
@@ -145,7 +136,7 @@ LogicalResult verifyStringResult(Operation* op, Value result) {
 }
 
 LogicalResult verifyStringEnd(Operation* op, Value string, Value length, Value result) {
-    const bool readsAStringAndALength = isStringColumn(string.getType()) && isIntegerColumn(length.getType());
+    const bool readsAStringAndALength = isStringColumn(string.getType()) && isIntegerColumn(length);
     if (!readsAStringAndALength) {
         return op->emitOpError("operands must be a string column and an integer column");
     }

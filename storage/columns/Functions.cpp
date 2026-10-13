@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include <algorithm>
+#include <charconv>
 #include <span>
 
 #include <range/v3/view/drop.hpp>
@@ -37,6 +38,53 @@ std::optional<ListView> taggedList(const ListElementView cell) {
     }
 
     throw TuringException("head(), last() and tail() read a list, and this row holds a value that is not one");
+}
+
+size_t skipDigits(std::string_view text, size_t position) {
+    while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
+        position++;
+    }
+
+    return position;
+}
+
+// Decimal notation alone: a sign, digits with an optional fraction, an optional exponent.
+// strtod also reads hexadecimal, infinities and leading blanks, which name no integer.
+bool isDecimalText(std::string_view text) {
+    size_t position = 0;
+    if (position < text.size() && (text[position] == '-' || text[position] == '+')) {
+        position++;
+    }
+
+    const size_t integerEnd = skipDigits(text, position);
+    size_t mantissaDigits = integerEnd - position;
+    position = integerEnd;
+
+    if (position < text.size() && text[position] == '.') {
+        const size_t fractionEnd = skipDigits(text, position + 1);
+        mantissaDigits += fractionEnd - position - 1;
+        position = fractionEnd;
+    }
+
+    if (mantissaDigits == 0) {
+        return false;
+    }
+
+    if (position < text.size() && (text[position] == 'e' || text[position] == 'E')) {
+        position++;
+        if (position < text.size() && (text[position] == '-' || text[position] == '+')) {
+            position++;
+        }
+
+        const size_t exponentEnd = skipDigits(text, position);
+        if (exponentEnd == position) {
+            return false;
+        }
+
+        position = exponentEnd;
+    }
+
+    return position == text.size();
 }
 
 // The number of Unicode characters a UTF-8 string holds. Every byte of a character but
@@ -129,6 +177,23 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell
 }
 
 StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType string) const {
+    return characterCount(string);
+}
+
+TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const ArgType cell) const {
+    const std::optional<types::String::Primitive> string = cellString(cell, "char_length");
+    if (!string) {
+        return std::nullopt;
+    }
+
+    return characterCount(*string);
+}
+
+CharLengthFunction::ResultType CharLengthFunction::operator()(const ArgType string) const {
     return characterCount(string);
 }
 
@@ -244,6 +309,29 @@ MapKeysFunction::ResultType MapKeysFunction::operator()(const MapView map) {
     }
 
     return _listBuffer->insert(_elements);
+}
+
+ToIntegerFunction::ResultType ToIntegerFunction::operator()(std::string_view text) {
+    types::Int64::Primitive result = 0;
+
+    const char* const end = text.data() + text.size();
+    const auto [parsedEnd, errorCode] = std::from_chars(text.data(), end, result);
+
+    const bool parsedAnInteger = errorCode == std::errc {} && parsedEnd == end;
+    const bool integerOutOfRange = errorCode == std::errc::result_out_of_range && parsedEnd == end;
+
+    if (parsedAnInteger) {
+        return result;
+    } else if (integerOutOfRange || !isDecimalText(text)) {
+        return std::nullopt;
+    }
+
+    const std::optional<types::Double::Primitive> decimal = _fromDecimal(text);
+    if (!decimal) {
+        return std::nullopt;
+    }
+
+    return ToIntegerFromNumberFunction<types::Double::Primitive> {}(*decimal);
 }
 
 ToStringFunction::ToStringFunction(StringBuffer* stringBuffer)
@@ -501,20 +589,20 @@ SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive str
 }
 
 LeftFunction::ResultType LeftFunction::operator()(types::String::Primitive string, types::Int64::Primitive length) const {
-    const size_t charCount = characterArgument(length, NAME);
+    const size_t keptCharacters = characterArgument(length, NAME);
 
-    return string.substr(0, characterOffset(string, charCount));
+    return string.substr(0, characterOffset(string, keptCharacters));
 }
 
 RightFunction::ResultType RightFunction::operator()(types::String::Primitive string, types::Int64::Primitive length) const {
-    const size_t charCount = characterArgument(length, NAME);
-    const size_t stringChars = static_cast<size_t>(characterCount(string));
+    const size_t keptCharacters = characterArgument(length, NAME);
+    const size_t stringCharacters = static_cast<size_t>(characterCount(string));
 
-    if (charCount >= stringChars) {
+    if (keptCharacters >= stringCharacters) {
         return string;
     }
 
-    return string.substr(characterOffset(string, stringChars - charCount));
+    return string.substr(characterOffset(string, stringCharacters - keptCharacters));
 }
 
 ReplaceFunction::ReplaceFunction(StringBuffer* stringBuffer)
@@ -530,14 +618,14 @@ ReplaceFunction::ResultType ReplaceFunction::operator()(types::String::Primitive
     if (search.empty()) {
         _replaced += replacement;
 
-        size_t charStart = 0;
-        while (charStart < string.size()) {
-            const types::String::Primitive rest = string.substr(charStart);
-            const size_t charSize = characterOffset(rest, 1);
+        size_t characterStart = 0;
+        while (characterStart < string.size()) {
+            const types::String::Primitive rest = string.substr(characterStart);
+            const size_t characterSize = characterOffset(rest, 1);
 
-            _replaced += rest.substr(0, charSize);
+            _replaced += rest.substr(0, characterSize);
             _replaced += replacement;
-            charStart += charSize;
+            characterStart += characterSize;
         }
 
         return _stringBuffer->insert(_replaced);
