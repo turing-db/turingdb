@@ -463,12 +463,12 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
                                             std::span<const NodeID> seeds,
                                             SeedExpansion& expansion,
                                             PathHopFilter* hopFilter) {
-    const SampleStep step {._direction = direction, ._edgeTypes = edgeTypes, ._hopFilter = hopFilter};
-    sampleSeedExpansion(parts, std::span<const SampleStep>(&step, 1), seeds, expansion);
+    const PathStep step {._direction = direction, ._edgeTypes = edgeTypes, ._hopFilter = hopFilter};
+    sampleSeedExpansion(parts, std::span<const PathStep>(&step, 1), seeds, expansion);
 }
 
 void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
-                                            std::span<const SampleStep> steps,
+                                            std::span<const PathStep> steps,
                                             std::span<const NodeID> seeds,
                                             SeedExpansion& expansion) {
     expansion = SeedExpansion {};
@@ -500,7 +500,7 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
         next.clear();
         nextRows.clear();
 
-        const SampleStep& step = steps[level % steps.size()];
+        const PathStep& step = steps[level % steps.size()];
         const std::span<const EdgeTypeID> edgeTypes = step._edgeTypes;
         PathHopFilter* const hopFilter = step._hopFilter;
         const bool walksOuts = step._direction != PathExplorationDir::BACKWARD;

@@ -4965,11 +4965,11 @@ bool writesAheadOf(Operation* firstWrite, Operation* op) {
 bool matchExploreEndSet(FilterOp filter,
                         LineageClimbs& climbs,
                         const llvm::DenseMap<Operation*, Operation*>& firstWrites,
+                        size_t maxChainHops,
                         ExploreEndSet& endSet) {
     llvm::SmallVector<Value, 4> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
-    bool matched = false;
     for (const Value conjunct : conjuncts) {
         NodeScanPredicate predicate;
         if (!matchNodeScanPredicate(conjunct, predicate)) {
@@ -4978,6 +4978,9 @@ bool matchExploreEndSet(FilterOp filter,
 
         NodeSetChain chain;
         deriveNodeSetChain(predicate, climbs, chain);
+        if (chain._hops.size() > maxChainHops) {
+            continue;
+        }
 
         ExplorePaths exploration = chain._column ? chain._column.getDefiningOp<ExplorePaths>() : nullptr;
         if (!exploration || chain._column != exploration.getTgtids()) {
@@ -4997,19 +5000,12 @@ bool matchExploreEndSet(FilterOp filter,
             continue;
         }
 
-        // A predicate on the end itself is the exact set, and leaves the filter
-        const bool endsOnThePredicate = chain._hops.empty();
-        if (!matched || endsOnThePredicate) {
-            endSet = ExploreEndSet {._filter = filter, ._exploration = exploration, ._conjunct = conjunct, ._chain = chain};
-            matched = true;
-        }
+        endSet = ExploreEndSet {._filter = filter, ._exploration = exploration, ._conjunct = conjunct, ._chain = chain};
 
-        if (endsOnThePredicate) {
-            break;
-        }
+        return true;
     }
 
-    return matched;
+    return false;
 }
 
 void fuseExploreEndSet(ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
@@ -5042,16 +5038,20 @@ struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet>
 
         LineageClimbs climbs;
 
-        const auto match = [&climbs, &firstWrites](FilterOp filter, ExploreEndSet& endSet) {
-            return matchExploreEndSet(filter, climbs, firstWrites, endSet);
-        };
-
         const auto rewrite = [&climbs](ExploreEndSet& endSet, mlir::RewriterBase& rewriter) {
             fuseExploreEndSet(endSet, rewriter);
             climbs.clear();
         };
 
-        runFilterWorklist<ExploreEndSet>(getOperation(), match, rewrite);
+        // A walk takes one end set, so every predicate on an end itself, the exact set, is
+        // fused before any set reached back over hops can take its walk
+        for (const size_t maxChainHops : {size_t(0), SIZE_MAX}) {
+            const auto match = [&climbs, &firstWrites, maxChainHops](FilterOp filter, ExploreEndSet& endSet) {
+                return matchExploreEndSet(filter, climbs, firstWrites, maxChainHops, endSet);
+            };
+
+            runFilterWorklist<ExploreEndSet>(getOperation(), match, rewrite);
+        }
     }
 };
 

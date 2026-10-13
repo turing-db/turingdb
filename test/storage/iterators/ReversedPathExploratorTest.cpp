@@ -29,7 +29,7 @@ using namespace turing::test;
 namespace {
 
 using EndRow = std::pair<size_t, uint64_t>;
-using Body = std::vector<PathDistanceIndex::SampleStep>;
+using Body = std::vector<PathStep>;
 
 struct ReversedOptions {
     size_t _maxCount {ChunkConfig::CHUNK_SIZE};
@@ -124,7 +124,7 @@ protected:
         PathTargetIndex index;
         if (options._indexesSeeds) {
             ASSERT_EQ(body.size(), 1);
-            const PathDistanceIndex::SampleStep& step = body.front();
+            const PathStep& step = body.front();
 
             index.buildSet(view, explorator.getSeedNodes(), reverseOf(step._direction), step._edgeTypes, maxHops);
             explorator.setTargetIndex(&index);
@@ -361,7 +361,13 @@ TEST_F(ReversedPathExploratorTest, walksFromWhicheverSideFansOutLess) {
     const Body forward {{._direction = PathExplorationDir::FORWARD}};
     const Body backward {{._direction = PathExplorationDir::BACKWARD}};
 
+    PathDistanceIndex::SeedExpansion fromHub;
+    PathDistanceIndex::sampleSeedExpansion(parts, forward, hub, fromHub);
+
+    PathDistanceIndex::SeedExpansion fromLeaves;
+    PathDistanceIndex::sampleSeedExpansion(parts, backward, leaves, fromLeaves);
+
     PathDistanceIndex::SeedExpansion fromEnds;
-    EXPECT_TRUE(ReversedPathExplorator::isCheaper(parts, forward, hub, leaves, 3, fromEnds));
-    EXPECT_FALSE(ReversedPathExplorator::isCheaper(parts, backward, leaves, hub, 3, fromEnds));
+    EXPECT_TRUE(ReversedPathExplorator::isCheaper(parts, forward, fromHub, hub.size(), leaves, 3, fromEnds));
+    EXPECT_FALSE(ReversedPathExplorator::isCheaper(parts, backward, fromLeaves, leaves.size(), hub, 3, fromEnds));
 }

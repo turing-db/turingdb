@@ -10,6 +10,7 @@
 #include "PathDistanceIndex.h"
 #include "PathExplorationDir.h"
 #include "PathExplorator.h"
+#include "PathStep.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "metadata/LabelSet.h"
@@ -24,7 +25,7 @@ class PathTargetIndex;
 // written, since the trail runs from the end.
 class ReversedPathExplorator {
 public:
-    using Body = std::span<const PathDistanceIndex::SampleStep>;
+    using Body = std::span<const PathStep>;
 
     ReversedPathExplorator(const GraphView& view,
                            const ColumnNodeIDs* inputNodeIDs,
@@ -37,10 +38,12 @@ public:
 
     // Whether the walk from the end set is expected to examine fewer edges than the walk from
     // the seeds. What a walk costs turns on the fan-out where it starts, so each side's own
-    // nodes are sampled rather than the graph's average; @param fromEnds is the end set's.
+    // nodes are sampled rather than the graph's average: @param fromSeeds is the seeds' sample,
+    // and the end set's is written to @param fromEnds.
     static bool isCheaper(const PartDirectory& parts,
                           Body body,
-                          std::span<const NodeID> seeds,
+                          const PathDistanceIndex::SeedExpansion& fromSeeds,
+                          size_t seedCount,
                           std::span<const NodeID> endNodeSet,
                           uint64_t maxHops,
                           PathDistanceIndex::SeedExpansion& fromEnds);
@@ -49,6 +52,7 @@ public:
     void setTargets(ColumnNodeIDs* targets) { _targets = targets; }
     void setDistinctEnds(bool distinct);
     void setTargetIndex(const PathTargetIndex* index);
+    void setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound);
 
     // The seeds the walk heads for, sorted and without duplicates
     std::span<const NodeID> getSeedNodes() const { return _seedNodes; }

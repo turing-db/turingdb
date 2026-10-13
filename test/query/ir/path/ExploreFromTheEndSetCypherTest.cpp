@@ -37,6 +37,24 @@ protected:
         sink.sortedRows(rows);
         return rows;
     }
+
+    Rows runWriting(std::string_view query) {
+        StringRowSink sink;
+        runWrite(query, sink);
+
+        Rows rows;
+        sink.sortedRows(rows);
+        return rows;
+    }
+
+    Rows runAfterAStagedWrite(std::string_view query) {
+        StringRowSink sink;
+        runWritesInOneChange("CREATE (:Hub {name: 'staged'})", query, sink);
+
+        Rows rows;
+        sink.sortedRows(rows);
+        return rows;
+    }
 };
 
 TEST_F(ExploreFromTheEndSetCypherTest, emitsTheRowsOfTheWalkFromTheHub) {
@@ -73,4 +91,14 @@ TEST_F(ExploreFromTheEndSetCypherTest, keepsTheWalkFromTheSeedsWhenThePathIsRead
     const std::string_view query = "MATCH p = (h:Hub {name: 'hub'})<-[:R]-{2,2}(t:Parent)<-[:T]-(d:Drug {name: 'drug'}) RETURN length(p), t.i";
 
     EXPECT_EQ(run(query), (Rows {{"3", "0"}, {"3", "1"}}));
+}
+
+TEST_F(ExploreFromTheEndSetCypherTest, emitsTheSameRowsInsideAChange) {
+    const std::string_view read = "MATCH (h:Hub {name: 'hub'})<-[:R]-{2,2}(t:Parent)<-[:T]-(d:Drug {name: 'drug'}) RETURN t.i, t.j";
+    const std::string_view writing = "MATCH (h:Hub {name: 'hub'})<-[:R]-{2,2}(t:Parent)<-[:T]-(d:Drug {name: 'drug'}) "
+                                     "CREATE (d)-[:SEEN]->(t) "
+                                     "RETURN t.i, t.j";
+
+    EXPECT_EQ(runAfterAStagedWrite(read), (Rows {{"0", "0"}, {"1", "0"}}));
+    EXPECT_EQ(runWriting(writing), (Rows {{"0", "0"}, {"1", "0"}}));
 }

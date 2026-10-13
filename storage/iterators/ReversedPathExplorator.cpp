@@ -11,9 +11,9 @@ using namespace db;
 
 namespace {
 
-void reverseBody(ReversedPathExplorator::Body body, std::vector<PathDistanceIndex::SampleStep>& reversed) {
+void reverseBody(ReversedPathExplorator::Body body, std::vector<PathStep>& reversed) {
     reversed.assign(body.rbegin(), body.rend());
-    for (PathDistanceIndex::SampleStep& step : reversed) {
+    for (PathStep& step : reversed) {
         bioassert(!step._hopFilter, "The walk from an end set reads no hop filter");
         step._direction = reverseOf(step._direction);
     }
@@ -30,10 +30,10 @@ ReversedPathExplorator::ReversedPathExplorator(const GraphView& view,
                                                uint64_t maxHops)
     : _explorator(view, &_ends, minHops, maxHops)
 {
-    std::vector<PathDistanceIndex::SampleStep> reversed;
+    std::vector<PathStep> reversed;
     reverseBody(body, reversed);
     for (size_t step = 0; step < reversed.size(); step++) {
-        const PathDistanceIndex::SampleStep& reversedStep = reversed[step];
+        const PathStep& reversedStep = reversed[step];
         _explorator.addStep(reversedStep._direction);
         if (!reversedStep._edgeTypes.empty()) {
             _explorator.setEdgeTypeFilter(step, reversedStep._edgeTypes);
@@ -70,18 +70,16 @@ ReversedPathExplorator::~ReversedPathExplorator() {
 
 bool ReversedPathExplorator::isCheaper(const PartDirectory& parts,
                                        Body body,
-                                       std::span<const NodeID> seeds,
+                                       const PathDistanceIndex::SeedExpansion& fromSeeds,
+                                       size_t seedCount,
                                        std::span<const NodeID> endNodeSet,
                                        uint64_t maxHops,
                                        PathDistanceIndex::SeedExpansion& fromEnds) {
-    PathDistanceIndex::SeedExpansion fromSeeds;
-    PathDistanceIndex::sampleSeedExpansion(parts, body, seeds, fromSeeds);
-
-    std::vector<PathDistanceIndex::SampleStep> reversed;
+    std::vector<PathStep> reversed;
     reverseBody(body, reversed);
     PathDistanceIndex::sampleSeedExpansion(parts, reversed, endNodeSet, fromEnds);
 
-    const double seedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, fromSeeds, seeds.size(), maxHops);
+    const double seedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, fromSeeds, seedCount, maxHops);
     const double endChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, fromEnds, endNodeSet.size(), maxHops);
 
     return endChecks < seedChecks;
@@ -93,6 +91,10 @@ void ReversedPathExplorator::setDistinctEnds(bool distinct) {
 
 void ReversedPathExplorator::setTargetIndex(const PathTargetIndex* index) {
     _explorator.setTargetIndex(index);
+}
+
+void ReversedPathExplorator::setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound) {
+    _explorator.setPendingAdjacency(adjacency, edgeIDBound);
 }
 
 bool ReversedPathExplorator::isValid() const {

@@ -299,7 +299,6 @@ private:
     bool isPendingNode(NodeID node) const;
     size_t nodeIDBound() const;
 
-
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;
     // The step the hop leaving a node at that depth takes

@@ -6605,39 +6605,25 @@ uint64_t edgesOfRepetitions(uint64_t repetitions, size_t stepCount) {
 // none in the sample, so its step is sampled unfiltered.
 void sampledBodyOf(const NLExplorePathsLoopData* loopData,
                    std::span<PathHopFilter* const> hopFilters,
-                   std::vector<PathDistanceIndex::SampleStep>& body) {
+                   std::vector<PathStep>& body) {
     const size_t stepCount = loopData->getStepCount();
 
-    body.assign(stepCount, PathDistanceIndex::SampleStep {});
+    body.assign(stepCount, PathStep {});
     for (size_t step = 0; step < stepCount; step++) {
         const NLExploreStep* exploreStep = loopData->getStep(step);
-        PathDistanceIndex::SampleStep& sampleStep = body[step];
-        sampleStep._direction = exploreStep->getDirection();
+        PathStep& bodyStep = body[step];
+        bodyStep._direction = exploreStep->getDirection();
 
         if (exploreStep->filtersByType()) {
-            sampleStep._edgeTypes = exploreStep->getEdgeTypes();
+            bodyStep._edgeTypes = exploreStep->getEdgeTypes();
         }
 
         PathHopFilter* hopFilter = hopFilters[step];
         const bool samplesTheFilter = hopFilter && !hopFilter->readsRepetition();
         if (samplesTheFilter) {
-            sampleStep._hopFilter = hopFilter;
+            bodyStep._hopFilter = hopFilter;
         }
     }
-}
-
-// What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
-// walk does rather than what the average node carrying the type does
-void sampleSeedsOf(const GraphView& view,
-                   NLExplorePathsLoopData* loopData,
-                   std::span<PathHopFilter* const> hopFilters,
-                   PathDistanceIndex::SeedExpansion& expansion) {
-    std::vector<PathDistanceIndex::SampleStep> body;
-    sampledBodyOf(loopData, hopFilters, body);
-
-    const PartDirectory parts(view);
-
-    PathDistanceIndex::sampleSeedExpansion(parts, body, loopData->getInput()->getRaw(), expansion);
 }
 
 // The distance index of an end-constrained exploration is built at most once per loop, the
@@ -6716,29 +6702,12 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
     return index;
 }
 
-// A walk to an end set emits the same rows from either end when nothing in it tells the two
-// apart: no path is read, no hop test sees which way the hop was taken, and no edge of this
-// change is walked beside the graph's. It then runs from whichever end fans out less.
-bool walksFromTheEndSet(const GraphView& view,
-                        NLExplorePathsLoopData* loopData,
-                        std::span<PathHopFilter* const> hopFilters,
-                        bool hasWriteBuffer,
-                        std::span<const NodeID> endNodes,
-                        uint64_t maxHops,
-                        std::vector<PathDistanceIndex::SampleStep>& body,
-                        PathDistanceIndex::SeedExpansion& fromEnds) {
+// A walk to an end set emits the same rows from either end when no path is read and no hop
+// test sees which way the hop was taken
+bool emitsTheSameFromEitherEnd(const NLExplorePathsLoopData* loopData, std::span<PathHopFilter* const> hopFilters) {
     const bool hasHopFilter = std::any_of(hopFilters.begin(), hopFilters.end(), [](const PathHopFilter* filter) { return filter != nullptr; });
-    if (loopData->getPaths() || hasHopFilter || hasWriteBuffer) {
-        return false;
-    }
 
-    sampledBodyOf(loopData, hopFilters, body);
-
-    const PartDirectory parts(view);
-    const ColumnNodeIDs* input = loopData->getInput();
-    const std::vector<NodeID>& seeds = input->getRaw();
-
-    return ReversedPathExplorator::isCheaper(parts, body, seeds, endNodes, maxHops, fromEnds);
+    return !loopData->getPaths() && !hasHopFilter;
 }
 
 void runFromTheEndSet(NLExecutionContext* context,
@@ -6747,6 +6716,7 @@ void runFromTheEndSet(NLExecutionContext* context,
                       std::span<const NodeID> endNodes,
                       uint64_t minHops,
                       uint64_t maxHops,
+                      bool walksPendingEdges,
                       const PathDistanceIndex::SeedExpansion& fromEnds) {
     const GraphView& view = *context->getView();
     const LabelSet* endLabels = loopData->filtersByEndLabels() ? &loopData->getEndLabels() : nullptr;
@@ -6763,6 +6733,11 @@ void runFromTheEndSet(NLExecutionContext* context,
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
 
+    if (context->getWriteBuffer()) {
+        const PendingAdjacency& pendingAdjacency = context->getPendingAdjacency();
+        explorator.setPendingAdjacency(&pendingAdjacency, pendingAdjacency.getEdgeIDBound());
+    }
+
     std::vector<EdgeTypeID> edgeTypes;
     combinedEdgeTypes(loopData, edgeTypes);
 
@@ -6771,6 +6746,7 @@ void runFromTheEndSet(NLExecutionContext* context,
     const std::span<const NodeID> seedNodes = explorator.getSeedNodes();
     const PathExplorationDir reversed = reverseOf(combinedDirection(loopData));
     const bool indexesSeeds = !distinctEnds
+                           && !walksPendingEdges
                            && PathTargetIndex::isWorthBuildingSet(view, reversed, edgeTypes, fromEnds, endNodes.size(), seedNodes.size(), maxHops);
     if (indexesSeeds) {
         seedIndex.buildSet(view, seedNodes, reversed, edgeTypes, maxHops);
@@ -6883,13 +6859,6 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         hopFilters[step] = hopFilter;
     }
 
-    std::vector<PathDistanceIndex::SampleStep> body;
-    PathDistanceIndex::SeedExpansion fromEnds;
-    if (endNodeSet && walksFromTheEndSet(view, loopData, hopFilters, writeBuffer != nullptr, endNodes, maxHops, body, fromEnds)) {
-        runFromTheEndSet(context, loopData, body, endNodes, minHops, maxHops, fromEnds);
-        return;
-    }
-
     // The level search of the distinct mode prunes by no index
     const bool prunes = !explorator.searchesLevels() && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes() || endNodeSet);
 
@@ -6898,12 +6867,30 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const bool gatesBoundEndIndex = loopData->getEndNodes() != nullptr;
     const bool readsSample = gatesDistanceIndex || gatesEndSetIndex || gatesBoundEndIndex;
 
+    // Once the walk from the seeds holds its index over the set, it walks only the prefixes
+    // that reach the set, as the walk from the set would toward the seeds
+    const bool weighsTheEndSet = gatesEndSetIndex && emitsTheSameFromEitherEnd(loopData, hopFilters);
+
+    // What this chunk's own seeds expand to: the gates price the walk by it, and it is what
+    // the walk does rather than what the average node carrying the type does
+    std::vector<PathStep> body;
     PathDistanceIndex::SeedExpansion expansion;
+    const PartDirectory parts(view);
+    if (weighsTheEndSet || (prunes && readsSample)) {
+        sampledBodyOf(loopData, hopFilters, body);
+        PathDistanceIndex::sampleSeedExpansion(parts, body, inputNodeIDs->getRaw(), expansion);
+    }
+
+    if (weighsTheEndSet) {
+        PathDistanceIndex::SeedExpansion fromEnds;
+        if (ReversedPathExplorator::isCheaper(parts, body, expansion, inputNodeIDs->size(), endNodes, maxHops, fromEnds)) {
+            runFromTheEndSet(context, loopData, body, endNodes, minHops, maxHops, walksPendingEdges, fromEnds);
+            return;
+        }
+    }
+
     if (prunes) {
         loopData->addSeedsSeen(inputNodeIDs->size());
-        if (readsSample) {
-            sampleSeedsOf(view, loopData, hopFilters, expansion);
-        }
     }
 
     if (filtersByEndLabels) {

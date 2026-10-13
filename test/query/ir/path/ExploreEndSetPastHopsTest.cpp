@@ -126,6 +126,27 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a {name:'Remy'})-[:KNOWS_WELL*1..3]->(b)-[:INTERESTED_IN]->(i {name:'Cooking'})
+// CREATE ... WITH a, b, i WHERE b.name = 'Adam' RETURN a, b, i with the write left out: the
+// filter on the walk's end itself comes after the one on the node past it
+const char* const endFilteredLastProgram = R"mlir(
+func.func @main() {
+  %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
+  %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 edge_types ["KNOWS_WELL"] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %4, %5, %6, %7, %8 = db.get_out_edges_by_type(%2, ["INTERESTED_IN"], {%1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %9 = db.get_node_properties(%7, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %10 = db.constant("Cooking" : !storage.string)
+  %11 = db.eq %9, %10 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %12:3 = db.filter(%11, {%8, %4, %7}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %13 = db.get_node_properties(%12#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %14 = db.constant("Adam" : !storage.string)
+  %15 = db.eq %13, %14 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %16:3 = db.filter(%15, {%12#0, %12#1, %12#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%16#0, %16#1, %16#2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // The walk already ends on a set of its own
 const char* const boundEndProgram = R"mlir(
 func.func @main() {
@@ -361,4 +382,24 @@ TEST_F(ExploreEndSetPastHopsTest, keepsAnEndSetTheWalkHasAlready) {
     ASSERT_TRUE(exploration.getEndNodes());
     EXPECT_TRUE(exploration.getEndNodes().getDefiningOp<mlir::db::ScanNodesByPropertyValue>());
     EXPECT_EQ(countOps<mlir::db::GetInEdgesByType>(*module), 0u);
+}
+
+TEST_F(ExploreEndSetPastHopsTest, endsOnTheEndsOwnPredicateWhicheverFilterComesFirst) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(endFilteredLastProgram);
+    ASSERT_TRUE(module);
+
+    runPass(*module);
+
+    mlir::db::ExplorePaths exploration = findExplorePaths(*module);
+    ASSERT_TRUE(exploration);
+    ASSERT_TRUE(exploration.getEndNodes());
+
+    mlir::db::ScanNodesByPropertyValue named = exploration.getEndNodes().getDefiningOp<mlir::db::ScanNodesByPropertyValue>();
+    ASSERT_TRUE(named);
+    EXPECT_EQ(mlir::dyn_cast<mlir::StringAttr>(named.getValue()).getValue(), "Adam");
+    EXPECT_EQ(countOps<mlir::db::GetInEdgesByType>(*module), 0u);
+
+    Rows rows;
+    expectSameRowsOncePassed(endFilteredLastProgram, rows);
+    EXPECT_EQ(rows, (Rows {{"0", "1", "5"}}));
 }

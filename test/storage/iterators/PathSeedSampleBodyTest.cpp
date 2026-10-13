@@ -79,7 +79,7 @@ TEST_F(PathSeedSampleBodyTest, readsEachLevelOffTheStepTakingIt) {
     const GraphReader reader = transaction.readGraph();
     const PartDirectory parts(reader.getView());
 
-    const PathDistanceIndex::SampleStep steps[] = {
+    const PathStep steps[] = {
         {._direction = PathExplorationDir::FORWARD, ._edgeTypes = {&_rare, 1}},
         {._direction = PathExplorationDir::FORWARD, ._edgeTypes = {&_dense, 1}},
     };
