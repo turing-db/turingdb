@@ -882,6 +882,94 @@ private:
     std::vector<QueryListBuffer::ListItemVariant> _parts;
 };
 
+class LeftFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "left";
+
+    ResultType operator()(types::String::Primitive string, types::Int64::Primitive length) const;
+};
+
+class RightFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "right";
+
+    ResultType operator()(types::String::Primitive string, types::Int64::Primitive length) const;
+};
+
+class ReplaceFunction {
+public:
+    using ResultType = types::String::Primitive;
+
+    static constexpr std::string_view NAME = "replace";
+
+    explicit ReplaceFunction(StringBuffer* stringBuffer);
+
+    ResultType operator()(types::String::Primitive string,
+                          types::String::Primitive search,
+                          types::String::Primitive replacement);
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+    std::string _replaced;
+};
+
+// The OrNull conversions over a type-erased cell. A cell holding a value the conversion
+// has no rule for converts to null rather than raising.
+class TaggedToIntegerOrNullFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(const ArgType cell);
+    ResultType operator()(const std::optional<ArgType>& cell);
+
+private:
+    ToIntegerFunction _fromString;
+};
+
+class TaggedToFloatOrNullFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Double::Primitive>;
+
+    ResultType operator()(const ArgType cell);
+    ResultType operator()(const std::optional<ArgType>& cell);
+
+private:
+    ToFloatFunction _fromString;
+};
+
+class TaggedToBooleanOrNullFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Bool::Primitive>;
+
+    ResultType operator()(const ArgType cell);
+    ResultType operator()(const std::optional<ArgType>& cell);
+
+private:
+    ToBoolFunction _fromString;
+};
+
+class TaggedToStringOrNullFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::String::Primitive>;
+
+    explicit TaggedToStringOrNullFunction(StringBuffer* stringBuffer);
+
+    ResultType operator()(const ArgType cell);
+    ResultType operator()(const std::optional<ArgType>& cell);
+
+private:
+    StringBuffer* _stringBuffer {nullptr};
+    std::string _formatted;
+};
+
 class ListReverseFunction {
 public:
     using ArgType = types::List::Primitive;
