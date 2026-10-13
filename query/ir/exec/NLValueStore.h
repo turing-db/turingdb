@@ -6,8 +6,9 @@
 #include <memory>
 #include <optional>
 
-#include "BioAssert.h"
 #include "buffers/StringBuffer.h"
+#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/InternalKind.h"
 #include "list/EncodedList.h"
 #include "list/ListContainer.h"
 #include "list/ListElementView.h"
@@ -15,7 +16,9 @@
 #include "map/EncodedMap.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
+#include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
+#include "views/NodeView.h"
 
 namespace db {
 
@@ -34,69 +37,41 @@ concept NLOptionalViewElement = requires { typename T::value_type; }
                              && std::same_as<T, std::optional<typename T::value_type>>
                              && NLViewElement<typename T::value_type>;
 
-// A column whose rows are views into the buffers that built them - strings, lists, maps,
-// embeddings and list or map cells - present in every row or nullable. An op that keeps
-// such rows past the step that built them copies them into an NLValueStore of its own.
-enum class NLViewColumnKind {
-    String,
-    OptString,
-    OptEmbedding,
-    List,
-    OptList,
-    Map,
-    OptMap,
-    ListElement,
-    OptListElement,
-    MapEntry,
-};
-
-// Invoke handler with the column element type a view column kind stands for, as
-// dispatchChunkKind does for a chunk kind
+// Invoke handler with a column whose rows are views - strings, lists, maps, embeddings, list
+// or map cells, present or nullable - typed on its container, when handler takes that
+// container. A column of values is left alone.
 template <typename Handler>
-void dispatchViewColumnKind(NLViewColumnKind kind, Handler&& handler) {
-    switch (kind) {
-        case NLViewColumnKind::String:
-            return handler.template operator()<types::String::Primitive>();
-        break;
-
-        case NLViewColumnKind::OptString:
-            return handler.template operator()<std::optional<types::String::Primitive>>();
-        break;
-
-        case NLViewColumnKind::OptEmbedding:
-            return handler.template operator()<std::optional<types::Embedding::Primitive>>();
-        break;
-
-        case NLViewColumnKind::List:
-            return handler.template operator()<ListView>();
-        break;
-
-        case NLViewColumnKind::OptList:
-            return handler.template operator()<std::optional<ListView>>();
-        break;
-
-        case NLViewColumnKind::Map:
-            return handler.template operator()<MapView>();
-        break;
-
-        case NLViewColumnKind::OptMap:
-            return handler.template operator()<std::optional<MapView>>();
-        break;
-
-        case NLViewColumnKind::ListElement:
-            return handler.template operator()<ListElementView>();
-        break;
-
-        case NLViewColumnKind::OptListElement:
-            return handler.template operator()<std::optional<ListElementView>>();
-        break;
-
-        case NLViewColumnKind::MapEntry:
-            return handler.template operator()<MapEntryView>();
-        break;
+class NLViewColumnVisitor {
+public:
+    explicit NLViewColumnVisitor(Handler& handler)
+        : _handler(handler)
+    {
     }
 
-    bioassert(false, "Unknown NLViewColumnKind");
+    void operator()(const ColumnMask* column) {
+    }
+
+    template <template <typename> typename Container, typename ElementType>
+    void operator()(const Container<ElementType>* column) {
+        constexpr bool holdsViews = NLViewElement<ElementType> || NLOptionalViewElement<ElementType>;
+
+        if constexpr (holdsViews) {
+            if constexpr (std::invocable<Handler&, const Container<ElementType>*>) {
+                _handler(column);
+            }
+        }
+    }
+
+private:
+    Handler& _handler;
+};
+
+template <typename Handler>
+void dispatchViewColumn(const Column* column, Handler&& handler) {
+    using Visitor = NLViewColumnVisitor<Handler>;
+
+    Visitor visitor(handler);
+    ColumnSingleDispatcher<InternalKind::Types::Tuple, Visitor>::dispatch(column, visitor);
 }
 
 // Owns the copies of the values an op keeps past the step that built them. A string, list,
@@ -121,7 +96,7 @@ public:
 
     // The copy of an item staged for a list, and of a tagged cell holding it
     ListBuffer<>::ListItemVariant ownItem(const ListBuffer<>::ListItemVariant& item);
-    ListElementView ownCell(const ListBuffer<>::ListItemVariant& item);
+    ListElementView ownCell(ListBuffer<>::ListItemVariant& item);
 
     // Copy the views of rows [firstRow, end) of a column in, whatever its kind: a constant
     // is copied whole, and a column of values is left as it is

@@ -76,52 +76,41 @@ ListBuffer<>::ListItemVariant NLValueStore::ownItem(const ListBuffer<>::ListItem
     return std::visit([this](const auto& value) -> ListBuffer<>::ListItemVariant { return ownElement(value); }, item);
 }
 
-ListElementView NLValueStore::ownCell(const ListBuffer<>::ListItemVariant& item) {
+ListElementView NLValueStore::ownCell(ListBuffer<>::ListItemVariant& item) {
     _valueCount++;
 
-    const auto ownNested = [this](const auto& value) -> ListBuffer<>::ListItemVariant {
+    const auto ownNested = [this](auto& value) {
         using T = std::decay_t<decltype(value)>;
 
         if constexpr (std::same_as<T, ListView>) {
-            return getLists().copy(value);
+            value = getLists().copy(value);
         } else if constexpr (std::same_as<T, MapView>) {
-            return getLists().getMaps().copy(value);
-        } else {
-            return value;
+            value = getLists().getMaps().copy(value);
         }
     };
 
-    const ListBuffer<>::ListItemVariant nested = std::visit(ownNested, item);
+    std::visit(ownNested, item);
 
-    return getLists().insert(std::span<const ListBuffer<>::ListItemVariant> {&nested, 1}).front();
+    return getLists().insert(std::span<const ListBuffer<>::ListItemVariant> {&item, 1}).front();
 }
 
 void NLValueStore::ownColumnRows(Column* column, size_t firstRow) {
-    const auto ownTyped = [&]<typename ElementType>() {
-        if (column->getKind() == ColumnVector<ElementType>::staticKind()) {
-            std::vector<ElementType>& raw = static_cast<ColumnVector<ElementType>*>(column)->getRaw();
+    dispatchViewColumn(column, [&]<typename ViewColumn>(const ViewColumn* viewColumn) {
+        using ElementType = typename ViewColumn::ValueType;
+
+        ViewColumn* ownedColumn = static_cast<ViewColumn*>(column);
+
+        if constexpr (std::same_as<ViewColumn, ColumnConst<ElementType>>) {
+            ElementType& constant = ownedColumn->getRaw();
+            constant = ownElement(constant);
+        } else if constexpr (std::same_as<ViewColumn, ColumnVector<ElementType>>) {
+            std::vector<ElementType>& raw = ownedColumn->getRaw();
 
             for (size_t row = firstRow; row < raw.size(); row++) {
                 raw[row] = ownElement(raw[row]);
             }
-        } else if (column->getKind() == ColumnConst<ElementType>::staticKind()) {
-            ElementType& constant = static_cast<ColumnConst<ElementType>*>(column)->getRaw();
-            constant = ownElement(constant);
         }
-    };
-
-    for (const NLViewColumnKind kind : {NLViewColumnKind::String,
-                                        NLViewColumnKind::OptString,
-                                        NLViewColumnKind::OptEmbedding,
-                                        NLViewColumnKind::List,
-                                        NLViewColumnKind::OptList,
-                                        NLViewColumnKind::Map,
-                                        NLViewColumnKind::OptMap,
-                                        NLViewColumnKind::ListElement,
-                                        NLViewColumnKind::OptListElement,
-                                        NLViewColumnKind::MapEntry}) {
-        dispatchViewColumnKind(kind, ownTyped);
-    }
+    });
 }
 
 void NLValueStore::clear() {
