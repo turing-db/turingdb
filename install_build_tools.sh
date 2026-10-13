@@ -57,12 +57,13 @@ else
         sudo apt-get purge -y cmake cmake-data 2>/dev/null || true
         sudo apt-get install -y build-essential m4 lsb-release patchelf
 
-        # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
+        # Apache Arrow requires CMake >= 3.25 and the shared test library
+        # (test/testutils/CMakeLists.txt) >= 3.27, but Ubuntu 22.04 (jammy) ships
         # 3.22.x. When the distro's cmake is too old, pull a newer one from
         # Kitware's official APT repo (same signed-by keyring pattern as the
         # LLVM repo below). Newer distros already satisfy the requirement and
         # are left on their distro package.
-        REQUIRED_CMAKE_VERSION=3.25
+        REQUIRED_CMAKE_VERSION=3.27
         INSTALLED_CMAKE_VERSION=$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')
         OLDEST_CMAKE_VERSION=$(printf '%s\n%s\n' "$REQUIRED_CMAKE_VERSION" "$INSTALLED_CMAKE_VERSION" | sort -V | head -1)
         if [ "$OLDEST_CMAKE_VERSION" != "$REQUIRED_CMAKE_VERSION" ]; then

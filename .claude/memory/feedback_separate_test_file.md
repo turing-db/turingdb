@@ -13,7 +13,10 @@ test file like `NLExecutorTest.cpp`.
 existing catch-all; the new test's fixture, program strings, and sink stay
 isolated and easy to find.
 
-**How to apply:** New feature test → new `SomethingTest.cpp` + its own CMake
-target (copy the shared link helper, add any extra libs like
-`turing_db_examples_s`). Only extend an existing test file when the user asks or
-when adding a case to an already-matching suite. See [[test_on_simpledb_fixture]].
+**How to apply:** New feature test → new `SomethingTest.cpp` + one
+`add_turing_test` (or `add_ir_tests`) line in the CMakeLists. Do not add a link
+list: every test links `turing_test_libs` (test/testutils/CMakeLists.txt), which
+already holds every engine library, so a per-test `target_link_libraries` would
+give the binary a second copy of a library. Only extend an existing test file when
+the user asks or when adding a case to an already-matching suite. See
+[[test_on_simpledb_fixture]].
