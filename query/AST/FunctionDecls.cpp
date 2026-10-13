@@ -760,6 +760,84 @@ void FunctionDecls::initDefault() {
         split->setReturnedListShape(ListShape(EvaluatedType::String, 1));
     }
 
+    for (const std::string_view name : {"left", "right"}) {
+        std::vector<FunctionSignature*> stringEnds;
+        createOverloads(name, {stringOrCell, nonNullIntegerOrCell}, stringEnds);
+
+        for (FunctionSignature* stringEnd : stringEnds) {
+            stringEnd->setReturnTypes({{EvaluatedType::String}});
+        }
+    }
+
+    std::vector<FunctionSignature*> replaces;
+    createOverloads("replace", {stringOrCell, stringOrCell, stringOrCell}, replaces);
+
+    for (FunctionSignature* replace : replaces) {
+        replace->setReturnTypes({{EvaluatedType::String}});
+    }
+
+    for (const std::string_view name : {"char_length", "character_length"}) {
+        for (const EvaluatedType argumentType : {EvaluatedType::String, EvaluatedType::ListItem}) {
+            FunctionSignature* charLength = createFunction(name);
+            charLength->setArguments({argumentType});
+            charLength->setReturnTypes({{EvaluatedType::Integer}});
+        }
+    }
+
+    // The OrNull conversions convert what their strict sibling converts, and answer null for
+    // a value of a type no conversion rule covers. A type-erased cell is converted per row.
+    struct OrNullConversion {
+        std::string_view _name;
+        EvaluatedType _result {EvaluatedType::Invalid};
+        std::vector<EvaluatedType> _converted;
+        std::vector<EvaluatedType> _unconvertible;
+    };
+
+    const std::vector<OrNullConversion> orNullConversions = {
+        {
+            "toIntegerOrNull",
+            EvaluatedType::Integer,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::ListItem},
+            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+        },
+        {
+            "toFloatOrNull",
+            EvaluatedType::Double,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::ListItem},
+            {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+        },
+        {
+            "toBooleanOrNull",
+            EvaluatedType::Bool,
+            {EvaluatedType::String, EvaluatedType::ListItem},
+            {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
+        },
+        {
+            "toStringOrNull",
+            EvaluatedType::String,
+            {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool, EvaluatedType::ListItem},
+            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
+             EvaluatedType::GraphPath, EvaluatedType::Embedding},
+        },
+    };
+
+    for (const OrNullConversion& conversion : orNullConversions) {
+        for (const EvaluatedType converted : conversion._converted) {
+            FunctionSignature* convertible = createFunction(conversion._name);
+            convertible->setArguments({converted});
+            convertible->setReturnTypes({{conversion._result}});
+        }
+
+        for (const EvaluatedType unconvertible : conversion._unconvertible) {
+            FunctionSignature* unconverted = createFunction(conversion._name);
+            unconverted->setArguments({unconvertible});
+            unconverted->setReturnTypes({{EvaluatedType::Null}});
+        }
+    }
+
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they
     // share is what the call returns.
