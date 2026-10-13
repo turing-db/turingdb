@@ -1,23 +1,13 @@
-function(test exe_name cpp_file)
-    add_turing_test(${exe_name} ${cpp_file})
-    target_link_libraries(${exe_name}
-        PRIVATE turing_db_analyzer_s
-                turing_db_ast_s
-                turing_db_parser_s
-                turing_db_procedures_s
-                turing_db_examples_s)
-endfunction()
-
-test(test_expression ExpressionTest.cpp)
-test(test_stmt StmtTest.cpp)
-test(test_distinct_order_by DistinctOrderByTest.cpp)
-test(test_projection_variable_alias ProjectionVariableAliasTest.cpp)
-test(test_nested_aggregate NestedAggregateTest.cpp)
-test(test_procedure_constant_argument ProcedureConstantArgumentTest.cpp)
-test(test_procedure_yield_rebinding ProcedureYieldRebindingTest.cpp)
-test(test_procedure_call_rejection ProcedureCallRejectionTest.cpp)
-test(test_vector_search_query_vector VectorSearchQueryVectorTest.cpp)
-test(test_list_index_analysis ListIndexAnalysisTest.cpp)
-test(test_set_aggregate_rejection SetAggregateRejectionTest.cpp)
-test(test_function_arity FunctionArityTest.cpp)
-test(test_create_vector_index_dimension CreateVectorIndexDimensionTest.cpp)
+add_turing_test(test_expression ExpressionTest.cpp)
+add_turing_test(test_stmt StmtTest.cpp)
+add_turing_test(test_distinct_order_by DistinctOrderByTest.cpp)
+add_turing_test(test_projection_variable_alias ProjectionVariableAliasTest.cpp)
+add_turing_test(test_nested_aggregate NestedAggregateTest.cpp)
+add_turing_test(test_procedure_constant_argument ProcedureConstantArgumentTest.cpp)
+add_turing_test(test_procedure_yield_rebinding ProcedureYieldRebindingTest.cpp)
+add_turing_test(test_procedure_call_rejection ProcedureCallRejectionTest.cpp)
+add_turing_test(test_vector_search_query_vector VectorSearchQueryVectorTest.cpp)
+add_turing_test(test_list_index_analysis ListIndexAnalysisTest.cpp)
+add_turing_test(test_set_aggregate_rejection SetAggregateRejectionTest.cpp)
+add_turing_test(test_function_arity FunctionArityTest.cpp)
+add_turing_test(test_create_vector_index_dimension CreateVectorIndexDimensionTest.cpp)

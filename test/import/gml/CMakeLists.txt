@@ -1,4 +1,2 @@
 add_turing_test(test_import_gml_gmlimporter GMLParserTest.cpp)
 
-target_link_libraries(test_import_gml_gmlimporter
-    PRIVATE turing_db_import_gml_s)

@@ -2,15 +2,6 @@ set(IR_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 function(add_ir_tests exe_name cpp_file)
     add_turing_test(${exe_name} ${cpp_file})
-    target_link_libraries(${exe_name} PRIVATE
-            turing_common_s
-            turing_db_storage_s
-            turing_db_jobs_s
-            turing_db_ir_exec_s
-            turing_db_ir_lowering_s
-            turing_db_ir_dbdialect_s
-            turing_db_ir_common_s
-            MLIRParser)
     target_include_directories(${exe_name} PRIVATE ${IR_TEST_DIR})
 endfunction()
 
@@ -63,13 +54,6 @@ target_include_directories(turing_ir_test_hash_join_s PUBLIC ${CMAKE_CURRENT_SOU
 function(add_call_v3_test exe_name cpp_file)
     add_turing_test(${exe_name} ${cpp_file})
     target_sources(${exe_name} PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
-    target_link_libraries(${exe_name} PRIVATE
-            turing_db_s
-            turing_testenv_s
-            turing_db_examples_s
-            turing_db_system_s
-            turing_db_storage_s
-            turing_db_ir_exec_s)
     target_include_directories(${exe_name} PRIVATE ${IR_TEST_DIR})
 endfunction()
 
