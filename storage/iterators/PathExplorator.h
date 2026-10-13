@@ -14,6 +14,7 @@
 #include "PathExplorationDir.h"
 #include "PathHopFilter.h"
 #include "PathReachTable.h"
+#include "PathStep.h"
 #include "PathTargetIndex.h"
 #include "versioning/PendingAdjacency.h"
 #include "columns/ColumnIDs.h"
@@ -53,9 +54,7 @@ public:
     void setIndices(ColumnVector<size_t>* indices) { _indices = indices; }
     void setTargets(ColumnNodeIDs* targets) { _targets = targets; }
     void setPaths(ColumnVector<PathRef>* paths, PathTrie* trie);
-    void addStep(PathExplorationDir direction);
-    void setHopFilter(size_t step, PathHopFilter* filter) { _steps[step]._hopFilter = filter; }
-    void setEdgeTypeFilter(size_t step, std::span<const EdgeTypeID> edgeTypes);
+    void addStep(const PathStep& step);
     void setEndLabels(const LabelSet* labels);
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     // The ends every seed shares, sorted and without duplicates
@@ -82,12 +81,8 @@ public:
 private:
     static constexpr size_t MAX_DEPENDENCIES = 4;
 
-    struct Step {
-        PathExplorationDir _direction {PathExplorationDir::FORWARD};
-        bool _filterByType {false};
-        std::span<const EdgeTypeID> _edgeTypes;
+    struct Step : PathStep {
         std::vector<uint64_t> _edgeTypeWords;
-        PathHopFilter* _hopFilter {nullptr};
 
         bool readsRepetition() const { return _hopFilter && _hopFilter->readsRepetition(); }
     };

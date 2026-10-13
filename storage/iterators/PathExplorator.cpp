@@ -379,19 +379,12 @@ void PathExplorator::setPaths(ColumnVector<PathRef>* paths, PathTrie* trie) {
     }
 }
 
-void PathExplorator::addStep(PathExplorationDir direction) {
-    _steps.push_back(Step {._direction = direction});
+void PathExplorator::addStep(const PathStep& step) {
+    Step& added = _steps.emplace_back(Step {step});
     _reach._reached.resize(_steps.size());
-}
 
-void PathExplorator::setEdgeTypeFilter(size_t step, std::span<const EdgeTypeID> edgeTypes) {
-    Step& filtered = _steps[step];
-    filtered._filterByType = true;
-    filtered._edgeTypes = edgeTypes;
-
-    std::vector<uint64_t>& words = filtered._edgeTypeWords;
-    words.clear();
-    for (const EdgeTypeID edgeType : edgeTypes) {
+    std::vector<uint64_t>& words = added._edgeTypeWords;
+    for (const EdgeTypeID edgeType : step._edgeTypes) {
         const size_t word = edgeType.getValue() >> 6;
         if (word >= words.size()) {
             words.resize(word + 1, 0);
@@ -432,7 +425,7 @@ bool PathExplorator::levelsFindTrails() const {
     for (size_t step = 0; step < _steps.size(); step++) {
         const Step& taken = _steps[step];
         const bool walksBothWays = taken._direction == PathExplorationDir::BOTH;
-        const bool takesAnyType = !taken._filterByType;
+        const bool takesAnyType = taken._edgeTypes.empty();
         const bool readsRepetition = taken.readsRepetition();
         if (walksBothWays || takesAnyType || readsRepetition) {
             return false;
@@ -926,8 +919,8 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
     const uint64_t remainingHops = _maxHops - candidateDepth;
 
     const Step& step = stepAt(_pathEdges.size());
-    const bool filterByType = step._filterByType;
     const std::span<const EdgeTypeID> edgeTypes = step._edgeTypes;
+    const bool filterByType = !edgeTypes.empty();
     const std::span<const uint64_t> edgeTypeWords = step._edgeTypeWords;
     const bool checksTarget = _target.isValid() || (_filtersByEndNodeSet && _targetIndex);
 
@@ -1630,8 +1623,8 @@ void PathExplorator::appendPendingReachCandidates(NodeID node) {
 
 void PathExplorator::appendReachCandidates(std::span<const EdgeRecord> edges) {
     const Step& step = _steps[_reach._step];
-    const bool filterByType = step._filterByType;
     const std::span<const EdgeTypeID> edgeTypes = step._edgeTypes;
+    const bool filterByType = !edgeTypes.empty();
     const std::span<const uint64_t> edgeTypeWords = step._edgeTypeWords;
 
     _candidateChecks += edges.size();

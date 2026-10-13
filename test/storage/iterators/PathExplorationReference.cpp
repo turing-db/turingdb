@@ -184,7 +184,7 @@ size_t turing::test::collectPaths(const GraphView& view,
 
     PathExplorator explorator(view, &input, minHops, maxHops);
 
-    explorator.addStep(direction);
+    explorator.addStep(PathStep {._direction = direction, ._edgeTypes = options.getEdgeTypes(), ._hopFilter = options._hopFilter});
     explorator.setIndices(&indices);
     if (options._collectTargets) {
         explorator.setTargets(&targets);
@@ -193,10 +193,6 @@ size_t turing::test::collectPaths(const GraphView& view,
     if (collectPaths) {
         explorator.setPaths(&paths, &trie);
     }
-    if (options._edgeType) {
-        explorator.setEdgeTypeFilter(0, options.getEdgeTypes());
-    }
-    explorator.setHopFilter(0, options._hopFilter);
     explorator.setEndLabels(options._endLabels);
     explorator.setEndNodes(options._endNodes);
     if (!options._endNodeSet.empty()) {

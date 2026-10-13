@@ -280,20 +280,19 @@ protected:
                                   _seeds,
                                   edgeBound(minRepetitions, stepCount),
                                   edgeBound(maxRepetitions, stepCount));
-        for (const BodyStep& step : steps) {
-            explorator.addStep(step._direction);
-        }
-
         std::vector<EdgeTypeID> edgeTypes(stepCount);
         for (size_t step = 0; step < stepCount; step++) {
+            PathStep added {._direction = steps[step]._direction};
             if (steps[step]._edgeType) {
                 edgeTypes[step] = *steps[step]._edgeType;
-                explorator.setEdgeTypeFilter(step, std::span<const EdgeTypeID>(&edgeTypes[step], 1));
+                added._edgeTypes = std::span<const EdgeTypeID>(&edgeTypes[step], 1);
             }
-        }
 
-        if (options._secondStepFilter) {
-            explorator.setHopFilter(1, options._secondStepFilter);
+            if (step == 1) {
+                added._hopFilter = options._secondStepFilter;
+            }
+
+            explorator.addStep(added);
         }
 
         if (options._endLabels) {
@@ -564,8 +563,8 @@ TEST_F(PathExploratorBodyTest, readsOneHopOfEachRepetition) {
 
     PathExplorator explorator(view, &_input, 0, 3 * stepCount);
 
-    explorator.addStep(PathExplorationDir::FORWARD);
-    explorator.addStep(PathExplorationDir::BOTH);
+    explorator.addStep(PathStep {._direction = PathExplorationDir::FORWARD});
+    explorator.addStep(PathStep {._direction = PathExplorationDir::BOTH});
     explorator.setIndices(&indices);
     explorator.setTargets(&targets);
     explorator.setPaths(&paths, &trie);

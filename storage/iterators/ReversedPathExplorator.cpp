@@ -32,12 +32,8 @@ ReversedPathExplorator::ReversedPathExplorator(const GraphView& view,
 {
     std::vector<PathStep> reversed;
     reverseBody(body, reversed);
-    for (size_t step = 0; step < reversed.size(); step++) {
-        const PathStep& reversedStep = reversed[step];
-        _explorator.addStep(reversedStep._direction);
-        if (!reversedStep._edgeTypes.empty()) {
-            _explorator.setEdgeTypeFilter(step, reversedStep._edgeTypes);
-        }
+    for (const PathStep& reversedStep : reversed) {
+        _explorator.addStep(reversedStep);
     }
 
     for (const NodeID end : endNodeSet) {

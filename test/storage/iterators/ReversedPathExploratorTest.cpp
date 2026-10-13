@@ -190,11 +190,8 @@ protected:
         PathExplorator explorator(view, &input, minHops, maxHops);
         explorator.setIndices(&indices);
         explorator.setTargets(&targets);
-        for (size_t step = 0; step < body.size(); step++) {
-            explorator.addStep(body[step]._direction);
-            if (!body[step]._edgeTypes.empty()) {
-                explorator.setEdgeTypeFilter(step, body[step]._edgeTypes);
-            }
+        for (const PathStep& step : body) {
+            explorator.addStep(step);
         }
         explorator.setEndNodeSet(endNodeSet);
         explorator.setDistinctEnds(distinctEnds);

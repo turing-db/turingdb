@@ -398,7 +398,7 @@ TEST_F(PathExploratorTest, emptyInputYieldsNothing) {
 
     PathExplorator explorator(view, &input, 0, unbounded);
 
-    explorator.addStep(PathExplorationDir::BOTH);
+    explorator.addStep(PathStep {._direction = PathExplorationDir::BOTH});
     explorator.setIndices(&indices);
     EXPECT_FALSE(explorator.isValid());
 
@@ -417,7 +417,7 @@ TEST_F(PathExploratorTest, resetRestartsFromTheFirstSeed) {
 
     PathExplorator explorator(view, &input, 1, 2);
 
-    explorator.addStep(PathExplorationDir::FORWARD);
+    explorator.addStep(PathStep {._direction = PathExplorationDir::FORWARD});
     explorator.setIndices(&indices);
 
     size_t firstRun = 0;

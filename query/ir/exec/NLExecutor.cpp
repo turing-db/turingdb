@@ -6603,25 +6603,12 @@ uint64_t edgesOfRepetitions(uint64_t repetitions, size_t stepCount) {
 
 // The body the walk repeats, as a sample expands it. A filter reading the repetition sees
 // none in the sample, so its step is sampled unfiltered.
-void sampledBodyOf(const NLExplorePathsLoopData* loopData,
-                   std::span<PathHopFilter* const> hopFilters,
-                   std::vector<PathStep>& body) {
-    const size_t stepCount = loopData->getStepCount();
-
-    body.assign(stepCount, PathStep {});
-    for (size_t step = 0; step < stepCount; step++) {
-        const NLExploreStep* exploreStep = loopData->getStep(step);
-        PathStep& bodyStep = body[step];
-        bodyStep._direction = exploreStep->getDirection();
-
-        if (exploreStep->filtersByType()) {
-            bodyStep._edgeTypes = exploreStep->getEdgeTypes();
-        }
-
-        PathHopFilter* hopFilter = hopFilters[step];
-        const bool samplesTheFilter = hopFilter && !hopFilter->readsRepetition();
-        if (samplesTheFilter) {
-            bodyStep._hopFilter = hopFilter;
+void sampledBodyOf(std::span<const PathStep> walkedBody, std::vector<PathStep>& body) {
+    body.assign(walkedBody.begin(), walkedBody.end());
+    for (PathStep& bodyStep : body) {
+        const bool readsRepetition = bodyStep._hopFilter && bodyStep._hopFilter->readsRepetition();
+        if (readsRepetition) {
+            bodyStep._hopFilter = nullptr;
         }
     }
 }
@@ -6704,8 +6691,8 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
 
 // A walk to an end set emits the same rows from either end when no path is read and no hop
 // test sees which way the hop was taken
-bool emitsTheSameFromEitherEnd(const NLExplorePathsLoopData* loopData, std::span<PathHopFilter* const> hopFilters) {
-    const bool hasHopFilter = std::any_of(hopFilters.begin(), hopFilters.end(), [](const PathHopFilter* filter) { return filter != nullptr; });
+bool emitsTheSameFromEitherEnd(const NLExplorePathsLoopData* loopData, std::span<const PathStep> walkedBody) {
+    const bool hasHopFilter = std::ranges::any_of(walkedBody, [](const PathStep& step) { return step._hopFilter != nullptr; });
 
     return !loopData->getPaths() && !hasHopFilter;
 }
@@ -6810,15 +6797,6 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         explorator.setPaths(loopData->getPaths(), loopData->getTrie());
     }
 
-    for (size_t step = 0; step < stepCount; step++) {
-        const NLExploreStep* exploreStep = loopData->getStep(step);
-        explorator.addStep(exploreStep->getDirection());
-
-        if (exploreStep->filtersByType()) {
-            explorator.setEdgeTypeFilter(step, exploreStep->getEdgeTypes());
-        }
-    }
-
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
 
@@ -6838,9 +6816,15 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     std::vector<std::optional<NLHopFilter>> hopRegionFilters(stepCount);
     std::vector<std::optional<PathLabelHopFilter>> hopLabelFilters(stepCount);
-    std::vector<PathHopFilter*> hopFilters(stepCount, nullptr);
+    std::vector<PathStep> walkedBody(stepCount);
     for (size_t step = 0; step < stepCount; step++) {
         const NLExploreStep* exploreStep = loopData->getStep(step);
+        PathStep& bodyStep = walkedBody[step];
+        bodyStep._direction = exploreStep->getDirection();
+
+        if (exploreStep->filtersByType()) {
+            bodyStep._edgeTypes = exploreStep->getEdgeTypes();
+        }
 
         PathHopFilter* hopFilter = nullptr;
         if (exploreStep->filtersByHopLabels()) {
@@ -6852,11 +6836,8 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
             hopFilter = &hopRegionFilters[step].emplace(context, exploreStep, hopFilter);
         }
 
-        if (hopFilter) {
-            explorator.setHopFilter(step, hopFilter);
-        }
-
-        hopFilters[step] = hopFilter;
+        bodyStep._hopFilter = hopFilter;
+        explorator.addStep(bodyStep);
     }
 
     // The level search of the distinct mode prunes by no index
@@ -6869,7 +6850,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     // Once the walk from the seeds holds its index over the set, it walks only the prefixes
     // that reach the set, as the walk from the set would toward the seeds
-    const bool weighsTheEndSet = gatesEndSetIndex && emitsTheSameFromEitherEnd(loopData, hopFilters);
+    const bool weighsTheEndSet = gatesEndSetIndex && emitsTheSameFromEitherEnd(loopData, walkedBody);
 
     // What this chunk's own seeds expand to: the gates price the walk by it, and it is what
     // the walk does rather than what the average node carrying the type does
@@ -6877,7 +6858,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     PathDistanceIndex::SeedExpansion expansion;
     const PartDirectory parts(view);
     if (weighsTheEndSet || (prunes && readsSample)) {
-        sampledBodyOf(loopData, hopFilters, body);
+        sampledBodyOf(walkedBody, body);
         PathDistanceIndex::sampleSeedExpansion(parts, body, inputNodeIDs->getRaw(), expansion);
     }
 
