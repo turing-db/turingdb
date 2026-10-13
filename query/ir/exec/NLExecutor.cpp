@@ -8454,7 +8454,7 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
             return;
         }
 
-        const ListBuffer<>::ListItemVariant item = rowWrite._taggedRead(written, writtenRow, memory);
+        ListBuffer<>::ListItemVariant item = rowWrite._taggedRead(written, writtenRow, memory);
         static_cast<ColumnVector<ListElementView>*>(accumulator)->getRaw()[row] = accumulatorValues.getActive().ownCell(item);
     };
 
@@ -11038,23 +11038,29 @@ NLAppendFunction NLExecutor::selectOptListAppendFunction() {
     return &appendColumn<std::optional<ListView>>;
 }
 
-NLOwnedAppendFunction NLExecutor::selectOwnedAppendFunction(NLViewColumnKind kind) {
+NLOwnedAppendFunction NLExecutor::selectOwnedAppendFunction(const Column* buffer) {
     NLOwnedAppendFunction append = nullptr;
-    dispatchViewColumnKind(kind, [&]<typename ElementType>() { append = &appendOwnedColumn<ElementType>; });
+    dispatchViewColumn(buffer, [&]<typename ElementType>(const ColumnVector<ElementType>* column) {
+        append = &appendOwnedColumn<ElementType>;
+    });
 
     return append;
 }
 
-NLReownFunction NLExecutor::selectReownFunction(NLViewColumnKind kind) {
+NLReownFunction NLExecutor::selectReownFunction(const Column* column) {
     NLReownFunction reown = nullptr;
-    dispatchViewColumnKind(kind, [&]<typename ElementType>() { reown = &reownColumn<ElementType>; });
+    dispatchViewColumn(column, [&]<typename ElementType>(const ColumnVector<ElementType>* viewColumn) {
+        reown = &reownColumn<ElementType>;
+    });
 
     return reown;
 }
 
-NLReownRowsFunction NLExecutor::selectReownRowsFunction(NLViewColumnKind kind) {
+NLReownRowsFunction NLExecutor::selectReownRowsFunction(const Column* column) {
     NLReownRowsFunction reown = nullptr;
-    dispatchViewColumnKind(kind, [&]<typename ElementType>() { reown = &reownColumnRows<ElementType>; });
+    dispatchViewColumn(column, [&]<typename ElementType>(const ColumnVector<ElementType>* viewColumn) {
+        reown = &reownColumnRows<ElementType>;
+    });
 
     return reown;
 }

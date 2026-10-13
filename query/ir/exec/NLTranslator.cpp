@@ -301,34 +301,6 @@ PathExplorationDir toPathExplorationDir(storage::PathDirection direction) {
     throw IRException("Unknown path direction");
 }
 
-bool optViewColumnKind(ValueType valueType, NLViewColumnKind& kind) {
-    switch (valueType) {
-        case ValueType::String:
-            kind = NLViewColumnKind::OptString;
-            return true;
-        break;
-
-        case ValueType::Embedding:
-            kind = NLViewColumnKind::OptEmbedding;
-            return true;
-        break;
-
-        case ValueType::List:
-            kind = NLViewColumnKind::OptList;
-            return true;
-        break;
-
-        case ValueType::Map:
-            kind = NLViewColumnKind::OptMap;
-            return true;
-        break;
-
-        default:
-            return false;
-        break;
-    }
-}
-
 ValueType valueTypeFromElementType(mlir::Type elementType) {
     if (mlir::isa<storage::StringType>(elementType)) {
         return ValueType::String;
@@ -3863,12 +3835,9 @@ void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
                         NLReduceWrite {._write = selectCaseWriteForChunkType(resultType, yielded, yieldedValue.getType())});
     }
 
-    NLViewColumnKind accumulatorKind {};
-    if (viewColumnKindFromChunkType(resultType, accumulatorKind)) {
-        const NLReownRowsFunction reownRows = accumulatesTaggedCells ? nullptr
-                                                                     : NLExecutor::selectReownRowsFunction(accumulatorKind);
-        data->setReowns(NLExecutor::selectReownFunction(accumulatorKind), reownRows);
-    }
+    const NLReownRowsFunction reownRows = accumulatesTaggedCells ? nullptr
+                                                                 : NLExecutor::selectReownRowsFunction(result);
+    data->setReowns(NLExecutor::selectReownFunction(result), reownRows);
 
     body->emplaceStmt(&NLExecutor::runReduce, data);
 }
@@ -4451,7 +4420,7 @@ void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer
         state->addColumnBuffer(bufferColumn, tempColumn, gather);
 
         const mlir::Type columnType = column.getType();
-        const NLOwnedAppendFunction appendOwned = selectOwnedAppendForChunkType(columnType);
+        const NLOwnedAppendFunction appendOwned = NLExecutor::selectOwnedAppendFunction(bufferColumn);
         const NLAppendFunction append = appendOwned ? nullptr : selectAppendForChunkType(columnType);
 
         data->addAppend(NLSortCollectData::Append {getColumn(column),
@@ -4554,11 +4523,13 @@ void NLTranslator::translateUnionCollect(nl::UnionCollect collect, NLStmtContain
         const mlir::Value column = columns[columnIndex];
         const mlir::Type columnType = column.getType();
 
-        const NLOwnedAppendFunction appendOwned = selectOwnedAppendForChunkType(columnType);
+        Column* bufferColumn = state->buffer(columnIndex);
+
+        const NLOwnedAppendFunction appendOwned = NLExecutor::selectOwnedAppendFunction(bufferColumn);
         const NLAppendFunction append = appendOwned ? nullptr : selectAppendForChunkType(columnType);
 
         data->addAppend(NLSortCollectData::Append {getColumn(column),
-                                                   state->buffer(columnIndex),
+                                                   bufferColumn,
                                                    append,
                                                    appendOwned});
     }
@@ -4645,7 +4616,7 @@ void NLTranslator::translateOptionalCollect(nl::OptionalCollect collect, NLStmtC
         Column* bufferColumn = allocColumnForChunkType(column.getType());
         state->addMatchedBuffer(bufferColumn);
 
-        const NLOwnedAppendFunction appendOwned = selectOwnedAppendForChunkType(column.getType());
+        const NLOwnedAppendFunction appendOwned = NLExecutor::selectOwnedAppendFunction(bufferColumn);
         const NLAppendFunction append = appendOwned ? nullptr : selectAppendForChunkType(column.getType());
 
         data->addAppend(NLSortCollectData::Append {getColumn(column),
@@ -4931,7 +4902,7 @@ void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtC
         Column* bufferColumn = allocColumnForChunkType(chunkType);
         state->addColumnBuffer(bufferColumn);
 
-        const NLOwnedAppendFunction appendOwned = selectOwnedAppendForChunkType(chunkType);
+        const NLOwnedAppendFunction appendOwned = NLExecutor::selectOwnedAppendFunction(bufferColumn);
         const NLAppendFunction append = appendOwned ? nullptr : selectAppendForChunkType(chunkType);
 
         data->addAppend(NLSortCollectData::Append {getColumn(column),
@@ -5461,11 +5432,8 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
             }
 
-            NLViewColumnKind extremeKind {};
-            if (keepsTaggedCells) {
-                aggregate._reown = NLExecutor::selectReownFunction(NLViewColumnKind::OptListElement);
-            } else if (keepsAValue && optViewColumnKind(accumulatorType, extremeKind)) {
-                aggregate._reown = NLExecutor::selectReownFunction(extremeKind);
+            if (keepsAValue) {
+                aggregate._reown = NLExecutor::selectReownFunction(aggregate._accumulator);
             }
         }
         break;
@@ -6410,63 +6378,6 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     }
 
     return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
-}
-
-// The append an accumulator collects this column with when its rows are views, and
-// nothing for a column of values, which the plain append copies whole
-NLOwnedAppendFunction NLTranslator::selectOwnedAppendForChunkType(mlir::Type chunkType) {
-    NLViewColumnKind kind {};
-    if (!viewColumnKindFromChunkType(chunkType, kind)) {
-        return nullptr;
-    }
-
-    return NLExecutor::selectOwnedAppendFunction(kind);
-}
-
-bool NLTranslator::viewColumnKindFromChunkType(mlir::Type chunkType, NLViewColumnKind& kind) {
-    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-
-    if (mlir::isa<storage::ListElementType>(elementType)) {
-        kind = NLViewColumnKind::ListElement;
-        return true;
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        kind = NLViewColumnKind::MapEntry;
-        return true;
-    } else if (mlir::isa<storage::StringType>(elementType)) {
-        kind = NLViewColumnKind::String;
-        return true;
-    } else if (mlir::isa<storage::ListType>(elementType)) {
-        kind = NLViewColumnKind::List;
-        return true;
-    } else if (mlir::isa<storage::MapType>(elementType)) {
-        kind = NLViewColumnKind::Map;
-        return true;
-    }
-
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
-    if (!nullableType) {
-        return false;
-    }
-
-    const mlir::Type valueType = nullableType.getValueType();
-    if (mlir::isa<storage::ListElementType>(valueType)) {
-        kind = NLViewColumnKind::OptListElement;
-        return true;
-    } else if (mlir::isa<storage::StringType>(valueType)) {
-        kind = NLViewColumnKind::OptString;
-        return true;
-    } else if (mlir::isa<storage::EmbeddingType>(valueType)) {
-        kind = NLViewColumnKind::OptEmbedding;
-        return true;
-    } else if (mlir::isa<storage::ListType>(valueType)) {
-        kind = NLViewColumnKind::OptList;
-        return true;
-    } else if (mlir::isa<storage::MapType>(valueType)) {
-        kind = NLViewColumnKind::OptMap;
-        return true;
-    }
-
-    return false;
 }
 
 NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
