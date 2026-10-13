@@ -2643,27 +2643,32 @@ class UnaryFunctionOp<string mnemonic, list<Trait> traits = [Pure]>
   }];
 }
 
-// A unary function reading values of one type raises on a row holding another, which a
-// column of an unresolved type can: it is speculatable over a column of that type alone
-class TypedUnaryFunctionOp<string mnemonic, string readType>
+// A unary function reading values of some types raises on a row holding another, which a
+// column of type-erased cells or of an unresolved type can: it is speculatable over a
+// column of the types it reads alone
+class TypedUnaryFunctionOp<string mnemonic, string readTypes>
     : UnaryFunctionOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let extraClassDefinition = [{
     ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
-      return speculatableOverElement<}] # readType # [{>(getInput());
+      return speculatableOverElement<}] # readTypes # [{>(getInput());
     }
   }];
 }
 
+class NumberFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::IntegerType, ::mlir::FloatType">;
+class TextFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::StringType">;
+class ListFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::ListType">;
+
 def Labels : UnaryFunctionOp<"labels">;
 def EdgeType : UnaryFunctionOp<"edge_type">;
-def Keys : UnaryFunctionOp<"keys">;
-def PropertyMap : UnaryFunctionOp<"properties">;
+def Keys : TypedUnaryFunctionOp<"keys", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
+def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 
 // The two ends of each edge of a column, as node columns of their own. The edge is read as
 // the graph stores it, so a hop that walked it backwards or undirected reports the same
 // pair rather than the one its own direction suggests.
-def StartNode : UnaryFunctionOp<"start_node">;
-def EndNode : UnaryFunctionOp<"end_node">;
+def StartNode : TypedUnaryFunctionOp<"start_node", "::mlir::storage::EdgeIDType">;
+def EndNode : TypedUnaryFunctionOp<"end_node", "::mlir::storage::EdgeIDType">;
 
 def ToInteger : UnaryFunctionOp<"to_integer">;
 def ToFloat : UnaryFunctionOp<"to_float">;
@@ -2733,42 +2738,42 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 // !storage.list_element every element of a heterogeneous list rides, and an empty list
 // reads as the null such a cell carries itself rather than as a nullable column of its own.
 // The ID of a node, an edge, or the entity a type-erased cell holds, as an integer.
-def ElementID : UnaryFunctionOp<"element_id">;
+def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType">;
 
-def Size : UnaryFunctionOp<"size">;
-def CharLength : UnaryFunctionOp<"char_length">;
-def Head : UnaryFunctionOp<"head">;
-def Last : UnaryFunctionOp<"last">;
-def Tail : UnaryFunctionOp<"tail">;
+def Size : TypedUnaryFunctionOp<"size", "::mlir::storage::StringType, ::mlir::storage::ListType">;
+def CharLength : TextFunctionOp<"char_length">;
+def Head : ListFunctionOp<"head">;
+def Last : ListFunctionOp<"last">;
+def Tail : ListFunctionOp<"tail">;
 
-def Abs : UnaryFunctionOp<"abs">;
-def Sign : UnaryFunctionOp<"sign">;
-def Ceil : UnaryFunctionOp<"ceil">;
-def Floor : UnaryFunctionOp<"floor">;
-def Round : UnaryFunctionOp<"round">;
-def Sqrt : UnaryFunctionOp<"sqrt">;
-def Exp : UnaryFunctionOp<"exp">;
-def Log : UnaryFunctionOp<"log">;
-def Log10 : UnaryFunctionOp<"log10">;
-def Sin : UnaryFunctionOp<"sin">;
-def Cos : UnaryFunctionOp<"cos">;
-def Tan : UnaryFunctionOp<"tan">;
-def Cot : UnaryFunctionOp<"cot">;
-def Asin : UnaryFunctionOp<"asin">;
-def Acos : UnaryFunctionOp<"acos">;
-def Atan : UnaryFunctionOp<"atan">;
-def Degrees : UnaryFunctionOp<"degrees">;
-def Radians : UnaryFunctionOp<"radians">;
-def Haversin : UnaryFunctionOp<"haversin">;
+def Abs : NumberFunctionOp<"abs">;
+def Sign : NumberFunctionOp<"sign">;
+def Ceil : NumberFunctionOp<"ceil">;
+def Floor : NumberFunctionOp<"floor">;
+def Round : NumberFunctionOp<"round">;
+def Sqrt : NumberFunctionOp<"sqrt">;
+def Exp : NumberFunctionOp<"exp">;
+def Log : NumberFunctionOp<"log">;
+def Log10 : NumberFunctionOp<"log10">;
+def Sin : NumberFunctionOp<"sin">;
+def Cos : NumberFunctionOp<"cos">;
+def Tan : NumberFunctionOp<"tan">;
+def Cot : NumberFunctionOp<"cot">;
+def Asin : NumberFunctionOp<"asin">;
+def Acos : NumberFunctionOp<"acos">;
+def Atan : NumberFunctionOp<"atan">;
+def Degrees : NumberFunctionOp<"degrees">;
+def Radians : NumberFunctionOp<"radians">;
+def Haversin : NumberFunctionOp<"haversin">;
 
-def ToUpper : UnaryFunctionOp<"to_upper">;
-def ToLower : UnaryFunctionOp<"to_lower">;
-def Trim : UnaryFunctionOp<"trim">;
-def LTrim : UnaryFunctionOp<"ltrim">;
-def RTrim : UnaryFunctionOp<"rtrim">;
-def Reverse : UnaryFunctionOp<"reverse">;
+def ToUpper : TextFunctionOp<"to_upper">;
+def ToLower : TextFunctionOp<"to_lower">;
+def Trim : TextFunctionOp<"trim">;
+def LTrim : TextFunctionOp<"ltrim">;
+def RTrim : TextFunctionOp<"rtrim">;
+def Reverse : TypedUnaryFunctionOp<"reverse", "::mlir::storage::StringType, ::mlir::storage::ListType">;
 
-def Substring : TuringOp<"substring", [Pure]> {
+def Substring : TuringOp<"substring", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Take the run of each row's string its start and length span";
 
   let description = [{
@@ -2816,14 +2821,13 @@ class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, Declare
     `(` $string `,` $length `)` attr-dict `:` functional-type(operands, results)
   }];
 
-  // A negative length raises, whichever row holds it
   let extraClassDefinition = [{
     ::mlir::LogicalResult $cppClass::verify() {
       return verifyStringEnd(getOperation(), getString(), getLength(), getResult());
     }
 
     ::mlir::Speculation::Speculatability $cppClass::getSpeculatability() {
-      return ::mlir::Speculation::NotSpeculatable;
+      return speculatableOverCharacters(getOperation());
     }
   }];
 }

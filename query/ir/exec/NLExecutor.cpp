@@ -8030,7 +8030,7 @@ void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     const SubstringFunction function {};
     constexpr std::string_view name = SubstringFunction::NAME;
 
-    constexpr std::optional<types::Int64::Primitive> toTheEnd = SubstringFunction::MAX_ARGUMENT;
+    constexpr std::optional<types::Int64::Primitive> toTheEnd = MAX_CHARACTER_ARGUMENT;
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<types::String::Primitive> text = string._read(string._column, rowIndex, name);

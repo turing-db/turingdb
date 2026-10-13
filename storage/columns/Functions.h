@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "columns/CharacterArgument.h"
 #include "columns/ColumnConst.h"
 #include "columns/ValueText.h"
 #include "columns/ColumnIDs.h"
@@ -1064,8 +1065,6 @@ public:
     using ResultType = types::String::Primitive;
 
     static constexpr std::string_view NAME = "substring";
-
-    static constexpr types::Int64::Primitive MAX_ARGUMENT = std::numeric_limits<int32_t>::max();
 
     ResultType operator()(types::String::Primitive string,
                           types::Int64::Primitive start,

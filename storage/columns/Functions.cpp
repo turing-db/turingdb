@@ -122,12 +122,12 @@ template <typename Integer>
 [[noreturn]] void throwCharacterArgumentError(const Integer value, std::string_view functionName) {
     throw TuringException(fmt::format("{}() takes a position or length from 0 to {}, and this row holds {}",
                                       functionName,
-                                      SubstringFunction::MAX_ARGUMENT,
+                                      MAX_CHARACTER_ARGUMENT,
                                       value));
 }
 
 size_t characterArgument(const types::Int64::Primitive value, std::string_view functionName) {
-    const bool outOfRange = value < 0 || value > SubstringFunction::MAX_ARGUMENT;
+    const bool outOfRange = value < 0 || value > MAX_CHARACTER_ARGUMENT;
     if (outOfRange) {
         throwCharacterArgumentError(value, functionName);
     }
@@ -374,7 +374,7 @@ std::optional<types::Int64::Primitive> db::cellInteger(const ListElementView cel
 }
 
 types::Int64::Primitive db::unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName) {
-    const types::UInt64::Primitive largest = static_cast<types::UInt64::Primitive>(SubstringFunction::MAX_ARGUMENT);
+    const types::UInt64::Primitive largest = static_cast<types::UInt64::Primitive>(MAX_CHARACTER_ARGUMENT);
     if (value > largest) {
         throwCharacterArgumentError(value, functionName);
     }

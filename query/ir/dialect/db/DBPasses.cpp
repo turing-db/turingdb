@@ -548,12 +548,11 @@ struct ConeFrame {
     unsigned _nextOperand {0};
 };
 
-// A cone is what a pass moves onto rows the query may not have run it on, so an op raising
-// on some row's value stays out of it, as one of the cone's inputs
+// A cone is what a pass moves onto rows the query may not have run it on, so an op that may
+// raise on some row's value - any op not declared speculatable - stays out of it, as one of
+// the cone's inputs
 bool raisesOnSomeRows(Operation* op) {
-    mlir::ConditionallySpeculatable speculation = dyn_cast<mlir::ConditionallySpeculatable>(op);
-
-    return speculation && speculation.getSpeculatability() == mlir::Speculation::NotSpeculatable;
+    return !mlir::isSpeculatable(op);
 }
 
 // Gathers the mask's compute cone and the external columns feeding it. Valid
