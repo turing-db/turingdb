@@ -7,6 +7,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "columns/CharacterArgument.h"
+
 #include "IRLiteralList.h"
 #include "IRRange.h"
 #include "StorageEnums.h"
@@ -47,9 +49,9 @@ Speculation::Speculatability speculatableOverNumbers(Operation* op) {
     return speculatableWhen(llvm::all_of(op->getOperands(), isNumberColumn));
 }
 
-template <typename ElementType>
+template <typename... ElementTypes>
 Speculation::Speculatability speculatableOverElement(Value input) {
-    return speculatableWhen(isa<ElementType>(columnElement(input)));
+    return speculatableWhen(isa<ElementTypes...>(columnElement(input)));
 }
 
 bool matchIntegerLiteral(Value column, int64_t& value) {
@@ -61,6 +63,47 @@ bool matchIntegerLiteral(Value column, int64_t& value) {
 
     value = integer.getValue().getSExtValue();
     return true;
+}
+
+bool isCharacterLiteral(Value argument) {
+    int64_t value = 0;
+
+    return matchIntegerLiteral(argument, value) && value >= 0 && value <= ::db::MAX_CHARACTER_ARGUMENT;
+}
+
+// A string function counting characters raises on a cell holding no string, and on a count
+// that is null, negative or past the largest it takes. Its first operand is the string, every
+// other one a count
+Speculation::Speculatability speculatableOverCharacters(Operation* op) {
+    const bool readsAString = isa<storage::StringType>(columnElement(op->getOperand(0)));
+    const bool countsLiterals = llvm::all_of(op->getOperands().drop_front(), isCharacterLiteral);
+
+    return speculatableWhen(readsAString && countsLiterals);
+}
+
+bool isEntityColumn(Value column) {
+    return isa<storage::NodeIDType, storage::EdgeIDType>(columnElement(column));
+}
+
+bool mayHoldNegativeInteger(Value column) {
+    int64_t literal = 0;
+    if (matchIntegerLiteral(column, literal)) {
+        return literal < 0;
+    }
+
+    const IntegerType integer = dyn_cast<IntegerType>(columnElement(column));
+
+    return integer && !integer.isUnsigned();
+}
+
+// An entity is equal to the integer naming its ID, and comparing one to a negative integer
+// raises. A column of an unresolved type is taken to hold no integer: the entity a CALL
+// yields is one, and a join on it must still move into the factor holding the call.
+Speculation::Speculatability speculatableEquality(Value lhs, Value rhs) {
+    const bool entityToNegative = isEntityColumn(lhs) && mayHoldNegativeInteger(rhs);
+    const bool negativeToEntity = mayHoldNegativeInteger(lhs) && isEntityColumn(rhs);
+
+    return speculatableWhen(!entityToNegative && !negativeToEntity);
 }
 
 // A literal divisor no row raises on: not 0, and not the -1 that overflows the smallest
@@ -2309,6 +2352,10 @@ Speculation::Speculatability Range::getSpeculatability() {
     return speculatableWhen(::db::countRangeSteps(from, to, by) < ::db::RANGE_LENGTH_LIMIT);
 }
 
+Speculation::Speculatability Substring::getSpeculatability() {
+    return speculatableOverCharacters(getOperation());
+}
+
 Speculation::Speculatability Replace::getSpeculatability() {
     const bool readsStrings = llvm::all_of(getOperation()->getOperands(), [](Value operand) {
         return isa<storage::StringType>(columnElement(operand));
@@ -2322,6 +2369,14 @@ Speculation::Speculatability Split::getSpeculatability() {
     const bool splitsOnAString = isa<storage::StringType>(columnElement(getDelimiter()));
 
     return speculatableWhen(readsAString && splitsOnAString);
+}
+
+Speculation::Speculatability EqOp::getSpeculatability() {
+    return speculatableEquality(getLhs(), getRhs());
+}
+
+Speculation::Speculatability NeqOp::getSpeculatability() {
+    return speculatableEquality(getLhs(), getRhs());
 }
 
 Speculation::Speculatability AddOp::getSpeculatability() {
