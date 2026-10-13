@@ -362,3 +362,26 @@ Commit messages are one short area-prefixed line, no body — e.g. `MLIR: implem
 ## PR style
 
 PR descriptions are one short sentence. Do not use the default `## Summary` / `## Test plan` template — no headers, no bullets, no checklists, no "Generated with Claude Code" footer. The title carries the detail; the body just states the intent in a sentence.
+
+### Explain the PRs you open
+
+**When you open a pull request, run `/pr-explain` on it before you hand it back.** The body
+stays the one sentence above. The explanation goes in a comment, so the two rules do not
+fight: the author's sentence says what the PR is for, and the comment gives a reviewer the
+shape of the change before they read a line of the diff.
+
+`/pr-explain` writes the comment in Matt Pocock's `pr` shape — Summary, Evidence, Merge
+Danger — over a PR Lens diagram of the change, and opens it with an `AI-generated summary`
+note. All three skills are vendored under `.claude/skills/`, so this needs nothing
+installed. It does need node 20.11 or later for the diagram; the skill finds one or says so
+and carries on without it.
+
+The diagram posts as a GitHub attachment. PR Lens can also publish an explorable canvas on
+`prlens.dev`, which is a third party, so the skill asks before every push and never pushes
+on its own. Say no and the comment keeps the attached diagrams.
+
+Two things it never does: it does not touch the PR body or title, and it posts nothing
+without a yes.
+
+For a stack of PRs, explain the ones a reviewer has to understand on their own. A stack
+of near-identical mechanical changes does not need one comment each.
