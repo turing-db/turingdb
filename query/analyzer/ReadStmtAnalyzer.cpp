@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "AnalyzeException.h"
+#include "BinaryOperatorTyping.h"
 #include "ExprAnalyzer.h"
 #include "FunctionInvocation.h"
 #include "YieldClause.h"
@@ -53,27 +54,22 @@ using namespace db;
 
 namespace {
 
-// A tagged scalar carries its type per row rather than in the plan, so no property type
-// rules it out: the comparison the constraint becomes settles it row by row, as the same
-// test written as a WHERE does. That comparison also settles two numbers, which compare by
-// value, and two types that can never hold equal values, where it is false on every row.
-bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
-    const bool comparesPerRow = namesATaggedCell(exprType);
-    const bool matchesNothing = exprType == EvaluatedType::Null;
-
-    if (comparesPerRow || matchesNothing) {
-        return true;
-    }
-
+// An inline constraint is the equality it spells, so it takes what an equality takes
+void constraintTypingError(ValueType propertyType, EvaluatedType exprType, std::string& error) {
     const std::optional<EvaluatedType> propertyEvaluated = toEvaluatedType(propertyType);
-    const bool comparesNumbers = propertyEvaluated && comparesAsNumbers(*propertyEvaluated, exprType);
-    const bool comparesDisjointTypes = propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType);
-
-    if (comparesNumbers || comparesDisjointTypes) {
-        return true;
+    if (!propertyEvaluated) {
+        error = fmt::format("types '{}' and '{}' are incompatible",
+                            ValueTypeName::value(propertyType),
+                            EvaluatedTypeName::value(exprType));
+        return;
     }
 
-    return ExprAnalyzer::propTypeCompatible(propertyType, exprType);
+    const BinaryOperand property {*propertyEvaluated, {}};
+    const BinaryOperand value {exprType, {}};
+
+    BinaryTyping typing;
+    BinaryOperatorTyping::type(BinaryOperator::Equal, property, value, typing);
+    error = typing._error;
 }
 
 // The type each row an UNWIND emits carries: one level out of a list's shape - however
@@ -430,13 +426,13 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-            const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
-            if (incompatibleValue) {
-                throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
-                                       ValueTypeName::value(propType->_valueType),
-                                       EvaluatedTypeName::value(expr->getType())),
-                           nodePattern);
+            std::string constraintError;
+            if (propType) {
+                constraintTypingError(propType->_valueType, expr->getType(), constraintError);
+            }
+
+            if (!constraintError.empty()) {
+                throwError(fmt::format("Cannot evaluate node property: {}", constraintError), nodePattern);
             }
 
             // Create a dummy Expr that represents the predicate evaluation
@@ -535,13 +531,13 @@ void ReadStmtAnalyzer::analyzeEdgeProperties(EdgePattern* edgePattern,
 
         const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-        const bool incompatibleValue = propType
-                                       && !constraintTypeCompatible(propType->_valueType, expr->getType());
-        if (incompatibleValue) {
-            throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
-                                   ValueTypeName::value(propType->_valueType),
-                                   EvaluatedTypeName::value(expr->getType())),
-                       edgePattern);
+        std::string constraintError;
+        if (propType) {
+            constraintTypingError(propType->_valueType, expr->getType(), constraintError);
+        }
+
+        if (!constraintError.empty()) {
+            throwError(fmt::format("Cannot evaluate edge property: {}", constraintError), edgePattern);
         }
 
         // Create a dummy Expr that represents the predicate evaluation

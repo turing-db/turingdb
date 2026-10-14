@@ -70,6 +70,8 @@ target_include_directories(test_query_ir_edge_type_disjunction PRIVATE ${IR_TEST
 
 add_turing_test(test_query_ir_label_expression LabelExpressionTest.cpp)
 
+add_turing_test(test_query_ir_inline_constraint_equality_rule InlineConstraintEqualityRuleTest.cpp)
+
 add_turing_test(test_query_ir_component_name_resolution ComponentNameResolutionTest.cpp)
 target_include_directories(test_query_ir_component_name_resolution PRIVATE ${IR_TEST_DIR})
 
