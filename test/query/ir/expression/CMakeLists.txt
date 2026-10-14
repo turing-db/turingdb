@@ -210,6 +210,17 @@ target_link_libraries(test_query_ir_concat_operator PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_concat_operator PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_equality_operator EqualityOperatorTest.cpp)
+target_link_libraries(test_query_ir_equality_operator PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_equality_operator PRIVATE ${IR_TEST_DIR})
+
 add_turing_test(test_query_ir_tagged_cell_comparison TaggedCellComparisonTest.cpp)
 target_sources(test_query_ir_tagged_cell_comparison PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
 target_link_libraries(test_query_ir_tagged_cell_comparison PRIVATE

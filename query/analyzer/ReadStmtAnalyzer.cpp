@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "AnalyzeException.h"
+#include "BinaryOperatorTyping.h"
 #include "ExprAnalyzer.h"
 #include "FunctionInvocation.h"
 #include "SymbolChain.h"
@@ -54,21 +55,21 @@ using namespace db;
 
 namespace {
 
-// A tagged scalar carries its type per row rather than in the plan, so no property type
-// rules it out: the comparison the constraint becomes settles it row by row, as the same
-// test written as a WHERE does. Two types that can never hold equal values settle it too -
-// the constraint is false wherever the property is there.
-bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
-    if (exprType == EvaluatedType::ListItem || exprType == EvaluatedType::MapValue) {
-        return true;
-    }
-
+// An inline constraint is the equality it spells, so it takes what an equality takes: a
+// pair that compares by value reads the rows, a pair of types that can never be equal
+// matches no row, and a pair the equality turns away is reported with its reason
+void constraintTypingError(ValueType propertyType, EvaluatedType exprType, std::string& error) {
     const std::optional<EvaluatedType> propertyEvaluated = toEvaluatedType(propertyType);
-    if (propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType)) {
-        return true;
+    if (!propertyEvaluated) {
+        error = fmt::format("types '{}' and '{}' are incompatible",
+                            ValueTypeName::value(propertyType),
+                            EvaluatedTypeName::value(exprType));
+        return;
     }
 
-    return ExprAnalyzer::propTypeCompatible(propertyType, exprType);
+    BinaryTyping typing;
+    BinaryOperatorTyping::type(BinaryOperator::Equal, BinaryOperand {*propertyEvaluated, {}}, BinaryOperand {exprType, {}}, typing);
+    error = typing._error;
 }
 
 // The type each row an UNWIND emits carries: one level out of a list's shape - however
@@ -425,13 +426,13 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-            const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
-            if (incompatibleValue) {
-                throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
-                                       ValueTypeName::value(propType->_valueType),
-                                       EvaluatedTypeName::value(expr->getType())),
-                           nodePattern);
+            std::string constraintError;
+            if (propType) {
+                constraintTypingError(propType->_valueType, expr->getType(), constraintError);
+            }
+
+            if (!constraintError.empty()) {
+                throwError(fmt::format("Cannot evaluate node property: {}", constraintError), nodePattern);
             }
 
             // Create a dummy Expr that represents the predicate evaluation
@@ -531,13 +532,13 @@ void ReadStmtAnalyzer::analyzeEdgeProperties(EdgePattern* edgePattern,
 
         const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-        const bool incompatibleValue = propType
-                                       && !constraintTypeCompatible(propType->_valueType, expr->getType());
-        if (incompatibleValue) {
-            throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
-                                   ValueTypeName::value(propType->_valueType),
-                                   EvaluatedTypeName::value(expr->getType())),
-                       edgePattern);
+        std::string constraintError;
+        if (propType) {
+            constraintTypingError(propType->_valueType, expr->getType(), constraintError);
+        }
+
+        if (!constraintError.empty()) {
+            throwError(fmt::format("Cannot evaluate edge property: {}", constraintError), edgePattern);
         }
 
         // Create a dummy Expr that represents the predicate evaluation

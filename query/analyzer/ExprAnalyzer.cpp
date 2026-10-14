@@ -171,10 +171,6 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
     return ListShape::collecting(shared, firstShape);
 }
 
-bool isEntity(EvaluatedType type) {
-    return type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern;
-}
-
 }
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)

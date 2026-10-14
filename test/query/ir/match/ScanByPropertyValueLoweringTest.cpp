@@ -72,8 +72,9 @@ std::string scanProgram(const std::string& literal) {
 }
 
 // The literal kinds db.scan_nodes_by_property_value admits, run end to end against a
-// graph carrying one property of every scannable type. The analyzer turns a double
-// equality away before codegen, so the f64 cases are only reachable from written IR.
+// graph carrying one property of every scannable type. The analyzer turns an equality of
+// two doubles away before codegen, so the f64 cases against the double property are only
+// reachable from written IR.
 class ScanByPropertyValueLoweringTest : public TuringTest {
 protected:
     void initialize() override {

@@ -174,8 +174,8 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::Equal, StringLiteral::create(&_ast, "true"), EvaluatedType::Bool);
     EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::NotEqual, fiveLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(fourtyTwoLiteral, BinaryOperator::Equal, CharLiteral::create(&_ast, '4'), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, fiveLiteral, EvaluatedType::Bool);
     /// Invalid
-    EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, fiveLiteral);
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::NotEqual, DoubleLiteral::create(&_ast, 5.7));
 
     // LessThan - GreaterThan - LessThanOrEqual - GreaterThanOrEqual (Numeric comparisons)

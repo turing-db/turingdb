@@ -120,133 +120,24 @@ void BinaryOperatorTyping::type(BinaryOperator op, const BinaryOperand& lhs, con
 void BinaryOperatorTyping::typeEquality(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out) {
     const EvaluatedType a = lhs._type;
     const EvaluatedType b = rhs._type;
-    const TypePairBitset pair(a, b);
 
     out._type = EvaluatedType::Bool;
 
-    if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
-        const std::string error = fmt::format(
-            "Equality of types '{}' and '{}' is not encouraged due to "
-            "potential rounding innaccuracy. Please constrain with '<' "
-            "and '>' instead.",
-            EvaluatedTypeName::value(a), EvaluatedTypeName::value(b));
-        out._error = error;
-        return;
+    const bool bothDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
+    const bool sameSchemaName = isSchemaName(a) && a == b;
+    const bool bothOperands = (isEqualityOperand(a) && isEqualityOperand(b)) || sameSchemaName;
+
+    if (bothDoubles) {
+        out._error = fmt::format("Equality of types '{}' and '{}' is not encouraged due to "
+                                 "potential rounding innaccuracy. Please constrain with '<' "
+                                 "and '>' instead.",
+                                 EvaluatedTypeName::value(a),
+                                 EvaluatedTypeName::value(b));
+    } else if (!bothOperands || !cellComparesAgainst(a, b)) {
+        out._error = fmt::format("Operands are not valid or compatible types: '{}' and '{}'",
+                                 EvaluatedTypeName::value(a),
+                                 EvaluatedTypeName::value(b));
     }
-
-    if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
-        || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)
-        || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Char)
-        || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-        || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Embedding)
-        || pair == TypePairBitset(EvaluatedType::Label, EvaluatedType::Label)
-        || pair == TypePairBitset(EvaluatedType::EdgeType, EvaluatedType::EdgeType)
-        || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)
-        || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
-        || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)
-        || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
-        return;
-    }
-
-    // Comparing against a null is null, so the pairs a null takes part in are as
-    // valid as any other; the two nulls of 'null = null' included
-    if (pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Null)
-    ) {
-        return;
-    }
-
-    // A type-erased cell is equal only to a cell holding the same value, so it
-    // compares against the types it can hold - a list and a null among them, the
-    // null being what IS (NOT) NULL tests a cell for
-    const bool comparesListItem =
-        pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::NodePattern)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::EdgePattern);
-
-    // A map value is a type-erased cell too, so it compares against the types a
-    // map can hold, and against null for IS (NOT) NULL
-    const bool comparesMapValue =
-        pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::MapValue)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Integer)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Double)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Char)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Bool)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::List)
-        || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Map);
-
-    // A stored list compares against another list, and against null for
-    // IS (NOT) NULL
-    const bool comparesList =
-        pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
-        || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::Null);
-
-    const bool comparesMap =
-        pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Map)
-        || pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Null);
-
-    if (comparesListItem || comparesMapValue || comparesList || comparesMap) {
-        return;
-    }
-
-    // Values of two types that can never be equal are not equal, so the comparison
-    // answers false rather than turning the query away
-    if (comparesAsDisjointTypes(a, b)) {
-        return;
-    }
-
-    // Allows NodeID <-> NodeID and NodeID <-> Integer comparisons
-    if (pair == TypePairBitset(EvaluatedType::NodePattern,
-                               EvaluatedType::NodePattern)
-        || pair == TypePairBitset(EvaluatedType::Integer,
-                                  EvaluatedType::NodePattern)) {
-        return;
-    }
-
-    // Allows EdgeID <-> EdgeID and EdgeID <-> Integer comparisons
-    if (pair == TypePairBitset(EvaluatedType::EdgePattern,
-                               EvaluatedType::EdgePattern)
-        || pair == TypePairBitset(EvaluatedType::Integer,
-                                  EvaluatedType::EdgePattern)) {
-        return;
-    }
-
-    // n IS NULL over a node or an edge, which an OPTIONAL MATCH leaves null when
-    // its pattern missed
-    const bool comparesEntityToNull =
-        pair == TypePairBitset(EvaluatedType::NodePattern, EvaluatedType::Null)
-        || pair == TypePairBitset(EvaluatedType::EdgePattern, EvaluatedType::Null);
-
-    if (comparesEntityToNull) {
-        return;
-    }
-
-    const std::string error = fmt::format(
-        "Operands are not valid or compatible types: '{}' and '{}'",
-        EvaluatedTypeName::value(a),
-        EvaluatedTypeName::value(b));
-
-    out._error = error;
 }
 
 void BinaryOperatorTyping::typeNullTest(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out) {

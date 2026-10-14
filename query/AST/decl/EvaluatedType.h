@@ -148,35 +148,115 @@ inline bool namesAListElementType(EvaluatedType type) {
         || type == EvaluatedType::List;
 }
 
-// The types naming a value an equality can be answered over without reading a row: the
-// scalars, the list and the map, but not a tagged cell, whose type is the row's rather
-// than the column's
-inline bool namesAComparableValue(EvaluatedType e) {
-    return e == EvaluatedType::Integer
-        || e == EvaluatedType::Double
-        || e == EvaluatedType::String
-        || e == EvaluatedType::Char
-        || e == EvaluatedType::Bool
-        || e == EvaluatedType::Embedding
-        || e == EvaluatedType::List
-        || e == EvaluatedType::DateTime
-        || e == EvaluatedType::Duration
-        || e == EvaluatedType::Map;
+inline bool isNumber(EvaluatedType e) {
+    return e == EvaluatedType::Integer || e == EvaluatedType::Double;
+}
+
+inline bool isText(EvaluatedType e) {
+    return e == EvaluatedType::String || e == EvaluatedType::Char;
+}
+
+inline bool isEntity(EvaluatedType e) {
+    return e == EvaluatedType::NodePattern || e == EvaluatedType::EdgePattern;
+}
+
+// A value whose type is the row's rather than the column's: a list element or a map value
+inline bool isCell(EvaluatedType e) {
+    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+}
+
+inline bool isSchemaName(EvaluatedType e) {
+    return e == EvaluatedType::Label || e == EvaluatedType::EdgeType || e == EvaluatedType::PropertyType;
+}
+
+// The types an equality takes on either side: a value, a null, a cell or an entity. Two
+// of them always compare: by value where comparesByValue says so, and false otherwise,
+// as 5 = 'a' is. A schema name is not one: it compares against its own kind only.
+inline bool isEqualityOperand(EvaluatedType e) {
+    const bool isAValue = isNumber(e)
+                       || isText(e)
+                       || e == EvaluatedType::Bool
+                       || e == EvaluatedType::Embedding
+                       || e == EvaluatedType::List
+                       || e == EvaluatedType::Map
+                       || e == EvaluatedType::DateTime
+                       || e == EvaluatedType::Duration;
+
+    return isAValue || e == EvaluatedType::Null || isCell(e) || isEntity(e);
+}
+
+// The pairs an equality reads a row for: the same type, two numbers - 32 equals 32.0 in
+// Cypher - a string and a character, an entity and its integer id, and a cell against
+// anything, since what a cell holds is known only on the row
+inline bool comparesByValue(EvaluatedType a, EvaluatedType b) {
+    const bool sameType = a == b;
+    const bool bothNumbers = isNumber(a) && isNumber(b);
+    const bool bothText = isText(a) && isText(b);
+    const bool entityAndId = (isEntity(a) && b == EvaluatedType::Integer) || (isEntity(b) && a == EvaluatedType::Integer);
+    const bool readsACell = isCell(a) || isCell(b);
+
+    return sameType || bothNumbers || bothText || entityAndId || readsACell;
 }
 
 // Whether two types can never hold equal values, which makes an equality between them
-// false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - and
-// neither is a string against a char, which compare as the characters they carry.
+// false on every row without reading one. A null is left out: a comparison against it
+// is null rather than false.
 inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
-    if (!namesAComparableValue(a) || !namesAComparableValue(b) || a == b) {
-        return false;
+    const bool bothOperands = isEqualityOperand(a) && isEqualityOperand(b);
+    const bool eitherNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
+
+    return bothOperands && !eitherNull && !comparesByValue(a, b);
+}
+
+// The kinds a list element holds, by its tag
+inline bool isListElementType(EvaluatedType e) {
+    return e == EvaluatedType::Integer
+        || e == EvaluatedType::Double
+        || e == EvaluatedType::Bool
+        || e == EvaluatedType::String
+        || e == EvaluatedType::Char
+        || e == EvaluatedType::Embedding
+        || e == EvaluatedType::List
+        || e == EvaluatedType::Map
+        || e == EvaluatedType::DateTime
+        || e == EvaluatedType::Duration
+        || e == EvaluatedType::NodePattern
+        || e == EvaluatedType::EdgePattern
+        || e == EvaluatedType::Null;
+}
+
+// The kinds a map value holds, by its tag
+inline bool isMapEntryType(EvaluatedType e) {
+    return e == EvaluatedType::Integer
+        || e == EvaluatedType::Double
+        || e == EvaluatedType::Bool
+        || e == EvaluatedType::String
+        || e == EvaluatedType::Char
+        || e == EvaluatedType::Embedding
+        || e == EvaluatedType::List
+        || e == EvaluatedType::Map
+        || e == EvaluatedType::DateTime
+        || e == EvaluatedType::Duration
+        || e == EvaluatedType::NodePattern
+        || e == EvaluatedType::EdgePattern
+        || e == EvaluatedType::Null;
+}
+
+// Whether a cell on either side can hold the other side, which is what the equality
+// kernels read a cell against. A cell is never folded, since its type is on the row.
+inline bool cellComparesAgainst(EvaluatedType a, EvaluatedType b) {
+    if (!isCell(a) && !isCell(b)) {
+        return true;
     }
 
-    const TypePairBitset pair(a, b);
-    const bool bothNumeric = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double);
-    const bool bothTextual = pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char);
+    const EvaluatedType cell = isCell(a) ? a : b;
+    const EvaluatedType other = isCell(a) ? b : a;
 
-    return !bothNumeric && !bothTextual;
+    if (isCell(other)) {
+        return true;
+    }
+
+    return cell == EvaluatedType::ListItem ? isListElementType(other) : isMapEntryType(other);
 }
 
 }
