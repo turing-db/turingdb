@@ -200,6 +200,7 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<MapView>::Pairs,
         ListElementKindPairs<NodeID>::Pairs,
         ListElementKindPairs<EdgeID>::Pairs,
+        ListElementKindPairs<types::Embedding::Primitive>::Pairs,
 
         // Equality against a map value, which holds its own type as a list element does
         MapEntryKindPairs<types::Int64::Primitive>::Pairs,
@@ -209,7 +210,19 @@ struct PairRestrictions<Op> {
         MapEntryKindPairs<types::Bool::Primitive>::Pairs,
         MapEntryKindPairs<ListView>::Pairs,
         MapEntryKindPairs<MapView>::Pairs,
+        MapEntryKindPairs<types::DateTime::Primitive>::Pairs,
+        MapEntryKindPairs<types::Duration::Primitive>::Pairs,
+        MapEntryKindPairs<types::Embedding::Primitive>::Pairs,
+        MapEntryKindPairs<NodeID>::Pairs,
+        MapEntryKindPairs<EdgeID>::Pairs,
         std::tuple<KindPair<MapEntryView, MapEntryView>>,
+
+        // A map value against a list element, each read through its own tag
+        std::tuple<
+            KindPair<MapEntryView, ListElementView>,
+            KindPair<MapEntryView, std::optional<ListElementView>>,
+            KindPair<ListElementView, MapEntryView>,
+            KindPair<std::optional<ListElementView>, MapEntryView>>,
 
         // A loaded CSV field owns its characters, so a comparison against a string
         // property meets a borrowed view on one side and an owned string on the other -

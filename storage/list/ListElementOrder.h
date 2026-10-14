@@ -100,6 +100,11 @@ bool operator==(MapEntryView entry, types::String::Primitive value);
 bool operator==(MapEntryView entry, types::Bool::Primitive value);
 bool operator==(MapEntryView entry, ListView value);
 bool operator==(MapEntryView entry, MapView value);
+bool operator==(MapEntryView entry, types::DateTime::Primitive value);
+bool operator==(MapEntryView entry, types::Duration::Primitive value);
+bool operator==(MapEntryView entry, types::Embedding::Primitive value);
+bool operator==(MapEntryView entry, NodeID value);
+bool operator==(MapEntryView entry, EdgeID value);
 
 /**
  * @brief Orders an element of a @ref ListByteBuffer against a value of a known type.

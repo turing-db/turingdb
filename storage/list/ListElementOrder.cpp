@@ -593,6 +593,31 @@ bool db::operator==(const MapEntryView entry, const MapView value) {
         && entry.getValueAs<MapView>() == value;
 }
 
+bool db::operator==(const MapEntryView entry, const types::DateTime::Primitive value) {
+    return entry.getValueTag() == MapBufferTypeTag::DateTime
+        && entry.getValueAs<types::DateTime::Primitive>() == value;
+}
+
+bool db::operator==(const MapEntryView entry, const types::Duration::Primitive value) {
+    return entry.getValueTag() == MapBufferTypeTag::Duration
+        && entry.getValueAs<types::Duration::Primitive>() == value;
+}
+
+bool db::operator==(const MapEntryView entry, const types::Embedding::Primitive value) {
+    return entry.getValueTag() == MapBufferTypeTag::Embedding
+        && EmbeddingEqual {}(entry.getValueAs<types::Embedding::Primitive>(), value);
+}
+
+bool db::operator==(const MapEntryView entry, const NodeID value) {
+    return entry.getValueTag() == MapBufferTypeTag::NodeID
+        && entry.getValueAs<NodeID>() == value;
+}
+
+bool db::operator==(const MapEntryView entry, const EdgeID value) {
+    return entry.getValueTag() == MapBufferTypeTag::EdgeID
+        && entry.getValueAs<EdgeID>() == value;
+}
+
 std::strong_ordering db::operator<=>(const ListElementView element, const types::Int64::Primitive value) {
     return compareElementWithNumber(element, value);
 }
