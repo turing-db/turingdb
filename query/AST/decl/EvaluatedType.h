@@ -140,6 +140,20 @@ inline bool convertibleToValueType(EvaluatedType e) {
     return toValueType(e).has_value();
 }
 
+// The types a list is homogeneous in: the scalars a value column holds, the entities a
+// pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
+// nesting is made of.
+inline bool namesAListElementType(EvaluatedType type) {
+    return convertibleToValueType(type)
+        || type == EvaluatedType::NodePattern
+        || type == EvaluatedType::EdgePattern
+        || type == EvaluatedType::List;
+}
+
+inline bool isNumber(EvaluatedType e) {
+    return e == EvaluatedType::Integer || e == EvaluatedType::Double;
+}
+
 // The types naming a value an equality can be answered over without reading a row: the
 // scalars, the list and the map, but not a tagged cell, whose type is the row's rather
 // than the column's
