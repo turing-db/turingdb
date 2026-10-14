@@ -164,8 +164,19 @@ TEST_F(ScanByPropertyValueLoweringTest, scansADoublePropertyAgainstAnF64Literal)
     expectRows("\"ratio\", 0.000000e+00 : f64", {0});
 }
 
-TEST_F(ScanByPropertyValueLoweringTest, aDoublePropertyDoesNotMatchAnIntegerLiteral) {
-    expectRows("\"ratio\", 1 : i64", {});
+// A number matches the other number kind by value: an integer literal reads a double
+// property as the double it is, and a whole double literal reads an integer property as
+// the integer it is, while a fractional one is no stored integer
+TEST_F(ScanByPropertyValueLoweringTest, aDoublePropertyMatchesAnIntegerLiteralByValue) {
+    expectRows("\"ratio\", 1 : i64", {2});
+    expectRows("\"ratio\", 3 : i64", {});
+}
+
+TEST_F(ScanByPropertyValueLoweringTest, anIntegerPropertyMatchesAWholeDoubleLiteral) {
+    expectRows("\"value\", 2.000000e+00 : f64", {2});
+    expectRows("\"value\", 2.500000e+00 : f64", {});
+    expectRows("\"count\", 4.000000e+00 : f64", {4});
+    expectRows("\"count\", -1.000000e+00 : f64", {});
 }
 
 TEST_F(ScanByPropertyValueLoweringTest, scansAnUnsignedPropertyAgainstANonNegativeLiteral) {

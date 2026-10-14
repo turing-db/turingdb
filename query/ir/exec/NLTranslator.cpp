@@ -1,5 +1,6 @@
 #include "NLTranslator.h"
 
+#include <math.h>
 #include <algorithm>
 #include <optional>
 #include <span>
@@ -345,10 +346,25 @@ typename T::Primitive constantValueAs(mlir::Attribute value) {
     }
 }
 
+// A double literal against an integer property matches the integer it is equal to: 32.0
+// is 32, and 32.5 is no stored integer
+bool wholeNumberOf(double literal, int64_t& whole) {
+    const bool isWhole = std::isfinite(literal) && std::trunc(literal) == literal;
+    const bool inRange = literal >= -9223372036854775808.0 && literal < 9223372036854775808.0;
+
+    if (!isWhole || !inRange) {
+        return false;
+    }
+
+    whole = static_cast<int64_t>(literal);
+    return true;
+}
+
 // Resolves a property-value scan's literal to the property's stored type: each type
 // matches its own literal kind, UInt64 taking the non-negative integers since there is no
-// unsigned literal. Any other pairing - a negative integer against UInt64, or a mix the
-// op admits but no stored value can equal - leaves the scan unmatchable.
+// unsigned literal, and a number matches the other number kind by value. Any other
+// pairing - a negative integer against UInt64, or a mix the op admits but no stored
+// value can equal - leaves the scan unmatchable.
 bool resolvePropertyScanLiteral(ValueType valueType,
                                 mlir::TypedAttr literal,
                                 NLScanByPropertyValueLoopData::Literal& value) {
@@ -358,14 +374,26 @@ bool resolvePropertyScanLiteral(ValueType valueType,
     const bool isBoolLiteral = integer && integer.getType().isSignlessInteger(1);
     const bool isIntegerLiteral = integer && !isBoolLiteral;
 
+    int64_t wholeLiteral = 0;
+    const bool isWholeDouble = floating && wholeNumberOf(floating.getValueAsDouble(), wholeLiteral);
+
     if (valueType == ValueType::Int64 && isIntegerLiteral) {
         value = integer.getInt();
+        return true;
+    } else if (valueType == ValueType::Int64 && isWholeDouble) {
+        value = wholeLiteral;
         return true;
     } else if (valueType == ValueType::UInt64 && isIntegerLiteral && integer.getInt() >= 0) {
         value = static_cast<uint64_t>(integer.getInt());
         return true;
+    } else if (valueType == ValueType::UInt64 && isWholeDouble && wholeLiteral >= 0) {
+        value = static_cast<uint64_t>(wholeLiteral);
+        return true;
     } else if (valueType == ValueType::Double && floating) {
         value = floating.getValueAsDouble();
+        return true;
+    } else if (valueType == ValueType::Double && isIntegerLiteral) {
+        value = static_cast<double>(integer.getInt());
         return true;
     } else if (valueType == ValueType::Bool && isBoolLiteral) {
         value = CustomBool(integer.getInt() != 0);
