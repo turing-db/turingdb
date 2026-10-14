@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <optional>
 
+#include "BinaryOperatorTyping.h"
+
 #include "CypherAnalyzer.h"
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
@@ -41,44 +43,6 @@
 using namespace db;
 
 namespace {
-
-// What <, <=, > and >= answer over two types: null against a null or across order classes,
-// a boolean within one, and Invalid for a type no ordering takes
-EvaluatedType orderingResultType(EvaluatedType a, EvaluatedType b) {
-    if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-        return EvaluatedType::Null;
-    } else if (!namesAnOrderingOperand(a) || !namesAnOrderingOperand(b)) {
-        return EvaluatedType::Invalid;
-    } else if (ordersAsDisjointTypes(a, b)) {
-        return EvaluatedType::Null;
-    }
-
-    return EvaluatedType::Bool;
-}
-
-// What = and <> answer over two types: null against a null, a boolean between two operands
-// an equality takes, and Invalid for any other pair. Two doubles are not tested for
-// equality, which rounding makes unreliable, and a label, an edge type or a property type
-// is the id of one, equal only to an id of its kind.
-EvaluatedType equalityResultType(EvaluatedType a, EvaluatedType b) {
-    const bool equatesTwoDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
-    const bool equatesMetadataIDs = a == b
-                                 && (a == EvaluatedType::Label
-                                     || a == EvaluatedType::EdgeType
-                                     || a == EvaluatedType::PropertyType);
-    const bool takesA = a == EvaluatedType::Null || namesAnEqualityOperand(a);
-    const bool takesB = b == EvaluatedType::Null || namesAnEqualityOperand(b);
-
-    if (equatesMetadataIDs) {
-        return EvaluatedType::Bool;
-    } else if (!takesA || !takesB || equatesTwoDoubles) {
-        return EvaluatedType::Invalid;
-    } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-        return EvaluatedType::Null;
-    }
-
-    return EvaluatedType::Bool;
-}
 
 std::string_view componentOwnerName(bool namesADateTimePart, bool namesADurationPart) {
     if (namesADateTimePart) {
@@ -161,38 +125,6 @@ ListShape selectedListShape(const Expr* value) {
     const bool namesNoShape = value->getType() == EvaluatedType::List && !shape.isList();
 
     return namesNoShape ? ListShape(EvaluatedType::Invalid, 1) : shape;
-}
-
-// A number or a boolean joins a string as the text Cypher writes it with: 1 + ' apples' is
-// '1 apples' and true + 'x' is 'truex'.
-bool concatenatesAsText(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::String);
-}
-
-// Whether an arithmetic operator's operands are a type-erased cell and a number, or two
-// cells. A cell is numeric only once read, and its tag names a type per row rather than
-// one for the column, so the answer is the double a reduction over cells lands on too.
-bool computesOverAny(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any)
-        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Integer)
-        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Double);
-}
-
-bool computesTimeOverAny(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::DateTime)
-        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
-}
-
-// The types a list is homogeneous in: the scalars a value column holds, the entities a
-// pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
-// nesting is made of.
-bool namesAListElementType(EvaluatedType type) {
-    return convertibleToValueType(type)
-        || type == EvaluatedType::NodePattern
-        || type == EvaluatedType::EdgePattern
-        || type == EvaluatedType::List;
 }
 
 // The shape of the list these elements make: depth 1 over the one type they share, or
@@ -279,42 +211,6 @@ ListShape collectedListShape(const UnionQuery::Branches& branches) {
     }
 
     return *shared;
-}
-
-// The types a scalar operand of '+' joins a list as: whatever an element of a list can be,
-// a tagged cell and a null included - appending a null leaves a list with a null in it.
-bool joinsAList(EvaluatedType type) {
-    return namesAListElementType(type)
-        || type == EvaluatedType::Char
-        || type == EvaluatedType::Null
-        || type == EvaluatedType::Any;
-}
-
-// The shape of the list appending a scalar makes: the list's own where the scalar is the
-// type its elements carry, and a list of tagged scalars where it is not, as a mixed list
-// literal is. A null carries no type, so it leaves the shape as it found it.
-ListShape appendedListShape(const ListShape& list, EvaluatedType scalar) {
-    const bool joinsTheLeaf = list.getDepth() == 1
-                              && (scalar == EvaluatedType::Null || list.getLeafType() == scalar);
-
-    if (!joinsTheLeaf) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    return list;
-}
-
-// The shape of the list a concatenation makes: the one both sides carry, or a list of
-// tagged scalars when they carry different ones, as a mixed list literal is.
-ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
-    const bool sameDepth = left.getDepth() == right.getDepth();
-    const bool sameLeafType = left.getLeafType() == right.getLeafType();
-
-    if (!sameDepth || !sameLeafType) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    return left;
 }
 
 bool isEntity(EvaluatedType type) {
@@ -486,297 +382,18 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     analyzeExpr(lhs);
     analyzeExpr(rhs);
 
-    const EvaluatedType a = lhs->getType();
-    const EvaluatedType b = rhs->getType();
+    const BinaryOperand left {lhs->getType(), lhs->getListShape()};
+    const BinaryOperand right {rhs->getType(), rhs->getListShape()};
 
-    EvaluatedType type = EvaluatedType::Invalid;
+    BinaryTyping typing;
+    BinaryOperatorTyping::type(expr->getOperator(), left, right, typing);
 
-    const TypePairBitset pair(a, b);
-
-    switch (expr->getOperator()) {
-        case BinaryOperator::NotEqual:
-        case BinaryOperator::Equal: {
-            type = analyzeEquality(a, b, expr);
-        } break;
-
-        case BinaryOperator::IsNull:
-        case BinaryOperator::IsNotNull: {
-            type = EvaluatedType::Bool;
-
-            if (b == EvaluatedType::Null) {
-                break;
-            }
-
-            throwError(fmt::format("IS tests whether its operand is null, so its right side "
-                                   "must be NULL, not '{}'",
-                                   EvaluatedTypeName::value(b)),
-                       expr);
-        } break;
-
-        case BinaryOperator::LessThan:
-        case BinaryOperator::GreaterThan:
-        case BinaryOperator::LessThanOrEqual:
-        case BinaryOperator::GreaterThanOrEqual: {
-            type = orderingResultType(a, b);
-            if (type != EvaluatedType::Invalid) {
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands are not valid or compatible types for an ordering: '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
-        } break;
-
-        case BinaryOperator::Add: {
-            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
-                type = EvaluatedType::Integer;
-                break;
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
-                type = EvaluatedType::Double;
-                break;
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
-                type = EvaluatedType::String;
-                break;
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
-                type = EvaluatedType::List;
-                expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
-                break;
-            }
-
-            // A scalar joins a list as the one-element list it stands for, from either
-            // side: [1, 2] + 3 and 1 + [2, 3] are both [1, 2, 3]
-            const bool leftIsAList = a == EvaluatedType::List;
-            const bool oneSideIsAList = leftIsAList || b == EvaluatedType::List;
-            const EvaluatedType scalar = leftIsAList ? b : a;
-
-            if (oneSideIsAList && joinsAList(scalar)) {
-                const ListShape& listShape = leftIsAList ? lhs->getListShape() : rhs->getListShape();
-
-                type = EvaluatedType::List;
-                expr->setListShape(appendedListShape(listShape, scalar));
-                break;
-            }
-
-            if (concatenatesAsText(pair)) {
-                type = EvaluatedType::String;
-                break;
-            }
-
-            // A cell meets a string or a boolean row by row: holding text or a number it
-            // joins it as text, holding a list it takes it as an element
-            const bool addsATextToAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String)
-                                     || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Char);
-            const bool addsABooleanToAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Bool);
-            if (addsATextToAny || addsABooleanToAny) {
-                type = EvaluatedType::Any;
-                break;
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Duration)) {
-                type = EvaluatedType::DateTime;
-                break;
-            } else if (pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
-                type = EvaluatedType::Duration;
-                break;
-            } else if (computesTimeOverAny(pair)) {
-                type = EvaluatedType::Any;
-                break;
-            }
-
-            // Arithmetic over an unknown value is unknown, whatever the other side holds.
-            // A list appends the null instead, typed or held by a cell: [1, 2] + null
-            if (pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Null)) {
-                type = EvaluatedType::Any;
-                break;
-            } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-                type = EvaluatedType::Null;
-                break;
-            }
-
-            if (computesOverAny(pair)) {
-                type = EvaluatedType::Any;
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands are not valid and compatible types for '+': '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
-        } break;
-
-        case BinaryOperator::Concat: {
-            if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
-                type = EvaluatedType::String;
-                break;
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
-                type = EvaluatedType::List;
-                expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
-                break;
-            }
-
-            // A type-erased cell joins a string where its row holds a string, a list where
-            // it holds a list, and is a type error where it holds anything else
-            if (pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String)) {
-                type = EvaluatedType::String;
-                break;
-            } else if (pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::List)) {
-                type = EvaluatedType::List;
-                expr->setListShape(ListShape(EvaluatedType::Invalid, 1));
-                break;
-            } else if (pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any)) {
-                type = EvaluatedType::Any;
-                break;
-            }
-
-            // '||' joins two strings or two lists, so an unknown value is no side of one
-            // rather than an element to append: [1, 2] || null is null where [1, 2] + null
-            // is [1, 2, null]
-            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-                type = EvaluatedType::Null;
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands are not valid and compatible types for '||': '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
-        } break;
-
-        case BinaryOperator::Sub:
-        case BinaryOperator::Mult:
-        case BinaryOperator::Div:
-        case BinaryOperator::Mod: {
-            const BinaryOperator binaryOperator = expr->getOperator();
-            const bool isSubtraction = binaryOperator == BinaryOperator::Sub;
-            const bool isMultiplication = binaryOperator == BinaryOperator::Mult;
-            const bool isDivision = binaryOperator == BinaryOperator::Div;
-
-            if (isSubtraction) {
-                const bool subtractsInstants = a == EvaluatedType::DateTime && b == EvaluatedType::DateTime;
-                const bool subtractsADuration = a == EvaluatedType::DateTime && b == EvaluatedType::Duration;
-                const bool subtractsDurations = a == EvaluatedType::Duration && b == EvaluatedType::Duration;
-
-                if (subtractsInstants || subtractsDurations) {
-                    type = EvaluatedType::Duration;
-                    break;
-                } else if (subtractsADuration) {
-                    type = EvaluatedType::DateTime;
-                    break;
-                } else if (computesTimeOverAny(pair)) {
-                    type = EvaluatedType::Any;
-                    break;
-                }
-            } else if (isMultiplication || isDivision) {
-                const bool scalesByANumber = pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Integer)
-                                          || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Double);
-                const bool scalesAnAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
-                const bool scalesTheDuration = isMultiplication || a == EvaluatedType::Duration;
-
-                if (scalesByANumber && scalesTheDuration) {
-                    type = EvaluatedType::Duration;
-                    break;
-                } else if (scalesAnAny) {
-                    type = EvaluatedType::Any;
-                    break;
-                }
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
-                type = EvaluatedType::Integer;
-                break;
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
-                type = EvaluatedType::Double;
-                break;
-            }
-
-            if (computesOverAny(pair)) {
-                type = EvaluatedType::Any;
-                break;
-            }
-
-            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-                type = EvaluatedType::Null;
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands are not valid and compatible numeric types: '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
-        } break;
-
-        case BinaryOperator::Pow: {
-            const bool bothInteger = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer);
-            const bool bothDouble = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double);
-            const bool mixedNumeric = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer);
-
-            // As per OpenCypher spec
-            if (bothInteger || bothDouble || mixedNumeric) {
-                type = EvaluatedType::Double;
-                break;
-            }
-
-            if (computesOverAny(pair)) {
-                type = EvaluatedType::Double;
-                break;
-            }
-
-            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
-                type = EvaluatedType::Null;
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands are not valid and compatible numeric types: '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
-        } break;
-
-        case BinaryOperator::In: {
-            // A type-erased cell holds whatever its row put there, so the test reads the
-            // list out of its tag and answers null for a row holding something else
-            const bool searchesACell = b == EvaluatedType::Any;
-            const bool searchesNull = b == EvaluatedType::Null;
-
-            type = searchesNull ? EvaluatedType::Null : EvaluatedType::Bool;
-
-            if (b != EvaluatedType::List && b != EvaluatedType::Map && !searchesACell && !searchesNull) {
-                const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
-                                                      EvaluatedTypeName::value(b));
-                throwError(error, expr);
-            }
-        } break;
-
-        case BinaryOperator::_SIZE: {
-            throwError("Invalid operand in binary expression.");
-        }
-        break;
+    if (!typing.isValid()) {
+        throwError(typing._error, expr);
     }
 
-    expr->setType(type);
+    expr->setType(typing._type);
+    expr->setListShape(typing._shape);
 
     // Dynamic/Aggregate contamination
     if (lhs->isDynamic() || rhs->isDynamic()) {
@@ -2099,16 +1716,23 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    || op == BinaryOperator::LessThanOrEqual
                                    || op == BinaryOperator::GreaterThanOrEqual);
 
-    if (testsOrdering) {
-        if (orderingResultType(subjectType, valueType) == EvaluatedType::Invalid) {
-            throwError(fmt::format("A CASE cannot order '{}' against '{}'",
-                                   EvaluatedTypeName::value(subjectType),
-                                   EvaluatedTypeName::value(valueType)),
-                       test._value);
-        }
-    } else {
-        analyzeEquality(subjectType, valueType, test._value);
+    const BinaryOperator typedOperator = testsOrdering ? op : BinaryOperator::Equal;
+    const BinaryOperand subjectOperand {subjectType, subject->getListShape()};
+    const BinaryOperand valueOperand {valueType, test._value->getListShape()};
+
+    BinaryTyping typing;
+    BinaryOperatorTyping::type(typedOperator, subjectOperand, valueOperand, typing);
+
+    if (typing.isValid()) {
+        return;
+    } else if (testsOrdering) {
+        throwError(fmt::format("A CASE cannot order '{}' against '{}'",
+                               EvaluatedTypeName::value(subjectType),
+                               EvaluatedTypeName::value(valueType)),
+                   test._value);
     }
+
+    throwError(typing._error, test._value);
 }
 
 EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
@@ -2139,28 +1763,6 @@ void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
     throwError(fmt::format("The subject of a CASE must be a scalar, a node or an edge, not '{}'",
                            EvaluatedTypeName::value(type)),
                subject);
-}
-
-EvaluatedType ExprAnalyzer::analyzeEquality(EvaluatedType a, EvaluatedType b, const Expr* expr) const {
-    const EvaluatedType type = equalityResultType(a, b);
-
-    const bool equatesTwoDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
-
-    if (type != EvaluatedType::Invalid) {
-        return type;
-    } else if (equatesTwoDoubles) {
-        throwError(fmt::format("Equality of types '{}' and '{}' is not encouraged due to "
-                               "potential rounding innaccuracy. Please constrain with '<' "
-                               "and '>' instead.",
-                               EvaluatedTypeName::value(a),
-                               EvaluatedTypeName::value(b)),
-                   expr);
-    }
-
-    throwError(fmt::format("Operands are not valid or compatible types: '{}' and '{}'",
-                           EvaluatedTypeName::value(a),
-                           EvaluatedTypeName::value(b)),
-               expr);
 }
 
 void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {

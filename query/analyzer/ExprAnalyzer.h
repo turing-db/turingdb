@@ -165,10 +165,6 @@ private:
     // own: the MLIR engine binds one, and an OPTIONAL MATCH can leave it null
     void requireCaseSubject(const Expr* subject) const;
 
-    // The type = and <> give over @param a and @param b, for a binary equality and for a
-    // CASE testing its subject alike. Reports a pair no equality takes at @param expr.
-    EvaluatedType analyzeEquality(EvaluatedType a, EvaluatedType b, const Expr* expr) const;
-
     // One WHEN value of @param branch, read as a predicate when the CASE has no subject
     // and as something to compare that subject against when it has one
     void analyzeCaseTest(const CaseExpr::Branch& branch, const Expr* subject, const CaseExpr::Test& test);
