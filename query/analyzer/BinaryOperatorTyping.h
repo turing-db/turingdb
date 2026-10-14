@@ -29,16 +29,6 @@ struct BinaryTyping {
 class BinaryOperatorTyping {
 public:
     static void type(BinaryOperator op, const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-
-private:
-    static void typeEquality(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typeNullTest(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typeOrdering(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typeAddition(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typeConcatenation(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typeArithmetic(BinaryOperator op, const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typePower(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
-    static void typeMembership(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
 };
 
 }
