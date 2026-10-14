@@ -7,6 +7,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ParameterProbe.h"
+
 using namespace db;
 
 namespace {
@@ -361,6 +363,25 @@ RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
     return invalid(TypingReason::InvalidOperator);
 }
 
+void probeType(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
+    const auto rule = [op](EvaluatedType left, EvaluatedType right) {
+        return ruleType(op, left, right)._type;
+    };
+
+    ParameterProbe probe;
+    ParameterProbe::probe(lhs, rhs, rule, probe);
+
+    out._leftAccepted = probe._leftAccepted;
+    out._rightAccepted = probe._rightAccepted;
+
+    // A boolean is three-valued, so null is one of its values rather than a type of its own
+    if (probe._results == EvaluatedTypeSet {EvaluatedType::Bool, EvaluatedType::Null}) {
+        probe._results = EvaluatedTypeSet {EvaluatedType::Bool};
+    }
+
+    probe.writeResult(lhs, rhs, out._result);
+}
+
 void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyping& out) {
     const std::string_view left = EvaluatedTypeName::value(a);
     const std::string_view right = EvaluatedTypeName::value(b);
@@ -404,38 +425,41 @@ void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyp
     }
 }
 
-void writeListShape(const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out) {
+// A parameter's list has no shape until it is bound, so a list it takes part in mixes
+// whatever the bind brings
+void writeListShape(const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
     const EvaluatedType a = lhs._type;
     const EvaluatedType b = rhs._type;
 
+    const bool readsAParameter = a == EvaluatedType::Parameter || b == EvaluatedType::Parameter;
     const bool leftIsAList = a == EvaluatedType::List;
     const bool bothLists = leftIsAList && b == EvaluatedType::List;
 
-    if (bothLists) {
-        out._shape = concatenatedListShape(lhs._shape, rhs._shape);
+    if (readsAParameter) {
+        out._result._shape = ListShape(EvaluatedType::Invalid, 1);
+    } else if (bothLists) {
+        out._result._shape = concatenatedListShape(lhs._shape, rhs._shape);
     } else {
         const ListShape& listShape = leftIsAList ? lhs._shape : rhs._shape;
         const EvaluatedType scalar = leftIsAList ? b : a;
 
-        out._shape = appendedListShape(listShape, scalar);
+        out._result._shape = appendedListShape(listShape, scalar);
     }
 }
 
 }
 
-void BinaryOperatorTyping::type(BinaryOperator op, const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out) {
+void BinaryOperatorTyping::type(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out) {
     const EvaluatedType a = lhs._type;
     const EvaluatedType b = rhs._type;
-    const RuleResult rule = ruleType(op, a, b);
+    probeType(op, lhs, rhs, out);
 
-    if (rule._type == EvaluatedType::Invalid) {
-        writeError(rule._reason, a, b, out);
+    if (out._result._type == EvaluatedType::Invalid) {
+        writeError(ruleType(op, a, b)._reason, a, b, out);
         return;
     }
 
-    out._type = rule._type;
-
-    if (rule._type == EvaluatedType::List) {
+    if (out._result._type == EvaluatedType::List) {
         writeListShape(lhs, rhs, out);
     }
 }

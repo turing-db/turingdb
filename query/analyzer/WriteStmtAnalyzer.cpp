@@ -265,6 +265,10 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
             const EvaluatedType exprType = expr->getType();
             if (exprType == EvaluatedType::Null) {
                 continue;
+            } else if (exprType == EvaluatedType::Parameter) {
+                const ValueType valueType = _exprAnalyzer->narrowParameterWrite(propName->getName(), expr);
+                data->addExprConstraint(propName->getName(), valueType, expr);
+                continue;
             }
 
             const EvaluatedType writtenType = expr->getCommonType();
@@ -347,6 +351,10 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             const EvaluatedType exprType = expr->getType();
             if (exprType == EvaluatedType::Null) {
                 continue;
+            } else if (exprType == EvaluatedType::Parameter) {
+                const ValueType valueType = _exprAnalyzer->narrowParameterWrite(propName->getName(), expr);
+                data->addExprConstraint(propName->getName(), valueType, expr);
+                continue;
             }
 
             const EvaluatedType writtenType = expr->getCommonType();
@@ -389,9 +397,10 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             _exprAnalyzer->analyzeExpr(rhs);
             const EvaluatedType rhsType = rhs->getType();
 
-            // writing null cannot create a new property
+            // writing null cannot create a new property, and a bind types the one it creates
             const bool writesNull = rhsType == EvaluatedType::Null;
-            const bool allowCreates = !writesNull;
+            const bool writesABind = rhsType == EvaluatedType::Parameter;
+            const bool allowCreates = !writesNull && !writesABind;
 
             const ValueType valType = evaluatedToValueType(rhs->getCommonType());
             const ValueType lhsEvaluatedVt =
@@ -403,6 +412,11 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
 
             if (rhs->isAggregate()) {
                 throwError("Invalid use of aggregate expression in this context", item);
+            }
+
+            if (writesABind) {
+                _exprAnalyzer->narrowParameterWrite(lhs->getPropName(), rhs);
+                return;
             }
 
             // A value whose type is only known per row is checked against the property's
@@ -488,6 +502,7 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
         case EvaluatedType::Any:
+        case EvaluatedType::Parameter:
             return ValueType::Invalid;
         break;
     }
