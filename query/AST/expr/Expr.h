@@ -2,8 +2,7 @@
 
 #include <stdint.h>
 
-#include "decl/EvaluatedType.h"
-#include "decl/ListShape.h"
+#include "decl/ExprType.h"
 
 #include "EnumToString.h"
 
@@ -52,15 +51,19 @@ public:
 
     Kind getKind() const { return _exprKind; }
 
-    virtual EvaluatedType getType() const { return _type; }
+    virtual EvaluatedType getType() const { return _exprType._type; }
+
+    EvaluatedTypeSet getCandidateTypes() const { return _exprType._candidates; }
 
     // How deeply a List-typed expression nests and what its innermost elements are.
     // What an UNWIND of this expression binds its variable to.
-    const ListShape& getListShape() const { return _listShape; }
+    const ListShape& getListShape() const { return _exprType._shape; }
+
+    const ExprType& getExprType() const { return _exprType; }
 
     // The type every value converts to without loss, which a property written from them
     // takes: the type itself, or for Any the one a selection's branches share, Any if none
-    EvaluatedType getCommonType() const { return getType() == EvaluatedType::Any ? _commonType : getType(); }
+    EvaluatedType getCommonType() const { return getType() == EvaluatedType::Any ? _exprType._commonType : getType(); }
 
     const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
 
@@ -68,11 +71,15 @@ public:
         return _name;
     }
 
-    void setType(EvaluatedType type) { _type = type; }
+    void setType(EvaluatedType type) { _exprType._type = type; }
 
-    void setListShape(const ListShape& shape) { _listShape = shape; }
+    void setCandidateTypes(EvaluatedTypeSet types) { _exprType._candidates = types; }
 
-    void setCommonType(EvaluatedType type) { _commonType = type; }
+    void setListShape(const ListShape& shape) { _exprType._shape = shape; }
+
+    void setExprType(const ExprType& type) { _exprType = type; }
+
+    void setCommonType(EvaluatedType type) { _exprType._commonType = type; }
 
     void setExprVarDecl(const VarDecl* decl) { _exprVarDecl = decl; }
 
@@ -120,9 +127,7 @@ protected:
 private:
     const VarDecl* _exprVarDecl {nullptr};
     Kind _exprKind {Kind::BINARY};
-    EvaluatedType _type {EvaluatedType::Invalid};
-    EvaluatedType _commonType {EvaluatedType::Any};
-    ListShape _listShape;
+    ExprType _exprType;
     Flags _flags {Flags::NONE};
     std::string_view _name;
 };

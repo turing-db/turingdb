@@ -443,8 +443,7 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
         if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
             const VarDecl* decl = *declPtr;
             VarDecl* published = scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
-            published->setListShape(decl->getListShape());
-            published->setCommonType(decl->getCommonType());
+            published->setExprType(decl->getExprType());
             published->setIsQuantifiedPath(decl->isQuantifiedPath());
             projection->addPublishedDecl(published);
 
@@ -464,8 +463,7 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
         const VarDecl* itemDecl = item->getExprVarDecl();
 
         VarDecl* published = scope->getOrCreateNamedVariable(_ast, item->getType(), *name);
-        published->setListShape(item->getListShape());
-        published->setCommonType(item->getCommonType());
+        published->setExprType(item->getExprType());
         published->setIsQuantifiedPath(itemDecl && itemDecl->isQuantifiedPath());
         projection->addPublishedDecl(published);
 
@@ -517,8 +515,7 @@ void CypherAnalyzer::analyze(NextSegmentStmt* segment) {
             }
 
             VarDecl* carried = scope->getOrCreateNamedVariable(_ast, decl->getType(), import);
-            carried->setListShape(decl->getListShape());
-            carried->setCommonType(decl->getCommonType());
+            carried->setExprType(decl->getExprType());
             carried->setIsQuantifiedPath(decl->isQuantifiedPath());
             _declSources[carried] = decl;
 
@@ -704,8 +701,7 @@ void CypherAnalyzer::importIntoQuery(RegularQuery* query,
         }
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
-        imported->setListShape(decl->getListShape());
-        imported->setCommonType(decl->getCommonType());
+        imported->setExprType(decl->getExprType());
         imported->setIsQuantifiedPath(decl->isQuantifiedPath());
         _declSources[imported] = decl;
         _exprAnalyzer->importCSVSource(imported, decl);
@@ -871,8 +867,7 @@ void CypherAnalyzer::importCorrelatedVariables(DeclContext* inner, std::vector<s
 
     const auto importDecl = [this, inner, &correlated](std::string_view name, const VarDecl* decl) {
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
-        imported->setListShape(decl->getListShape());
-        imported->setCommonType(decl->getCommonType());
+        imported->setExprType(decl->getExprType());
         imported->setIsQuantifiedPath(decl->isQuantifiedPath());
         imported->setImportSource(decl);
         _declSources[imported] = decl;
@@ -1144,39 +1139,38 @@ void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, cons
     for (const Projection::ReturnItem& returnItem : branchProjection->items()) {
         VarDecl* decl = published[index];
 
-        EvaluatedType itemType = EvaluatedType::Invalid;
+        const ExprType* itemType = nullptr;
         EvaluatedType itemCommonType = EvaluatedType::Invalid;
-        const ListShape* itemShape = nullptr;
 
         if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
-            itemType = (*declPtr)->getType();
+            itemType = &(*declPtr)->getExprType();
             itemCommonType = (*declPtr)->getCommonType();
-            itemShape = &(*declPtr)->getListShape();
         } else {
             const Expr* item = std::get<Expr*>(returnItem);
-            itemType = item->getType();
+            itemType = &item->getExprType();
             itemCommonType = item->getCommonType();
-            itemShape = &item->getListShape();
         }
 
         const EvaluatedType columnType = decl->getType();
-        const EvaluatedType columnCommonType = decl->getCommonType();
-        const EvaluatedType selected = selectedType(columnType, itemType);
+
+        ExprType column;
+        ExprAnalyzer::selectExprType(decl->getExprType(), *itemType, column);
+        const EvaluatedType selected = column._type;
 
         if (selected == EvaluatedType::Invalid) {
             throwError(fmt::format("Column '{}' cannot hold both '{}' and '{}' values",
                                    decl->getName(),
                                    EvaluatedTypeName::value(columnType),
-                                   EvaluatedTypeName::value(itemType)),
+                                   EvaluatedTypeName::value(itemType->_type)),
                        branchProjection);
         }
 
         const ListShape columnShape = ListShape::selected(columnType, decl->getListShape());
-        const ListShape itemListShape = ListShape::selected(itemType, *itemShape);
+        const ListShape itemListShape = ListShape::selected(itemType->_type, itemType->_shape);
 
-        decl->setType(selected);
-        decl->setCommonType(commonType(columnCommonType, itemCommonType));
-        decl->setListShape(selected == EvaluatedType::List ? ListShape::unified(columnShape, itemListShape) : ListShape());
+        column._shape = selected == EvaluatedType::List ? ListShape::unified(columnShape, itemListShape) : ListShape();
+        column._commonType = commonType(decl->getCommonType(), itemCommonType);
+        decl->setExprType(column);
 
         branchProjection->addPublishedDecl(decl);
         index++;

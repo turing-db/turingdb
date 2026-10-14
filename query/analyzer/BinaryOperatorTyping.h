@@ -2,22 +2,16 @@
 
 #include <string>
 
-#include "decl/EvaluatedType.h"
-#include "decl/ListShape.h"
+#include "decl/ExprType.h"
 #include "expr/Operators.h"
 
 namespace db {
 
-// One operand of a binary expression as the typing rules see it
-struct BinaryOperand {
-    EvaluatedType _type {EvaluatedType::Invalid};
-    ListShape _shape;
-};
-
 // What a binary expression evaluates to, or why its operands do not combine
 struct BinaryTyping {
-    EvaluatedType _type {EvaluatedType::Invalid};
-    ListShape _shape;
+    ExprType _result;
+    EvaluatedTypeSet _leftAccepted;
+    EvaluatedTypeSet _rightAccepted;
     std::string _error;
 
     bool isValid() const { return _error.empty(); }
@@ -28,7 +22,7 @@ struct BinaryTyping {
 // without an expression to analyze.
 class BinaryOperatorTyping {
 public:
-    static void type(BinaryOperator op, const BinaryOperand& lhs, const BinaryOperand& rhs, BinaryTyping& out);
+    static void type(BinaryOperator op, const ExprType& lhs, const ExprType& rhs, BinaryTyping& out);
 };
 
 }

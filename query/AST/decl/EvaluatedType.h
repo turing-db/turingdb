@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include <bit>
+#include <initializer_list>
 #include <optional>
 #include <utility>
 
@@ -40,6 +42,7 @@ enum class EvaluatedType : uint8_t {
     DateTime,
     Duration,
     NormalForm,
+    Parameter,
 
     _SIZE,
 };
@@ -64,6 +67,65 @@ public:
 
 private:
     uint32_t _bitset {0};
+};
+
+class EvaluatedTypeSet {
+public:
+    constexpr EvaluatedTypeSet() = default;
+
+    constexpr EvaluatedTypeSet(std::initializer_list<EvaluatedType> types)
+    {
+        for (const EvaluatedType type : types) {
+            add(type);
+        }
+    }
+
+    constexpr EvaluatedTypeSet& operator&=(const EvaluatedTypeSet& other) {
+        _bitset &= other._bitset;
+        return *this;
+    }
+
+    constexpr EvaluatedTypeSet& operator|=(const EvaluatedTypeSet& other) {
+        _bitset |= other._bitset;
+        return *this;
+    }
+
+    constexpr void add(EvaluatedType type) {
+        _bitset |= static_cast<uint32_t>(1) << static_cast<uint32_t>(type);
+    }
+
+    constexpr bool contains(EvaluatedType type) const {
+        return (_bitset & (static_cast<uint32_t>(1) << static_cast<uint32_t>(type))) != 0;
+    }
+
+    constexpr bool isEmpty() const { return _bitset == 0; }
+
+    constexpr size_t getCount() const { return std::popcount(_bitset); }
+
+    constexpr uint32_t getBitset() const { return _bitset; }
+
+    constexpr bool operator==(const EvaluatedTypeSet& other) const {
+        return _bitset == other._bitset;
+    }
+
+private:
+    uint32_t _bitset {0};
+};
+
+static_assert(std::to_underlying(EvaluatedType::_SIZE) <= 32, "EvaluatedTypeSet holds 32 types");
+
+// The types a parameter's bind can give it. A null bind is left out: it is null on the
+// row whatever the expression's type, as a missing property is.
+inline constexpr EvaluatedTypeSet PARAMETER_VALUE_TYPES = {
+    EvaluatedType::Integer,
+    EvaluatedType::Double,
+    EvaluatedType::String,
+    EvaluatedType::Bool,
+    EvaluatedType::Embedding,
+    EvaluatedType::List,
+    EvaluatedType::Map,
+    EvaluatedType::DateTime,
+    EvaluatedType::Duration,
 };
 
 using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
@@ -91,7 +153,8 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::EdgeType, "EdgeType">,
     EnumStringPair<EvaluatedType::DateTime, "DateTime">,
     EnumStringPair<EvaluatedType::Duration, "Duration">,
-    EnumStringPair<EvaluatedType::NormalForm, "NormalForm">>;
+    EnumStringPair<EvaluatedType::NormalForm, "NormalForm">,
+    EnumStringPair<EvaluatedType::Parameter, "Parameter">>;
 
 // Evaluated Type to ValueType conversion
 static constexpr size_t VALUE_TYPE_COUNT = std::to_underlying(ValueType::_SIZE);

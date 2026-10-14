@@ -1,5 +1,7 @@
 #include "ExprAnalyzer.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <optional>
 
@@ -9,6 +11,7 @@
 #include "DiagnosticsManager.h"
 #include "AnalyzeException.h"
 #include "ReadStmtAnalyzer.h"
+#include "ParameterProbe.h"
 #include "CypherAST.h"
 #include "FunctionDecls.h"
 #include "FunctionResolver.h"
@@ -78,6 +81,20 @@ EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
     }
 
     return common;
+}
+
+EvaluatedTypeSet typesFittingProperty(ValueType propertyType, EvaluatedTypeSet candidates) {
+    EvaluatedTypeSet fitting;
+
+    for (uint32_t types = candidates.getBitset(); types != 0; types &= types - 1) {
+        const EvaluatedType candidate = ParameterProbe::lowestType(types);
+
+        if (ExprAnalyzer::propTypeCompatible(propertyType, candidate)) {
+            fitting.add(candidate);
+        }
+    }
+
+    return fitting;
 }
 
 ListShape selectedListShape(const Expr* value) {
@@ -234,6 +251,7 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
             analyzeLiteralExpr(static_cast<LiteralExpr*>(expr));
         break;
         case Expr::Kind::PARAMETER:
+            analyzeParameterExpr(static_cast<ParameterExpr*>(expr));
         break;
         case Expr::Kind::FUNCTION_INVOCATION:
             analyzeFuncInvocExpr(static_cast<FunctionInvocationExpr*>(expr), &FunctionDecls::getBuiltins());
@@ -319,18 +337,22 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     analyzeExpr(lhs);
     analyzeExpr(rhs);
 
-    const BinaryOperand left {lhs->getType(), lhs->getListShape()};
-    const BinaryOperand right {rhs->getType(), rhs->getListShape()};
-
     BinaryTyping typing;
-    BinaryOperatorTyping::type(expr->getOperator(), left, right, typing);
+    BinaryOperatorTyping::type(expr->getOperator(), lhs->getExprType(), rhs->getExprType(), typing);
 
     if (!typing.isValid()) {
         throwError(typing._error, expr);
     }
 
-    expr->setType(typing._type);
-    expr->setListShape(typing._shape);
+    if (lhs->getType() == EvaluatedType::Parameter) {
+        lhs->setCandidateTypes(typing._leftAccepted);
+    }
+
+    if (rhs->getType() == EvaluatedType::Parameter) {
+        rhs->setCandidateTypes(typing._rightAccepted);
+    }
+
+    expr->setExprType(typing._result);
 
     // Dynamic/Aggregate contamination
     if (lhs->isDynamic() || rhs->isDynamic()) {
@@ -472,14 +494,18 @@ void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
     }
 
     expr->setDecl(varDecl);
-    expr->setType(varDecl->getType());
-    expr->setListShape(varDecl->getListShape());
-    expr->setCommonType(varDecl->getCommonType());
+    expr->setExprType(varDecl->getExprType());
     expr->setExprVarDecl(varDecl);
 
     // For now, variable expressions cannot be evaluated at compile time
     // TODO: We could check if the variable is actually a constexpr
     expr->setDynamic();
+}
+
+void ExprAnalyzer::analyzeParameterExpr(ParameterExpr* expr) {
+    expr->setType(EvaluatedType::Parameter);
+    expr->setCandidateTypes(PARAMETER_VALUE_TYPES);
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
@@ -729,6 +755,23 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     const std::string_view name = propName->getName();
     ValueType vt = resolvePropertyType(name);
+
+    const auto parameterCreated = _parameterCreatedTypes.find(name);
+    const bool readsAParameterWrite = vt == ValueType::Invalid
+                                   && parameterCreated != _parameterCreatedTypes.end()
+                                   && !readsAComponentOfAProperty;
+
+    if (readsAParameterWrite) {
+        expr->setPropertyName(name);
+        expr->setEntityVarDecl(varDecl);
+        expr->setType(EvaluatedType::Parameter);
+        expr->setCandidateTypes(parameterCreated->second);
+        expr->setDynamic();
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+
+        return ValueType::Invalid;
+    }
 
     if (vt == ValueType::Invalid && allowCreate) {
         addToBeCreatedType(name, defaultType, expr);
@@ -1352,7 +1395,11 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
         if (answersNullOverNull && readsANull) {
             expr->setType(EvaluatedType::Null);
         } else if (unifiesArguments) {
-            expr->setType(unifiedArgumentType(name, providedArgs));
+            ExprType unified;
+            unifiedArgumentType(name, providedArgs, unified);
+
+            expr->setType(unified._type);
+            expr->setCandidateTypes(unified._candidates);
         } else if (signature->returnTypes().size() == 1) {
             expr->setType(signature->returnTypes().front().getType());
         } else {
@@ -1436,29 +1483,41 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
     throwError(fmt::format("Invalid arguments for function '{}'", name), expr);
 }
 
-EvaluatedType ExprAnalyzer::unifiedArgumentType(std::string_view name,
-                                                std::span<Expr* const> args) const {
-    EvaluatedType unified = EvaluatedType::Null;
+void ExprAnalyzer::unifiedArgumentType(std::string_view name,
+                                       std::span<Expr* const> args,
+                                       ExprType& unified) const {
+    unified = ExprType {EvaluatedType::Null, {}, {}};
 
     for (const Expr* arg : args) {
-        const EvaluatedType argType = arg->getType();
-        const EvaluatedType folded = selectedType(unified, argType);
+        ExprType folded;
+        selectExprType(unified, arg->getExprType(), folded);
 
-        if (folded == EvaluatedType::Invalid) {
+        if (folded._type == EvaluatedType::Invalid) {
             throwError(fmt::format("'{}' cannot mix '{}' and '{}' arguments",
                                    name,
-                                   EvaluatedTypeName::value(unified),
-                                   EvaluatedTypeName::value(argType)),
+                                   EvaluatedTypeName::value(unified._type),
+                                   EvaluatedTypeName::value(arg->getType())),
                        arg);
         }
 
         unified = folded;
     }
-
-    return unified;
 }
 
 void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, const void* obj) {
+    const auto parameterCreated = _parameterCreatedTypes.find(name);
+
+    if (parameterCreated != _parameterCreatedTypes.end()) {
+        if (typesFittingProperty(type, parameterCreated->second).isEmpty()) {
+            throwError(fmt::format("Property '{}' is written as '{}' and from a parameter that cannot be bound to one",
+                                   name,
+                                   ValueTypeName::value(type)),
+                       obj);
+        }
+
+        _parameterCreatedTypes.erase(parameterCreated);
+    }
+
     const auto it = _toBeCreatedTypes.find(name);
 
     if (it != _toBeCreatedTypes.end()) {
@@ -1478,6 +1537,37 @@ void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, con
 
     // Register the new type
     _toBeCreatedTypes[name] = type;
+}
+
+ValueType ExprAnalyzer::narrowParameterWrite(std::string_view name, Expr* value) {
+    const ValueType propertyType = resolvePropertyType(name);
+    const EvaluatedTypeSet candidates = value->getCandidateTypes();
+
+    EvaluatedTypeSet accepted;
+
+    if (propertyType != ValueType::Invalid) {
+        accepted = typesFittingProperty(propertyType, candidates);
+    } else {
+        accepted = candidates;
+
+        const auto parameterCreated = _parameterCreatedTypes.find(name);
+        if (parameterCreated != _parameterCreatedTypes.end()) {
+            accepted &= parameterCreated->second;
+        }
+    }
+
+    if (accepted.isEmpty()) {
+        throwError(fmt::format("Property '{}' takes no type the parameter written to it can be bound to", name),
+                   value);
+    }
+
+    value->setCandidateTypes(accepted);
+
+    if (propertyType == ValueType::Invalid) {
+        _parameterCreatedTypes[name] = accepted;
+    }
+
+    return propertyType;
 }
 
 bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
@@ -1518,6 +1608,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
         case EvaluatedType::Any:
+        case EvaluatedType::Parameter:
             return false;
         break;
     }
@@ -1583,7 +1674,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
         contaminate(subject);
     }
 
-    EvaluatedType resultType = EvaluatedType::Null;
+    ExprType result {EvaluatedType::Null, {}, {}};
     EvaluatedType resultCommonType = EvaluatedType::Null;
     ListShape resultShape;
 
@@ -1598,7 +1689,9 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
 
         analyzeExpr(branch._then);
 
-        resultType = unifyCaseBranch(resultType, branch._then);
+        ExprType unified;
+        unifyCaseBranch(result, branch._then, unified);
+        result = unified;
         resultCommonType = commonType(resultCommonType, branch._then->getCommonType());
         resultShape = ListShape::unified(resultShape, selectedListShape(branch._then));
 
@@ -1608,16 +1701,19 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     Expr* const elseExpr = expr->getElseExpr();
     if (elseExpr) {
         analyzeExpr(elseExpr);
-        resultType = unifyCaseBranch(resultType, elseExpr);
+        ExprType unified;
+        unifyCaseBranch(result, elseExpr, unified);
+        result = unified;
         resultCommonType = commonType(resultCommonType, elseExpr->getCommonType());
         resultShape = ListShape::unified(resultShape, selectedListShape(elseExpr));
         contaminate(elseExpr);
     }
 
-    expr->setType(resultType);
+    expr->setType(result._type);
+    expr->setCandidateTypes(result._candidates);
     expr->setCommonType(resultCommonType);
 
-    if (resultType == EvaluatedType::List) {
+    if (result._type == EvaluatedType::List) {
         expr->setListShape(resultShape);
     }
 }
@@ -1670,13 +1766,11 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    || op == BinaryOperator::GreaterThanOrEqual);
 
     const BinaryOperator typedOperator = testsOrdering ? op : BinaryOperator::Equal;
-    const BinaryOperand subjectOperand {subjectType, subject->getListShape()};
-    const BinaryOperand valueOperand {valueType, test._value->getListShape()};
 
     BinaryTyping typing;
-    BinaryOperatorTyping::type(typedOperator, subjectOperand, valueOperand, typing);
+    BinaryOperatorTyping::type(typedOperator, subject->getExprType(), test._value->getExprType(), typing);
 
-    test._resultType = typing._type;
+    test._resultType = typing._result._type;
 
     if (typing.isValid()) {
         return;
@@ -1690,18 +1784,21 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
     throwError(typing._error, test._value);
 }
 
-EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
-    const EvaluatedType branchType = branch->getType();
-    const EvaluatedType unified = selectedType(carried, branchType);
+void ExprAnalyzer::unifyCaseBranch(const ExprType& carried, const Expr* branch, ExprType& unified) const {
+    selectExprType(carried, branch->getExprType(), unified);
 
-    if (unified == EvaluatedType::Invalid) {
+    if (unified._type == EvaluatedType::Invalid) {
         throwError(fmt::format("A CASE cannot mix '{}' and '{}' branches",
-                               EvaluatedTypeName::value(carried),
-                               EvaluatedTypeName::value(branchType)),
+                               EvaluatedTypeName::value(carried._type),
+                               EvaluatedTypeName::value(branch->getType())),
                    branch);
     }
+}
 
-    return unified;
+void ExprAnalyzer::selectExprType(const ExprType& carried, const ExprType& value, ExprType& out) {
+    ParameterProbe probe;
+    ParameterProbe::probe(carried, value, selectedType, probe);
+    probe.writeResult(carried, value, out);
 }
 
 void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
@@ -1933,8 +2030,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
     itemDecl->setListShape(sourceShape.unwound());
 
     VarDecl* const accumulatorDecl = _ctxt->getOrCreateNamedVariable(_ast, initialValue->getType(), accumulatorName);
-    accumulatorDecl->setListShape(initialValue->getListShape());
-    accumulatorDecl->setCommonType(initialValue->getCommonType());
+    accumulatorDecl->setExprType(initialValue->getExprType());
 
     expr->setItemDecl(itemDecl);
     expr->setAccumulatorDecl(accumulatorDecl);
@@ -1947,26 +2043,29 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
     while (true) {
         analyzeExpr(expression);
 
-        const EvaluatedType accumulatorType = accumulatorDecl->getType();
+        const ExprType& accumulator = accumulatorDecl->getExprType();
         const EvaluatedType accumulatorCommonType = accumulatorDecl->getCommonType();
         const ListShape& accumulatorShape = accumulatorDecl->getListShape();
 
-        const EvaluatedType widenedType = accumulatedType(accumulatorType, expression->getType());
-        const EvaluatedType widenedCommonType = commonType(accumulatorCommonType, expression->getCommonType());
-        const ListShape widenedShape = ListShape::unified(accumulatorShape, expression->getListShape());
+        ParameterProbe probe;
+        ParameterProbe::probe(accumulator, expression->getExprType(), accumulatedType, probe);
 
-        const bool settled = widenedType == accumulatorType
-                          && widenedCommonType == accumulatorCommonType
-                          && widenedShape.getLeafType() == accumulatorShape.getLeafType()
-                          && widenedShape.getDepth() == accumulatorShape.getDepth();
+        ExprType widened;
+        probe.writeResult(accumulator, expression->getExprType(), widened);
+        widened._commonType = commonType(accumulatorCommonType, expression->getCommonType());
+        widened._shape = ListShape::unified(accumulatorShape, expression->getListShape());
+
+        const bool settled = widened._type == accumulator._type
+                          && widened._candidates == accumulator._candidates
+                          && widened._commonType == accumulatorCommonType
+                          && widened._shape.getLeafType() == accumulatorShape.getLeafType()
+                          && widened._shape.getDepth() == accumulatorShape.getDepth();
 
         if (settled) {
             break;
         }
 
-        accumulatorDecl->setType(widenedType);
-        accumulatorDecl->setCommonType(widenedCommonType);
-        accumulatorDecl->setListShape(widenedShape);
+        accumulatorDecl->setExprType(widened);
         forgetAnalysis(expression);
     }
 
@@ -1980,18 +2079,14 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
                    expr);
     }
 
-    const EvaluatedType reducedType = accumulatorDecl->getType();
-
-    expr->setType(reducedType);
-    expr->setCommonType(accumulatorDecl->getCommonType());
-    expr->setListShape(accumulatorDecl->getListShape());
+    expr->setExprType(accumulatorDecl->getExprType());
     expr->setDynamic();
 
     if (initialValue->isAggregate() || source->isAggregate()) {
         expr->setAggregate();
     }
 
-    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, reducedType));
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
 }
 
 void ExprAnalyzer::forgetAnalysis(const Expr* expr) {

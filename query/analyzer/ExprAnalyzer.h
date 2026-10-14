@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include "decl/EvaluatedType.h"
+#include "decl/ExprType.h"
 #include "expr/CaseExpr.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
@@ -29,6 +30,7 @@ class LogicalExpr;
 class UnaryExpr;
 class SymbolExpr;
 class LiteralExpr;
+class ParameterExpr;
 class PropertyExpr;
 class PropertyLookupExpr;
 class StringExpr;
@@ -92,6 +94,7 @@ public:
     void analyzeUnaryExpr(UnaryExpr* expr);
     void analyzeSymbolExpr(SymbolExpr* expr);
     void analyzeLiteralExpr(LiteralExpr* expr);
+    void analyzeParameterExpr(ParameterExpr* expr);
     void analyzeListExpr(ListExpr* expr);
     void analyzeListComprehensionExpr(ListComprehensionExpr* expr);
     void analyzePatternComprehensionExpr(PatternComprehensionExpr* expr);
@@ -119,7 +122,16 @@ public:
 
     void addToBeCreatedType(std::string_view name, ValueType type, const void* obj = nullptr);
 
+    // Narrows @param value, a parameter written to the property @param name, to the types the
+    // property takes. Answers that type, or Invalid where the property is new and its bind
+    // decides it, in which case the property takes the candidates the writes of it share.
+    ValueType narrowParameterWrite(std::string_view name, Expr* value);
+
     static bool propTypeCompatible(ValueType vt, EvaluatedType exprType);
+
+    // The type of one column the branches of a CASE, a coalesce, a UNION or a WHEN fill
+    // with @param carried and @param value, selected over the types each can be bound to
+    static void selectExprType(const ExprType& carried, const ExprType& value, ExprType& out);
 
     /// Adds an empty declaration for the given NodePattern
     void registerNodePatternDeclaration(const NodePattern* node);
@@ -136,6 +148,7 @@ private:
     const GraphMetadata& _graphMetadata;
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
+    std::unordered_map<std::string_view, EvaluatedTypeSet> _parameterCreatedTypes;
 
     // The LOAD CSV each row variable in scope was bound by
     std::unordered_map<const VarDecl*, LoadCSVStmt*> _csvSources;
@@ -159,7 +172,7 @@ private:
 
     // The type a CASE has once @param branch is folded into the type its earlier branches
     // already share, reporting a pair no column type can hold
-    EvaluatedType unifyCaseBranch(EvaluatedType carried, const Expr* branch);
+    void unifyCaseBranch(const ExprType& carried, const Expr* branch, ExprType& unified) const;
 
     // Rejects a CASE subject that is not a value
     void requireCaseSubject(const Expr* subject) const;
@@ -170,7 +183,7 @@ private:
 
     // The type the arguments of a call to @param name share, folded the way a CASE folds
     // its branches, reporting a pair no column type can hold
-    EvaluatedType unifiedArgumentType(std::string_view name, std::span<Expr* const> args) const;
+    void unifiedArgumentType(std::string_view name, std::span<Expr* const> args, ExprType& unified) const;
 
     // row[i] over a LOAD CSV row, which reads a field rather than an element. A constant
     // index names the field the load publishes it under; a computed one names none
