@@ -40,7 +40,8 @@ using namespace db;
 namespace {
 
 void printTuringDBCommitInfo() {
-    std::cout << "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH)
+    std::cout << "TuringDB " << TOSTRING(TURINGDB_VERSION)
+              << " - " << TOSTRING(HEAD_COMMIT_HASH)
               << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
 }
 
