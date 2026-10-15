@@ -500,6 +500,194 @@ SplitFunction::ResultType SplitFunction::operator()(types::String::Primitive str
     return _listBuffer->insert(_parts);
 }
 
+LeftFunction::ResultType LeftFunction::operator()(types::String::Primitive string, types::Int64::Primitive length) const {
+    const size_t charCount = characterArgument(length, NAME);
+
+    return string.substr(0, characterOffset(string, charCount));
+}
+
+RightFunction::ResultType RightFunction::operator()(types::String::Primitive string, types::Int64::Primitive length) const {
+    const size_t charCount = characterArgument(length, NAME);
+    const size_t stringChars = static_cast<size_t>(characterCount(string));
+
+    if (charCount >= stringChars) {
+        return string;
+    }
+
+    return string.substr(characterOffset(string, stringChars - charCount));
+}
+
+ReplaceFunction::ReplaceFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
+ReplaceFunction::ResultType ReplaceFunction::operator()(types::String::Primitive string,
+                                                        types::String::Primitive search,
+                                                        types::String::Primitive replacement) {
+    _replaced.clear();
+
+    if (search.empty()) {
+        _replaced += replacement;
+
+        size_t charStart = 0;
+        while (charStart < string.size()) {
+            const types::String::Primitive rest = string.substr(charStart);
+            const size_t charSize = characterOffset(rest, 1);
+
+            _replaced += rest.substr(0, charSize);
+            _replaced += replacement;
+            charStart += charSize;
+        }
+
+        return _stringBuffer->insert(_replaced);
+    }
+
+    size_t partStart = 0;
+    size_t searchStart = string.find(search);
+
+    if (searchStart == std::string_view::npos) {
+        return string;
+    }
+
+    while (searchStart != std::string_view::npos) {
+        _replaced += string.substr(partStart, searchStart - partStart);
+        _replaced += replacement;
+
+        partStart = searchStart + search.size();
+        searchStart = string.find(search, partStart);
+    }
+
+    _replaced += string.substr(partStart);
+
+    return _stringBuffer->insert(_replaced);
+}
+
+TaggedToIntegerOrNullFunction::ResultType TaggedToIntegerOrNullFunction::operator()(const ArgType cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Int:
+            return cell.getAs<types::Int64::Primitive>();
+        break;
+        case ListBufferTypeTag::UInt:
+            return ToIntegerFromNumberFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
+        break;
+        case ListBufferTypeTag::Double:
+            return ToIntegerFromNumberFunction<types::Double::Primitive> {}(cell.getAs<types::Double::Primitive>());
+        break;
+        case ListBufferTypeTag::Bool:
+            return cell.getAs<types::Bool::Primitive>() ? 1 : 0;
+        break;
+        case ListBufferTypeTag::String:
+            return _fromString(cell.getAs<types::String::Primitive>());
+        break;
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+TaggedToIntegerOrNullFunction::ResultType TaggedToIntegerOrNullFunction::operator()(const std::optional<ArgType>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedToFloatOrNullFunction::ResultType TaggedToFloatOrNullFunction::operator()(const ArgType cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Int:
+            return static_cast<types::Double::Primitive>(cell.getAs<types::Int64::Primitive>());
+        break;
+        case ListBufferTypeTag::UInt:
+            return static_cast<types::Double::Primitive>(cell.getAs<types::UInt64::Primitive>());
+        break;
+        case ListBufferTypeTag::Double:
+            return cell.getAs<types::Double::Primitive>();
+        break;
+        case ListBufferTypeTag::String:
+            return _fromString(cell.getAs<types::String::Primitive>());
+        break;
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+TaggedToFloatOrNullFunction::ResultType TaggedToFloatOrNullFunction::operator()(const std::optional<ArgType>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedToBooleanOrNullFunction::ResultType TaggedToBooleanOrNullFunction::operator()(const ArgType cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Bool:
+            return cell.getAs<types::Bool::Primitive>();
+        break;
+        case ListBufferTypeTag::Int:
+            return types::Bool::Primitive(cell.getAs<types::Int64::Primitive>() != 0);
+        break;
+        case ListBufferTypeTag::UInt:
+            return types::Bool::Primitive(cell.getAs<types::UInt64::Primitive>() != 0);
+        break;
+        case ListBufferTypeTag::String:
+            return _fromString(cell.getAs<types::String::Primitive>());
+        break;
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+TaggedToBooleanOrNullFunction::ResultType TaggedToBooleanOrNullFunction::operator()(const std::optional<ArgType>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedToStringOrNullFunction::TaggedToStringOrNullFunction(StringBuffer* stringBuffer)
+    : _stringBuffer(stringBuffer)
+{
+}
+
+TaggedToStringOrNullFunction::ResultType TaggedToStringOrNullFunction::operator()(const ArgType cell) {
+    ValueTextScratch scratch;
+
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::String:
+            return cell.getAs<types::String::Primitive>();
+        break;
+        case ListBufferTypeTag::Int:
+            return _stringBuffer->insert(valueTextInto(cell.getAs<types::Int64::Primitive>(), scratch));
+        break;
+        case ListBufferTypeTag::UInt:
+            return _stringBuffer->insert(valueTextInto(cell.getAs<types::UInt64::Primitive>(), scratch));
+        break;
+        case ListBufferTypeTag::Double:
+            return _stringBuffer->insert(valueTextInto(cell.getAs<types::Double::Primitive>(), scratch));
+        break;
+        case ListBufferTypeTag::Bool:
+            return valueTextInto(cell.getAs<types::Bool::Primitive>(), scratch);
+        break;
+        case ListBufferTypeTag::DateTime: {
+            const types::DateTime::Primitive instant = cell.getAs<types::DateTime::Primitive>();
+            if (!DateTime::isRenderable(instant)) {
+                return std::nullopt;
+            }
+
+            _formatted.clear();
+            DateTime::format(_formatted, instant);
+            return _stringBuffer->insert(_formatted);
+        }
+        break;
+        case ListBufferTypeTag::Duration:
+            _formatted.clear();
+            Duration::format(_formatted, cell.getAs<types::Duration::Primitive>());
+            return _stringBuffer->insert(_formatted);
+        break;
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+TaggedToStringOrNullFunction::ResultType TaggedToStringOrNullFunction::operator()(const std::optional<ArgType>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
 ReverseFunction::ReverseFunction(StringBuffer* stringBuffer)
     : _stringBuffer(stringBuffer)
 {
