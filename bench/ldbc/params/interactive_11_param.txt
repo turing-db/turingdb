@@ -1,0 +1,3 @@
+personId|countryName|workFromYear
+4398046511333|Sweden|2006
+10995116277918|Hungary|2011
