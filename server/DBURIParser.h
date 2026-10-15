@@ -11,16 +11,8 @@ public:
     static net::HTTP::Result<void> parseURI(net::HTTP::Info& info, std::string_view uri) {
         // Extract the path part of the URI
         // up to the ? character if any
-        const char* pathBegin = uri.data();
-        const char* pathPtr = pathBegin;
-        const char* const uriEnd = pathPtr + uri.size();
-        for (; pathPtr < uriEnd; pathPtr++) {
-            if (*pathPtr == '?') {
-                break;
-            }
-        }
-
-        info.setPath(std::string_view(pathBegin, pathPtr - pathBegin));
+        const size_t queryStart = uri.find('?');
+        info.setPath(uri.substr(0, queryStart));
 
         const auto res = getEndpointIndex(info.getPath());
         if (!res) {
@@ -34,12 +26,11 @@ public:
         }
 
         // We can stop here if we are already at the end of the URI
-        if (pathPtr >= uriEnd) {
+        if (queryStart == std::string_view::npos) {
             return {};
         }
 
         // URI variables
-        pathPtr++;
         auto& parameters = info.getParams();
 
         constexpr auto parseKeyValuePair = [](net::HTTP::Params& params,
@@ -54,7 +45,7 @@ public:
             }
         };
 
-        std::string_view query(pathPtr, uriEnd - pathPtr);
+        std::string_view query = uri.substr(queryStart + 1);
         while (!query.empty()) {
             const size_t pairEnd = query.find('&');
             const std::string_view pair = query.substr(0, pairEnd);
