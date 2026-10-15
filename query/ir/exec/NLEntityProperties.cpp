@@ -13,6 +13,7 @@
 #include "writers/MetadataBuilder.h"
 
 #include "NLExecutionContext.h"
+#include "NLValueStore.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 
@@ -66,8 +67,10 @@ MapBuffer<>::MapItemVariant storedValue(const PropertyContainer& container, Enti
 }
 
 template <SupportedType T>
-MapBuffer<>::MapItemVariant readWritten(NLWrittenValues& written, const NLWrittenValues::Value& value) {
-    const std::optional<typename T::Primitive> read = written.read<T>(value);
+MapBuffer<>::MapItemVariant readWritten(NLWrittenValues& written,
+                                        NLValueStore& readValues,
+                                        const NLWrittenValues::Value& value) {
+    const std::optional<typename T::Primitive> read = written.read<T>(value, readValues);
     if (!read) {
         return PropertyNull {};
     }
@@ -76,38 +79,39 @@ MapBuffer<>::MapItemVariant readWritten(NLWrittenValues& written, const NLWritte
 }
 
 MapBuffer<>::MapItemVariant writtenValue(NLWrittenValues& written,
+                                         NLValueStore& readValues,
                                          ValueType valueType,
                                          const NLWrittenValues::Value& value) {
     switch (valueType) {
         case ValueType::Int64:
-            return readWritten<types::Int64>(written, value);
+            return readWritten<types::Int64>(written, readValues, value);
         break;
         case ValueType::UInt64:
-            return readWritten<types::UInt64>(written, value);
+            return readWritten<types::UInt64>(written, readValues, value);
         break;
         case ValueType::Double:
-            return readWritten<types::Double>(written, value);
+            return readWritten<types::Double>(written, readValues, value);
         break;
         case ValueType::String:
-            return readWritten<types::String>(written, value);
+            return readWritten<types::String>(written, readValues, value);
         break;
         case ValueType::Bool:
-            return readWritten<types::Bool>(written, value);
+            return readWritten<types::Bool>(written, readValues, value);
         break;
         case ValueType::Embedding:
-            return readWritten<types::Embedding>(written, value);
+            return readWritten<types::Embedding>(written, readValues, value);
         break;
         case ValueType::List:
-            return readWritten<types::List>(written, value);
+            return readWritten<types::List>(written, readValues, value);
         break;
         case ValueType::DateTime:
-            return readWritten<types::DateTime>(written, value);
+            return readWritten<types::DateTime>(written, readValues, value);
         break;
         case ValueType::Map:
-            return readWritten<types::Map>(written, value);
+            return readWritten<types::Map>(written, readValues, value);
         break;
         case ValueType::Duration:
-            return readWritten<types::Duration>(written, value);
+            return readWritten<types::Duration>(written, readValues, value);
         break;
         case ValueType::Invalid:
         case ValueType::_SIZE:
@@ -124,10 +128,11 @@ bool holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value) {
 
 }
 
-NLEntityProperties::NLEntityProperties(NLExecutionContext* context)
+NLEntityProperties::NLEntityProperties(NLExecutionContext* context, NLValueStore* readValues)
     : _view(context->getView()),
     _writeBuffer(context->getWriteBuffer()),
     _written(&context->getWrittenValues()),
+    _readValues(readValues),
     _metadataBuilder(context->getMetadataBuilder())
 {
     if (_writeBuffer) {
@@ -264,7 +269,7 @@ void NLEntityProperties::addWritten(PropertyTypeID id, const CommitWriteBuffer::
         return;
     }
 
-    add(id, _readsValues ? writtenValue(*_written, getValueType(id), value) : PropertyNull {});
+    add(id, _readsValues ? writtenValue(*_written, *_readValues, getValueType(id), value) : PropertyNull {});
 }
 
 void NLEntityProperties::add(PropertyTypeID id, const MapBuffer<>::MapItemVariant& value) {

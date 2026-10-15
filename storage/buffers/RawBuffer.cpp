@@ -41,14 +41,15 @@ void RawBuffer<T, N>::reserveContiguous(size_t numTs) {
 
 template <typename T, size_t N>
 void RawBuffer<T, N>::clear() {
-    auto* cur = _first;
+    auto* cur = _first->_next;
     while (cur) {
         auto* next = cur->_next;
         delete cur;
         cur = next;
     }
 
-    _first = new BufferChunk<T, N>();
+    _first->_next = nullptr;
+    _first->_size = 0;
     _last = _first;
 }
 

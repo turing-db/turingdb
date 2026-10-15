@@ -3,7 +3,7 @@
 #include "list/ListBufferTypeTag.h"
 #include "map/MapBufferTypeTag.h"
 
-#include "LocalMemory.h"
+#include "NLStepBuffers.h"
 
 using namespace db;
 
@@ -30,8 +30,8 @@ T cellValue(const MapEntryView entry) {
 }
 
 template <TypedInternalID IDT>
-NLKeysFunction<IDT>::NLKeysFunction(NLExecutionContext* context, LocalMemory* memory)
-    : _properties(context),
+NLKeysFunction<IDT>::NLKeysFunction(NLExecutionContext* context, NLStepBuffers* memory)
+    : _properties(context, &memory->valueStore()),
     _listBuffer(&memory->listBuffer())
 {
 }
@@ -53,8 +53,8 @@ ListView NLKeysFunction<IDT>::operator()(IDT entity) {
 }
 
 template <TypedInternalID IDT>
-NLPropertiesFunction<IDT>::NLPropertiesFunction(NLExecutionContext* context, LocalMemory* memory)
-    : _properties(context),
+NLPropertiesFunction<IDT>::NLPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory)
+    : _properties(context, &memory->valueStore()),
     _mapBuffer(&memory->mapBuffer())
 {
 }
@@ -71,7 +71,7 @@ MapView NLPropertiesFunction<IDT>::operator()(IDT entity) {
 }
 
 template <typename Cell>
-NLTaggedKeysFunction<Cell>::NLTaggedKeysFunction(NLExecutionContext* context, LocalMemory* memory)
+NLTaggedKeysFunction<Cell>::NLTaggedKeysFunction(NLExecutionContext* context, NLStepBuffers* memory)
     : _nodeKeys(context, memory),
     _edgeKeys(context, memory),
     _mapKeys(&memory->listBuffer())
@@ -106,7 +106,7 @@ std::optional<ListView> NLTaggedKeysFunction<Cell>::operator()(const std::option
 }
 
 template <typename Cell>
-NLTaggedPropertiesFunction<Cell>::NLTaggedPropertiesFunction(NLExecutionContext* context, LocalMemory* memory)
+NLTaggedPropertiesFunction<Cell>::NLTaggedPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory)
     : _nodeProperties(context, memory),
     _edgeProperties(context, memory)
 {

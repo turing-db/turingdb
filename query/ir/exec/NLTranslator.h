@@ -865,10 +865,6 @@ private:
     Column* allocColumnForChunkType(mlir::Type chunkType);
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
 
-    // The append a sort takes a column of lists with, and nothing for a column of anything
-    // else: the buffer holds the lists rather than views of the ones a chunk was handed
-    static NLListAppendFunction selectOwnedListAppendForChunkType(mlir::Type chunkType);
-
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
     static NLFetchNodesFunction selectFetchForChunkType(mlir::Type chunkType);
     static NLFillNullFunction selectFillNullForChunkType(mlir::Type chunkType);

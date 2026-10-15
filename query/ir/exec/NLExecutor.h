@@ -694,10 +694,15 @@ public:
     static NLBroadcastFunction selectOptListTileFunction();
     static NLAppendFunction selectOptListAppendFunction();
 
-    // The appends a sort collects a column of lists with: the list goes into the
-    // accumulator's own buffer, so it stands once the loop that built it has moved on
-    static NLListAppendFunction selectOwnedListAppendFunction();
-    static NLListAppendFunction selectOwnedOptListAppendFunction();
+    // The append an accumulator collects a column of views with, and nothing for a column
+    // of values: the value goes into the accumulator's own store, so it stands once the
+    // loop that built it has moved on
+    static NLOwnedAppendFunction selectOwnedAppendFunction(const Column* buffer);
+
+    // The copy of a column of views into another store, whole or for some rows, and nothing
+    // for a column of values
+    static NLReownFunction selectReownFunction(const Column* column);
+    static NLReownRowsFunction selectReownRowsFunction(const Column* column);
     static NLGatherFunction selectOptListGatherFunction();
     static NLCompareFunction selectOptListCompareFunction();
     static NLKeyAppendFunction selectOptListKeyAppendFunction();

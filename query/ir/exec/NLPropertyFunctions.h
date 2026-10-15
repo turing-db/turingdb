@@ -15,8 +15,8 @@
 
 namespace db {
 
-class LocalMemory;
 class NLExecutionContext;
+class NLStepBuffers;
 
 template <TypedInternalID IDT>
 class NLKeysFunction {
@@ -24,7 +24,7 @@ public:
     using ArgType = IDT;
     using ResultType = ListView;
 
-    NLKeysFunction(NLExecutionContext* context, LocalMemory* memory);
+    NLKeysFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLKeysFunction();
 
     ResultType operator()(IDT entity);
@@ -42,7 +42,7 @@ public:
     using ArgType = IDT;
     using ResultType = MapView;
 
-    NLPropertiesFunction(NLExecutionContext* context, LocalMemory* memory);
+    NLPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLPropertiesFunction();
 
     ResultType operator()(IDT entity);
@@ -62,7 +62,7 @@ public:
     using ArgType = Cell;
     using ResultType = std::optional<ListView>;
 
-    NLTaggedKeysFunction(NLExecutionContext* context, LocalMemory* memory);
+    NLTaggedKeysFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLTaggedKeysFunction();
 
     ResultType operator()(Cell cell);
@@ -80,7 +80,7 @@ public:
     using ArgType = Cell;
     using ResultType = std::optional<MapView>;
 
-    NLTaggedPropertiesFunction(NLExecutionContext* context, LocalMemory* memory);
+    NLTaggedPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLTaggedPropertiesFunction();
 
     ResultType operator()(Cell cell);
