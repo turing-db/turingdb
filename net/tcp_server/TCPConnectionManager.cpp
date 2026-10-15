@@ -7,6 +7,7 @@
 
 #include "ServerContext.h"
 #include "TCPConnection.h"
+#include "NetException.h"
 
 using namespace net;
 
@@ -74,8 +75,14 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
             // Process with stored callback
             _ctxt._process(threadContext, connection);
 
-            if (writer.getBytesWritten() != 0) {
-                writer.flush(); // Make sure we sent everything
+            // A gone-away peer makes send() fail: the writer records that through
+            // netErrorOccurred() and also throws, and the throw would escape to the
+            // thread entry and terminate the server. errorOccured() below handles it.
+            try {
+                if (writer.getBytesWritten() != 0) {
+                    writer.flush(); // Make sure we sent everything
+                }
+            } catch (const NetException&) {
             }
 
             if (writer.errorOccured()) {
@@ -87,7 +94,10 @@ void TCPConnectionManager::process(AbstractThreadContext* threadContext,
             }
 
             if (writer.wroteNonEmptyChunk()) {
-                writer.flush();
+                try {
+                    writer.flush();
+                } catch (const NetException&) {
+                }
                 writer.reset();
             }
 
