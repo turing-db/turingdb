@@ -160,6 +160,7 @@ int StartCmd::execute() {
     // Config
     TuringConfig config;
     config.setSyncedOnDisk(!_inMemory);
+    config.setMmapVectorIndexes(!_noVectorMmap);
 
     if (!_turingDir.empty()) {
         fs::Path absTuringDir(_turingDir);
@@ -385,6 +386,10 @@ void StartCmd::initialize() {
         .metavar("port")
         .help("Visualizer proxy port (default: 8080)")
         .store_into(_uiPort);
+    _argParser.add_argument("-no-vector-mmap")
+        .help("Read HNSW vector indexes into memory at startup instead of mapping the "
+              "index file; a server that adds vectors reads them in anyway")
+        .store_into(_noVectorMmap);
     _argParser.add_argument("-start-timeout")
         .metavar("seconds")
         .help("Milliseconds to wait for the first INIT response when daemonizing (default: 500)")

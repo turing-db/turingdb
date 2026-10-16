@@ -142,7 +142,7 @@ void SystemManager::initLockFile() {
 void SystemManager::initVectorDatabase() {
     const auto& vectorDir = _config->getVectorDir();
 
-    if (auto res = _vectorDatabase.init(vectorDir); !res) {
+    if (auto res = _vectorDatabase.init(vectorDir, _config->mmappingVectorIndexes()); !res) {
         panic("Could not create vector database: {}", res.error().fmtMessage());
     }
 }

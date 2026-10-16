@@ -26,9 +26,11 @@ public:
 
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     bool usingSystemEvents() const { return _systemEvents; }
+    bool mmappingVectorIndexes() const { return _mmapVectorIndexes; }
 
     void setTuringDirectory(const fs::Path& turingDir);
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
+    void setMmapVectorIndexes(bool mmapVectorIndexes) { _mmapVectorIndexes = mmapVectorIndexes; }
     void useSystemEvents(bool systemEvents) { _systemEvents = systemEvents; }
 
     const std::function<void()>& getOnStopRequest() const { return _onStopRequest; }
@@ -51,6 +53,7 @@ private:
 
     bool _syncedOnDisk {true};
     bool _systemEvents {true};
+    bool _mmapVectorIndexes {true};
 };
 
 }

@@ -93,10 +93,16 @@ public:
             return *this;
         }
 
+        Loader& setMmapHNSWIndex(bool mmapHNSWIndex) {
+            _mmapHNSWIndex = mmapHNSWIndex;
+            return *this;
+        }
+
         [[nodiscard]] VectorResult<std::unique_ptr<VecLib>> load(VecLibStorage& storage);
 
     private:
         std::unique_ptr<VecLib> _vecLib;
+        bool _mmapHNSWIndex {true};
     };
 
     [[nodiscard]] VectorResult<void> addEmbeddings(const BatchVectorCreate* batch);

@@ -27,7 +27,7 @@ public:
     VectorDatabase(const VectorDatabase&) = delete;
     VectorDatabase(VectorDatabase&&) = delete;
 
-    [[nodiscard]] VectorResult<void> init(const fs::Path& rootPath);
+    [[nodiscard]] VectorResult<void> init(const fs::Path& rootPath, bool mmapHNSWIndexes = true);
 
     VectorResult<VecLibID> createLibrary(std::string_view libName,
                                          Dimension dim,
@@ -55,6 +55,7 @@ private:
     std::unique_ptr<ShardCache> _shardCache;
     VecLibMap _vecLibs;
     VecLibIDs _vecLibIDs;
+    bool _mmapHNSWIndexes {true};
 
     [[nodiscard]] VectorResult<void> load();
 };

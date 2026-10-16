@@ -146,9 +146,9 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
         case IndexType::HNSW: {
             const fs::Path hnswPath = _vecLib->_storage->getHNSWIndexPath(meta._id);
             if (hnswPath.exists()) {
-                _vecLib->_hnswIndex.reset(
-                        faiss::read_index(hnswPath.c_str(), faiss::IO_FLAG_MMAP_IFC));
-                _vecLib->_hnswIndexMapped = true;
+                const int ioFlags = _mmapHNSWIndex ? faiss::IO_FLAG_MMAP_IFC : 0;
+                _vecLib->_hnswIndex.reset(faiss::read_index(hnswPath.c_str(), ioFlags));
+                _vecLib->_hnswIndexMapped = _mmapHNSWIndex;
             } else {
                 _vecLib->_hnswIndex = buildHNSWIndex(meta);
             }

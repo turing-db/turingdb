@@ -18,8 +18,10 @@ VectorDatabase::VectorDatabase()
 VectorDatabase::~VectorDatabase() {
 }
 
-VectorResult<void> VectorDatabase::init(const fs::Path& rootPath) {
+VectorResult<void> VectorDatabase::init(const fs::Path& rootPath, bool mmapHNSWIndexes) {
     static constexpr uint64_t RANDOM_SEED = 982451653;
+
+    _mmapHNSWIndexes = mmapHNSWIndexes;
 
     if (!RandomGenerator::initialized()) {
         RandomGenerator::initialize(RANDOM_SEED);
@@ -213,6 +215,7 @@ VectorResult<void> VectorDatabase::load() {
         auto lib = VecLib::Loader()
                        .setStorageManager(_storageManager.get())
                        .setShardCache(_shardCache.get())
+                       .setMmapHNSWIndex(_mmapHNSWIndexes)
                        .load(*storage);
 
         if (!lib) {
