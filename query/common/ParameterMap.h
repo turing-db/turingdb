@@ -17,6 +17,7 @@ public:
     ~ParameterMap();
 
     void set(std::string_view name, const ParameterValue& value);
+    ParameterValue& insert(std::string_view name);
     const ParameterValue* get(std::string_view name) const;
     void clear();
 
