@@ -12,6 +12,7 @@
 #include "TuringProtoDecoder.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
+#include "TuringProtoRequestBody.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "TuringSink.h"
@@ -26,6 +27,7 @@ namespace db {
 
 class LocalMemory;
 class DataframeManager;
+class ParameterMap;
 
 }
 
@@ -65,7 +67,8 @@ public:
     void send();
     void recv();
     db::QueryStatus sendQuery(const std::string& query,
-                              const db::QueryCallbacks::OnOutputData& callback);
+                              const db::QueryCallbacks::OnOutputData& callback,
+                              const db::ParameterMap* parameters = nullptr);
 
     void setRemoteAddress(const std::string& remoteAddress) { _remoteAddress = remoteAddress; }
     void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
@@ -106,6 +109,7 @@ private:
 
     // Send Buffer Members
     std::string _sendBuffer;
+    net::proto::TuringProtoRequestBody _requestBody;
     size_t _sendOffset {0};
     // Flag to indicate whether we are in the sending phase of the client
     bool _sending {false};
@@ -156,7 +160,7 @@ private:
     bool _callbackFired {false};
     bool _sawTerminalPacket {false};
 
-    void buildRequest(const std::string& query);
+    void buildRequest(const std::string& query, const db::ParameterMap* parameters);
 
     // Copies up to (need - filled) buffered bytes from _httpScratch into dst, advancing
     // _scratchHead and filled. Any remaining bytes are read from the socket by the caller.

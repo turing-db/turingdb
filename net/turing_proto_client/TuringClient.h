@@ -8,6 +8,7 @@
 #include "LocalMemory.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
+#include "TuringProtoRequestBody.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
 #include "QueryCallbacks.h"
@@ -18,6 +19,7 @@
 namespace db {
 
 class LocalMemory;
+class ParameterMap;
 class DataframeManager;
 
 }
@@ -41,7 +43,8 @@ public:
     void disconnect();
 
     db::QueryStatus sendQuery(const std::string& query,
-                              const db::QueryCallbacks::OnOutputData& callback);
+                              const db::QueryCallbacks::OnOutputData& callback,
+                              const db::ParameterMap* parameters = nullptr);
 
     void setRemoteAddress(const std::string& remoteAddress) { _remoteAddress = remoteAddress; }
     void setRemotePort(const std::string& remotePort) { _remotePort = remotePort; }
@@ -93,7 +96,9 @@ private:
     db::ListBuffer<> _listBuffer;
     db::MapBuffer<> _mapBuffer;
 
-    void sendRequest(const std::string& query);
+    net::proto::TuringProtoRequestBody _requestBody;
+
+    void sendRequest(const std::string& query, const db::ParameterMap* parameters);
     void recvHttpResponseHeaders();
     size_t recvChunkSizeLine();
     void recvChunkBody(size_t chunkSize, net::proto::ProtoHeader* outHeader);

@@ -3,7 +3,8 @@ add_library(turing_db_net_encoders STATIC
     NestedContainerIterator.cpp
     TuringProtoEncoder.cpp
     TuringProtoNestedWriter.cpp
-    TuringProtoParameterWriter.cpp)
+    TuringProtoParameterWriter.cpp
+    TuringProtoRequestBody.cpp)
 
 target_include_directories(turing_db_net_encoders PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

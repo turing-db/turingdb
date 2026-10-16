@@ -10,9 +10,12 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <spdlog/fmt/fmt.h>
 
 #include "HTTPUtils.h"
 #include "TuringProtoDecoder.h"
@@ -176,7 +179,11 @@ void TuringClient::disconnect() {
     }
 }
 
-void TuringClient::sendRequest(const std::string& query) {
+void TuringClient::sendRequest(const std::string& query, const db::ParameterMap* parameters) {
+    _requestBody.build(query, parameters);
+    const std::span<char> prefix = _requestBody.getPrefix();
+    const std::span<char> suffix = _requestBody.getSuffix();
+
     std::string headers;
     headers.reserve(256);
 
@@ -196,7 +203,7 @@ void TuringClient::sendRequest(const std::string& query) {
 
     headers += "Content-type: application/turing-proto\r\n";
     headers += "Content-Length: ";
-    headers += std::to_string(query.size());
+    headers += std::to_string(prefix.size() + query.size() + suffix.size());
     headers += "\r\n";
 
     if (!_authToken.empty()) {
@@ -211,9 +218,11 @@ void TuringClient::sendRequest(const std::string& query) {
     // iovec.iov_base is void* (non-const) because the struct is shared with
     // recvmsg, which writes through it. sendmsg only reads, so the const_cast
     // on query.data() is a POSIX-ABI wrinkle , not a real mutation.
-    std::array<iovec, 2> iovecs = {{
+    std::array<iovec, 4> iovecs = {{
         {headers.data(), headers.size()},
+        {prefix.data(), prefix.size()},
         {const_cast<char*>(query.data()), query.size()},
+        {suffix.data(), suffix.size()},
     }};
 
     size_t iovIndex = 0;
@@ -429,11 +438,15 @@ void TuringClient::recvCrlf() {
 }
 
 db::QueryStatus TuringClient::sendQuery(const std::string& query,
-                                        const db::QueryCallbacks::OnOutputData& callback) {
-    bioassert(query.length() <= MAX_WIRE_SIZE, "Query length exceeds maximum wire size");
-    bioassert(_graphName.length() <= MAX_WIRE_SIZE, "Graph name length exceeds maximum wire size");
+                                        const db::QueryCallbacks::OnOutputData& callback,
+                                        const db::ParameterMap* parameters) {
+    if (_graphName.length() > MAX_WIRE_SIZE) {
+        throw TuringException(fmt::format("The graph name is {} bytes, more than the {} bytes the binary protocol allows",
+                                          _graphName.length(),
+                                          MAX_WIRE_SIZE));
+    }
 
-    sendRequest(query);
+    sendRequest(query, parameters);
     recvHttpResponseHeaders();
 
     _embeddingBuffer.clear();
