@@ -11,6 +11,7 @@
 #include "QueryStatus.h"
 #include "TCPConnection.h"
 #include "TuringDB.h"
+#include "TuringProtoQueryRequest.h"
 #include "TuringProtoWriter.h"
 #include "AuthGate.h"
 
@@ -83,9 +84,14 @@ void TuringProtoServerProcessor::handleQuery() {
     QueryStatus status;
     DBTransactionInfo::read(httpInfo, transactionInfo, status);
 
+    TuringProtoQueryRequest request;
     if (status.isOk()) {
-        const QueryState state(transactionInfo.graphName, &mem, &compilerContext, &queryConfig, &_protoNLSink, transactionInfo.commit, transactionInfo.change);
-        status = _db.query(httpInfo.getPayload(), state);
+        TuringProtoQueryRequest::read(httpInfo, request, status);
+    }
+
+    if (status.isOk()) {
+        const QueryState state(transactionInfo.graphName, &mem, &compilerContext, &queryConfig, &_protoNLSink, transactionInfo.commit, transactionInfo.change, &request.getParameters());
+        status = _db.query(request.getQuery(), state);
     }
 
     if (!status.isOk()) {

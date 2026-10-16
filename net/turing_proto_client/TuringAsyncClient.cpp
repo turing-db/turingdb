@@ -8,10 +8,12 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <spdlog/fmt/fmt.h>
 
 #include "HTTPUtils.h"
 #include "TuringProtoDecoder.h"
@@ -457,12 +459,17 @@ void TuringAsyncClient::drainScratchIntoIovecs(std::array<iovec, 2>& iovecs, siz
 /**-------- --------------------------------------**/
 
 /**-------- Send Functions --------**/
-void TuringAsyncClient::buildRequest(const std::string& query) {
+void TuringAsyncClient::buildRequest(const std::string& query, const db::ParameterMap* parameters) {
+    _requestBody.build(query, parameters);
+    const std::span<char> prefix = _requestBody.getPrefix();
+    const std::span<char> suffix = _requestBody.getSuffix();
+    const size_t bodySize = prefix.size() + query.size() + suffix.size();
+
     // Serialize the whole request (headers + body) into the owned send buffer; send()
     // pumps it from _sendOffset and resumes across EAGAIN. Keep-Alive means the buffer is
     // reused across requests, so clear it first and size it for this request's body.
     _sendBuffer.clear();
-    _sendBuffer.reserve(query.size() + 256);
+    _sendBuffer.reserve(bodySize + 256);
 
     _sendBuffer += "POST /query?graph=";
     _sendBuffer += _graphName;
@@ -480,14 +487,16 @@ void TuringAsyncClient::buildRequest(const std::string& query) {
 
     _sendBuffer += "Content-type: application/turing-proto\r\n";
     _sendBuffer += "Content-Length: ";
-    _sendBuffer += std::to_string(query.size());
+    _sendBuffer += std::to_string(bodySize);
     _sendBuffer += "\r\n";
     _sendBuffer += "Connection: Keep-Alive\r\n";
     _sendBuffer += "\r\n";
 
     // The body follows the header block in the same buffer — no separate copy, no second
     // iovec, and send() only reads the bytes so no const_cast is needed.
+    _sendBuffer.append(prefix.data(), prefix.size());
     _sendBuffer += query;
+    _sendBuffer.append(suffix.data(), suffix.size());
 
     _sendOffset = 0;
     _sending = true;
@@ -517,9 +526,13 @@ void TuringAsyncClient::send() {
 }
 
 db::QueryStatus TuringAsyncClient::sendQuery(const std::string& query,
-                                             const db::QueryCallbacks::OnOutputData& callback) {
-    bioassert(query.length() <= std::numeric_limits<uint32_t>::max(), "Query length exceeds uint32 maximum");
-    bioassert(_graphName.length() <= std::numeric_limits<uint32_t>::max(), "Graph name length exceeds uint32 maximum");
+                                             const db::QueryCallbacks::OnOutputData& callback,
+                                             const db::ParameterMap* parameters) {
+    if (_graphName.length() > MAX_WIRE_SIZE) {
+        throw TuringException(fmt::format("The graph name is {} bytes, more than the {} bytes the binary protocol allows",
+                                          _graphName.length(),
+                                          MAX_WIRE_SIZE));
+    }
 
     // Prime the per-query state and stage the request, then make the first send/recv
     // attempt. On a blocking socket this runs the whole exchange; on a non-blocking
@@ -529,7 +542,7 @@ db::QueryStatus TuringAsyncClient::sendQuery(const std::string& query,
     reset();
     _callback = callback;
 
-    buildRequest(query);
+    buildRequest(query, parameters);
 
     send();
     if (isSendComplete()) {

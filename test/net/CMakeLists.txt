@@ -22,6 +22,11 @@ target_link_libraries(test_net_turing_proto_parameter_reader PRIVATE
     turing_db_net_encoders
     turing_db_decoders_s)
 
+add_turing_test(test_net_turing_proto_request_body TuringProtoRequestBodyTest.cpp)
+target_link_libraries(test_net_turing_proto_request_body PRIVATE
+    turing_db_net_encoders
+    turing_db_decoders_s)
+
 add_turing_test(test_net_json_encoder JsonEncoderTest.cpp)
 target_link_libraries(test_net_json_encoder PRIVATE
     turing_db_net_encoders
@@ -91,3 +96,14 @@ target_link_libraries(test_net_json_parameters PRIVATE
     turing_testenv_s
     turing_db_examples_s
     nlohmann_json)
+
+add_turing_test(test_net_turing_proto_parameters TuringProtoParametersTest.cpp)
+target_sources(test_net_turing_proto_parameters PRIVATE
+    ${CMAKE_SOURCE_DIR}/test/query-test-suite/QueryResultFormatter.cpp)
+target_include_directories(test_net_turing_proto_parameters PRIVATE
+    ${CMAKE_SOURCE_DIR}/test/query-test-suite)
+target_link_libraries(test_net_turing_proto_parameters PRIVATE
+    turing_db_server_s
+    turing_db_proto_client_s
+    turing_testenv_s
+    turing_db_examples_s)
