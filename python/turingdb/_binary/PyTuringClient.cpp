@@ -5,8 +5,10 @@
 #include <string>
 
 #include "NanobindUtils.h"
+#include "PyParameters.h"
 
 #include "LocalMemory.h"
+#include "ParameterMap.h"
 #include "QueryStatus.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
@@ -32,7 +34,13 @@ void PyTuringClient::setCommitHash(const std::string& commitHash) {
     _client->setCommitHash(result.value());
 }
 
-nb::dict PyTuringClient::query(const std::string& cypher) {
+nb::dict PyTuringClient::query(const std::string& cypher, nb::handle parameters) {
+    db::ParameterMap parameterMap;
+    const bool hasParameters = !parameters.is_none();
+    if (hasParameters) {
+        readParameters(parameters, parameterMap);
+    }
+
     db::DataframeManager dataframeManager;
     db::Dataframe bufferedDataframe;
     // Owning storage for column names — see allocColumns docs.
@@ -48,7 +56,7 @@ nb::dict PyTuringClient::query(const std::string& cypher) {
         appendDfs(dataframe, &bufferedDataframe);
     };
 
-    const db::QueryStatus status = _client->sendQuery(cypher, onData);
+    const db::QueryStatus status = _client->sendQuery(cypher, onData, hasParameters ? &parameterMap : nullptr);
     if (!status.isOk()) {
         throw TuringException(std::string(db::QueryStatusDescription::value(status.getStatus())) + ": " + status.getError());
     }

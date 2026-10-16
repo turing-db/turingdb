@@ -23,7 +23,7 @@ NB_MODULE(_turingembedded, m) {
         .def("clear_change_id", &PyTuringEmbedded::clearChangeID)
         .def("set_commit_hash", &PyTuringEmbedded::setCommitHash, nb::arg("commit_hash"))
         .def("clear_commit_hash", &PyTuringEmbedded::clearCommitHash)
-        .def("query", &PyTuringEmbedded::query, nb::arg("cypher"));
+        .def("query", &PyTuringEmbedded::query, nb::arg("cypher"), nb::arg("parameters") = nb::none());
 
     nb::register_exception_translator(
         [](const std::exception_ptr& p, void*) {

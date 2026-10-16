@@ -86,11 +86,11 @@ class TuringDB:
     def impl(self) -> Union[HTTPClient, BinaryClient, EmbeddedClient]:
         return self._impl
 
-    def query(self, query: str) -> DataFrame:
-        return self._impl.query(query)
+    def query(self, query: str, query_parameters: Optional[dict] = None) -> DataFrame:
+        return self._impl.query(query, query_parameters)
 
-    def query_raw(self, query: str) -> dict:
-        return self._impl.query_raw(query)
+    def query_raw(self, query: str, query_parameters: Optional[dict] = None) -> dict:
+        return self._impl.query_raw(query, query_parameters)
 
     def set_graph(self, graph_name: str) -> None:
         self._impl.set_graph(graph_name)

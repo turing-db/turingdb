@@ -36,7 +36,7 @@ public:
     void setCommitHash(const std::string& s);
     void clearCommitHash() { _commitHash = db::CommitHash::head(); }
 
-    nb::dict query(const std::string& cypher);
+    nb::dict query(const std::string& cypher, nb::handle parameters);
 
 private:
     void init();
