@@ -6,6 +6,6 @@ User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
 Authorization: Bearer token
-Content-Length: 90
+Content-Length: 102
 
-MATCH (a:Person)-->(b:Interest)<--(c:Person) WHERE a.name <> c.name RETURN DISTINCT b.name
+{"query":"MATCH (a:Person)-->(b:Interest)<--(c:Person) WHERE a.name <> c.name RETURN DISTINCT b.name"}

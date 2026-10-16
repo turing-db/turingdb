@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 98
+Content-Length: 110
 
-MATCH (a:Person)-[:KNOWS]->(b:Person)-[:INTERESTED_IN]->(c:Interest) RETURN a.name, b.name, c.name
+{"query":"MATCH (a:Person)-[:KNOWS]->(b:Person)-[:INTERESTED_IN]->(c:Interest) RETURN a.name, b.name, c.name"}

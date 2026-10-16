@@ -6,6 +6,6 @@ User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
 Authorization: Bearer token
-Content-Length: 30
+Content-Length: 42
 
-MATCH (n:Person) RETURN n.name
+{"query":"MATCH (n:Person) RETURN n.name"}

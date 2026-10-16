@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 89
+Content-Length: 101
 
-CREATE (a:City {name:'CityA'}), (b:City {name:'CityB'}), (a)-[:ROAD {distance:10.0}]->(b)
+{"query":"CREATE (a:City {name:'CityA'}), (b:City {name:'CityB'}), (a)-[:ROAD {distance:10.0}]->(b)"}

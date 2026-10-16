@@ -205,7 +205,8 @@ def seed_name(query):
 
 
 def requests_from_seeds(template, states):
-    """Every hand-written Cypher seed as a /query request, the client states taken in turn."""
+    """Every hand-written Cypher seed as a /query request with a JSON body, the client states
+    taken in turn."""
     seeds = sorted(p for p in glob.glob(os.path.join(CORPUS_DIR, "*.cypher"))
                    if not os.path.basename(p).startswith("q_"))
 
@@ -214,10 +215,11 @@ def requests_from_seeds(template, states):
         with open(path, "rb") as handle:
             query = handle.read()
 
+        body = json.dumps({"query": query.decode("utf-8")}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         params, authorization = states[index % len(states)]
-        header = template.format(params=params, authorization=authorization, length=len(query))
+        header = template.format(params=params, authorization=authorization, length=len(body))
         name = "cypher_" + os.path.splitext(os.path.basename(path))[0] + ".raw"
-        found[name] = header.encode("ascii") + query
+        found[name] = header.encode("ascii") + body
 
     return found
 

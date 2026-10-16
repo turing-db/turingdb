@@ -6,6 +6,6 @@ User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
 Authorization: Bearer token
-Content-Length: 19
+Content-Length: 31
 
-CREATE GRAPH testDB
+{"query":"CREATE GRAPH testDB"}

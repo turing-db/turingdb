@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 300
+Content-Length: 312
 
-MATCH (tag:Tag {name: 'Carl_Gustaf_Emil_Mannerheim'})<-[:HAS_TAG]-(message:Message), (message)<-[:REPLY_OF]-(comment:Comment)-[:HAS_TAG]->(relatedTag:Tag) WHERE NOT (comment)-[:HAS_TAG]->(tag) RETURN relatedTag.name, count(DISTINCT comment) AS count ORDER BY count DESC, relatedTag.name ASC LIMIT 100
+{"query":"MATCH (tag:Tag {name: 'Carl_Gustaf_Emil_Mannerheim'})<-[:HAS_TAG]-(message:Message), (message)<-[:REPLY_OF]-(comment:Comment)-[:HAS_TAG]->(relatedTag:Tag) WHERE NOT (comment)-[:HAS_TAG]->(tag) RETURN relatedTag.name, count(DISTINCT comment) AS count ORDER BY count DESC, relatedTag.name ASC LIMIT 100"}

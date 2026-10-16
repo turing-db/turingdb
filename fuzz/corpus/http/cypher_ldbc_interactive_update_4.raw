@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 248
+Content-Length: 260
 
-MATCH (p:Person {id: 4398046511333}) CREATE (f:Forum {id: 999999999, title: 'Bench forum', creationDate: datetime('2010-11-25T08:20:45.079Z')})-[:HAS_MODERATOR]->(p) WITH f UNWIND [1524] AS tagId MATCH (t:Tag {id: tagId}) CREATE (f)-[:HAS_TAG]->(t)
+{"query":"MATCH (p:Person {id: 4398046511333}) CREATE (f:Forum {id: 999999999, title: 'Bench forum', creationDate: datetime('2010-11-25T08:20:45.079Z')})-[:HAS_MODERATOR]->(p) WITH f UNWIND [1524] AS tagId MATCH (t:Tag {id: tagId}) CREATE (f)-[:HAS_TAG]->(t)"}

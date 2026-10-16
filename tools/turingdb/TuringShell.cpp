@@ -4,11 +4,11 @@
 #include <regex>
 #include <stdlib.h>
 #include <strings.h>
-#include <limits>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <termios.h>
 #include <iostream>
+#include <variant>
 
 #include <argparse.hpp>
 #include <linenoise.h>
@@ -30,6 +30,7 @@
 #include "ShellCompletion.h"
 #include "ShellTable.h"
 #include "LocalMemory.h"
+#include "ParameterJson.h"
 #include "ParameterValue.h"
 
 #include "NLOutputSink.h"
@@ -110,37 +111,6 @@ void extractWords(std::vector<std::string>& words, const std::string& line) {
 
         words.emplace_back(std::string(line.c_str() + pos, newPos - pos));
         pos = newPos;
-    }
-}
-
-void parseJsonParameter(const nlohmann::json& json, ParameterValue& value) {
-    if (json.is_null()) {
-        value.setNull();
-    } else if (json.is_boolean()) {
-        value.setBool(json.get<bool>());
-    } else if (json.is_number_unsigned()) {
-        const uint64_t number = json.get<uint64_t>();
-        if (number > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-            throw TuringException(fmt::format("Integer {} exceeds the Int64 range", number));
-        }
-
-        value.setInt64(static_cast<int64_t>(number));
-    } else if (json.is_number_integer()) {
-        value.setInt64(json.get<int64_t>());
-    } else if (json.is_number_float()) {
-        value.setDouble(json.get<double>());
-    } else if (json.is_string()) {
-        value.setString(json.get_ref<const std::string&>());
-    } else if (json.is_array()) {
-        ParameterValue::List& list = value.setList();
-        for (const nlohmann::json& element : json) {
-            parseJsonParameter(element, list.emplace_back());
-        }
-    } else {
-        ParameterValue::Map& map = value.setMap();
-        for (const auto& [key, entry] : json.items()) {
-            parseJsonParameter(entry, map[key]);
-        }
     }
 }
 
@@ -742,62 +712,74 @@ void asString(std::string& out, const MapView mv) {
     out += '}';
 }
 
-void asString(std::string& out, const ParameterValue& value) {
-    if (value.isNull()) {
-        out += "null";
-        return;
-    }
+void asString(std::string& out, const ParameterValue& root) {
+    using Item = std::variant<const ParameterValue*, std::string_view>;
 
-    switch (value.getType()) {
-        case ValueType::Int64:
-            asString(out, value.getInt64());
-        break;
-        case ValueType::Double:
-            asString(out, value.getDouble());
-        break;
-        case ValueType::Bool:
-            out += value.getBool() ? "true" : "false";
-        break;
-        case ValueType::String:
-            out += value.getString();
-        break;
-        case ValueType::List: {
-            out += '[';
+    std::vector<Item> worklist;
+    worklist.emplace_back(&root);
 
-            bool first = true;
-            for (const ParameterValue& element : value.getList()) {
-                if (!first) {
-                    out += ", ";
-                }
+    while (!worklist.empty()) {
+        const Item item = worklist.back();
+        worklist.pop_back();
 
-                asString(out, element);
-                first = false;
-            }
-
-            out += ']';
+        if (const std::string_view* text = std::get_if<std::string_view>(&item)) {
+            out += *text;
+            continue;
         }
-        break;
-        case ValueType::Map: {
-            out += '{';
 
-            bool first = true;
-            for (const auto& [key, entry] : value.getMap()) {
-                if (!first) {
-                    out += ", ";
-                }
-
-                out += key;
-                out += " : ";
-                asString(out, entry);
-                first = false;
-            }
-
-            out += '}';
+        const ParameterValue& value = *std::get<const ParameterValue*>(item);
+        if (value.isNull()) {
+            out += "null";
+            continue;
         }
-        break;
-        default:
-            throw TuringException(fmt::format("Unsupported parameter type {}", ValueTypeName::value(value.getType())));
-        break;
+
+        switch (value.getType()) {
+            case ValueType::Int64:
+                asString(out, value.getInt64());
+            break;
+            case ValueType::Double:
+                asString(out, value.getDouble());
+            break;
+            case ValueType::Bool:
+                out += value.getBool() ? "true" : "false";
+            break;
+            case ValueType::String:
+                out += value.getString();
+            break;
+            case ValueType::List: {
+                const ParameterValue::List& list = value.getList();
+
+                out += '[';
+                worklist.emplace_back(std::string_view {"]"});
+
+                for (size_t index = list.size(); index > 0; index--) {
+                    worklist.emplace_back(&list[index - 1]);
+                    if (index > 1) {
+                        worklist.emplace_back(std::string_view {", "});
+                    }
+                }
+            }
+            break;
+            case ValueType::Map: {
+                const ParameterValue::Map& map = value.getMap();
+
+                out += '{';
+                worklist.emplace_back(std::string_view {"}"});
+
+                for (auto entry = map.rbegin(); entry != map.rend(); entry++) {
+                    worklist.emplace_back(&entry->second);
+                    worklist.emplace_back(std::string_view {" : "});
+                    worklist.emplace_back(std::string_view {entry->first});
+                    if (std::next(entry) != map.rend()) {
+                        worklist.emplace_back(std::string_view {", "});
+                    }
+                }
+            }
+            break;
+            default:
+                throw TuringException(fmt::format("Unsupported parameter type {}", ValueTypeName::value(value.getType())));
+            break;
+        }
     }
 }
 
@@ -1078,7 +1060,7 @@ void TuringShell::setParameter(std::string_view arguments) {
     ParameterValue value;
     try {
         const nlohmann::json json = nlohmann::json::parse(trimmed.substr(arrowPos + ARROW.size()));
-        parseJsonParameter(json, value);
+        readJsonParameter(json, value);
     } catch (const nlohmann::json::exception& e) {
         spdlog::error("Invalid value for parameter {}: {}", name, e.what());
         return;

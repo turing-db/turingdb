@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 63
+Content-Length: 75
 
-LOAD CSV 'file.csv' AS row RETURN row[0] AS name, row[1] AS age
+{"query":"LOAD CSV 'file.csv' AS row RETURN row[0] AS name, row[1] AS age"}

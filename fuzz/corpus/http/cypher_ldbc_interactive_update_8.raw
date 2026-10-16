@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 150
+Content-Length: 162
 
-MATCH (p1:Person {id: 4398046511333}), (p2:Person {id: 6597069766660}) CREATE (p1)-[:KNOWS {creationDate: datetime('2010-11-25T08:20:45.079Z')}]->(p2)
+{"query":"MATCH (p1:Person {id: 4398046511333}), (p2:Person {id: 6597069766660}) CREATE (p1)-[:KNOWS {creationDate: datetime('2010-11-25T08:20:45.079Z')}]->(p2)"}

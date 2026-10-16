@@ -1,6 +1,7 @@
 
 set(server_sources
     AuthGate.cpp
+    DBQueryRequest.cpp
     DBServerNlSink.cpp
     DBServerProcessor.cpp
     DBTransactionInfo.cpp

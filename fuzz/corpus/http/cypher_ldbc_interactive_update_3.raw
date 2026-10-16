@@ -6,6 +6,6 @@ User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
 Authorization: Bearer token
-Content-Length: 168
+Content-Length: 180
 
-MATCH (person:Person {id: 4398046511333}), (comment:Comment {id: 206158431892}) CREATE (person)-[:LIKES {creationDate: datetime('2010-11-25T08:20:45.079Z')}]->(comment)
+{"query":"MATCH (person:Person {id: 4398046511333}), (comment:Comment {id: 206158431892}) CREATE (person)-[:LIKES {creationDate: datetime('2010-11-25T08:20:45.079Z')}]->(comment)"}

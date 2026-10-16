@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 27
+Content-Length: 39
 
-MATCH (n)-[e]->(m) DELETE e
+{"query":"MATCH (n)-[e]->(m) DELETE e"}

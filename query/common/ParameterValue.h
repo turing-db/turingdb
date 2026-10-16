@@ -18,7 +18,12 @@ public:
     using Variant = std::variant<std::monostate, int64_t, double, bool, std::string, List, Map>;
 
     ParameterValue();
+    ParameterValue(const ParameterValue& other);
+    ParameterValue(ParameterValue&& other) noexcept;
     ~ParameterValue();
+
+    ParameterValue& operator=(const ParameterValue& other);
+    ParameterValue& operator=(ParameterValue&& other) noexcept;
 
     bool isNull() const;
     ValueType getType() const;
@@ -41,6 +46,12 @@ public:
 
 private:
     Variant _value;
+
+    bool holdsContainer() const;
+    void copyFrom(const ParameterValue& other);
+    void detachContainer(std::vector<Variant>& worklist);
+
+    static void detachChildren(Variant& container, std::vector<Variant>& worklist);
 };
 
 }

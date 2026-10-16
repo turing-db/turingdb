@@ -74,3 +74,10 @@ target_link_libraries(test_net_change_id_param PRIVATE
     turing_testenv_s
     turing_db_examples_s
     nlohmann_json)
+
+add_turing_test(test_net_json_parameters JsonParametersTest.cpp)
+target_link_libraries(test_net_json_parameters PRIVATE
+    turing_db_server_s
+    turing_testenv_s
+    turing_db_examples_s
+    nlohmann_json)
