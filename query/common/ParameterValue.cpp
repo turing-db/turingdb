@@ -161,6 +161,10 @@ void ParameterValue::setString(std::string_view value) {
     _value.emplace<std::string>(value);
 }
 
+std::string& ParameterValue::setString() {
+    return _value.emplace<std::string>();
+}
+
 ParameterValue::List& ParameterValue::setList() {
     return _value.emplace<List>();
 }

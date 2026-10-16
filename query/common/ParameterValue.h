@@ -41,6 +41,7 @@ public:
     void setDouble(double value);
     void setBool(bool value);
     void setString(std::string_view value);
+    std::string& setString();
     List& setList();
     Map& setMap();
 

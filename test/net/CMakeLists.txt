@@ -12,6 +12,16 @@ target_link_libraries(test_net_turing_proto_roundtrip PRIVATE
     turing_db_net_encoders
     turing_db_proto_client_s)
 
+add_turing_test(test_net_turing_proto_parameter_writer TuringProtoParameterWriterTest.cpp)
+target_link_libraries(test_net_turing_proto_parameter_writer PRIVATE
+    turing_db_net_encoders
+    turing_db_decoders_s)
+
+add_turing_test(test_net_turing_proto_parameter_reader TuringProtoParameterReaderTest.cpp)
+target_link_libraries(test_net_turing_proto_parameter_reader PRIVATE
+    turing_db_net_encoders
+    turing_db_decoders_s)
+
 add_turing_test(test_net_json_encoder JsonEncoderTest.cpp)
 target_link_libraries(test_net_json_encoder PRIVATE
     turing_db_net_encoders
