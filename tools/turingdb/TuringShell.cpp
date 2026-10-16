@@ -962,7 +962,7 @@ void TuringShell::processLine(std::string& line) {
 
         try {
             const TimePoint start = Clock::now();
-            res = _client.sendQuery(line, shellOutPutCallBack);
+            res = _client.sendQuery(line, shellOutPutCallBack, &_parameters);
             const TimePoint end = Clock::now();
 
             remoteQueryTime = end - start;

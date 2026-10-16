@@ -36,7 +36,7 @@ public:
     void setCommitHash(const std::string& commitHash);
     void clearCommitHash() { _client->setCommitHash(db::CommitHash::head()); }
 
-    nb::dict query(const std::string& cypher);
+    nb::dict query(const std::string& cypher, nb::handle parameters);
 
 private:
     std::unique_ptr<db::LocalMemory> _localMem;

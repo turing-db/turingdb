@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "NanobindUtils.h"
+#include "PyParameters.h"
 
 #include "LocalMemory.h"
 #include "NLOutputSink.h"
+#include "ParameterMap.h"
 #include "Path.h"
 #include "QueryState.h"
 #include "QueryStatus.h"
@@ -82,7 +84,13 @@ void PyTuringEmbedded::setCommitHash(const std::string& s) {
     _commitHash = res.value();
 }
 
-nb::dict PyTuringEmbedded::query(const std::string& cypher) {
+nb::dict PyTuringEmbedded::query(const std::string& cypher, nb::handle parameters) {
+    db::ParameterMap parameterMap;
+    const bool hasParameters = !parameters.is_none();
+    if (hasParameters) {
+        readParameters(parameters, parameterMap);
+    }
+
     db::DataframeManager dfMan;
     db::Dataframe bufferedDf;
     PyEmbeddedNLSink sink(&bufferedDf, &dfMan, _localMem.get());
@@ -93,7 +101,8 @@ nb::dict PyTuringEmbedded::query(const std::string& cypher) {
                                &_queryConfig,
                                &sink,
                                _commitHash,
-                               _changeID);
+                               _changeID,
+                               hasParameters ? &parameterMap : nullptr);
 
     const db::QueryStatus status = _db->query(cypher, state);
     if (!status.isOk()) {

@@ -29,7 +29,7 @@ NB_MODULE(_turingproto, m) {
         .def("clear_change_id", &PyTuringClient::clearChangeID)
         .def("set_commit_hash", &PyTuringClient::setCommitHash, nb::arg("commit_hash"))
         .def("clear_commit_hash", &PyTuringClient::clearCommitHash)
-        .def("query", &PyTuringClient::query, nb::arg("cypher"));
+        .def("query", &PyTuringClient::query, nb::arg("cypher"), nb::arg("parameters") = nb::none());
 
     nb::register_exception_translator(
         [](const std::exception_ptr& p, void*) {
