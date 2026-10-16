@@ -137,8 +137,11 @@ private:
     VecLibMetadata _metadata;
     std::unique_ptr<LSHShardRouter> _shardRouter;
     std::unique_ptr<faiss::Index> _hnswIndex;
+    bool _hnswIndexMapped {false};
 
     VecLib();
+
+    void materializeHNSWIndex();
 
     template <typename Visitor>
     void forEachIndex(Visitor visit);

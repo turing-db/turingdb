@@ -146,6 +146,59 @@ TEST_F(VectorReloadTest, rebuiltIndexSurvivesReload) {
     }
 }
 
+// Adding embeddings to a library that was loaded from disk has to work for every index
+// type. An HNSW index is mapped from its file on load, and faiss aborts the process
+// rather than grow a mapped index, so the library reads it back in owned to add to it.
+TEST_F(VectorReloadTest, addAfterReload) {
+    constexpr Dimension dimension = 2;
+    constexpr std::array<float, dimension> axisX {1.0f, 0.0f};
+    constexpr std::array<float, dimension> axisY {0.0f, 1.0f};
+
+    for (const IndexType indexType : {IndexType::FLAT, IndexType::HNSW}) {
+        const std::string libName = indexType == IndexType::FLAT ? "flataddlib" : "hnswaddlib";
+        SCOPED_TRACE(libName);
+
+        {
+            VectorDatabase db;
+            ASSERT_TRUE(db.init(_rootDir));
+            ASSERT_TRUE(db.createLibrary(libName, dimension, DistanceMetric::EUCLIDEAN_DIST, indexType));
+
+            VecLibWriteAccessor accessor = db.getLibraryForWrite(libName);
+            ASSERT_TRUE(accessor.isValid());
+
+            BatchVectorCreate batch;
+            accessor.prepareCreateBatch(&batch);
+            batch.addPoint(0, axisX);
+            ASSERT_TRUE(accessor.addEmbeddings(&batch));
+        }
+
+        VectorDatabase db;
+        ASSERT_TRUE(db.init(_rootDir));
+
+        {
+            VecLibWriteAccessor accessor = db.getLibraryForWrite(libName);
+            ASSERT_TRUE(accessor.isValid());
+
+            BatchVectorCreate batch;
+            accessor.prepareCreateBatch(&batch);
+            batch.addPoint(1, axisY);
+            ASSERT_TRUE(accessor.addEmbeddings(&batch));
+        }
+
+        VecLibAccessor accessor = db.getLibrary(libName);
+        ASSERT_TRUE(accessor.isValid());
+
+        VectorSearchResult results;
+        VectorSearchQuery query(dimension);
+        query.setVector(axisY);
+        query.setMaxResultCount(2);
+        ASSERT_TRUE(accessor.search(&query, &results));
+
+        const std::vector<int64_t> ids(results.ids().begin(), results.ids().end());
+        EXPECT_EQ(ids, (std::vector<int64_t> {1, 0}));
+    }
+}
+
 int main(int argc, char** argv) {
     return turingTestMain(argc, argv);
 }

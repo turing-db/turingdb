@@ -148,6 +148,7 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
             if (hnswPath.exists()) {
                 _vecLib->_hnswIndex.reset(
                         faiss::read_index(hnswPath.c_str(), faiss::IO_FLAG_MMAP_IFC));
+                _vecLib->_hnswIndexMapped = true;
             } else {
                 _vecLib->_hnswIndex = buildHNSWIndex(meta);
             }
@@ -201,7 +202,22 @@ VectorResult<void> VecLib::addEmbeddingsBruteForce(const BatchVectorCreate* batc
     return {};
 }
 
+// A mapped index reads its vectors straight out of the index file, and faiss aborts
+// the process rather than grow one. A write reads the index back in owned, which also
+// releases the mapping before persistHNSWIndex rewrites the file underneath it.
+void VecLib::materializeHNSWIndex() {
+    if (!_hnswIndexMapped) {
+        return;
+    }
+
+    const fs::Path hnswPath = _storage->getHNSWIndexPath(_metadata._id);
+    _hnswIndex.reset(faiss::read_index(hnswPath.c_str()));
+    _hnswIndexMapped = false;
+}
+
 VectorResult<void> VecLib::addEmbeddingsHNSW(const BatchVectorCreate* batch) {
+    materializeHNSWIndex();
+
     for (auto it = batch->begin(); it != batch->end(); ++it) {
         const auto& data = *it;
         if (data._externalIDs.empty()) {
@@ -288,6 +304,7 @@ VectorResult<void> VecLib::clearIndex() {
         break;
         case IndexType::HNSW:
             _hnswIndex = buildHNSWIndex(_metadata);
+            _hnswIndexMapped = false;
             return {};
         break;
         case IndexType::_SIZE:
