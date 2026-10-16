@@ -1,5 +1,6 @@
 #include "TCPServer.h"
 
+#include <exception>
 #include <thread>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -20,6 +21,20 @@ using namespace net;
 namespace {
 
 constexpr const char* THREAD_NAME = "turingdb.http";
+
+void closeFailedConnection(TCPConnection& connection, const char* reason) {
+    spdlog::error("Closing connection after an unhandled exception: {}", reason);
+
+    // The connection goes back to the storage pool on close and is handed out
+    // again as it stands, so its writer and input buffer are reset the way the
+    // connection manager's own error path leaves them; close() takes the parser.
+    connection.getWriter().reset();
+    connection.getInputBuffer().getWriter().reset();
+
+    if (connection.getSocket() != 0) {
+        connection.close();
+    }
+}
 
 }
 
@@ -227,7 +242,13 @@ void TCPServer::runThread(size_t threadID, ServerContext& ctxt) {
                 continue;
             }
 
-            connectionManager.process(threadContext.get(), ev);
+            try {
+                connectionManager.process(threadContext.get(), ev);
+            } catch (const std::exception& e) {
+                closeFailedConnection(*connection, e.what());
+            } catch (...) {
+                closeFailedConnection(*connection, "unknown exception");
+            }
         }
     }
 }
