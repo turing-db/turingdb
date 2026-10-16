@@ -3,6 +3,7 @@
 #include "TuringDB.h"
 #include "JsonEncoder.h"
 #include "DBServerNlSink.h"
+#include "DBQueryRequest.h"
 #include "DBTransactionInfo.h"
 #include "QueryState.h"
 
@@ -82,9 +83,14 @@ void DBServerProcessor::query() {
     QueryStatus status;
     DBTransactionInfo::read(httpInfo, transactionInfo, status);
 
+    DBQueryRequest request;
     if (status.isOk()) {
-        const QueryState state(transactionInfo.graphName, &mem, &compilerContext, &_db.getDefaultQueryConfig(), &sink, transactionInfo.commit, transactionInfo.change);
-        status = _db.query(httpInfo.getPayload(), state);
+        DBQueryRequest::read(httpInfo, request, status);
+    }
+
+    if (status.isOk()) {
+        const QueryState state(transactionInfo.graphName, &mem, &compilerContext, &_db.getDefaultQueryConfig(), &sink, transactionInfo.commit, transactionInfo.change, &request.getParameters());
+        status = _db.query(request.getQuery(), state);
     }
 
     if (!status.isOk()) {

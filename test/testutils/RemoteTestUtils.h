@@ -22,7 +22,10 @@ struct HttpResponse {
     std::string body;
 };
 
-// Posts the query on a fresh connection and reads a chunked response.
+// Posts the body on a fresh connection and reads a chunked response.
+void postHttpBody(uint16_t port, const std::string& uri, const std::string& body, HttpResponse& response);
+
+// Posts the query in the JSON body the REST server reads.
 void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response);
 
 // USE_TURING_PROTO is read once during TuringServer::start() to choose the

@@ -1,5 +1,8 @@
 #include "ParameterValue.h"
 
+#include <utility>
+#include <vector>
+
 #include "BioAssert.h"
 
 using namespace db;
@@ -8,7 +11,78 @@ ParameterValue::ParameterValue()
 {
 }
 
+ParameterValue::ParameterValue(const ParameterValue& other)
+{
+    copyFrom(other);
+}
+
+ParameterValue::ParameterValue(ParameterValue&& other) noexcept
+{
+    _value.swap(other._value);
+}
+
 ParameterValue::~ParameterValue() {
+    std::vector<Variant> worklist;
+    detachContainer(worklist);
+
+    while (!worklist.empty()) {
+        Variant container;
+        container.swap(worklist.back());
+        worklist.pop_back();
+
+        detachChildren(container, worklist);
+    }
+}
+
+ParameterValue& ParameterValue::operator=(const ParameterValue& other) {
+    if (this != &other) {
+        ParameterValue copy(other);
+        _value.swap(copy._value);
+    }
+
+    return *this;
+}
+
+ParameterValue& ParameterValue::operator=(ParameterValue&& other) noexcept {
+    if (this != &other) {
+        ParameterValue previous;
+        previous._value.swap(_value);
+        _value.swap(other._value);
+    }
+
+    return *this;
+}
+
+bool ParameterValue::holdsContainer() const {
+    return std::holds_alternative<List>(_value) || std::holds_alternative<Map>(_value);
+}
+
+void ParameterValue::copyFrom(const ParameterValue& other) {
+    using Item = std::pair<const ParameterValue*, ParameterValue*>;
+
+    std::vector<Item> worklist;
+    worklist.emplace_back(&other, this);
+
+    while (!worklist.empty()) {
+        const auto [source, target] = worklist.back();
+        worklist.pop_back();
+
+        if (const List* sourceList = std::get_if<List>(&source->_value)) {
+            List& targetList = target->_value.emplace<List>(sourceList->size());
+
+            for (size_t index = 0; index < targetList.size(); index++) {
+                worklist.emplace_back(&(*sourceList)[index], &targetList[index]);
+            }
+        } else if (const Map* sourceMap = std::get_if<Map>(&source->_value)) {
+            Map& targetMap = target->_value.emplace<Map>();
+
+            for (const auto& [key, entry] : *sourceMap) {
+                worklist.emplace_back(&entry, &targetMap[key]);
+            }
+        } else {
+            target->_value = source->_value;
+        }
+    }
 }
 
 bool ParameterValue::isNull() const {
@@ -93,4 +167,22 @@ ParameterValue::List& ParameterValue::setList() {
 
 ParameterValue::Map& ParameterValue::setMap() {
     return _value.emplace<Map>();
+}
+
+void ParameterValue::detachContainer(std::vector<Variant>& worklist) {
+    if (holdsContainer()) {
+        worklist.emplace_back().swap(_value);
+    }
+}
+
+void ParameterValue::detachChildren(Variant& container, std::vector<Variant>& worklist) {
+    if (List* list = std::get_if<List>(&container)) {
+        for (ParameterValue& element : *list) {
+            element.detachContainer(worklist);
+        }
+    } else if (Map* map = std::get_if<Map>(&container)) {
+        for (auto& [key, entry] : *map) {
+            entry.detachContainer(worklist);
+        }
+    }
 }

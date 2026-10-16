@@ -7,7 +7,8 @@ target_link_libraries(turing_testutils_s
             GTest::gmock
             turing_common_s
             turing_db_jobs_s
-            spdlog)
+            spdlog
+    PRIVATE nlohmann_json)
 
 target_include_directories(turing_testutils_s
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR})

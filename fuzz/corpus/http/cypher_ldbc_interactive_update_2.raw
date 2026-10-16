@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 159
+Content-Length: 171
 
-MATCH (person:Person {id: 4398046511333}), (post:Post {id: 343597383680}) CREATE (person)-[:LIKES {creationDate: datetime('2010-11-25T08:20:45.079Z')}]->(post)
+{"query":"MATCH (person:Person {id: 4398046511333}), (post:Post {id: 343597383680}) CREATE (person)-[:LIKES {creationDate: datetime('2010-11-25T08:20:45.079Z')}]->(post)"}

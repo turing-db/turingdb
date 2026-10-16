@@ -5,6 +5,6 @@ Connection: keep-alive
 User-Agent: python-httpx/0.28.1
 Accept: application/json
 Content-Type: application/json
-Content-Length: 63
+Content-Length: 75
 
-CREATE VECTOR INDEX embeddings WITH DIMENSION 128 METRIC EUCLID
+{"query":"CREATE VECTOR INDEX embeddings WITH DIMENSION 128 METRIC EUCLID"}

@@ -124,7 +124,7 @@ class HTTPClient:
             self._client.timeout = prev
 
     def list_available_graphs(self) -> list[str]:
-        json = self._send_request("query", data="LIST AVAILABLE GRAPHS")
+        json = self._send_request("query", "LIST AVAILABLE GRAPHS")
         if not isinstance(json, dict):
             raise TuringDBException("Invalid response from the server")
         df = self._parse_chunks(json)
@@ -133,7 +133,7 @@ class HTTPClient:
         return df["graphName"].tolist()
 
     def list_loaded_graphs(self) -> list[str]:
-        json = self._send_request("query", data="LIST GRAPH")
+        json = self._send_request("query", "LIST GRAPH")
         if not isinstance(json, dict):
             raise TuringDBException("Invalid response from the server")
         df = self._parse_chunks(json)
@@ -146,7 +146,7 @@ class HTTPClient:
 
     def load_graph(self, graph_name: str, raise_if_loaded: bool = True):
         try:
-            return self._send_request("query", data=f"LOAD GRAPH {graph_name}")
+            return self._send_request("query", f"LOAD GRAPH {graph_name}")
         except TuringDBException as e:
             if not raise_if_loaded and "Graph already loaded" in str(e):
                 return None
@@ -155,16 +155,16 @@ class HTTPClient:
     def create_graph(self, graph_name: str):
         return self.query(f"create graph {graph_name}")
 
-    def query(self, query: str):
-        json = self._send_request("query", data=query, params=self._params)
+    def query(self, query: str, query_parameters: Optional[dict] = None):
+        json = self._send_request("query", query, query_parameters, params=self._params)
 
         if not isinstance(json, dict):
             raise TuringDBException("Invalid response from the server")
 
         return self._parse_chunks(json)
 
-    def query_raw(self, query: str) -> dict:
-        json = self._send_request("query", data=query, params=self._params)
+    def query_raw(self, query: str, query_parameters: Optional[dict] = None) -> dict:
+        json = self._send_request("query", query, query_parameters, params=self._params)
 
         if not isinstance(json, dict):
             raise TuringDBException("Invalid response from the server")
@@ -235,26 +235,22 @@ class HTTPClient:
     def _send_request(
         self,
         path: str,
-        data: Optional[dict | str] = None,
+        query: str,
+        query_parameters: Optional[dict] = None,
         params: Optional[dict] = None,
     ):
         self._query_exec_time = None
         self._total_exec_time = None
         self._t0 = time.time()
 
-        if data is None:
-            data = ""
+        body = {"query": query}
+        if query_parameters is not None:
+            body["parameters"] = query_parameters
 
         url = f"{self.host}/{path}"
-
-        if isinstance(data, dict):
-            response = self._client.post(
-                url, json=data, params=params, headers=self._headers
-            )
-        else:
-            response = self._client.post(
-                url, content=data, params=params, headers=self._headers
-            )
+        response = self._client.post(
+            url, json=body, params=params, headers=self._headers
+        )
         if response.is_error:
             try:
                 _raise_if_error(_decode_body(response.text))

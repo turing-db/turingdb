@@ -9,6 +9,8 @@
 #include <thread>
 #include <unistd.h>
 
+#include <nlohmann/json.hpp>
+
 #include "FatalException.h"
 #include "TuringTime.h"
 
@@ -150,13 +152,13 @@ ProtoEnvScope::~ProtoEnvScope() {
     }
 }
 
-void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response) {
+void postHttpBody(uint16_t port, const std::string& uri, const std::string& body, HttpResponse& response) {
     const int socket = connectTo(port);
 
     std::string request = "POST " + uri + " HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: ";
-    request += std::to_string(query.size());
+    request += std::to_string(body.size());
     request += "\r\n\r\n";
-    request += query;
+    request += body;
 
     try {
         sendAll(socket, request);
@@ -191,6 +193,11 @@ void postHttpQuery(uint16_t port, const std::string& uri, const std::string& que
     }
 
     ::close(socket);
+}
+
+void postHttpQuery(uint16_t port, const std::string& uri, const std::string& query, HttpResponse& response) {
+    const nlohmann::json body = {{"query", query}};
+    postHttpBody(port, uri, body.dump(), response);
 }
 
 }

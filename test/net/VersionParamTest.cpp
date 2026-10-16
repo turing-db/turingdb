@@ -167,7 +167,7 @@ TEST_F(VersionParamTest, binaryProtocolRejectsAnUnparseableCommit) {
     startServer();
 
     HttpResponse response;
-    postHttpQuery(_port, "/query?graph=simpledb&commit=zzz", COUNT_QUERY, response);
+    postHttpBody(_port, "/query?graph=simpledb&commit=zzz", COUNT_QUERY, response);
 
     EXPECT_EQ(response.statusLine, "HTTP/1.1 200 OK");
     ASSERT_GE(response.body.size(), net::proto::ProtoHeader::wireSize());
