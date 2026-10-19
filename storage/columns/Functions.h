@@ -202,11 +202,23 @@ public:
     ResultType operator()(const IDT id) const { return static_cast<types::Int64::Primitive>(id.getValue()); }
 };
 
+// What a conversion over a type-erased cell answers for a value it has no rule for
+enum class UnconvertibleCell {
+    Null,
+    Raise,
+};
+
+template <typename StringFunctor, UnconvertibleCell OnUnconvertible>
+class TaggedConversionFunction;
+
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
 class ToFloatFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Double::Primitive>;
+    using TaggedCounterpart = TaggedConversionFunction<ToFloatFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "toFloat";
 
     ResultType operator()(std::string_view sv) {
         // @ref std::strtod requires a null-terminated std::string: convert the string_view
@@ -238,6 +250,9 @@ class ToIntegerFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Int64::Primitive>;
+    using TaggedCounterpart = TaggedConversionFunction<ToIntegerFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "toInteger";
 
     ResultType operator()(std::string_view text);
 
@@ -249,6 +264,9 @@ class ToBoolFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Bool::Primitive>;
+    using TaggedCounterpart = TaggedConversionFunction<ToBoolFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "toBoolean";
 
     ResultType operator()(std::string_view sv) {
         strToLower(_buf, sv);
@@ -283,6 +301,9 @@ class ToStringFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = types::String::Primitive;
+    using TaggedCounterpart = TaggedConversionFunction<ToStringFunction, UnconvertibleCell::Raise>;
+
+    static constexpr std::string_view NAME = "toString";
 
     explicit ToStringFunction(StringBuffer* stringBuffer);
 
@@ -671,6 +692,122 @@ std::optional<types::Int64::Primitive> cellInteger(const ListElementView cell, s
 
 types::Int64::Primitive unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName);
 
+[[noreturn]] void throwUnconvertibleCell(std::string_view functionName);
+
+// A rule held by a TaggedConversionFunction, built over the string buffer when it writes text
+template <typename Rule>
+class ConversionRule {
+public:
+    explicit ConversionRule(StringBuffer* stringBuffer) requires std::is_constructible_v<Rule, StringBuffer*>
+        : _rule(stringBuffer)
+    {
+    }
+
+    explicit ConversionRule(StringBuffer* stringBuffer) requires (!std::is_constructible_v<Rule, StringBuffer*>)
+    {
+    }
+
+    Rule& get() { return _rule; }
+
+private:
+    Rule _rule;
+};
+
+// A conversion over a type-erased cell. The cell's tag names the element it holds, which
+// converts by the rule ConversionFunctorFor gives a column of that element.
+template <typename StringFunctor, UnconvertibleCell OnUnconvertible>
+class TaggedConversionFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<TypeUtils::unwrap_optional_t<typename StringFunctor::ResultType>>;
+
+    explicit TaggedConversionFunction(StringBuffer* stringBuffer)
+        : _fromInteger(stringBuffer),
+        _fromUnsigned(stringBuffer),
+        _fromDouble(stringBuffer),
+        _fromBoolean(stringBuffer),
+        _fromString(stringBuffer),
+        _fromDateTime(stringBuffer),
+        _fromDuration(stringBuffer)
+    {
+    }
+
+    ResultType operator()(const ArgType cell) {
+        switch (cell.getTag()) {
+            case ListBufferTypeTag::Int:
+                return convert<types::Int64::Primitive>(cell, _fromInteger);
+            break;
+            case ListBufferTypeTag::UInt:
+                return convert<types::UInt64::Primitive>(cell, _fromUnsigned);
+            break;
+            case ListBufferTypeTag::Double:
+                return convert<types::Double::Primitive>(cell, _fromDouble);
+            break;
+            case ListBufferTypeTag::Bool:
+                return convert<types::Bool::Primitive>(cell, _fromBoolean);
+            break;
+            case ListBufferTypeTag::String:
+                return convert<types::String::Primitive>(cell, _fromString);
+            break;
+            case ListBufferTypeTag::DateTime:
+                return convert<types::DateTime::Primitive>(cell, _fromDateTime);
+            break;
+            case ListBufferTypeTag::Duration:
+                return convert<types::Duration::Primitive>(cell, _fromDuration);
+            break;
+            case ListBufferTypeTag::Null:
+                return std::nullopt;
+            break;
+            default:
+                return unconvertible();
+            break;
+        }
+    }
+
+    ResultType operator()(const std::optional<ArgType>& cell) {
+        return cell.has_value() ? (*this)(*cell) : std::nullopt;
+    }
+
+private:
+    template <typename Element>
+    using Rule = typename ConversionFunctorFor<StringFunctor, Element>::Type;
+
+    // The string functor is the rule of strings alone: any other element it is named for has none
+    template <typename Element>
+    static constexpr bool HAS_RULE = std::is_same_v<Element, types::String::Primitive>
+                                     || !std::is_same_v<Rule<Element>, StringFunctor>;
+
+    ConversionRule<Rule<types::Int64::Primitive>> _fromInteger;
+    ConversionRule<Rule<types::UInt64::Primitive>> _fromUnsigned;
+    ConversionRule<Rule<types::Double::Primitive>> _fromDouble;
+    ConversionRule<Rule<types::Bool::Primitive>> _fromBoolean;
+    ConversionRule<Rule<types::String::Primitive>> _fromString;
+    ConversionRule<Rule<types::DateTime::Primitive>> _fromDateTime;
+    ConversionRule<Rule<types::Duration::Primitive>> _fromDuration;
+
+    template <typename Element>
+    ResultType convert(const ArgType cell, ConversionRule<Rule<Element>>& rule) {
+        if constexpr (HAS_RULE<Element>) {
+            return rule.get()(cell.getAs<Element>());
+        } else {
+            return unconvertible();
+        }
+    }
+
+    static ResultType unconvertible() {
+        if constexpr (OnUnconvertible == UnconvertibleCell::Raise) {
+            throwUnconvertibleCell(StringFunctor::NAME);
+        } else {
+            return std::nullopt;
+        }
+    }
+};
+
+using TaggedToIntegerOrNullFunction = TaggedConversionFunction<ToIntegerFunction, UnconvertibleCell::Null>;
+using TaggedToFloatOrNullFunction = TaggedConversionFunction<ToFloatFunction, UnconvertibleCell::Null>;
+using TaggedToBooleanOrNullFunction = TaggedConversionFunction<ToBoolFunction, UnconvertibleCell::Null>;
+using TaggedToStringOrNullFunction = TaggedConversionFunction<ToStringFunction, UnconvertibleCell::Null>;
+
 // abs keeps the type each cell holds, so its answer is a cell of its own
 class TaggedAbsFunction {
 public:
@@ -983,59 +1120,6 @@ public:
 private:
     StringBuffer* _stringBuffer {nullptr};
     std::string _replaced;
-};
-
-// The OrNull conversions over a type-erased cell. A cell holding a value the conversion
-// has no rule for converts to null rather than raising.
-class TaggedToIntegerOrNullFunction {
-public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<types::Int64::Primitive>;
-
-    ResultType operator()(const ArgType cell);
-    ResultType operator()(const std::optional<ArgType>& cell);
-
-private:
-    ToIntegerFunction _fromString;
-};
-
-class TaggedToFloatOrNullFunction {
-public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<types::Double::Primitive>;
-
-    ResultType operator()(const ArgType cell);
-    ResultType operator()(const std::optional<ArgType>& cell);
-
-private:
-    ToFloatFunction _fromString;
-};
-
-class TaggedToBooleanOrNullFunction {
-public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<types::Bool::Primitive>;
-
-    ResultType operator()(const ArgType cell);
-    ResultType operator()(const std::optional<ArgType>& cell);
-
-private:
-    ToBoolFunction _fromString;
-};
-
-class TaggedToStringOrNullFunction {
-public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<types::String::Primitive>;
-
-    explicit TaggedToStringOrNullFunction(StringBuffer* stringBuffer);
-
-    ResultType operator()(const ArgType cell);
-    ResultType operator()(const std::optional<ArgType>& cell);
-
-private:
-    StringBuffer* _stringBuffer {nullptr};
-    std::string _formatted;
 };
 
 class ListReverseFunction {
