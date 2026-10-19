@@ -313,8 +313,19 @@ if [[ "$(uname)" == "Linux" ]]; then
     ARROW_CMAKE_ARGS+=("${LINUX_ARCH_ARGS[@]}")
 fi
 
-ARROW_THRIFT_URL="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz" \
-    cmake "${ARROW_CMAKE_ARGS[@]}" $ARROW_SRC_DIR/cpp
+# Arrow downloads its bundled dependencies at configure time unless pointed at local archives.
+ARROW_THIRDPARTY_DIR=$SOURCE_DIR/external/arrow-thirdparty
+export ARROW_BOOST_URL=$ARROW_THIRDPARTY_DIR/boost-1.88.0-cmake.tar.gz
+export ARROW_LZ4_URL=$ARROW_THIRDPARTY_DIR/lz4-v1.10.0.tar.gz
+export ARROW_MIMALLOC_URL=$ARROW_THIRDPARTY_DIR/mimalloc-v3.2.7.tar.gz
+export ARROW_RAPIDJSON_URL=$ARROW_THIRDPARTY_DIR/rapidjson-232389d4f1012dddec4ef84861face2d2ba85709.tar.gz
+export ARROW_SNAPPY_URL=$ARROW_THIRDPARTY_DIR/snappy-1.2.2.tar.gz
+export ARROW_THRIFT_URL=$ARROW_THIRDPARTY_DIR/thrift-0.22.0.tar.gz
+export ARROW_XSIMD_URL=$ARROW_THIRDPARTY_DIR/xsimd-14.0.0.tar.gz
+export ARROW_ZLIB_URL=$ARROW_THIRDPARTY_DIR/zlib-1.3.1.tar.gz
+export ARROW_ZSTD_URL=$ARROW_THIRDPARTY_DIR/zstd-1.5.7.tar.gz
+
+cmake "${ARROW_CMAKE_ARGS[@]}" $ARROW_SRC_DIR/cpp
 cmake --build $BUILD_DIR/arrow -j $NUM_JOBS
 cmake --install $BUILD_DIR/arrow
 
