@@ -47,7 +47,8 @@ public:
 
         std::string_view query = uri.substr(queryStart + 1);
         while (!query.empty()) {
-            const size_t pairEnd = query.find('&');
+            const size_t separator = query.find('&');
+            const size_t pairEnd = separator == std::string_view::npos ? query.size() : separator;
             const std::string_view pair = query.substr(0, pairEnd);
             const size_t equalPosition = pair.find('=');
 
@@ -57,7 +58,7 @@ public:
                 parseKeyValuePair(parameters, pair.substr(0, equalPosition), pair.substr(equalPosition + 1));
             }
 
-            if (pairEnd == std::string_view::npos) {
+            if (separator == std::string_view::npos) {
                 break;
             }
 
