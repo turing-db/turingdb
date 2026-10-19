@@ -4,6 +4,7 @@
 #include <vector>
 #include <stdint.h>
 #include <string_view>
+#include <unordered_map>
 
 namespace db {
 
@@ -87,6 +88,7 @@ class YieldClause;
 class YieldItems;
 class DeclContext;
 class VarDecl;
+class ParameterDecl;
 class NodePatternData;
 class EdgePatternData;
 class CypherParserState;
@@ -197,6 +199,7 @@ public:
     friend ChangeQuery;
     friend DeclContext;
     friend VarDecl;
+    friend ParameterDecl;
     friend NodePatternData;
     friend EdgePatternData;
     friend LoadGraphQuery;
@@ -266,6 +269,11 @@ public:
     ExplainRequest& explainRequest();
     const ExplainRequest* getExplainRequest() const { return _explainRequest.get(); }
 
+    // A parameter has one value for the whole request, so every $name in it, in any
+    // scope, union branch or subquery, reads the same declaration
+    ParameterDecl* getOrCreateParameterDecl(std::string_view name);
+    const std::vector<ParameterDecl*>& parameterDecls() const { return _parameterDecls; }
+
 private:
     SourceManager* _sourceManager {nullptr};
     DiagnosticsManager* _diagnosticsManager {nullptr};
@@ -301,6 +309,8 @@ private:
     QueryCommands _subQueries;
     std::vector<DeclContext*> _declContexts;
     std::vector<VarDecl*> _varDecls;
+    std::vector<ParameterDecl*> _parameterDecls;
+    std::unordered_map<std::string_view, ParameterDecl*> _parameterDeclMap;
     std::vector<NodePatternData*> _nodePatternDatas;
     std::vector<EdgePatternData*> _edgePatternDatas;
     std::vector<std::string*> _unnamedVarIdentifiers;
@@ -333,6 +343,7 @@ private:
 
     void addDeclContext(DeclContext* ctxt);
     void addVarDecl(VarDecl* decl);
+    void addParameterDecl(ParameterDecl* decl);
     void addNodePatternData(NodePatternData* data);
     void addEdgePatternData(EdgePatternData* data);
     void addFunctionInvocation(FunctionInvocation* invocation);

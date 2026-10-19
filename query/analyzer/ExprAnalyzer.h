@@ -163,6 +163,8 @@ private:
     // earlier in the query creates it with. Invalid for a name neither knows.
     ValueType resolvePropertyType(std::string_view name) const;
 
+    void narrowOperand(Expr* operand, EvaluatedTypeSet accepted);
+
     // Lets @param expr and the expressions under it be analyzed again, as a reduce's body
     // is once its accumulator has widened
     void forgetAnalysis(const Expr* expr);

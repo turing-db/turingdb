@@ -13,6 +13,7 @@
 #include "ProcedureManager.h"
 #include "SimpleGraph.h"
 #include "decl/DeclContext.h"
+#include "decl/ParameterDecl.h"
 #include "expr/All.h"
 #include "versioning/Transaction.h"
 
@@ -82,4 +83,25 @@ TEST_F(ParameterTypeTest, aParameterIsNarrowedByTheExpressionItIsAnOperandOf) {
 
     EXPECT_EQ(p->getType(), EvaluatedType::Parameter);
     EXPECT_EQ(p->getCandidateTypes(), (EvaluatedTypeSet {EvaluatedType::Integer, EvaluatedType::Double}));
+}
+
+TEST_F(ParameterTypeTest, theOccurrencesOfAParameterShareOneDecl) {
+    ParameterExpr* first = parameter("p");
+    ParameterExpr* second = parameter("p");
+    ParameterExpr* other = parameter("q");
+    Expr* one = LiteralExpr::create(&_ast, IntegerLiteral::create(&_ast, 1));
+
+    _analyzer->analyzeRootExpr(BinaryExpr::create(&_ast, BinaryOperator::Sub, first, one));
+    _analyzer->analyzeRootExpr(second);
+    _analyzer->analyzeRootExpr(other);
+
+    const EvaluatedTypeSet numbers {EvaluatedType::Integer, EvaluatedType::Double};
+
+    ASSERT_NE(first->getDecl(), nullptr);
+    EXPECT_EQ(first->getDecl(), second->getDecl());
+    EXPECT_NE(first->getDecl(), other->getDecl());
+    EXPECT_EQ(first->getDecl()->getCandidateTypes(), numbers);
+    EXPECT_EQ(second->getCandidateTypes(), numbers);
+    EXPECT_EQ(other->getCandidateTypes(), PARAMETER_VALUE_TYPES);
+    EXPECT_EQ(_ast.parameterDecls().size(), size_t {2});
 }

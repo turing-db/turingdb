@@ -20,6 +20,7 @@
 #include "NodePattern.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "Parameter.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
@@ -30,6 +31,7 @@
 #include "stmt/ReturnStmt.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
+#include "decl/ParameterDecl.h"
 #include "decl/VarDecl.h"
 
 #include "embedding/EmbeddingBucket.h"
@@ -344,13 +346,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         throwError(typing._error, expr);
     }
 
-    if (lhs->getType() == EvaluatedType::Parameter) {
-        lhs->setCandidateTypes(typing._leftAccepted);
-    }
-
-    if (rhs->getType() == EvaluatedType::Parameter) {
-        rhs->setCandidateTypes(typing._rightAccepted);
-    }
+    narrowOperand(lhs, typing._leftAccepted);
+    narrowOperand(rhs, typing._rightAccepted);
 
     expr->setExprType(typing._result);
 
@@ -503,9 +500,31 @@ void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
 }
 
 void ExprAnalyzer::analyzeParameterExpr(ParameterExpr* expr) {
+    ParameterDecl* decl = _ast->getOrCreateParameterDecl(expr->getParameter()->getName());
+    expr->setDecl(decl);
+
     expr->setType(EvaluatedType::Parameter);
-    expr->setCandidateTypes(PARAMETER_VALUE_TYPES);
+    expr->setCandidateTypes(decl->getCandidateTypes());
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+}
+
+void ExprAnalyzer::narrowOperand(Expr* operand, EvaluatedTypeSet accepted) {
+    if (operand->getType() != EvaluatedType::Parameter) {
+        return;
+    } else if (operand->getKind() != Expr::Kind::PARAMETER) {
+        operand->setCandidateTypes(accepted);
+        return;
+    }
+
+    ParameterDecl* decl = static_cast<ParameterExpr*>(operand)->getDecl();
+    decl->narrow(accepted);
+
+    const EvaluatedTypeSet candidates = decl->getCandidateTypes();
+    if (candidates.isEmpty()) {
+        throwError(fmt::format("No value of parameter '${}' is valid in every expression that uses it", decl->getName()), operand);
+    }
+
+    operand->setCandidateTypes(candidates);
 }
 
 void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
@@ -1561,10 +1580,10 @@ ValueType ExprAnalyzer::narrowParameterWrite(std::string_view name, Expr* value)
                    value);
     }
 
-    value->setCandidateTypes(accepted);
+    narrowOperand(value, accepted);
 
     if (propertyType == ValueType::Invalid) {
-        _parameterCreatedTypes[name] = accepted;
+        _parameterCreatedTypes[name] = value->getCandidateTypes();
     }
 
     return propertyType;
