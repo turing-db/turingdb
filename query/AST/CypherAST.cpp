@@ -32,6 +32,7 @@
 #include "QueryCommand.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
+#include "decl/ParameterDecl.h"
 #include "decl/PatternData.h"
 
 using namespace db;
@@ -149,6 +150,10 @@ CypherAST::~CypherAST() {
     }
 
     for (VarDecl* decl : _varDecls) {
+        delete decl;
+    }
+
+    for (ParameterDecl* decl : _parameterDecls) {
         delete decl;
     }
 
@@ -282,6 +287,20 @@ void CypherAST::addDeclContext(DeclContext* ctxt) {
 
 void CypherAST::addVarDecl(VarDecl* decl) {
     _varDecls.push_back(decl);
+}
+
+void CypherAST::addParameterDecl(ParameterDecl* decl) {
+    _parameterDecls.push_back(decl);
+    _parameterDeclMap[decl->getName()] = decl;
+}
+
+ParameterDecl* CypherAST::getOrCreateParameterDecl(std::string_view name) {
+    const auto it = _parameterDeclMap.find(name);
+    if (it != _parameterDeclMap.end()) {
+        return it->second;
+    }
+
+    return ParameterDecl::create(this, name);
 }
 
 void CypherAST::addNodePatternData(NodePatternData* data) {
