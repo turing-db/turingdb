@@ -615,8 +615,9 @@ void FunctionDecls::initDefault() {
     relationshipsPath->setReturnTypes({{EvaluatedType::List}});
     relationshipsPath->setReturnedListShape(ListShape(EvaluatedType::EdgePattern, 1));
 
-    // A conversion and its OrNull sibling convert the same argument types. The sibling also
-    // converts a type-erased cell per row, and answers null for a type no rule converts.
+    // A conversion and its OrNull sibling convert the same argument types, and a type-erased
+    // cell per row. Where no rule converts the value, the sibling answers null and the
+    // conversion raises.
     struct Conversion {
         std::string_view _name;
         std::string_view _orNullName;
@@ -672,9 +673,11 @@ void FunctionDecls::initDefault() {
             orNull->setReturnTypes({{conversion._result}});
         }
 
-        FunctionSignature* orNullOfACell = createFunction(conversion._orNullName);
-        orNullOfACell->setArguments({EvaluatedType::ListItem});
-        orNullOfACell->setReturnTypes({{conversion._result}});
+        for (const std::string_view name : {conversion._name, conversion._orNullName}) {
+            FunctionSignature* ofACell = createFunction(name);
+            ofACell->setArguments({EvaluatedType::ListItem});
+            ofACell->setReturnTypes({{conversion._result}});
+        }
 
         for (const EvaluatedType unconvertible : conversion._unconvertible) {
             FunctionSignature* unconverted = createFunction(conversion._orNullName);
