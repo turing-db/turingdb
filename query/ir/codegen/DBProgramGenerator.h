@@ -330,6 +330,13 @@ private:
         llvm::SmallVector<mlir::Value> _columns;
     };
 
+    // The columns an aggregate reads over the rows ahead of its reduction. The row
+    // percentile is null unless the call takes a percentile that reads a row.
+    struct AggregateArguments {
+        mlir::Value _values;
+        mlir::Value _rowPercentile;
+    };
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 
     void createMain();
@@ -1045,6 +1052,12 @@ private:
     // which a collect in the same projection has already repointed at its own emit loop
     mlir::Value alignConstantToDriver(mlir::Value column);
 
+    // An op that runs once per row, such as db.range, reads no row of its own when every
+    // operand is a constant, so nothing ties it to the relation it runs over: a pass erasing
+    // that relation's scan would leave it one row. Pins the constant operands of each such
+    // op in [@param first, @param last) to the driver instead.
+    void alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last);
+
     // The column count(*) counts: the first variable bound to a column holding the rows
     // flowing past the insertion point. A scope of constants alone is the single row those
     // constants are, which is what count(*) counts there
@@ -1079,7 +1092,8 @@ private:
 
     // The collects a keyless projection returns, built as one op so a single drain emits
     // them all. One collect needs no help: its own translation is that op.
-    void generateKeylessCollect(const Projection* projection);
+    void emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> collectExprs,
+                            llvm::ArrayRef<AggregateArguments> collectArguments);
 
     // What an aggregate gathering its values answers from @param listColumn, the list of a
     // group's values: collect the list itself, percentileCont and percentileDisc its percentile.
@@ -1096,9 +1110,17 @@ private:
                                        const VariableColumnMap* variableColumns);
 
     // Reduces every aggregate of a keyless projection before its items are built, so what an
-    // item computes beside an aggregate reads the one row the reduction leaves. Each reads
-    // its input over the rows @param inputAggregateOp left, not over an earlier sibling's row.
-    void generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp);
+    // item computes beside an aggregate reads the one row the reduction leaves. Every input
+    // is translated ahead of the first reduction: the lowering reads a computation placed
+    // after a reduction, such as range(1, 4), over the one row that reduction leaves.
+    void generateKeylessAggregates(const Projection* projection);
+
+    void translateAggregateArguments(const FunctionInvocation* invocation,
+                                     const VariableColumnMap* variableColumns,
+                                     AggregateArguments& arguments);
+    void emitAggregate(const Expr* expr,
+                       const FunctionInvocation* invocation,
+                       const AggregateArguments& arguments);
 
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);

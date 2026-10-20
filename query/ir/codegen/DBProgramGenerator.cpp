@@ -5100,7 +5100,15 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
         return getOrTranslateBoundColumn(argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
+        mlir::Block* const block = _opBuilder.getInsertionBlock();
+        const mlir::Block::iterator insertionPoint = _opBuilder.getInsertionPoint();
+        mlir::Operation* const lastOpBefore = insertionPoint == block->begin() ? nullptr : &*std::prev(insertionPoint);
+
         translateExpr(argExpr);
+
+        const mlir::Block::iterator firstTranslated = lastOpBefore ? std::next(lastOpBefore->getIterator()) : block->begin();
+        alignConstantOperandsToDriver(firstTranslated, _opBuilder.getInsertionPoint());
+
         return alignConstantToDriver(_part._exprMap.at(argExpr));
     }
 
@@ -5137,6 +5145,32 @@ mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
     return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), noneType, column, driver).getResult();
+}
+
+void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last) {
+    const mlir::Value driver = resolveRowCarryingColumn();
+    if (!driver) {
+        return;
+    }
+
+    const auto isConstant = [this](mlir::Value value) { return yieldsConstantColumn(value, _constantColumns); };
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::OpBuilder::InsertionGuard insertionGuard(_opBuilder);
+
+    for (mlir::Operation& op : llvm::make_range(first, last)) {
+        const bool readsConstantsAlone = op.getNumOperands() > 0 && llvm::all_of(op.getOperands(), isConstant);
+        const bool runsPerRow = !llvm::all_of(op.getResults(), isConstant);
+        if (!readsConstantsAlone || !runsPerRow) {
+            continue;
+        }
+
+        _opBuilder.setInsertionPoint(&op);
+        for (mlir::OpOperand& operand : op.getOpOperands()) {
+            operand.set(_opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, operand.get(), driver).getResult());
+        }
+    }
 }
 
 mlir::Value DBProgramGenerator::resolveWildcardColumn() {
@@ -9025,7 +9059,6 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
                                                          const FunctionInvocationExpr* funcExpr) {
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     const FunctionSignature* signature = invocation->getSignature();
-    const std::string_view funcName = signature->getFullName();
 
     // The expression's own aggregate flag is contaminated by its arguments, so a scalar
     // function over a reduction - coalesce(max(n.age), 0) - carries it too. What says a
@@ -9035,29 +9068,48 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
         return;
     }
 
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    AggregateArguments arguments;
+    translateAggregateArguments(invocation, nullptr, arguments);
 
+    emitAggregate(expr, invocation, arguments);
+}
+
+void DBProgramGenerator::translateAggregateArguments(const FunctionInvocation* invocation,
+                                                     const VariableColumnMap* variableColumns,
+                                                     AggregateArguments& arguments) {
     const ExprChain* args = invocation->getArguments();
     bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
     const Expr* argExpr = args->front();
-    const mlir::Value translated = translateAggregateInput(argExpr, nullptr);
-
-    const bool isDistinct = invocation->isDistinct();
+    const mlir::Value translated = translateAggregateInput(argExpr, variableColumns);
 
     // A quantified pattern binds the handle of the walk. A count reads its rows off the
     // handles unless it counts distinct walks, and every other aggregate the entities
     // each one stands for
-    const bool countsHandles = funcName == "count" && !isDistinct;
-    const mlir::Value inputColumn = countsHandles ? translated : readWalkEntities(argExpr, translated);
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+    const bool countsHandles = funcName == "count" && !invocation->isDistinct();
+    arguments._values = countsHandles ? translated : readWalkEntities(argExpr, translated);
+
+    arguments._rowPercentile = translateRowPercentile(invocation, arguments._values, variableColumns);
+}
+
+void DBProgramGenerator::emitAggregate(const Expr* expr,
+                                       const FunctionInvocation* invocation,
+                                       const AggregateArguments& arguments) {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+    const mlir::Value inputColumn = arguments._values;
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const bool isDistinct = invocation->isDistinct();
 
     // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x):
     // the flag is spent here rather than on a seen-set the result cannot depend on
     const bool isExtremum = funcName == "min" || funcName == "max";
     const bool reducesDistinctValues = isDistinct && !isExtremum;
 
-    const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
+    const bool countsRows = invocation->getArguments()->front()->getType() == EvaluatedType::Wildcard;
 
     if (funcName == "count") {
         _part._exprMap[expr] = _opBuilder.create<mlir::db::Count>(loc, noneType, inputColumn, isDistinct, countsRows).getResult();
@@ -9079,8 +9131,8 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
             distinctValues.push_back(0);
         }
 
+        const mlir::Value rowPercentile = arguments._rowPercentile;
         llvm::SmallVector<mlir::Value, 1> percentileColumns;
-        const mlir::Value rowPercentile = translateRowPercentile(invocation, inputColumn, nullptr);
         if (rowPercentile) {
             percentileColumns.push_back(rowPercentile);
         }
@@ -9435,49 +9487,18 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
     return collectOp;
 }
 
-void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
-    llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
-    for (const Projection::ReturnItem& returnItem : projection->items()) {
-        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
-        if (!itemPtr) {
-            continue;
-        }
-
-        collectAggregateInvocations(*itemPtr, aggregateExprs);
-    }
-
-    llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
-    for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
-        if (gathersItsValues(aggregateExpr)) {
-            collectExprs.push_back(aggregateExpr);
-        }
-    }
-
-    // A lone collect is built by its own translation, keyless, as any other aggregate is
-    if (collectExprs.size() < 2) {
-        return;
-    }
-
-    VariableColumnMap variableColumns;
-    collectVariableColumns(variableColumns);
-
+void DBProgramGenerator::emitKeylessCollect(llvm::ArrayRef<const FunctionInvocationExpr*> collectExprs,
+                                            llvm::ArrayRef<AggregateArguments> collectArguments) {
     llvm::SmallVector<mlir::Value> valueColumns;
     llvm::SmallVector<mlir::Value> percentileColumns;
     llvm::SmallVector<std::optional<size_t>> percentileIndices;
 
-    for (const FunctionInvocationExpr* collectExpr : collectExprs) {
-        const FunctionInvocation* invocation = collectExpr->getFunctionInvocation();
+    for (const AggregateArguments& arguments : collectArguments) {
+        valueColumns.push_back(arguments._values);
 
-        const ExprChain* args = invocation->getArguments();
-        bioassert(args && !args->empty(), "collect() with no arguments.");
-
-        const mlir::Value valueColumn = readWalkEntities(args->front(), translateAggregateInput(args->front(), &variableColumns));
-        valueColumns.push_back(valueColumn);
-
-        const mlir::Value rowPercentile = translateRowPercentile(invocation, valueColumn, &variableColumns);
-        if (rowPercentile) {
+        if (arguments._rowPercentile) {
             percentileIndices.push_back(percentileColumns.size());
-            percentileColumns.push_back(rowPercentile);
+            percentileColumns.push_back(arguments._rowPercentile);
         } else {
             percentileIndices.push_back(std::nullopt);
         }
@@ -9566,7 +9587,7 @@ mlir::Value DBProgramGenerator::translateRowPercentile(const FunctionInvocation*
         .getResult();
 }
 
-void DBProgramGenerator::generateKeylessAggregates(const Projection* projection, mlir::Operation* inputAggregateOp) {
+void DBProgramGenerator::generateKeylessAggregates(const Projection* projection) {
     llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
@@ -9577,15 +9598,37 @@ void DBProgramGenerator::generateKeylessAggregates(const Projection* projection,
         collectAggregateInvocations(*itemPtr, aggregateExprs);
     }
 
-    for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
-        mlir::Operation* const lastAggregateOp = _part._aggregateOp;
-        _part._aggregateOp = inputAggregateOp;
+    VariableColumnMap variableColumns;
+    collectVariableColumns(variableColumns);
 
-        translateExpr(aggregateExpr);
+    llvm::SmallVector<AggregateArguments> arguments(aggregateExprs.size());
+    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
+        translateAggregateArguments(aggregateExprs[aggregateIndex]->getFunctionInvocation(),
+                                    &variableColumns,
+                                    arguments[aggregateIndex]);
+    }
 
-        if (_part._aggregateOp == inputAggregateOp) {
-            _part._aggregateOp = lastAggregateOp;
+    llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
+    llvm::SmallVector<AggregateArguments> collectArguments;
+    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
+        if (gathersItsValues(aggregateExprs[aggregateIndex])) {
+            collectExprs.push_back(aggregateExprs[aggregateIndex]);
+            collectArguments.push_back(arguments[aggregateIndex]);
         }
+    }
+
+    const bool collectsSeveralLists = collectExprs.size() > 1;
+    if (collectsSeveralLists) {
+        emitKeylessCollect(collectExprs, collectArguments);
+    }
+
+    for (size_t aggregateIndex = 0; aggregateIndex < aggregateExprs.size(); aggregateIndex++) {
+        const FunctionInvocationExpr* aggregateExpr = aggregateExprs[aggregateIndex];
+        if (collectsSeveralLists && gathersItsValues(aggregateExpr)) {
+            continue;
+        }
+
+        emitAggregate(aggregateExpr, aggregateExpr->getFunctionInvocation(), arguments[aggregateIndex]);
     }
 }
 
@@ -9595,9 +9638,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     }
 
     if (!projection->hasGroupingKeys()) {
-        mlir::Operation* const inputAggregateOp = _part._aggregateOp;
-        generateKeylessCollect(projection);
-        generateKeylessAggregates(projection, inputAggregateOp);
+        generateKeylessAggregates(projection);
         return;
     }
 
@@ -9737,9 +9778,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     // projection is the one keyless group, whichever way it spells its key - RETURN 1 AS
     // x, count(n) counts the whole match, as RETURN count(n) does
     if (keyColumns.empty()) {
-        mlir::Operation* const inputAggregateOp = _part._aggregateOp;
-        generateKeylessCollect(projection);
-        generateKeylessAggregates(projection, inputAggregateOp);
+        generateKeylessAggregates(projection);
         return;
     }
 
