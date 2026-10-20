@@ -383,6 +383,38 @@ def Unwind : TuringOp<"unwind", [Pure]> {
 }
 
 /**
+* UnwindRange
+*/
+def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+  let summary = "Produce one row per integer a row's range bounds span, without building the list";
+
+  let description = [{
+    `UNWIND range(start, end, step) AS x`: db.unwind over db.range, fused so the list is
+    never built. It reads one column per bound and expands the rows in flight through
+    them, as db.unwind expands them through its source:
+
+      %x, %n = db.unwind_range(%from, %to, %by, {%node})
+        : (!db.column<i64>, !db.column<i64>, !db.column<i64>, !db.column<!storage.node_id>)
+        -> (!db.column<!storage.nullable<i64>>, !db.column<!storage.node_id>)
+
+    Row r contributes one row per integer from row r of `start` to row r of `end`, both
+    included, by row r of `step`: none when a bound is null or the step walks away from
+    `end`, and the error db.range raises for a step of 0. The step is always an operand,
+    so a range the query gave none counts by a constant 1. Nothing is laid out, so no
+    length limit applies. `columns_to_filter` is the carry set, replicated as db.unwind's
+    is, and the element column is the one db.unwind gives a list of integers.
+  }];
+
+  let arguments = (ins Column:$start, Column:$end, Column:$step, Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$element, Variadic<Column>:$carried);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $start `,` $end `,` $step `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * MakeList
 */
 def MakeList : TuringOp<"make_list", [Pure]> {

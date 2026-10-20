@@ -201,6 +201,127 @@ private:
     }
 };
 
+// The integers one row's range bounds span. A row with a null bound spans no list at all,
+// and one whose step walks away from its end spans the empty list.
+class NLRangeSpan {
+public:
+    // Returns false where a bound of @param row holds no value
+    bool read(const NLRangeBound& start, const NLRangeBound& end, const NLRangeBound& step, size_t row) {
+        const std::optional<types::Int64::Primitive> from = start._read(start._column, row);
+        const std::optional<types::Int64::Primitive> to = end._read(end._column, row);
+        const std::optional<types::Int64::Primitive> by =
+            step._column ? step._read(step._column, row) : std::optional<types::Int64::Primitive> {1};
+
+        const bool boundsPresent = from.has_value() && to.has_value() && by.has_value();
+        if (!boundsPresent) {
+            return false;
+        }
+
+        if (*by == 0) {
+            throw IRException("range() cannot count by a step of 0");
+        }
+
+        _ascending = *by > 0;
+        _empty = _ascending ? *from > *to : *from < *to;
+        _first = static_cast<uint64_t>(*from);
+        _stride = _ascending ? static_cast<uint64_t>(*by) : 0 - static_cast<uint64_t>(*by);
+        _steps = countRangeSteps(*from, *to, *by);
+
+        return true;
+    }
+
+    bool isEmpty() const { return _empty; }
+    uint64_t getSteps() const { return _steps; }
+
+    // The stride can be wider than an int64 holds, so every integer is offset from the
+    // first unsigned
+    types::Int64::Primitive at(uint64_t position) const {
+        const uint64_t offset = position * _stride;
+        return static_cast<types::Int64::Primitive>(_ascending ? _first + offset : _first - offset);
+    }
+
+private:
+    uint64_t _first {0};
+    uint64_t _stride {0};
+    uint64_t _steps {0};
+    bool _ascending {true};
+    bool _empty {true};
+};
+
+// The cursor an unwind_range loop walks: every (row, integer) pair the bounds span, in row
+// order. It is local to the walk, so one nested in an outer loop restarts on every one of
+// its steps.
+class NLRangeCursor {
+public:
+    explicit NLRangeCursor(const NLUnwindRangeLoopData* loopData)
+        : _start(loopData->getStart()),
+        _end(loopData->getEnd()),
+        _step(loopData->getStep()),
+        _rowCount(_start._column->size())
+    {
+        bioassert(_end._column->size() == _rowCount && _step._column->size() == _rowCount,
+                  "Bound columns of an unwind_range are not row-aligned.");
+
+        openNextRow();
+    }
+
+    bool exhausted() const { return _row >= _rowCount; }
+
+    // Takes the next @param chunkSize integers, or what is left of them, with the row each
+    // one came from
+    void fillChunk(size_t chunkSize, std::vector<std::optional<types::Int64::Primitive>>& values, std::vector<size_t>& rows) {
+        values.resize(chunkSize);
+        rows.resize(chunkSize);
+
+        size_t filled = 0;
+        while (filled < chunkSize && !exhausted()) {
+            const size_t room = chunkSize - filled;
+            const uint64_t remainingSteps = _span.getSteps() - _position;
+            const bool finishesRow = remainingSteps < room;
+            const size_t count = finishesRow ? static_cast<size_t>(remainingSteps) + 1 : room;
+
+            for (size_t index = 0; index < count; index++) {
+                values[filled + index] = _span.at(_position + index);
+            }
+
+            std::fill_n(rows.begin() + filled, count, _row);
+            filled += count;
+
+            if (finishesRow) {
+                _row++;
+                openNextRow();
+            } else {
+                _position += count;
+            }
+        }
+
+        values.resize(filled);
+        rows.resize(filled);
+    }
+
+private:
+    NLRangeBound _start;
+    NLRangeBound _end;
+    NLRangeBound _step;
+    size_t _rowCount {0};
+    size_t _row {0};
+    uint64_t _position {0};
+    NLRangeSpan _span;
+
+    void openNextRow() {
+        _position = 0;
+
+        while (_row < _rowCount) {
+            const bool spansIntegers = _span.read(_start, _end, _step, _row) && !_span.isEmpty();
+            if (spansIntegers) {
+                return;
+            }
+
+            _row++;
+        }
+    }
+};
+
 // Copy a slice of a ListView's tagged scalars straight into a
 // ColumnVector<ListElementView> - the heterogeneous unwind's type-erased column.
 void fillListElementChunk(Column* output, const ListView list, size_t offset, size_t rows) {
@@ -6501,6 +6622,42 @@ void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data
     }
 }
 
+void NLExecutor::runUnwindRangeLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnwindRangeLoopData* loopData = static_cast<NLUnwindRangeLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const size_t chunkSize = context->getChunkSize();
+
+    // A null limit leaves the loop unbounded, exactly as in runUnwindLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    using ElementColumn = ColumnOptVector<types::Int64::Primitive>;
+    std::vector<std::optional<types::Int64::Primitive>>& values = static_cast<ElementColumn*>(loopData->getElementOutput())->getRaw();
+    ColumnVector<size_t>* rows = loopData->getRows();
+
+    NLRangeCursor cursor(loopData);
+
+    const auto runIteration = [&]() {
+        cursor.fillChunk(chunkSize, values, rows->getRaw());
+
+        for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
+            const auto gatherFunc = carriedColumn.getGatherFunc();
+            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (!cursor.exhausted() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (!cursor.exhausted()) {
+            runIteration();
+        }
+    }
+}
+
 void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesLoopData* loopData = static_cast<NLScanEdgesLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
@@ -7925,34 +8082,18 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     outputRaw.reserve(rowCount);
 
     std::vector<ListBuffer<>::ListItemVariant> elements;
+    NLRangeSpan span;
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-        const std::optional<types::Int64::Primitive> from = start._read(start._column, rowIndex);
-        const std::optional<types::Int64::Primitive> to = end._read(end._column, rowIndex);
-        const std::optional<types::Int64::Primitive> by =
-            step._column ? step._read(step._column, rowIndex) : std::optional<types::Int64::Primitive> {1};
-
-        const bool boundsPresent = from.has_value() && to.has_value() && by.has_value();
-        if (!boundsPresent) {
+        if (!span.read(start, end, step, rowIndex)) {
             outputRaw.push_back(std::nullopt);
             continue;
         }
 
-        if (*by == 0) {
-            throw IRException("range() cannot count by a step of 0");
-        }
-
         elements.clear();
 
-        const bool ascending = *by > 0;
-        const bool reachesEnd = ascending ? *from <= *to : *from >= *to;
-
-        if (reachesEnd) {
-            // The stride can be wider than an int64 holds, so every element is offset from
-            // the first unsigned
-            const uint64_t first = static_cast<uint64_t>(*from);
-            const uint64_t stride = ascending ? static_cast<uint64_t>(*by) : 0 - static_cast<uint64_t>(*by);
-            const uint64_t steps = countRangeSteps(*from, *to, *by);
+        if (!span.isEmpty()) {
+            const uint64_t steps = span.getSteps();
 
             if (steps >= RANGE_LENGTH_LIMIT) {
                 throw IRException(fmt::format("range() size exceeds {} integers", RANGE_LENGTH_LIMIT));
@@ -7963,10 +8104,7 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
             elements.reserve(length);
 
             for (uint64_t position = 0; position < length; position++) {
-                const uint64_t offset = position * stride;
-                const uint64_t value = ascending ? first + offset : first - offset;
-
-                elements.push_back(ListBuffer<>::ListItemVariant {static_cast<types::Int64::Primitive>(value)});
+                elements.push_back(ListBuffer<>::ListItemVariant {span.at(position)});
             }
         }
 

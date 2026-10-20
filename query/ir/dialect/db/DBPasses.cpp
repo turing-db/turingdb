@@ -42,6 +42,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
+#define GEN_PASS_DEF_FUSEUNWINDRANGE
 #define GEN_PASS_DEF_PLACEINFACTORS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
@@ -1294,6 +1295,41 @@ Value climbFilters(Value column);
 void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 Value seedColumnOf(ExplorePaths exploration, Value column);
+
+bool fuseUnwindRange(Unwind unwind, mlir::RewriterBase& rewriter) {
+    Range range = unwind.getSource().getDefiningOp<Range>();
+    if (!range) {
+        return false;
+    }
+
+    const Location loc = unwind.getLoc();
+    rewriter.setInsertionPoint(unwind);
+
+    Value step = range.getStep();
+    if (!step) {
+        step = rewriter.create<ConstantOp>(loc, rewriter.getI64IntegerAttr(1)).getResult();
+    }
+
+    UnwindRange fused = rewriter.create<UnwindRange>(loc,
+                                                     unwind->getResultTypes(),
+                                                     range.getStart(),
+                                                     range.getEnd(),
+                                                     step,
+                                                     unwind.getColumnsToFilter());
+
+    rewriter.replaceOp(unwind, fused->getResults());
+    eraseIfUnused(range.getOperation(), rewriter);
+
+    return true;
+}
+
+struct FuseUnwindRange : public impl::FuseUnwindRangeBase<FuseUnwindRange> {
+    void runOnOperation() override {
+        runWorklist<Unwind>(getOperation(), [](Operation* op, mlir::RewriterBase& rewriter) {
+            return fuseUnwindRange(cast<Unwind>(op), rewriter);
+        });
+    }
+};
 
 bool computesFromTheRow(Operation* op) {
     if (op->getNumRegions() != 0) {

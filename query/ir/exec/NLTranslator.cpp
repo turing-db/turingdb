@@ -849,6 +849,15 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
             _iteratorConfigs[unwind.getResult()] = config;
+        } else if (nl::UnwindRange unwindRange = mlir::dyn_cast<nl::UnwindRange>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::UnwindRange;
+            config._rangeBounds = {unwindRange.getStart(), unwindRange.getEnd(), unwindRange.getStep()};
+
+            const mlir::OperandRange carriedColumns = unwindRange.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+
+            _iteratorConfigs[unwindRange.getResult()] = config;
         } else if (nl::OptionalDrain optionalDrain = mlir::dyn_cast<nl::OptionalDrain>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::OptionalDrain;
@@ -1198,6 +1207,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // An unwind expands the rows it is given rather than accumulating them, so - like
         // a hop - a downstream LIMIT can bound its loop through the ordinary early-exit.
         translateUnwindLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::UnwindRange) {
+        translateUnwindRangeLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::OptionalDrain) {
         translateOptionalDrainLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::UnionDrain) {
@@ -1621,6 +1632,18 @@ NLCellAbsentFunction NLTranslator::selectCellAbsent(mlir::Type sourceElement) {
     return NLExecutor::selectValueCellAbsent(valueTypeFromElementType(sourceNullable.getValueType()));
 }
 
+template <typename LoopData>
+void NLTranslator::bindCarriedColumns(llvm::ArrayRef<mlir::Value> carriedColumns, mlir::Block& loopBody, LoopData* loopData) {
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(1 + carriedIndex));
+
+        const NLCarriedColumn carriedColumn(getColumn(carriedColumns[carriedIndex]),
+                                            allocColumn(loopVariable),
+                                            selectGatherForChunkType(loopVariable.getType()));
+        loopData->addCarriedColumn(carriedColumn);
+    }
+}
+
 void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
                                        mlir::Block& loopBody,
                                        NLLimitState* limit,
@@ -1657,18 +1680,29 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
         loopData->addCarriedColumn(elementColumn);
     }
 
-    const size_t carriedCount = config._carriedColumns.size();
-    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
-        const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
-        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(1 + carriedIndex));
-
-        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
-                                            allocColumn(loopVariable),
-                                            selectGatherForChunkType(loopVariable.getType()));
-        loopData->addCarriedColumn(carriedColumn);
-    }
+    bindCarriedColumns(config._carriedColumns, loopBody, loopData);
 
     body->emplaceStmt(&NLExecutor::runUnwindLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateUnwindRangeLoop(const IteratorConfig& config,
+                                            mlir::Block& loopBody,
+                                            NLLimitState* limit,
+                                            NLStmtContainer* body) {
+    const llvm::SmallVector<mlir::Value, 3>& bounds = config._rangeBounds;
+
+    NLUnwindRangeLoopData* loopData = _program->allocFunctionData<NLUnwindRangeLoopData>(rangeBound(bounds[0]),
+                                                                                         rangeBound(bounds[1]),
+                                                                                         rangeBound(bounds[2]),
+                                                                                         allocColumn(loopBody.getArgument(0)));
+    loopData->setLimit(limit);
+    loopData->getRows()->reserve(_program->getChunkSize());
+
+    bindCarriedColumns(config._carriedColumns, loopBody, loopData);
+
+    body->emplaceStmt(&NLExecutor::runUnwindRangeLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
@@ -3402,29 +3436,29 @@ NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType
     return NLExecutor::selectRangeBoundRead(valueTypeFromElementType(nullableType.getValueType()));
 }
 
+NLRangeBound NLTranslator::rangeBound(mlir::Value chunk) {
+    if (!chunk) {
+        return NLRangeBound {};
+    }
+
+    return NLRangeBound {
+        ._column = getColumn(chunk),
+        ._read = selectRangeBoundRead(chunk.getType()),
+    };
+}
+
 void NLTranslator::translateListSlice(nl::ListSlice slice, NLStmtContainer* body) {
     const mlir::Value resultValue = slice.getResult();
 
     Column* const result = allocColumnForChunkType(resultValue.getType());
     _valueSlots[resultValue] = result;
 
-    const auto bound = [this](mlir::Value chunk) {
-        if (!chunk) {
-            return NLListSliceData::Bound {};
-        }
-
-        return NLListSliceData::Bound {
-            ._column = getColumn(chunk),
-            ._read = selectRangeBoundRead(chunk.getType()),
-        };
-    };
-
     const Column* const list = getColumn(slice.getList());
 
     NLListSliceData* data = _program->allocFunctionData<NLListSliceData>(list,
                                                                          NLExecutor::selectListRead(list),
-                                                                         bound(slice.getFrom()),
-                                                                         bound(slice.getTo()),
+                                                                         rangeBound(slice.getFrom()),
+                                                                         rangeBound(slice.getTo()),
                                                                          result);
 
     body->emplaceStmt(&NLExecutor::runListSlice, data);
@@ -3484,22 +3518,11 @@ void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
     Column* const result = allocColumnForChunkType(resultValue.getType());
     _valueSlots[resultValue] = result;
 
-    const auto bound = [this](mlir::Value chunk) {
-        if (!chunk) {
-            return NLRangeData::Bound {};
-        }
-
-        return NLRangeData::Bound {
-            ._column = getColumn(chunk),
-            ._read = selectRangeBoundRead(chunk.getType()),
-        };
-    };
-
     NLRangeData* data = _program->allocFunctionData<NLRangeData>(result,
                                                                  _memory,
-                                                                 bound(range.getStart()),
-                                                                 bound(range.getEnd()),
-                                                                 bound(range.getStep()));
+                                                                 rangeBound(range.getStart()),
+                                                                 rangeBound(range.getEnd()),
+                                                                 rangeBound(range.getStep()));
 
     body->emplaceStmt(&NLExecutor::runRange, data);
 }

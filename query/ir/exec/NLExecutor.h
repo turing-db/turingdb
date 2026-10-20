@@ -68,6 +68,10 @@ public:
     // a time, with the carry set gathered by the source row each emitted row came from.
     static void runUnwindLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Count out the integers each row's bounds span one chunk at a time, with the carry
+    // set gathered by the row each integer came from. A null limit leaves it unbounded.
+    static void runUnwindRangeLoop(NLExecutionContext* context, NLFunctionData* data);
+
     // Walk the loop data's columns one row at a time: each step gathers row k of every
     // column into its one-row output and runs the body over it. A null limit leaves it
     // unbounded.

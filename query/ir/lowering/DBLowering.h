@@ -238,6 +238,7 @@ private:
     void lowerLoadCSV(mlir::db::LoadCSV loadCSV);
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerUnwind(mlir::db::Unwind unwind);
+    void lowerUnwindRange(mlir::db::UnwindRange unwindRange);
     void lowerMakeList(mlir::db::MakeList makeList);
     void lowerMakeMap(mlir::db::MakeMap makeMap);
     void lowerRange(mlir::db::Range range);

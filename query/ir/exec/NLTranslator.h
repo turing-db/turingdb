@@ -86,6 +86,7 @@ private:
         LoadCSV,
         VectorSearch,
         Unwind,
+        UnwindRange,
         ProcedureInit,
         OptionalDrain,
         UnionDrain,
@@ -204,6 +205,10 @@ private:
         // The column an Unwind iterator expands, one row per element of each of its
         // cells; null for the other kinds.
         mlir::Value _source;
+
+        // The start, end and step an UnwindRange iterator counts each row out by; empty
+        // for the other kinds.
+        llvm::SmallVector<mlir::Value, 3> _rangeBounds;
     };
 
     NLProgram* _program {nullptr};
@@ -389,6 +394,19 @@ private:
                              mlir::Block& loopBody,
                              NLLimitState* limit,
                              NLStmtContainer* body);
+
+    // Allocate the loop variable each carried column of an unwind is gathered into, the
+    // ones following the element
+    template <typename LoopData>
+    void bindCarriedColumns(llvm::ArrayRef<mlir::Value> carriedColumns, mlir::Block& loopBody, LoopData* loopData);
+
+    // Translate the nl.for over an nl.unwind_range iterator: allocate the element loop
+    // variable and one per carried column, bind the reads its bounds are taken through,
+    // and record the counting loop statement.
+    void translateUnwindRangeLoop(const IteratorConfig& config,
+                                  mlir::Block& loopBody,
+                                  NLLimitState* limit,
+                                  NLStmtContainer* body);
 
     // The drain filling an nl.unwind's element chunk from a list column: the chunk's own
     // element type is what the list resolved to, so it names the column the drain fills
@@ -1086,6 +1104,9 @@ private:
     // The read one bound column of an nl.range is taken through, chosen by the integer
     // the chunk holds
     static NLRangeBoundReadFunction selectRangeBoundRead(mlir::Type chunkType);
+
+    // The column and the read of one bound, or no column where the op was given none
+    NLRangeBound rangeBound(mlir::Value chunk);
 
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 

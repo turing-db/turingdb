@@ -4189,6 +4189,11 @@ private:
 using NLRangeBoundReadFunction = std::optional<types::Int64::Primitive> (*)(const Column* input,
                                                                            size_t row);
 
+struct NLRangeBound {
+    const Column* _column {nullptr};
+    NLRangeBoundReadFunction _read {nullptr};
+};
+
 // The list one column of an nl.list_slice holds at @param row, or nothing where the row
 // holds none. One per list column kind, selected during translation.
 using NLListReadFunction = std::optional<ListView> (*)(const Column* input, size_t row);
@@ -4232,10 +4237,7 @@ private:
 // contiguous run. The step reads no column where the query gave none, which counts by 1.
 class NLRangeData : public NLFunctionData {
 public:
-    struct Bound {
-        const Column* _column {nullptr};
-        NLRangeBoundReadFunction _read {nullptr};
-    };
+    using Bound = NLRangeBound;
 
     NLRangeData(Column* result,
                 LocalMemory* memory,
@@ -4271,7 +4273,7 @@ private:
 // step fills. The elements are the ones the list holds, so nothing is copied.
 class NLListSliceData : public NLFunctionData {
 public:
-    using Bound = NLRangeData::Bound;
+    using Bound = NLRangeBound;
 
     NLListSliceData(const Column* list,
                     NLListReadFunction listRead,
@@ -4298,6 +4300,56 @@ private:
     Bound _from;
     Bound _to;
     Column* _result {nullptr};
+};
+
+// nl.unwind_range loop data: the bounds each row is counted out by, the element chunk a
+// step fills with the next integers, and the carry set gathered by the row each integer
+// came from.
+class NLUnwindRangeLoopData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    NLUnwindRangeLoopData(const NLRangeBound& start,
+                          const NLRangeBound& end,
+                          const NLRangeBound& step,
+                          Column* elementOutput)
+        : _start(start),
+        _end(end),
+        _step(step),
+        _elementOutput(elementOutput)
+    {
+    }
+
+    const NLRangeBound& getStart() const { return _start; }
+    const NLRangeBound& getEnd() const { return _end; }
+    const NLRangeBound& getStep() const { return _step; }
+    Column* getElementOutput() const { return _elementOutput; }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+    ColumnVector<size_t>* getRows() { return &_rows; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLRangeBound _start;
+    NLRangeBound _end;
+    NLRangeBound _step;
+    Column* _elementOutput {nullptr};
+
+    NLLimitState* _limit {nullptr};
+    CarriedColumns _carriedColumns;
+    NLStmtContainer _stmts;
+
+    ColumnVector<size_t> _rows;
 };
 
 // What an op computing over the elements of one row's list holds - nl.list_comprehension

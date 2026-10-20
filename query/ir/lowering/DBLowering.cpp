@@ -914,6 +914,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::LoadCSV,
                      mlir::db::VectorSearch,
                      mlir::db::Unwind,
+                     mlir::db::UnwindRange,
                      mlir::db::ScanNodesByLabel,
                      mlir::db::ScanNodesByPropertyValue,
                      mlir::db::ScanEdges,
@@ -1196,6 +1197,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerVectorSearch(vectorSearch);
     } else if (mlir::db::Unwind unwind = mlir::dyn_cast<mlir::db::Unwind>(operation)) {
         lowerUnwind(unwind);
+    } else if (mlir::db::UnwindRange unwindRange = mlir::dyn_cast<mlir::db::UnwindRange>(operation)) {
+        lowerUnwindRange(unwindRange);
     } else if (mlir::db::MakeList makeList = mlir::dyn_cast<mlir::db::MakeList>(operation)) {
         lowerMakeList(makeList);
     } else if (mlir::db::MakeMap makeMap = mlir::dyn_cast<mlir::db::MakeMap>(operation)) {
@@ -1599,6 +1602,50 @@ void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
                                                   sourceChunk,
                                                   carriedChunks);
     buildLoopForSource(rows.getResult(), unwind.getOperation());
+}
+
+void DBLowering::lowerUnwindRange(mlir::db::UnwindRange unwindRange) {
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : unwindRange.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    std::array<mlir::Value, 3> bounds {mapValue(unwindRange.getStart()),
+                                       mapValue(unwindRange.getEnd()),
+                                       mapValue(unwindRange.getStep())};
+
+    llvm::SmallVector<mlir::Value, 8> operandChunks(carriedChunks.begin(), carriedChunks.end());
+    operandChunks.append(bounds.begin(), bounds.end());
+
+    const mlir::Value cardinality = cardinalityDriver(operandChunks);
+
+    for (mlir::Value& bound : bounds) {
+        bound = nullableValueChunk(rowAlignedChunk(bound, cardinality));
+    }
+
+    operandChunks.assign(bounds.begin(), bounds.end());
+    operandChunks.append(carriedChunks.begin(), carriedChunks.end());
+
+    setInsertionInto(deepestOwnerBlock(operandChunks, _rootBlock));
+
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    chunkTypes.push_back(nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getI64Type())));
+
+    for (const mlir::Value carriedChunk : carriedChunks) {
+        chunkTypes.push_back(carriedChunk.getType());
+    }
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+
+    nl::UnwindRange rows = _builder.create<nl::UnwindRange>(_builder.getUnknownLoc(),
+                                                            iteratorType,
+                                                            bounds[0],
+                                                            bounds[1],
+                                                            bounds[2],
+                                                            carriedChunks);
+    buildLoopForSource(rows.getResult(), unwindRange.getOperation());
 }
 
 void DBLowering::lowerElementOperands(mlir::Value source, mlir::OperandRange carried, ElementOperands& operands) {

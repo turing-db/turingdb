@@ -494,6 +494,25 @@ LogicalResult verifySubqueryExpression(SubqueryOp subquery) {
     return success();
 }
 
+// A carried column comes back replicated, never retyped, so the carry set and the
+// results past the element column must match one for one.
+LogicalResult verifyCarriedResults(Operation* op, OperandRange carriedColumns, ResultRange carriedResults) {
+    if (carriedColumns.size() != carriedResults.size()) {
+        return op->emitOpError("expects one carried result per carried column, but has ")
+               << carriedResults.size() << " for " << carriedColumns.size();
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        if (carriedColumns[carriedIndex].getType() != carriedResults[carriedIndex].getType()) {
+            return op->emitOpError("carried result ") << carriedIndex
+                                                      << " must have the same type as carried column "
+                                                      << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 }
 
 #define GET_OP_CLASSES
@@ -1790,26 +1809,20 @@ LogicalResult UnwindCollect::verify() {
     return success();
 }
 
-// A carried column comes back replicated, never retyped, so the carry set and the
-// results past the element column must match one for one.
 LogicalResult Unwind::verify() {
-    const OperandRange carriedColumns = getColumnsToFilter();
-    const Operation::result_range carriedResults = getCarried();
+    return verifyCarriedResults(getOperation(), getColumnsToFilter(), getCarried());
+}
 
-    if (carriedColumns.size() != carriedResults.size()) {
-        return emitOpError("expects one carried result per carried column, but has ")
-               << carriedResults.size() << " for " << carriedColumns.size();
+LogicalResult UnwindRange::verify() {
+    const ColumnType elementColumn = dyn_cast<ColumnType>(getElement().getType());
+    const storage::NullableType nullable = elementColumn ? dyn_cast<storage::NullableType>(elementColumn.getType())
+                                                         : storage::NullableType {};
+
+    if (!nullable || !isa<IntegerType>(nullable.getValueType())) {
+        return emitOpError("element must be a column of nullable integers");
     }
 
-    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
-        if (carriedColumns[carriedIndex].getType() != carriedResults[carriedIndex].getType()) {
-            return emitOpError("carried result ") << carriedIndex
-                                                  << " must have the same type as carried column "
-                                                  << carriedIndex;
-        }
-    }
-
-    return success();
+    return verifyCarriedResults(getOperation(), getColumnsToFilter(), getCarried());
 }
 
 // The body binds the element, the row tag and one argument per carried column, and ends
@@ -2268,6 +2281,11 @@ Speculation::Speculatability Range::getSpeculatability() {
     }
 
     return speculatableWhen(::db::countRangeSteps(from, to, by) < ::db::RANGE_LENGTH_LIMIT);
+}
+
+Speculation::Speculatability UnwindRange::getSpeculatability() {
+    int64_t by = 0;
+    return speculatableWhen(matchIntegerLiteral(getStep(), by) && by != 0);
 }
 
 Speculation::Speculatability Split::getSpeculatability() {

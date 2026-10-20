@@ -237,6 +237,35 @@ def Unwind : NLOp<"unwind", [Pure]> {
 }
 
 /**
+* UnwindRange
+*/
+// Pure: counting out a row's integers is deterministic; the per-integer fan-out is in the nl.for.
+def UnwindRange : NLOp<"unwind_range", [Pure]> {
+  let summary = "Create a database iterator that counts out the integers each row's bounds span";
+  let description = [{
+    Imperative counterpart of db.unwind_range. Each step of an enclosing nl.for fills one
+    chunk of the next integers plus one chunk per carried column, gathered so a carried
+    cell repeats once per integer its row's bounds span:
+
+      %rows = nl.unwind_range(%from, %to, %by, {%nodes})
+                : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>,
+                   !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.node_id>)
+                -> !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.node_id>>
+
+    Every bound carries rows - lowering lays a constant one out over them first - and is
+    read as a nullable value chunk. The integers are computed as the chunk is filled, so
+    the iterator holds one chunk of them however many a row spans.
+  }];
+
+  let arguments = (ins NLChunk:$start, NLChunk:$end, NLChunk:$step, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $start `,` $end `,` $step `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * FetchNodes
 */
 def FetchNodes : NLOp<"fetch_nodes", [Pure]> {

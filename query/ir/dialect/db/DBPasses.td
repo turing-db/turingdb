@@ -23,6 +23,11 @@ def FuseUnwindEquality : Pass<"fuse_unwind_equality"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseUnwindRange : Pass<"fuse_unwind_range"> {
+    let summary = "Fuse an unwind of a range into an unwind_range, which counts the integers out instead of building the list";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseScanByNodeIDs : Pass<"fuse_scan_by_node_ids"> {
     let summary = "Fuse a node scan and its node-ID disjunction filter into a const_scan_nodes";
     let dependentDialects = ["mlir::db::DB"];

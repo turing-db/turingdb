@@ -1,5 +1,6 @@
 #include "ProductPlacement.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -59,6 +60,12 @@ bool readsOneFactor(mlir::db::FilterOp filter, mlir::db::CrossProduct product) {
     return readsTheLeft != readsTheRight;
 }
 
+bool carriesAProductColumn(mlir::OperandRange carriedColumns) {
+    return llvm::any_of(carriedColumns, [](mlir::Value carried) {
+        return static_cast<bool>(productOf(carried));
+    });
+}
+
 }
 
 size_t turing::test::countFiltersOverOneFactor(mlir::ModuleOp module) {
@@ -79,12 +86,11 @@ size_t turing::test::countFiltersOverOneFactor(mlir::ModuleOp module) {
 size_t turing::test::countUnwindsOverAProduct(mlir::ModuleOp module) {
     size_t count = 0;
     module.walk([&count](mlir::db::Unwind unwind) {
-        for (const mlir::Value carried : unwind.getColumnsToFilter()) {
-            if (productOf(carried)) {
-                count++;
-                return;
-            }
-        }
+        count += carriesAProductColumn(unwind.getColumnsToFilter()) ? 1 : 0;
+    });
+
+    module.walk([&count](mlir::db::UnwindRange unwindRange) {
+        count += carriesAProductColumn(unwindRange.getColumnsToFilter()) ? 1 : 0;
     });
 
     return count;
