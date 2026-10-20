@@ -1,0 +1,13 @@
+altgraph==0.17.5
+auditwheel==6.8.2
+delocate==0.13.0
+macholib==1.16.4
+packaging==26.3
+patchelf==0.19.1.0
+pyelftools==0.33
+setuptools==84.2.0
+setuptools-scm==10.3.4
+tomli==2.5.0 ; python_full_version < '3.11'
+typing-extensions==4.16.0
+vcs-versioning==2.6.0
+wheel==0.48.0
