@@ -268,9 +268,8 @@ public:
     bool exhausted() const { return _row >= _rowCount; }
 
     // Takes the next @param chunkSize integers, or what is left of them, with the row each
-    // one came from
-    void fillChunk(size_t chunkSize, std::vector<std::optional<types::Int64::Primitive>>& values, std::vector<size_t>& rows) {
-        values.resize(chunkSize);
+    // one came from. @param values is null where nothing reads the integers.
+    void fillChunk(size_t chunkSize, std::vector<std::optional<types::Int64::Primitive>>* values, std::vector<size_t>& rows) {
         rows.resize(chunkSize);
 
         size_t filled = 0;
@@ -280,8 +279,12 @@ public:
             const bool finishesRow = remainingSteps < room;
             const size_t count = finishesRow ? static_cast<size_t>(remainingSteps) + 1 : room;
 
-            for (size_t index = 0; index < count; index++) {
-                values[filled + index] = _span.at(_position + index);
+            if (values) {
+                values->resize(filled + count);
+
+                for (size_t index = 0; index < count; index++) {
+                    (*values)[filled + index] = _span.at(_position + index);
+                }
             }
 
             std::fill_n(rows.begin() + filled, count, _row);
@@ -295,7 +298,6 @@ public:
             }
         }
 
-        values.resize(filled);
         rows.resize(filled);
     }
 
@@ -6631,7 +6633,8 @@ void NLExecutor::runUnwindRangeLoop(NLExecutionContext* context, NLFunctionData*
     const NLLimitState* limit = loopData->getLimit();
 
     using ElementColumn = ColumnOptVector<types::Int64::Primitive>;
-    std::vector<std::optional<types::Int64::Primitive>>& values = static_cast<ElementColumn*>(loopData->getElementOutput())->getRaw();
+    ElementColumn* const elements = static_cast<ElementColumn*>(loopData->getElementOutput());
+    std::vector<std::optional<types::Int64::Primitive>>* const values = elements ? &elements->getRaw() : nullptr;
     ColumnVector<size_t>* rows = loopData->getRows();
 
     NLRangeCursor cursor(loopData);

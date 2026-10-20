@@ -1675,6 +1675,11 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     NLUnwindElementEmitFunction elementEmit = nullptr;
     selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
 
+    const bool readsTheElements = !elementValue.use_empty();
+    if (!readsTheElements) {
+        elementEmit = nullptr;
+    }
+
     Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
 
     NLUnwindLoopData* loopData = _program->allocFunctionData<NLUnwindLoopData>(source,
@@ -1687,7 +1692,7 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     loopData->getRows()->reserve(chunkSize);
     loopData->getPositions()->reserve(chunkSize);
 
-    if (!elementEmit) {
+    if (readsTheElements && !elementEmit) {
         const NLCarriedColumn elementColumn(source,
                                             allocColumn(elementValue),
                                             selectGatherForChunkType(sourceChunk));
@@ -1710,7 +1715,7 @@ void NLTranslator::translateUnwindRangeLoop(const IteratorConfig& config,
     NLUnwindRangeLoopData* loopData = _program->allocFunctionData<NLUnwindRangeLoopData>(rangeBound(bounds[0]),
                                                                                          rangeBound(bounds[1]),
                                                                                          rangeBound(bounds[2]),
-                                                                                         allocColumn(loopBody.getArgument(0)));
+                                                                                         allocColumnIfUsed(loopBody.getArgument(0)));
     loopData->setLimit(limit);
     loopData->getRows()->reserve(_program->getChunkSize());
 
