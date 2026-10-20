@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools==84.2.0", "wheel", "setuptools-scm>=8"]
+requires = ["setuptools==84.2.0", "wheel==0.48.0", "setuptools-scm==10.3.4"]
 build-backend = "build_backend"
 backend-path = ["."]
 
