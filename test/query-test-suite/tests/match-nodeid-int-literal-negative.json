@@ -3,11 +3,10 @@
   "graph": "simpledb",
   "query": "MATCH (n) WHERE n = -1 RETURN n.name",
   "expect": {
-    "result": "EXEC ERROR\nCannot compare ID with negative integer.",
-    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"Cannot compare ID with negative integer.\"}"
+    "result": "n.name",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[]}"
   },
   "tags": [
-    "errors",
     "literal",
     "match",
     "where",

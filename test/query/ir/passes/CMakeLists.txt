@@ -102,6 +102,8 @@ add_ir_tests(test_query_ir_trim_list_comprehension TrimListComprehensionTest.cpp
 
 add_call_v3_test(test_query_ir_fetch_nodes FetchNodesTest.cpp)
 
+add_call_v3_test(test_query_ir_fetch_nodes_over_an_empty_product FetchNodesOverAnEmptyProductTest.cpp)
+
 add_ir_tests(test_query_ir_deep_chain_passes DeepChainPassesTest.cpp)
 
 add_ir_tests(test_query_ir_constant_column_deep_chain ConstantColumnDeepChainTest.cpp)

@@ -15,8 +15,6 @@
 #include "list/ListElementOrder.h"
 #include "metadata/PropertyType.h"
 
-#include "TuringException.h"
-
 namespace db {
 
 // A mask's boolean reaches the comparisons of a type-erased cell only through its
@@ -757,20 +755,12 @@ struct TuringEqual {
     /// Specialisations to allow for ID <-> int, e.g  (n) = 42, (e) = n.age, etc.
     template <TypedInternalID IDT>
     bool operator()(IDT n, types::Int64::Primitive i) {
-        if (i < 0) {
-            throw TuringException("Cannot compare ID with negative integer.");
-        }
-        const types::UInt64::Primitive id = i;
-        return n.getValue() == id;
+        return std::cmp_equal(n.getValue(), i);
     }
 
     template <TypedInternalID IDT>
     bool operator()(types::Int64::Primitive i, IDT n) {
-        if (i < 0) {
-            throw TuringException("compare ID with negative integer.");
-        }
-        const types::UInt64::Primitive id = i;
-        return n.getValue() == id;
+        return std::cmp_equal(n.getValue(), i);
     }
 
     template <TypedInternalID IDT>

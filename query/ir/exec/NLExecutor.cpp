@@ -1317,7 +1317,7 @@ std::optional<NodeID> namedNode(NodeID node) {
 
 std::optional<NodeID> namedNode(types::Int64::Primitive id) {
     if (id < 0) {
-        throw TuringException("Cannot compare ID with negative integer.");
+        return std::nullopt;
     }
 
     return NodeID(static_cast<uint64_t>(id));
@@ -1329,14 +1329,8 @@ std::optional<NodeID> namedNode(types::UInt64::Primitive id) {
 
 std::optional<NodeID> namedNode(ListElementView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::Int: {
-            const types::Int64::Primitive id = cell.getAs<types::Int64::Primitive>();
-            if (id < 0) {
-                return std::nullopt;
-            }
-
-            return namedNode(id);
-        }
+        case ListBufferTypeTag::Int:
+            return namedNode(cell.getAs<types::Int64::Primitive>());
         break;
 
         case ListBufferTypeTag::UInt:
