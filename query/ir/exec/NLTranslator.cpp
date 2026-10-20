@@ -1633,14 +1633,28 @@ NLCellAbsentFunction NLTranslator::selectCellAbsent(mlir::Type sourceElement) {
 }
 
 template <typename LoopData>
-void NLTranslator::bindCarriedColumns(llvm::ArrayRef<mlir::Value> carriedColumns, mlir::Block& loopBody, LoopData* loopData) {
+void NLTranslator::bindCarriedColumns(llvm::ArrayRef<mlir::Value> carriedColumns,
+                                      mlir::Block& loopBody,
+                                      size_t firstCarriedArgument,
+                                      LoopData* loopData) {
     for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
-        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(1 + carriedIndex));
+        const mlir::Value carriedValue = carriedColumns[carriedIndex];
 
-        const NLCarriedColumn carriedColumn(getColumn(carriedColumns[carriedIndex]),
-                                            allocColumn(loopVariable),
-                                            selectGatherForChunkType(loopVariable.getType()));
+        const unsigned argumentIndex = static_cast<unsigned>(firstCarriedArgument + carriedIndex);
+        Column* carriedOutput = allocColumn(loopBody.getArgument(argumentIndex));
+
+        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
+                                            carriedOutput,
+                                            selectGatherForChunkType(carriedValue.getType()));
         loopData->addCarriedColumn(carriedColumn);
+    }
+}
+
+void NLTranslator::throwIfCarriedNotRowAligned(const IteratorConfig& config) {
+    for (const mlir::Value carriedValue : config._carriedColumns) {
+        if (!rowAlignedWith(carriedValue, config._inputNodes)) {
+            throw IRException("Carried column is not row-aligned with the input chunk");
+        }
     }
 }
 
@@ -1680,7 +1694,7 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
         loopData->addCarriedColumn(elementColumn);
     }
 
-    bindCarriedColumns(config._carriedColumns, loopBody, loopData);
+    bindCarriedColumns(config._carriedColumns, loopBody, 1, loopData);
 
     body->emplaceStmt(&NLExecutor::runUnwindLoop, loopData);
 
@@ -1700,7 +1714,7 @@ void NLTranslator::translateUnwindRangeLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
     loopData->getRows()->reserve(_program->getChunkSize());
 
-    bindCarriedColumns(config._carriedColumns, loopBody, loopData);
+    bindCarriedColumns(config._carriedColumns, loopBody, 1, loopData);
 
     body->emplaceStmt(&NLExecutor::runUnwindRangeLoop, loopData);
 
@@ -2062,7 +2076,8 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     // Reserve scratch indices column
     loopData->getIndices()->reserve(_program->getChunkSize());
 
-    bindCarriedColumns(config, loopBody, 4, loopData);
+    throwIfCarriedNotRowAligned(config);
+    bindCarriedColumns(config._carriedColumns, loopBody, 4, loopData);
 
     NLHandlerFunction handler = nullptr;
     if (config._kind == IteratorKind::GetOutEdges) {
@@ -2095,28 +2110,6 @@ bool NLTranslator::isPendingValue(mlir::Value value, bool isNode) const {
     return pendingValues.contains(value);
 }
 
-void NLTranslator::bindCarriedColumns(const IteratorConfig& config,
-                                      mlir::Block& loopBody,
-                                      size_t firstCarriedArgument,
-                                      NLExpansionLoopData* loopData) {
-    const size_t carriedCount = config._carriedColumns.size();
-    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
-        const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
-
-        if (!rowAlignedWith(carriedValue, config._inputNodes)) {
-            throw IRException("Carried column is not row-aligned with the input chunk");
-        }
-
-        const unsigned argumentIndex = static_cast<unsigned>(firstCarriedArgument + carriedIndex);
-        Column* carriedOutput = allocColumn(loopBody.getArgument(argumentIndex));
-
-        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
-                                            carriedOutput,
-                                            selectGatherForChunkType(carriedValue.getType()));
-        loopData->addCarriedColumn(carriedColumn);
-    }
-}
-
 void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
                                              mlir::Block& loopBody,
                                              NLLimitState* limit,
@@ -2147,7 +2140,8 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
         loopData->setEndLabels(endLabels, endMatchable);
     }
 
-    bindCarriedColumns(config, loopBody, 3, loopData);
+    throwIfCarriedNotRowAligned(config);
+    bindCarriedColumns(config._carriedColumns, loopBody, 3, loopData);
 
     // The bound end is the carried column's input, row-aligned with the seeds; a walk
     // ending where it began targets the seeds themselves

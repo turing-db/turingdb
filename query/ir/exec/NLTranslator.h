@@ -395,10 +395,17 @@ private:
                              NLLimitState* limit,
                              NLStmtContainer* body);
 
-    // Allocate the loop variable each carried column of an unwind is gathered into, the
-    // ones following the element
+    // Allocate the filtered output of every carried column of a loop, bound to the loop
+    // variables from firstCarriedArgument on, with the gather that fills it
     template <typename LoopData>
-    void bindCarriedColumns(llvm::ArrayRef<mlir::Value> carriedColumns, mlir::Block& loopBody, LoopData* loopData);
+    void bindCarriedColumns(llvm::ArrayRef<mlir::Value> carriedColumns,
+                            mlir::Block& loopBody,
+                            size_t firstCarriedArgument,
+                            LoopData* loopData);
+
+    // An expansion loop gathers its carried columns by the input row each output row
+    // came from, so every one of them must hold the input's rows
+    static void throwIfCarriedNotRowAligned(const IteratorConfig& config);
 
     // Translate the nl.for over an nl.unwind_range iterator: allocate the element loop
     // variable and one per carried column, bind the reads its bounds are taken through,
@@ -513,13 +520,6 @@ private:
                               size_t step,
                               llvm::ArrayRef<mlir::Value> hopImports,
                               NLExplorePathsLoopData* loopData);
-
-    // Allocate the filtered output of every carried column of an expansion loop, bound to
-    // the loop variables from firstCarriedArgument on, with the gather that fills it
-    void bindCarriedColumns(const IteratorConfig& config,
-                            mlir::Block& loopBody,
-                            size_t firstCarriedArgument,
-                            NLExpansionLoopData* loopData);
 
     // Translate an nl.expand_path: allocate the list column its rows expand into, and an
     // nl.path_length: allocate the count column its rows are read into
