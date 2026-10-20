@@ -16,6 +16,14 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "App
     endif()
 endif()
 
+if(NOT APPLE)
+    add_link_options(-no-pie)
+
+    if(NOT DEBUG_BUILD AND NOT RELDEBUG)
+        add_link_options(-s)
+    endif()
+endif()
+
 add_subdirectory(testutils)
 add_subdirectory(testenv)
 add_subdirectory(common)
