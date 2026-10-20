@@ -171,22 +171,24 @@ jobs:
       id: submodules
       run: echo "hash=$(git ls-tree -r HEAD | awk '$2 == "commit"' | git hash-object --stdin)" >> "$GITHUB_OUTPUT"
 
-    # The self-hosted Linux runner containers use a local on-disk cache instead
-    # of the GitHub-hosted cache (no cache egress), pre-provisioned at
-    # /opt/actions-local-cache. The macOS and -arm runners use the GitHub-hosted cache.
-    - name: Cache dependencies (self-hosted Linux)
+    # The self-hosted Linux runner containers of a host share one cache directory
+    # on its disk, mounted at /opt/actions-local-cache (no cache egress), so a key
+    # one of them saves is restored by all of them. The macOS and -arm runners use
+    # the GitHub-hosted cache.
+    - name: Restore dependencies (self-hosted Linux)
       id: cache-dependencies-self-hosted
       if: runner.os == 'Linux' && contains(matrix.os, 'turing')
-      uses: corca-ai/local-cache@v2
-      with:
-        base: /opt/actions-local-cache
-        path: external/dependencies
-        # The salt busts poisoned entries: fail-fast-cancelled jobs saved
-        # partial external/dependencies trees (e.g. missing curl) under this
-        # per-OS key, which later cache-hit jobs then restored and failed on at
-        # find_package. Bump the salt to discard them and re-save a clean tree
-        # (with fail-fast disabled, jobs now run to completion so caches stay clean).
-        key: ${{ matrix.os }}-dependencies-v4-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}-${{ steps.submodules.outputs.hash }}
+      # The salt busts poisoned entries: fail-fast-cancelled jobs saved
+      # partial external/dependencies trees (e.g. missing curl) under this
+      # per-OS key, which later cache-hit jobs then restored and failed on at
+      # find_package. Bump the salt to discard them and re-save a clean tree
+      # (with fail-fast disabled, jobs now run to completion so caches stay clean).
+      run: >-
+        python3 scripts/ci_cache.py restore
+        --base /opt/actions-local-cache
+        --path external/dependencies
+        --clean-key ${{ matrix.os }}-dependencies-
+        --key ${{ matrix.os }}-dependencies-v4-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}-${{ steps.submodules.outputs.hash }}
 
     - name: Cache dependencies (GitHub-hosted)
       id: cache-dependencies-github-hosted
@@ -203,6 +205,14 @@ jobs:
       run: ./dependencies.sh
       env:
         SKIP_BUILD_IF_CACHED: ${{ steps.cache-dependencies-self-hosted.outputs.cache-hit || steps.cache-dependencies-github-hosted.outputs.cache-hit }}
+
+    - name: Save dependencies (self-hosted Linux)
+      if: steps.cache-dependencies-self-hosted.outputs.cache-hit == 'false'
+      run: >-
+        python3 scripts/ci_cache.py save
+        --base /opt/actions-local-cache
+        --path external/dependencies
+        --key ${{ steps.cache-dependencies-self-hosted.outputs.key }}
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
@@ -271,14 +281,29 @@ jobs:
     # skips on macOS). The self-hosted runners cache the dataset on local disk
     # like the dependencies above, where a hit is a symlink rather than a 1.1 GB
     # pull expanded to 14.9 GB. It gets its own directory because
-    # corca-ai/local-cache is directory-only.
-    - name: Cache reactome dataset (self-hosted Linux)
+    # scripts/ci_cache.py caches directories.
+    - name: Restore reactome dataset (self-hosted Linux)
+      id: cache-reactome-self-hosted
       if: runner.os == 'Linux' && contains(matrix.os, 'turing')
-      uses: corca-ai/local-cache@v2
-      with:
-        base: /opt/actions-local-cache
-        path: external/datasets/reactome
-        key: dataset-reactome-v1
+      run: >-
+        python3 scripts/ci_cache.py restore
+        --base /opt/actions-local-cache
+        --path external/datasets/reactome
+        --key dataset-reactome-v1
+
+    - name: Download reactome dataset (self-hosted Linux)
+      if: steps.cache-reactome-self-hosted.outputs.cache-hit == 'false'
+      run: |
+        mkdir -p external/datasets/reactome
+        uv run --no-project --with boto3 python -c "import boto3; boto3.client('s3').download_file('turingdb-public', 'data/reactome.jsonl', 'external/datasets/reactome/reactome.jsonl')"
+
+    - name: Save reactome dataset (self-hosted Linux)
+      if: steps.cache-reactome-self-hosted.outputs.cache-hit == 'false'
+      run: >-
+        python3 scripts/ci_cache.py save
+        --base /opt/actions-local-cache
+        --path external/datasets/reactome
+        --key dataset-reactome-v1
 
     # The GitHub-hosted ARM runners are ephemeral and have no local cache base.
     - name: Cache reactome dataset (GitHub-hosted Linux)
@@ -324,7 +349,7 @@ jobs:
     # .cache, .turing and /tmp) accumulate until the host disk fills. Reclaim
     # them at the end of every job, as if the container had been recreated.
     # Runs before the cache actions' post-steps, so it must never touch
-    # external/ (corca-ai/local-cache and actions/cache save it there).
+    # external/ (actions/cache saves it there).
     - name: Reclaim disk (self-hosted)
       if: always() && runner.os == 'Linux' && contains(matrix.os, 'turing')
       uses: ./.github/actions/clean-self-hosted-runner

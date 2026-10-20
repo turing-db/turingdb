@@ -2,8 +2,8 @@ name: Clean self-hosted runner
 description: >-
   Reclaim disk on the persistent self-hosted -turing runners by deleting what
   is regenerated each job: workspace build trees and the container writable
-  layer (HOME caches + /tmp). Never touches external/ (the dependency and
-  dataset caches, which the cache actions save in their post-steps) or .git.
+  layer (HOME caches + /tmp). Never touches external/ (where the dependency
+  and dataset caches are restored) or .git.
 
 runs:
   using: composite
