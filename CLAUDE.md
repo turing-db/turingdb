@@ -166,6 +166,42 @@ unless there is a stated reason not to.
 - Reduce before fixing. Shrink a failing query to the smallest IR or Cypher that still
   fails, and make that the test.
 
+## Design choices: build what the field builds, and ask first
+
+**Hold every design to the standard of a professional engine, and put the choice to the
+user before building it.** Reusing an existing structure for a job it was not made for
+looks minimal: no new type, no new op, a small diff. That minimality is not an argument.
+The borrowed structure carries the wrong meaning, every later feature has to work around
+it, and every reader has to learn why it is there.
+
+This applies to any choice that others will build on: a representation, a type, an IR op,
+a data structure, an interface, a wire or file format, a module boundary. Before proposing
+one, answer these:
+- Is it proper? Each concept gets a representation that names it. If the case for a
+  design is that an existing type or container "already handles it", it is borrowed.
+- How do mature systems do it? Postgres, DuckDB, SQLite, Neo4j and HyPer/Umbra for
+  databases; LLVM, MLIR and GCC for compilers; the spec or RFC for a format or protocol.
+  Name the system and its mechanism. If no mature system does it your way, find out why.
+- What does the folklore say? Most problems in this field have a standard answer and
+  known pitfalls, in textbooks, papers and the source of those systems. Use the standard
+  answer unless there is a stated reason not to.
+- Then ask the user. Give the canonical option, any alternative, what each costs, and a
+  recommendation. Do not implement a design choice the user has not seen.
+
+Implementation details inside a design already agreed, or that follow a pattern the
+codebase already has, need no question.
+
+Worked example: query parameters (`$name`). Suggested: use a list element as the untyped
+value that carries a parameter, since a list already holds values of any type. A parameter
+is an expression whose value arrives with the query. A list element is part of a stored
+property value. The suggestion used one for the other because it fit. The field's answer:
+a parameter is its own node in the AST and the IR, its type is resolved at analysis or
+bind time, and at execution it is bound to a value of the engine's own tagged value type.
+Postgres has `Param` and `ParamListInfo` (a Datum and a type OID), DuckDB
+`BoundParameterExpression` and `Value`, Neo4j a parameter map of `AnyValue`. The lesson is
+not about parameters. It is about any design whose main virtue is that it needed nothing
+new.
+
 ## Cypher language support
 
 **If a query is valid openCypher, implement it. Do not reject it in the analyzer.** An
