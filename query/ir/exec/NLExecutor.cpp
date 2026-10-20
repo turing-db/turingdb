@@ -8481,10 +8481,6 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
         }
     }
 
-    if (reownRows) {
-        reown(accumulator, accumulatorValues.getActive());
-    }
-
     std::vector<size_t>& rowsRaw = reduce->getRows()->getRaw();
     std::vector<size_t>& positionsRaw = reduce->getPositions()->getRaw();
 
@@ -8517,12 +8513,12 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
             }
         }
 
-        if (reown && accumulatorValues.needsCompaction(sourceRows)) {
+        std::erase_if(reachingRows, [&](size_t row) { return elementCounts[row] == position + 1; });
+
+        if (reown && !reachingRows.empty() && accumulatorValues.needsCompaction(sourceRows)) {
             reown(accumulator, accumulatorValues.getSpare());
             accumulatorValues.flip();
         }
-
-        std::erase_if(reachingRows, [&](size_t row) { return elementCounts[row] == position + 1; });
     }
 }
 
