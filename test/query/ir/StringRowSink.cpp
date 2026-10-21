@@ -297,16 +297,18 @@ bool textOfConstList(const Column* chunk, size_t rowIndex, std::string& text) {
 }
 
 bool textOfOptionalList(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnOptVector<ListView>*>(chunk);
-    if (!column) {
+    const std::optional<ListView>* list = nullptr;
+    if (const auto* column = dynamic_cast<const ColumnOptVector<ListView>*>(chunk)) {
+        list = &column->getRaw()[rowIndex];
+    } else if (const auto* constant = dynamic_cast<const ColumnConst<std::optional<ListView>>*>(chunk)) {
+        list = &constant->getRaw();
+    } else {
         return false;
     }
 
-    const std::optional<ListView>& list = column->getRaw()[rowIndex];
-
     text.clear();
-    if (list.has_value()) {
-        appendListText(*list, text);
+    if (list->has_value()) {
+        appendListText(**list, text);
     } else {
         text = "null";
     }

@@ -166,6 +166,11 @@ std::string renderCell(const Column* column, size_t row) {
         return list.has_value() ? renderList(*list) : "null";
     }
 
+    if (const auto* optList = dynamic_cast<const ColumnConst<std::optional<ListView>>*>(column)) {
+        const std::optional<ListView>& list = optList->getRaw();
+        return list.has_value() ? renderList(*list) : "null";
+    }
+
     throw TuringException("ListOfMapsTest: unsupported output column type");
 }
 

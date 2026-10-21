@@ -24,6 +24,7 @@ def NL : Dialect {
 }
 
 def ConstantThroughOperands : NativeOpTrait<"ConstantThroughOperands">;
+def ConstantResult : NativeOpTrait<"ConstantResult">;
 def RowAlignedThroughOperands : NativeOpTrait<"RowAlignedThroughOperands">;
 def RowAlignedWithFirstOperand : NativeOpTrait<"RowAlignedWithFirstOperand">;
 

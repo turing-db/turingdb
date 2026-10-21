@@ -218,6 +218,27 @@ private:
     llvm::DenseSet<mlir::Operation*> _fusedLimits;          // db.limits fused into a sort
 
     void lowerOperation(mlir::Operation& operation);
+    void lowerOperationByKind(mlir::Operation& operation);
+
+    // Whether @param operation computes a constant its lowering would otherwise compute
+    // once per row
+    bool computesOnceOverConstants(mlir::Operation& operation);
+
+    // Lowers @param operation over the single row its constants are laid out on, ahead of
+    // the loops, and reads each result as the constant it is
+    void lowerOnceOverConstants(mlir::Operation& operation);
+
+    // Whether @param operation reads constants alone but may raise on them, so it runs
+    // over the rows reaching it rather than once: `ELSE 10 / 0` divides for no row that
+    // takes another branch
+    bool raisesOverConstants(mlir::Operation& operation);
+
+    // Lowers @param operation with its constants laid out over the rows reaching it
+    void lowerOverReachingRows(mlir::Operation& operation);
+
+    // Moves @param computation, and the ops it reads that were placed after the first loop
+    // of its block, ahead of that loop, where every loop reading it can see it
+    void moveAheadOfLoops(mlir::Operation* computation);
 
     // Hoist one nl.limit handle per db.limit of @param region to the top of @param
     // hoistBlock and assign it to the loops producing the limited columns. A limit

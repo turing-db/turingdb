@@ -417,7 +417,7 @@ def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, DeclareOpInterfaceMe
 /**
 * MakeList
 */
-def MakeList : TuringOp<"make_list", [Pure]> {
+def MakeList : TuringOp<"make_list", [Pure, ConstantThroughOperands]> {
   let summary = "Build one list per row out of the row's cell in each element column";
 
   let description = [{
@@ -463,7 +463,7 @@ def MakeList : TuringOp<"make_list", [Pure]> {
 /**
 * MakeMap
 */
-def MakeMap : TuringOp<"make_map", [Pure]> {
+def MakeMap : TuringOp<"make_map", [Pure, ConstantThroughOperands]> {
   let summary = "Build one map per row out of the row's cell in each value column";
 
   let description = [{
@@ -513,7 +513,7 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
 /**
 * Range
 */
-def Range : TuringOp<"range", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Range : TuringOp<"range", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Build one list of the integers a row's bounds span";
 
   let description = [{
@@ -549,7 +549,7 @@ def Range : TuringOp<"range", [NoMemoryEffect, DeclareOpInterfaceMethods<Conditi
 /**
 * ListSlice
 */
-def ListSlice : TuringOp<"list_slice", [Pure, AttrSizedOperandSegments]> {
+def ListSlice : TuringOp<"list_slice", [Pure, ConstantThroughOperands, AttrSizedOperandSegments]> {
   let summary = "Read the run of each row's list that its bounds span";
 
   let description = [{
@@ -591,7 +591,7 @@ def ListSlice : TuringOp<"list_slice", [Pure, AttrSizedOperandSegments]> {
 // element that is no number - which is why the op is not speculatable.
 //
 //   %m = db.percentile_cont(%values, %p) : (!db.column<none>, !db.column<f64>) -> !db.column<none>
-class PercentileOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect]> {
+class PercentileOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, ConstantThroughOperands]> {
   let summary = "Read a percentile of the numbers each row's list holds";
 
   let arguments = (ins Column:$list, Column:$percentile);
@@ -608,7 +608,7 @@ def PercentileDisc : PercentileOp<"percentile_disc">;
 /**
 * ListComprehension
 */
-def ListComprehension : TuringOp<"list_comprehension", [Pure]> {
+def ListComprehension : TuringOp<"list_comprehension", [Pure, ConstantThroughOperands]> {
   let summary = "Build one list per row out of the elements of that row's list, filtered and projected";
 
   let description = [{
@@ -663,7 +663,7 @@ def ListComprehension : TuringOp<"list_comprehension", [Pure]> {
 /**
 * ListPredicate
 */
-def ListPredicate : TuringOp<"list_predicate", [Pure]> {
+def ListPredicate : TuringOp<"list_predicate", [Pure, ConstantThroughOperands]> {
   let summary = "Decide, per row, whether a predicate holds for the elements of that row's list";
 
   let description = [{
@@ -704,7 +704,7 @@ def ListPredicate : TuringOp<"list_predicate", [Pure]> {
 /**
 * Reduce
 */
-def Reduce : TuringOp<"reduce", [Pure]> {
+def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands]> {
   let summary = "Fold the elements of each row's list into one value per row";
 
   let description = [{
@@ -2773,7 +2773,7 @@ def LTrim : TextFunctionOp<"ltrim">;
 def RTrim : TextFunctionOp<"rtrim">;
 def Reverse : TypedUnaryFunctionOp<"reverse", "::mlir::storage::StringType, ::mlir::storage::ListType">;
 
-def Substring : TuringOp<"substring", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Substring : TuringOp<"substring", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Take the run of each row's string its start and length span";
 
   let description = [{
@@ -2789,7 +2789,7 @@ def Substring : TuringOp<"substring", [NoMemoryEffect, DeclareOpInterfaceMethods
   }];
 }
 
-def Split : TuringOp<"split", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Split : TuringOp<"split", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Split on delimiter";
 
   let description = [{
@@ -2806,7 +2806,7 @@ def Split : TuringOp<"split", [NoMemoryEffect, DeclareOpInterfaceMethods<Conditi
   }];
 }
 
-class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Take the run of characters at one end of each row's string";
 
   let description = [{
@@ -2835,7 +2835,7 @@ class StringEndOp<string mnemonic> : TuringOp<mnemonic, [NoMemoryEffect, Declare
 def Left : StringEndOp<"left">;
 def Right : StringEndOp<"right">;
 
-def Replace : TuringOp<"replace", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def Replace : TuringOp<"replace", [NoMemoryEffect, ConstantThroughOperands, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Replace every occurrence of a search string in each row's string";
 
   let description = [{
@@ -3108,7 +3108,7 @@ def InOp : PredicateOp<"in", [Pure]> {
   let summary = "Row-wise test of whether each value is an element of the given list";
 }
 
-def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
+def Case : TuringOp<"case", [Pure, ConstantThroughOperands, AttrSizedOperandSegments]> {
   let summary = "Row-wise selection of the first branch whose condition holds";
 
   let description = [{
@@ -3144,7 +3144,7 @@ def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
   }];
 }
 
-def LazyCase : TuringOp<"lazy_case", [Pure]> {
+def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands]> {
   let summary = "A Cypher CASE, whose conditions and values are computed only over the rows reaching them";
 
   let description = [{

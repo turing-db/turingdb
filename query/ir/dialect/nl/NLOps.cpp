@@ -853,6 +853,27 @@ LogicalResult Range::verify() {
     return success();
 }
 
+LogicalResult RowConstant::verify() {
+    llvm::SmallVector<Value> worklist {getRow()};
+    llvm::DenseSet<Value> visited;
+
+    while (!worklist.empty()) {
+        const Value value = worklist.pop_back_val();
+        if (!visited.insert(value).second) {
+            continue;
+        }
+
+        Operation* const definingOp = value.getDefiningOp();
+        if (!definingOp) {
+            return emitOpError("operand must be computed from constants, not from the rows of a step");
+        }
+
+        worklist.append(definingOp->operand_begin(), definingOp->operand_end());
+    }
+
+    return success();
+}
+
 LogicalResult Split::verify() {
     const bool readsStrings = llvm::isa<storage::StringType, storage::ListElementType>(
                                   valueElementOf(getString().getType()))

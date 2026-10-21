@@ -916,6 +916,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCurrentDateTime(currentDateTime);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
+        } else if (nl::RowConstant rowConstant = mlir::dyn_cast<nl::RowConstant>(operation)) {
+            translateRowConstant(rowConstant, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Concat concat = mlir::dyn_cast<nl::Concat>(operation)) {
@@ -3168,6 +3170,8 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
         fill = NLExecutor::selectConstantListBroadcast();
     } else if (isMap) {
         fill = NLExecutor::selectConstantMapBroadcast();
+    } else if (mlir::isa<storage::MapElementType>(resultElement)) {
+        fill = NLExecutor::selectConstantMapEntryBroadcast();
     } else if (isNullableListElement(resultElement)) {
         fill = NLExecutor::selectOptListElementBroadcast(value);
     } else {
@@ -3176,6 +3180,17 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
+}
+
+void NLTranslator::translateRowConstant(nl::RowConstant rowConstant, NLStmtContainer* body) {
+    const Column* row = getColumn(rowConstant.getRow());
+
+    Column* result = nullptr;
+    const NLUnaryFn read = NLExecutor::selectRowConstant(row, _memory, result);
+    _valueSlots[rowConstant.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(row, result, read);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
 template <ColumnOperator Op, typename OpType>

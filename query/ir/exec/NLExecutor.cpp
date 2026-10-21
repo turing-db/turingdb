@@ -1702,11 +1702,13 @@ void broadcastNullColumn(const Column* value, size_t rowCount, Column* output) {
     outputRaw.assign(rowCount, std::optional<int64_t> {});
 }
 
-// The list sibling of broadcastConstantColumn: a list cell is a view over the query's
-// list buffer and is never absent, so the rows are a plain column of that one view.
-void broadcastConstantListColumn(const Column* value, size_t rowCount, Column* output) {
-    const ColumnConst<ListView>* typedValue = static_cast<const ColumnConst<ListView>*>(value);
-    ColumnVector<ListView>* typedOutput = static_cast<ColumnVector<ListView>*>(output);
+// The view sibling of broadcastConstantColumn: a list, a map or a map entry is a view over
+// the query's buffers and carries no absence of its own, so the rows are a plain column of
+// that one view.
+template <typename View>
+void broadcastConstantViewColumn(const Column* value, size_t rowCount, Column* output) {
+    const ColumnConst<View>* typedValue = static_cast<const ColumnConst<View>*>(value);
+    ColumnVector<View>* typedOutput = static_cast<ColumnVector<View>*>(output);
 
     auto& outputRaw = typedOutput->getRaw();
     outputRaw.resize(rowCount);
@@ -1714,14 +1716,13 @@ void broadcastConstantListColumn(const Column* value, size_t rowCount, Column* o
     std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
 }
 
-void broadcastConstantMapColumn(const Column* value, size_t rowCount, Column* output) {
-    const ColumnConst<MapView>* typedValue = static_cast<const ColumnConst<MapView>*>(value);
-    ColumnVector<MapView>* typedOutput = static_cast<ColumnVector<MapView>*>(output);
+// The one row a computation over constants wrote, held as the constant it stands for
+template <typename Element>
+void readSingleRowAsConstant(Column* result, const Column* row) {
+    const std::vector<Element>& rowRaw = static_cast<const ColumnVector<Element>*>(row)->getRaw();
+    bioassert(rowRaw.size() == 1, "A computation over constants did not write a single row.");
 
-    auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(rowCount);
-
-    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+    static_cast<ColumnConst<Element>*>(result)->set(rowRaw.front());
 }
 
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
@@ -10876,11 +10877,15 @@ NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
-    return &broadcastConstantListColumn;
+    return &broadcastConstantViewColumn<ListView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantMapBroadcast() {
-    return &broadcastConstantMapColumn;
+    return &broadcastConstantViewColumn<MapView>;
+}
+
+NLBroadcastConstantFunction NLExecutor::selectConstantMapEntryBroadcast() {
+    return &broadcastConstantViewColumn<MapEntryView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
@@ -10916,6 +10921,49 @@ NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueT
     ValueTypeDispatcher(valueType).execute(select);
 
     return fill;
+}
+
+NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, Column*& result) {
+    NLUnaryFn read = nullptr;
+
+    const auto selectForElement = [&]<typename Element>() {
+        if (!read && row->getKind() == ColumnVector<Element>::staticKind()) {
+            result = memory->alloc<ColumnConst<Element>>();
+            read = &readSingleRowAsConstant<Element>;
+        }
+    };
+
+    selectForElement.template operator()<types::Int64::Primitive>();
+    selectForElement.template operator()<types::UInt64::Primitive>();
+    selectForElement.template operator()<types::Double::Primitive>();
+    selectForElement.template operator()<types::String::Primitive>();
+    selectForElement.template operator()<types::Bool::Primitive>();
+    selectForElement.template operator()<types::Embedding::Primitive>();
+    selectForElement.template operator()<types::DateTime::Primitive>();
+    selectForElement.template operator()<types::Duration::Primitive>();
+    selectForElement.template operator()<std::optional<types::Int64::Primitive>>();
+    selectForElement.template operator()<std::optional<types::UInt64::Primitive>>();
+    selectForElement.template operator()<std::optional<types::Double::Primitive>>();
+    selectForElement.template operator()<std::optional<types::String::Primitive>>();
+    selectForElement.template operator()<std::optional<types::Bool::Primitive>>();
+    selectForElement.template operator()<std::optional<types::Embedding::Primitive>>();
+    selectForElement.template operator()<std::optional<types::DateTime::Primitive>>();
+    selectForElement.template operator()<std::optional<types::Duration::Primitive>>();
+    selectForElement.template operator()<NodeID>();
+    selectForElement.template operator()<EdgeID>();
+    selectForElement.template operator()<ListView>();
+    selectForElement.template operator()<std::optional<ListView>>();
+    selectForElement.template operator()<ListElementView>();
+    selectForElement.template operator()<std::optional<ListElementView>>();
+    selectForElement.template operator()<MapView>();
+    selectForElement.template operator()<std::optional<MapView>>();
+    selectForElement.template operator()<MapEntryView>();
+
+    if (!read) {
+        throw IRException(fmt::format("nl.row_constant can not read a {} as a constant", row->getTypeName()));
+    }
+
+    return read;
 }
 
 // A list_element chunk is a ColumnVector<ListElementView> of fixed-width tagged

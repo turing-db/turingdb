@@ -2405,6 +2405,31 @@ def BroadcastConstant : NLOp<"broadcast_constant", [Pure, RowAlignedThroughOpera
 }
 
 /**
+* RowConstant
+*/
+def RowConstant : NLOp<"row_constant", [Pure, ConstantResult, SameOperandsAndResultType]> {
+  let summary = "Read the single row a computation over constants produced as a constant";
+  let description = [{
+      A row-wise op whose operands are all constants is computed once, ahead of the loops,
+      over the single row its constants are laid out on. This reads that row as the constant
+      it is, standing for every row of whichever step reads it:
+
+      %from = nl.broadcast_constant %one : (!nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+      %to = nl.broadcast_constant %thousand : (!nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+      %row = nl.range %from, %to : (...) -> !nl.chunk<!storage.nullable<!storage.list<i64>>>
+      %list = nl.row_constant %row : !nl.chunk<!storage.nullable<!storage.list<i64>>>
+
+      No row of a step may reach the operand: it is computed from constants alone.
+  }];
+
+  let arguments = (ins NLChunk:$row);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$row attr-dict `:` type($row)";
+}
+
+/**
 * Add
 */
 def Add : NLOp<"add", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {

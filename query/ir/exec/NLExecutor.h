@@ -649,13 +649,18 @@ public:
     // beside its value type.
     static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType, const Column* value);
 
+    // Reads the single row a computation over constants wrote as a constant column
+    // (nl.row_constant)
+    static NLUnaryFn selectRowConstant(const Column* row, LocalMemory* memory, Column*& result);
+
     // The broadcast of the null literal, whose rows are the absent value rather than
     // copies of a value the constant holds
     static NLBroadcastConstantFunction selectNullConstantBroadcast();
 
-    // The list and map siblings: a list/map constant lays its one view out over the step's rows
+    // The list, map and map entry siblings: the constant lays its one view out over the step's rows
     static NLBroadcastConstantFunction selectConstantListBroadcast();
     static NLBroadcastConstantFunction selectConstantMapBroadcast();
+    static NLBroadcastConstantFunction selectConstantMapEntryBroadcast();
 
     // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
     // no value type to dispatch on

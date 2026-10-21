@@ -1033,6 +1033,7 @@ private:
     // Allocates the row-aligned column a constant is laid out into, and binds the
     // fill that writes the driving relation's row count of its value each step
     void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
+    void translateRowConstant(mlir::nl::RowConstant rowConstant, NLStmtContainer* body);
     // The list sibling of translateConstant: materializes the literals into the query's
     // ListBuffer and allocates a singleton column holding a view of them
 

@@ -14,6 +14,7 @@ target_link_libraries(turing_db_ir_common_s
     PRIVATE
         MLIRIR
         MLIRFuncDialect
+        MLIRSideEffectInterfaces
         turing_db_ir_storagedialect_s
 
     PUBLIC

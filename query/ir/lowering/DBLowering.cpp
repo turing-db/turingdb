@@ -1186,6 +1186,112 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
+    if (computesOnceOverConstants(operation)) {
+        lowerOnceOverConstants(operation);
+    } else if (raisesOverConstants(operation)) {
+        lowerOverReachingRows(operation);
+    } else {
+        lowerOperationByKind(operation);
+    }
+}
+
+bool DBLowering::computesOnceOverConstants(mlir::Operation& operation) {
+    const bool constantThroughOperands = operation.hasTrait<mlir::OpTrait::ConstantThroughOperands>();
+
+    return constantThroughOperands && yieldsConstantColumn(operation.getResult(0), _constantColumns);
+}
+
+bool DBLowering::raisesOverConstants(mlir::Operation& operation) {
+    const bool constantThroughOperands = operation.hasTrait<mlir::OpTrait::ConstantThroughOperands>();
+    const bool readsConstantsAlone = constantThroughOperands && llvm::all_of(operation.getOperands(), [this](mlir::Value operand) {
+        return yieldsConstantColumn(mapValue(operand), _constantColumns);
+    });
+
+    return readsConstantsAlone && !runsWithoutRaising(&operation);
+}
+
+void DBLowering::lowerOverReachingRows(mlir::Operation& operation) {
+    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> constantChunks;
+    for (const mlir::Value operand : operation.getOperands()) {
+        const mlir::Value chunk = mapValue(operand);
+        constantChunks.emplace_back(operand, chunk);
+        _valueMap[operand] = rowAlignedChunk(chunk, _innermostCardinality);
+    }
+
+    lowerOperationByKind(operation);
+
+    for (const auto& [operand, chunk] : llvm::reverse(constantChunks)) {
+        _valueMap[operand] = chunk;
+    }
+}
+
+void DBLowering::lowerOnceOverConstants(mlir::Operation& operation) {
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostCardinality = {};
+
+    lowerOperationByKind(operation);
+
+    _innermostCardinality = previousInnermostCardinality;
+
+    for (const mlir::Value result : operation.getResults()) {
+        const mlir::Value row = mapValue(result);
+        if (yieldsConstantColumn(row, _constantColumns)) {
+            continue;
+        }
+
+        _builder.setInsertionPointAfterValue(row);
+
+        nl::RowConstant constant = _builder.create<nl::RowConstant>(_builder.getUnknownLoc(), row);
+        _valueMap[result] = constant.getResult();
+
+        moveAheadOfLoops(constant.getOperation());
+    }
+}
+
+void DBLowering::moveAheadOfLoops(mlir::Operation* computation) {
+    mlir::Block* const block = computation->getBlock();
+
+    const auto loopIt = llvm::find_if(*block, [](mlir::Operation& op) { return mlir::isa<nl::For>(op); });
+    const bool followsALoop = loopIt != block->end() && loopIt->isBeforeInBlock(computation);
+    if (!followsALoop) {
+        return;
+    }
+
+    mlir::Operation* const firstLoop = &*loopIt;
+
+    llvm::SmallVector<mlir::Operation*> cone;
+    llvm::DenseSet<mlir::Operation*> visited;
+    llvm::SmallVector<mlir::Operation*> worklist {computation};
+
+    while (!worklist.empty()) {
+        mlir::Operation* const op = worklist.pop_back_val();
+        if (!visited.insert(op).second) {
+            continue;
+        }
+
+        cone.push_back(op);
+
+        op->walk([&](mlir::Operation* nested) {
+            for (const mlir::Value operand : nested->getOperands()) {
+                mlir::Operation* const definingOp = operand.getDefiningOp();
+                const bool definedPastTheLoop = definingOp
+                                             && definingOp->getBlock() == block
+                                             && firstLoop->isBeforeInBlock(definingOp);
+                if (definedPastTheLoop) {
+                    worklist.push_back(definingOp);
+                }
+            }
+        });
+    }
+
+    llvm::sort(cone, [](mlir::Operation* lhs, mlir::Operation* rhs) { return lhs->isBeforeInBlock(rhs); });
+
+    for (mlir::Operation* const op : cone) {
+        op->moveBefore(firstLoop);
+    }
+}
+
+void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
     if (mlir::db::ScanNodes scanNodes = mlir::dyn_cast<mlir::db::ScanNodes>(operation)) {
         lowerScanNodes(scanNodes);
     } else if (mlir::db::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<mlir::db::ScanNodesByLabel>(operation)) {
@@ -6108,32 +6214,8 @@ mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardi
     for (mlir::Operation& operation : block) {
         if (operation.hasTrait<mlir::OpTrait::IsTerminator>()) {
             value = mapValue(operation.getOperand(0));
-            continue;
-        }
-
-        const bool computesFromConstantsAlone = cardinality
-                                             && operation.getNumResults() == 1
-                                             && !operation.hasTrait<mlir::OpTrait::ConstantLike>()
-                                             && yieldsConstantColumn(operation.getResult(0), _constantColumns);
-
-        if (!computesFromConstantsAlone) {
+        } else {
             lowerOperation(operation);
-            continue;
-        }
-
-        // Computed once from constants, `ELSE 10 / $d` would divide whether or not a row
-        // takes the branch, so it is computed over the rows that do
-        llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> constantChunks;
-        for (const mlir::Value operand : operation.getOperands()) {
-            const mlir::Value chunk = mapValue(operand);
-            constantChunks.emplace_back(operand, chunk);
-            _valueMap[operand] = rowAlignedChunk(chunk, cardinality);
-        }
-
-        lowerOperation(operation);
-
-        for (const auto& [operand, chunk] : llvm::reverse(constantChunks)) {
-            _valueMap[operand] = chunk;
         }
     }
 
@@ -7011,17 +7093,21 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
 
     const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
     mlir::Type valueElement = chunkType.getElementType();
-    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(valueElement)) {
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(valueElement);
+    if (nullable) {
         valueElement = nullable.getValueType();
     }
 
     // The rows are laid out as a nullable value chunk - present in every row - which is
     // what every fold, key serialization and reduction reads a value column as. A list or
-    // a map is laid out as the plain container chunk an nl.collect drain emits instead: the
-    // value being laid out is a literal, so no row of it is absent.
+    // a map literal is laid out as the plain container chunk an nl.collect drain emits
+    // instead, since no row of a literal is absent; one a function answered may be null.
+    // A map entry carries its null in its own tag.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const mlir::Type resultElement = isContainer ? valueElement
+    const bool isMapEntry = llvm::isa<storage::MapElementType>(valueElement);
+    const bool staysPlain = (isContainer && !nullable) || isMapEntry;
+    const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
