@@ -5712,7 +5712,7 @@ bool readsRowsAsASet(Operation* op, llvm::SmallVectorImpl<Operation*>& passedOn)
         return aggregatesDistinctly(groupAggregate.getKinds());
     } else if (Collect collect = dyn_cast<Collect>(op)) {
         return collectsDistinctly(collect);
-    } else if (isRowWiseOp(op) || isa<FilterOp, ExplorePaths>(op) || isEdgeHop(op)) {
+    } else if (isRowWiseOp(op) || isa<FilterOp, ExplorePaths, BroadcastConstant>(op) || isEdgeHop(op)) {
         passedOn.push_back(op);
         return true;
     }
@@ -5721,8 +5721,9 @@ bool readsRowsAsASet(Operation* op, llvm::SmallVectorImpl<Operation*>& passedOn)
 }
 
 // Whether every row the op ever emits is only ever read as a member of a set: a dedup or a
-// distinct aggregate settles it, a row-wise op, a filter or a further hop passes the question
-// on to its own users, and anything counting, cutting or outputting rows refuses.
+// distinct aggregate settles it, a row-wise op, a constant laid over the rows, a filter or a
+// further hop passes the question on to its own users, and anything counting, cutting or
+// outputting rows refuses.
 bool usersReadRowsAsASet(Operation* op) {
     llvm::SmallPtrSet<Operation*, 16> visited;
     llvm::SmallVector<Operation*> passedOn {op};
