@@ -171,3 +171,7 @@ add_call_v3_test(test_query_ir_is_empty_function IsEmptyFunctionTest.cpp)
 add_ir_tests(test_query_ir_element_id_function ElementIdFunctionTest.cpp)
 
 add_turing_test(test_query_ir_conversion_over_no_rows ConversionOverNoRowsTest.cpp)
+
+add_turing_test(test_query_ir_number_equality_across_types NumberEqualityAcrossTypesTest.cpp)
+target_sources(test_query_ir_number_equality_across_types PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_number_equality_across_types PRIVATE ${IR_TEST_DIR})
