@@ -2264,16 +2264,23 @@ dropConstraint
 
 reservedWord
     : PROCEDURES { $$ = Symbol::create(ast, $1); }
+    | MERGE_DATAPARTS { $$ = Symbol::create(ast, $1); }
+    | SHORTESTPATH { $$ = Symbol::create(ast, $1); }
     | DESCENDING { $$ = Symbol::create(ast, $1); }
     | CONSTRAINT { $$ = Symbol::create(ast, $1); }
+    | EMBEDDINGS { $$ = Symbol::create(ast, $1); }
     | MANDATORY { $$ = Symbol::create(ast, $1); }
     | ASCENDING { $$ = Symbol::create(ast, $1); }
+    | DIMENSION { $$ = Symbol::create(ast, $1); }
     | OPTIONAL { $$ = Symbol::create(ast, $1); }
     | CONTAINS { $$ = Symbol::create(ast, $1); }
     | DISTINCT { $$ = Symbol::create(ast, $1); }
     // | EXTRACT { $$ = Symbol::create(ast, $1); }
     | REQUIRE { $$ = Symbol::create(ast, $1); }
     | COLLECT { $$ = Symbol::create(ast, $1); }
+    | CONNECT { $$ = Symbol::create(ast, $1); }
+    | INDEXES { $$ = Symbol::create(ast, $1); }
+    | PARQUET { $$ = Symbol::create(ast, $1); }
     | SUBMIT { $$ = Symbol::create(ast, $1); }
     | CHANGE { $$ = Symbol::create(ast, $1); }
     | STARTS { $$ = Symbol::create(ast, $1); }
@@ -2289,6 +2296,12 @@ reservedWord
     | DETACH { $$ = Symbol::create(ast, $1); }
     | EXISTS { $$ = Symbol::create(ast, $1); }
     | COMMIT { $$ = Symbol::create(ast, $1); }
+    | COSINE { $$ = Symbol::create(ast, $1); }
+    | EUCLID { $$ = Symbol::create(ast, $1); }
+    | METRIC { $$ = Symbol::create(ast, $1); }
+    | REDUCE { $$ = Symbol::create(ast, $1); }
+    | SEARCH { $$ = Symbol::create(ast, $1); }
+    | VECTOR { $$ = Symbol::create(ast, $1); }
     | LIMIT { $$ = Symbol::create(ast, $1); }
     | YIELD { $$ = Symbol::create(ast, $1); }
     | MATCH { $$ = Symbol::create(ast, $1); }
@@ -2302,6 +2315,14 @@ reservedWord
     | NORMALIZED { $$ = Symbol::create(ast, $1); }
     | HEADERS { $$ = Symbol::create(ast, $1); }
     | JSONL { $$ = Symbol::create(ast, $1); }
+    | GRAPH { $$ = Symbol::create(ast, $1); }
+    | INDEX { $$ = Symbol::create(ast, $1); }
+    | FLAT { $$ = Symbol::create(ast, $1); }
+    | FROM { $$ = Symbol::create(ast, $1); }
+    | HNSW { $$ = Symbol::create(ast, $1); }
+    | LOAD { $$ = Symbol::create(ast, $1); }
+    | PULL { $$ = Symbol::create(ast, $1); }
+    | PUSH { $$ = Symbol::create(ast, $1); }
     | CSV { $$ = Symbol::create(ast, $1); }
     | FAIL { $$ = Symbol::create(ast, $1); }
     | ERROR_ { $$ = Symbol::create(ast, $1); }
@@ -2336,6 +2357,7 @@ reservedWord
     | FOR { $$ = Symbol::create(ast, $1); }
     | ADD { $$ = Symbol::create(ast, $1); }
     | AND { $$ = Symbol::create(ast, $1); }
+    | GML { $$ = Symbol::create(ast, $1); }
     | OR { $$ = Symbol::create(ast, $1); }
     | IN { $$ = Symbol::create(ast, $1); }
     | IS { $$ = Symbol::create(ast, $1); }
@@ -2345,6 +2367,7 @@ reservedWord
     | ON { $$ = Symbol::create(ast, $1); }
     | IF { $$ = Symbol::create(ast, $1); }
     | AS { $$ = Symbol::create(ast, $1); }
+    | S3 { $$ = Symbol::create(ast, $1); }
     ;
 
 %%

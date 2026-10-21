@@ -56,3 +56,6 @@ target_include_directories(test_query_ir_dynamic_map_key PRIVATE ${IR_TEST_DIR})
 
 add_turing_test(test_query_ir_unwound_map_key UnwoundMapKeyTest.cpp)
 target_include_directories(test_query_ir_unwound_map_key PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_keyword_name KeywordNameTest.cpp)
+target_include_directories(test_query_ir_keyword_name PRIVATE ${IR_TEST_DIR})
