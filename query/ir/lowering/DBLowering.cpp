@@ -4062,9 +4062,9 @@ void DBLowering::lowerUnionResults(mlir::db::Union unionOp) {
     mlir::Block* const root = _rootBlock;
 
     _builder.setInsertionPointToStart(root);
-    const mlir::Value state = _builder.create<nl::UnionBuffer>(loc).getState();
+    const mlir::Value state = _builder.create<nl::RowBuffer>(loc).getState();
 
-    llvm::SmallVector<nl::UnionCollect, 4> collects;
+    llvm::SmallVector<nl::RowCollect, 4> collects;
 
     for (mlir::Region& branch : unionOp.getBranches()) {
         lowerCollectedBranch(branch, root, state, collects);
@@ -4088,7 +4088,7 @@ void DBLowering::lowerConditional(mlir::db::Conditional conditional) {
     mlir::Value state;
     if (returning) {
         _builder.setInsertionPointToStart(root);
-        state = _builder.create<nl::UnionBuffer>(loc).getState();
+        state = _builder.create<nl::RowBuffer>(loc).getState();
     }
 
     _constantComputationBlock = root;
@@ -4108,7 +4108,7 @@ void DBLowering::lowerConditional(mlir::db::Conditional conditional) {
     const size_t conditionCount = regions.size() / 2;
     const bool hasDefault = regions.size() % 2 == 1;
 
-    llvm::SmallVector<nl::UnionCollect, 4> collects;
+    llvm::SmallVector<nl::RowCollect, 4> collects;
 
     for (size_t conditionIndex = 0; conditionIndex < conditionCount; conditionIndex++) {
         for (size_t columnIndex = 0; columnIndex < readColumns.size(); columnIndex++) {
@@ -4164,7 +4164,7 @@ void DBLowering::lowerConditionalBranch(mlir::Region& branch,
                                         llvm::ArrayRef<mlir::Value> readColumns,
                                         llvm::ArrayRef<mlir::Value> taken,
                                         mlir::Value state,
-                                        llvm::SmallVectorImpl<nl::UnionCollect>& collects) {
+                                        llvm::SmallVectorImpl<nl::RowCollect>& collects) {
     const mlir::Location loc = _builder.getUnknownLoc();
     mlir::Block* const root = _rootBlock;
 
@@ -4190,7 +4190,7 @@ void DBLowering::lowerConditionalBranch(mlir::Region& branch,
 void DBLowering::lowerCollectedBranch(mlir::Region& branch,
                                       mlir::Block* root,
                                       mlir::Value state,
-                                      llvm::SmallVectorImpl<nl::UnionCollect>& collects) {
+                                      llvm::SmallVectorImpl<nl::RowCollect>& collects) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
     _innermostLoopBody = nullptr;
@@ -4215,7 +4215,7 @@ void DBLowering::lowerCollectedBranch(mlir::Region& branch,
             // A branch of constants alone lays them out where they are bound, above the
             // root, which the collect must still run once per step of
             setInsertionInto(deepestOwnerBlock(chunks, root));
-            collects.push_back(_builder.create<nl::UnionCollect>(loc, state, chunks));
+            collects.push_back(_builder.create<nl::RowCollect>(loc, state, chunks));
         }
 
         for (const auto& [column, chunk] : replacedMappings) {
@@ -4224,25 +4224,25 @@ void DBLowering::lowerCollectedBranch(mlir::Region& branch,
     }
 }
 
-void DBLowering::drainCollectedBranches(llvm::ArrayRef<nl::UnionCollect> collects,
+void DBLowering::drainCollectedBranches(llvm::ArrayRef<nl::RowCollect> collects,
                                         mlir::Value state,
                                         mlir::Block* root,
                                         mlir::Operation* holder) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
     llvm::SmallVector<mlir::MutableOperandRange, 4> branchColumns;
-    for (nl::UnionCollect collect : collects) {
+    for (nl::RowCollect collect : collects) {
         branchColumns.push_back(collect.getColumnsMutable());
     }
 
     reconcileBranchResultTypes(branchColumns, mlir::ArrayAttr());
 
-    nl::UnionCollect firstCollect = collects.front();
+    nl::RowCollect firstCollect = collects.front();
     const llvm::SmallVector<mlir::Type, 4> chunkTypes(firstCollect.getColumns().getTypes());
     const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
 
     setInsertionInto(root);
-    nl::UnionDrain drain = _builder.create<nl::UnionDrain>(loc, iteratorType, state);
+    nl::RowDrain drain = _builder.create<nl::RowDrain>(loc, iteratorType, state);
 
     buildLoopForSource(drain.getResult(), holder);
 }
@@ -4437,10 +4437,10 @@ void DBLowering::lowerMaterialize(mlir::db::Materialize materialize) {
     rowAlignBufferedChunks(chunks);
 
     _builder.setInsertionPointToStart(_rootBlock);
-    const mlir::Value state = _builder.create<nl::UnionBuffer>(loc).getState();
+    const mlir::Value state = _builder.create<nl::RowBuffer>(loc).getState();
 
     setInsertionInto(deepestOwnerBlock(chunks, _rootBlock));
-    _builder.create<nl::UnionCollect>(loc, state, chunks);
+    _builder.create<nl::RowCollect>(loc, state, chunks);
 
     _valueMap[materialize.getRows()] = state;
 }
@@ -4448,9 +4448,9 @@ void DBLowering::lowerMaterialize(mlir::db::Materialize materialize) {
 void DBLowering::lowerScanMaterialized(mlir::db::ScanMaterialized scan) {
     const mlir::Value state = mapValue(scan.getRows());
 
-    nl::UnionCollect collect;
+    nl::RowCollect collect;
     for (mlir::Operation* user : state.getUsers()) {
-        if (nl::UnionCollect stateCollect = mlir::dyn_cast<nl::UnionCollect>(user)) {
+        if (nl::RowCollect stateCollect = mlir::dyn_cast<nl::RowCollect>(user)) {
             collect = stateCollect;
             break;
         }
@@ -4464,7 +4464,7 @@ void DBLowering::lowerScanMaterialized(mlir::db::ScanMaterialized scan) {
     const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
 
     setInsertionInto(_rootBlock);
-    nl::UnionDrain drain = _builder.create<nl::UnionDrain>(_builder.getUnknownLoc(), iteratorType, state);
+    nl::RowDrain drain = _builder.create<nl::RowDrain>(_builder.getUnknownLoc(), iteratorType, state);
 
     buildLoopForSource(drain.getResult(), scan.getOperation());
 }

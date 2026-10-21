@@ -9484,21 +9484,21 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
     }
 }
 
-void NLExecutor::runUnionReset(NLExecutionContext* context, NLFunctionData* data) {
-    const NLUnionResetData* reset = static_cast<NLUnionResetData*>(data);
+void NLExecutor::runRowReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLRowResetData* reset = static_cast<NLRowResetData*>(data);
     reset->getState()->reset();
 }
 
-void NLExecutor::runUnionCollect(NLExecutionContext* context, NLFunctionData* data) {
-    const NLUnionCollectData* collect = static_cast<NLUnionCollectData*>(data);
+void NLExecutor::runRowCollect(NLExecutionContext* context, NLFunctionData* data) {
+    const NLRowCollectData* collect = static_cast<NLRowCollectData*>(data);
 
     for (const NLSortCollectData::Append& append : collect->appends()) {
         appendCollectedChunk(append, collect->getState()->values());
     }
 }
 
-void NLExecutor::runUnionLoop(NLExecutionContext* context, NLFunctionData* data) {
-    NLUnionLoopData* loopData = static_cast<NLUnionLoopData*>(data);
+void NLExecutor::runRowLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLRowLoopData* loopData = static_cast<NLRowLoopData*>(data);
     const size_t totalRows = loopData->getState()->getRowCount();
 
     const NLStmtContainer* loopBody = loopData->getStmts();

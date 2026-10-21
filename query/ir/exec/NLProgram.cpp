@@ -411,7 +411,7 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
-size_t NLUnionState::getRowCount() const {
+size_t NLRowState::getRowCount() const {
     if (_buffers.empty()) {
         return 0;
     }
@@ -419,7 +419,7 @@ size_t NLUnionState::getRowCount() const {
     return _buffers.front()->size();
 }
 
-void NLUnionState::reset() {
+void NLRowState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();
     }

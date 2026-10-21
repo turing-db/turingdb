@@ -119,7 +119,7 @@ TEST_F(RetainedValuesAcrossChunksTest, unitesValuesBuiltPerRow) {
                      "UNION ALL "
                      "UNWIND range(1, 3) AS i RETURN ['b', toString(i)] AS l, 'b' + toString(i) AS s } "
                      "RETURN l, s",
-                     "nl.union_collect",
+                     "nl.row_collect",
                      {{"[a, 1]", "a1"},
                       {"[a, 2]", "a2"},
                       {"[a, 3]", "a3"},

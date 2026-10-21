@@ -89,7 +89,7 @@ private:
         UnwindRange,
         ProcedureInit,
         OptionalDrain,
-        UnionDrain,
+        RowDrain,
         CrossProduct,
         HashJoinProbe,
         EachRow,
@@ -115,8 +115,8 @@ private:
         // The accumulator an OptionalDrain iterator drains; null for the other kinds.
         NLOptionalState* _optionalState {nullptr};
 
-        // The accumulator a UnionDrain iterator drains; null for the other kinds.
-        NLUnionState* _unionState {nullptr};
+        // The accumulator a RowDrain iterator drains; null for the other kinds.
+        NLRowState* _rowState {nullptr};
 
         // The call a ProcedureInit iterator drives; null for the other kinds.
         NLProcedureState* _procedureState {nullptr};
@@ -292,7 +292,7 @@ private:
     // nl.optional_collect and the nl.for over nl.optional_drain find the same buffers and
     // matched flags
     llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
-    llvm::DenseMap<mlir::Value, NLUnionState*> _unionStates;
+    llvm::DenseMap<mlir::Value, NLRowState*> _rowStates;
     llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
     llvm::DenseMap<mlir::Value, NLCountSubqueryState*> _countSubqueryStates;
 
@@ -759,22 +759,22 @@ private:
     // produced by an nl.optional_buffer translated earlier.
     NLOptionalState* optionalStateFor(mlir::Value handle) const;
 
-    // Translate an nl.union_buffer: allocate the runtime accumulator, map the handle to it
+    // Translate an nl.row_buffer: allocate the runtime accumulator, map the handle to it
     // and record the reset statement. The buffers are allocated by the first collect.
-    void translateUnionBuffer(mlir::nl::UnionBuffer buffer, NLStmtContainer* body);
+    void translateRowBuffer(mlir::nl::RowBuffer buffer, NLStmtContainer* body);
 
-    // Translate the nl.union_collect of one branch: the first allocates the buffers, and
-    // each records the per-step statement appending its columns to them
-    void translateUnionCollect(mlir::nl::UnionCollect collect, NLStmtContainer* body);
+    // Translate an nl.row_collect: the first allocates the buffers, and each records the
+    // per-step statement appending its columns to them
+    void translateRowCollect(mlir::nl::RowCollect collect, NLStmtContainer* body);
 
-    // Translate the nl.for over an nl.union_drain iterator: one loop variable per buffer,
+    // Translate the nl.for over an nl.row_drain iterator: one loop variable per buffer,
     // gathered from it chunk by chunk
-    void translateUnionLoop(const IteratorConfig& config,
-                            mlir::Block& loopBody,
-                            NLLimitState* limit,
-                            NLStmtContainer* body);
+    void translateRowLoop(const IteratorConfig& config,
+                          mlir::Block& loopBody,
+                          NLLimitState* limit,
+                          NLStmtContainer* body);
 
-    NLUnionState* unionStateFor(mlir::Value handle) const;
+    NLRowState* rowStateFor(mlir::Value handle) const;
 
     // Translate an nl.exists_buffer: allocate the runtime accumulator, map the handle to
     // it, record this step's input chunks and the row tag column, and record the reset

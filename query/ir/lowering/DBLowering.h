@@ -383,7 +383,7 @@ private:
     void lowerUnion(mlir::db::Union unionOp);
 
     // Lowers a union with results - the body of a CALL - into branches that collect their
-    // rows into one nl.union_buffer, drained by the loop the rest of the body lowers into
+    // rows into one nl.row_buffer, drained by the loop the rest of the body lowers into
     void lowerUnionResults(mlir::db::Union unionOp);
 
     // Lowers a WHEN as db.lazy_case is lowered: each condition over the row no earlier
@@ -396,16 +396,16 @@ private:
                                 llvm::ArrayRef<mlir::Value> readColumns,
                                 llvm::ArrayRef<mlir::Value> taken,
                                 mlir::Value state,
-                                llvm::SmallVectorImpl<mlir::nl::UnionCollect>& collects);
+                                llvm::SmallVectorImpl<mlir::nl::RowCollect>& collects);
 
     // Lowers one branch of a union or a WHEN rooted in @param root, collecting what it
     // yields into @param state when it yields anything
     void lowerCollectedBranch(mlir::Region& branch,
                               mlir::Block* root,
                               mlir::Value state,
-                              llvm::SmallVectorImpl<mlir::nl::UnionCollect>& collects);
+                              llvm::SmallVectorImpl<mlir::nl::RowCollect>& collects);
 
-    void drainCollectedBranches(llvm::ArrayRef<mlir::nl::UnionCollect> collects,
+    void drainCollectedBranches(llvm::ArrayRef<mlir::nl::RowCollect> collects,
                                 mlir::Value state,
                                 mlir::Block* root,
                                 mlir::Operation* holder);

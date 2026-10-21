@@ -5183,11 +5183,11 @@ private:
     ColumnVector<uint64_t>* _result {nullptr};
 };
 
-// Runtime state of one UNION inside a CALL body: one growing buffer per column, which
-// the nl.union_collect of every branch appends to and the nl.for over nl.union_drain reads
-// back in collected order. The buffer columns are borrowed: the translator pool-allocates
+// Runtime state of one row accumulator: one growing buffer per column, which every
+// nl.row_collect appends to and each nl.for over an nl.row_drain reads back in collected
+// order. The buffer columns are borrowed: the translator pool-allocates
 // them in the same arena as the loop columns.
-class NLUnionState {
+class NLRowState {
 public:
     void addBuffer(Column* buffer) { _buffers.push_back(buffer); }
 
@@ -5196,7 +5196,7 @@ public:
 
     size_t getRowCount() const;
 
-    // Clear every buffer; runs each time nl.union_buffer's block runs
+    // Clear every buffer; runs each time nl.row_buffer's block runs
     void reset();
 
     // The values the buffers hold, copied in as NLSortState::values' are
@@ -5207,30 +5207,30 @@ private:
     NLValueStore _values;
 };
 
-// nl.union_buffer data: resets an accumulator to empty each time its block runs
-class NLUnionResetData : public NLFunctionData {
+// nl.row_buffer data: resets an accumulator to empty each time its block runs
+class NLRowResetData : public NLFunctionData {
 public:
-    NLUnionResetData(NLUnionState* state)
+    NLRowResetData(NLRowState* state)
         : _state(state)
     {
     }
 
-    NLUnionState* getState() const { return _state; }
+    NLRowState* getState() const { return _state; }
 
 private:
-    NLUnionState* _state {nullptr};
+    NLRowState* _state {nullptr};
 };
 
-// nl.union_collect data: appends the current chunk of every column one branch yields to
-// the matching buffer of the accumulator, in NLSortCollectData's append shape
-class NLUnionCollectData : public NLFunctionData {
+// nl.row_collect data: appends the current chunk of every column to the matching buffer
+// of the accumulator, in NLSortCollectData's append shape
+class NLRowCollectData : public NLFunctionData {
 public:
-    NLUnionCollectData(NLUnionState* state)
+    NLRowCollectData(NLRowState* state)
         : _state(state)
     {
     }
 
-    NLUnionState* getState() const { return _state; }
+    NLRowState* getState() const { return _state; }
 
     const std::vector<NLSortCollectData::Append>& appends() const { return _appends; }
 
@@ -5239,20 +5239,20 @@ public:
     }
 
 private:
-    NLUnionState* _state {nullptr};
+    NLRowState* _state {nullptr};
     std::vector<NLSortCollectData::Append> _appends;
 };
 
-// nl.for over nl.union_drain data: the emit phase of a UNION inside a CALL body, which
-// gathers the collected rows chunk by chunk into the loop variables
-class NLUnionLoopData : public NLFunctionData {
+// nl.for over nl.row_drain data: the emit phase of a row accumulator, which gathers the
+// collected rows chunk by chunk into the loop variables
+class NLRowLoopData : public NLFunctionData {
 public:
-    NLUnionLoopData(NLUnionState* state)
+    NLRowLoopData(NLRowState* state)
         : _state(state)
     {
     }
 
-    NLUnionState* getState() const { return _state; }
+    NLRowState* getState() const { return _state; }
 
     const std::vector<NLCarriedColumn>& columns() const { return _columns; }
 
@@ -5269,7 +5269,7 @@ public:
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
-    NLUnionState* _state {nullptr};
+    NLRowState* _state {nullptr};
     NLLimitState* _limit {nullptr};
     std::vector<NLCarriedColumn> _columns;
     ColumnVector<size_t> _indices;
@@ -5449,10 +5449,10 @@ public:
         return statePtr;
     }
 
-    NLUnionState* allocUnionState() {
-        auto state = std::make_unique<NLUnionState>();
-        NLUnionState* statePtr = state.get();
-        _unionStates.push_back(std::move(state));
+    NLRowState* allocRowState() {
+        auto state = std::make_unique<NLRowState>();
+        NLRowState* statePtr = state.get();
+        _rowStates.push_back(std::move(state));
         return statePtr;
     }
 
@@ -5515,7 +5515,7 @@ private:
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;
     std::vector<std::unique_ptr<NLCountSubqueryState>> _countSubqueryStates;
     std::vector<std::unique_ptr<NLRowListsState>> _rowListsStates;
-    std::vector<std::unique_ptr<NLUnionState>> _unionStates;
+    std::vector<std::unique_ptr<NLRowState>> _rowStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;
