@@ -22,4 +22,5 @@
 #include "expr/CaseExpr.h"
 #include "expr/ExistsExpr.h"
 #include "expr/CountSubqueryExpr.h"
+#include "expr/CollectSubqueryExpr.h"
 

@@ -34,6 +34,7 @@ class LiteralExpr;
 class EntityTypeExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
+class CollectSubqueryExpr;
 class ParameterExpr;
 class PropertyExpr;
 class PropertyLookupExpr;
@@ -144,6 +145,7 @@ public:
     friend EntityTypeExpr;
     friend ExistsExpr;
     friend CountSubqueryExpr;
+    friend CollectSubqueryExpr;
     friend ParameterExpr;
     friend PropertyExpr;
     friend PropertyLookupExpr;

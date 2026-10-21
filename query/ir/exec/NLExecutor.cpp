@@ -8244,27 +8244,27 @@ void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
-void NLExecutor::runPatternComprehensionReset(NLExecutionContext* context, NLFunctionData* data) {
-    NLPatternComprehensionResetData* reset = static_cast<NLPatternComprehensionResetData*>(data);
+void NLExecutor::runRowListsReset(NLExecutionContext* context, NLFunctionData* data) {
+    NLRowListsResetData* reset = static_cast<NLRowListsResetData*>(data);
 
-    // No cardinality chunk: nothing was in flight where the comprehension is read, which
-    // is the single empty row Cypher starts from
+    // No cardinality chunk: nothing was in flight where the lists are read, which is the
+    // single empty row Cypher starts from
     const Column* const cardinality = reset->getCardinality();
     const size_t rowCount = cardinality ? cardinality->size() : 1;
 
     reset->getState()->reset(rowCount);
 
-    // The tag holds each row's position, so the pattern carries it the way it carries any
-    // other column and the collect reads the row each match belongs to off it.
+    // The tag holds each row's position, so the body carries it the way it carries any
+    // other column and the collect reads the row each value belongs to off it.
     std::vector<uint64_t>& tagRaw = reset->getTag()->getRaw();
     tagRaw.resize(rowCount);
     std::iota(tagRaw.begin(), tagRaw.end(), uint64_t {0});
 }
 
-void NLExecutor::runPatternComprehensionCollect(NLExecutionContext* context, NLFunctionData* data) {
-    NLPatternComprehensionCollectData* collect = static_cast<NLPatternComprehensionCollectData*>(data);
+void NLExecutor::runRowListsCollect(NLExecutionContext* context, NLFunctionData* data) {
+    NLRowListsCollectData* collect = static_cast<NLRowListsCollectData*>(data);
 
-    NLPatternComprehensionState* state = collect->getState();
+    NLRowListsState* state = collect->getState();
     const Column* const value = collect->getValue();
     const NLListItemReadFunction valueRead = collect->getValueRead();
     NLStepBuffers* const memory = collect->getStepBuffers();
@@ -8273,7 +8273,7 @@ void NLExecutor::runPatternComprehensionCollect(NLExecutionContext* context, NLF
     const ColumnVector<uint64_t>* const tag = collect->getTag();
 
     if (!tag) {
-        // No input row to tag: every match belongs to the single empty row the step is
+        // No input row to tag: every value belongs to the single row the step is
         for (size_t match = 0; match < value->size(); match++) {
             state->stage(0, valueRead(value, match, memory));
         }
@@ -8284,20 +8284,20 @@ void NLExecutor::runPatternComprehensionCollect(NLExecutionContext* context, NLF
     const std::vector<uint64_t>& tagRaw = tag->getRaw();
 
     bioassert(value->size() == tagRaw.size(),
-              "Yielded value of a pattern comprehension is not row-aligned with its row tags.");
+              "Yielded value of a row lists body is not row-aligned with its row tags.");
 
     for (size_t match = 0; match < tagRaw.size(); match++) {
         state->stage(tagRaw[match], valueRead(value, match, memory));
     }
 }
 
-void NLExecutor::runPatternComprehension(NLExecutionContext* context, NLFunctionData* data) {
-    NLPatternComprehensionData* comprehension = static_cast<NLPatternComprehensionData*>(data);
+void NLExecutor::runRowListsResult(NLExecutionContext* context, NLFunctionData* data) {
+    NLRowListsResultData* result = static_cast<NLRowListsResultData*>(data);
 
-    NLStepBuffers* const memory = comprehension->getStepBuffers();
+    NLStepBuffers* const memory = result->getStepBuffers();
     memory->clear();
 
-    comprehension->getState()->buildLists(memory->listBuffer(), comprehension->getResult()->getRaw());
+    result->getState()->buildLists(memory->listBuffer(), result->getResult()->getRaw());
 }
 
 void NLExecutor::runListPredicate(NLExecutionContext* context, NLFunctionData* data) {

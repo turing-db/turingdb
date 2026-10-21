@@ -1,6 +1,7 @@
 #include "ExprAnalyzer.h"
 
 #include <algorithm>
+#include <optional>
 
 #include "CypherAnalyzer.h"
 #include "DiagnosticsManager.h"
@@ -17,7 +18,11 @@
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
+#include "Projection.h"
+#include "SinglePartQuery.h"
+#include "UnionQuery.h"
 #include "stmt/LoadCSVStmt.h"
+#include "stmt/ReturnStmt.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
@@ -212,6 +217,34 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
     return ListShape::collecting(shared, firstShape);
 }
 
+// The shape of the list a COLLECT gathers its one column into, which every branch of a
+// UNION contributes to: the one each branch would gather where they all agree, and a list
+// of tagged scalars where they do not
+ListShape collectedListShape(const UnionQuery::Branches& branches) {
+    std::optional<ListShape> shared;
+
+    for (const UnionQuery::Branch& branch : branches) {
+        const Projection* projection = branch._query->getReturnStmt()->getProjection();
+
+        const ListShape collected = std::visit([](auto&& item) {
+            return ListShape::collecting(item->getType(), item->getListShape());
+        }, projection->items().front());
+
+        if (!shared) {
+            shared = collected;
+            continue;
+        }
+
+        const bool agrees = collected.getDepth() == shared->getDepth()
+                         && collected.getLeafType() == shared->getLeafType();
+        if (!agrees) {
+            return ListShape(EvaluatedType::Invalid, 1);
+        }
+    }
+
+    return *shared;
+}
+
 // The types a scalar operand of '+' joins a list as: whatever an element of a list can be,
 // a tagged cell and a null included - appending a null leaves a list with a null in it.
 bool joinsAList(EvaluatedType type) {
@@ -345,6 +378,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::COUNT_SUBQUERY:
             analyzeCountSubqueryExpr(static_cast<CountSubqueryExpr*>(expr));
         break;
+        case Expr::Kind::COLLECT_SUBQUERY:
+            analyzeCollectSubqueryExpr(static_cast<CollectSubqueryExpr*>(expr));
+        break;
 
         case Expr::Kind::_SIZE:
             throwError("Unknown expression type in ExprAnalyzer.");
@@ -372,6 +408,18 @@ void ExprAnalyzer::analyzeCountSubqueryExpr(CountSubqueryExpr* expr) {
 
     expr->setType(EvaluatedType::Integer);
     expr->setDynamic();
+}
+
+void ExprAnalyzer::analyzeCollectSubqueryExpr(CollectSubqueryExpr* expr) {
+    bioassert(_queryAnalyzer, "COLLECT analyzed without a query analyzer.");
+
+    _queryAnalyzer->analyzeCollectSubqueryBody(expr);
+
+    expr->setType(EvaluatedType::List);
+    expr->setListShape(collectedListShape(expr->getBranches()));
+    expr->setDynamic();
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
 }
 
 void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {

@@ -44,6 +44,7 @@ class StmtContainer;
 class WithStmt;
 class ExistsExpr;
 class CountSubqueryExpr;
+class CollectSubqueryExpr;
 class Pattern;
 class Projection;
 class Pattern;
@@ -93,6 +94,10 @@ public:
 
     // Analyzes the body of a COUNT subquery, scoped as an EXISTS body is
     void analyzeCountSubqueryBody(CountSubqueryExpr* count);
+
+    // Analyzes the body of a COLLECT subquery, scoped as an EXISTS body is, whose every
+    // branch ends in a RETURN of one column
+    void analyzeCollectSubqueryBody(CollectSubqueryExpr* collect);
 
     // Sub-statements
     void analyze(OrderBy* orderBySt, const Projection* projection);

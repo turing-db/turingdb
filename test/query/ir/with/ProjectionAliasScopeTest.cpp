@@ -152,7 +152,7 @@ TEST_F(ProjectionAliasScopeTest, rejectsTwoItemsOfOneProjectionUnderOneName) {
 
 TEST_F(ProjectionAliasScopeTest, rejectsRebindingAnImportedVariable) {
     expectRejected("WITH 1 AS x, 2 AS y CALL (x, y) { WITH y AS x RETURN x AS z } RETURN z",
-                   "Variable 'x' is imported by the CALL");
+                   "Variable 'x' is imported by the subquery");
 }
 
 int main(int argc, char** argv) {

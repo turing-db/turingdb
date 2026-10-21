@@ -44,6 +44,7 @@ class ListPredicateExpr;
 class ReduceExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
+class CollectSubqueryExpr;
 class ListSliceExpr;
 class MapLiteral;
 class PatternComprehensionExpr;
@@ -99,6 +100,7 @@ public:
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeCountSubqueryExpr(CountSubqueryExpr* expr);
+    void analyzeCollectSubqueryExpr(CollectSubqueryExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
     void analyzeTypeTestOfAnExpr(EntityTypeExpr* expr, Expr* operand);

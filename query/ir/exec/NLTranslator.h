@@ -296,9 +296,9 @@ private:
     llvm::DenseMap<mlir::Value, NLExistsState*> _existsStates;
     llvm::DenseMap<mlir::Value, NLCountSubqueryState*> _countSubqueryStates;
 
-    // nl.pattern_comprehension_state handle SSA value -> the accumulator it names, so the
-    // collect staging the matches and the build reading them find the one the buffer opened
-    llvm::DenseMap<mlir::Value, NLPatternComprehensionState*> _patternComprehensionStates;
+    // nl.row_lists_state handle SSA value -> the accumulator it names, so the collect
+    // staging the values and the result reading them find the one the buffer opened
+    llvm::DenseMap<mlir::Value, NLRowListsState*> _rowListsStates;
 
     // nl.procedure handle SSA value -> the runtime call it produces, so every op that
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
@@ -807,24 +807,21 @@ private:
                                           mlir::Value tag,
                                           NLStmtContainer* body);
 
-    // Translate an nl.pattern_comprehension_buffer: allocate the accumulator this step's
-    // matches are staged in and the row tag column the pattern carries
-    void translatePatternComprehensionBuffer(mlir::nl::PatternComprehensionBuffer buffer,
-                                             NLStmtContainer* body);
+    // Translate an nl.row_lists_buffer: allocate the accumulator this step's values are
+    // staged in and the row tag column the body carries
+    void translateRowListsBuffer(mlir::nl::RowListsBuffer buffer, NLStmtContainer* body);
 
-    // Translate an nl.pattern_comprehension_collect: bind the tag and the value the
-    // pattern's matches contribute, under the read the value column's shape takes
-    void translatePatternComprehensionCollect(mlir::nl::PatternComprehensionCollect collect,
-                                              NLStmtContainer* body);
+    // Translate an nl.row_lists_collect: bind the tag and the value the body contributes,
+    // under the read the value column's shape takes
+    void translateRowListsCollect(mlir::nl::RowListsCollect collect, NLStmtContainer* body);
 
-    // Translate an nl.pattern_comprehension: allocate the list column the step fills once
-    // the pattern's nest has been walked
-    void translatePatternComprehension(mlir::nl::PatternComprehension comprehension,
-                                       NLStmtContainer* body);
+    // Translate an nl.row_lists_result: allocate the list column the step fills once the
+    // body's nest has been walked
+    void translateRowListsResult(mlir::nl::RowListsResult result, NLStmtContainer* body);
 
-    // The runtime accumulator a pattern comprehension handle names. Throws if the handle
-    // was not produced by an nl.pattern_comprehension_buffer.
-    NLPatternComprehensionState* patternComprehensionStateFor(mlir::Value handle) const;
+    // The runtime accumulator a row lists handle names. Throws if the handle was not
+    // produced by an nl.row_lists_buffer.
+    NLRowListsState* rowListsStateFor(mlir::Value handle) const;
 
     // Translate the nl.for over an nl.unwind_collect iterator: allocate one loop variable per
     // grouping key plus the element value, wire the key outputs and value output onto

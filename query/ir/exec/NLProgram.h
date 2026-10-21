@@ -4888,33 +4888,33 @@ private:
     std::vector<NLSortCollectData::Append> _appends;
 };
 
-// Runtime state of one pattern comprehension over one step of the rows it is read on: how
-// many rows that step has, and what its pattern's matches contributed to each of them. The
-// list-valued sibling of NLOptionalState - both cover one step rather than the whole
-// relation - except that it reduces what the pattern found to one cell per row instead of
-// re-emitting it as rows.
-class NLPatternComprehensionState {
+// Runtime state of one pattern comprehension or COLLECT subquery over one step of the rows
+// it is read on: how many rows that step has, and what its body's rows contributed to each
+// of them. The list-valued sibling of NLOptionalState - both cover one step rather than the
+// whole relation - except that it reduces what the body found to one cell per row instead
+// of re-emitting it as rows.
+class NLRowListsState {
 public:
     // Drop what the last step staged and size the accumulator to this one. Runs each time
-    // nl.pattern_comprehension_buffer's block runs.
+    // nl.row_lists_buffer's block runs.
     void reset(size_t rowCount);
 
     void stage(size_t row, const ListBuffer<>::ListItemVariant& value);
 
     // One list per row of the step, in row order, built into @param lists: the values that
-    // row's matches staged, and the empty list for a row the pattern missed.
+    // row's body rows staged, and the empty list for a row the body produced none for.
     void buildLists(ListBuffer<>& listBuffer, std::vector<ListView>& lists);
 
 private:
     size_t _rowCount {0};
 
-    // What the matches contributed and, row-aligned with it, the row each value belongs
-    // to: they are staged in the order the pattern walked them, which is not the rows'.
+    // What the body's rows contributed and, row-aligned with it, the row each value belongs
+    // to: they are staged in the order the body walked them, which is not the rows'.
     std::vector<ListBuffer<>::ListItemVariant> _values;
     std::vector<size_t> _rows;
 
-    // The copies of the staged values, which the pattern's later steps would otherwise
-    // empty the buffers of
+    // The copies of the staged values, which the body's later steps would otherwise empty
+    // the buffers of
     NLValueStore _stagedValues;
 
     // The values under the row they belong to, where each row's run of them starts and how
@@ -4925,40 +4925,40 @@ private:
     std::vector<size_t> _next;
 };
 
-// nl.pattern_comprehension_buffer data: empties an accumulator and lays the row tag out
-// over this step's rows, each time the block it lives in runs. The cardinality column is
-// null where nothing is in flight, which is the single empty row.
-class NLPatternComprehensionResetData : public NLFunctionData {
+// nl.row_lists_buffer data: empties an accumulator and lays the row tag out over this
+// step's rows, each time the block it lives in runs. The cardinality column is null where
+// nothing is in flight, which is the single empty row.
+class NLRowListsResetData : public NLFunctionData {
 public:
-    NLPatternComprehensionResetData(NLPatternComprehensionState* state,
-                                    const Column* cardinality,
-                                    ColumnVector<uint64_t>* tag)
+    NLRowListsResetData(NLRowListsState* state,
+                        const Column* cardinality,
+                        ColumnVector<uint64_t>* tag)
         : _state(state),
         _cardinality(cardinality),
         _tag(tag)
     {
     }
 
-    NLPatternComprehensionState* getState() const { return _state; }
+    NLRowListsState* getState() const { return _state; }
     const Column* getCardinality() const { return _cardinality; }
     ColumnVector<uint64_t>* getTag() const { return _tag; }
 
 private:
-    NLPatternComprehensionState* _state {nullptr};
+    NLRowListsState* _state {nullptr};
     const Column* _cardinality {nullptr};
     ColumnVector<uint64_t>* _tag {nullptr};
 };
 
-// nl.pattern_comprehension_collect data: stages what this step of the pattern's matches
-// contributes, each value under the row its tag names, through the read its column shape
-// takes. The tag is null when the accumulator covers the single empty row.
-class NLPatternComprehensionCollectData : public NLFunctionData {
+// nl.row_lists_collect data: stages what this step of the body's rows contributes, each
+// value under the row its tag names, through the read its column shape takes. The tag is
+// null when the accumulator covers a single row.
+class NLRowListsCollectData : public NLFunctionData {
 public:
-    NLPatternComprehensionCollectData(NLPatternComprehensionState* state,
-                                      const ColumnVector<uint64_t>* tag,
-                                      const Column* value,
-                                      NLListItemReadFunction valueRead,
-                                      NLStepBuffers* stepBuffers)
+    NLRowListsCollectData(NLRowListsState* state,
+                          const ColumnVector<uint64_t>* tag,
+                          const Column* value,
+                          NLListItemReadFunction valueRead,
+                          NLStepBuffers* stepBuffers)
         : _state(state),
         _tag(tag),
         _value(value),
@@ -4967,39 +4967,39 @@ public:
     {
     }
 
-    NLPatternComprehensionState* getState() const { return _state; }
+    NLRowListsState* getState() const { return _state; }
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
     const Column* getValue() const { return _value; }
     NLListItemReadFunction getValueRead() const { return _valueRead; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
-    NLPatternComprehensionState* _state {nullptr};
+    NLRowListsState* _state {nullptr};
     const ColumnVector<uint64_t>* _tag {nullptr};
     const Column* _value {nullptr};
     NLListItemReadFunction _valueRead {nullptr};
     NLStepBuffers* _stepBuffers {nullptr};
 };
 
-// nl.pattern_comprehension data: the build phase of a pattern comprehension, writing one
-// list per row of the step into the result column once the pattern's nest has been walked.
-class NLPatternComprehensionData : public NLFunctionData {
+// nl.row_lists_result data: the build phase, writing one list per row of the step into
+// the result column once the body's nest has been walked.
+class NLRowListsResultData : public NLFunctionData {
 public:
-    NLPatternComprehensionData(NLPatternComprehensionState* state,
-                               ColumnVector<ListView>* result,
-                               NLStepBuffers* stepBuffers)
+    NLRowListsResultData(NLRowListsState* state,
+                         ColumnVector<ListView>* result,
+                         NLStepBuffers* stepBuffers)
         : _state(state),
         _result(result),
         _stepBuffers(stepBuffers)
     {
     }
 
-    NLPatternComprehensionState* getState() const { return _state; }
+    NLRowListsState* getState() const { return _state; }
     ColumnVector<ListView>* getResult() const { return _result; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
 private:
-    NLPatternComprehensionState* _state {nullptr};
+    NLRowListsState* _state {nullptr};
     ColumnVector<ListView>* _result {nullptr};
     NLStepBuffers* _stepBuffers {nullptr};
 };
@@ -5440,12 +5440,12 @@ public:
         return statePtr;
     }
 
-    // Allocate one pattern comprehension's runtime accumulator, owned by the program; the
+    // Allocate one row lists accumulator, owned by the program; the
     // reset, collect and build statements that share it hold a borrowed pointer.
-    NLPatternComprehensionState* allocPatternComprehensionState() {
-        auto state = std::make_unique<NLPatternComprehensionState>();
-        NLPatternComprehensionState* statePtr = state.get();
-        _patternComprehensionStates.push_back(std::move(state));
+    NLRowListsState* allocRowListsState() {
+        auto state = std::make_unique<NLRowListsState>();
+        NLRowListsState* statePtr = state.get();
+        _rowListsStates.push_back(std::move(state));
         return statePtr;
     }
 
@@ -5514,7 +5514,7 @@ private:
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;
     std::vector<std::unique_ptr<NLCountSubqueryState>> _countSubqueryStates;
-    std::vector<std::unique_ptr<NLPatternComprehensionState>> _patternComprehensionStates;
+    std::vector<std::unique_ptr<NLRowListsState>> _rowListsStates;
     std::vector<std::unique_ptr<NLUnionState>> _unionStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;

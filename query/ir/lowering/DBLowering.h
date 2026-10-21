@@ -455,8 +455,9 @@ private:
 
     // Lower a db.exists_subquery to an nl.exists_buffer, the body's loop nest ending in an
     // nl.exists_mark, and an nl.exists_result; a db.count_subquery to the count_subquery
-    // buffer, tally and result. A body that cannot carry its input rows runs under a loop
-    // over them, and the rest of the query goes on inside that loop.
+    // buffer, tally and result; a db.collect_subquery to the row_lists buffer, collect and
+    // result. A body that cannot carry its input rows runs under a loop over them, and the
+    // rest of the query goes on inside that loop.
     template <typename SubqueryOp, typename YieldOp>
     void lowerSubqueryExpression(SubqueryOp subquery);
 
@@ -840,6 +841,10 @@ private:
     mlir::Value rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality);
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
+
+    // The chunk a body's value is staged into its row's list from: laid out over @param rows
+    // where it is a constant, and read as nullable where it is a scalar
+    mlir::Value rowListsValueChunk(mlir::Value valueChunk, mlir::Value rows);
     mlir::Value nullTestedChunk(mlir::Value chunk);
     mlir::Value reducedValueChunk(mlir::Value chunk);
 

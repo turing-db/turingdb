@@ -3947,4 +3947,74 @@ def CountSubqueryYield : TuringOp<"count_subquery_yield", [Pure, Terminator, Att
   }];
 }
 
+/**
+* CollectSubquery
+*/
+def CollectSubquery : TuringOp<"collect_subquery", [Pure]> {
+  let summary = "Build, per row in flight, the list of what a body returns for it";
+
+  let description = [{
+    Models Cypher's `COLLECT { ... }`. The result is one list per input row - the values
+    of the one column the body returns for it, in the order the body produced them, and
+    the empty list where it produced none - so the op changes no row count, which is what
+    lets it stand in an expression.
+
+    Its operands, body and paths are db.count_subquery's: the body reads the scope around
+    it through one block argument per input column, and a body carrying the scope takes a
+    trailing `!db.column<ui64>` row tag and is run over a whole chunk of input rows at
+    once, each value it yields going into the list of the input row its tag names. A body
+    that aggregates, sorts, cuts, dedups or is a UNION is run one input row at a time
+    instead, and every value it yields goes into that row's list.
+
+      %names = db.collect_subquery(%p) carries_scope ({
+        ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
+          %s, %e, %et, %k, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
+          %name = db.get_node_properties(%k) {property = "name"} : ...
+          db.collect_subquery_yield %tag2, %name, {} : !db.column<none>
+      }) : (!db.column<!storage.node_id>) -> !db.column<none>
+
+    The result's type is the body's to decide and is resolved during lowering, as
+    db.pattern_comprehension's is: the list is of whatever the body yields. A null the
+    body returns is an element of the list, as it is in Neo4j.
+
+    Reading the graph is deterministic and a COLLECT body writes nothing, so it is Pure.
+  }];
+
+  let arguments = (ins Variadic<Column>:$input_columns, UnitAttr:$carries_scope);
+
+  let results = (outs Column:$result);
+
+  // Exactly one block, ending in a db.collect_subquery_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` (`carries_scope` $carries_scope^)? $body attr-dict
+    `:` functional-type($input_columns, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* CollectSubqueryYield
+*/
+def CollectSubqueryYield : TuringOp<"collect_subquery_yield", [Pure, Terminator, AttrSizedOperandSegments, HasParent<"CollectSubquery">]> {
+  let summary = "Name the row tag, the value and the columns a db.collect_subquery's body holds";
+
+  let description = [{
+    Terminates a db.collect_subquery's body region. `tag` is the row tag as the body left
+    it, absent when the body takes none, and `value` is the one column the body returns,
+    which each row it produced contributes to a list. A body with no tag names in
+    `columns` the columns it holds there, which its row count is read off; a tagged body
+    names none.
+  }];
+
+  let arguments = (ins Optional<ColumnRowTags>:$tag, Column:$value, Variadic<Column>:$columns);
+
+  let assemblyFormat = [{
+    ($tag^ `,`)? $value `,` `{` $columns `}` attr-dict `:` qualified(type($value))
+    (`,` `{` qualified(type($columns))^ `}`)?
+  }];
+}
+
 #endif //TURINGDB_OPS

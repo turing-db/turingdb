@@ -60,6 +60,7 @@ class ListPredicateExpr;
 class ReduceExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
+class CollectSubqueryExpr;
 class ListSliceExpr;
 class LoadCSVStmt;
 class MapLiteral;
@@ -1138,10 +1139,14 @@ private:
     // UNION ALL, summed, and one over the whole body of a UNION that dedups
     void translateCountSubqueryExpr(const Expr* expr, const CountSubqueryExpr* countExpr);
 
-    // Emits the db.exists_subquery or db.count_subquery of @param branches: the columns in
-    // flight become the inputs it reads through block arguments, one query is generated into
-    // the op's region as a correlated query of its own, or the db.union of several, and the
-    // op's one result is returned
+    // Emits the lists `COLLECT { ... }` stands for: one db.collect_subquery per branch of a
+    // UNION ALL, concatenated, and one over the whole body of a UNION that dedups
+    void translateCollectSubqueryExpr(const Expr* expr, const CollectSubqueryExpr* collectExpr);
+
+    // Emits the db.exists_subquery, db.count_subquery or db.collect_subquery of @param
+    // branches: the columns in flight become the inputs it reads through block arguments,
+    // one query is generated into the op's region as a correlated query of its own, or the
+    // db.union of several, and the op's one result is returned
     template <typename SubqueryOp, typename YieldOp>
     mlir::Value generateSubqueryExpression(llvm::ArrayRef<const SinglePartQuery*> branches,
                                            size_t dedupedBranches,

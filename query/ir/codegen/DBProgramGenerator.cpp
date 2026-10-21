@@ -88,6 +88,7 @@
 #include "expr/EntityTypeExpr.h"
 #include "expr/ExistsExpr.h"
 #include "expr/CountSubqueryExpr.h"
+#include "expr/CollectSubqueryExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/ExprChildren.h"
@@ -359,6 +360,8 @@ constexpr std::string_view subqueryTagName {"`hidden_`tag"};
 constexpr std::string_view existsTagName {"`hidden_`exists_tag"};
 
 constexpr std::string_view countTagName {"`hidden_`count_tag"};
+
+constexpr std::string_view collectTagName {"`hidden_`collect_tag"};
 
 // The mask of an entity a MERGE wrote is bound past a WITH under the entity's name behind
 // this prefix. No hidden name starts with it, so a barrier publishing no entity drops it
@@ -7355,6 +7358,11 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             translateCountSubqueryExpr(expr, countExpr);
         }
         break;
+        case Expr::Kind::COLLECT_SUBQUERY: {
+            const CollectSubqueryExpr* collectExpr = static_cast<const CollectSubqueryExpr*>(expr);
+            translateCollectSubqueryExpr(expr, collectExpr);
+        }
+        break;
 
         case Expr::Kind::LIST_COMPREHENSION: {
             const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
@@ -7805,6 +7813,48 @@ void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const Coun
     _part._exprMap[expr] = count;
 }
 
+// A UNION ALL holds a row's values from every branch, one after the other, so each branch
+// is a COLLECT of its own and the lists are concatenated in branch order
+void DBProgramGenerator::translateCollectSubqueryExpr(const Expr* expr, const CollectSubqueryExpr* collectExpr) {
+    const CollectSubqueryExpr::Branches& collectBranches = collectExpr->getBranches();
+
+    llvm::SmallVector<const SinglePartQuery*> branches;
+    for (const UnionQuery::Branch& branch : collectBranches) {
+        branches.push_back(branch._query);
+    }
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const size_t dedupedBranches = UnionQuery::getDedupedBranchCount(collectBranches);
+    if (dedupedBranches > 0) {
+        _part._exprMap[expr] =
+            generateSubqueryExpression<mlir::db::CollectSubquery, mlir::db::CollectSubqueryYield>(branches,
+                                                                                                  dedupedBranches,
+                                                                                                  noneType,
+                                                                                                  collectTagName);
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    mlir::Value lists;
+    for (const SinglePartQuery* branch : branches) {
+        const mlir::Value branchLists =
+            generateSubqueryExpression<mlir::db::CollectSubquery, mlir::db::CollectSubqueryYield>(llvm::ArrayRef(branch),
+                                                                                                  0,
+                                                                                                  noneType,
+                                                                                                  collectTagName);
+
+        if (lists) {
+            lists = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lists, branchLists).getResult();
+        } else {
+            lists = branchLists;
+        }
+    }
+
+    _part._exprMap[expr] = lists;
+}
+
 template <typename SubqueryOp, typename YieldOp>
 mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const SinglePartQuery*> branches,
                                                            size_t dedupedBranches,
@@ -8004,7 +8054,18 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(llvm::ArrayRef<const 
         }
     }
 
-    _opBuilder.create<YieldOp>(loc, carriedTag, heldColumns);
+    if constexpr (std::is_same_v<SubqueryOp, mlir::db::CollectSubquery>) {
+        const auto isReturned = [](const PublishedColumn& column) {
+            return !isHiddenName(column._name);
+        };
+
+        const auto valueIt = std::ranges::find_if(held, isReturned);
+        bioassert(valueIt != held.end(), "COLLECT subquery body returns no column");
+
+        _opBuilder.create<YieldOp>(loc, carriedTag, valueIt->_column, heldColumns);
+    } else {
+        _opBuilder.create<YieldOp>(loc, carriedTag, heldColumns);
+    }
 
     _part = std::move(outerPart);
     _vdg = std::move(outerGraph);

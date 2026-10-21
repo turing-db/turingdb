@@ -2217,6 +2217,10 @@ LogicalResult CountSubquery::verify() {
     return verifySubqueryExpression<CountSubqueryYield>(*this);
 }
 
+LogicalResult CollectSubquery::verify() {
+    return verifySubqueryExpression<CollectSubqueryYield>(*this);
+}
+
 LogicalResult CallSubquery::verify() {
     Block& bodyBlock = getBody().front();
 

@@ -1144,15 +1144,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCountSubqueryTally(countTally, body);
         } else if (nl::CountSubqueryResult countResult = mlir::dyn_cast<nl::CountSubqueryResult>(operation)) {
             translateCountSubqueryResult(countResult, body);
-        } else if (nl::PatternComprehensionBuffer comprehensionBuffer =
-                       mlir::dyn_cast<nl::PatternComprehensionBuffer>(operation)) {
-            translatePatternComprehensionBuffer(comprehensionBuffer, body);
-        } else if (nl::PatternComprehensionCollect comprehensionCollect =
-                       mlir::dyn_cast<nl::PatternComprehensionCollect>(operation)) {
-            translatePatternComprehensionCollect(comprehensionCollect, body);
-        } else if (nl::PatternComprehension patternComprehension =
-                       mlir::dyn_cast<nl::PatternComprehension>(operation)) {
-            translatePatternComprehension(patternComprehension, body);
+        } else if (nl::RowListsBuffer rowListsBuffer = mlir::dyn_cast<nl::RowListsBuffer>(operation)) {
+            translateRowListsBuffer(rowListsBuffer, body);
+        } else if (nl::RowListsCollect rowListsCollect = mlir::dyn_cast<nl::RowListsCollect>(operation)) {
+            translateRowListsCollect(rowListsCollect, body);
+        } else if (nl::RowListsResult rowListsResult = mlir::dyn_cast<nl::RowListsResult>(operation)) {
+            translateRowListsResult(rowListsResult, body);
         } else if (nl::CreateNode createNode = mlir::dyn_cast<nl::CreateNode>(operation)) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
@@ -4793,24 +4790,22 @@ NLCountSubqueryState* NLTranslator::countSubqueryStateFor(mlir::Value handle) co
     return stateIt->second;
 }
 
-void NLTranslator::translatePatternComprehensionBuffer(nl::PatternComprehensionBuffer buffer,
-                                                       NLStmtContainer* body) {
-    NLPatternComprehensionState* state = _program->allocPatternComprehensionState();
-    _patternComprehensionStates[buffer.getState()] = state;
+void NLTranslator::translateRowListsBuffer(nl::RowListsBuffer buffer, NLStmtContainer* body) {
+    NLRowListsState* state = _program->allocRowListsState();
+    _rowListsStates[buffer.getState()] = state;
 
     const mlir::Value cardinality = buffer.getCardinality();
     const Column* const rows = cardinality ? getColumn(cardinality) : nullptr;
 
     ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
 
-    NLPatternComprehensionResetData* resetData =
-        _program->allocFunctionData<NLPatternComprehensionResetData>(state, rows, tag);
-    body->emplaceStmt(&NLExecutor::runPatternComprehensionReset, resetData);
+    NLRowListsResetData* resetData =
+        _program->allocFunctionData<NLRowListsResetData>(state, rows, tag);
+    body->emplaceStmt(&NLExecutor::runRowListsReset, resetData);
 }
 
-void NLTranslator::translatePatternComprehensionCollect(nl::PatternComprehensionCollect collect,
-                                                        NLStmtContainer* body) {
-    NLPatternComprehensionState* state = patternComprehensionStateFor(collect.getState());
+void NLTranslator::translateRowListsCollect(nl::RowListsCollect collect, NLStmtContainer* body) {
+    NLRowListsState* state = rowListsStateFor(collect.getState());
 
     const mlir::Value value = collect.getValue();
     const mlir::Value tag = collect.getTag();
@@ -4820,35 +4815,33 @@ void NLTranslator::translatePatternComprehensionCollect(nl::PatternComprehension
         tagColumn = static_cast<const ColumnVector<uint64_t>*>(getColumn(tag));
     }
 
-    NLPatternComprehensionCollectData* data =
-        _program->allocFunctionData<NLPatternComprehensionCollectData>(state,
-                                                                       tagColumn,
-                                                                       getColumn(value),
-                                                                       selectListItemRead(value.getType()),
-                                                                       _program->allocStepBuffers());
-    body->emplaceStmt(&NLExecutor::runPatternComprehensionCollect, data);
+    NLRowListsCollectData* data =
+        _program->allocFunctionData<NLRowListsCollectData>(state,
+                                                           tagColumn,
+                                                           getColumn(value),
+                                                           selectListItemRead(value.getType()),
+                                                           _program->allocStepBuffers());
+    body->emplaceStmt(&NLExecutor::runRowListsCollect, data);
 }
 
-void NLTranslator::translatePatternComprehension(nl::PatternComprehension comprehension,
-                                                 NLStmtContainer* body) {
-    NLPatternComprehensionState* state = patternComprehensionStateFor(comprehension.getState());
+void NLTranslator::translateRowListsResult(nl::RowListsResult result, NLStmtContainer* body) {
+    NLRowListsState* state = rowListsStateFor(result.getState());
 
-    const mlir::Value resultValue = comprehension.getResult();
-    Column* const result = allocColumnForChunkType(resultValue.getType());
-    _valueSlots[resultValue] = result;
+    const mlir::Value resultValue = result.getResult();
+    Column* const lists = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = lists;
 
-    NLPatternComprehensionData* data =
-        _program->allocFunctionData<NLPatternComprehensionData>(state,
-                                                                static_cast<ColumnVector<ListView>*>(result),
-                                                                _program->allocStepBuffers());
-    body->emplaceStmt(&NLExecutor::runPatternComprehension, data);
+    NLRowListsResultData* data =
+        _program->allocFunctionData<NLRowListsResultData>(state,
+                                                          static_cast<ColumnVector<ListView>*>(lists),
+                                                          _program->allocStepBuffers());
+    body->emplaceStmt(&NLExecutor::runRowListsResult, data);
 }
 
-NLPatternComprehensionState* NLTranslator::patternComprehensionStateFor(mlir::Value handle) const {
-    const auto stateIt = _patternComprehensionStates.find(handle);
-    if (stateIt == _patternComprehensionStates.end()) {
-        throw IRException("pattern comprehension handle must be produced by an "
-                          "nl.pattern_comprehension_buffer");
+NLRowListsState* NLTranslator::rowListsStateFor(mlir::Value handle) const {
+    const auto stateIt = _rowListsStates.find(handle);
+    if (stateIt == _rowListsStates.end()) {
+        throw IRException("row lists handle must be produced by an nl.row_lists_buffer");
     }
 
     return stateIt->second;

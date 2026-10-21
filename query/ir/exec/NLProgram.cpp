@@ -352,21 +352,21 @@ NLCountSubqueryResultData::NLCountSubqueryResultData(NLCountSubqueryState* state
 {
 }
 
-void NLPatternComprehensionState::reset(size_t rowCount) {
+void NLRowListsState::reset(size_t rowCount) {
     _rowCount = rowCount;
     _values.clear();
     _rows.clear();
     _stagedValues.clear();
 }
 
-void NLPatternComprehensionState::stage(size_t row, const ListBuffer<>::ListItemVariant& value) {
+void NLRowListsState::stage(size_t row, const ListBuffer<>::ListItemVariant& value) {
     bioassert(row < _rowCount, "Row tag {} is outside the {} rows of the step", row, _rowCount);
 
     _values.push_back(_stagedValues.ownItem(value));
     _rows.push_back(row);
 }
 
-void NLPatternComprehensionState::buildLists(ListBuffer<>& listBuffer, std::vector<ListView>& lists) {
+void NLRowListsState::buildLists(ListBuffer<>& listBuffer, std::vector<ListView>& lists) {
     _starts.assign(_rowCount + 1, 0);
 
     for (const size_t row : _rows) {

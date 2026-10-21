@@ -163,19 +163,18 @@ def NLCountSubqueryState : NLType<"CountSubqueryState", "count_subquery_state"> 
     }];
 }
 
-def NLPatternComprehensionState : NLType<"PatternComprehensionState", "pattern_comprehension_state"> {
-    let summary = "A pattern comprehension accumulator handle";
+def NLRowListsState : NLType<"RowListsState", "row_lists_state"> {
+    let summary = "A one-list-per-row accumulator handle";
     let description = [{
-        Stands for one pattern comprehension's state over the current step of the rows
-        it is read on: how many rows that step has, and the values its pattern's
-        matches contributed, each under the row it belongs to. Produced by
-        nl.pattern_comprehension_buffer at the top of the block whose step it covers -
-        so it is reset once per step - staged into by nl.pattern_comprehension_collect
-        once per step of the pattern's own nest, and read by nl.pattern_comprehension,
-        which builds one list per row of the step. The list-valued sibling of
-        !nl.optional_state: both cover one step of the rows in flight, but this one
-        reduces what the pattern found to one cell per row rather than re-emitting it
-        as rows.
+        Stands for the state of one pattern comprehension or COLLECT subquery over the
+        current step of the rows it is read on: how many rows that step has, and the
+        values its body's rows contributed, each under the row it belongs to. Produced by
+        nl.row_lists_buffer at the top of the block whose step it covers - so it is reset
+        once per step - staged into by nl.row_lists_collect once per step of the body's
+        own nest, and read by nl.row_lists_result, which builds one list per row of the
+        step. The list-valued sibling of !nl.optional_state: both cover one step of the
+        rows in flight, but this one reduces what the body found to one cell per row
+        rather than re-emitting it as rows.
     }];
 }
 
@@ -471,15 +470,14 @@ def NLProcedureStateHandle : Type<
         "procedure state handle", "::mlir::nl::ProcedureStateType">,
     BuildableType<"::mlir::nl::ProcedureStateType::get($_builder.getContext())">;
 
-// Constrains an operand to an !nl.pattern_comprehension_state handle, the same way
-// NLSortStateHandle constrains the sort handle. The single concrete type - there is
-// only ever !nl.pattern_comprehension_state - is what lets
-// nl.pattern_comprehension_collect and nl.pattern_comprehension omit the handle's
-// type in their assembly, building it from this recipe instead.
-def NLPatternComprehensionStateHandle : Type<
-        CPred<"::llvm::isa<::mlir::nl::PatternComprehensionStateType>($_self)">,
-        "pattern comprehension state handle", "::mlir::nl::PatternComprehensionStateType">,
-    BuildableType<"::mlir::nl::PatternComprehensionStateType::get($_builder.getContext())">;
+// Constrains an operand to an !nl.row_lists_state handle, the same way NLSortStateHandle
+// constrains the sort handle. The single concrete type - there is only ever
+// !nl.row_lists_state - is what lets nl.row_lists_collect and nl.row_lists_result omit the
+// handle's type in their assembly, building it from this recipe instead.
+def NLRowListsStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::RowListsStateType>($_self)">,
+        "row lists state handle", "::mlir::nl::RowListsStateType">,
+    BuildableType<"::mlir::nl::RowListsStateType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.optional_state handle, the same way
 // NLSortStateHandle constrains the sort handle. The single concrete type - there

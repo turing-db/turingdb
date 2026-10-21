@@ -941,6 +941,12 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::CallProcedure>(operation);
 }
 
+// An EXISTS, a COUNT or a COLLECT: a subquery standing in an expression, one value per
+// row in flight
+bool isSubqueryExpression(mlir::Operation* operation) {
+    return mlir::isa<mlir::db::ExistsSubquery, mlir::db::CountSubquery, mlir::db::CollectSubquery>(operation);
+}
+
 // A body whose own dataflow cannot keep the input rows paired with what it makes of them
 // runs one input row at a time, whatever it ends on
 bool runsPerRow(mlir::Operation* operation) {
@@ -950,6 +956,8 @@ bool runsPerRow(mlir::Operation* operation) {
         return !exists.getCarriesScope();
     } else if (mlir::db::CountSubquery count = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
         return !count.getCarriesScope();
+    } else if (mlir::db::CollectSubquery collect = mlir::dyn_cast<mlir::db::CollectSubquery>(operation)) {
+        return !collect.getCarriesScope();
     }
 
     return false;
@@ -964,6 +972,8 @@ mlir::OperandRange subqueryInputColumns(mlir::Operation* operation) {
         return exists.getInputColumns();
     } else if (mlir::db::CountSubquery count = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
         return count.getInputColumns();
+    } else if (mlir::db::CollectSubquery collect = mlir::dyn_cast<mlir::db::CollectSubquery>(operation)) {
+        return collect.getInputColumns();
     }
 
     return mlir::OperandRange(operation->operand_end(), operation->operand_end());
@@ -987,11 +997,10 @@ bool opensRowLoop(mlir::Operation* operation) {
     const bool returningSubquery = mlir::isa<mlir::db::CallSubquery>(operation)
                                    && operation->getNumResults() > 0;
 
-    // An EXISTS or a COUNT answering for the rows in flight opens no loop of its own; one
+    // A subquery expression answering for the rows in flight opens no loop of its own; one
     // run a row at a time opens the loop over those rows, which the ops after it are
     // emitted into.
-    const bool perRowExpression = mlir::isa<mlir::db::ExistsSubquery, mlir::db::CountSubquery>(operation)
-                                  && runsPerRow(operation);
+    const bool perRowExpression = isSubqueryExpression(operation) && runsPerRow(operation);
 
     return opensSourceLoop(operation)
         || returningSubquery
@@ -1426,6 +1435,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerSubqueryExpression<mlir::db::ExistsSubquery, mlir::db::ExistsYield>(existsSubquery);
     } else if (mlir::db::CountSubquery countSubquery = mlir::dyn_cast<mlir::db::CountSubquery>(operation)) {
         lowerSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(countSubquery);
+    } else if (mlir::db::CollectSubquery collectSubquery = mlir::dyn_cast<mlir::db::CollectSubquery>(operation)) {
+        lowerSubqueryExpression<mlir::db::CollectSubquery, mlir::db::CollectSubqueryYield>(collectSubquery);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
@@ -2086,7 +2097,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     const mlir::Value cardinality = inputChunks.empty() ? mlir::Value {} : cardinalityDriver(inputChunks);
 
     setInsertionInto(stepBlock);
-    nl::PatternComprehensionBuffer buffer = _builder.create<nl::PatternComprehensionBuffer>(loc, cardinality);
+    nl::RowListsBuffer buffer = _builder.create<nl::RowListsBuffer>(loc, cardinality);
     const mlir::Value state = buffer.getState();
 
     // The pattern reads this step's rows through its block arguments, and the row tag
@@ -2132,23 +2143,9 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
         throw IRException("db.pattern_comprehension yields no value");
     }
 
-    // A value computed from constants alone holds one cell standing for every match, so it
-    // is laid out over the matches it is read against - the ones the tag counts, since a
-    // WHERE has cut both together
-    valueChunk = rowAlignedChunk(valueChunk, rowTagChunk ? rowTagChunk : _innermostCardinality);
-
-    // An entity ID, a list and a tagged cell are present in every row and go into the list
-    // as they stand; only a scalar value column is read as nullable, the way lowerMakeList
-    // reads the columns it builds from
-    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
-    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                       storage::EdgeIDType,
-                                                       storage::ListType,
-                                                       storage::ListElementType>(valueElement);
-
-    if (!holdsCellsPresentInEveryRow) {
-        valueChunk = nullableValueChunk(valueChunk);
-    }
+    // The matches the value is read against are the ones the tag counts, since a WHERE has
+    // cut both together
+    valueChunk = rowListsValueChunk(valueChunk, rowTagChunk ? rowTagChunk : _innermostCardinality);
 
     llvm::SmallVector<mlir::Value, 2> stagedChunks {valueChunk};
     if (rowTagChunk) {
@@ -2156,7 +2153,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     }
 
     setInsertionInto(deepestOwnerBlock(stagedChunks, stepBlock));
-    _builder.create<nl::PatternComprehensionCollect>(loc, state, rowTagChunk, valueChunk);
+    _builder.create<nl::RowListsCollect>(loc, state, rowTagChunk, valueChunk);
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
@@ -2168,12 +2165,30 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     const nl::ChunkType resultType = nl::ChunkType::get(context, listType);
 
     setInsertionInto(stepBlock);
-    nl::PatternComprehension lists = _builder.create<nl::PatternComprehension>(loc,
-                                                                               resultType,
-                                                                               state,
-                                                                               cardinality);
+    nl::RowListsResult lists = _builder.create<nl::RowListsResult>(loc, resultType, state, cardinality);
 
     _valueMap[comprehension.getResult()] = lists.getResult();
+}
+
+mlir::Value DBLowering::rowListsValueChunk(mlir::Value valueChunk, mlir::Value rows) {
+    // A value computed from constants alone holds one cell standing for every row, so it is
+    // laid out over the rows it is read against
+    const mlir::Value aligned = rowAlignedChunk(valueChunk, rows);
+
+    // An entity ID, a list and a tagged cell are present in every row and go into the list
+    // as they stand; only a scalar value column is read as nullable, the way lowerMakeList
+    // reads the columns it builds from
+    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(aligned.getType()).getElementType();
+    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
+                                                       storage::EdgeIDType,
+                                                       storage::ListType,
+                                                       storage::ListElementType>(valueElement);
+
+    if (holdsCellsPresentInEveryRow) {
+        return aligned;
+    }
+
+    return nullableValueChunk(aligned);
 }
 
 mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks) {
@@ -3316,8 +3331,10 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
 template <typename SubqueryOp, typename YieldOp>
 void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     constexpr bool countsRows = std::is_same_v<SubqueryOp, mlir::db::CountSubquery>;
+    constexpr bool collectsValues = std::is_same_v<SubqueryOp, mlir::db::CollectSubquery>;
 
     const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
     const mlir::OperandRange inputColumns = subquery.getInputColumns();
 
     llvm::SmallVector<mlir::Value, 4> inputChunks;
@@ -3359,12 +3376,18 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
         stepChunks.assign(bodyRoot->args_begin(), bodyRoot->args_begin() + inputChunks.size());
     }
 
+    const mlir::Value cardinality = stepChunks.empty() ? mlir::Value() : stepChunks.front();
+
     setInsertionInto(bodyRoot);
 
     mlir::Value state;
     mlir::Value tag;
 
-    if constexpr (countsRows) {
+    if constexpr (collectsValues) {
+        nl::RowListsBuffer buffer = _builder.create<nl::RowListsBuffer>(loc, cardinality);
+        state = buffer.getState();
+        tag = buffer.getTag();
+    } else if constexpr (countsRows) {
         nl::CountSubqueryBuffer buffer = _builder.create<nl::CountSubqueryBuffer>(loc, stepChunks);
         state = buffer.getState();
         tag = buffer.getTag();
@@ -3430,9 +3453,17 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     llvm::SmallVector<mlir::Value, 4> answeredChunks = heldChunks;
     answeredChunks.push_back(heldTag ? heldTag : heldRows);
 
+    mlir::Value collectedValue;
+    if constexpr (collectsValues) {
+        collectedValue = rowListsValueChunk(mapValue(yield.getValue()), heldTag ? heldTag : heldRows);
+        answeredChunks.push_back(collectedValue);
+    }
+
     setInsertionInto(deepestOwnerBlock(answeredChunks, bodyRoot));
 
-    if constexpr (countsRows) {
+    if constexpr (collectsValues) {
+        _builder.create<nl::RowListsCollect>(loc, state, heldTag, collectedValue);
+    } else if constexpr (countsRows) {
         _builder.create<nl::CountSubqueryTally>(loc, state, heldTag, heldRows);
     } else {
         llvm::SmallVector<mlir::Value, 1> markedRows;
@@ -3447,17 +3478,20 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     _innermostLoopBody = previousInnermostLoopBody;
     _innermostCardinality = previousInnermostCardinality;
 
-    const mlir::Value cardinality = stepChunks.empty() ? mlir::Value() : stepChunks.front();
-
     setInsertionInto(bodyRoot);
 
     mlir::Value answer;
 
-    if constexpr (countsRows) {
+    if constexpr (collectsValues) {
+        const mlir::Type listType = storage::ListType::get(context, listedElementType(context, collectedValue));
+        const nl::ChunkType listChunk = nl::ChunkType::get(context, listType);
+
+        nl::RowListsResult result = _builder.create<nl::RowListsResult>(loc, listChunk, state, cardinality);
+        answer = result.getResult();
+    } else if constexpr (countsRows) {
         nl::CountSubqueryResult result = _builder.create<nl::CountSubqueryResult>(loc, state, cardinality);
         answer = result.getResult();
     } else {
-        mlir::MLIRContext* const context = _builder.getContext();
         const nl::ChunkType boolChunk = nl::ChunkType::get(context, mlir::storage::BoolType::get(context));
 
         nl::ExistsResult result = _builder.create<nl::ExistsResult>(loc, boolChunk, state, cardinality);
@@ -5124,9 +5158,9 @@ void DBLowering::visitProducer(mlir::Value column,
                                                mlir::db::GroupAggregate,
                                                mlir::db::OptionalMatch>(definingOp);
 
-    // An EXISTS or a COUNT run one row at a time loops over the rows in flight, a row a
+    // A subquery expression run one row at a time loops over the rows in flight, a row a
     // step, and the rest of the query goes on inside that loop
-    const bool loopsOverSingleRows = mlir::isa<mlir::db::ExistsSubquery, mlir::db::CountSubquery>(definingOp)
+    const bool loopsOverSingleRows = isSubqueryExpression(definingOp)
                                      && runsPerRow(definingOp)
                                      && !subqueryInputColumns(definingOp).empty();
 

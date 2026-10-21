@@ -42,6 +42,20 @@ target_include_directories(test_query_ir_count_subquery_codegen PRIVATE ${IR_TES
 add_turing_test(test_query_ir_count_neo4j_manual CountNeo4jManualTest.cpp)
 target_include_directories(test_query_ir_count_neo4j_manual PRIVATE ${IR_TEST_DIR})
 
+# COLLECT { ... }: one list per row in flight, of what the body returns for it, over a body
+# carrying the rows, one run a row at a time, UNION and UNION ALL.
+add_turing_test(test_query_ir_collect_subquery CollectSubqueryTest.cpp)
+
+# Which path each kind of COLLECT body compiles to.
+add_ir_tests(test_query_ir_collect_subquery_codegen CollectSubqueryCodegenTest.cpp)
+target_sources(test_query_ir_collect_subquery_codegen PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_collect_subquery_codegen PRIVATE ${IR_TEST_DIR})
+
+# Every example of the Neo4j manual's COLLECT subqueries page, over the graph that page
+# builds, answering the rows it documents.
+add_turing_test(test_query_ir_collect_neo4j_manual CollectNeo4jManualTest.cpp)
+target_include_directories(test_query_ir_collect_neo4j_manual PRIVATE ${IR_TEST_DIR})
+
 # OPTIONAL CALL { ... }: the input rows the body yields nothing for, padded with null.
 add_turing_test(test_query_ir_call_subquery_optional CallSubqueryOptionalTest.cpp)
 target_include_directories(test_query_ir_call_subquery_optional PRIVATE ${IR_TEST_DIR})

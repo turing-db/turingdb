@@ -72,6 +72,7 @@
 
 #include "expr/ExistsExpr.h"
 #include "expr/CountSubqueryExpr.h"
+#include "expr/CollectSubqueryExpr.h"
 
 
 #include "BioAssert.h"
@@ -634,6 +635,37 @@ void CypherAnalyzer::analyzeCountSubqueryBody(CountSubqueryExpr* count) {
     }
 }
 
+void CypherAnalyzer::analyzeCollectSubqueryBody(CollectSubqueryExpr* collect) {
+    const CollectSubqueryExpr::Branches& branches = collect->getBranches();
+
+    for (const UnionQuery::Branch& branch : branches) {
+        if (branch._query->writesToTheGraph()) {
+            throwError("A COLLECT subquery is read-only: its body cannot write to the graph", collect);
+        }
+    }
+
+    for (const UnionQuery::Branch& branch : branches) {
+        analyzeExistsBranch(branch._query);
+    }
+
+    for (const UnionQuery::Branch& branch : branches) {
+        const ReturnStmt* returnStmt = branch._query->getReturnStmt();
+        if (!returnStmt) {
+            throwError("A COLLECT subquery must end with a RETURN clause", branch._query);
+        }
+
+        const size_t columnCount = returnStmt->getProjection()->items().size();
+        if (columnCount != 1) {
+            throwError(fmt::format("A COLLECT subquery must return exactly one column, not {}", columnCount),
+                       branch._query);
+        }
+    }
+
+    for (size_t index = 1; index < branches.size(); index++) {
+        analyzeUnionColumns(branches.front()._query, branches[index]._query);
+    }
+}
+
 void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     if (!_analyzedBodies.insert(body).second) {
         return;
@@ -884,7 +916,7 @@ void CypherAnalyzer::throwOnRedeclaredImport(const Projection* projection,
             }
         }
 
-        throwError(fmt::format("Variable '{}' is imported by the CALL: a clause of the subquery "
+        throwError(fmt::format("Variable '{}' is imported by the subquery: a clause of the subquery "
                                "cannot declare it again",
                                import),
                    projection);
@@ -1146,7 +1178,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
                                  && std::ranges::find(_subqueryImports, alias) != _subqueryImports.end();
 
     if (rebindsAnImport) {
-        throwError(fmt::format("Variable '{}' is imported by the CALL: a clause of the subquery "
+        throwError(fmt::format("Variable '{}' is imported by the subquery: a clause of the subquery "
                                "cannot declare it again",
                                alias),
                    item);
@@ -1366,6 +1398,16 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         const CountSubqueryExpr* count = static_cast<const CountSubqueryExpr*>(expr);
 
         for (const UnionQuery::Branch& branch : count->getBranches()) {
+            if (!readsGroupWiseVariables(branch._query, projection, elements)) {
+                return false;
+            }
+        }
+
+        return true;
+    } else if (kind == Expr::Kind::COLLECT_SUBQUERY) {
+        const CollectSubqueryExpr* collect = static_cast<const CollectSubqueryExpr*>(expr);
+
+        for (const UnionQuery::Branch& branch : collect->getBranches()) {
             if (!readsGroupWiseVariables(branch._query, projection, elements)) {
                 return false;
             }

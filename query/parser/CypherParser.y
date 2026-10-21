@@ -423,7 +423,6 @@
 %type<db::LoadCommitQuery*> loadCommitQuery
 %type<db::Stmt*> readingStatement
 %type<db::Stmt*> updatingStatement
-%type<db::StmtContainer*> readingStatements
 %type<db::Stmt*> queryStatement
 %type<db::StmtContainer*> queryStatements
 %type<db::ChangeOp> changeOp
@@ -440,6 +439,7 @@
 %type<db::SinglePartQuery*> conditionalBranchQuery
 %type<db::ExistsExpr::Branches> existsBody
 %type<db::UnionQuery::Branches> countBody
+%type<db::UnionQuery::Branches> collectBody
 %type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
 %type<db::MergeStmt*> mergeSt
@@ -995,11 +995,6 @@ mergeDataPartsQuery
     : MERGE_DATAPARTS { $$ = MergeDataPartsQuery::create(ast); LOC($$, @$); }
     ;
 
-readingStatements
-    : readingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
-    | readingStatements readingStatement { $$ = $1; $$->add($2); LOC($$, @$); }
-    ;
-
 queryStatements
     : queryStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
     | queryStatements queryStatement { $$ = $1; $$->add($2); LOC($$, @$); }
@@ -1266,6 +1261,24 @@ countBody
         for (const UnionQuery::Branch& branch : $2) {
             if (branch._whenCall) {
                 scanner.notImplemented(@2, "WHEN in a COUNT body");
+            }
+
+            $$.push_back(branch);
+        }
+      }
+    ;
+
+collectBody
+    : singlePartQuery { $$.push_back({$1, false}); }
+    | unionOperand unionList {
+        if ($1._whenCall) {
+            scanner.notImplemented(@1, "WHEN in a COLLECT body");
+        }
+
+        $$.push_back($1);
+        for (const UnionQuery::Branch& branch : $2) {
+            if (branch._whenCall) {
+                scanner.notImplemented(@2, "WHEN in a COLLECT body");
             }
 
             $$.push_back(branch);
@@ -1570,7 +1583,7 @@ atomExpr
     ;
 
 collectExpr
-    : COLLECT OBRACE readingStatements returnSt CBRACE { scanner.notImplemented(@$, "COLLECT"); }
+    : COLLECT OBRACE collectBody CBRACE { $$ = CollectSubqueryExpr::create(ast, $3); LOC($$, @$); }
     | COLLECT OPAREN expr CPAREN {
         Symbol* symbol = Symbol::create(ast, "collect");
         QualifiedName* name = QualifiedName::create(ast);
