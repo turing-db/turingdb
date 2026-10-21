@@ -2436,48 +2436,50 @@ void distinctAppendIntegerKey(std::string& key, const types::Int64::Primitive va
     distinctAppendValueBytes(key, value);
 }
 
-bool unsignedHoldsAnInteger(const types::UInt64::Primitive value) {
-    return value <= static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max());
+void distinctAppendNumberKey(std::string& key, const types::Int64::Primitive value) {
+    distinctAppendIntegerKey(key, value);
 }
 
-bool doubleHoldsAnInteger(const types::Double::Primitive value) {
-    constexpr types::Double::Primitive integerBound = 9223372036854775808.0;
+void distinctAppendNumberKey(std::string& key, const types::UInt64::Primitive value) {
+    if (value <= static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max())) {
+        distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(value));
+        return;
+    }
 
-    return std::isfinite(value) && std::trunc(value) == value && std::abs(value) < integerBound;
+    key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
+    distinctAppendValueBytes(key, value);
+}
+
+void distinctAppendNumberKey(std::string& key, const types::Double::Primitive value) {
+    constexpr types::Double::Primitive integerBound = 9223372036854775808.0;
+    constexpr types::Double::Primitive unsignedBound = 18446744073709551616.0;
+
+    const bool holdsAWholeNumber = std::isfinite(value) && std::trunc(value) == value;
+    const bool holdsAnInteger = holdsAWholeNumber && value >= -integerBound && value < integerBound;
+    const bool holdsAnUnsigned = holdsAWholeNumber && value >= integerBound && value < unsignedBound;
+
+    if (holdsAnInteger) {
+        distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(value));
+    } else if (holdsAnUnsigned) {
+        distinctAppendNumberKey(key, static_cast<types::UInt64::Primitive>(value));
+    } else {
+        key.push_back(static_cast<char>(ListBufferTypeTag::Double));
+        distinctAppendValueBytes(key, value);
+    }
 }
 
 void distinctAppendNumberBytes(std::string& key, const ListElementView element) {
-    const auto appendInteger = [&key](types::Int64::Primitive value) {
-        distinctAppendIntegerKey(key, value);
-    };
-
     switch (element.getTag()) {
         case ListBufferTypeTag::Int:
-            return appendInteger(element.getAs<types::Int64::Primitive>());
+            return distinctAppendNumberKey(key, element.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt: {
-            const types::UInt64::Primitive value = element.getAs<types::UInt64::Primitive>();
-            if (unsignedHoldsAnInteger(value)) {
-                return appendInteger(static_cast<types::Int64::Primitive>(value));
-            }
-
-            key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
-            distinctAppendValueBytes(key, value);
-            return;
-        }
+        case ListBufferTypeTag::UInt:
+            return distinctAppendNumberKey(key, element.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::Double: {
-            const types::Double::Primitive value = element.getAs<types::Double::Primitive>();
-            if (doubleHoldsAnInteger(value)) {
-                return appendInteger(static_cast<types::Int64::Primitive>(std::trunc(value)));
-            }
-
-            key.push_back(static_cast<char>(ListBufferTypeTag::Double));
-            distinctAppendValueBytes(key, value);
-            return;
-        }
+        case ListBufferTypeTag::Double:
+            return distinctAppendNumberKey(key, element.getAs<types::Double::Primitive>());
         break;
 
         default:
@@ -2498,34 +2500,18 @@ void distinctAppendMapValueBytes(std::string& key, const MapEntryView entry) {
 
     switch (tag) {
         case MapBufferTypeTag::Int:
-            distinctAppendIntegerKey(key, entry.getValueAs<types::Int64::Primitive>());
+            distinctAppendNumberKey(key, entry.getValueAs<types::Int64::Primitive>());
             return;
         break;
 
-        case MapBufferTypeTag::UInt: {
-            const types::UInt64::Primitive value = entry.getValueAs<types::UInt64::Primitive>();
-            if (unsignedHoldsAnInteger(value)) {
-                distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(value));
-                return;
-            }
-
-            key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
-            distinctAppendValueBytes(key, value);
+        case MapBufferTypeTag::UInt:
+            distinctAppendNumberKey(key, entry.getValueAs<types::UInt64::Primitive>());
             return;
-        }
         break;
 
-        case MapBufferTypeTag::Double: {
-            const types::Double::Primitive value = entry.getValueAs<types::Double::Primitive>();
-            if (doubleHoldsAnInteger(value)) {
-                distinctAppendIntegerKey(key, static_cast<types::Int64::Primitive>(std::trunc(value)));
-                return;
-            }
-
-            key.push_back(static_cast<char>(ListBufferTypeTag::Double));
-            distinctAppendValueBytes(key, value);
+        case MapBufferTypeTag::Double:
+            distinctAppendNumberKey(key, entry.getValueAs<types::Double::Primitive>());
             return;
-        }
         break;
 
         case MapBufferTypeTag::Bool:

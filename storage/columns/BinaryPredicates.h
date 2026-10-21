@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "ID.h"
+#include "NumberOrder.h"
 #include "TypeUtils.h"
 #include "ColumnMask.h"
 #include "ColumnConst.h"
@@ -174,28 +175,27 @@ concept TestsEquality =
     (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
      || std::is_same_v<F, TuringEqual> || std::is_same_v<F, TuringNotEqual>);
 
-// The built-in comparisons convert the signed operand of a mixed pair to unsigned, so a
-// count compared with -1 would be compared with 2^64 - 1
+// The built-in comparisons convert one operand of a mixed pair to the other's type, so a
+// count compared with -1 would be compared with 2^64 - 1, and 2^53 + 1 with 2^53.0 would
+// be equal
 template <typename T, typename U>
-concept MixedSignIntegers =
-    (std::same_as<T, types::Int64::Primitive> && std::same_as<U, types::UInt64::Primitive>)
-    || (std::same_as<T, types::UInt64::Primitive> && std::same_as<U, types::Int64::Primitive>);
+concept MixedNumbers = Number<T> && Number<U> && !std::same_as<T, U>;
 
 template <typename Order>
 struct TuringOrder {
     template <typename T, typename U>
         requires (!OrdersToANullableBool<T, U>)
     auto operator()(const T& a, const U& b) const -> decltype(Order {}(a, b)) {
-        if constexpr (!MixedSignIntegers<T, U>) {
+        if constexpr (!MixedNumbers<T, U>) {
             return Order {}(a, b);
         } else if constexpr (std::is_same_v<Order, std::greater<>>) {
-            return std::cmp_greater(a, b);
+            return std::is_gt(numberOrder(a, b));
         } else if constexpr (std::is_same_v<Order, std::less<>>) {
-            return std::cmp_less(a, b);
+            return std::is_lt(numberOrder(a, b));
         } else if constexpr (std::is_same_v<Order, std::greater_equal<>>) {
-            return std::cmp_greater_equal(a, b);
+            return std::is_gteq(numberOrder(a, b));
         } else {
-            return std::cmp_less_equal(a, b);
+            return std::is_lteq(numberOrder(a, b));
         }
     }
 
@@ -779,8 +779,8 @@ struct TuringEqual {
               && (!ComparesATaggedCell<T, U>)
               && (!ComparesAMapEntry<T, U>)
     bool operator()(const T& a, const U& b) {
-        if constexpr (MixedSignIntegers<T, U>) {
-            return std::cmp_equal(a, b);
+        if constexpr (MixedNumbers<T, U>) {
+            return numbersEqual(a, b);
         } else {
             return std::equal_to<> {}(a, b);
         }
