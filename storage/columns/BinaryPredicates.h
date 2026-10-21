@@ -4,7 +4,6 @@
 #include <concepts>
 #include <functional>
 #include <optional>
-#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -55,6 +54,14 @@ concept HoldsPropertyNull = (std::same_as<std::decay_t<Ts>, PropertyNull> || ...
 template <typename T>
 concept ListOperand =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListView>;
+
+template <typename T>
+concept MapOperand =
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, MapView>;
+
+// Two lists or two maps, whose equality is unknown where a null inside one meets a value
+template <typename T, typename U>
+concept ComparesTwoContainers = (ListOperand<T> && ListOperand<U>) || (MapOperand<T> && MapOperand<U>);
 
 // A list the membership test has to read out of a tag: what an index of a nested list
 // answers, since the type of an element is settled row by row
@@ -144,6 +151,22 @@ inline std::optional<ListView> heldList(const T& operand) {
         return operand;
     } else if constexpr (std::is_same_v<T, CellView>) {
         return taggedList(operand);
+    } else {
+        return std::nullopt;
+    }
+}
+
+// The map a cell holds, absent where it holds anything else, as heldList answers for a list
+template <typename T>
+inline std::optional<MapView> heldMap(const T& operand) {
+    if constexpr (std::is_same_v<T, MapView>) {
+        return operand;
+    } else if constexpr (std::is_same_v<T, CellView>) {
+        if (operand.getTag() != CellTag::MapView) {
+            return std::nullopt;
+        }
+
+        return operand.template getAs<MapView>();
     } else {
         return std::nullopt;
     }
@@ -717,50 +740,22 @@ struct BinaryPredicate {
 
 struct TuringEqual {
     template <typename T, typename U>
-        requires ListOperand<T> && ListOperand<U>
+        requires ComparesTwoContainers<T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) {
-        if constexpr (TypeUtils::is_optional_v<T>) {
-            if (!a.has_value()) {
-                return std::nullopt;
-            }
-        }
-
-        if constexpr (TypeUtils::is_optional_v<U>) {
-            if (!b.has_value()) {
-                return std::nullopt;
-            }
-        }
-
-        const std::span<const CellView> lhs = TypeUtils::unwrap(a).elements();
-        const std::span<const CellView> rhs = TypeUtils::unwrap(b).elements();
-
-        if (lhs.size() != rhs.size()) {
-            return CustomBool {false};
-        }
-
-        bool unknown = false;
-
-        for (size_t index = 0; index < lhs.size(); index++) {
-            const bool holdsNull = lhs[index].getTag() == CellTag::Null
-                                || rhs[index].getTag() == CellTag::Null;
-            if (holdsNull) {
-                unknown = true;
-                continue;
-            }
-
-            if (!(lhs[index] == rhs[index])) {
-                return CustomBool {false};
-            }
-        }
-
-        if (unknown) {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
             return std::nullopt;
         }
 
-        return CustomBool {true};
+        const std::optional<bool> equal = equalOrUnknown(TypeUtils::unwrap(a), TypeUtils::unwrap(b));
+        if (!equal.has_value()) {
+            return std::nullopt;
+        }
+
+        return CustomBool {*equal};
     }
 
-    // A cell holding a list compares as that list, so its null elements answer as a list's do
+    // A cell holding a list or a map compares as that value, so the nulls inside it answer
+    // as they do there
     template <typename T, typename U>
         requires ComparesATaggedCell<T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) {
@@ -775,6 +770,12 @@ struct TuringEqual {
         const std::optional<ListView> rhsList = heldList(rhs);
         if (lhsList && rhsList) {
             return (*this)(*lhsList, *rhsList);
+        }
+
+        const std::optional<MapView> lhsMap = heldMap(lhs);
+        const std::optional<MapView> rhsMap = heldMap(rhs);
+        if (lhsMap && rhsMap) {
+            return (*this)(*lhsMap, *rhsMap);
         }
 
         using Lhs = std::decay_t<decltype(lhs)>;
@@ -826,7 +827,7 @@ struct TuringEqual {
 
     // Generalist fallback for all other types
     template <typename T, typename U>
-        requires (!ListOperand<T> || !ListOperand<U>)
+        requires (!ComparesTwoContainers<T, U>)
               && (!ComparesATaggedCell<T, U>)
               && (!ComparesAnID<T, U>)
     bool operator()(const T& a, const U& b) {
@@ -1008,6 +1009,11 @@ struct TuringIn {
             if (scalarList) {
                 return (*this)(*scalarList, elements);
             }
+
+            const std::optional<MapView> scalarMap = heldMap(scalar);
+            if (scalarMap) {
+                return (*this)(*scalarMap, elements);
+            }
         } else if constexpr (TypedInternalID<Scalar>) {
             if (!scalar.isValid()) {
                 return std::nullopt;
@@ -1022,13 +1028,19 @@ struct TuringIn {
                 continue;
             }
 
-            if constexpr (std::is_same_v<Scalar, ListView>) {
-                const std::optional<ListView> elementList = taggedList(element);
-                if (!elementList) {
+            if constexpr (std::is_same_v<Scalar, ListView> || std::is_same_v<Scalar, MapView>) {
+                std::optional<Scalar> elementValue;
+                if constexpr (std::is_same_v<Scalar, ListView>) {
+                    elementValue = heldList(element);
+                } else {
+                    elementValue = heldMap(element);
+                }
+
+                if (!elementValue) {
                     continue;
                 }
 
-                const std::optional<CustomBool> equal = TuringEqual {}(*elementList, scalar);
+                const std::optional<CustomBool> equal = TuringEqual {}(*elementValue, scalar);
                 if (!equal) {
                     unknown = true;
                 } else if (equal->_boolean) {

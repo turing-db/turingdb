@@ -2747,45 +2747,31 @@ bool everyRowMatchable(const Column* column, size_t row) {
     return true;
 }
 
-// Whether a join key value can equal anything at all. A NaN equals nothing, itself
-// included, and neither does a vector holding one. A list holding a null among its own
-// elements is no list's equal either: [1, null] = [1, null] is null, where a null nested
-// deeper compares as a value.
-template <typename Value>
-bool keyValueIsMatchable(const Value& value) {
-    return true;
+template <typename ElementType>
+bool keyValuesEqual(const ElementType& probe, const ElementType& build) {
+    return probe == build;
 }
 
-bool keyValueIsMatchable(types::Double::Primitive value) {
-    return !std::isnan(value);
+bool keyValuesEqual(types::Embedding::Primitive probe, types::Embedding::Primitive build) {
+    return EmbeddingEqual {}(probe, build);
 }
 
-bool keyValueIsMatchable(types::Embedding::Primitive embedding) {
-    const auto isNaN = [](float value) { return std::isnan(value); };
+// == is equivalence on these, under which two nulls agree, so the join asks `=` itself
+template <typename ElementType>
+    requires std::same_as<ElementType, ListView>
+          || std::same_as<ElementType, MapView>
+          || std::same_as<ElementType, CellView>
+bool keyValuesEqual(const ElementType& probe, const ElementType& build) {
+    const std::optional<CustomBool> equal = Eq {}(probe, build);
 
-    return std::none_of(embedding.begin(), embedding.end(), isNaN);
+    return equal.has_value() && equal->_boolean;
 }
 
-bool keyValueIsMatchable(ListView list) {
-    const auto isNull = [](CellView element) { return element.getTag() == CellTag::Null; };
-
-    return std::none_of(list.begin(), list.end(), isNull);
-}
-
-bool keyValueIsMatchable(CellView cell) {
-    const CellTag tag = cell.getTag();
-
-    if (tag == CellTag::Null) {
-        return false;
-    } else if (tag == CellTag::Double) {
-        return keyValueIsMatchable(cell.getAs<types::Double::Primitive>());
-    } else if (tag == CellTag::Embedding) {
-        return keyValueIsMatchable(cell.getAs<types::Embedding::Primitive>());
-    } else if (tag == CellTag::ListView) {
-        return keyValueIsMatchable(cell.getAs<ListView>());
-    }
-
-    return true;
+// A key no other key equals is one that does not equal itself: a null, a NaN, a list or
+// map holding a null at any depth
+template <typename ElementType>
+bool keyValueIsMatchable(const ElementType& value) {
+    return keyValuesEqual(value, value);
 }
 
 template <typename ElementType>
@@ -2795,8 +2781,6 @@ bool columnRowMatchable(const Column* column, size_t row) {
     return keyValueIsMatchable(raw[row]);
 }
 
-// A null does not match: `=` against a null gives null, and the filter this join replaces
-// kept only the true rows
 template <typename Primitive>
 bool optColumnRowMatchable(const Column* column, size_t row) {
     const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
@@ -3037,15 +3021,6 @@ void hashMaskKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
 }
 
 template <typename ElementType>
-bool keyValuesEqual(const ElementType& probe, const ElementType& build) {
-    return probe == build;
-}
-
-bool keyValuesEqual(types::Embedding::Primitive probe, types::Embedding::Primitive build) {
-    return EmbeddingEqual {}(probe, build);
-}
-
-template <typename ElementType>
 bool keyEqualColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
     const auto& probeRaw = static_cast<const ColumnVector<ElementType>*>(probe)->getRaw();
     const auto& buildRaw = static_cast<const ColumnVector<ElementType>*>(build)->getRaw();
@@ -3063,12 +3038,12 @@ bool keyEqualOptColumn(const Column* probe, size_t probeRow, const Column* build
 
 template <typename ElementType>
 NLJoinKeyFunctions joinKeyFunctions() {
-    return {&hashKeyColumn<ElementType>, &keyEqualColumn<ElementType>};
+    return {&hashKeyColumn<ElementType>, &keyEqualColumn<ElementType>, &columnRowMatchable<ElementType>};
 }
 
 template <typename Primitive>
 NLJoinKeyFunctions optJoinKeyFunctions() {
-    return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>};
+    return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>, &optColumnRowMatchable<Primitive>};
 }
 
 bool keyEqualMaskColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
@@ -11812,42 +11787,6 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
     return nullptr;
 }
 
-NLKeyIsMatchableFunction NLExecutor::everyKeyMatchable() {
-    return &everyRowMatchable;
-}
-
-NLKeyIsMatchableFunction NLExecutor::selectOptKeyMatchableFunction(ValueType valueType) {
-    NLKeyIsMatchableFunction isMatchable = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        isMatchable = &optColumnRowMatchable<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return isMatchable;
-}
-
-// A plainly-held value carries no present flag, so a double is the only such column with
-// a row a join cannot match on.
-NLKeyIsMatchableFunction NLExecutor::selectPlainKeyMatchableFunction(ValueType valueType) {
-    if (valueType == ValueType::Double) {
-        return &columnRowMatchable<types::Double::Primitive>;
-    }
-
-    return &everyRowMatchable;
-}
-
-NLKeyIsMatchableFunction NLExecutor::selectListKeyMatchableFunction() {
-    return &columnRowMatchable<ListView>;
-}
-
-NLKeyIsMatchableFunction NLExecutor::selectCellKeyMatchableFunction() {
-    return &columnRowMatchable<CellView>;
-}
-
-NLKeyIsMatchableFunction NLExecutor::selectOptCellKeyMatchableFunction() {
-    return &optColumnRowMatchable<CellView>;
-}
-
 NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -11962,7 +11901,7 @@ NLJoinKeyFunctions NLExecutor::selectOptCellJoinKeyFunctions() {
 }
 
 NLJoinKeyFunctions NLExecutor::selectMaskJoinKeyFunctions() {
-    return {&hashMaskKeyColumn, &keyEqualMaskColumn};
+    return {&hashMaskKeyColumn, &keyEqualMaskColumn, &everyRowMatchable};
 }
 
 // The pairs `=` compares are the pairs its kernel takes, so a pair the kernel has no

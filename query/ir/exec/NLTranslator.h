@@ -953,7 +953,6 @@ private:
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
     static NLJoinKeyFunctions selectJoinKeyFunctionsForChunkType(mlir::Type chunkType);
-    static NLKeyIsMatchableFunction selectKeyMatchableForChunkType(mlir::Type chunkType);
 
     // The non-null row count handler for a chunk type - the all-rows count for an
     // ID chunk, the present-value count for a !storage.nullable<...> chunk. Used by

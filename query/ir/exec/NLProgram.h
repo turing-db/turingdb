@@ -1899,10 +1899,9 @@ private:
 // collide by concatenation (e.g. "a"+"b" versus "ab"+"").
 using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::string& key);
 
-// Type of handle that answers whether one row of a join key column can match at all. One
-// per column kind / value type, selected during translation the same way the key-append
-// family is. A null cannot, for which Cypher gives null rather than true for `=`, and
-// neither can a NaN, which is not equal to itself, nor a list holding a null.
+// Type of handle that answers whether one row of a join key column can match at all: whether
+// `=` holds the key equal to itself, which a null, a NaN and a list or map holding a null
+// at any depth do not.
 using NLKeyIsMatchableFunction = bool (*)(const Column* column, size_t row);
 
 // Type of handle that hashes every row of a join key column, one hash per row, for the
@@ -1915,11 +1914,12 @@ using NLKeyHashFunction = void (*)(const Column* column, std::vector<uint64_t>& 
 // place from their columns.
 using NLKeyEqualFunction = bool (*)(const Column* probe, size_t probeRow, const Column* build, size_t buildRow);
 
-// The two handlers a join reads a key column through, selected together from its chunk
+// The three handlers a join reads a key column through, selected together from its chunk
 // type. The equality compares two columns of that type.
 struct NLJoinKeyFunctions {
     NLKeyHashFunction _hash {nullptr};
     NLKeyEqualFunction _equal {nullptr};
+    NLKeyIsMatchableFunction _isMatchable {nullptr};
 };
 
 // Runtime state of one hash join's build side: the build rows, materialized column by
@@ -1992,19 +1992,17 @@ public:
     // is compared against to find the group already holding it.
     void setKeyColumns(const Column* key,
                        const Column* buildKey,
-                       const NLJoinKeyFunctions& keyFunctions,
-                       NLKeyIsMatchableFunction isMatchable) {
+                       const NLJoinKeyFunctions& keyFunctions) {
         _key = key;
         _buildKey = buildKey;
         _keyFunctions = keyFunctions;
-        _keyIsMatchable = isMatchable;
     }
 
     const Column* getKeyColumn() const { return _key; }
     const Column* getBuildKeyColumn() const { return _buildKey; }
     NLKeyHashFunction getKeyHash() const { return _keyFunctions._hash; }
     NLKeyEqualFunction getKeyEqual() const { return _keyFunctions._equal; }
-    NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyIsMatchable; }
+    NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyFunctions._isMatchable; }
 
     std::vector<uint64_t>* getHashScratch() { return &_hashScratch; }
 
@@ -2015,7 +2013,6 @@ private:
     const Column* _key {nullptr};
     const Column* _buildKey {nullptr};
     NLJoinKeyFunctions _keyFunctions;
-    NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
 
     // This step's key hashes, one per row of the collected chunk
     std::vector<uint64_t> _hashScratch;
@@ -2051,19 +2048,17 @@ public:
     // probe chunk type's, the equality compares that type to the build key's.
     void setKeyColumns(const Column* key,
                        const Column* buildKey,
-                       const NLJoinKeyFunctions& keyFunctions,
-                       NLKeyIsMatchableFunction isMatchable) {
+                       const NLJoinKeyFunctions& keyFunctions) {
         _key = key;
         _buildKey = buildKey;
         _keyFunctions = keyFunctions;
-        _keyIsMatchable = isMatchable;
     }
 
     const Column* getKeyColumn() const { return _key; }
     const Column* getBuildKeyColumn() const { return _buildKey; }
     NLKeyHashFunction getKeyHash() const { return _keyFunctions._hash; }
     NLKeyEqualFunction getKeyEqual() const { return _keyFunctions._equal; }
-    NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyIsMatchable; }
+    NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyFunctions._isMatchable; }
 
     std::vector<uint64_t>* getHashScratch() { return &_hashScratch; }
 
@@ -2081,7 +2076,6 @@ private:
     const Column* _key {nullptr};
     const Column* _buildKey {nullptr};
     NLJoinKeyFunctions _keyFunctions;
-    NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
     NLLimitState* _limit {nullptr};
 
     // This step's key hashes, one per row of the probe chunk

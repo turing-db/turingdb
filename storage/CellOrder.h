@@ -43,6 +43,15 @@ std::strong_ordering operator<=>(ListView lhs, ListView rhs);
 std::strong_ordering operator<=>(MapView lhs, MapView rhs);
 
 /**
+ * @brief Cypher's equality of two cells, lists or maps, at any depth: unknown where a null
+ * meets a value and no other pair differs. == is equivalence instead, under which two nulls
+ * agree, which is what DISTINCT and grouping key on.
+ */
+std::optional<bool> equalOrUnknown(CellView lhs, CellView rhs);
+std::optional<bool> equalOrUnknown(ListView lhs, ListView rhs);
+std::optional<bool> equalOrUnknown(MapView lhs, MapView rhs);
+
+/**
  * @brief Compares an element of a @ref ListByteBuffer against a value of a known type.
  *
  * Equal only when the element holds that value: a number compares numerically whatever

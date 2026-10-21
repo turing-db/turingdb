@@ -118,10 +118,21 @@ TEST_F(HashJoinCrossTypeKeyTest, leavesAListHoldingANullUnmatched) {
                                 1);
 }
 
-// A null inside a nested list compares as a value: [[1, null]] = [[1, null]] is true
-TEST_F(HashJoinCrossTypeKeyTest, matchesAListHoldingANestedNull) {
-    expectJoinMatchesTheProduct("UNWIND [[[1, null]], [[2]]] AS x UNWIND [[[1, null]], [[3]]] AS y "
+TEST_F(HashJoinCrossTypeKeyTest, leavesAListHoldingANestedNullUnmatched) {
+    expectJoinMatchesTheProduct("UNWIND [[[1, null]], [[2]]] AS x UNWIND [[[1, null]], [[2]]] AS y "
                                 "WITH x, y WHERE x = y RETURN x, y",
+                                1);
+}
+
+TEST_F(HashJoinCrossTypeKeyTest, leavesAMapHoldingANullUnmatched) {
+    expectJoinMatchesTheProduct("UNWIND [{a: null}, {a: 1}] AS x UNWIND [{a: null}, {a: 1}] AS y "
+                                "WITH x, y WHERE x = y RETURN x.a, y.a",
+                                1);
+}
+
+TEST_F(HashJoinCrossTypeKeyTest, leavesAListHoldingAMapWithANullUnmatched) {
+    expectJoinMatchesTheProduct("UNWIND [[{a: [null]}], [{a: [1]}]] AS x UNWIND [[{a: [null]}], [{a: [1]}]] AS y "
+                                "WITH x, y WHERE x = y RETURN x[0].a, y[0].a",
                                 1);
 }
 
