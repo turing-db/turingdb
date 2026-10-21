@@ -126,3 +126,7 @@ target_include_directories(test_query_ir_integer_against_double PRIVATE ${IR_TES
 add_turing_test(test_query_ir_number_equality_across_types NumberEqualityAcrossTypesTest.cpp)
 target_sources(test_query_ir_number_equality_across_types PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_number_equality_across_types PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_float_division_by_zero FloatDivisionByZeroTest.cpp)
+target_sources(test_query_ir_float_division_by_zero PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_float_division_by_zero PRIVATE ${IR_TEST_DIR})
