@@ -59,3 +59,7 @@ add_ir_tests(test_query_ir_coalesce_context CoalesceContextTest.cpp)
 add_ir_tests(test_query_ir_coalesce_nested_raise CoalesceNestedRaiseTest.cpp)
 
 add_ir_tests(test_query_ir_coalesce_nesting_depth CoalesceNestingDepthTest.cpp)
+
+add_turing_test(test_query_ir_case_list_branch CaseListBranchTest.cpp)
+target_sources(test_query_ir_case_list_branch PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_case_list_branch PRIVATE ${IR_TEST_DIR})
