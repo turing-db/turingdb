@@ -953,7 +953,8 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::GetOutEdgesByTypeAndLabel,
                      mlir::db::GetInEdgesByTypeAndLabel,
                      mlir::db::ExplorePaths,
-                     mlir::db::CallProcedure>(operation);
+                     mlir::db::CallProcedure,
+                     mlir::db::ScanMaterialized>(operation);
 }
 
 // An EXISTS, a COUNT or a COLLECT: a subquery standing in an expression, one value per
@@ -1442,6 +1443,10 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerConditional(conditional);
     } else if (mlir::db::DistinctSet distinctSet = mlir::dyn_cast<mlir::db::DistinctSet>(operation)) {
         lowerDistinctSet(distinctSet);
+    } else if (mlir::db::Materialize materialize = mlir::dyn_cast<mlir::db::Materialize>(operation)) {
+        lowerMaterialize(materialize);
+    } else if (mlir::db::ScanMaterialized scan = mlir::dyn_cast<mlir::db::ScanMaterialized>(operation)) {
+        lowerScanMaterialized(scan);
     } else if (mlir::db::OptionalMatch optionalMatch = mlir::dyn_cast<mlir::db::OptionalMatch>(operation)) {
         lowerOptionalMatch(optionalMatch);
     } else if (mlir::db::CallSubquery callSubquery = mlir::dyn_cast<mlir::db::CallSubquery>(operation)) {
@@ -4419,6 +4424,51 @@ void DBLowering::lowerDistinctSet(mlir::db::DistinctSet distinctSet) {
     _valueMap[distinctSet.getSet()] = _builder.create<nl::Distinct>(_builder.getUnknownLoc()).getState();
 }
 
+// The buffer is emptied each step of the root and filled in the loop producing the rows, so
+// a scan placed after that loop finds every row of the step
+void DBLowering::lowerMaterialize(mlir::db::Materialize materialize) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : materialize.getColumns()) {
+        chunks.push_back(mapValue(column));
+    }
+
+    rowAlignBufferedChunks(chunks);
+
+    _builder.setInsertionPointToStart(_rootBlock);
+    const mlir::Value state = _builder.create<nl::UnionBuffer>(loc).getState();
+
+    setInsertionInto(deepestOwnerBlock(chunks, _rootBlock));
+    _builder.create<nl::UnionCollect>(loc, state, chunks);
+
+    _valueMap[materialize.getRows()] = state;
+}
+
+void DBLowering::lowerScanMaterialized(mlir::db::ScanMaterialized scan) {
+    const mlir::Value state = mapValue(scan.getRows());
+
+    nl::UnionCollect collect;
+    for (mlir::Operation* user : state.getUsers()) {
+        if (nl::UnionCollect stateCollect = mlir::dyn_cast<nl::UnionCollect>(user)) {
+            collect = stateCollect;
+            break;
+        }
+    }
+
+    if (!collect) {
+        throw IRException("db.scan_materialized reads rows no db.materialize collected");
+    }
+
+    const llvm::SmallVector<mlir::Type, 4> chunkTypes(collect.getColumns().getTypes());
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
+
+    setInsertionInto(_rootBlock);
+    nl::UnionDrain drain = _builder.create<nl::UnionDrain>(_builder.getUnknownLoc(), iteratorType, state);
+
+    buildLoopForSource(drain.getResult(), scan.getOperation());
+}
+
 void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     // The nl chunks the deduped columns lowered to; these are what the filter
     // reads to build each row's key, and gathers the survivors from.
@@ -5181,11 +5231,13 @@ void DBLowering::visitProducer(mlir::Value column,
 
     // A sort or a grouped aggregate accumulates the whole relation before emitting any of
     // it, so the loops feeding it have to see every row: the walk stops and the limit
-    // budgets the emit loop alone. An optional match accumulates one step of the rows it
-    // joins onto rather than the relation, and emits them in input order, so once the
-    // budget is spent no later step can contribute a row - the walk carries on and bounds
-    // the loops feeding it too.
-    const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
+    // budgets the emit loop alone. So does a materialize, whose scans are the emit loops.
+    // An optional match accumulates one step of the rows it joins onto rather than the
+    // relation, and emits them in input order, so once the budget is spent no later step
+    // can contribute a row - the walk carries on and bounds the loops feeding it too.
+    const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort,
+                                                  mlir::db::GroupAggregate,
+                                                  mlir::db::Materialize>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
     frame._reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop || loopsOverSingleRows;

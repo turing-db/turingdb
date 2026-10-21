@@ -15,6 +15,7 @@
 #include "stmt/ReturnStmt.h"
 #include "stmt/CallStmt.h"
 #include "stmt/CallSubqueryStmt.h"
+#include "stmt/NextSegmentStmt.h"
 #include "stmt/DeleteStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/Limit.h"
@@ -352,6 +353,18 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                     out << "        ASTType CALL_SUBQUERY\n";
                     out << "    }\n";
                     for (const CallSubqueryStmt::Branch& branch : subquery->branches()) {
+                        dump(out, branch._query);
+                    }
+                }
+                break;
+
+                case Stmt::Kind::NEXT_SEGMENT: {
+                    const NextSegmentStmt* segment = static_cast<const NextSegmentStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << segment << " : \"\"\n";
+                    out << "    _" << std::hex << segment << " {\n";
+                    out << "        ASTType NEXT_SEGMENT\n";
+                    out << "    }\n";
+                    for (const CallSubqueryStmt::Branch& branch : segment->getBody()->branches()) {
                         dump(out, branch._query);
                     }
                 }

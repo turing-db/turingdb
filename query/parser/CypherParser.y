@@ -247,6 +247,7 @@
 %token<std::string_view> PUSH
 %token<std::string_view> PULL
 %token<std::string_view> NEW
+%token<std::string_view> NEXT
 %token<std::string_view> FAIL
 %token<std::string_view> CSV
 %token<std::string_view> GML
@@ -444,6 +445,10 @@
 %type<db::CallSubqueryStmt*> foreachSt
 %type<db::StmtContainer*> foreachUpdates
 %type<db::CallSubqueryStmt::Branches> callSubqueryBody
+%type<db::CallSubqueryStmt::Branches> nextSegment
+%type<db::CallSubqueryStmt::Branches> segmentBeforeNext
+%type<db::ParserUtils::NextSegments> nextHead
+%type<db::ParserUtils::NextSegments> nextChain
 %type<db::CallSubqueryStmt::Branches> conditionalBranches
 %type<db::CallSubqueryStmt::Branches> whenBranches
 %type<db::SinglePartQuery*> conditionalBranchQuery
@@ -520,6 +525,43 @@ regularQuery
         $$ = ConditionalQuery::create(ast, body);
         LOC($$, @$);
       }
+    | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
+    ;
+
+nextChain
+    : nextHead nextSegment {
+        $$ = std::move($1);
+        $$.push_back(std::move($2));
+      }
+    ;
+
+nextHead
+    : segmentBeforeNext { $$.push_back(std::move($1)); }
+    | nextHead segmentBeforeNext {
+        $$ = std::move($1);
+        $$.push_back(std::move($2));
+      }
+    ;
+
+segmentBeforeNext
+    : nextSegment NEXT {
+        if (ParserUtils::returnsUnaliasedItem($1)) {
+            scanner.syntaxError(@1, "Expression in a RETURN followed by NEXT must be aliased (use AS)");
+        }
+
+        $$ = std::move($1);
+      }
+    ;
+
+nextSegment
+    : singlePartQuery { $$.push_back({$1, false, {}}); }
+    | unionOperand unionList {
+        $$.push_back({$1._query, false, {}, nullptr, $1._whenCall});
+        for (const UnionQuery::Branch& branch : $2) {
+            $$.push_back({branch._query, branch._all, {}, nullptr, branch._whenCall});
+        }
+      }
+    | conditionalBranches { $$ = std::move($1); }
     ;
 
 explainQuery
@@ -1210,14 +1252,8 @@ callSubquerySt
     ;
 
 callSubqueryBody
-    : singlePartQuery { $$.push_back({$1, false, {}}); }
-    | unionOperand unionList {
-        $$.push_back({$1._query, false, {}, nullptr, $1._whenCall});
-        for (const UnionQuery::Branch& branch : $2) {
-            $$.push_back({branch._query, branch._all, {}, nullptr, branch._whenCall});
-        }
-      }
-    | conditionalBranches { $$ = std::move($1); }
+    : nextSegment { $$ = std::move($1); }
+    | nextChain { $$.push_back({ParserUtils::createNextQuery(ast, $1, @$), false, {}}); }
     ;
 
 conditionalBranches
@@ -1240,6 +1276,7 @@ conditionalBranchQuery
     : singlePartQuery { $$ = $1; }
     | OBRACE singlePartQuery CBRACE { $$ = $2; }
     | OBRACE unionOperand unionList CBRACE { scanner.notImplemented(@$, "UNION inside a WHEN branch"); }
+    | OBRACE nextChain CBRACE { $$ = ParserUtils::createNextQuery(ast, $2, @2); }
     ;
 
 existsBody
@@ -1258,6 +1295,7 @@ existsBody
             $$.push_back(branch._query);
         }
       }
+    | nextChain { $$.push_back(ParserUtils::createNextQuery(ast, $1, @$)); }
     ;
 
 countBody
@@ -1276,6 +1314,7 @@ countBody
             $$.push_back(branch);
         }
       }
+    | nextChain { $$.push_back({ParserUtils::createNextQuery(ast, $1, @$), false}); }
     ;
 
 collectBody
@@ -1830,6 +1869,7 @@ unionOperand
             scanner.syntaxError(@2, "A WHEN combined by UNION must name each column it returns with AS");
         }
       }
+    | OBRACE nextChain CBRACE { $$ = {ParserUtils::createNextQuery(ast, $2, @2), false, nullptr}; }
     ;
 
 subqueryExist
@@ -2180,6 +2220,7 @@ symbol
     | DATETIMES { $$ = Symbol::create(ast, $1); }
     | DURATIONS { $$ = Symbol::create(ast, $1); }
     | FILTER { $$ = Symbol::create(ast, $1); }
+    | NEXT { $$ = Symbol::create(ast, $1); }
     | EXTRACT { $$ = Symbol::create(ast, $1); }
     | EMBEDDING { $$ = Symbol::create(ast, $1); }
     | TYPE { $$ = Symbol::create(ast, $1); }

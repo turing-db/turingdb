@@ -2,6 +2,7 @@
 
 #include "SinglePartQuery.h"
 #include "CallSubqueryStmt.h"
+#include "NextSegmentStmt.h"
 
 using namespace db;
 
@@ -27,6 +28,7 @@ bool Stmt::isUpdating(Kind kind) {
         case Kind::UNWIND:
         case Kind::WITH:
         case Kind::CALL_SUBQUERY:
+        case Kind::NEXT_SEGMENT:
             return false;
         break;
     }
@@ -34,38 +36,40 @@ bool Stmt::isUpdating(Kind kind) {
     return false;
 }
 
-bool Stmt::isUpdating(const Stmt* stmt) {
+const CallSubqueryStmt* Stmt::getSubqueryBody(const Stmt* stmt) {
     const Kind kind = stmt->getKind();
 
     if (kind == Kind::CALL_SUBQUERY) {
-        const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
-
-        return !subquery->isReturning() && writesToTheGraph(stmt);
+        return static_cast<const CallSubqueryStmt*>(stmt);
+    } else if (kind == Kind::NEXT_SEGMENT) {
+        return static_cast<const NextSegmentStmt*>(stmt)->getBody();
     }
 
-    return isUpdating(kind);
+    return nullptr;
+}
+
+bool Stmt::isUpdating(const Stmt* stmt) {
+    if (const CallSubqueryStmt* subquery = getSubqueryBody(stmt)) {
+        return !subquery->isReturning() && subquery->writesToTheGraph();
+    }
+
+    return isUpdating(stmt->getKind());
 }
 
 bool Stmt::writesToTheGraph(const Stmt* stmt) {
-    const Kind kind = stmt->getKind();
-
-    if (kind == Kind::CALL_SUBQUERY) {
-        const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
-
+    if (const CallSubqueryStmt* subquery = getSubqueryBody(stmt)) {
         return subquery->writesToTheGraph();
     }
 
-    return isUpdating(kind);
+    return isUpdating(stmt->getKind());
 }
 
 bool Stmt::isReading(const Stmt* stmt) {
-    const Kind kind = stmt->getKind();
-
-    if (kind == Kind::CALL_SUBQUERY) {
+    if (getSubqueryBody(stmt)) {
         return readsTheGraph(stmt);
     }
 
-    return !isUpdating(kind);
+    return !isUpdating(stmt->getKind());
 }
 
 bool Stmt::readsTheGraph(const Stmt* stmt) {
@@ -73,7 +77,8 @@ bool Stmt::readsTheGraph(const Stmt* stmt) {
 
     switch (kind) {
         case Kind::CALL_SUBQUERY:
-            return static_cast<const CallSubqueryStmt*>(stmt)->readsTheGraph();
+        case Kind::NEXT_SEGMENT:
+            return getSubqueryBody(stmt)->readsTheGraph();
         break;
 
         case Kind::MATCH:

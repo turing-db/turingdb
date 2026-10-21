@@ -42,6 +42,7 @@ class ReturnStmt;
 class Stmt;
 class StmtContainer;
 class WithStmt;
+class NextSegmentStmt;
 class ExistsExpr;
 class CountSubqueryExpr;
 class CollectSubqueryExpr;
@@ -73,6 +74,7 @@ public:
     void analyze(const ReturnStmt* returnSt);
     void analyze(WithStmt* withSt);
     void analyze(CallSubqueryStmt* subquery);
+    void analyze(NextSegmentStmt* segment);
     void analyze(const ConditionalQuery* query);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
@@ -106,6 +108,19 @@ public:
 
 private:
     using DeclSet = std::unordered_set<const VarDecl*>;
+
+    // How a branch of a subquery body reads the variables it imports
+    enum class BranchImports {
+        // Named by the scope clause: the WHEN predicate and every clause of the body read them
+        SCOPE_CLAUSE,
+
+        // Named by a leading WITH, which runs once the WHEN predicate has picked the branch
+        LEADING_WITH,
+
+        // The table a NEXT segment reads: the WHEN predicate reads it, and a WITH of the
+        // body descopes what it does not project
+        NEXT_SEGMENT,
+    };
 
     CypherAST* _ast {nullptr};
     GraphView _graphView;
@@ -158,8 +173,10 @@ private:
     void importEveryVariable(CallSubqueryStmt* subquery) const;
 
     // Analyzes one query of a CALL body under its own scope, seeded with what it imports
-    void analyzeSubqueryBranch(const CallSubqueryStmt::Branch& branch, bool hasScopeClause);
-    void importIntoBranch(const CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);
+    void analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, BranchImports imports);
+
+    void analyzeBranchColumns(const CallSubqueryStmt* subquery) const;
+    void importIntoBranch(CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);
 
     void throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const;
 
@@ -169,6 +186,10 @@ private:
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds
     void publishSubqueryReturn(const CallSubqueryStmt* subquery);
+
+    // Declares in @param scope the columns the branches of a body return, under the
+    // declarations the first branch makes
+    void publishBranchReturns(const CallSubqueryStmt* subquery, DeclContext* scope);
     void publishUnionBranchReturn(Projection* branchProjection, const Projection* firstProjection);
 
     // Adds to a barrier of a subquery body the imports it does not project, so what the

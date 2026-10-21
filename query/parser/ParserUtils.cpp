@@ -23,9 +23,11 @@
 #include "stmt/CallStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/MatchStmt.h"
+#include "stmt/NextSegmentStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/UnwindStmt.h"
+#include "stmt/WithStmt.h"
 #include "CypherAST.h"
 #include "EdgePattern.h"
 #include "FunctionInvocation.h"
@@ -320,6 +322,115 @@ bool ParserUtils::createWhenOperand(CypherAST* ast,
     query->setReturnStmt(returnStmt);
 
     return true;
+}
+
+bool ParserUtils::returnsUnaliasedItem(const CallSubqueryStmt::Branches& segment) {
+    for (const CallSubqueryStmt::Branch& branch : segment) {
+        const ReturnStmt* returnStmt = branch._query->getReturnStmt();
+        if (!returnStmt) {
+            continue;
+        }
+
+        for (const Projection::ReturnItem& item : returnStmt->getProjection()->items()) {
+            const Expr* expr = std::get<Expr*>(item);
+            const bool named = expr->getKind() == Expr::Kind::SYMBOL || !expr->getName().empty();
+
+            if (!named) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+SinglePartQuery* ParserUtils::createNextQuery(CypherAST* ast,
+                                              const NextSegments& segments,
+                                              const SourceLocation& location) {
+    SourceManager* sourceManager = ast->getSourceManager();
+
+    StmtContainer* stmts = StmtContainer::create(ast);
+    sourceManager->setLocation(stmts, location);
+
+    SinglePartQuery* query = SinglePartQuery::create(ast);
+    query->setStmts(stmts);
+    sourceManager->setLocation(query, location);
+
+    for (size_t index = 0; index < segments.size(); index++) {
+        const CallSubqueryStmt::Branches& segment = segments[index];
+        const bool endsTheChain = index + 1 == segments.size();
+
+        SinglePartQuery* first = segment.front()._query;
+        ReturnStmt* returnStmt = first->getReturnStmt();
+
+        const bool composite = segment.size() > 1 || segment.front()._condition;
+
+        if (!composite && (returnStmt || endsTheChain)) {
+            ast->nestQuery(first);
+
+            if (const StmtContainer* segmentStmts = first->getStmts()) {
+                for (Stmt* stmt : segmentStmts->stmts()) {
+                    stmts->add(stmt);
+                }
+            }
+
+            if (endsTheChain) {
+                query->setReturnStmt(returnStmt);
+            } else {
+                WithStmt* with = WithStmt::create(ast, returnStmt->getProjection());
+                sourceManager->setLocation(with, location);
+                stmts->add(with);
+            }
+
+            continue;
+        }
+
+        CallSubqueryStmt* body = CallSubqueryStmt::create(ast, segment);
+        sourceManager->setLocation(body, location);
+
+        NextSegmentStmt* segmentStmt = NextSegmentStmt::create(ast, body);
+        sourceManager->setLocation(segmentStmt, location);
+        stmts->add(segmentStmt);
+
+        if (endsTheChain && returnStmt) {
+            query->setReturnStmt(createSegmentReturn(ast, returnStmt->getProjection(), location));
+        }
+    }
+
+    return query;
+}
+
+ReturnStmt* ParserUtils::createSegmentReturn(CypherAST* ast,
+                                             const Projection* projection,
+                                             const SourceLocation& location) {
+    SourceManager* sourceManager = ast->getSourceManager();
+
+    Projection* columns = Projection::create(ast);
+    sourceManager->setLocation(columns, location);
+
+    if (projection->isReturningAll()) {
+        columns->setReturnAll();
+    }
+
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const Expr* expr = std::get<Expr*>(item);
+
+        std::string_view name = expr->getName();
+        if (name.empty() && expr->getKind() == Expr::Kind::SYMBOL) {
+            name = static_cast<const SymbolExpr*>(expr)->getSymbol()->getName();
+        } else if (name.empty()) {
+            name = sourceManager->getStringRepr(std::bit_cast<uintptr_t>(expr));
+        }
+
+        SymbolExpr* column = SymbolExpr::create(ast, Symbol::create(ast, name));
+        sourceManager->setLocation(column, location);
+        columns->addExpr(column);
+    }
+
+    ReturnStmt* returnStmt = ReturnStmt::create(ast, columns);
+    sourceManager->setLocation(returnStmt, location);
+
+    return returnStmt;
 }
 
 CallSubqueryStmt* ParserUtils::createForeach(CypherAST* ast,

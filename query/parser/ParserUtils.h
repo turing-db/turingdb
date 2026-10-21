@@ -24,6 +24,8 @@ class Pattern;
 class Parameter;
 class PatternElement;
 class PropertyExpr;
+class Projection;
+class ReturnStmt;
 class SetStmt;
 class SinglePartQuery;
 class StmtContainer;
@@ -40,6 +42,10 @@ public:
         Expr* _rightOperand {nullptr};
         SourceLocation _rightOperandLocation;
     };
+
+    // The queries a NEXT chains, in order: each a single query, the branches of a UNION or
+    // those of a WHEN
+    using NextSegments = std::vector<CallSubqueryStmt::Branches>;
 
     ParserUtils() = delete;
     ~ParserUtils() = delete;
@@ -78,6 +84,17 @@ public:
                                   const CallSubqueryStmt::Branches& branches,
                                   const SourceLocation& location,
                                   UnionQuery::Branch& operand);
+
+    // Whether an item of a segment's RETURN has neither an alias nor a variable to name the
+    // column the next segment reads it through
+    static bool returnsUnaliasedItem(const CallSubqueryStmt::Branches& segment);
+
+    // `a RETURN x NEXT b` is `a WITH x b`. A UNION or a WHEN segment, and one ending on an
+    // updating clause that NEXT follows, is a NextSegmentStmt; ending the chain, its
+    // columns are what the query returns.
+    static SinglePartQuery* createNextQuery(CypherAST* ast,
+                                            const NextSegments& segments,
+                                            const SourceLocation& location);
 
     // `FOREACH (x IN list | updates)` is `CALL (*) { UNWIND list AS x updates }`
     static CallSubqueryStmt* createForeach(CypherAST* ast,
@@ -148,6 +165,12 @@ public:
 
 private:
     static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);
+
+    // `RETURN <the columns of @param projection>`, read back by name from the scope the
+    // segment that projects them publishes
+    static ReturnStmt* createSegmentReturn(CypherAST* ast,
+                                           const Projection* projection,
+                                           const SourceLocation& location);
 };
 
 }

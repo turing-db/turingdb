@@ -88,6 +88,7 @@ class ConditionalQuery;
 class Stmt;
 class WhereClause;
 class WithStmt;
+class NextSegmentStmt;
 class YieldClause;
 class YieldItems;
 
@@ -380,6 +381,16 @@ private:
     // inputs beside what the body returned, take the scope over
     void generateCallSubquery(const CallSubqueryStmt* subquery);
 
+    void generateNextSegment(const NextSegmentStmt* segment);
+    void generateUnionSegment(const CallSubqueryStmt* body);
+    void generateConditionalSegment(const CallSubqueryStmt* body);
+    void generateUpdatingSegment(const CallSubqueryStmt* body);
+
+    // A constant holds one value standing for every row rather than rows of its own
+    void splitConstantColumns(llvm::ArrayRef<PublishedColumn> columns,
+                              llvm::SmallVectorImpl<PublishedColumn>& rowColumns,
+                              llvm::SmallVectorImpl<PublishedColumn>& constants);
+
     // Whether the body's rows carry the columns it was given through to its RETURN: true
     // unless a clause of it aggregates, sorts, cuts or dedups the rows, which is when the
     // body has to run one input row at a time instead
@@ -532,6 +543,19 @@ private:
 
     using CarriedEntities = llvm::SmallVector<std::pair<const VarDecl*, PartScope::WrittenEntity>>;
 
+    // What a db.call_subquery hands back, bound to its results: the rows in flight it was
+    // given, the columns its body returned, and the constants, which it never took
+    struct SubqueryResults {
+        llvm::SmallVector<PublishedColumn> _inputs;
+        llvm::SmallVector<PublishedColumn> _returned;
+        llvm::SmallVector<PublishedColumn> _constants;
+        CarriedEntities _returnedEntities;
+    };
+
+    // Emits the db.call_subquery of @param subquery, leaving the scope as it was, and fills
+    // @param results when the body returns
+    void emitCallSubquery(const CallSubqueryStmt* subquery, SubqueryResults& results);
+
     // The scope one branch of a CALL body opens with: the imports it names, read through
     // @param inputArguments or where they are bound as constants, and - for a body carrying
     // the scope - every input under a hidden name
@@ -575,11 +599,24 @@ private:
                                  mlir::Block* bodyBlock,
                                  std::vector<std::unique_ptr<mlir::Region>>& regions);
 
-    // Generates one branch into a region ending in a db.yield of what its RETURN publishes,
-    // none for a branch ending on a write
+    // Opens the region of one more branch, its single block empty
+    mlir::Block* openSubqueryBranch(SubqueryBranchResults& branchResults);
+
+    // Generates one branch into @param block, opened by openSubqueryBranch, ending in a
+    // db.yield of what its RETURN publishes, none for a branch ending on a write
     void generateSubqueryBranch(const SinglePartQuery* query,
+                                mlir::Block* block,
                                 mlir::Block* bodyBlock,
                                 SubqueryBranchResults& branchResults);
+
+    // Emits the db.union holding the branches built and fills @param yielded as
+    // generateSubqueryUnion does
+    void generateUnionOverBranches(mlir::Value distinctSet,
+                                   size_t dedupedBranches,
+                                   mlir::Block* bodyBlock,
+                                   SubqueryBranchResults& branchResults,
+                                   llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                   CarriedEntities& returnedEntities);
 
     // Makes every branch yield the mask of each entity a MERGE wrote in any of them, or a
     // CREATE wrote in some of them

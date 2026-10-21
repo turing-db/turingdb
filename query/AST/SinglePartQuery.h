@@ -19,6 +19,7 @@ public:
 
     const StmtContainer* getStmts() const { return _stmts; }
     const ReturnStmt* getReturnStmt() const { return _returnStmt; }
+    ReturnStmt* getReturnStmt() { return _returnStmt; }
 
     // A CALL subquery counts when its own body does
     bool writesToTheGraph() const;

@@ -2347,6 +2347,62 @@ def DistinctSet : TuringOp<"distinct_set", []> {
 }
 
 /**
+* Materialize
+*/
+def Materialize : TuringOp<"materialize", [Pure]> {
+  let summary = "Hold every row in flight for several dataflows to read in turn";
+  let description = [{
+    The table a NEXT hands a UNION segment, every branch of which reads all of it. The
+    columns in flight are held once and each branch walks them with a db.scan_materialized
+    of its own, as a common table expression is scanned once per reference:
+
+      %t = db.materialize(%name, %age) : (!db.column<none>, !db.column<none>) -> !db.materialized
+      %n = db.union {
+        %name1, %age1 = db.scan_materialized(%t) : (!db.materialized) -> (!db.column<none>, !db.column<none>)
+        ...
+        db.yield %c : !db.column<ui64>
+      }, {
+        %name2, %age2 = db.scan_materialized(%t) : (!db.materialized) -> (!db.column<none>, !db.column<none>)
+        ...
+        db.yield %l : !db.column<none>
+      } : !db.column<none>
+
+    A pipeline breaker: a scan starts once the dataflow feeding the op has run to its end.
+    The columns are row-aligned, the rows of one relation, and no constant is among them:
+    a constant stands for every row, and a branch reads it where it is bound.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns);
+  let results   = (outs MaterializedType:$rows);
+
+  let assemblyFormat = [{
+    `(` $columns `)` attr-dict `:` functional-type($columns, $rows)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* ScanMaterialized
+*/
+def ScanMaterialized : TuringOp<"scan_materialized", [Pure]> {
+  let summary = "Walk every row a db.materialize holds";
+  let description = [{
+    A source like a scan: it opens a loop over the rows `rows` holds, in the order they
+    were held, one result per column the db.materialize took, of the same type.
+  }];
+
+  let arguments = (ins MaterializedType:$rows);
+  let results   = (outs Variadic<Column>:$columns);
+
+  let assemblyFormat = [{
+    `(` $rows `)` attr-dict `:` functional-type($rows, $columns)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
 * Union
 */
 def Union : TuringOp<"union", [NoTerminator]> {
@@ -2378,10 +2434,12 @@ def Union : TuringOp<"union", [NoTerminator]> {
     the concatenation is the sink seeing each nest's rows in turn. Not Pure: its branches
     emit the result, so it must survive dead-code elimination as db.output does.
 
-    The body of a db.call_subquery is a UNION when the CALL's is. The rows the branches
-    produce then feed the rest of the body rather than the result table, so the op has one
-    result per column and each branch ends in a db.yield of its columns. The branches read
-    the body's arguments, the columns of the row the body runs for:
+    The body of a db.call_subquery is a UNION when the CALL's is, and so is a UNION
+    segment of a NEXT chain. The rows the branches produce then feed what follows rather
+    than the result table, so the op has one result per column and each branch ends in a
+    db.yield of its columns. The branches of a CALL body read the body's arguments, the
+    columns of the row the body runs for; those of a segment read the table in flight
+    through a db.scan_materialized each:
 
       %z = db.union {
         %s, %e, %et, %i = db.get_out_edges(%pIn, {}) : ...

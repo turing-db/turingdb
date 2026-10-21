@@ -110,6 +110,7 @@
 #include "expr/UnaryExpr.h"
 #include "stmt/CreateStmt.h"
 #include "stmt/MergeStmt.h"
+#include "stmt/NextSegmentStmt.h"
 #include "stmt/DeleteStmt.h"
 #include "expr/ExprChain.h"
 #include "stmt/Limit.h"
@@ -439,9 +440,11 @@ bool statementCarriesRows(const Stmt* stmt) {
 
         // A shortest path answers for the whole source and target columns with one
         // distance and one path, so its rows are not the rows it read. A RETURN is the
-        // body's tail, read off getReturnStmt() rather than walked here.
+        // body's tail, read off getReturnStmt() rather than walked here. A NEXT segment
+        // replaces the rows it read with the ones it returns.
         case Stmt::Kind::SHORTESTPATH:
         case Stmt::Kind::RETURN:
+        case Stmt::Kind::NEXT_SEGMENT:
             return false;
         break;
     }
@@ -2058,6 +2061,10 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
             generatePartStatements(stmts.subspan(partBegin, index - partBegin));
             generateWith(static_cast<const WithStmt*>(stmt));
             partBegin = index + 1;
+        } else if (stmt->getKind() == Stmt::Kind::NEXT_SEGMENT) {
+            generatePartStatements(stmts.subspan(partBegin, index - partBegin));
+            generateNextSegment(static_cast<const NextSegmentStmt*>(stmt));
+            partBegin = index + 1;
         } else if (closesPartOnItsCut(stmt, stmts.subspan(index + 1))) {
             generatePartStatements(stmts.subspan(partBegin, index + 1 - partBegin));
             publishInFlightColumns();
@@ -2137,7 +2144,7 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
     for (const Stmt* next : following) {
         const Stmt::Kind kind = next->getKind();
 
-        if (kind == Stmt::Kind::WITH) {
+        if (kind == Stmt::Kind::WITH || kind == Stmt::Kind::NEXT_SEGMENT) {
             return false;
         } else if (kind == Stmt::Kind::MATCH || kind == Stmt::Kind::CALL_SUBQUERY) {
             return true;
@@ -5704,6 +5711,217 @@ bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
 }
 
 void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) {
+    SubqueryResults results;
+    emitCallSubquery(subquery, results);
+
+    if (!subquery->isReturning()) {
+        return;
+    }
+
+    llvm::SmallVector<PublishedColumn> published = results._inputs;
+    published.append(results._returned.begin(), results._returned.end());
+    published.append(results._constants.begin(), results._constants.end());
+
+    rebindScopeKeepingWrittenEntities(published);
+
+    for (auto& [decl, written] : results._returnedEntities) {
+        _part._writtenEntities[decl] = std::move(written);
+    }
+}
+
+// A segment reads the table the segments before it returned, and what it returns replaces
+// that table
+void DBProgramGenerator::generateNextSegment(const NextSegmentStmt* segment) {
+    const CallSubqueryStmt* body = segment->getBody();
+
+    if (body->isUnion()) {
+        generateUnionSegment(body);
+    } else if (body->isConditional()) {
+        generateConditionalSegment(body);
+    } else {
+        generateUpdatingSegment(body);
+    }
+}
+
+// Every branch reads the whole table, so the table is held once and each branch walks it
+// from the start
+void DBProgramGenerator::generateUnionSegment(const CallSubqueryStmt* body) {
+    const CallSubqueryStmt::Branches& branches = body->branches();
+    const size_t dedupedBranches = body->getDedupedBranchCount();
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
+
+    llvm::SmallVector<PublishedColumn> scopeColumns;
+    collectPublishedColumns(scopeColumns);
+
+    llvm::SmallVector<PublishedColumn> inputs;
+    llvm::SmallVector<PublishedColumn> constants;
+    splitConstantColumns(scopeColumns, inputs, constants);
+
+    llvm::SmallVector<mlir::Value> inputColumns;
+    llvm::SmallVector<mlir::Type> inputTypes;
+    for (const PublishedColumn& input : inputs) {
+        inputColumns.push_back(input._column);
+        inputTypes.push_back(input._column.getType());
+    }
+
+    mlir::Value rows;
+    if (!inputColumns.empty()) {
+        const mlir::db::MaterializedType rowsType = mlir::db::MaterializedType::get(_mlirCtxt);
+        rows = _opBuilder.create<mlir::db::Materialize>(loc, rowsType, inputColumns).getRows();
+    }
+
+    mlir::Value distinctSet;
+    if (dedupedBranches > 0) {
+        distinctSet = _opBuilder.create<mlir::db::DistinctSet>(loc).getSet();
+    }
+
+    SubqueryBranchResults branchResults;
+    std::vector<llvm::SmallVector<PublishedColumn>> branchScopes(branches.size());
+    std::vector<CarriedEntities> importedEntities(branches.size());
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        mlir::Block* const block = openSubqueryBranch(branchResults);
+
+        llvm::SmallVector<mlir::Value> scanned;
+        if (rows) {
+            _opBuilder.setInsertionPointToStart(block);
+            mlir::db::ScanMaterialized scan = _opBuilder.create<mlir::db::ScanMaterialized>(loc, inputTypes, rows);
+            scanned.assign(scan.getColumns().begin(), scan.getColumns().end());
+        }
+
+        collectSubqueryBranchScope(branches[branchIndex],
+                                   inputs,
+                                   scanned,
+                                   mlir::Value(),
+                                   constants,
+                                   /*bindsHidden=*/false,
+                                   branchScopes[branchIndex],
+                                   importedEntities[branchIndex]);
+    }
+
+    std::unordered_set<std::string_view> outerImportedCSVRows;
+    std::swap(_importedCSVRows, outerImportedCSVRows);
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        rebindSubqueryBranchScope(branchScopes[branchIndex], importedEntities[branchIndex]);
+
+        mlir::Block* const block = &branchResults._regions[branchIndex]->front();
+        generateSubqueryBranch(branches[branchIndex]._query, block, outerBlock, branchResults);
+    }
+
+    llvm::SmallVector<PublishedColumn> yielded;
+    CarriedEntities returnedEntities;
+    generateUnionOverBranches(distinctSet, dedupedBranches, outerBlock, branchResults, yielded, returnedEntities);
+
+    std::swap(_importedCSVRows, outerImportedCSVRows);
+
+    rebindScope(yielded);
+
+    for (auto& [decl, written] : returnedEntities) {
+        _part._writtenEntities[decl] = std::move(written);
+    }
+}
+
+// A WHEN decides per row, as the CALL (*) its body is written as does, and what it returns
+// replaces the row: a name the row held and the branch returns again is bound afresh
+void DBProgramGenerator::generateConditionalSegment(const CallSubqueryStmt* body) {
+    SubqueryResults results;
+    emitCallSubquery(body, results);
+
+    rebindScope(results._returned);
+
+    for (auto& [decl, written] : results._returnedEntities) {
+        _part._writtenEntities[decl] = std::move(written);
+    }
+}
+
+// A segment ending on a write returns nothing, so the segment after it starts from a single
+// row, as a query does: the segment is the body of a CALL () run once, which reads the
+// table it is handed as a UNION segment's branches do
+void DBProgramGenerator::generateUpdatingSegment(const CallSubqueryStmt* body) {
+    const CallSubqueryStmt::Branch& branch = body->branches().front();
+    const SinglePartQuery* query = branch._query;
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
+
+    llvm::SmallVector<PublishedColumn> scopeColumns;
+    collectPublishedColumns(scopeColumns);
+
+    llvm::SmallVector<PublishedColumn> inputs;
+    llvm::SmallVector<PublishedColumn> constants;
+    splitConstantColumns(scopeColumns, inputs, constants);
+
+    llvm::SmallVector<mlir::Value> inputColumns;
+    llvm::SmallVector<mlir::Type> inputTypes;
+    for (const PublishedColumn& input : inputs) {
+        inputColumns.push_back(input._column);
+        inputTypes.push_back(input._column.getType());
+    }
+
+    mlir::Region bodyRegion;
+    mlir::Block* const bodyBlock = new mlir::Block(); // Region destructor frees it
+    bodyRegion.push_back(bodyBlock);
+
+    llvm::SmallVector<mlir::Value> scanned;
+    if (!inputColumns.empty()) {
+        const mlir::db::MaterializedType rowsType = mlir::db::MaterializedType::get(_mlirCtxt);
+        const mlir::Value rows = _opBuilder.create<mlir::db::Materialize>(loc, rowsType, inputColumns).getRows();
+
+        _opBuilder.setInsertionPointToStart(bodyBlock);
+        mlir::db::ScanMaterialized scan = _opBuilder.create<mlir::db::ScanMaterialized>(loc, inputTypes, rows);
+        scanned.assign(scan.getColumns().begin(), scan.getColumns().end());
+    }
+
+    llvm::SmallVector<PublishedColumn> scope;
+    CarriedEntities importedEntities;
+    collectSubqueryBranchScope(branch,
+                               inputs,
+                               scanned,
+                               mlir::Value(),
+                               constants,
+                               /*bindsHidden=*/false,
+                               scope,
+                               importedEntities);
+
+    std::unordered_set<std::string_view> outerImportedCSVRows;
+    std::swap(_importedCSVRows, outerImportedCSVRows);
+
+    _opBuilder.setInsertionPointToEnd(bodyBlock);
+    rebindSubqueryBranchScope(scope, importedEntities);
+    generateQueryParts(query);
+    _opBuilder.create<mlir::db::SubqueryYield>(loc, mlir::Value(), mlir::ValueRange {});
+
+    std::swap(_importedCSVRows, outerImportedCSVRows);
+
+    _opBuilder.setInsertionPointToEnd(outerBlock);
+
+    mlir::db::CallSubquery callOp = _opBuilder.create<mlir::db::CallSubquery>(loc,
+                                                                             mlir::TypeRange {},
+                                                                             mlir::ValueRange {},
+                                                                             /*unit=*/true,
+                                                                             subqueryCarriesRows(query),
+                                                                             /*optional=*/false);
+    callOp.getBody().takeBody(bodyRegion);
+
+    rebindScope({});
+}
+
+void DBProgramGenerator::splitConstantColumns(llvm::ArrayRef<PublishedColumn> columns,
+                                              llvm::SmallVectorImpl<PublishedColumn>& rowColumns,
+                                              llvm::SmallVectorImpl<PublishedColumn>& constants) {
+    for (const PublishedColumn& column : columns) {
+        if (yieldsConstantColumn(column._column, _constantColumns)) {
+            constants.push_back(column);
+        } else {
+            rowColumns.push_back(column);
+        }
+    }
+}
+
+void DBProgramGenerator::emitCallSubquery(const CallSubqueryStmt* subquery, SubqueryResults& results) {
     const CallSubqueryStmt::Branches& branches = subquery->branches();
     const bool returning = subquery->isReturning();
     const bool optional = returning && subquery->isOptional();
@@ -5722,14 +5940,7 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     // is no input of the body: an imported one is read where it is bound
     llvm::SmallVector<PublishedColumn> inputs;
     llvm::SmallVector<PublishedColumn> constants;
-
-    for (const PublishedColumn& column : scopeColumns) {
-        if (yieldsConstantColumn(column._column, _constantColumns)) {
-            constants.push_back(column);
-        } else {
-            inputs.push_back(column);
-        }
-    }
+    splitConstantColumns(scopeColumns, inputs, constants);
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
@@ -5883,34 +6094,39 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
         return;
     }
 
-    const mlir::ResultRange results = callOp.getResults();
+    const mlir::ResultRange callResults = callOp.getResults();
     size_t resultIndex = 0;
 
-    llvm::SmallVector<PublishedColumn> published;
     if (!carriesScope) {
         for (const PublishedColumn& input : inputs) {
-            published.push_back({input._decl, input._name, results[resultIndex]});
+            results._inputs.push_back({input._decl, input._name, callResults[resultIndex]});
             resultIndex++;
         }
     }
 
-    for (const PublishedColumn& column : yielded) {
-        published.push_back({column._decl, column._name, results[resultIndex]});
+    // A body carrying the scope yields the inputs ahead of its own columns
+    for (size_t yieldedIndex = 0; yieldedIndex < yielded.size(); yieldedIndex++) {
+        const PublishedColumn& column = yielded[yieldedIndex];
+        const PublishedColumn bound {column._decl, column._name, callResults[resultIndex]};
         resultIndex++;
+
+        if (carriesScope && yieldedIndex < inputs.size()) {
+            results._inputs.push_back(bound);
+        } else {
+            results._returned.push_back(bound);
+        }
     }
 
-    published.append(constants.begin(), constants.end());
-
-    rebindScopeKeepingWrittenEntities(published);
+    results._constants.assign(constants.begin(), constants.end());
 
     for (auto& [decl, written] : returnedEntities) {
         if (optional) {
             written._labels.clear();
             written._edgeType.clear();
         }
-
-        _part._writtenEntities[decl] = std::move(written);
     }
+
+    results._returnedEntities = std::move(returnedEntities);
 }
 
 void DBProgramGenerator::collectSubqueryBranchScope(const CallSubqueryStmt::Branch& branch,
@@ -5921,22 +6137,15 @@ void DBProgramGenerator::collectSubqueryBranchScope(const CallSubqueryStmt::Bran
                                                     bool bindsHidden,
                                                     llvm::SmallVectorImpl<PublishedColumn>& scope,
                                                     CarriedEntities& importedEntities) const {
-    const DeclContext* bodyContext = branch._query->getDeclContext();
-    const CallSubqueryStmt::Imports& imports = branch._imports;
+    const std::vector<const VarDecl*>& importDecls = branch._importDecls;
 
-    const auto importedDecl = [&imports, bodyContext](std::string_view name) -> const VarDecl* {
-        const auto namesIt = [name](const Symbol* import) {
-            return import->getName() == name;
-        };
+    const auto importedDecl = [&importDecls](std::string_view name) -> const VarDecl* {
+        const auto importIt = std::ranges::find(importDecls, name, &VarDecl::getName);
 
-        if (!std::ranges::any_of(imports, namesIt)) {
-            return nullptr;
-        }
-
-        return bodyContext->getDecl(name);
+        return importIt != importDecls.end() ? *importIt : nullptr;
     };
 
-    // The body reads an import under the declaration its own context holds for it. A body
+    // The body reads an import under the declaration the analyzer bound it to. A body
     // carrying the scope holds every input under a hidden name too, so the input comes back
     // as the body's rows left it whatever its clauses publish, and a write reading no import
     // still has rows to write one of per. A body run per row reads the row it is handed.
@@ -6001,8 +6210,19 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
         rebindSubqueryBranchScope(branchScopes[branchIndex], importedEntities[branchIndex]);
-        generateSubqueryBranch(branches[branchIndex], bodyBlock, branchResults);
+        generateSubqueryBranch(branches[branchIndex], openSubqueryBranch(branchResults), bodyBlock, branchResults);
     }
+
+    generateUnionOverBranches(distinctSet, dedupedBranches, bodyBlock, branchResults, yielded, returnedEntities);
+}
+
+void DBProgramGenerator::generateUnionOverBranches(mlir::Value distinctSet,
+                                                   size_t dedupedBranches,
+                                                   mlir::Block* bodyBlock,
+                                                   SubqueryBranchResults& branchResults,
+                                                   llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                                                   CarriedEntities& returnedEntities) {
+    const size_t branchCount = branchResults._regions.size();
 
     yieldEveryPendingMask(branchResults);
 
@@ -6016,10 +6236,12 @@ void DBProgramGenerator::generateSubqueryUnion(llvm::ArrayRef<const SinglePartQu
 
     _opBuilder.setInsertionPointToEnd(bodyBlock);
 
-    mlir::db::Union unionOp = _opBuilder.create<mlir::db::Union>(loc, branchResults._resultTypes, branches.size());
+    mlir::db::Union unionOp = _opBuilder.create<mlir::db::Union>(_opBuilder.getUnknownLoc(),
+                                                                 branchResults._resultTypes,
+                                                                 branchCount);
     const mlir::MutableArrayRef<mlir::Region> unionBranches = unionOp.getBranches();
 
-    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+    for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
         unionBranches[branchIndex].takeBody(*branchResults._regions[branchIndex]);
     }
 
@@ -6050,7 +6272,7 @@ void DBProgramGenerator::generateSubqueryConditional(llvm::ArrayRef<CallSubquery
         }
 
         rebindSubqueryBranchScope(scope, entities);
-        generateSubqueryBranch(branch._query, bodyBlock, branchResults);
+        generateSubqueryBranch(branch._query, openSubqueryBranch(branchResults), bodyBlock, branchResults);
     }
 
     yieldEveryPendingMask(branchResults);
@@ -6118,18 +6340,23 @@ void DBProgramGenerator::rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColum
     }
 }
 
-void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
-                                                mlir::Block* bodyBlock,
-                                                SubqueryBranchResults& branchResults) {
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-
+mlir::Block* DBProgramGenerator::openSubqueryBranch(SubqueryBranchResults& branchResults) {
     std::unique_ptr<mlir::Region>& region = branchResults._regions.emplace_back(std::make_unique<mlir::Region>());
     mlir::Block* const block = new mlir::Block(); // Region destructor frees it
     region->push_back(block);
 
+    return block;
+}
+
+void DBProgramGenerator::generateSubqueryBranch(const SinglePartQuery* query,
+                                                mlir::Block* block,
+                                                mlir::Block* bodyBlock,
+                                                SubqueryBranchResults& branchResults) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
     _unionBranchRowBlocks[block] = bodyBlock;
 
-    _opBuilder.setInsertionPointToStart(block);
+    _opBuilder.setInsertionPointToEnd(block);
     generateQueryParts(query);
 
     llvm::SmallVector<PublishedColumn>& branchColumns = branchResults._branchColumns.emplace_back();

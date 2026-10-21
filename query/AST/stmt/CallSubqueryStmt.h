@@ -11,6 +11,7 @@ class CypherAST;
 class Expr;
 class SinglePartQuery;
 class Symbol;
+class VarDecl;
 
 // CALL (a, b) { ... }: a query of its own, run once per row in flight, reading the
 // variables it imports and nothing else of the scope around it
@@ -23,12 +24,15 @@ public:
     // imports. Each branch imports through a leading WITH of its own, so the imports are
     // held per branch. A WHEN branch holds its predicate; the ELSE branch holds none. A
     // `{ WHEN ... }` side of a UNION holds the CALL it is written as, as UnionQuery's does.
+    // The analyzer binds each import to a declaration of the body, which a later clause of
+    // the body may name again.
     struct Branch {
         SinglePartQuery* _query {nullptr};
         bool _all {false};
         Imports _imports;
         Expr* _condition {nullptr};
         CallSubqueryStmt* _whenCall {nullptr};
+        std::vector<const VarDecl*> _importDecls;
     };
 
     using Branches = std::vector<Branch>;

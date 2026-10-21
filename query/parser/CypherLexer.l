@@ -156,6 +156,7 @@ using Token = db::YCypherParser::token;
 "PUSH" { KEYWORD(PUSH) }
 "PULL" { KEYWORD(PULL) }
 "NEW" { KEYWORD(NEW) }
+"NEXT" { KEYWORD(NEXT) }
 "CSV" { KEYWORD(CSV) }
 "GML" { KEYWORD(GML) }
 "PARQUET" { KEYWORD(PARQUET) }

@@ -43,6 +43,7 @@ set(ast_sources
     stmt/CallSubqueryStmt.cpp
     stmt/CreateStmt.cpp
     stmt/MergeStmt.cpp
+    stmt/NextSegmentStmt.cpp
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
     stmt/ShortestPathStmt.cpp

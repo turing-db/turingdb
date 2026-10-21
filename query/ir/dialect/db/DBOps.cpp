@@ -1034,6 +1034,37 @@ void Union::print(OpAsmPrinter& printer) {
     printer.printOptionalAttrDict((*this)->getAttrs());
 }
 
+LogicalResult Materialize::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column");
+    }
+
+    return success();
+}
+
+LogicalResult ScanMaterialized::verify() {
+    Materialize materialize = getRows().getDefiningOp<Materialize>();
+    if (!materialize) {
+        return emitOpError("requires rows a db.materialize holds");
+    }
+
+    const OperandRange heldColumns = materialize.getColumns();
+    const ResultRange columns = getColumns();
+    if (columns.size() != heldColumns.size()) {
+        return emitOpError("expects ") << heldColumns.size()
+                                       << " results, one per column the db.materialize holds, but has "
+                                       << columns.size();
+    }
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (columns[columnIndex].getType() != heldColumns[columnIndex].getType()) {
+            return emitOpError("result ") << columnIndex << " must have the type of the column it reads";
+        }
+    }
+
+    return success();
+}
+
 // A union emits one result table, so every branch has to end in a db.output and all of
 // them have to name the same columns. The names are the query's, checked by the analyzer;
 // what is re-checked here is the shape a hand-written module can still get wrong.

@@ -71,6 +71,7 @@ class CallStmt;
 class CallSubqueryStmt;
 class CreateStmt;
 class MergeStmt;
+class NextSegmentStmt;
 class SetStmt;
 class RemoveStmt;
 class DeleteStmt;
@@ -180,6 +181,7 @@ public:
     friend CallSubqueryStmt;
     friend CreateStmt;
     friend MergeStmt;
+    friend NextSegmentStmt;
     friend SetStmt;
     friend RemoveStmt;
     friend DeleteStmt;
@@ -237,6 +239,10 @@ public:
     CypherAST& operator=(CypherAST&&) = delete;
 
     const QueryCommands& queries() const { return _queries; }
+
+    // Moves a command out of the top-level list and into the one a holder reads it
+    // through, once that holder is built over it
+    void nestQuery(QueryCommand* query);
 
     const std::vector<Expr*>& getExpressions() const { return _expressions; }
     const std::vector<EntityPattern*>& getEntityPatterns() const { return _entityPatterns; }
@@ -321,9 +327,6 @@ private:
     void addStmtContainer(StmtContainer* container);
     void addQuery(QueryCommand* query);
 
-    // Moves a command out of the top-level list and into the one a holder reads it
-    // through, once that holder is built over it
-    void nestQuery(QueryCommand* query);
     void addDeclContext(DeclContext* ctxt);
     void addVarDecl(VarDecl* decl);
     void addNodePatternData(NodePatternData* data);

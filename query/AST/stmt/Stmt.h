@@ -2,6 +2,7 @@
 
 namespace db {
 
+class CallSubqueryStmt;
 class CypherAST;
 
 class Stmt {
@@ -23,6 +24,7 @@ public:
         UNWIND,
         WITH,
         CALL_SUBQUERY,
+        NEXT_SEGMENT,
     };
 
     // A clause that writes to the graph. Cypher orders a query part's clauses reading
@@ -47,6 +49,9 @@ public:
     // joins that half only when its body goes to the graph: one that only writes has
     // nothing an updating clause above it could hide
     static bool isReading(const Stmt* stmt);
+
+    // The query a CALL subquery or a NEXT segment runs, null for any other clause
+    static const CallSubqueryStmt* getSubqueryBody(const Stmt* stmt);
 
     virtual Kind getKind() const = 0;
 

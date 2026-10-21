@@ -90,4 +90,14 @@ def DistinctSetType : TuringType<"DistinctSet", "distinct_set"> {
     }];
 }
 
+// The rows in flight held once for several dataflows to read in turn: the branches of a
+// UNION that a NEXT hands the whole table it returned.
+def MaterializedType : TuringType<"Materialized", "materialized"> {
+    let summary = "Rows held by db.materialize for each db.scan_materialized to read";
+    let description = [{
+        Produced by db.materialize and read by every db.scan_materialized that walks the
+        rows it holds.
+    }];
+}
+
 #endif // TURINGDB_TYPES
