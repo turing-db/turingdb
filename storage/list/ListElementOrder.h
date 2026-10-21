@@ -35,7 +35,6 @@ bool operator==(ListElementView lhs, ListElementView rhs);
  * order a nested list element is compared on.
  */
 std::strong_ordering operator<=>(ListView lhs, ListView rhs);
-bool operator==(ListView lhs, ListView rhs);
 
 /**
  * @brief Orders two maps entry by entry, on the key and then on the value, putting the
@@ -43,7 +42,6 @@ bool operator==(ListView lhs, ListView rhs);
  * the maps hold them, which is sorted by key for every map codegen or a MapContainer builds.
  */
 std::strong_ordering operator<=>(MapView lhs, MapView rhs);
-bool operator==(MapView lhs, MapView rhs);
 
 /**
  * @brief Compares an element of a @ref ListByteBuffer against a value of a known type.

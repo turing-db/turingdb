@@ -123,6 +123,7 @@ add_turing_test(test_storage_dump_map_graph dump/MapGraphDumpLoadTest.cpp)
 add_turing_test(test_storage_dump_map_datetime_graph dump/MapDateTimeGraphDumpLoadTest.cpp)
 
 add_turing_test(test_storage_columns_dispatcher ColumnDispatcherTest.cpp)
+add_turing_test(test_storage_column_set_element ColumnSetElementTest.cpp)
 add_turing_test(test_storage_objectmap ObjectMapTest.cpp)
 
 

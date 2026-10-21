@@ -48,4 +48,7 @@ private:
 
     std::span<const ListElementView> _elements;
 };
+
+bool operator==(ListView lhs, ListView rhs);
+
 }

@@ -42,4 +42,6 @@ private:
     std::span<const MapEntryView> _entries;
 };
 
+bool operator==(MapView lhs, MapView rhs);
+
 }

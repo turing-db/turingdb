@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <unordered_set>
 
 #include "Column.h"
@@ -126,7 +127,7 @@ private:
 };
 
 template <typename T>
-concept SetElement = requires(const T& t) {
+concept SetElement = std::equality_comparable<T> && requires(const T& t) {
     { std::hash<T> {}(t) } -> std::convertible_to<std::size_t>;
 };
 
