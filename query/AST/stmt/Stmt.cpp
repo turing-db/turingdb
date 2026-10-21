@@ -77,8 +77,10 @@ bool Stmt::readsTheGraph(const Stmt* stmt) {
 
     switch (kind) {
         case Kind::CALL_SUBQUERY:
-        case Kind::NEXT_SEGMENT:
-            return getSubqueryBody(stmt)->readsTheGraph();
+        case Kind::NEXT_SEGMENT: {
+            const CallSubqueryStmt* subquery = getSubqueryBody(stmt);
+            return subquery->readsTheGraph();
+        }
         break;
 
         case Kind::MATCH:

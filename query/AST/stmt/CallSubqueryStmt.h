@@ -24,14 +24,15 @@ public:
     // imports. Each branch imports through a leading WITH of its own, so the imports are
     // held per branch. A WHEN branch holds its predicate; the ELSE branch holds none. A
     // `{ WHEN ... }` side of a UNION holds the CALL it is written as, as UnionQuery's does.
-    // The analyzer binds each import to a declaration of the body, which a later clause of
-    // the body may name again.
     struct Branch {
         SinglePartQuery* _query {nullptr};
         bool _all {false};
         Imports _imports;
         Expr* _condition {nullptr};
         CallSubqueryStmt* _whenCall {nullptr};
+
+        // The declaration the analyzer binds each import to, which a later clause of the
+        // body may name again
         std::vector<const VarDecl*> _importDecls;
     };
 

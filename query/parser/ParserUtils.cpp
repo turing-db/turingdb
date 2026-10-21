@@ -331,7 +331,9 @@ bool ParserUtils::returnsUnaliasedItem(const CallSubqueryStmt::Branches& segment
             continue;
         }
 
-        for (const Projection::ReturnItem& item : returnStmt->getProjection()->items()) {
+        const Projection* projection = returnStmt->getProjection();
+
+        for (const Projection::ReturnItem& item : projection->items()) {
             const Expr* expr = std::get<Expr*>(item);
             const bool named = expr->getKind() == Expr::Kind::SYMBOL || !expr->getName().empty();
 
@@ -360,10 +362,11 @@ SinglePartQuery* ParserUtils::createNextQuery(CypherAST* ast,
         const CallSubqueryStmt::Branches& segment = segments[index];
         const bool endsTheChain = index + 1 == segments.size();
 
-        SinglePartQuery* first = segment.front()._query;
+        const CallSubqueryStmt::Branch& firstBranch = segment.front();
+        SinglePartQuery* first = firstBranch._query;
         ReturnStmt* returnStmt = first->getReturnStmt();
 
-        const bool composite = segment.size() > 1 || segment.front()._condition;
+        const bool composite = segment.size() > 1 || firstBranch._condition;
 
         if (!composite && (returnStmt || endsTheChain)) {
             ast->nestQuery(first);
@@ -378,6 +381,7 @@ SinglePartQuery* ParserUtils::createNextQuery(CypherAST* ast,
                 query->setReturnStmt(returnStmt);
             } else {
                 WithStmt* with = WithStmt::create(ast, returnStmt->getProjection());
+                with->setSegmentReturn(true);
                 sourceManager->setLocation(with, location);
                 stmts->add(with);
             }
@@ -417,7 +421,8 @@ ReturnStmt* ParserUtils::createSegmentReturn(CypherAST* ast,
 
         std::string_view name = expr->getName();
         if (name.empty() && expr->getKind() == Expr::Kind::SYMBOL) {
-            name = static_cast<const SymbolExpr*>(expr)->getSymbol()->getName();
+            const Symbol* symbol = static_cast<const SymbolExpr*>(expr)->getSymbol();
+            name = symbol->getName();
         } else if (name.empty()) {
             name = sourceManager->getStringRepr(std::bit_cast<uintptr_t>(expr));
         }

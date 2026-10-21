@@ -429,8 +429,6 @@ private:
     void lowerDistinctSet(mlir::db::DistinctSet distinctSet);
 
     void lowerMaterialize(mlir::db::Materialize materialize);
-
-    // Opens a loop over the rows a db.materialize collected, after the loop collecting them
     void lowerScanMaterialized(mlir::db::ScanMaterialized scan);
 
     // Brings every branch's result columns to the one type each column of the result

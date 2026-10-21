@@ -321,6 +321,10 @@ private:
     // handed the field's column with it
     std::unordered_map<const VarDecl*, std::string_view> _csvFieldRows;
 
+    // The columns of the row the CALL body being generated runs for, as its block
+    // arguments and the constants it reads where they are bound
+    llvm::SmallVector<PublishedColumn> _subqueryRowColumns;
+
     // The LOAD CSV rows the subquery body being generated imports. A body that groups or
     // dedups runs one input row at a time, so such a row holds one record there and the
     // columns of its fields tell its rows apart as the whole row would
@@ -384,12 +388,22 @@ private:
     void generateNextSegment(const NextSegmentStmt* segment);
     void generateUnionSegment(const CallSubqueryStmt* body);
     void generateConditionalSegment(const CallSubqueryStmt* body);
-    void generateUpdatingSegment(const CallSubqueryStmt* body);
+    void generateUpdatingSegment(const NextSegmentStmt* segment);
 
-    // A constant holds one value standing for every row rather than rows of its own
     void splitConstantColumns(llvm::ArrayRef<PublishedColumn> columns,
                               llvm::SmallVectorImpl<PublishedColumn>& rowColumns,
                               llvm::SmallVectorImpl<PublishedColumn>& constants);
+
+    // The table a segment reads: the columns in flight, the ones holding rows behind a
+    // db.materialize, which is null when none does
+    struct SegmentTable {
+        llvm::SmallVector<PublishedColumn> _rowColumns;
+        llvm::SmallVector<PublishedColumn> _constants;
+        mlir::Value _rows;
+    };
+
+    void materializeTable(SegmentTable& table);
+    void scanTable(const SegmentTable& table, mlir::Block* block, llvm::SmallVectorImpl<mlir::Value>& scanned);
 
     // Whether the body's rows carry the columns it was given through to its RETURN: true
     // unless a clause of it aggregates, sorts, cuts or dedups the rows, which is when the
@@ -556,6 +570,8 @@ private:
     // @param results when the body returns
     void emitCallSubquery(const CallSubqueryStmt* subquery, SubqueryResults& results);
 
+    void bindReturnedEntities(CarriedEntities& returnedEntities);
+
     // The scope one branch of a CALL body opens with: the imports it names, read through
     // @param inputArguments or where they are bound as constants, and - for a body carrying
     // the scope - every input under a hidden name
@@ -599,7 +615,6 @@ private:
                                  mlir::Block* bodyBlock,
                                  std::vector<std::unique_ptr<mlir::Region>>& regions);
 
-    // Opens the region of one more branch, its single block empty
     mlir::Block* openSubqueryBranch(SubqueryBranchResults& branchResults);
 
     // Generates one branch into @param block, opened by openSubqueryBranch, ending in a
@@ -609,8 +624,6 @@ private:
                                 mlir::Block* bodyBlock,
                                 SubqueryBranchResults& branchResults);
 
-    // Emits the db.union holding the branches built and fills @param yielded as
-    // generateSubqueryUnion does
     void generateUnionOverBranches(mlir::Value distinctSet,
                                    size_t dedupedBranches,
                                    mlir::Block* bodyBlock,

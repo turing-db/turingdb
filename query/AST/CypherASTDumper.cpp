@@ -364,7 +364,8 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                     out << "    _" << std::hex << segment << " {\n";
                     out << "        ASTType NEXT_SEGMENT\n";
                     out << "    }\n";
-                    for (const CallSubqueryStmt::Branch& branch : segment->getBody()->branches()) {
+                    const CallSubqueryStmt* body = segment->getBody();
+                    for (const CallSubqueryStmt::Branch& branch : body->branches()) {
                         dump(out, branch._query);
                     }
                 }

@@ -516,15 +516,14 @@ void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
     }
 }
 
-// The segment reads the table the segments before it returned and its columns replace it,
-// so what it returns is the whole scope after it
 void CypherAnalyzer::analyze(NextSegmentStmt* segment) {
     CallSubqueryStmt* body = segment->getBody();
 
     importEveryVariable(body);
 
+    std::vector<DeclContext*> returnScopes;
     for (CallSubqueryStmt::Branch& branch : body->branches()) {
-        analyzeSubqueryBranch(branch, BranchImports::NEXT_SEGMENT);
+        returnScopes.push_back(analyzeSubqueryBranch(branch, BranchImports::NEXT_SEGMENT));
     }
 
     analyzeBranchColumns(body);
@@ -532,10 +531,63 @@ void CypherAnalyzer::analyze(NextSegmentStmt* segment) {
     DeclContext* scope = DeclContext::create(_ast, _ctxt);
 
     if (body->isReturning()) {
+        carrySegmentImports(body, returnScopes);
         publishBranchReturns(body, scope);
+    } else {
+        for (const std::string_view import : _subqueryImports) {
+            const VarDecl* decl = _ctxt->getDecl(import);
+            if (!decl) {
+                continue;
+            }
+
+            VarDecl* carried = scope->getOrCreateNamedVariable(_ast, decl->getType(), import);
+            carried->setListShape(decl->getListShape());
+            carried->setIsQuantifiedPath(decl->isQuantifiedPath());
+            _declSources[carried] = decl;
+
+            segment->addCarriedImport(carried);
+        }
     }
 
     setScope(scope);
+}
+
+// The branches return one table, so either every one of them carries the imports of the
+// CALL around the segment or none does
+void CypherAnalyzer::carrySegmentImports(const CallSubqueryStmt* body, std::span<DeclContext* const> returnScopes) {
+    const CallSubqueryStmt::Branches& branches = body->branches();
+
+    if (_subqueryImports.empty()) {
+        return;
+    }
+
+    // A keyless aggregate, or a WITH of the branch that dropped an import, stops the imports
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        const ReturnStmt* returnStmt = branches[branchIndex]._query->getReturnStmt();
+        const Projection* projection = returnStmt->getProjection();
+        const DeclContext* returnScope = returnScopes[branchIndex];
+
+        const bool keyless = projection->isAggregate() && !projection->hasGroupingKeys();
+        const auto dropped = [returnScope](std::string_view import) {
+            return !returnScope->getDecl(import);
+        };
+
+        if (keyless || std::ranges::any_of(_subqueryImports, dropped)) {
+            return;
+        }
+    }
+
+    DeclContext* const outer = _ctxt;
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        ReturnStmt* returnStmt = branches[branchIndex]._query->getReturnStmt();
+        Projection* projection = returnStmt->getProjection();
+
+        setScope(returnScopes[branchIndex]);
+        carrySubqueryImports(projection, projection->isAggregate(), projection->hasGroupingKeys());
+    }
+
+    setScope(outer);
 }
 
 void CypherAnalyzer::analyzeBranchColumns(const CallSubqueryStmt* subquery) const {
@@ -551,7 +603,7 @@ void CypherAnalyzer::analyzeBranchColumns(const CallSubqueryStmt* subquery) cons
     }
 }
 
-void CypherAnalyzer::analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, BranchImports imports) {
+DeclContext* CypherAnalyzer::analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, BranchImports imports) {
     // The body reads the imported variables and nothing else of the scope around it, so
     // its context is seeded with a declaration per import and the body resolves in that
     const SinglePartQuery* body = branch._query;
@@ -559,6 +611,7 @@ void CypherAnalyzer::analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, Bra
     DeclContext* const inner = body->getDeclContext();
 
     const bool predicateReadsImports = imports != BranchImports::LEADING_WITH;
+    const bool keepsEnclosingImports = imports == BranchImports::NEXT_SEGMENT;
 
     // What the scope clause names is readable everywhere in the body. A body importing
     // through a leading WITH carries nothing this way: that WITH is an ordinary
@@ -575,7 +628,9 @@ void CypherAnalyzer::analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, Bra
         }
     }
 
-    std::swap(_subqueryImports, outerImports);
+    if (!keepsEnclosingImports) {
+        std::swap(_subqueryImports, outerImports);
+    }
 
     setScope(inner);
 
@@ -600,9 +655,14 @@ void CypherAnalyzer::analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, Bra
 
     analyze(body);
 
-    std::swap(_subqueryImports, outerImports);
+    if (!keepsEnclosingImports) {
+        std::swap(_subqueryImports, outerImports);
+    }
 
+    DeclContext* const returnScope = _ctxt;
     setScope(outer);
+
+    return returnScope;
 }
 
 void CypherAnalyzer::importIntoBranch(CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner) {
@@ -873,6 +933,10 @@ void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt::Branch& branch) 
     }
 
     const WithStmt* with = static_cast<const WithStmt*>(first);
+    if (with->isSegmentReturn()) {
+        return;
+    }
+
     const Projection* projection = with->getProjection();
 
     const bool plainProjection = !with->getWhere()
@@ -1007,7 +1071,8 @@ void CypherAnalyzer::publishSubqueryReturn(const CallSubqueryStmt* subquery) {
 
 void CypherAnalyzer::publishBranchReturns(const CallSubqueryStmt* subquery, DeclContext* scope) {
     const CallSubqueryStmt::Branches& branches = subquery->branches();
-    Projection* projection = branches.front()._query->getReturnStmt()->getProjection();
+    ReturnStmt* returnStmt = branches.front()._query->getReturnStmt();
+    Projection* projection = returnStmt->getProjection();
 
     publishProjection(projection, scope);
 

@@ -3182,7 +3182,12 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
         mlir::Value yieldedTag;
         lowerSubqueryBody(call, stepBlock, inputChunks, yieldedChunks, yieldedTag);
 
-        if (unit || !_innermostLoopBody) {
+        if (unit) {
+            _innermostLoopBody = nullptr;
+            _innermostCardinality = mlir::Value();
+
+            setInsertionInto(stepBlock);
+        } else if (!_innermostLoopBody) {
             _innermostLoopBody = previousInnermostLoopBody;
             _innermostCardinality = previousInnermostCardinality;
 
@@ -4424,8 +4429,6 @@ void DBLowering::lowerDistinctSet(mlir::db::DistinctSet distinctSet) {
     _valueMap[distinctSet.getSet()] = _builder.create<nl::Distinct>(_builder.getUnknownLoc()).getState();
 }
 
-// The buffer is emptied each step of the root and filled in the loop producing the rows, so
-// a scan placed after that loop finds every row of the step
 void DBLowering::lowerMaterialize(mlir::db::Materialize materialize) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -4460,13 +4463,7 @@ void DBLowering::lowerScanMaterialized(mlir::db::ScanMaterialized scan) {
         throw IRException("db.scan_materialized reads rows no db.materialize collected");
     }
 
-    const llvm::SmallVector<mlir::Type, 4> chunkTypes(collect.getColumns().getTypes());
-    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
-
-    setInsertionInto(_rootBlock);
-    nl::RowDrain drain = _builder.create<nl::RowDrain>(_builder.getUnknownLoc(), iteratorType, state);
-
-    buildLoopForSource(drain.getResult(), scan.getOperation());
+    drainCollectedBranches({collect}, state, _rootBlock, scan.getOperation());
 }
 
 void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {

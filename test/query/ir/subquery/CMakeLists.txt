@@ -210,3 +210,6 @@ add_turing_test(test_query_ir_subquery_written_entity_matrix SubqueryWrittenEnti
 
 # An EXISTS or COUNT subquery over a node the same query created.
 add_turing_test(test_query_ir_exists_over_created_node ExistsOverCreatedNodeTest.cpp)
+
+# A CALL () over rows holding only a projected constant leaves those rows in flight.
+add_turing_test(test_query_ir_call_without_inputs_after_rows CallWithoutInputsAfterRowsTest.cpp)

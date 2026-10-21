@@ -118,7 +118,7 @@ private:
         LEADING_WITH,
 
         // The table a NEXT segment reads: the WHEN predicate reads it, and a WITH of the
-        // body descopes what it does not project
+        // body descopes what it does not project, bar what a CALL around the segment imports
         NEXT_SEGMENT,
     };
 
@@ -173,9 +173,12 @@ private:
     void importEveryVariable(CallSubqueryStmt* subquery) const;
 
     // Analyzes one query of a CALL body under its own scope, seeded with what it imports
-    void analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, BranchImports imports);
+    // @returns the scope the branch's RETURN reads
+    DeclContext* analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, BranchImports imports);
 
     void analyzeBranchColumns(const CallSubqueryStmt* subquery) const;
+
+    void carrySegmentImports(const CallSubqueryStmt* body, std::span<DeclContext* const> returnScopes);
     void importIntoBranch(CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);
 
     void throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const;
