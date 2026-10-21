@@ -105,6 +105,7 @@ private:
     db::CommitHash _commitHash {db::CommitHash::head()};
     db::ChangeID _changeID {db::ChangeID::head()};
     int _socket {-1};
+    bool _connecting {false};
     db::LocalMemory* _localMem {nullptr};
 
     // Send Buffer Members
@@ -159,6 +160,11 @@ private:
     db::QueryStatus _res;
     bool _callbackFired {false};
     bool _sawTerminalPacket {false};
+
+    // Completes a connect() that returned EINPROGRESS: WouldBlock until the socket is
+    // writable, then throws if the handshake failed.
+    AsyncIOProgress finishConnect();
+    [[noreturn]] void throwConnectError(int error) const;
 
     void buildRequest(const std::string& query, const db::ParameterMap* parameters);
 

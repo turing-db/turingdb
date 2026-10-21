@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <netdb.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -180,8 +181,8 @@ void TuringAsyncClient::connect() {
         }
 
         // A non-blocking connect() typically returns -1/EINPROGRESS: the handshake is
-        // still in flight and completes later, surfaced as the socket becoming writable.
-        // Treat that as success and let the event loop finish it; any other errno is fatal.
+        // still in flight, and send() finishes it once the socket is writable. Any other
+        // errno is fatal.
         const int connectResult = ::connect(sock, addr->ai_addr, addr->ai_addrlen);
         if (connectResult != 0 && errno != EINPROGRESS) {
             lastErrno = errno;
@@ -190,14 +191,42 @@ void TuringAsyncClient::connect() {
         }
 
         _socket = sock;
+        _connecting = connectResult != 0;
         ::freeaddrinfo(result);
         return;
     }
 
     ::freeaddrinfo(result);
+    throwConnectError(lastErrno);
+}
+
+TuringAsyncClient::AsyncIOProgress TuringAsyncClient::finishConnect() {
+    pollfd writable {.fd = _socket, .events = POLLOUT, .revents = 0};
+
+    const int ready = ::poll(&writable, 1, 0);
+    if (ready < 0) {
+        throwConnectError(errno);
+    } else if (ready == 0) {
+        return AsyncIOProgress::WouldBlock;
+    }
+
+    int error = 0;
+    socklen_t errorSize = sizeof(error);
+    if (::getsockopt(_socket, SOL_SOCKET, SO_ERROR, &error, &errorSize) < 0) {
+        throwConnectError(errno);
+    } else if (error != 0) {
+        throwConnectError(error);
+    }
+
+    _connecting = false;
+
+    return AsyncIOProgress::Ok;
+}
+
+void TuringAsyncClient::throwConnectError(int error) const {
     throw TuringException(std::string("Failed to connect to ")
                           + _remoteAddress + ":" + _remotePort + ": "
-                          + strerror(lastErrno));
+                          + strerror(error));
 }
 
 void TuringAsyncClient::disconnect() {
@@ -208,6 +237,7 @@ void TuringAsyncClient::disconnect() {
         ::close(_socket);
         _socket = -1;
     }
+    _connecting = false;
 }
 /**-------------------------------------------------------------**/
 
@@ -505,6 +535,13 @@ void TuringAsyncClient::buildRequest(const std::string& query, const db::Paramet
 void TuringAsyncClient::send() {
     if (!_sending) {
         return;
+    }
+
+    if (_connecting) {
+        const AsyncIOProgress progress = finishConnect();
+        if (progress == AsyncIOProgress::WouldBlock) {
+            return;
+        }
     }
 
     while (_sendOffset < _sendBuffer.size()) {

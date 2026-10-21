@@ -16,6 +16,8 @@ add_turing_test(test_net_proto_analyze_error ProtoAnalyzeErrorTest.cpp)
 
 add_turing_test(test_net_turing_client TuringClientTest.cpp)
 
+add_turing_test(test_net_turing_async_client_connect TuringAsyncClientConnectTest.cpp)
+
 add_turing_test(test_net_turing_proto_endtoend TuringProtoEndToEndTest.cpp)
 target_sources(test_net_turing_proto_endtoend PRIVATE
     ${CMAKE_SOURCE_DIR}/test/query-test-suite/QueryResultFormatter.cpp)
