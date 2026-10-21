@@ -60,6 +60,8 @@ protected:
 
     // A reading query the engine turns away, with an error naming @param expectedError
     void expectError(std::string_view query, std::string_view expectedError);
+    void expectWriteError(std::string_view query, std::string_view expectedError);
+    void expectFailure(const db::QueryStatus& status, std::string_view query, std::string_view expectedError);
 
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;

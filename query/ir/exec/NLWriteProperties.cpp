@@ -333,7 +333,7 @@ void disengagedValue(ValueType valueType, CommitWriteBuffer::SupportedTypeVarian
     ValueTypeDispatcher(valueType).execute(disengage);
 }
 
-CellTag listBufferTag(ValueType valueType) {
+CellTag cellTagOf(ValueType valueType) {
     CellTag tag {CellTag::INVALID};
 
     const auto tagOf = [&]<SupportedType T>() {
@@ -358,7 +358,7 @@ std::string_view cellTypeName(CellTag tag) {
 
     for (size_t index = static_cast<size_t>(ValueType::Invalid) + 1; index < static_cast<size_t>(ValueType::_SIZE); index++) {
         const ValueType valueType = static_cast<ValueType>(index);
-        if (listBufferTag(valueType) == tag) {
+        if (cellTagOf(valueType) == tag) {
             return ValueTypeName::value(valueType);
         }
     }
@@ -366,56 +366,56 @@ std::string_view cellTypeName(CellTag tag) {
     return ValueTypeName::value(ValueType::Invalid);
 }
 
-void stageListElementAsItsType(const CellView element,
-                               ValueType valueType,
-                               CommitWriteBuffer::SupportedTypeVariant& value) {
+void stageCellAsItsType(const CellView cell,
+                        ValueType valueType,
+                        CommitWriteBuffer::SupportedTypeVariant& value) {
     switch (valueType) {
         case ValueType::Int64:
-            value = std::optional {element.getAs<types::Int64::Primitive>()};
+            value = std::optional {cell.getAs<types::Int64::Primitive>()};
         break;
         case ValueType::UInt64:
-            value = std::optional {element.getAs<types::UInt64::Primitive>()};
+            value = std::optional {cell.getAs<types::UInt64::Primitive>()};
         break;
         case ValueType::Double:
-            value = std::optional {element.getAs<types::Double::Primitive>()};
+            value = std::optional {cell.getAs<types::Double::Primitive>()};
         break;
         case ValueType::Bool:
-            value = std::optional {element.getAs<types::Bool::Primitive>()};
+            value = std::optional {cell.getAs<types::Bool::Primitive>()};
         break;
         case ValueType::DateTime:
-            value = std::optional {element.getAs<types::DateTime::Primitive>()};
+            value = std::optional {cell.getAs<types::DateTime::Primitive>()};
         break;
         case ValueType::Duration:
-            value = std::optional {element.getAs<types::Duration::Primitive>()};
+            value = std::optional {cell.getAs<types::Duration::Primitive>()};
         break;
         case ValueType::String:
-            value = std::optional<types::String::OwningPrimitive> {std::in_place, element.getAs<types::String::Primitive>()};
+            value = std::optional<types::String::OwningPrimitive> {std::in_place, cell.getAs<types::String::Primitive>()};
         break;
         case ValueType::Embedding: {
-            const types::Embedding::Primitive embedding = element.getAs<types::Embedding::Primitive>();
+            const types::Embedding::Primitive embedding = cell.getAs<types::Embedding::Primitive>();
             value = std::optional<types::Embedding::OwningPrimitive> {std::in_place, embedding.begin(), embedding.end()};
         }
         break;
         case ValueType::List:
-            throwIfHoldsAPath(element.getAs<types::List::Primitive>());
-            value = std::optional<types::List::OwningPrimitive> {std::in_place, element.getAs<types::List::Primitive>()};
+            throwIfHoldsAPath(cell.getAs<types::List::Primitive>());
+            value = std::optional<types::List::OwningPrimitive> {std::in_place, cell.getAs<types::List::Primitive>()};
         break;
         case ValueType::Map:
-            throwIfHoldsAPath(element.getAs<types::Map::Primitive>());
-            value = std::optional<types::Map::OwningPrimitive> {std::in_place, element.getAs<types::Map::Primitive>()};
+            throwIfHoldsAPath(cell.getAs<types::Map::Primitive>());
+            value = std::optional<types::Map::OwningPrimitive> {std::in_place, cell.getAs<types::Map::Primitive>()};
         break;
         case ValueType::Invalid:
         case ValueType::_SIZE:
-            throw IRException("Cannot write a list element to a property of invalid type");
+            throw IRException("Cannot write a cell to a property of invalid type");
         break;
     }
 }
 
 // An integer widens to the other numeric types an integer literal can be written to
-void stageListElement(const CellView element,
-                      ValueType valueType,
-                      CommitWriteBuffer::SupportedTypeVariant& value) {
-    const CellTag tag = element.getTag();
+void stageCell(const CellView cell,
+               ValueType valueType,
+               CommitWriteBuffer::SupportedTypeVariant& value) {
+    const CellTag tag = cell.getTag();
 
     const bool holdsAnInteger = tag == CellTag::Int;
     const bool widensToDouble = holdsAnInteger && valueType == ValueType::Double;
@@ -424,11 +424,11 @@ void stageListElement(const CellView element,
     if (tag == CellTag::Null) {
         disengagedValue(valueType, value);
     } else if (widensToDouble) {
-        value = std::optional {static_cast<types::Double::Primitive>(element.getAs<types::Int64::Primitive>())};
+        value = std::optional {static_cast<types::Double::Primitive>(cell.getAs<types::Int64::Primitive>())};
     } else if (widensToUnsigned) {
-        value = std::optional {static_cast<types::UInt64::Primitive>(element.getAs<types::Int64::Primitive>())};
-    } else if (tag == listBufferTag(valueType)) {
-        stageListElementAsItsType(element, valueType, value);
+        value = std::optional {static_cast<types::UInt64::Primitive>(cell.getAs<types::Int64::Primitive>())};
+    } else if (tag == cellTagOf(valueType)) {
+        stageCellAsItsType(cell, valueType, value);
     } else {
         throw IRException(fmt::format("Cannot set a property of type '{}' to a value of type '{}'",
                                       ValueTypeName::value(valueType),
@@ -436,13 +436,13 @@ void stageListElement(const CellView element,
     }
 }
 
-void stageListElementRows(const CellView element,
-                          size_t rowCount,
-                          PropertyTypeID propID,
-                          ValueType valueType,
-                          CommitWriteBuffer::UntypedProperties& buf) {
+void stageCellRows(const CellView cell,
+                   size_t rowCount,
+                   PropertyTypeID propID,
+                   ValueType valueType,
+                   CommitWriteBuffer::UntypedProperties& buf) {
     CommitWriteBuffer::UntypedProperty property {propID, {}};
-    stageListElement(element, valueType, property.value);
+    stageCell(cell, valueType, property.value);
 
     buf.assign(rowCount, property);
 }
@@ -504,35 +504,35 @@ void db::extractColumnProperties(const Column* column,
     }
 }
 
-void db::extractListElementProperties(const Column* column,
-                                      size_t rowCount,
-                                      PropertyTypeID propID,
-                                      ValueType valueType,
-                                      CommitWriteBuffer::UntypedProperties& buf) {
+void db::extractCellProperties(const Column* column,
+                               size_t rowCount,
+                               PropertyTypeID propID,
+                               ValueType valueType,
+                               CommitWriteBuffer::UntypedProperties& buf) {
     const ColumnKind::Code kind = column->getKind();
 
     if (kind == ColumnConst<CellView>::staticKind()) {
-        const CellView element = static_cast<const ColumnConst<CellView>*>(column)->getRaw();
-        stageListElementRows(element, rowCount, propID, valueType, buf);
+        const CellView cell = static_cast<const ColumnConst<CellView>*>(column)->getRaw();
+        stageCellRows(cell, rowCount, propID, valueType, buf);
     } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
-        const std::optional<CellView>& element =
+        const std::optional<CellView>& cell =
             static_cast<const ColumnConst<std::optional<CellView>>*>(column)->getRaw();
-        stageListElementRows(element.value_or(CellView::nullElement()), rowCount, propID, valueType, buf);
+        stageCellRows(cell.value_or(CellView::nullElement()), rowCount, propID, valueType, buf);
     } else if (kind == ColumnVector<CellView>::staticKind()) {
-        const auto& elements = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
-        buf.assign(elements.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
+        const auto& cells = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
+        buf.assign(cells.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
 
-        for (size_t row = 0; row < elements.size(); row++) {
-            stageListElement(elements[row], valueType, buf[row].value);
+        for (size_t row = 0; row < cells.size(); row++) {
+            stageCell(cells[row], valueType, buf[row].value);
         }
     } else if (kind == ColumnOptVector<CellView>::staticKind()) {
-        const auto& elements = static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
-        buf.assign(elements.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
+        const auto& cells = static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
+        buf.assign(cells.size(), CommitWriteBuffer::UntypedProperty {propID, {}});
 
-        for (size_t row = 0; row < elements.size(); row++) {
-            stageListElement(elements[row].value_or(CellView::nullElement()), valueType, buf[row].value);
+        for (size_t row = 0; row < cells.size(); row++) {
+            stageCell(cells[row].value_or(CellView::nullElement()), valueType, buf[row].value);
         }
     } else {
-        throw IRException("A property write of list elements reads a column of list elements");
+        throw IRException("A property write of cells reads a column of cells");
     }
 }
