@@ -502,6 +502,9 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             // map can hold, and against null for IS (NOT) NULL
             const bool comparesMapValue =
                 pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::MapValue)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::ListItem)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::DateTime)
+                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Duration)
                 || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::String)
@@ -585,39 +588,14 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::GreaterThanOrEqual: {
             type = EvaluatedType::Bool;
 
-            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
-                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)
-                || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)
-                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
-                // Valid pair
-                break;
-            }
-
             // Ordering a value against a null is null, the same as comparing it against one
             const bool ordersAgainstNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
 
-            if (ordersAgainstNull) {
-                break;
-            }
+            // Two values of one class compare, a tagged cell is ordered on the type it holds
+            // in each row, and two values of different classes are null
+            const bool ordersTwoValues = namesAnOrderingOperand(a) && namesAnOrderingOperand(b);
 
-            // A type-erased cell is ordered as an element holding the other side would be,
-            // so it orders against the scalar types it can hold
-            const bool ordersListItem =
-                pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
-
-            if (ordersListItem) {
+            if (ordersAgainstNull || ordersTwoValues) {
                 break;
             }
 

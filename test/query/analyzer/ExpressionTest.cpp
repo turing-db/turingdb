@@ -196,13 +196,13 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::LessThanOrEqual, DoubleLiteral::create(&_ast, 5.0), EvaluatedType::Bool);
     EXPECT_BINARY_VALID(sevenLiteral, BinaryOperator::GreaterThanOrEqual, DoubleLiteral::create(&_ast, 6.9), EvaluatedType::Bool);
     EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::LessThanOrEqual, falseLiteral, EvaluatedType::Bool);
-    /// Invalid
-    EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::LessThan, fiveLiteral);
-    EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::GreaterThan, trueLiteral);
-    EXPECT_BINARY_INVALID(StringLiteral::create(&_ast, "test"), BinaryOperator::LessThanOrEqual, fiveLiteral);
-    EXPECT_BINARY_INVALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::GreaterThanOrEqual, fiveLiteral);
-    EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::LessThan, StringLiteral::create(&_ast, "10"));
-    EXPECT_BINARY_INVALID(StringLiteral::create(&_ast, "5"), BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14));
+    /// Valid: two types with no order between them order null rather than being rejected
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::LessThan, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::GreaterThan, trueLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(StringLiteral::create(&_ast, "test"), BinaryOperator::LessThanOrEqual, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::GreaterThanOrEqual, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 5.5), BinaryOperator::LessThan, StringLiteral::create(&_ast, "10"), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(StringLiteral::create(&_ast, "5"), BinaryOperator::GreaterThan, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Bool);
 
     // Add - Sub - Mult - Div - Mod - Pow (Arithmetic operations)
     /// Valid

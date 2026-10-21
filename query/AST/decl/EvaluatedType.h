@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stdint.h>
+
+#include <optional>
 #include <utility>
 
 #include "EnumToString.h"
@@ -169,6 +171,68 @@ inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
     const bool bothTextual = pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char);
 
     return !bothNumeric && !bothTextual;
+}
+
+inline bool namesATaggedCell(EvaluatedType e) {
+    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+}
+
+// The types <, <=, > and >= take: every value, entities and paths included, though only
+// numbers, strings, booleans, datetimes, durations and lists have an order
+inline bool namesAnOrderingOperand(EvaluatedType e) {
+    return namesAComparableValue(e)
+        || namesATaggedCell(e)
+        || e == EvaluatedType::NodePattern
+        || e == EvaluatedType::EdgePattern
+        || e == EvaluatedType::GraphPath;
+}
+
+// The class a type is ordered in, or nullopt for a type with no order: a map, an
+// embedding, an entity or a path
+inline std::optional<EvaluatedType> orderClassOf(EvaluatedType e) {
+    switch (e) {
+        case EvaluatedType::Integer:
+        case EvaluatedType::Double:
+            return EvaluatedType::Integer;
+        break;
+        case EvaluatedType::String:
+        case EvaluatedType::Char:
+            return EvaluatedType::String;
+        break;
+        case EvaluatedType::Bool:
+        case EvaluatedType::DateTime:
+        case EvaluatedType::Duration:
+        case EvaluatedType::List:
+            return e;
+        break;
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+// Whether <, <=, > and >= between two types are null on every row: Cypher orders two
+// values of one class only. A tagged cell holds the row's type, so it can order against
+// another cell or any type that has an order.
+inline bool ordersAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
+    if (!namesAnOrderingOperand(a) || !namesAnOrderingOperand(b)) {
+        return false;
+    }
+
+    const bool aIsACell = namesATaggedCell(a);
+    const bool bIsACell = namesATaggedCell(b);
+    const std::optional<EvaluatedType> aClass = orderClassOf(a);
+    const std::optional<EvaluatedType> bClass = orderClassOf(b);
+
+    if (aIsACell && bIsACell) {
+        return false;
+    } else if (aIsACell) {
+        return !bClass;
+    } else if (bIsACell) {
+        return !aClass;
+    }
+
+    return !aClass || aClass != bClass;
 }
 
 }

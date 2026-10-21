@@ -8274,21 +8274,22 @@ mlir::Value DBProgramGenerator::translateCaseTest(const Expr* subjectExpr,
     const mlir::Value value = _part._exprMap.at(test._value);
     const EvaluatedType valueType = test._value->getType();
 
-    // Null is equal to nothing, itself included, and two types that can never hold equal
-    // values have no order between them, so a branch comparing across either is never
-    // taken. IS NULL above is how a Cypher CASE tests for a null
+    // Null is equal to nothing, itself included, and an ordering between two types with
+    // no order between them is null, so a branch comparing across either is never taken.
+    // IS NULL above is how a Cypher CASE tests for a null
     const bool comparesAgainstNull = subjectIsNull || valueType == EvaluatedType::Null;
     const bool comparesDisjointTypes = subjectExpr && comparesAsDisjointTypes(subjectExpr->getType(), valueType);
+    const bool ordersDisjointTypes = subjectExpr && ordersAsDisjointTypes(subjectExpr->getType(), valueType);
 
     const bool testsEquality = test._operator == BinaryOperator::Equal
                                || test._operator == BinaryOperator::NotEqual;
-    const bool neverTaken = comparesAgainstNull || (comparesDisjointTypes && !testsEquality);
+    const bool neverTaken = comparesAgainstNull || (ordersDisjointTypes && !testsEquality);
 
     if (!subject) {
         return value;
     } else if (neverTaken) {
         return constantBool(false);
-    } else if (comparesDisjointTypes) {
+    } else if (comparesDisjointTypes && testsEquality) {
         return disjointComparison(subject, value, test._operator == BinaryOperator::Equal);
     }
 
@@ -8385,9 +8386,9 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
                                      || rhsExpr->getType() == EvaluatedType::Null;
 
     // Two types that can never hold equal values answer the equality without reading a
-    // row. The ordering operators are left out: they answer null across types rather than
-    // false, and the analyzer turns them away ahead of here
+    // row, and two types with no order between them answer an ordering null
     const bool comparesDisjointTypes = comparesAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
+    const bool ordersNothing = comparesAgainstNull || ordersAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
 
     const bool testsKnownNull = lhsExpr->getType() == EvaluatedType::Null || isUntypedNullColumn(lhs);
 
@@ -8464,28 +8465,28 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::DivOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::GreaterThan:
-            if (comparesAgainstNull) {
+            if (ordersNothing) {
                 _part._exprMap[expr] = nullConstantColumn();
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
             }
         break;
         case BinaryOperator::LessThan:
-            if (comparesAgainstNull) {
+            if (ordersNothing) {
                 _part._exprMap[expr] = nullConstantColumn();
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::LtOp>(loc, boolType, lhs, rhs).getResult();
             }
         break;
         case BinaryOperator::GreaterThanOrEqual:
-            if (comparesAgainstNull) {
+            if (ordersNothing) {
                 _part._exprMap[expr] = nullConstantColumn();
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::GteOp>(loc, boolType, lhs, rhs).getResult();
             }
         break;
         case BinaryOperator::LessThanOrEqual:
-            if (comparesAgainstNull) {
+            if (ordersNothing) {
                 _part._exprMap[expr] = nullConstantColumn();
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();

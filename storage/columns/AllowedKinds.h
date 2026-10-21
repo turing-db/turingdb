@@ -207,8 +207,11 @@ struct PairRestrictions<Op> {
         MapEntryKindPairs<types::Double::Primitive>::Pairs,
         MapEntryKindPairs<types::String::Primitive>::Pairs,
         MapEntryKindPairs<types::Bool::Primitive>::Pairs,
+        MapEntryKindPairs<types::DateTime::Primitive>::Pairs,
+        MapEntryKindPairs<types::Duration::Primitive>::Pairs,
         MapEntryKindPairs<ListView>::Pairs,
         MapEntryKindPairs<MapView>::Pairs,
+        MapEntryKindPairs<ListElementView>::Pairs,
         std::tuple<KindPair<MapEntryView, MapEntryView>>,
 
         // A loaded CSV field owns its characters, so a comparison against a string
@@ -317,6 +320,18 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Duration::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
+        // A map value is a type-erased cell too, and orders the same way
+        MapEntryKindPairs<types::Int64::Primitive>::Pairs,
+        MapEntryKindPairs<types::UInt64::Primitive>::Pairs,
+        MapEntryKindPairs<types::Double::Primitive>::Pairs,
+        MapEntryKindPairs<types::String::Primitive>::Pairs,
+        MapEntryKindPairs<types::Bool::Primitive>::Pairs,
+        MapEntryKindPairs<types::DateTime::Primitive>::Pairs,
+        MapEntryKindPairs<types::Duration::Primitive>::Pairs,
+        MapEntryKindPairs<ListView>::Pairs,
+        MapEntryKindPairs<ListElementView>::Pairs,
+        std::tuple<KindPair<MapEntryView, MapEntryView>>,
+
         OptionalKindPairs<ListView, ListView>::Pairs,
         ListElementKindPairs<ListView>::Pairs
     >;
@@ -370,6 +385,18 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::DateTime::Primitive>::Pairs,
         ListElementKindPairs<types::Duration::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
+
+        // A map value is a type-erased cell too, and orders the same way
+        MapEntryKindPairs<types::Int64::Primitive>::Pairs,
+        MapEntryKindPairs<types::UInt64::Primitive>::Pairs,
+        MapEntryKindPairs<types::Double::Primitive>::Pairs,
+        MapEntryKindPairs<types::String::Primitive>::Pairs,
+        MapEntryKindPairs<types::Bool::Primitive>::Pairs,
+        MapEntryKindPairs<types::DateTime::Primitive>::Pairs,
+        MapEntryKindPairs<types::Duration::Primitive>::Pairs,
+        MapEntryKindPairs<ListView>::Pairs,
+        MapEntryKindPairs<ListElementView>::Pairs,
+        std::tuple<KindPair<MapEntryView, MapEntryView>>,
 
         OptionalKindPairs<ListView, ListView>::Pairs,
         ListElementKindPairs<ListView>::Pairs

@@ -152,6 +152,14 @@ TEST_F(TaggedCellComparisonTest, filtersOutTheCellsThatDoNotCompare) {
     expectRows("UNWIND [1, 'a', null] AS x WITH x WHERE x < 5 RETURN x", {{"1"}});
 }
 
+TEST_F(TaggedCellComparisonTest, filtersOutTheCellsThatDoNotCompareToAString) {
+    expectRows("UNWIND [1, 'a', [2]] AS x WITH x WHERE x < 'b' RETURN x", {{"a"}});
+}
+
+TEST_F(TaggedCellComparisonTest, filtersOutAStringCellAgainstANumber) {
+    expectRows("UNWIND [1, 'a'] AS x WITH x WHERE x < 5 RETURN x", {{"1"}});
+}
+
 TEST_F(TaggedCellComparisonTest, filtersOutTheNegationOfACellThatDoesNotCompare) {
     expectRows("UNWIND [1, 'a', null] AS x WITH x WHERE NOT x > 5 RETURN x", {{"1"}});
 }

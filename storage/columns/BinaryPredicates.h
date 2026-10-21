@@ -103,7 +103,9 @@ concept ComparesAMapEntry = (MapEntryOperand<T> || MapEntryOperand<U>)
                          && !HoldsPropertyNull<T, U>;
 
 template <typename T, typename U>
-concept OrdersToANullableBool = ComparesATaggedCell<T, U> || (ListOperand<T> && ListOperand<U>);
+concept OrdersToANullableBool = ComparesATaggedCell<T, U>
+                             || ComparesAMapEntry<T, U>
+                             || (ListOperand<T> && ListOperand<U>);
 
 template <typename T>
 inline bool holdsAValue(const T& operand) {
@@ -158,7 +160,9 @@ inline std::optional<ListView> heldList(const T& operand) {
 
 template <typename T, typename U>
 inline std::optional<std::partial_ordering> cellComparisonOrder(const T& a, const U& b) {
-    if constexpr (std::is_same_v<T, ListElementView> || std::is_same_v<T, U>) {
+    constexpr bool leadsWithAMapEntry = std::is_same_v<T, MapEntryView> && !std::is_same_v<U, ListElementView>;
+
+    if constexpr (std::is_same_v<T, ListElementView> || std::is_same_v<T, U> || leadsWithAMapEntry) {
         return comparisonOrder(a, b);
     } else {
         const std::optional<std::partial_ordering> order = comparisonOrder(b, a);

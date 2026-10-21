@@ -96,6 +96,8 @@ bool operator==(MapEntryView entry, types::UInt64::Primitive value);
 bool operator==(MapEntryView entry, types::Double::Primitive value);
 bool operator==(MapEntryView entry, types::String::Primitive value);
 bool operator==(MapEntryView entry, types::Bool::Primitive value);
+bool operator==(MapEntryView entry, types::DateTime::Primitive value);
+bool operator==(MapEntryView entry, types::Duration::Primitive value);
 bool operator==(MapEntryView entry, ListView value);
 bool operator==(MapEntryView entry, MapView value);
 
@@ -115,11 +117,14 @@ std::strong_ordering operator<=>(ListElementView element, types::DateTime::Primi
 std::strong_ordering operator<=>(ListElementView element, types::Duration::Primitive value);
 
 /**
- * @brief Compares an element of a @ref ListByteBuffer as <, <=, > and >= do. Unlike the
- * order above, only two numbers, strings, booleans, datetimes or lists compare: any other
- * pair, a null on either side included, is absent. A NaN is unordered against every number.
+ * @brief Compares an element of a @ref ListByteBuffer, or the value of a map entry, as <, <=,
+ * > and >= do. Unlike the order above, only two numbers, strings, booleans, datetimes,
+ * durations or lists compare: any other pair, a null on either side included, is absent. A
+ * NaN is unordered against every number.
  */
 std::optional<std::partial_ordering> comparisonOrder(ListElementView lhs, ListElementView rhs);
+std::optional<std::partial_ordering> comparisonOrder(ListElementView element, MapEntryView entry);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView lhs, MapEntryView rhs);
 std::optional<std::partial_ordering> comparisonOrder(ListView lhs, ListView rhs);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, ListView value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Int64::Primitive value);
@@ -129,5 +134,13 @@ std::optional<std::partial_ordering> comparisonOrder(ListElementView element, ty
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Bool::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::DateTime::Primitive value);
 std::optional<std::partial_ordering> comparisonOrder(ListElementView element, types::Duration::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::Int64::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::UInt64::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::Double::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::String::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::Bool::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::DateTime::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, types::Duration::Primitive value);
+std::optional<std::partial_ordering> comparisonOrder(MapEntryView entry, ListView value);
 
 }

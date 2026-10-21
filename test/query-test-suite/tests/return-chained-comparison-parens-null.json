@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN (1 < 2) < 3",
+  "expect": {
+    "result": "(1 < 2) < 3\nnull"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "null"
+  ],
+  "write-required": false
+}
