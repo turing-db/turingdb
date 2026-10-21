@@ -29,3 +29,7 @@ add_turing_test(test_query_ir_with_where_dropped_variable WithWhereDroppedVariab
 
 # The ORDER BY of a WITH reading a variable the projection drops.
 add_turing_test(test_query_ir_with_order_by_dropped_variable WithOrderByDroppedVariableTest.cpp)
+
+add_turing_test(test_query_ir_constant_projection_over_reduced_rows ConstantProjectionOverReducedRowsTest.cpp)
+target_sources(test_query_ir_constant_projection_over_reduced_rows PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_constant_projection_over_reduced_rows PRIVATE ${IR_TEST_DIR})
