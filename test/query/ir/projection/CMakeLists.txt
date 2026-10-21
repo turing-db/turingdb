@@ -58,3 +58,5 @@ add_turing_test(test_query_ir_bool_ordering BoolOrderingTest.cpp)
 target_include_directories(test_query_ir_bool_ordering PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_nan_ordering NaNOrderingTest.cpp)
+
+add_call_v3_test(test_query_ir_constant_projection_rows ConstantProjectionRowsTest.cpp)

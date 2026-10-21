@@ -5722,12 +5722,16 @@ bool readsRowsAsASet(Operation* op, llvm::SmallVectorImpl<Operation*>& passedOn)
 
 // Whether every row the op ever emits is only ever read as a member of a set: a dedup or a
 // distinct aggregate settles it, a row-wise op, a filter or a further hop passes the question
-// on to its own users, and anything counting, cutting or outputting rows refuses.
+// on to its own users, and anything counting, cutting or outputting rows refuses. So does an
+// op with no user: a constant read after it, as in RETURN 1, is laid out over its rows.
 bool usersReadRowsAsASet(Operation* op) {
     llvm::SmallPtrSet<Operation*, 16> visited;
     llvm::SmallVector<Operation*> passedOn {op};
     while (!passedOn.empty()) {
         Operation* const producer = passedOn.pop_back_val();
+        if (producer->use_empty()) {
+            return false;
+        }
 
         for (Operation* const user : producer->getUsers()) {
             const bool firstVisit = visited.insert(user).second;

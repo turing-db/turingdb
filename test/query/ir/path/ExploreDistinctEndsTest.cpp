@@ -125,6 +125,46 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)-[e]->{1,3}(m) RETURN 1: no op reads the exploration, and the constant goes out
+// once per path
+const char* const constantOutputProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %c = db.constant(1 : i64)
+  db.output(%c) : !db.column<i64>
+  return
+}
+)mlir";
+
+// MATCH (n)-[e]->{1,3}(m)-->(p) RETURN 1: the hop passes the rows on, and no op reads it
+const char* const hopThenConstantOutputProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %h:4 = db.get_out_edges(%0#1, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %c = db.constant(1 : i64)
+  db.output(%c) : !db.column<i64>
+  return
+}
+)mlir";
+
+// MATCH (n)-[e]->{1,3}(m) WHERE m.age > 30 RETURN 1: the filter passes the rows on, and no
+// op reads it
+const char* const filterThenConstantOutputProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %c = db.constant(30 : i64)
+  %mask = db.gt %age, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %1 = db.filter(%mask, {%0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %one = db.constant(1 : i64)
+  db.output(%one) : !db.column<i64>
+  return
+}
+)mlir";
+
 // MATCH (n)-[e]->{1,3}(m) RETURN DISTINCT n, e, m: the path is read
 const char* const pathDedupProgram = R"mlir(
 func.func @main() {
@@ -454,6 +494,9 @@ TEST_F(ExploreDistinctEndsTest, leavesExplorationsWhoseRowsAreCounted) {
     EXPECT_FALSE(marksDistinct(outputProgram));
     EXPECT_FALSE(marksDistinct(limitThenDedupProgram));
     EXPECT_FALSE(marksDistinct(pathDedupProgram));
+    EXPECT_FALSE(marksDistinct(constantOutputProgram));
+    EXPECT_FALSE(marksDistinct(hopThenConstantOutputProgram));
+    EXPECT_FALSE(marksDistinct(filterThenConstantOutputProgram));
 }
 
 TEST_F(ExploreDistinctEndsSimpleGraphTest, distinctFormsEmitTheDeduplicatedRows) {
