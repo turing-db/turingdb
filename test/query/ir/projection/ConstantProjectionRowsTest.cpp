@@ -39,7 +39,7 @@ TEST_F(ConstantProjectionRowsTest, returnsBothPathsSharingTheirEnds) {
 }
 
 TEST_F(ConstantProjectionRowsTest, returnsOneRowPerPathPastAHopOrAFilter) {
-    expectOneRowPerMatch("MATCH (a:Person)-[e*1..2]->(b)-->(c)", "RETURN 1", 20);
+    expectOneRowPerMatch("MATCH (a:Person)-[e*1..2]->(b)-->(c)", "RETURN 1", 17);
     expectOneRowPerMatch("MATCH (a:Person)-[e*1..2]->(b) WHERE b.name <> 'x'", "RETURN 1", 25);
     expectOneRowPerMatch("MATCH (a:Person)-[e*1..2]->(b) WHERE b:Person", "RETURN 1", 5);
 }
