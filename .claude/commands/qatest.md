@@ -63,30 +63,26 @@ SimpleGraph is 18 nodes and is defined in `examples/SimpleGraph.cpp` — read it
 keep the node table to hand, every expected result is derived against it. `/tmp/ldbcdb` is
 a second, larger fixture when a hypothesis needs scale.
 
-### The two probes
+### The probe
 
-Read-only, v3 only, ~1s, no port:
-
-```bash
-./build/samples/mlir/mlir -q "<query>" -e -g <scratch>/qa/fixture/simpledb
-```
-
-Add `-d` for the db dialect and `-l` for the lowered nl dialect when triaging a hit.
-
-The shell, which runs the same engine through `TuringDB::query`:
+Every query goes through the shell, which runs v3 through `TuringDB::query`:
 
 ```bash
-printf 'MATCH (n) RETURN count(n)\n' \
-  | ./build/tools/turingdb/turingdb -turing-dir <scratch>/qa/turing -load simpledb -p 71NN
+printf 'cd simpledb\nMATCH (n) RETURN count(n)\nquit\n' \
+  | stdbuf -oL -eL ./build/tools/turingdb/turingdb -turing-dir <scratch>/qa/turing -load simpledb -p 71NN
 ```
 
 Give each concurrent shell its own port (`-p 7101`, `7102`, …) — the default 6666
 collides.
 
-Writes (`CREATE`, `MERGE`, `DELETE`, `SET`) go through the shell only; the mlir driver has
-no isolated turing directory. In the shell a write needs the change dance: `CHANGE NEW`
-prints the id but does not select it, so `checkout change-0`, then the writes, then
-`COMMIT` before anything can read them, then `CHANGE SUBMIT` and a bare `checkout`.
+Prefix a query with `EXPLAIN` for its db and lowered nl IR when triaging a hit. When
+lowering itself fails, `EXPLAIN` prints only the error; `./build/samples/mlir/mlir -d -q
+"<query>"` then still dumps the db IR. Never read results from that sample: its printer
+shows `?` for Bool, nullable and list columns.
+
+A write needs the change dance: `CHANGE NEW` prints the id but does not select it, so
+`checkout change-0`, then the writes, then `COMMIT` before anything can read them, then
+`CHANGE SUBMIT` and a bare `checkout`.
 
 ### Each iteration
 
@@ -104,7 +100,7 @@ A candidate is a **hit** only when all four hold:
 Prefer four distinct root causes over four shapes of one bug. When a probe finds several
 shapes of the same cause, keep the clearest one and keep hunting.
 
-A probe's `OUTPUT-BUG` — the engine holds the right rows and a client cannot render them —
+A probe's `OUTPUT-BUG` — the engine holds the right rows and the shell cannot render them —
 is a finding but not a hit. Verify it the way you verify a hit, then record it in
 `<scratch>/qa/hits.md` under a heading of its own and carry it into the PR body in phase 7.
 It does not fill one of the four test slots, because the harness hands
@@ -128,9 +124,8 @@ Stop the loop at 4 hits, or at the deadline.
 - **A result the client cannot print.** The rows are right and the user still never sees
   them. `MATCH (n) RETURN n:Person` returns 18 rows and the shell answers
   `EXEC_ERROR: Unsupported unary operation on column of type db::ColumnMask` with no rows,
-  because `writeColumnCell` in `tools/turingdb/TuringShell.cpp` excludes ColumnMask; the
-  mlir driver prints `?` for every Bool column. Worth hunting and worth reporting, but a
-  finding rather than a hit — see above.
+  because `writeColumnCell` in `tools/turingdb/TuringShell.cpp` excludes ColumnMask. Worth
+  hunting and worth reporting, but a finding rather than a hit — see above.
 
 ### Known limitations — not bugs
 
@@ -232,16 +227,15 @@ v3:       ...
 expected: ...
 v3:       ...
 
-not pinned, <the client> cannot print the result:
+not pinned, the shell cannot print the result:
 <query>
 expected: ...
-<the client>: ...
+shell:    ...
 ```
 
 Mark a query that already answers correctly, or a reader takes the group's every line for
-a failure. An output-layer finding is a group of its own at the end, under the line naming
-the client, so the body stays one sentence and one code block. The title still counts
-tests.
+a failure. An output-layer finding is a group of its own at the end, so the body stays one
+sentence and one code block. The title still counts tests.
 
 End the body with the Claude Code footer. `gh pr create` works; `gh pr edit` does not on
 this repo — edit a body afterwards with

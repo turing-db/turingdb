@@ -12,32 +12,27 @@ minutes, then report whatever you have.
 
 ## Running a query
 
-v3 alone, read-only, about a second per call:
+Every query goes through the shell, on your own port:
 
 ```bash
-./build/samples/mlir/mlir -q "<query>" -e -g <fixture>/simpledb
-```
-
-`-d` dumps the db dialect and `-l` the lowered nl dialect. Reach for them once a query
-misbehaves, not before.
-
-The shell, on your own port:
-
-```bash
-printf '<query>\n' \
-  | ./build/tools/turingdb/turingdb -turing-dir <turingDir> -load simpledb -p <port>
+printf 'cd simpledb\n<query>\nquit\n' \
+  | stdbuf -oL -eL ./build/tools/turingdb/turingdb -turing-dir <turingDir> -load simpledb -p <port>
 ```
 
 The shell runs v3, which is the only engine `TuringDB::query` has. Use only the port you
-were given.
+were given. Without `stdbuf` the result tables arrive out of order with the error lines.
 
-Writes go through the shell, never the mlir driver: `CHANGE NEW`, then `checkout change-0`,
-then the writes, then `COMMIT` — nothing is readable before the `COMMIT` — then
-`CHANGE SUBMIT` and a bare `checkout`.
+Prefix a query with `EXPLAIN` to see its db and lowered nl IR. Reach for it once a query
+misbehaves, not before. When lowering itself fails, `EXPLAIN` prints only the error; then
+`./build/samples/mlir/mlir -d -q "<query>"` still dumps the db IR, on an in-memory
+simpledb. Never use that sample to read results: its printer shows `?` for many column
+kinds.
 
-The shell and the mlir driver render a result differently, and neither renders every
-column kind. A query that fails in one and works in the other did not fail in the engine —
-read **The output layer** below before you call it a wrong answer.
+Writes: `CHANGE NEW`, then `checkout change-0`, then the writes, then `COMMIT` — nothing is
+readable before the `COMMIT` — then `CHANGE SUBMIT` and a bare `checkout`.
+
+The shell does not render every column kind. Read **The output layer** below before you
+call an error from it a wrong answer.
 
 ## Deriving the expected result
 
@@ -57,30 +52,24 @@ renders a result with its own set of column kinds. That is a user-facing failure
 question answered with an error or a placeholder — so report it as `OUTPUT-BUG`. Do not
 bury it as a tooling note.
 
-Two gaps are already known. Do not spend time rediscovering them:
+One gap is already known. Do not spend time rediscovering it: the shell cannot render a
+`ColumnMask`, which is what a label predicate answers with, so `MATCH (n) RETURN n:Person`
+gives `EXEC_ERROR: Unsupported unary operation on column of type db::ColumnMask` and no
+rows at all. `writeColumnCell` in `tools/turingdb/TuringShell.cpp` excludes ColumnMask.
 
-- `./build/samples/mlir/mlir` prints `?` for every Bool column and for every nullable
-  constant column, so `RETURN n.isFrench` and `RETURN toInteger('42')` both show `?` where
-  the shell prints the value. Use the shell whenever a projected value is a boolean or a
-  number.
-- The shell cannot render a `ColumnMask`, which is what a label predicate answers with, so
-  `MATCH (n) RETURN n:Person` gives `EXEC_ERROR: Unsupported unary operation on column of
-  type db::ColumnMask` and no rows at all. `writeColumnCell` in
-  `tools/turingdb/TuringShell.cpp` excludes ColumnMask.
-
-To place a failure, run the query through the other client, then vary a clause that
-changes the column kind without changing what the query means — add an `ORDER BY`, a
-`DISTINCT`, or a grouping key. `MATCH (n) RETURN n:Person ORDER BY n.name` prints all 18
-rows because the sort materialises the mask first. If any of those renders the values, the
-engine has them and a client is what failed.
+To place a failure, `EXPLAIN` the query to see the column type of each output, then vary a
+clause that changes the column kind without changing what the query means — add an
+`ORDER BY`, a `DISTINCT`, or a grouping key. `MATCH (n) RETURN n:Person ORDER BY n.name`
+prints all 18 rows because the sort materialises the mask first. If any of those renders
+the values, the engine has them and the shell is what failed.
 
 ## Verdicts
 
 - `BUG` — v3 is wrong and you can name the rule it breaks, with a query reduced to the
   smallest shape that still fails.
-- `OUTPUT-BUG` — the engine holds the right rows and a client cannot render them. Name the
-  client that fails and the one that works. Say so explicitly: a `QueryInterpreterV3` unit
-  test supplies its own sink, so it will pass and cannot pin this.
+- `OUTPUT-BUG` — the engine holds the right rows and the shell cannot render them. Name
+  the variant that renders them. Say so explicitly: a `QueryInterpreterV3` unit test
+  supplies its own sink, so it will pass and cannot pin this.
 - `KNOWN-LIMIT` — the shape is one of the documented gaps: relationship uniqueness within
   one MATCH (two relationship variables of one clause may bind the same edge, so a fork like
   `MATCH (a)<-[e1]-(b)-[e2]->(c)` over-counts), a read of an uncommitted write, or anything
@@ -105,8 +94,7 @@ minimal:  <the reduced query>
 repro:    <the exact command line>
 ```
 
-An `OUTPUT-BUG` takes the same block plus the client that renders the query correctly, and
-the shape that makes the same values come out.
+An `OUTPUT-BUG` takes the same block plus the shape that makes the same values come out.
 
 Keep raw output in your scratchpad directory and quote only what carries the finding. If
 nothing is wrong, say so in a line — a clean hypothesis is a useful result and should not
