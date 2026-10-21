@@ -168,6 +168,19 @@ void WriteQueryTest::expectError(std::string_view query, std::string_view expect
     RowSink sink;
     const QueryStatus status = runQuery(query, &sink);
 
+    expectFailure(status, query, expectedError);
+}
+
+void WriteQueryTest::expectWriteError(std::string_view query, std::string_view expectedError) {
+    ChangeID changeID;
+    openChange(changeID);
+
+    const QueryStatus status = runWrite(query, changeID);
+
+    expectFailure(status, query, expectedError);
+}
+
+void WriteQueryTest::expectFailure(const QueryStatus& status, std::string_view query, std::string_view expectedError) {
     ASSERT_FALSE(status.isOk()) << "query: " << query << "\nexpected it to fail";
     EXPECT_NE(status.getError().find(expectedError), std::string::npos)
         << "query: " << query << "\nerror: " << status.getError();

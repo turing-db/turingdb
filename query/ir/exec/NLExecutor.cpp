@@ -6622,12 +6622,12 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     const PropertyTypeID propID = setData->getPropertyTypeID();
     const ValueType nullValueType = setData->getNullValueType();
-    const ValueType listElementValueType = setData->getListElementValueType();
+    const ValueType cellValueType = setData->getCellValueType();
 
     if (nullValueType != ValueType::Invalid) {
         fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (listElementValueType != ValueType::Invalid) {
-        extractListElementProperties(setData->getValue(), rowCount, propID, listElementValueType, propsBuffer);
+    } else if (cellValueType != ValueType::Invalid) {
+        extractCellProperties(setData->getValue(), rowCount, propID, cellValueType, propsBuffer);
     } else {
         extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
     }
@@ -6669,14 +6669,14 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     const size_t rowCount = edges->size();
     const PropertyTypeID propID = setData->getPropertyTypeID();
     const ValueType nullValueType = setData->getNullValueType();
-    const ValueType listElementValueType = setData->getListElementValueType();
+    const ValueType cellValueType = setData->getCellValueType();
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
 
     if (nullValueType != ValueType::Invalid) {
         fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
-    } else if (listElementValueType != ValueType::Invalid) {
-        extractListElementProperties(setData->getValue(), rowCount, propID, listElementValueType, propsBuffer);
+    } else if (cellValueType != ValueType::Invalid) {
+        extractCellProperties(setData->getValue(), rowCount, propID, cellValueType, propsBuffer);
     } else {
         extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
     }

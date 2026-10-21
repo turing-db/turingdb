@@ -3714,10 +3714,10 @@ public:
     ValueType getNullValueType() const { return _nullValueType; }
     void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
 
-    // A column of list elements carries each row's type in its cell, so the property's own
-    // type is what every cell is checked against and staged as. Invalid for any other column.
-    ValueType getListElementValueType() const { return _listElementValueType; }
-    void setListElementValueType(ValueType valueType) { _listElementValueType = valueType; }
+    // A column of cells carries each row's type in the cell, so the property's own type is
+    // what every cell is checked against and staged as. Invalid for any other column.
+    ValueType getCellValueType() const { return _cellValueType; }
+    void setCellValueType(ValueType valueType) { _cellValueType = valueType; }
 
 private:
     const ColumnNodeIDs* _input {nullptr};
@@ -3726,7 +3726,7 @@ private:
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
     ValueType _nullValueType {ValueType::Invalid};
-    ValueType _listElementValueType {ValueType::Invalid};
+    ValueType _cellValueType {ValueType::Invalid};
     bool _allPending {false};
 };
 
@@ -3760,10 +3760,10 @@ public:
     ValueType getNullValueType() const { return _nullValueType; }
     void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
 
-    // A column of list elements carries each row's type in its cell, so the property's own
-    // type is what every cell is checked against and staged as. Invalid for any other column.
-    ValueType getListElementValueType() const { return _listElementValueType; }
-    void setListElementValueType(ValueType valueType) { _listElementValueType = valueType; }
+    // A column of cells carries each row's type in the cell, so the property's own type is
+    // what every cell is checked against and staged as. Invalid for any other column.
+    ValueType getCellValueType() const { return _cellValueType; }
+    void setCellValueType(ValueType valueType) { _cellValueType = valueType; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
@@ -3772,7 +3772,7 @@ private:
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
     ValueType _nullValueType {ValueType::Invalid};
-    ValueType _listElementValueType {ValueType::Invalid};
+    ValueType _cellValueType {ValueType::Invalid};
     bool _allPending {false};
 };
 
