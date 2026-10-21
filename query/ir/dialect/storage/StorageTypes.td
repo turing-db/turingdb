@@ -7,6 +7,12 @@ include "StorageDialect.td"
 include "StorageEnums.td"
 include "StorageAttributes.td"
 
+// The bits of a ValueTypeSet, written as value type names: [Int64, Double]
+def ValueTypeSetParameter : AttrOrTypeParameter<"uint32_t", "the value types a dynamic value can hold"> {
+    let parser = [{ ::mlir::storage::parseValueTypeSet($_parser) }];
+    let printer = [{ ::mlir::storage::printValueTypeSet($_printer, $_self) }];
+}
+
 class StorageType<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<Storage, name, traits> {
   let mnemonic = typeMnemonic;
@@ -122,6 +128,24 @@ def Nullable : StorageType<"Nullable", "nullable"> {
     }];
     let parameters = (ins "::mlir::Type":$valueType);
     let assemblyFormat = "`<` $valueType `>`";
+}
+
+def Dynamic : StorageType<"Dynamic", "dynamic"> {
+    let summary = "A value whose type is fixed when the program is translated";
+    let description = [{
+        The type of a parameter whose bind accepts several value types. It names them,
+        and the bind allocates the column from the value it receives.
+
+          !storage.dynamic<[Int64, Double]>
+    }];
+
+    let parameters = (ins ValueTypeSetParameter:$accepted);
+    let assemblyFormat = "`<` $accepted `>`";
+    let genVerifyDecl = 1;
+
+    let extraClassDeclaration = [{
+        ::db::ValueTypeSet getAcceptedSet() const;
+    }];
 }
 
 def Any : StorageType<"Any", "any"> {
