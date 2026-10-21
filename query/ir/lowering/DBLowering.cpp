@@ -6740,6 +6740,11 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     // before the mask that the real terminator yields exists
     nl::Yield placeholder = _builder.create<nl::Yield>(loc);
 
+    // The hop's rows are its edges, one per row of the step
+    const mlir::Value edges = nlBlock->getArgument(mlir::hopEdgeArgument(step));
+    const mlir::Value previousRegionRows = _regionRows;
+    _regionRows = edges;
+
     mlir::Value mask;
     for (mlir::Operation& operation : dbHop) {
         if (mlir::db::Yield yield = mlir::dyn_cast<mlir::db::Yield>(operation)) {
@@ -6749,8 +6754,10 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
         }
     }
 
+    _regionRows = previousRegionRows;
+
     _builder.setInsertionPoint(placeholder);
-    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(mlir::hopEdgeArgument(step)));
+    const mlir::Value maskChunk = rowAlignedChunk(mask, edges);
     _builder.create<nl::Yield>(loc, mlir::ValueRange {maskChunk});
     placeholder.erase();
 }
