@@ -16,3 +16,11 @@
 
 #define GET_OP_CLASSES
 #include "DBOps.h.inc"
+
+namespace mlir::db {
+
+// Whether @param op takes rows from its columns and every column it reads is a constant,
+// against @param classified as yieldsConstantColumn reads it: such an op runs over one row
+bool readsConstantColumnsAlone(Operation* op, llvm::DenseMap<Value, bool>& classified);
+
+}

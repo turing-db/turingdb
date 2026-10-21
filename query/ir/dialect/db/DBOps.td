@@ -2909,6 +2909,12 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
     after the barrier - a WHERE cutting those rows, a count(*) tallying them, a pattern
     crossed with them - read a column that has them.
 
+    An op that reads constants alone runs over a single row, or over the rows of the region
+    it sits in where the op owning that region defines them. So a constant read where rows
+    are in flight comes through this op, and the relation it is read over is a use of the
+    driver like any other: `MATCH (n) RETURN 5` outputs a broadcast over the scan, and a
+    pass asking who reads the scan's rows finds it.
+
     The driver is absent when no relation drives the scope, which is then the single row
     the constants are - `WITH 1 AS x WHERE x > 100`, whose one row the filter drops - so
     the value is laid out over that row:

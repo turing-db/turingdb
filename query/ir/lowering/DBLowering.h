@@ -181,8 +181,9 @@ private:
     // not left in the loop body - just a record of which block is innermost.
     mlir::Block* _innermostLoopBody {nullptr};
 
-    // Defines the cardinality of the innermost loop, used for projection
-    mlir::Value _innermostCardinality;
+    // The rows of the region being lowered, as the op owning it defines them: what an op
+    // reading constants alone runs over. Null at the top level, where that is a single row.
+    mlir::Value _regionRows;
 
     // Each db.limit gets its own hoisted nl.limit handle - N independent budgets.
     // A pre-scan in lower() finds every db.limit before any loop is built, so the
@@ -696,6 +697,7 @@ private:
     // Emits the nl.output the sink reads this result off, and hands it back: a union
     // reaches for it again once every branch has said what its columns hold
     mlir::nl::Output lowerOutput(mlir::db::Output output);
+    mlir::nl::Output lowerConstantOutput(mlir::db::Output output, mlir::Value driver);
 
     // Lower one factor region of a db.cross_product or a db.hash_join into a loop
     // nest rooted at rootBlock, collecting its db.yield columns (mapped to their nl
@@ -813,6 +815,7 @@ private:
     // holds one value standing for every row of the step - so the loop's rows are the
     // count a cut over constants alone charges, and the count every cut chained after it
     // reads in turn.
+    void rowAlignGroupingKeys(llvm::MutableArrayRef<mlir::Value> chunks, size_t keyCount);
     void rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
 
     // Lays the constants among a hash join factor's yielded chunks over the rows that
@@ -831,7 +834,6 @@ private:
     // @param resultChunks. The driver stands for the relation a projection of constants
     // alone is a projection of, so leaving it on the wider chunk would size that
     // emission by the rows the step dropped.
-    void followCardinalityThrough(mlir::ValueRange inputChunks, mlir::ValueRange resultChunks);
 
     // The chunk a step that walks rows is handed for @param chunk: itself when it
     // carries rows, and its value laid out over the rows of @param cardinality - the

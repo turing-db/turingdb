@@ -678,13 +678,14 @@ func.func @main() {
 )mlir";
 
 // MATCH (n) RETURN 5: a constant projected over a scan, with no per-row column in
-// the projection. Projection preserves cardinality, so the result is one row of 5
-// per node - not a single row.
+// the projection. The constant is laid over the scan's rows, so the result is one row
+// of 5 per node - not a single row.
 constexpr const char* constantOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %c = db.constant(5 : i64)
-  db.output(%c) : !db.column<i64>
+  %x = db.broadcast_constant(%c, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%x) : !db.column<none>
   return
 }
 )mlir";
@@ -696,7 +697,8 @@ func.func @main() {
   %x = db.constant(40 : i64)
   %y = db.constant(2 : i64)
   %s = db.add %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<i64>
-  db.output(%s) : !db.column<i64>
+  %r = db.broadcast_constant(%s, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%r) : !db.column<none>
   return
 }
 )mlir";
@@ -706,8 +708,9 @@ constexpr const char* constantLimitOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %c = db.constant(5 : i64)
-  %lc = db.limit(%c) count 3 : (!db.column<i64>) -> !db.column<i64>
-  db.output(%lc) : !db.column<i64>
+  %x = db.broadcast_constant(%c, %n) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+  %lc = db.limit(%x) count 3 : (!db.column<none>) -> !db.column<none>
+  db.output(%lc) : !db.column<none>
   return
 }
 )mlir";
@@ -757,7 +760,8 @@ func.func @main() {
     db.yield %b : !db.column<!storage.node_id>
   }
   %c = db.constant(5 : i64)
-  db.output(%c) : !db.column<i64>
+  %x = db.broadcast_constant(%c, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%x) : !db.column<none>
   return
 }
 )mlir";
@@ -779,7 +783,8 @@ func.func @main() {
     db.yield %c : !db.column<!storage.node_id>
   }
   %d = db.constant(5 : i64)
-  db.output(%d) : !db.column<i64>
+  %x = db.broadcast_constant(%d, %0#0) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%x) : !db.column<none>
   return
 }
 )mlir";
@@ -2875,9 +2880,8 @@ TEST_F(DBLoweringTest, constantProjectionOverMatchHasRelationCardinality) {
     CollectingConstSink<int64_t> sink;
     runLoweredProgram(constantOverMatchProgram, reader.getView(), sink);
 
-    // RETURN 5 over the diamond's four nodes: projection preserves cardinality, so
-    // four rows of 5 - not one. (Before the fix the output floated to function scope
-    // and emitted a single row.)
+    // RETURN 5 over the diamond's four nodes: the constant is laid over the scan's
+    // rows, so four rows of 5 - not one.
     const std::vector<std::vector<int64_t>> expected {{5}, {5}, {5}, {5}};
     EXPECT_EQ(sink.rows(), expected);
 }
@@ -2890,8 +2894,8 @@ TEST_F(DBLoweringTest, constantExpressionProjectionOverMatchHasRelationCardinali
     CollectingConstSink<int64_t> sink;
     runLoweredProgram(constantExpressionOverMatchProgram, reader.getView(), sink);
 
-    // An expression over constants alone is a constant column too, so it is projected
-    // over the relation's rows as a literal is: four rows of 42, not the single row the
+    // An expression over constants alone is a constant column too, so it is laid over
+    // the relation's rows as a literal is: four rows of 42, not the single row the
     // expression is bound as above the loop.
     const std::vector<std::vector<int64_t>> expected {{42}, {42}, {42}, {42}};
     EXPECT_EQ(sink.rows(), expected);

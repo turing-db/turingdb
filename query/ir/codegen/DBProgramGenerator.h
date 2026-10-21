@@ -152,8 +152,21 @@ public:
     void generateExplainResult(const ExplainReport& report);
 
 private:
+    // An op reading constants alone runs over a single row, so every op inserted while rows
+    // are in flight has the constants it reads alone laid over them
+    class ConstantRowsListener : public mlir::OpBuilder::Listener {
+    public:
+        explicit ConstantRowsListener(DBProgramGenerator* generator);
+
+        void notifyOperationInserted(mlir::Operation* op, mlir::OpBuilder::InsertPoint previous) override;
+
+    private:
+        DBProgramGenerator* _generator {nullptr};
+    };
+
     mlir::ModuleOp* _module {nullptr};
     mlir::MLIRContext* _mlirCtxt {nullptr};
+    ConstantRowsListener _constantRowsListener;
     mlir::OpBuilder _opBuilder;
 
     ExplainReport* _explain {nullptr};
@@ -1047,17 +1060,11 @@ private:
     mlir::Value resolveColumnInScope(ColumnPredicate accept) const;
 
     mlir::Value resolveRowCarryingColumn();
+    void layConstantOperandsOverRows(mlir::Operation* op);
 
-    // Pins a constant column to the relation whose rows it stands for. Left unpinned, a
-    // constant is aligned during lowering against whichever loop is innermost by then,
-    // which a collect in the same projection has already repointed at its own emit loop
+    // Pins a constant column to the relation whose rows it stands for, ahead of the op
+    // reading it, whose result type follows the column's
     mlir::Value alignConstantToDriver(mlir::Value column);
-
-    // An op that runs once per row, such as db.range, reads no row of its own when every
-    // operand is a constant, so nothing ties it to the relation it runs over: a pass erasing
-    // that relation's scan would leave it one row. Pins the constant operands of each such
-    // op in [@param first, @param last) to the driver instead.
-    void alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last);
 
     // The column count(*) counts: the first variable bound to a column holding the rows
     // flowing past the insertion point. A scope of constants alone is the single row those

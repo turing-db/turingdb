@@ -1092,7 +1092,8 @@ constexpr const char* labelsConstantProgram = R"mlir(
 func.func @main() {
   %label = db.call_procedure("db.labels", {}, {}) yields ["label"] : () -> !db.column<none>
   %c = db.constant(5 : i64)
-  db.output(%c) : !db.column<i64>
+  %x = db.broadcast_constant(%c, %label) : (!db.column<i64>, !db.column<none>) -> !db.column<none>
+  db.output(%x) : !db.column<none>
   return
 }
 )mlir";
@@ -1696,9 +1697,9 @@ TEST_F(MLIRCallProcedureTest, constantProjectionOverDriveLoopKeepsCardinality) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // Projection preserves cardinality, so the five labels give five rows of 5. The
-    // drive loop binds no node-ID chunk, so this only lowers because nl.output's
-    // cardinality driver takes a chunk of any element type.
+    // The constant is laid over the five labels, so five rows of 5. The drive loop
+    // binds no node-ID chunk, so this only lowers because nl.output's cardinality
+    // driver takes a chunk of any element type.
     ConstSink<types::Int64::Primitive> sink;
     runLoweredProgram(labelsConstantProgram, reader.getView(), sink, /*chunkSize=*/2);
 

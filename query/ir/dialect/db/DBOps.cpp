@@ -2382,3 +2382,27 @@ Speculation::Speculatability DivOp::getSpeculatability() {
 Speculation::Speculatability ModOp::getSpeculatability() {
     return speculatableWhen(isNumberColumn(getLhs()) && isSafeLiteralDivisor(getRhs(), false));
 }
+
+bool mlir::db::readsConstantColumnsAlone(Operation* op, llvm::DenseMap<Value, bool>& classified) {
+    const bool constantThroughOperands = op->hasTrait<OpTrait::ConstantThroughOperands>() && ::db::runsWithoutRaising(op);
+    const bool holdsOneValue = op->hasTrait<OpTrait::ConstantLike>() || op->hasTrait<OpTrait::ConstantResult>();
+    const bool laysOutAConstant = isa<BroadcastConstant>(op);
+    if (constantThroughOperands || holdsOneValue || laysOutAConstant || op->hasTrait<OpTrait::IsTerminator>()) {
+        return false;
+    }
+
+    bool readsAColumn = false;
+    for (const Value operand : op->getOperands()) {
+        if (!isa<ColumnType>(operand.getType())) {
+            continue;
+        }
+
+        if (!::db::yieldsConstantColumn(operand, classified)) {
+            return false;
+        }
+
+        readsAColumn = true;
+    }
+
+    return readsAColumn;
+}

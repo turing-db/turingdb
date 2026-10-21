@@ -899,6 +899,26 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
     throw IRException("Unhandled group aggregate kind");
 }
 
+// Whether every column is a constant laid over the relation @param driver carries, one
+// driver for them all or none
+bool laysConstantsOverOneRelation(mlir::OperandRange columns, mlir::Value& driver) {
+    if (columns.empty()) {
+        return false;
+    }
+
+    mlir::db::BroadcastConstant first = columns.front().getDefiningOp<mlir::db::BroadcastConstant>();
+    if (!first) {
+        return false;
+    }
+
+    driver = first.getDriver();
+
+    return llvm::all_of(columns, [driver](mlir::Value column) {
+        mlir::db::BroadcastConstant broadcast = column.getDefiningOp<mlir::db::BroadcastConstant>();
+        return broadcast && broadcast.getDriver() == driver && yieldsConstantColumn(broadcast.getValue());
+    });
+}
+
 // The single nl.output that solely consumes every result in the range, or a null
 // op if any result has more than one use, a non-nl.output user, or a different
 // output than its siblings. Read the direction as "one shared output user => the
@@ -1118,7 +1138,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _constantColumns.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
     _limitHandles.clear();
     _loopLimitHandle.clear();
     _optionalMatchLimits.clear();
@@ -1239,7 +1259,7 @@ void DBLowering::lowerOverReachingRows(mlir::Operation& operation) {
     for (const mlir::Value operand : operation.getOperands()) {
         const mlir::Value chunk = mapValue(operand);
         constantChunks.emplace_back(operand, chunk);
-        _valueMap[operand] = rowAlignedChunk(chunk, _innermostCardinality);
+        _valueMap[operand] = rowAlignedChunk(chunk, _regionRows);
     }
 
     lowerOperationByKind(operation);
@@ -1250,12 +1270,12 @@ void DBLowering::lowerOverReachingRows(mlir::Operation& operation) {
 }
 
 void DBLowering::lowerOnceOverConstants(mlir::Operation& operation) {
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
-    _innermostCardinality = {};
+    const mlir::Value previousRegionRows = _regionRows;
+    _regionRows = {};
 
     lowerOperationByKind(operation);
 
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     for (const mlir::Value result : operation.getResults()) {
         const mlir::Value row = mapValue(result);
@@ -1845,9 +1865,9 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
     // The rows the body computes over are the elements of one row's list, so a constant it
     // reads is laid out over those rather than over the rows the op is read on
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     _innermostLoopBody = nlBody;
-    _innermostCardinality = elementChunk;
+    _regionRows = elementChunk;
 
     for (mlir::Operation& operation : dbBody) {
         mlir::db::ComprehensionYield yield = mlir::dyn_cast<mlir::db::ComprehensionYield>(operation);
@@ -1861,7 +1881,7 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     // ComprehensionYield::verify guarantees both, so an empty one here means unverified
     // IR - the defensive backstop lowerOptionalMatch keeps too.
@@ -2028,9 +2048,9 @@ mlir::Operation* DBLowering::lowerReduceBody(mlir::Block& dbBody, mlir::Block* n
     }
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     _innermostLoopBody = nlBody;
-    _innermostCardinality = elementChunk;
+    _regionRows = elementChunk;
 
     for (mlir::Operation& operation : dbBody) {
         mlir::db::ReduceYield yield = mlir::dyn_cast<mlir::db::ReduceYield>(operation);
@@ -2042,7 +2062,7 @@ mlir::Operation* DBLowering::lowerReduceBody(mlir::Block& dbBody, mlir::Block* n
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     valueChunk = rowAlignedChunk(valueChunk, elementChunk);
 
@@ -2130,10 +2150,10 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     // this step; the caller's root and innermost loop are restored once it is lowered.
     mlir::Block* const previousRoot = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     _rootBlock = stepBlock;
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
 
     mlir::Value rowTagChunk;
     mlir::Value valueChunk;
@@ -2160,7 +2180,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
 
     // The matches the value is read against are the ones the tag counts, since a WHERE has
     // cut both together
-    valueChunk = rowListsValueChunk(valueChunk, rowTagChunk ? rowTagChunk : _innermostCardinality);
+    valueChunk = rowListsValueChunk(valueChunk, rowTagChunk ? rowTagChunk : _regionRows);
 
     llvm::SmallVector<mlir::Value, 2> stagedChunks {valueChunk};
     if (rowTagChunk) {
@@ -2172,7 +2192,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     // Every row gets a list, the empty one where the pattern matched nothing, so the
     // lists are a container chunk rather than the nullable one a list comprehension builds
@@ -2997,10 +3017,10 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     // this step; the caller's root and innermost loop are restored once it is lowered.
     mlir::Block* const previousRoot = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     _rootBlock = stepBlock;
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
 
     if (patternLimit) {
         mlir::db::OptionalYield patternYield = mlir::cast<mlir::db::OptionalYield>(patternBlock.getTerminator());
@@ -3059,7 +3079,7 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     llvm::SmallVector<mlir::Type, 4> chunkTypes;
     for (const mlir::Value chunk : matchedChunks) {
@@ -3093,7 +3113,7 @@ void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
     }
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
 
     llvm::SmallVector<mlir::Value, 4> yieldedChunks;
     mlir::Value yieldedTag;
@@ -3107,7 +3127,7 @@ void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
     const bool bodyOpenedALoop = _innermostLoopBody != nullptr;
     if (!returning || !bodyOpenedALoop) {
         _innermostLoopBody = previousInnermostLoopBody;
-        _innermostCardinality = previousInnermostCardinality;
+        _regionRows = previousRegionRows;
     }
 
     if (!returning) {
@@ -3137,7 +3157,7 @@ void DBLowering::lowerSubqueryBody(mlir::db::CallSubquery call,
     mlir::Block* const previousRoot = _rootBlock;
     _rootBlock = stepBlock;
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
 
     for (mlir::Operation& operation : bodyBlock) {
         mlir::db::SubqueryYield yield = mlir::dyn_cast<mlir::db::SubqueryYield>(operation);
@@ -3165,7 +3185,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
     const bool unit = call.getUnit();
 
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
 
     llvm::SmallVector<mlir::Value, 4> yieldedChunks;
 
@@ -3179,7 +3199,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
 
         if (unit || !_innermostLoopBody) {
             _innermostLoopBody = previousInnermostLoopBody;
-            _innermostCardinality = previousInnermostCardinality;
+            _regionRows = previousRegionRows;
 
             setInsertionInto(stepBlock);
         }
@@ -3217,7 +3237,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
     // relation for what follows to walk: the step's own rows are in flight still
     if (unit) {
         _innermostLoopBody = previousInnermostLoopBody;
-        _innermostCardinality = previousInnermostCardinality;
+        _regionRows = previousRegionRows;
 
         setInsertionInto(stepBlock);
         return;
@@ -3432,10 +3452,10 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     // this step; the caller's root and innermost loop are restored once it is lowered.
     mlir::Block* const previousRoot = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     _rootBlock = bodyRoot;
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
 
     for (mlir::Operation& operation : bodyBlock.without_terminator()) {
         lowerOperation(operation);
@@ -3491,7 +3511,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     setInsertionInto(bodyRoot);
 
@@ -3531,7 +3551,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     }
 
     _innermostLoopBody = bodyRoot;
-    _innermostCardinality = stepChunks.front();
+    _regionRows = stepChunks.front();
 }
 
 void DBLowering::collectReadPastRowLoop(mlir::Operation* subquery,
@@ -3673,10 +3693,10 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
     // save and restore the caller's so nested or sibling products are unaffected.
     mlir::Block* const previousRoot = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     _rootBlock = rootBlock;
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
 
     // A factor is one self-contained block ending in a db.yield. Lower each op
     // as at top level; the yield names the columns this factor contributes, so
@@ -3707,7 +3727,7 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     return factorBody;
 }
@@ -3829,7 +3849,6 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
         _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
     }
 
-    followCardinalityThrough(chunks, truncatedChunks);
 }
 
 void DBLowering::lowerSkip(mlir::db::Skip skip) {
@@ -3883,7 +3902,6 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
         _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
     }
 
-    followCardinalityThrough(chunks, truncatedChunks);
 }
 
 void DBLowering::detectTopKFusion(mlir::func::FuncOp dbFunction) {
@@ -4006,14 +4024,14 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
 
     mlir::Block* const previousRoot = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
 
     llvm::SmallVector<nl::Output, 4> branchOutputs;
 
     for (mlir::Region& branch : branches) {
         _rootBlock = _entryBlock;
         _innermostLoopBody = nullptr;
-        _innermostCardinality = mlir::Value();
+        _regionRows = mlir::Value();
 
         mlir::db::Output branchOutput = mlir::cast<mlir::db::Output>(branch.front().back());
 
@@ -4045,7 +4063,7 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 }
 
 // The branches of a union inside a CALL body feed the rest of the body, which is lowered
@@ -4075,7 +4093,7 @@ void DBLowering::lowerConditional(mlir::db::Conditional conditional) {
 
     mlir::Block* const root = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    const mlir::Value previousRegionRows = _regionRows;
     mlir::Block* const previousConstantComputationBlock = _constantComputationBlock;
 
     const bool returning = conditional.getNumResults() > 0;
@@ -4146,7 +4164,7 @@ void DBLowering::lowerConditional(mlir::db::Conditional conditional) {
 
     if (!returning) {
         _innermostLoopBody = previousInnermostLoopBody;
-        _innermostCardinality = previousInnermostCardinality;
+        _regionRows = previousRegionRows;
 
         setInsertionInto(root);
         return;
@@ -4189,7 +4207,7 @@ void DBLowering::lowerCollectedBranch(mlir::Region& branch,
     const mlir::Location loc = _builder.getUnknownLoc();
 
     _innermostLoopBody = nullptr;
-    _innermostCardinality = mlir::Value();
+    _regionRows = mlir::Value();
 
     mlir::db::Yield branchYield = mlir::cast<mlir::db::Yield>(branch.front().back());
 
@@ -4471,9 +4489,9 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
 
 void DBLowering::lowerCount(mlir::db::Count count) {
     // The nl chunk the counted column lowered to; the update reads its per-step
-    // non-null row count. A constant column counts the rows it stands for, not the
-    // one row it is, so it is laid out over the driving relation first.
-    const mlir::Value inputChunk = rowAlignedChunk(mapValue(count.getInput()), _innermostCardinality);
+    // non-null row count. A constant column holds no rows, so it is laid out over the
+    // rows of the region first.
+    const mlir::Value inputChunk = rowAlignedChunk(mapValue(count.getInput()), _regionRows);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -4524,10 +4542,6 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // into a function-scope nl.output reading it - the block that holds the chunk is
     // the entry block, so lowerOutput places nl.output there.
     _valueMap[count.getResult()] = result.getResult();
-
-    // The count collapses the rows in flight to its one row, so from here on that row is
-    // what sizes a projection of constants alone
-    _innermostCardinality = result.getResult();
 }
 
 void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
@@ -4542,14 +4556,13 @@ void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
                                                                 countScanRows.getPropertyScanAttr());
 
     _valueMap[countScanRows.getResult()] = rows.getResult();
-    _innermostCardinality = rows.getResult();
 }
 
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {
     // The nl chunk the aggregated column lowered to; the update folds its per-step
-    // non-null values into the accumulator. A constant column is reduced over the
-    // rows it stands for, so it is laid out over the driving relation first.
-    const mlir::Value alignedChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
+    // non-null values into the accumulator. A constant column holds no rows, so it is
+    // laid out over the rows of the region first.
+    const mlir::Value alignedChunk = rowAlignedChunk(mapValue(input), _regionRows);
 
     const mlir::Value inputChunk = reducedValueChunk(alignedChunk);
 
@@ -4611,7 +4624,6 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The db aggregate's result maps to that chunk, so the db.output that follows
     // lowers into a function-scope nl.output reading it, exactly as db.count does.
     _valueMap[result] = aggregateResult.getResult();
-    _innermostCardinality = aggregateResult.getResult();
 }
 
 void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
@@ -4637,7 +4649,7 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // The group assignment reads one row of every key per row of the step, which a constant
     // key - one value standing for every row - has none of. The keys are laid out first, so
     // that the aggregate inputs behind them are laid out over a key chunk holding rows.
-    rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value>(chunks).take_front(keyCount));
+    rowAlignGroupingKeys(chunks, keyCount);
 
     // A constant aggregate input is reduced over the rows of the group it falls in,
     // not over the single row it is, so it is laid out over the chunk the grouping
@@ -4738,13 +4750,13 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
 
     // The grouping keys are laid out first, as lowerGroupAggregate lays its own: the group
     // assignment reads a row of every key per row of the step, which a constant key has none of.
-    rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value>(chunks).take_front(keyCount));
+    rowAlignGroupingKeys(chunks, keyCount);
 
     // A constant collected column is folded over the rows of the group it falls in, not
     // over the single row it is, so it is laid out over the chunk the grouping keys are
-    // read from - the driving relation when the collect has no keys. The aggregate
+    // read from - the rows of the region when the collect has no keys. The aggregate
     // inputs beside it are laid out the same way, as lowerGroupAggregate lays its own.
-    const mlir::Value cardinality = keyCount > 0 ? chunks.front() : _innermostCardinality;
+    const mlir::Value cardinality = keyCount > 0 ? chunks.front() : _regionRows;
     for (size_t inputIndex = keyCount; inputIndex < chunks.size(); inputIndex++) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
     }
@@ -5678,10 +5690,6 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     for (size_t index = 0; index < dbResults.size(); index++) {
         _valueMap[dbResults[index]] = nlResults[index];
     }
-
-    // The merge grows or shrinks the rows in flight, so from here on what sizes a
-    // projection of constants alone is its own node chunk
-    _innermostCardinality = nlResults.front();
 }
 
 void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty) {
@@ -6256,8 +6264,8 @@ mlir::Value DBLowering::lowerCaseRegion(mlir::Region& region,
 }
 
 mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardinality) {
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
-    _innermostCardinality = cardinality;
+    const mlir::Value previousRegionRows = _regionRows;
+    _regionRows = cardinality;
 
     mlir::Value value;
     for (mlir::Operation& operation : block) {
@@ -6268,7 +6276,7 @@ mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardi
         }
     }
 
-    _innermostCardinality = previousInnermostCardinality;
+    _regionRows = previousRegionRows;
 
     return rowAlignedChunk(value, cardinality);
 }
@@ -6464,7 +6472,6 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
         _valueMap[filteredCol] = outputChunk;
     }
 
-    followCardinalityThrough(columnChunks, nlFilter.getResults());
 }
 
 void DBLowering::lowerFetchNodes(mlir::db::FetchNodes fetch) {
@@ -6496,7 +6503,6 @@ void DBLowering::lowerFetchNodes(mlir::db::FetchNodes fetch) {
         _valueMap[results[resultIndex]] = nlFetch->getResult(resultIndex);
     }
 
-    followCardinalityThrough(inputChunks, nlFetch->getResults());
 }
 
 mlir::Value DBLowering::deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks) {
@@ -6537,7 +6543,41 @@ mlir::Block* DBLowering::deeperOfBlocks(mlir::Block* first, mlir::Block* second)
     throw IRException("db operands read together must be bound in the same loop");
 }
 
+// The constants go out against the driver's row count rather than as columns laid out
+// over its rows first
+nl::Output DBLowering::lowerConstantOutput(mlir::db::Output output, mlir::Value driver) {
+    llvm::SmallVector<mlir::Value, 4> constants;
+    for (const mlir::Value column : output.getColumns()) {
+        mlir::db::BroadcastConstant broadcast = column.getDefiningOp<mlir::db::BroadcastConstant>();
+        constants.push_back(mapValue(broadcast.getValue()));
+
+        mlir::Operation* const layout = mapValue(broadcast.getResult()).getDefiningOp();
+        if (broadcast->hasOneUse() && layout && layout->use_empty()) {
+            layout->erase();
+        }
+    }
+
+    const mlir::Value cardinality = driver ? mapValue(driver) : mlir::Value();
+    setInsertionInto(cardinality ? ownerBlock(cardinality) : ownerBlock(constants.front()));
+
+    return _builder.create<nl::Output>(_builder.getUnknownLoc(),
+                                       constants,
+                                       mlir::Value(),
+                                       mlir::Value(),
+                                       cardinality,
+                                       output.getColumnNamesAttr());
+}
+
 nl::Output DBLowering::lowerOutput(mlir::db::Output output) {
+    // A union branch's columns meet the other branches' and take one type with them, so
+    // they stay laid out
+    const bool feedsAUnion = mlir::isa<mlir::db::Union>(output->getParentOp());
+
+    mlir::Value driver;
+    if (!feedsAUnion && laysConstantsOverOneRelation(output.getColumns(), driver)) {
+        return lowerConstantOutput(output, driver);
+    }
+
     llvm::SmallVector<mlir::Value, 4> columns;
     for (const mlir::Value column : output.getColumns()) {
         columns.push_back(mapValue(column));
@@ -6555,9 +6595,9 @@ nl::Output DBLowering::lowerOutput(mlir::db::Output output) {
     // dropping the copy.
 
     // If there is a column which is produced by a block which is not the entry block
-    // (e.g. a loop block), then set the anchor to be that block. Otherwise, we have no
-    // loops, i.e. we are in a MATCH (n) RETURN 5 case, where the output can just be in
-    // the entry block since it is independent of any loop (over n in this case).
+    // (e.g. a loop block), then set the anchor to be that block. Otherwise the columns are
+    // constants alone, which stand for the single row of the top level, and the output goes
+    // in the entry block.
     // Getting the owner block of the returned column is sufficient because in nested
     // loops, each Cypher variable is redefined each op due to the carry set implictly
     // filtering. Otherwise we would need to check for the *deepest* block of all
@@ -6571,29 +6611,13 @@ nl::Output DBLowering::lowerOutput(mlir::db::Output output) {
         }
     }
 
-    // Custom cardinality calculation for e.g. MATCH (n) RETURN 5
-    mlir::Value cardinality;
-    // Output would not normally be in a loop body, but toplevel
-    const bool returningNonLooped = anchorBlock == _entryBlock;
-    if (returningNonLooped && _innermostLoopBody) {
-        // but if we have all constants, then it need be moved to the inner most loop to
-        // match cardinality. An expression over constants alone is one of them: it is
-        // bound where its operands are, above the loop whose rows it is projected over
-        const bool allConstants = llvm::all_of(columns, [this](mlir::Value column) { return yieldsConstantColumn(column, _constantColumns); });
-
-        if (allConstants) {
-            anchorBlock = _innermostLoopBody;
-            cardinality = _innermostCardinality;
-        }
-    }
-
     setInsertionInto(anchorBlock);
 
     return _builder.create<nl::Output>(_builder.getUnknownLoc(),
                                        columns,
                                        mlir::Value(),
                                        mlir::Value(),
-                                       cardinality,
+                                       mlir::Value(),
                                        output.getColumnNamesAttr());
 }
 
@@ -6815,11 +6839,6 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
     // nest in dataflow order), so a cross product nests at this body.
     _innermostLoopBody = loopBody;
 
-    // A loop over a call that binds no return value has no variable, so there is no chunk
-    // here for a constant projection to be sized against.
-    _innermostCardinality = loopBody->getNumArguments() > 0 ? loopBody->getArgument(0)
-                                                           : mlir::Value();
-
     const mlir::ResultRange dbResults = dbOp->getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = loopBody->getArgument(static_cast<unsigned>(resultIndex));
@@ -6918,23 +6937,6 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
     return slotIt->second;
 }
 
-void DBLowering::followCardinalityThrough(mlir::ValueRange inputChunks, mlir::ValueRange resultChunks) {
-    if (!_innermostCardinality) {
-        return;
-    }
-
-    // Any chunk of the driver's relation stands for it: a cut trimmed down to a column other
-    // than the driver itself still narrows the relation the driver counts.
-    for (size_t chunkIndex = 0; chunkIndex < inputChunks.size(); chunkIndex++) {
-        if (!rowAlignedWith(inputChunks[chunkIndex], _innermostCardinality)) {
-            continue;
-        }
-
-        _innermostCardinality = resultChunks[chunkIndex];
-        return;
-    }
-}
-
 void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
     mlir::Value cardinality;
     for (const mlir::Value chunk : chunks) {
@@ -6954,7 +6956,7 @@ void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks
 // constants are laid out first: over the relation driving the step, or - where none drives
 // it - over the single row the projection is.
 void DBLowering::rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunks) {
-    mlir::Value cardinality = _innermostCardinality;
+    mlir::Value cardinality = _regionRows;
     for (const mlir::Value chunk : chunks) {
         if (!yieldsConstantColumn(chunk, _constantColumns)) {
             cardinality = chunk;
@@ -6967,15 +6969,26 @@ void DBLowering::rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunk
     }
 }
 
+// The grouping keys are laid out over the rows the op reads: those of a key that carries
+// rows, else those of a column it aggregates
+void DBLowering::rowAlignGroupingKeys(llvm::MutableArrayRef<mlir::Value> chunks, size_t keyCount) {
+    const mlir::Value rows = cardinalityDriver(chunks);
+
+    for (mlir::Value& key : chunks.take_front(keyCount)) {
+        key = rowAlignedChunk(key, rows);
+    }
+}
+
 void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
-    // With no relation driving the projection a constant is the single row that
-    // projection is, and the cut charges it as it stands.
-    if (!_innermostCardinality) {
+    // Constants alone at the top level are the single row they stand for, and the cut
+    // charges it as it stands
+    const mlir::Value cardinality = cardinalityDriver(chunks);
+    if (!cardinality) {
         return;
     }
 
     for (mlir::Value& chunk : chunks) {
-        chunk = rowAlignedChunk(chunk, _innermostCardinality);
+        chunk = rowAlignedChunk(chunk, cardinality);
     }
 }
 
@@ -7131,7 +7144,7 @@ mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) {
         }
     }
 
-    return _innermostCardinality;
+    return _regionRows;
 }
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {

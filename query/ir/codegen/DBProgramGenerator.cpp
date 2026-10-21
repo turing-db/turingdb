@@ -753,6 +753,13 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
 }
 
+// A constant, or one laid out over a relation, holds one value in every row
+bool holdsOneValue(mlir::Value column) {
+    mlir::db::BroadcastConstant broadcast = column.getDefiningOp<mlir::db::BroadcastConstant>();
+
+    return yieldsConstantColumn(broadcast ? broadcast.getValue() : column);
+}
+
 // A constant column holds the same value in every row, so a step shaped by rows - a
 // dedup, a sort, a cut - is not given one: reading it would anchor that step where the
 // constant is bound, above the loop the other columns are read in
@@ -998,13 +1005,23 @@ DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule,
                                        const mlir::db::DBPassContext& passContext)
     : _module(mainModule),
     _mlirCtxt(_module->getContext()),
-    _opBuilder(_module->getBodyRegion()),
+    _constantRowsListener(this),
+    _opBuilder(_module->getBodyRegion(), &_constantRowsListener),
     _explain(explain),
     _passContext(passContext)
 {
 }
 
 DBProgramGenerator::~DBProgramGenerator() {
+}
+
+DBProgramGenerator::ConstantRowsListener::ConstantRowsListener(DBProgramGenerator* generator)
+    : _generator(generator)
+{
+}
+
+void DBProgramGenerator::ConstantRowsListener::notifyOperationInserted(mlir::Operation* op, mlir::OpBuilder::InsertPoint previous) {
+    _generator->layConstantOperandsOverRows(op);
 }
 
 mlir::db::ColumnType DBProgramGenerator::allocColumnType(mlir::Type type) {
@@ -5085,7 +5102,7 @@ mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) con
         }
 
         const mlir::Value column = findIt->second.back();
-        if (!isRowAlignedHere(column) || !accept(column)) {
+        if (!holdsTheRowsInFlight(column) || !accept(column)) {
             continue;
         }
 
@@ -5093,12 +5110,26 @@ mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) con
     }
 
     for (const YieldedColumn& yielded : _part._yieldedColumns) {
-        if (isRowAlignedHere(yielded._column)) {
+        if (holdsTheRowsInFlight(yielded._column)) {
             return yielded._column;
         }
     }
 
-    return mlir::Value {};
+    // The entities one write created hold the same rows, so the first one bound stands for them
+    mlir::Value firstCreated;
+    for (const auto& [decl, created] : _part._createdEntities) {
+        const mlir::Value column = created._column;
+        if (!column || !holdsTheRowsInFlight(column) || !accept(column)) {
+            continue;
+        }
+
+        const bool boundEarlier = !firstCreated || computedBefore(column, firstCreated);
+        if (boundEarlier) {
+            firstCreated = column;
+        }
+    }
+
+    return firstCreated;
 }
 
 mlir::Value DBProgramGenerator::readWalkEntities(const Expr* argExpr, mlir::Value column) {
@@ -5130,14 +5161,7 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
         return getOrTranslateBoundColumn(argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
-        mlir::Block* const block = _opBuilder.getInsertionBlock();
-        const mlir::Block::iterator insertionPoint = _opBuilder.getInsertionPoint();
-        mlir::Operation* const lastOpBefore = insertionPoint == block->begin() ? nullptr : &*std::prev(insertionPoint);
-
         translateExpr(argExpr);
-
-        const mlir::Block::iterator firstTranslated = lastOpBefore ? std::next(lastOpBefore->getIterator()) : block->begin();
-        alignConstantOperandsToDriver(firstTranslated, _opBuilder.getInsertionPoint());
 
         return alignConstantToDriver(_part._exprMap.at(argExpr));
     }
@@ -5159,7 +5183,13 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 }
 
 mlir::Value DBProgramGenerator::resolveRowCarryingColumn() {
-    return resolveColumnInScope([this](mlir::Value column) { return !yieldsConstantColumn(column, _constantColumns); });
+    const mlir::Value column = resolveColumnInScope([this](mlir::Value column) { return !yieldsConstantColumn(column, _constantColumns); });
+    if (column || !_part._aggregateOp) {
+        return column;
+    }
+
+    // Under grouping keys no variable names, the groups are held by the aggregate's results alone
+    return _part._aggregateOp->getResult(0);
 }
 
 mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
@@ -5177,29 +5207,26 @@ mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
     return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), noneType, column, driver).getResult();
 }
 
-void DBProgramGenerator::alignConstantOperandsToDriver(mlir::Block::iterator first, mlir::Block::iterator last) {
+void DBProgramGenerator::layConstantOperandsOverRows(mlir::Operation* op) {
+    if (!mlir::db::readsConstantColumnsAlone(op, _constantColumns)) {
+        return;
+    }
+
     const mlir::Value driver = resolveRowCarryingColumn();
     if (!driver) {
         return;
     }
 
-    const auto isConstant = [this](mlir::Value value) { return yieldsConstantColumn(value, _constantColumns); };
-
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-    const mlir::OpBuilder::InsertionGuard insertionGuard(_opBuilder);
 
-    for (mlir::Operation& op : llvm::make_range(first, last)) {
-        const bool readsConstantsAlone = op.getNumOperands() > 0 && llvm::all_of(op.getOperands(), isConstant);
-        const bool runsPerRow = !llvm::all_of(op.getResults(), isConstant);
-        if (!readsConstantsAlone || !runsPerRow) {
+    mlir::OpBuilder builder(op);
+    for (mlir::OpOperand& operand : op->getOpOperands()) {
+        const mlir::Value column = operand.get();
+        if (!mlir::isa<mlir::db::ColumnType>(column.getType())) {
             continue;
         }
 
-        _opBuilder.setInsertionPoint(&op);
-        for (mlir::OpOperand& operand : op.getOpOperands()) {
-            operand.set(_opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, operand.get(), driver).getResult());
-        }
+        operand.set(builder.create<mlir::db::BroadcastConstant>(op->getLoc(), noneType, column, driver).getResult());
     }
 }
 
@@ -5383,6 +5410,8 @@ void DBProgramGenerator::generateOutput(const Projection* projection, const Unio
     llvm::SmallVector<mlir::Value> outputted;
     llvm::SmallVector<llvm::StringRef> outputNames;
     translateProjection(projection, variableColumns, outputted, outputNames);
+
+    broadcastConstantProjection(outputted);
 
     buildNamedPathItems(projection, outputted);
     expandPathItems(projection, outputted);
@@ -6888,10 +6917,11 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
     llvm::SmallVector<size_t> dedupedCarriedColumns;
     collectCarriedRowColumns(carriedColumns, dedupedCarriedColumns, dedupedColumns);
 
-    // Every column is constant, so the projection is one row repeated as many times as
+    // Every column holds one value, so the projection is one row repeated as many times as
     // the query matched: no column tells two of those rows apart, and the one the dedup
     // keeps is the first of them - the projection capped at a single row
-    if (dedupedColumns.empty()) {
+    const bool oneValuePerColumn = std::ranges::all_of(projected, holdsOneValue) && dedupedCarriedColumns.empty();
+    if (dedupedColumns.empty() || oneValuePerColumn) {
         translateDistinctOverConstants(projection, projected);
     } else {
         llvm::SmallVector<mlir::Value> deduped;

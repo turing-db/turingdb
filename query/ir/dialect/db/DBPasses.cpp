@@ -5924,6 +5924,26 @@ void keepRowCarryingColumn(ValueRange columns, size_t firstIndex, llvm::SmallBit
     }
 }
 
+// Whether the op's rows are those of its carry set: its results are its carried columns, or
+// the operands it reads beside them are constants, which hold no rows of their own
+bool takesItsRowsFromItsCarrySet(Operation* op, const CarrySetLayout& layout) {
+    if (layout._resultOffset == 0) {
+        return true;
+    }
+
+    const size_t carriedEnd = op->getNumOperands() - layout._trailingOperandCount;
+    for (size_t operandIndex = 0; operandIndex < op->getNumOperands(); operandIndex++) {
+        const bool carried = operandIndex >= layout._operandOffset && operandIndex < carriedEnd;
+        const Value operand = op->getOperand(operandIndex);
+
+        if (!carried && isa<ColumnType>(operand.getType()) && !::db::yieldsConstantColumn(operand)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void selectKeptCarriedColumns(Operation* op, const CarrySetLayout& layout, llvm::SmallVectorImpl<size_t>& kept) {
     const size_t count = carriedCount(op, layout);
 
@@ -5936,9 +5956,8 @@ void selectKeptCarriedColumns(Operation* op, const CarrySetLayout& layout, llvm:
 
     keepRequiredColumns(op, keep);
 
-    const bool standsForItsRows = layout._resultOffset == 0;
-    if (standsForItsRows) {
-        keepRowCarryingColumn(op->getOperands().drop_front(layout._operandOffset), 0, keep);
+    if (takesItsRowsFromItsCarrySet(op, layout)) {
+        keepRowCarryingColumn(op->getOperands().slice(layout._operandOffset, count), 0, keep);
     }
 
     for (size_t carriedIndex = 0; carriedIndex < count; carriedIndex++) {
@@ -7559,6 +7578,53 @@ Value handedOnFrom(OpResult result) {
     return {};
 }
 
+bool drivesABroadcast(OpOperand& use) {
+    BroadcastConstant broadcast = dyn_cast<BroadcastConstant>(use.getOwner());
+
+    return broadcast && broadcast.getDriver() == use.get();
+}
+
+// Whether @param column is read once, setting aside the broadcasts it drives
+bool readOnceBesidesBroadcasts(Value column) {
+    const size_t reads = llvm::count_if(column.getUses(), [](OpOperand& use) {
+        return !drivesABroadcast(use);
+    });
+
+    return reads == 1;
+}
+
+// A broadcast reads only the rows of its driver, so one driven by a column a rewrite drops
+// is driven by @param kept instead: a column of the same rows the rewrite keeps, or none
+// where the dropped column held the rows alone
+void redriveBroadcasts(Value dropped, Value kept, mlir::RewriterBase& rewriter) {
+    for (OpOperand& use : llvm::make_early_inc_range(dropped.getUses())) {
+        if (!drivesABroadcast(use)) {
+            continue;
+        }
+
+        BroadcastConstant broadcast = cast<BroadcastConstant>(use.getOwner());
+        rewriter.modifyOpInPlace(broadcast, [&broadcast, kept]() {
+            MutableOperandRange driver = broadcast.getDriverMutable();
+            if (kept) {
+                driver.assign(kept);
+            } else {
+                driver.clear();
+            }
+        });
+    }
+}
+
+// The column standing for the same rows as @param link once it is dropped from its op
+Value siblingOf(OpResult link) {
+    for (const OpResult result : link.getOwner()->getResults()) {
+        if (result != link) {
+            return result;
+        }
+    }
+
+    return {};
+}
+
 bool isFactorOfTheScanAlone(Block* block) {
     const bool inAProduct = isa_and_nonnull<CrossProduct>(block->getParentOp());
 
@@ -7597,7 +7663,7 @@ bool matchFetchNodesChain(Value nodes, Value ids, FetchNodesChain& chain) {
         const bool readByTheEquality = user == chain._equality.getOperation();
         const bool carriedByTheFilter = user == chain._filter.getOperation() && use.getOperandNumber() > 0;
 
-        if (!readByTheEquality && !carriedByTheFilter) {
+        if (!readByTheEquality && !carriedByTheFilter && !drivesABroadcast(use)) {
             return false;
         }
     }
@@ -7616,7 +7682,7 @@ bool matchFetchNodesChain(Value nodes, Value ids, FetchNodesChain& chain) {
             return false;
         }
 
-        const bool readByTheLinkAlone = handedOn.hasOneUse();
+        const bool readByTheLinkAlone = readOnceBesidesBroadcasts(handedOn);
         if (!readByTheLinkAlone || !keepsAColumnOnceDropped(link, handedOn)) {
             return false;
         }
@@ -7750,6 +7816,17 @@ void fuseFetchNodes(FetchNodesChain& chain, mlir::RewriterBase& rewriter) {
             fetchTypes.push_back(column.getType());
         }
     }
+
+    for (const OpResult link : chain._links) {
+        redriveBroadcasts(link, siblingOf(link), rewriter);
+    }
+
+    Block* const scanBlock = chain._scan->getBlock();
+    const auto rowArgument = llvm::find_if(scanBlock->getArguments(), [](BlockArgument argument) {
+        return isa<ColumnType>(argument.getType());
+    });
+    const Value rowsBeforeTheScan = rowArgument == scanBlock->args_end() ? Value() : Value(*rowArgument);
+    redriveBroadcasts(chain._scan->getResult(0), rowsBeforeTheScan, rewriter);
 
     rewriter.setInsertionPoint(filter);
     FetchNodes fetch = rewriter.create<FetchNodes>(loc, fetchTypes, chain._ids, fetchCarried);
