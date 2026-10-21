@@ -779,6 +779,21 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
     return builder.getIntegerType(64);
 }
 
+// The element of one column holding both @param lhs and @param rhs, or a null type when
+// no column type holds the two
+mlir::Type unifiedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
+    if (lhs == rhs) {
+        return lhs;
+    } else if (isNumericElement(lhs) && isNumericElement(rhs)) {
+        return promoteNumeric(builder, lhs, rhs);
+    } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
+        mlir::MLIRContext* const context = builder.getContext();
+        return storage::ListType::get(context, storage::ListElementType::get(context));
+    }
+
+    return mlir::Type {};
+}
+
 // The value-reduction AggregateKind matching a grouped aggregate's kind, so the
 // grouped result-type resolution reuses aggregateResultElementType. count and
 // count_distinct tally rows rather than reducing values, so they have no
@@ -2166,18 +2181,17 @@ mlir::Type DBLowering::accumulatedElement(mlir::Type accumulated, mlir::Type chu
         return accumulated;
     }
 
-    mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type element = chunkValueElement(_builder, chunkType);
-
-    if (!accumulated || accumulated == element) {
+    if (!accumulated) {
         return element;
-    } else if (isNumericElement(accumulated) && isNumericElement(element)) {
-        return promoteNumeric(_builder, accumulated, element);
-    } else if (mlir::isa<storage::ListType>(accumulated) && mlir::isa<storage::ListType>(element)) {
-        return storage::ListType::get(context, storage::ListElementType::get(context));
     }
 
-    return storage::ListElementType::get(context);
+    const mlir::Type unified = unifiedValueElement(_builder, accumulated, element);
+    if (!unified) {
+        return storage::ListElementType::get(_builder.getContext());
+    }
+
+    return unified;
 }
 
 nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
@@ -6188,19 +6202,16 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
         }
 
         const mlir::Type element = chunkValueElement(_builder, chunkType);
-
-        if (!unified || unified == element) {
+        if (!unified) {
             unified = element;
             continue;
         }
 
-        const bool bothNumeric = isNumericElement(unified) && isNumericElement(element);
-        if (!bothNumeric) {
-            throw IRException("db.case requires branches of one type, or of numeric types "
-                              "that promote against each other");
+        unified = unifiedValueElement(_builder, unified, element);
+        if (!unified) {
+            throw IRException("db.case requires branches of one type, of numeric types "
+                              "that promote against each other, or of lists");
         }
-
-        unified = promoteNumeric(_builder, unified, element);
     }
 
     // Every branch is the null literal, so no branch says what the column holds. The rows
@@ -6210,19 +6221,15 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
         return _builder.getIntegerType(64);
     }
 
-    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(unified);
-    const bool isBool = integerType && integerType.getWidth() == 1;
-    const bool isString = mlir::isa<storage::StringType>(unified);
-
     // A node or an edge is selected as the entity it is rather than as its ID's integer,
     // so the selection answers a column the rest of the query still reads as an entity.
     // Mixing one with a scalar, or a node with an edge, was already turned away above:
-    // neither pair promotes.
+    // neither pair unifies.
     const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
+    const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
 
-    if (!isNumericElement(unified) && !isBool && !isString && !isEntity) {
-        throw IRException("db.case requires scalar or entity branches: a list or an "
-                          "embedding is not a value a branch can select");
+    if (!isEntity && !isValue) {
+        throw IRException("db.case requires value or entity branches");
     }
 
     return unified;
@@ -6236,6 +6243,8 @@ mlir::Value DBLowering::chunkAsElement(mlir::Value chunk, mlir::Type resultEleme
     if (isUntypedNullChunk(chunkType)) {
         return chunk;
     } else if (chunkValueElement(_builder, chunkType) == resultElement) {
+        return chunk;
+    } else if (mlir::isa<storage::ListType>(resultElement)) {
         return chunk;
     }
 

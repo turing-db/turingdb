@@ -638,13 +638,14 @@ private:
     mlir::nl::ChunkType caseResultChunkType(mlir::Type resultElement);
 
     // The value element type a CASE's branches share: the one they all carry, the
-    // promotion of their numbers when they carry two, and an i64 when every branch is
-    // null. A branch no value column can hold is rejected here.
+    // promotion of their numbers when they carry two, a list of tagged cells when they
+    // carry lists of different elements, and an i64 when every branch is null. A branch
+    // no value column can hold is rejected here.
     mlir::Type caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks);
 
     // @param chunk as a column of @param resultElement: itself when it already carries
-    // that element, and an nl.to_float / nl.to_integer of it otherwise. An untyped null
-    // is left untyped.
+    // that element or is a list, whose cells are list views whatever their elements, and
+    // an nl.to_float / nl.to_integer of it otherwise. An untyped null is left untyped.
     mlir::Value chunkAsElement(mlir::Value chunk, mlir::Type resultElement);
 
     mlir::Value propertyWriteChunk(llvm::StringRef propertyName, mlir::Value chunk);

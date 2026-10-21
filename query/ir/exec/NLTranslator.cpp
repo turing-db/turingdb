@@ -19,6 +19,7 @@
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
+#include "IRValueTypes.h"
 #include "PathHopArguments.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
@@ -330,38 +331,19 @@ PathExplorationDir toPathExplorationDir(storage::PathDirection direction) {
 }
 
 ValueType valueTypeFromElementType(mlir::Type elementType) {
-    if (mlir::isa<storage::StringType>(elementType)) {
-        return ValueType::String;
-    } else if (mlir::isa<storage::EmbeddingType>(elementType)) {
-        return ValueType::Embedding;
-    } else if (mlir::isa<storage::ListType>(elementType)) {
-        return ValueType::List;
-    } else if (mlir::isa<storage::DateTimeType>(elementType)) {
-        return ValueType::DateTime;
-    } else if (mlir::isa<storage::DurationType>(elementType)) {
-        return ValueType::Duration;
-    } else if (mlir::isa<storage::MapType>(elementType)) {
-        return ValueType::Map;
-    } else if (mlir::isa<mlir::Float64Type>(elementType)) {
-        return ValueType::Double;
-    } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
-        const bool isBool = intType.getWidth() == 1;
-        const bool isUnsigned = intType.isUnsigned();
-        if (isBool) {
-            return ValueType::Bool;
-        } else if (isUnsigned) {
-            return ValueType::UInt64;
-        } else {
-            return ValueType::Int64;
-        }
-    } else if (mlir::isa<mlir::NoneType>(elementType)) {
-        // A null literal carries no type of its own, and a column has to have one to be
-        // laid out: it is carried as a null integer, which every reader sees as the
-        // absent value it is - the count that skips it, the key that groups on it
+    // A null literal carries no type of its own, and a column has to have one to be
+    // laid out: it is carried as a null integer, which every reader sees as the
+    // absent value it is - the count that skips it, the key that groups on it
+    if (mlir::isa<mlir::NoneType>(elementType)) {
         return ValueType::Int64;
     }
 
-    throw IRException("Unsupported nullable value chunk element type");
+    const ValueType valueType = elementTypeToValueType(elementType);
+    if (valueType == ValueType::Invalid) {
+        throw IRException("Unsupported nullable value chunk element type");
+    }
+
+    return valueType;
 }
 
 template <SupportedType T>
