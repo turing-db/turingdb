@@ -2369,10 +2369,12 @@ int compareOptListElementColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
-// 3-way compare two rows of a collected list column. Two lists order lexicographically
-// on the element order above, so a list can be the key the rows are sorted on.
-int compareListColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
+// 3-way compare two rows of a list or a map column. Two lists order lexicographically
+// on the element order above, and two maps by size, then keys, then values, so either can
+// be the key the rows are sorted on.
+template <typename View>
+int compareContainerColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnVector<View>*>(column)->getRaw();
     const std::strong_ordering order = raw[a] <=> raw[b];
 
     if (order == std::strong_ordering::less) {
@@ -2384,12 +2386,13 @@ int compareListColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
-// The nullable sibling, for a list read out of a property: a row holding no list sorts
-// after every list, as compareOptColumn places a null after every value.
-int compareOptListColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
-    const std::optional<ListView>& valueA = raw[a];
-    const std::optional<ListView>& valueB = raw[b];
+// The nullable sibling, for a list or a map read out of a property: a row holding none
+// sorts after every value, as compareOptColumn places a null after every value.
+template <typename View>
+int compareOptContainerColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnOptVector<View>*>(column)->getRaw();
+    const std::optional<View>& valueA = raw[a];
+    const std::optional<View>& valueB = raw[b];
 
     const bool aNull = !valueA.has_value();
     const bool bNull = !valueB.has_value();
@@ -11269,7 +11272,7 @@ NLCopyFunction NLExecutor::selectOptListElementCopyFunction() {
 }
 
 NLCompareFunction NLExecutor::selectListCompareFunction() {
-    return &compareListColumn;
+    return &compareContainerColumn<ListView>;
 }
 
 // The nullable list family, which labels() produces: a node an OPTIONAL MATCH did not
@@ -11318,7 +11321,7 @@ NLGatherFunction NLExecutor::selectOptListGatherFunction() {
 }
 
 NLCompareFunction NLExecutor::selectOptListCompareFunction() {
-    return &compareOptListColumn;
+    return &compareOptContainerColumn<ListView>;
 }
 
 NLKeyAppendFunction NLExecutor::selectOptListKeyAppendFunction() {
@@ -12671,11 +12674,11 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::List:
-            return &compareListColumn;
+            return &compareContainerColumn<ListView>;
         break;
 
         case NLChunkKind::Map:
-            throw IRException("A map column cannot be a sort key: a map has no order here");
+            return &compareContainerColumn<MapView>;
         break;
 
         case NLChunkKind::Path:
@@ -12734,7 +12737,7 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
         break;
 
         case ValueType::List:
-            return &compareOptListColumn;
+            return &compareOptContainerColumn<ListView>;
         break;
 
         case ValueType::DateTime:
@@ -12746,7 +12749,7 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
         break;
 
         case ValueType::Map:
-            throw IRException("cannot sort by a map column");
+            return &compareOptContainerColumn<MapView>;
         break;
 
         case ValueType::Invalid:

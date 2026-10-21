@@ -75,14 +75,6 @@ TEST_F(QueryInterpreterV3ErrorTest, reportsRejectedExpressionWithItsLocation) {
               "-------* Expressions in DELETE statements can only be symbols");
 }
 
-TEST_F(QueryInterpreterV3ErrorTest, reportsMapSortKey) {
-    QueryStatus status;
-    runQuery("MATCH (n) RETURN n.name ORDER BY {a: n.age}", status);
-
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
-    EXPECT_EQ(status.getError(), "A map column cannot be a sort key: a map has no order here");
-}
-
 TEST_F(QueryInterpreterV3ErrorTest, deleteOutsideWrite) {
     QueryStatus status;
     runQuery("MATCH (n) DELETE n", status);

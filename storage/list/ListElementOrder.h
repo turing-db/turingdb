@@ -37,9 +37,10 @@ bool operator==(ListElementView lhs, ListElementView rhs);
 std::strong_ordering operator<=>(ListView lhs, ListView rhs);
 
 /**
- * @brief Orders two maps entry by entry, on the key and then on the value, putting the
- * shorter map first when one is a prefix of the other. Entries are compared in the order
- * the maps hold them, which is sorted by key for every map codegen or a MapContainer builds.
+ * @brief Orders two maps as Cypher does: the map with fewer entries first, then maps of one
+ * size by their sorted keys, then maps of one key set by their values pairwise. Entries are
+ * read in the order the maps hold them, which is sorted by key for every map codegen or a
+ * MapContainer builds.
  */
 std::strong_ordering operator<=>(MapView lhs, MapView rhs);
 

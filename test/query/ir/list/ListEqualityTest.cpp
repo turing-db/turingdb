@@ -127,7 +127,6 @@ TEST_F(ListEqualityTest, filtersOnAListEquality) {
 }
 
 // A list may hold a map, so two such lists compare like any other pair: entry by entry.
-// Equality is not ordering - a map has no order here, but two maps are plainly equal or not.
 TEST_F(ListEqualityTest, listsHoldingMapsComparePairwise) {
     expectRows("RETURN [{a: 1}] = [{a: 1}]", {{"true"}});
     expectRows("RETURN [{a: 1}] = [{a: 2}]", {{"false"}});

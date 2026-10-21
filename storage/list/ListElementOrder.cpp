@@ -467,24 +467,27 @@ bool db::operator==(const ListView lhs, const ListView rhs) {
 std::strong_ordering db::operator<=>(const MapView lhs, const MapView rhs) {
     const std::span<const MapEntryView> lhsEntries = lhs.entries();
     const std::span<const MapEntryView> rhsEntries = rhs.entries();
-    const size_t common = std::min(lhsEntries.size(), rhsEntries.size());
 
-    for (size_t index = 0; index < common; index++) {
-        const MapEntryView lhsEntry = lhsEntries[index];
-        const MapEntryView rhsEntry = rhsEntries[index];
+    const std::strong_ordering sizeOrder = lhsEntries.size() <=> rhsEntries.size();
+    if (sizeOrder != std::strong_ordering::equal) {
+        return sizeOrder;
+    }
 
-        const std::strong_ordering keyOrder = lhsEntry.getKey() <=> rhsEntry.getKey();
+    for (size_t index = 0; index < lhsEntries.size(); index++) {
+        const std::strong_ordering keyOrder = lhsEntries[index].getKey() <=> rhsEntries[index].getKey();
         if (keyOrder != std::strong_ordering::equal) {
             return keyOrder;
         }
+    }
 
-        const std::strong_ordering valueOrder = compareValues(lhsEntry, rhsEntry);
+    for (size_t index = 0; index < lhsEntries.size(); index++) {
+        const std::strong_ordering valueOrder = compareValues(lhsEntries[index], rhsEntries[index]);
         if (valueOrder != std::strong_ordering::equal) {
             return valueOrder;
         }
     }
 
-    return lhsEntries.size() <=> rhsEntries.size();
+    return std::strong_ordering::equal;
 }
 
 bool db::operator==(const MapView lhs, const MapView rhs) {
