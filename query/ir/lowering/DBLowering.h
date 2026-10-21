@@ -868,10 +868,10 @@ private:
     // or the chunk itself where it already spells one
     mlir::Value paddedColumnChunk(mlir::Value chunk);
 
-    mlir::Value nullableListChunk(mlir::Value chunk);
+    mlir::Value nullableContainerChunk(mlir::Value chunk);
 
     // Builds the nl.to_nullable that wraps @param chunk's rows in @param valueElement's
-    // nullable column, which the value and the list siblings above share
+    // nullable column, which the value and the container siblings above share
     mlir::Value toNullableChunk(mlir::Value chunk, mlir::Type valueElement);
 
     // The element type of the lists @param chunks build: the one type every chunk carries,

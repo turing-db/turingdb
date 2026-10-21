@@ -7220,17 +7220,17 @@ mlir::Value DBLowering::nullTestedChunk(mlir::Value chunk) {
     const mlir::Type element = chunkType.getElementType();
     if (mlir::isa<storage::EntityListType, storage::PathRefType>(element)) {
         return toNullableChunk(chunk, _builder.getIntegerType(64, /*isSigned=*/false));
-    } else if (mlir::isa<storage::ListType>(element)) {
-        return nullableListChunk(chunk);
+    } else if (mlir::isa<storage::ListType, storage::MapType>(element)) {
+        return nullableContainerChunk(chunk);
     }
 
     return nullableValueChunk(chunk);
 }
 
-// The nullable column a list rides where a row of it can be absent - the drain padding the
-// input rows a subquery body yielded nothing for. Kept apart from the value sibling so the
-// reductions and comparisons that read only a scalar still turn a list away.
-mlir::Value DBLowering::nullableListChunk(mlir::Value chunk) {
+// The nullable column a list or a map rides where a row of it can be absent - the drain
+// padding the input rows a subquery body yielded nothing for. Kept apart from the value
+// sibling so the reductions and comparisons that read only a scalar still turn one away.
+mlir::Value DBLowering::nullableContainerChunk(mlir::Value chunk) {
     const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
     const mlir::Type element = chunkType.getElementType();
     if (mlir::isa<storage::NullableType>(element)) {
@@ -7302,8 +7302,8 @@ mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
 
     const mlir::Type element = chunkType.getElementType();
 
-    if (mlir::isa<storage::ListType>(element)) {
-        return nullableListChunk(chunk);
+    if (mlir::isa<storage::ListType, storage::MapType>(element)) {
+        return nullableContainerChunk(chunk);
     } else if (mlir::isa<storage::BoolType, storage::StringType, mlir::Float64Type, mlir::IntegerType>(element)) {
         return nullableValueChunk(chunk);
     }
