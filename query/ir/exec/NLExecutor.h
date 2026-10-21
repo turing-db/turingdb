@@ -754,7 +754,7 @@ public:
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
     static NLKeyAppendFunction selectOptKeyAppendFunction(NLChunkKind kind);
 
-    // Hash and equality for a join key: an ID chunk of this kind, a nullable value chunk
+    // Hash, equality and match test for a join key: an ID chunk of this kind, a nullable value chunk
     // of this value type, a plain numeric chunk, a type-erased cell, a mask.
     // Used by nl.hash_join_collect to chain a build row under its hash and by
     // nl.hash_join_probe to find and confirm the build rows a probe row matches. Two values
@@ -767,18 +767,6 @@ public:
     static NLJoinKeyFunctions selectOptCellJoinKeyFunctions();
     static NLJoinKeyFunctions selectMaskJoinKeyFunctions();
     static NLKeyEqualFunction selectCrossTypeKeyEqualFunction(const Column* probe, const Column* build);
-
-    // Per-row test of whether a join key can match. An ID chunk holds neither a null nor
-    // a NaN, so every row of it matches; a nullable value chunk reads its present flag, a
-    // type-erased cell its tag, and a NaN, a vector holding one or a list holding a null
-    // equals no key. Used by nl.hash_join_collect to leave a key out of the index and by
-    // nl.hash_join_probe to leave a probe row unmatched.
-    static NLKeyIsMatchableFunction everyKeyMatchable();
-    static NLKeyIsMatchableFunction selectOptKeyMatchableFunction(ValueType valueType);
-    static NLKeyIsMatchableFunction selectPlainKeyMatchableFunction(ValueType valueType);
-    static NLKeyIsMatchableFunction selectListKeyMatchableFunction();
-    static NLKeyIsMatchableFunction selectCellKeyMatchableFunction();
-    static NLKeyIsMatchableFunction selectOptCellKeyMatchableFunction();
 
     // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows
     // is its handle (the row count); a nullable value chunk of this value type

@@ -451,6 +451,81 @@ bool db::operator==(const MapView lhs, const MapView rhs) {
     return true;
 }
 
+std::optional<bool> db::equalOrUnknown(const CellView lhs, const CellView rhs) {
+    const CellTag lhsTag = tagOf(lhs);
+    const CellTag rhsTag = tagOf(rhs);
+
+    const bool holdsNull = lhsTag == CellTag::Null || rhsTag == CellTag::Null;
+    const bool bothMaps = lhsTag == CellTag::MapView && rhsTag == CellTag::MapView;
+    const bool bothLists = lhsTag == CellTag::ListView && rhsTag == CellTag::ListView;
+
+    if (holdsNull) {
+        return std::nullopt;
+    } else if (bothMaps) {
+        return equalOrUnknown(valueOf<MapView>(lhs), valueOf<MapView>(rhs));
+    } else if (bothLists) {
+        return equalOrUnknown(valueOf<ListView>(lhs), valueOf<ListView>(rhs));
+    }
+
+    return valuesEqual(lhs, rhs);
+}
+
+std::optional<bool> db::equalOrUnknown(const ListView lhs, const ListView rhs) {
+    const std::span<const CellView> lhsElements = lhs.elements();
+    const std::span<const CellView> rhsElements = rhs.elements();
+    if (lhsElements.size() != rhsElements.size()) {
+        return false;
+    }
+
+    bool unknown = false;
+
+    for (size_t index = 0; index < lhsElements.size(); index++) {
+        const std::optional<bool> equal = equalOrUnknown(lhsElements[index], rhsElements[index]);
+        if (!equal.has_value()) {
+            unknown = true;
+        } else if (!*equal) {
+            return false;
+        }
+    }
+
+    if (unknown) {
+        return std::nullopt;
+    }
+
+    return true;
+}
+
+std::optional<bool> db::equalOrUnknown(const MapView lhs, const MapView rhs) {
+    const std::span<const MapEntryView> lhsEntries = lhs.entries();
+    const std::span<const MapEntryView> rhsEntries = rhs.entries();
+    if (lhsEntries.size() != rhsEntries.size()) {
+        return false;
+    }
+
+    bool unknown = false;
+
+    for (size_t index = 0; index < lhsEntries.size(); index++) {
+        const MapEntryView lhsEntry = lhsEntries[index];
+        const MapEntryView rhsEntry = rhsEntries[index];
+        if (lhsEntry.getKey() != rhsEntry.getKey()) {
+            return false;
+        }
+
+        const std::optional<bool> equal = equalOrUnknown(lhsEntry.getValue(), rhsEntry.getValue());
+        if (!equal.has_value()) {
+            unknown = true;
+        } else if (!*equal) {
+            return false;
+        }
+    }
+
+    if (unknown) {
+        return std::nullopt;
+    }
+
+    return true;
+}
+
 bool db::operator==(const CellView element, const types::Int64::Primitive value) {
     return elementEqualsNumber(element, value);
 }

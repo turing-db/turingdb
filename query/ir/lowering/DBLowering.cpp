@@ -574,6 +574,20 @@ bool isListChunk(mlir::Type chunkType) {
     return mlir::isa<storage::ListType>(listed);
 }
 
+// A map column, read through the nullable a stored map wears, as isListChunk reads a list
+bool isMapChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type mapped = nullable ? nullable.getValueType() : element;
+
+    return mlir::isa<storage::MapType>(mapped);
+}
+
 bool isIndexableChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
     if (!chunk) {
@@ -6091,8 +6105,9 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         case BinaryResultKind::Comparison: {
             const mlir::Type boolElement = _builder.getI1Type();
 
-            // List comparison always nullable; either having a null element => null
+            // List and map comparison always nullable; either holding a null => null
             const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
+            const bool comparesTwoMaps = isMapChunk(lhsType) && isMapChunk(rhsType);
 
             // A cell may hold a null, or a value of another type than the one it meets
             const bool comparesATaggedCell = holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType);
@@ -6109,6 +6124,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const bool alwaysNullable = operandNullable
                                      || comparesTwoLists
+                                     || comparesTwoMaps
                                      || comparesATaggedCell
                                      || comparesAnEntity
                                      || comparesTwoPaths;

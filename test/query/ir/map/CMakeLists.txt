@@ -65,3 +65,6 @@ target_include_directories(test_query_ir_map_order_by PRIVATE ${IR_TEST_DIR})
 
 add_turing_test(test_query_ir_map_null_test MapNullTestTest.cpp)
 target_include_directories(test_query_ir_map_null_test PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_null_inside_value_equality NullInsideValueEqualityTest.cpp)
+target_include_directories(test_query_ir_null_inside_value_equality PRIVATE ${IR_TEST_DIR})

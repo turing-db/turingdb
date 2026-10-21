@@ -5128,8 +5128,7 @@ void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtC
     const mlir::Value keyColumn = columns[buildKey];
     data->setKeyColumns(getColumn(keyColumn),
                         state->buffer(buildKey),
-                        selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
-                        selectKeyMatchableForChunkType(keyColumn.getType()));
+                        selectJoinKeyFunctionsForChunkType(keyColumn.getType()));
     data->getHashScratch()->reserve(_program->getChunkSize());
 
     body->emplaceStmt(&NLExecutor::runHashJoinCollect, data);
@@ -5219,8 +5218,7 @@ void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
 
     data->setKeyColumns(probeKeyColumn,
                         buildKeyColumn,
-                        keyFunctions,
-                        selectKeyMatchableForChunkType(keyType));
+                        keyFunctions);
 
     body->emplaceStmt(&NLExecutor::runHashJoinProbeLoop, data);
 
@@ -6791,28 +6789,6 @@ NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type c
     }
 
     return NLExecutor::selectJoinKeyFunctions(chunkKindFromElementType(elementType));
-}
-
-// The gating sibling of selectKeyAppendForChunkType: a nullable value chunk reads its
-// present flag and a tagged cell its tag, a double, an embedding or a list also reads its
-// value, and every other chunk holds a matchable key in every row.
-NLKeyIsMatchableFunction NLTranslator::selectKeyMatchableForChunkType(mlir::Type chunkType) {
-    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const mlir::Type elementType = chunk.getElementType();
-
-    if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptCellKeyMatchableFunction();
-    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return NLExecutor::selectOptKeyMatchableFunction(valueTypeFromElementType(nullableType.getValueType()));
-    } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectCellKeyMatchableFunction();
-    } else if (mlir::isa<storage::ListType>(elementType)) {
-        return NLExecutor::selectListKeyMatchableFunction();
-    } else if (isPlainValueElementType(elementType)) {
-        return NLExecutor::selectPlainKeyMatchableFunction(valueTypeFromElementType(elementType));
-    }
-
-    return NLExecutor::everyKeyMatchable();
 }
 
 // The value-reduction sibling of selectCountForChunkType: a type-erased column of tagged
