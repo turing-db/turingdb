@@ -244,13 +244,11 @@ NLPendingEdgeScan::~NLPendingEdgeScan() {
 }
 
 void NLPendingEdgeScan::setSourceLabelSet(const LabelSet& labelset) {
-    _endpointLabels = LabelSetHandle(labelset);
-    _labelsTheTarget = false;
+    _sourceLabels = LabelSetHandle(labelset);
 }
 
 void NLPendingEdgeScan::setTargetLabelSet(const LabelSet& labelset) {
-    _endpointLabels = LabelSetHandle(labelset);
-    _labelsTheTarget = true;
+    _targetLabels = LabelSetHandle(labelset);
 }
 
 void NLPendingEdgeScan::fill(size_t maxCount) {
@@ -291,13 +289,13 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
 bool NLPendingEdgeScan::keeps(const CommitWriteBuffer::PendingEdge& edge) const {
     if (_edgeTypes && !edgeTypeMatches(*_edgeTypes, edge.edgeType)) {
         return false;
+    } else if (_sourceLabels.isValid() && !carriesLabels(_writeBuffer, *_view, edge.src, _sourceLabels)) {
+        return false;
+    } else if (_targetLabels.isValid() && !carriesLabels(_writeBuffer, *_view, edge.tgt, _targetLabels)) {
+        return false;
     }
 
-    if (!_endpointLabels.isValid()) {
-        return true;
-    }
-
-    return carriesLabels(_writeBuffer, *_view, _labelsTheTarget ? edge.tgt : edge.src, _endpointLabels);
+    return true;
 }
 
 void NLPendingEdgeScan::clearChunks() {

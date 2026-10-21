@@ -170,14 +170,14 @@ TEST_F(FuseScanEdgesByEndpointLabelCodegenTest, labelledTargetOfAnInHopKeepsItsO
     EXPECT_EQ(countOps<mlir::db::ScanInEdgesByLabelSrc>(*module), 0u);
 }
 
-// Both ends carry labels: the hop's own end fuses into the by-label scan and the other
-// stays a label check over it, since no op holds a label set per endpoint.
-TEST_F(FuseScanEdgesByEndpointLabelCodegenTest, labelledBothEndsKeepsTheCheckOnTheFarOne) {
+// Both ends carry labels: the hop's own end fuses into the by-label scan, and the check on
+// the other end then folds into it as well.
+TEST_F(FuseScanEdgesByEndpointLabelCodegenTest, labelledBothEndsFuseIntoOneScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)-->(b:Interest) RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelTgt>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrcTgt>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CheckLabelConstraint>(*module), 0u);
 }
 
 // An undirected hop reads both edge directions of its nodes, which is no edge scan.

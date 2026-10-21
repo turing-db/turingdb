@@ -67,6 +67,8 @@ private:
         ScanEdgesByType,
         ScanEdgesBySourceLabel,
         ScanEdgesByTargetLabel,
+        ScanEdgesByEndpointLabelsFromSource,
+        ScanEdgesByEndpointLabelsFromTarget,
         GetOutEdges,
         GetInEdges,
         GetEdges,
@@ -146,6 +148,10 @@ private:
         // a LabelSet as soon as the loop is translated. A name a parameter binds views the
         // parameter map's string instead, which the caller keeps alive as long.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
+
+        // The label names the end a both-ends edge scan does not read the index of must
+        // carry, where _labels holds the indexed end's; empty for the other kinds.
+        llvm::SmallVector<llvm::StringRef, 4> _otherEndLabels;
 
         // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
         // iterator filters by, as a disjunction; empty for the other kinds. Like
@@ -465,6 +471,7 @@ private:
     void translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateScanEdgesByTypeLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateScanEdgesByLabelLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body, NLHandlerFunction executor);
+    void translateScanEdgesByEndpointLabelsLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body, NLHandlerFunction executor);
 
     // Record the iterator config of one of the four by-label edge scans: they differ in
     // which endpoint carries the labels, which the kind names, and each reads its label

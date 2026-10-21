@@ -749,6 +749,54 @@ def ScanInEdgesByLabelSrc : NLOp<"scan_in_edges_by_label_src", [Pure, InferTypeO
 }
 
 /**
+* ScanOutEdgesByLabelSrcTgt
+*/
+def ScanOutEdgesByLabelSrcTgt : NLOp<"scan_out_edges_by_label_src_tgt", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the edges whose two ends carry their labels, read off the source's index";
+  let description = [{
+    Imperative counterpart of db.scan_out_edges_by_label_src_tgt. Each step of an
+    enclosing nl.for fills the same four chunks nl.scan_edges fills, but only for the
+    edges whose source's label set is a superset of `src_labels` and whose target's is
+    a superset of `tgt_labels`:
+
+      %edges = nl.scan_out_edges_by_label_src_tgt(["Person"], ["Interest"])
+
+    It walks the index keyed by the source's label set, as
+    nl.scan_out_edges_by_label_src does, and keeps each edge whose target carries
+    `tgt_labels`. Both lists are resolved the way an nl.scan_nodes_by_label name is,
+    and a label absent from the schema in either leaves the scan unsatisfiable, so the
+    loop yields no chunk. The result is the same four-chunk edge iterator
+    nl.scan_edges produces and is inferred, not spelled out.
+  }];
+  let arguments = (ins LabelRefArrayAttr:$src_labels, LabelRefArrayAttr:$tgt_labels);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $src_labels `,` $tgt_labels `)` attr-dict";
+}
+
+/**
+* ScanInEdgesByLabelSrcTgt
+*/
+def ScanInEdgesByLabelSrcTgt : NLOp<"scan_in_edges_by_label_src_tgt", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the edges whose two ends carry their labels, read off the target's index";
+  let description = [{
+    Imperative counterpart of db.scan_in_edges_by_label_src_tgt: the rows of
+    nl.scan_out_edges_by_label_src_tgt, read off the index keyed by the target's label
+    set, as nl.scan_in_edges_by_label_tgt reads them, keeping each edge whose source
+    carries `src_labels`:
+
+      %edges = nl.scan_in_edges_by_label_src_tgt(["Interest"], ["Person"])
+
+    The chunks carry the edge as the graph stores it, so `srcids` holds the source and
+    `tgtids` the target, as under nl.get_in_edges. Both lists are resolved the way an
+    nl.scan_nodes_by_label name is, and a label absent from the schema in either leaves
+    the scan unsatisfiable, so the loop yields no chunk.
+  }];
+  let arguments = (ins LabelRefArrayAttr:$src_labels, LabelRefArrayAttr:$tgt_labels);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $src_labels `,` $tgt_labels `)` attr-dict";
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {

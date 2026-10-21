@@ -595,6 +595,18 @@ void ScanInEdgesByLabelSrc::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     }
 }
 
+void ScanOutEdgesByLabelSrcTgt::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
+void ScanInEdgesByLabelSrcTgt::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
 // Ensures each variable has a numeric name
 void GetOutEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     for (Value result : getResults()) {
@@ -1355,6 +1367,22 @@ LogicalResult ScanOutEdgesByLabelTgt::verify() {
 LogicalResult ScanInEdgesByLabelSrc::verify() {
     if (getLabels().empty()) {
         return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
+LogicalResult ScanOutEdgesByLabelSrcTgt::verify() {
+    if (getSrcLabels().empty() || getTgtLabels().empty()) {
+        return emitOpError("requires at least one label on each end");
+    }
+
+    return success();
+}
+
+LogicalResult ScanInEdgesByLabelSrcTgt::verify() {
+    if (getSrcLabels().empty() || getTgtLabels().empty()) {
+        return emitOpError("requires at least one label on each end");
     }
 
     return success();

@@ -774,6 +774,28 @@ private:
     bool _matchable {true};
 };
 
+// Loop data of the two both-ends edge scans: the by-label scan's, keyed by the label set
+// of the end whose index it reads, with the label set the other end must carry.
+class NLScanEdgesByEndpointLabelsLoopData : public NLScanEdgesByLabelLoopData {
+public:
+    NLScanEdgesByEndpointLabelsLoopData(ColumnNodeIDs* sources,
+                                        ColumnEdgeIDs* edgeIDs,
+                                        ColumnEdgeTypes* edgeTypes,
+                                        ColumnNodeIDs* targets,
+                                        const LabelSet& indexedLabelSet,
+                                        const LabelSet& otherEndLabelSet,
+                                        bool matchable)
+        : NLScanEdgesByLabelLoopData(sources, edgeIDs, edgeTypes, targets, indexedLabelSet, matchable),
+        _otherEndLabelSet(otherEndLabelSet)
+    {
+    }
+
+    const LabelSet& getOtherEndLabelSet() const { return _otherEndLabelSet; }
+
+private:
+    LabelSet _otherEndLabelSet;
+};
+
 // The seed-expansion core shared by every loop that fans an input node chunk out: the
 // input, the seed and end node chunks a step fills, the row-to-input-row indices that
 // gather the carry set, the limit and the body

@@ -85,6 +85,8 @@ public:
     // target-labelled one the index keyed by the target's.
     static void runScanEdgesBySourceLabelLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanEdgesByTargetLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runScanEdgesByEndpointLabelsFromSourceLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runScanEdgesByEndpointLabelsFromTargetLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
 

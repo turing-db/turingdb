@@ -325,6 +325,8 @@ private:
     void lowerScanInEdgesByLabelTgt(mlir::db::ScanInEdgesByLabelTgt scanInEdgesByLabelTgt);
     void lowerScanOutEdgesByLabelTgt(mlir::db::ScanOutEdgesByLabelTgt scanOutEdgesByLabelTgt);
     void lowerScanInEdgesByLabelSrc(mlir::db::ScanInEdgesByLabelSrc scanInEdgesByLabelSrc);
+    void lowerScanOutEdgesByLabelSrcTgt(mlir::db::ScanOutEdgesByLabelSrcTgt scanOutEdgesByLabelSrcTgt);
+    void lowerScanInEdgesByLabelSrcTgt(mlir::db::ScanInEdgesByLabelSrcTgt scanInEdgesByLabelSrcTgt);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetInEdges(mlir::db::GetInEdges getInEdges);
     void lowerGetEdges(mlir::db::GetEdges getEdges);

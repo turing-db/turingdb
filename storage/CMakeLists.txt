@@ -77,6 +77,7 @@ set(storage_sources
         iterators/ScanEdgeTypesIterator.cpp
         iterators/ScanPropertyTypesIterator.cpp
         iterators/ScanOutEdgesBySourceLabelIterator.cpp
+        iterators/ScanEdgesByEndpointLabelsChunkWriter.cpp
         iterators/MatchLabelSetIterator.cpp
         iterators/NeighbourhoodSampleIterator.cpp
         iterators/PathCycleTable.cpp

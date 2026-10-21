@@ -954,6 +954,8 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::ScanInEdgesByLabelTgt,
                      mlir::db::ScanOutEdgesByLabelTgt,
                      mlir::db::ScanInEdgesByLabelSrc,
+                     mlir::db::ScanOutEdgesByLabelSrcTgt,
+                     mlir::db::ScanInEdgesByLabelSrcTgt,
                      mlir::db::GetOutEdges,
                      mlir::db::GetInEdges,
                      mlir::db::GetEdges,
@@ -1390,6 +1392,10 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerScanOutEdgesByLabelTgt(scanOutEdgesByLabelTgt);
     } else if (mlir::db::ScanInEdgesByLabelSrc scanInEdgesByLabelSrc = mlir::dyn_cast<mlir::db::ScanInEdgesByLabelSrc>(operation)) {
         lowerScanInEdgesByLabelSrc(scanInEdgesByLabelSrc);
+    } else if (mlir::db::ScanOutEdgesByLabelSrcTgt scanOutEdgesByLabelSrcTgt = mlir::dyn_cast<mlir::db::ScanOutEdgesByLabelSrcTgt>(operation)) {
+        lowerScanOutEdgesByLabelSrcTgt(scanOutEdgesByLabelSrcTgt);
+    } else if (mlir::db::ScanInEdgesByLabelSrcTgt scanInEdgesByLabelSrcTgt = mlir::dyn_cast<mlir::db::ScanInEdgesByLabelSrcTgt>(operation)) {
+        lowerScanInEdgesByLabelSrcTgt(scanInEdgesByLabelSrcTgt);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
@@ -2679,6 +2685,24 @@ void DBLowering::lowerScanInEdgesByLabelSrc(mlir::db::ScanInEdgesByLabelSrc scan
     nl::ScanInEdgesByLabelSrc edges = _builder.create<nl::ScanInEdgesByLabelSrc>(_builder.getUnknownLoc(),
                                                                                  scanInEdgesByLabelSrc.getLabelsAttr());
     buildLoopForSource(edges.getResult(), scanInEdgesByLabelSrc.getOperation());
+}
+
+void DBLowering::lowerScanOutEdgesByLabelSrcTgt(mlir::db::ScanOutEdgesByLabelSrcTgt scanOutEdgesByLabelSrcTgt) {
+    setInsertionInto(_rootBlock);
+
+    nl::ScanOutEdgesByLabelSrcTgt edges = _builder.create<nl::ScanOutEdgesByLabelSrcTgt>(_builder.getUnknownLoc(),
+                                                                                         scanOutEdgesByLabelSrcTgt.getSrcLabelsAttr(),
+                                                                                         scanOutEdgesByLabelSrcTgt.getTgtLabelsAttr());
+    buildLoopForSource(edges.getResult(), scanOutEdgesByLabelSrcTgt.getOperation());
+}
+
+void DBLowering::lowerScanInEdgesByLabelSrcTgt(mlir::db::ScanInEdgesByLabelSrcTgt scanInEdgesByLabelSrcTgt) {
+    setInsertionInto(_rootBlock);
+
+    nl::ScanInEdgesByLabelSrcTgt edges = _builder.create<nl::ScanInEdgesByLabelSrcTgt>(_builder.getUnknownLoc(),
+                                                                                       scanInEdgesByLabelSrcTgt.getSrcLabelsAttr(),
+                                                                                       scanInEdgesByLabelSrcTgt.getTgtLabelsAttr());
+    buildLoopForSource(edges.getResult(), scanInEdgesByLabelSrcTgt.getOperation());
 }
 
 void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {

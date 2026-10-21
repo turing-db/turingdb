@@ -64,7 +64,7 @@ def FuseScanInEdgesByLabel : Pass<"fuse_scan_in_edges_by_label"> {
 }
 
 def FuseScanEdgesByEndpointLabel : Pass<"fuse_scan_edges_by_endpoint_label"> {
-    let summary = "Fuse a whole edge scan and the label check on one of its endpoints into a by-label edge scan";
+    let summary = "Fold a label check on either endpoint of an edge scan into the labels the scan reads that endpoint by";
     let dependentDialects = ["mlir::db::DB"];
 }
 

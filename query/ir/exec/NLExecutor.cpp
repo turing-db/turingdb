@@ -39,6 +39,7 @@
 #include "iterators/PathHopFilter.h"
 #include "iterators/PathLabelHopFilter.h"
 #include "iterators/ReversedPathExplorator.h"
+#include "iterators/ScanEdgesByEndpointLabelsChunkWriter.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanInEdgesByTargetLabelIterator.h"
@@ -6794,6 +6795,64 @@ void NLExecutor::runScanEdgesByTargetLabelLoop(NLExecutionContext* context, NLFu
 
     NLPendingEdgeScan pendingEdges(context, loopData);
     pendingEdges.setTargetLabelSet(loopData->getLabelSet());
+
+    runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
+}
+
+void NLExecutor::runScanEdgesByEndpointLabelsFromSourceLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanEdgesByEndpointLabelsLoopData* loopData = static_cast<NLScanEdgesByEndpointLabelsLoopData*>(data);
+
+    if (!loopData->isMatchable()) {
+        return;
+    }
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* sources = loopData->getSources();
+
+    const NLLimitState* limit = loopData->getLimit();
+
+    const LabelSetHandle sourceLabels(loopData->getLabelSet());
+    const LabelSetHandle targetLabels(loopData->getOtherEndLabelSet());
+
+    ScanOutEdgesByBothLabelsChunkWriter chunkWriter(*context->getView(), sourceLabels, targetLabels);
+    chunkWriter.setSrcIDs(sources);
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
+
+    NLPendingEdgeScan pendingEdges(context, loopData);
+    pendingEdges.setSourceLabelSet(loopData->getLabelSet());
+    pendingEdges.setTargetLabelSet(loopData->getOtherEndLabelSet());
+
+    runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
+}
+
+void NLExecutor::runScanEdgesByEndpointLabelsFromTargetLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanEdgesByEndpointLabelsLoopData* loopData = static_cast<NLScanEdgesByEndpointLabelsLoopData*>(data);
+
+    if (!loopData->isMatchable()) {
+        return;
+    }
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* sources = loopData->getSources();
+
+    const NLLimitState* limit = loopData->getLimit();
+
+    const LabelSetHandle targetLabels(loopData->getLabelSet());
+    const LabelSetHandle sourceLabels(loopData->getOtherEndLabelSet());
+
+    // The writer fills the indexed end through setSrcIDs, which here is the edge's target,
+    // so the two node columns cross as in runScanEdgesByTargetLabelLoop.
+    ScanInEdgesByBothLabelsChunkWriter chunkWriter(*context->getView(), targetLabels, sourceLabels);
+    chunkWriter.setSrcIDs(loopData->getTargets());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(sources);
+
+    NLPendingEdgeScan pendingEdges(context, loopData);
+    pendingEdges.setTargetLabelSet(loopData->getLabelSet());
+    pendingEdges.setSourceLabelSet(loopData->getOtherEndLabelSet());
 
     runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }

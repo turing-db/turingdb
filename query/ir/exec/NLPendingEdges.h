@@ -139,9 +139,8 @@ public:
 
     void setEdgeTypes(std::span<const EdgeTypeID> edgeTypes) { _edgeTypes = edgeTypes; }
 
-    // The label set one endpoint of the edge must carry at least for the scan to keep it -
-    // its source for an out-edge scan, its target for an in-edge scan. The label set is
-    // borrowed, so it must outlive the scan.
+    // The label set the edge's source, or its target, must carry at least for the scan to
+    // keep it. The label set is borrowed, so it must outlive the scan.
     void setSourceLabelSet(const LabelSet& labelset);
     void setTargetLabelSet(const LabelSet& labelset);
 
@@ -165,8 +164,8 @@ private:
     size_t _edge {0};
 
     std::optional<std::span<const EdgeTypeID>> _edgeTypes;
-    LabelSetHandle _endpointLabels;
-    bool _labelsTheTarget {false};
+    LabelSetHandle _sourceLabels;
+    LabelSetHandle _targetLabels;
 
     void clearChunks();
 

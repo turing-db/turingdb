@@ -1080,6 +1080,80 @@ def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [Pure, Declar
 }
 
 /**
+* ScanOutEdgesByLabelSrcTgt
+*/
+def ScanOutEdgesByLabelSrcTgt : TuringOp<"scan_out_edges_by_label_src_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every edge whose source and target each carry every given label of their end as four row-aligned columns";
+
+  let description = [{
+    The both-ends sibling of db.scan_out_edges_by_label_src: it produces the edges
+    whose source's label set is a superset of `src_labels` and whose target's is a
+    superset of `tgt_labels`, in the same four row-aligned columns:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label_src_tgt(["Person"], ["Interest"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is `MATCH (a:Person)-->(b:Interest)`: the edges db.scan_out_edges_by_label_src
+    keeps once a db.check_label_constraint over its target column has dropped the
+    rest. It reads the index keyed by the source's label set, as that scan does, and
+    checks each edge's target against `tgt_labels`. db.scan_in_edges_by_label_src_tgt
+    produces the same rows off the index keyed by the target's label set.
+
+    Neither label list may be empty: a scan labelled on one end only is
+    db.scan_out_edges_by_label_src or db.scan_in_edges_by_label_tgt.
+  }];
+
+  let arguments = (ins LabelRefArrayAttr:$src_labels, LabelRefArrayAttr:$tgt_labels);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $src_labels `,` $tgt_labels `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
+* ScanInEdgesByLabelSrcTgt
+*/
+def ScanInEdgesByLabelSrcTgt : TuringOp<"scan_in_edges_by_label_src_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every edge whose target and source each carry every given label of their end, read off the target's index";
+
+  let description = [{
+    The both-ends sibling of db.scan_in_edges_by_label_tgt: it produces the edges
+    whose source's label set is a superset of `src_labels` and whose target's is a
+    superset of `tgt_labels`:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label_src_tgt(["Interest"], ["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is `MATCH (a:Person)<--(b:Interest)`: the edges db.scan_in_edges_by_label_tgt
+    keeps once a db.check_label_constraint over its source column has dropped the
+    rest. It reads the index keyed by the target's label set, as that scan does, and
+    checks each edge's source against `src_labels`. The rows are those of
+    db.scan_out_edges_by_label_src_tgt; the two differ in the index they read.
+
+    Neither label list may be empty: a scan labelled on one end only is
+    db.scan_in_edges_by_label_tgt or db.scan_out_edges_by_label_src.
+  }];
+
+  let arguments = (ins LabelRefArrayAttr:$src_labels, LabelRefArrayAttr:$tgt_labels);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $src_labels `,` $tgt_labels `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

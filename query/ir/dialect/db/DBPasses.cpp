@@ -3563,16 +3563,50 @@ struct FuseScanInEdgesByLabel : public impl::FuseScanInEdgesByLabelBase<FuseScan
     }
 };
 
+// The labels an edge scan reads each endpoint by, null for an endpoint it reads every node
+// of, and whether the index it walks is keyed by the target's label set or the source's.
+struct EdgeScanLabels {
+    ArrayAttr _source;
+    ArrayAttr _target;
+    bool _indexedByTarget {false};
+};
+
+bool readEdgeScanLabels(Operation* op, EdgeScanLabels& scanLabels) {
+    if (isa<ScanEdges>(op)) {
+        return true;
+    } else if (isa<ScanOutEdgesByLabelSrc, ScanInEdgesByLabelSrc>(op)) {
+        scanLabels._source = op->getAttrOfType<ArrayAttr>("labels");
+        return true;
+    } else if (isa<ScanOutEdgesByLabelTgt, ScanInEdgesByLabelTgt>(op)) {
+        scanLabels._target = op->getAttrOfType<ArrayAttr>("labels");
+        scanLabels._indexedByTarget = true;
+        return true;
+    } else if (ScanOutEdgesByLabelSrcTgt scan = dyn_cast<ScanOutEdgesByLabelSrcTgt>(op)) {
+        scanLabels._source = scan.getSrcLabels();
+        scanLabels._target = scan.getTgtLabels();
+        return true;
+    } else if (ScanInEdgesByLabelSrcTgt scan = dyn_cast<ScanInEdgesByLabelSrcTgt>(op)) {
+        scanLabels._source = scan.getSrcLabels();
+        scanLabels._target = scan.getTgtLabels();
+        scanLabels._indexedByTarget = true;
+        return true;
+    }
+
+    return false;
+}
+
 // An edge scan whose rows are then cut down to the edges one endpoint of which carries a
-// set of labels: the by-label edge scan spelled the long way, since the index keyed by that
-// endpoint's label set holds exactly those edges and never builds the rows the filter goes
-// on to drop.
+// set of labels: the scan reading that endpoint by those labels as well, which never builds
+// the rows the filter goes on to drop.
 struct EndpointLabelledEdgeScan {
-    ScanEdges _scan;
+    FilterOp _filter;
+    Operation* _scan {nullptr};
     GetNodeLabelSet _labelSet;
     CheckLabelConstraint _check;
-    ArrayAttr _labels;
+    EdgeScanLabels _scanLabels;
+    llvm::SmallVector<Attribute, 4> _endLabels;
     bool _labelledTarget {false};
+    bool _endWasLabelled {false};
 };
 
 bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& labelledScan) {
@@ -3581,8 +3615,8 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
         return false;
     }
 
-    const ArrayAttr labels = check.getConjunction();
-    if (!labels) {
+    const ArrayAttr checkLabels = check.getConjunction();
+    if (!checkLabels) {
         return false;
     }
 
@@ -3592,19 +3626,22 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
     }
 
     const Value labelledColumn = labelSet.getInputNodes();
-    ScanEdges scan = labelledColumn.getDefiningOp<ScanEdges>();
-    if (!scan) {
+    Operation* const scan = labelledColumn.getDefiningOp();
+    EdgeScanLabels scanLabels;
+    if (!scan || !readEdgeScanLabels(scan, scanLabels)) {
         return false;
     }
 
-    const bool labelledTarget = labelledColumn == scan.getTgtids();
-    const bool labelledSource = labelledColumn == scan.getSrcids();
+    constexpr size_t SRC_RESULT_INDEX = 0;
+    constexpr size_t TGT_RESULT_INDEX = 3;
+    const bool labelledTarget = labelledColumn == scan->getResult(TGT_RESULT_INDEX);
+    const bool labelledSource = labelledColumn == scan->getResult(SRC_RESULT_INDEX);
     if (!labelledTarget && !labelledSource) {
         return false;
     }
 
     for (const Value column : filter.getColumnsToFilter()) {
-        if (column.getDefiningOp() != scan.getOperation()) {
+        if (column.getDefiningOp() != scan) {
             return false;
         }
     }
@@ -3625,65 +3662,88 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
         return false;
     }
 
-    labelledScan = EndpointLabelledEdgeScan {._scan = scan,
-                                             ._labelSet = labelSet,
-                                             ._check = check,
-                                             ._labels = labels,
-                                             ._labelledTarget = labelledTarget};
+    const ArrayAttr endLabels = labelledTarget ? scanLabels._target : scanLabels._source;
+    if (endLabels) {
+        labelledScan._endLabels.assign(endLabels.begin(), endLabels.end());
+    }
+
+    for (const Attribute label : checkLabels) {
+        if (!llvm::is_contained(labelledScan._endLabels, label)) {
+            labelledScan._endLabels.push_back(label);
+        }
+    }
+
+    labelledScan._filter = filter;
+    labelledScan._scan = scan;
+    labelledScan._labelSet = labelSet;
+    labelledScan._check = check;
+    labelledScan._scanLabels = scanLabels;
+    labelledScan._labelledTarget = labelledTarget;
+    labelledScan._endWasLabelled = endLabels != nullptr;
 
     return true;
 }
 
-void fuseScanEdgesByEndpointLabel(FilterOp filter,
-                                  const EndpointLabelledEdgeScan& labelledScan,
-                                  mlir::OpBuilder& builder) {
-    ScanEdges scan = labelledScan._scan;
-    Operation* const scanOp = scan.getOperation();
+// The by-label edge scan reading the endpoints by these labels. A scan labelled on one end
+// walks that end's index; one labelled on both walks the index the scan it replaces walked.
+Operation* createLabelledEdgeScan(Operation* scan, const EdgeScanLabels& scanLabels, mlir::RewriterBase& rewriter) {
+    const Location loc = scan->getLoc();
+    const mlir::TypeRange types = scan->getResultTypes();
 
-    builder.setInsertionPoint(scanOp);
+    if (!scanLabels._source) {
+        return rewriter.create<ScanOutEdgesByLabelTgt>(loc, types, scanLabels._target);
+    } else if (!scanLabels._target) {
+        return rewriter.create<ScanInEdgesByLabelSrc>(loc, types, scanLabels._source);
+    } else if (scanLabels._indexedByTarget) {
+        return rewriter.create<ScanInEdgesByLabelSrcTgt>(loc, types, scanLabels._source, scanLabels._target);
+    }
 
-    // Both by-label scans declare the same four results in the same order as the plain
-    // scan, so the plain scan's map onto them one for one. Which of the two the labelled
-    // endpoint picks is the hop the query wrote: an out-hop arrives at its target, an
-    // in-hop leaves its source.
-    Operation* byLabelScan = nullptr;
-    if (labelledScan._labelledTarget) {
-        byLabelScan = builder.create<ScanOutEdgesByLabelTgt>(scan.getLoc(),
-                                                             scan.getSrcids().getType(),
-                                                             scan.getEids().getType(),
-                                                             scan.getEtypes().getType(),
-                                                             scan.getTgtids().getType(),
-                                                             labelledScan._labels);
+    return rewriter.create<ScanOutEdgesByLabelSrcTgt>(loc, types, scanLabels._source, scanLabels._target);
+}
+
+llvm::StringRef endLabelsAttrName(Operation* scan, bool target) {
+    if (isa<ScanOutEdgesByLabelSrcTgt, ScanInEdgesByLabelSrcTgt>(scan)) {
+        return target ? "tgt_labels" : "src_labels";
+    }
+
+    return "labels";
+}
+
+void fuseScanEdgesByEndpointLabel(EndpointLabelledEdgeScan& labelledScan, mlir::RewriterBase& rewriter) {
+    Operation* const scan = labelledScan._scan;
+    const bool labelledTarget = labelledScan._labelledTarget;
+    const ArrayAttr endLabels = rewriter.getArrayAttr(labelledScan._endLabels);
+
+    if (labelledScan._endWasLabelled) {
+        const llvm::StringRef attrName = endLabelsAttrName(scan, labelledTarget);
+        rewriter.modifyOpInPlace(scan, [scan, attrName, endLabels]() {
+            scan->setAttr(attrName, endLabels);
+        });
     } else {
-        byLabelScan = builder.create<ScanInEdgesByLabelSrc>(scan.getLoc(),
-                                                            scan.getSrcids().getType(),
-                                                            scan.getEids().getType(),
-                                                            scan.getEtypes().getType(),
-                                                            scan.getTgtids().getType(),
-                                                            labelledScan._labels);
+        EdgeScanLabels& scanLabels = labelledScan._scanLabels;
+        if (labelledTarget) {
+            scanLabels._target = endLabels;
+        } else {
+            scanLabels._source = endLabels;
+        }
+
+        rewriter.setInsertionPoint(scan);
+        Operation* const labelledEdgeScan = createLabelledEdgeScan(scan, scanLabels, rewriter);
+        rewriter.replaceOp(scan, labelledEdgeScan->getResults());
     }
 
-    scanOp->replaceAllUsesWith(byLabelScan);
+    FilterOp filter = labelledScan._filter;
+    rewriter.replaceOp(filter, filter.getColumnsToFilter());
 
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    const mlir::ResultRange filtered = filter.getFilteredColumns();
-    for (size_t index = 0; index < filtered.size(); index++) {
-        filtered[index].replaceAllUsesWith(columns[index]);
-    }
-
-    filter.erase();
-    eraseIfUnused(labelledScan._check);
-    eraseIfUnused(labelledScan._labelSet);
-    scanOp->erase();
+    eraseIfUnused(labelledScan._check.getOperation(), rewriter);
+    eraseIfUnused(labelledScan._labelSet.getOperation(), rewriter);
 }
 
 struct FuseScanEdgesByEndpointLabel : public impl::FuseScanEdgesByEndpointLabelBase<FuseScanEdgesByEndpointLabel> {
     void runOnOperation() override {
-        mlir::OpBuilder builder(&getContext());
-        runFilterPass<EndpointLabelledEdgeScan>(getOperation(),
-                                                matchEndpointLabelledEdgeScan,
-                                                fuseScanEdgesByEndpointLabel,
-                                                builder);
+        runFilterWorklist<EndpointLabelledEdgeScan>(getOperation(),
+                                                    matchEndpointLabelledEdgeScan,
+                                                    fuseScanEdgesByEndpointLabel);
     }
 };
 
@@ -3966,14 +4026,11 @@ void collectKnownLabels(Value column, llvm::DenseSet<Attribute>& labels) {
                 addLabelNames(*scanLabels, labels);
             }
             return;
-        } else if (isa<ScanOutEdgesByLabelSrc, ScanInEdgesByLabelSrc>(def)) {
-            if (resultIndex == srcResultIndex) {
-                addLabelNames(def->getAttrOfType<ArrayAttr>("labels"), labels);
-            }
-            return;
-        } else if (isa<ScanOutEdgesByLabelTgt, ScanInEdgesByLabelTgt>(def)) {
-            if (resultIndex == tgtResultIndex) {
-                addLabelNames(def->getAttrOfType<ArrayAttr>("labels"), labels);
+        } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(def, scanLabels)) {
+            if (resultIndex == srcResultIndex && scanLabels._source) {
+                addLabelNames(scanLabels._source, labels);
+            } else if (resultIndex == tgtResultIndex && scanLabels._target) {
+                addLabelNames(scanLabels._target, labels);
             }
             return;
         } else if (FilterOp filter = dyn_cast<FilterOp>(def)) {
@@ -7168,23 +7225,6 @@ size_t multiplySaturating(size_t rows, size_t factor) {
     return rows * factor;
 }
 
-// The labels of whichever of the four by-label edge scans this is, and null for any other
-// op. They all read the edges hanging off the nodes the labels select, so they are counted
-// the same way whichever endpoint carries them.
-ArrayAttr byLabelEdgeScanLabels(Operation* op) {
-    if (ScanOutEdgesByLabelSrc byLabel = dyn_cast<ScanOutEdgesByLabelSrc>(op)) {
-        return byLabel.getLabels();
-    } else if (ScanInEdgesByLabelTgt byLabel = dyn_cast<ScanInEdgesByLabelTgt>(op)) {
-        return byLabel.getLabels();
-    } else if (ScanOutEdgesByLabelTgt byLabel = dyn_cast<ScanOutEdgesByLabelTgt>(op)) {
-        return byLabel.getLabels();
-    } else if (ScanInEdgesByLabelSrc byLabel = dyn_cast<ScanInEdgesByLabelSrc>(op)) {
-        return byLabel.getLabels();
-    }
-
-    return nullptr;
-}
-
 // The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
 // count, a literal list one row per element, a by-label scan what the graph holds under
@@ -7204,25 +7244,29 @@ std::optional<size_t> estimateSourceRows(Operation* op,
         return estimation.estimateNodeCount(labels);
     } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
         return estimation.estimateNodeCount(::db::LabelSet {});
-    } else if (const ArrayAttr scanLabels = byLabelEdgeScanLabels(op)) {
+    } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(op, scanLabels)) {
         const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
         if (nodeCount == 0) {
             return 0;
         }
 
-        ::db::LabelSet labels;
-        collectScanLabels(scanLabels, metadata, labels);
+        // A labelled endpoint keeps the share of the edges its labels select of the nodes,
+        // the two endpoints' labels taken as independent.
+        size_t rows = estimation.estimateEdgeCount();
+        for (const ArrayAttr endLabels : {scanLabels._source, scanLabels._target}) {
+            if (endLabels) {
+                ::db::LabelSet labels;
+                collectScanLabels(endLabels, metadata, labels);
+                rows = multiplySaturating(estimation.estimateNodeCount(labels), rows) / nodeCount;
+            }
+        }
 
-        // The edges hanging off those nodes, read as the by-label scan and hop it fused
-        // were: the node count the labels select, at the graph's average degree.
-        return multiplySaturating(estimation.estimateNodeCount(labels), estimation.estimateEdgeCount()) / nodeCount;
+        return rows;
     } else if (ScanEdgesByType byType = dyn_cast<ScanEdgesByType>(op)) {
         if (byType.getEdgeTypes().empty()) {
             return 0;
         }
 
-        return estimation.estimateEdgeCount();
-    } else if (isa<ScanEdges>(op)) {
         return estimation.estimateEdgeCount();
     }
 

@@ -798,6 +798,16 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             bindScanEdgesByLabel(scanInEdgesByLabelTgt, IteratorKind::ScanEdgesByTargetLabel);
         } else if (nl::ScanOutEdgesByLabelTgt scanOutEdgesByLabelTgt = mlir::dyn_cast<nl::ScanOutEdgesByLabelTgt>(operation)) {
             bindScanEdgesByLabel(scanOutEdgesByLabelTgt, IteratorKind::ScanEdgesByTargetLabel);
+        } else if (nl::ScanOutEdgesByLabelSrcTgt scanOutEdgesByLabelSrcTgt = mlir::dyn_cast<nl::ScanOutEdgesByLabelSrcTgt>(operation)) {
+            IteratorConfig config {IteratorKind::ScanEdgesByEndpointLabelsFromSource, {}, {}};
+            resolveLabelNames(scanOutEdgesByLabelSrcTgt.getSrcLabels(), config._labels);
+            resolveLabelNames(scanOutEdgesByLabelSrcTgt.getTgtLabels(), config._otherEndLabels);
+            _iteratorConfigs[scanOutEdgesByLabelSrcTgt.getResult()] = config;
+        } else if (nl::ScanInEdgesByLabelSrcTgt scanInEdgesByLabelSrcTgt = mlir::dyn_cast<nl::ScanInEdgesByLabelSrcTgt>(operation)) {
+            IteratorConfig config {IteratorKind::ScanEdgesByEndpointLabelsFromTarget, {}, {}};
+            resolveLabelNames(scanInEdgesByLabelSrcTgt.getTgtLabels(), config._labels);
+            resolveLabelNames(scanInEdgesByLabelSrcTgt.getSrcLabels(), config._otherEndLabels);
+            _iteratorConfigs[scanInEdgesByLabelSrcTgt.getResult()] = config;
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
@@ -1237,6 +1247,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanEdgesBySourceLabelLoop);
     } else if (config._kind == IteratorKind::ScanEdgesByTargetLabel) {
         translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanEdgesByTargetLabelLoop);
+    } else if (config._kind == IteratorKind::ScanEdgesByEndpointLabelsFromSource) {
+        translateScanEdgesByEndpointLabelsLoop(config, loopBody, limit, body, &NLExecutor::runScanEdgesByEndpointLabelsFromSourceLoop);
+    } else if (config._kind == IteratorKind::ScanEdgesByEndpointLabelsFromTarget) {
+        translateScanEdgesByEndpointLabelsLoop(config, loopBody, limit, body, &NLExecutor::runScanEdgesByEndpointLabelsFromTargetLoop);
     } else if (config._kind == IteratorKind::Sort) {
         translateSortLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::GroupAggregate) {
@@ -2009,6 +2023,37 @@ void NLTranslator::translateScanEdgesByLabelLoop(const IteratorConfig& config,
                                                                 targets,
                                                                 labelset,
                                                                 matchable);
+    loopData->setLimit(limit);
+
+    body->addStmt(NLFunctionDescriptor {executor, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateScanEdgesByEndpointLabelsLoop(const IteratorConfig& config,
+                                                          mlir::Block& loopBody,
+                                                          NLLimitState* limit,
+                                                          NLStmtContainer* body,
+                                                          NLHandlerFunction executor) {
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
+
+    LabelSet indexedLabelSet;
+    const bool indexedMatchable = resolveLabelSet(config._labels, indexedLabelSet);
+
+    LabelSet otherEndLabelSet;
+    const bool otherEndMatchable = resolveLabelSet(config._otherEndLabels, otherEndLabelSet);
+
+    NLScanEdgesByEndpointLabelsLoopData* loopData =
+        _program->allocFunctionData<NLScanEdgesByEndpointLabelsLoopData>(sources,
+                                                                         edgeIDs,
+                                                                         edgeTypes,
+                                                                         targets,
+                                                                         indexedLabelSet,
+                                                                         otherEndLabelSet,
+                                                                         indexedMatchable && otherEndMatchable);
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {executor, loopData});
