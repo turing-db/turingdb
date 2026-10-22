@@ -1,5 +1,7 @@
 #include "ScanEdgesByEndpointLabelsChunkWriter.h"
 
+#include <algorithm>
+
 #include "reader/GraphReader.h"
 #include "IteratorUtils.h"
 
@@ -9,8 +11,8 @@ using namespace db;
 
 namespace {
 
-constexpr size_t NColumns = 4;
-constexpr size_t NCombinations = 1 << NColumns;
+constexpr size_t N_COLUMNS = 4;
+constexpr size_t N_COMBINATIONS = 1 << N_COLUMNS;
 
 }
 
@@ -51,56 +53,76 @@ void ScanEdgesByEndpointLabelsChunkWriter<IndexIterator>::filterTombstones() {
 template <typename IndexIterator>
 void ScanEdgesByEndpointLabelsChunkWriter<IndexIterator>::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
-    static constexpr auto bools = generateArray<NColumns, NCombinations>();
-    static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
+    static constexpr auto bools = generateArray<N_COLUMNS, N_COMBINATIONS>();
+    static constexpr auto masks = generateBitmasks<N_COLUMNS, N_COMBINATIONS>();
 
     bioassert(_srcs || _tgts || _edgeIDs || _types,
               "ScanEdgesByEndpointLabelsChunkWriter must be initialized with at least one valid column");
 
     if (_srcs) {
         _srcs->clear();
-        _srcs->reserve(maxCount);
     }
     if (_edgeIDs) {
         _edgeIDs->clear();
-        _edgeIDs->reserve(maxCount);
     }
     if (_tgts) {
         _tgts->clear();
-        _tgts->reserve(maxCount);
     }
     if (_types) {
         _types->clear();
-        _types->reserve(maxCount);
     }
 
     const GraphReader reader(this->_view);
+    size_t written = 0;
 
-    const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+    const auto fill = [&]<std::array<bool, N_COLUMNS> conditions>() {
         while (this->isValid() && remainingToMax > 0) {
-            while (this->_edgeIt != this->_edges.end() && remainingToMax > 0) {
+            _keptEdges.clear();
+            while (this->_edgeIt != this->_edges.end() && _keptEdges.size() < remainingToMax) {
                 const EdgeRecord& edge = *this->_edgeIt;
                 const LabelSetHandle otherEndLabels = reader.getNodeLabelSet(edge._otherID);
 
                 if (otherEndLabels.isValid() && otherEndLabels.hasAtLeastLabels(_otherLabels)) {
-                    if constexpr (conditions[0]) {
-                        _srcs->push_back(edge._nodeID);
-                    }
-                    if constexpr (conditions[1]) {
-                        _edgeIDs->push_back(edge._edgeID);
-                    }
-                    if constexpr (conditions[2]) {
-                        _tgts->push_back(edge._otherID);
-                    }
-                    if constexpr (conditions[3]) {
-                        _types->push_back(edge._edgeTypeID);
-                    }
-
-                    remainingToMax--;
+                    _keptEdges.push_back(&edge);
                 }
 
                 ++this->_edgeIt;
             }
+
+            const size_t keptCount = _keptEdges.size();
+            const size_t newSize = written + keptCount;
+
+            if constexpr (conditions[0]) {
+                _srcs->resize(newSize);
+                std::transform(_keptEdges.begin(),
+                               _keptEdges.end(),
+                               _srcs->begin() + written,
+                               [](const EdgeRecord* edge) { return edge->_nodeID; });
+            }
+            if constexpr (conditions[1]) {
+                _edgeIDs->resize(newSize);
+                std::transform(_keptEdges.begin(),
+                               _keptEdges.end(),
+                               _edgeIDs->begin() + written,
+                               [](const EdgeRecord* edge) { return edge->_edgeID; });
+            }
+            if constexpr (conditions[2]) {
+                _tgts->resize(newSize);
+                std::transform(_keptEdges.begin(),
+                               _keptEdges.end(),
+                               _tgts->begin() + written,
+                               [](const EdgeRecord* edge) { return edge->_otherID; });
+            }
+            if constexpr (conditions[3]) {
+                _types->resize(newSize);
+                std::transform(_keptEdges.begin(),
+                               _keptEdges.end(),
+                               _types->begin() + written,
+                               [](const EdgeRecord* edge) { return edge->_edgeTypeID; });
+            }
+
+            written = newSize;
+            remainingToMax -= keptCount;
 
             if (this->_edgeIt == this->_edges.end()) {
                 this->nextValid();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "ScanOutEdgesBySourceLabelIterator.h"
 #include "ScanInEdgesByTargetLabelIterator.h"
 #include "ChunkWriter.h"
@@ -37,6 +39,7 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    std::vector<const EdgeRecord*> _keptEdges;
 
     void filterTombstones();
 };
