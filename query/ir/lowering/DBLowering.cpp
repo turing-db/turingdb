@@ -6716,6 +6716,14 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     // before the mask that the real terminator yields exists
     nl::Yield placeholder = _builder.create<nl::Yield>(loc);
 
+    // The rows the predicate computes over are the hop's edges, so a constant it reads is
+    // laid out over those rather than over the rows the walk is read on
+    const mlir::Value edges = nlBlock->getArgument(mlir::hopEdgeArgument(step));
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostLoopBody = nlBlock;
+    _innermostCardinality = edges;
+
     mlir::Value mask;
     for (mlir::Operation& operation : dbHop) {
         if (mlir::db::Yield yield = mlir::dyn_cast<mlir::db::Yield>(operation)) {
@@ -6725,8 +6733,11 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
         }
     }
 
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
     _builder.setInsertionPoint(placeholder);
-    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(mlir::hopEdgeArgument(step)));
+    const mlir::Value maskChunk = rowAlignedChunk(mask, edges);
     _builder.create<nl::Yield>(loc, mlir::ValueRange {maskChunk});
     placeholder.erase();
 }
