@@ -2909,6 +2909,12 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
     after the barrier - a WHERE cutting those rows, a count(*) tallying them, a pattern
     crossed with them - read a column that has them.
 
+    Elsewhere a bare constant needs no broadcast. An op reading constants alone, such as
+    the db.output of `MATCH (n) RETURN 5`, runs over the rows in flight where it stands,
+    and lowering takes those rows from the innermost loop. They are not a use of any
+    column, so an analysis over use-def chains must not read an op with no user as one
+    whose rows nothing reads: fuse_explore_distinct_ends refuses such an exploration.
+
     The driver is absent when no relation drives the scope, which is then the single row
     the constants are - `WITH 1 AS x WHERE x > 100`, whose one row the filter drops - so
     the value is laid out over that row:
