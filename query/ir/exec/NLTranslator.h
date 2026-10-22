@@ -206,9 +206,10 @@ private:
         // cells; null for the other kinds.
         mlir::Value _source;
 
-        // The start, end and step an UnwindRange iterator counts each row out by; empty
-        // for the other kinds.
-        llvm::SmallVector<mlir::Value, 3> _rangeBounds;
+        // The start, end and step an UnwindRange iterator counts each row out by, then the
+        // slice bounds of the run it keeps, null where absent; empty for the other kinds.
+        llvm::SmallVector<mlir::Value, 5> _rangeBounds;
+        bool _rangeReversed {false};
     };
 
     NLProgram* _program {nullptr};

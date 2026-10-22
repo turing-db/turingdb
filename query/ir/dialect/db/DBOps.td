@@ -385,7 +385,7 @@ def Unwind : TuringOp<"unwind", [Pure]> {
 /**
 * UnwindRange
 */
-def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
+def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, AttrSizedOperandSegments, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Produce one row per integer a row's range bounds span, without building the list";
 
   let description = [{
@@ -402,15 +402,32 @@ def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, DeclareOpInterfaceMe
     `end`, and the error db.range raises for a step of 0. The step is always an operand,
     so a range the query gave none counts by a constant 1. Nothing is laid out, so no
     length limit applies. `columns_to_filter` is the carry set, replicated as db.unwind's
-    is, and the element column is the one db.unwind gives a list of integers.
+    is, and the element column is the one db.unwind gives a list of integers, or none
+    where the list above the range was left for lowering to type, as db.reverse's is.
+
+    `from` and `to` restrict each row to the run of its range that db.list_slice would
+    keep, with the same bounds, and `reversed` counts that run out backwards. Both are
+    where db.reverse, db.list_slice and db.tail over a db.range fold, so the list is not
+    built for those either:
+
+      %x = db.unwind_range(%from, %to, %by, from %a, {}) reversed : ...
+
+    reads `UNWIND reverse(range(from, to, by)[a..]) AS x`.
   }];
 
-  let arguments = (ins Column:$start, Column:$end, Column:$step, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$start,
+                       Column:$end,
+                       Column:$step,
+                       Optional<Column>:$from,
+                       Optional<Column>:$to,
+                       Variadic<Column>:$columns_to_filter,
+                       UnitAttr:$reversed);
   let results   = (outs Column:$element, Variadic<Column>:$carried);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $start `,` $end `,` $step `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+    `(` $start `,` $end `,` $step (`,` `from` $from^)? (`,` `to` $to^)? `,` `{` $columns_to_filter `}` `)`
+    (`reversed` $reversed^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 

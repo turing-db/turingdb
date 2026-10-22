@@ -43,6 +43,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSEUNWINDRANGE
+#define GEN_PASS_DEF_UNNESTUNWINDCOMPREHENSION
 #define GEN_PASS_DEF_PLACEINFACTORS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
@@ -1350,12 +1351,74 @@ void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 Value seedColumnOf(ExplorePaths exploration, Value column);
 
+// What an unwound list is when it is a run of a range: the range, the one slice taken of it
+// in its own order - db.tail being the slice from 1 - and whether the run is reversed. The
+// chain holds the ops above the range, from the unwind down.
+struct RangeRun {
+    Range _range;
+    Value _from;
+    Value _to;
+    bool _sliced {false};
+    bool _fromOne {false};
+    bool _reversed {false};
+    llvm::SmallVector<Operation*, 4> _chain;
+};
+
+bool matchRangeRun(Value list, RangeRun& run) {
+    bool pendingReversal = false;
+
+    Value current = list;
+    while (Operation* const op = current.getDefiningOp()) {
+        if (Range range = dyn_cast<Range>(op)) {
+            // A slice is cut in the range's own order, so a reversal under it is no run
+            if (run._sliced && pendingReversal) {
+                return false;
+            }
+
+            run._range = range;
+            run._reversed = run._reversed != pendingReversal;
+            return true;
+        } else if (Reverse reverse = dyn_cast<Reverse>(op)) {
+            pendingReversal = !pendingReversal;
+            current = reverse.getInput();
+        } else if (ListSlice slice = dyn_cast<ListSlice>(op)) {
+            if (run._sliced) {
+                return false;
+            }
+
+            run._sliced = true;
+            run._from = slice.getFrom();
+            run._to = slice.getTo();
+            run._reversed = pendingReversal;
+            pendingReversal = false;
+            current = slice.getList();
+        } else if (Tail tail = dyn_cast<Tail>(op)) {
+            if (run._sliced) {
+                return false;
+            }
+
+            run._sliced = true;
+            run._fromOne = true;
+            run._reversed = pendingReversal;
+            pendingReversal = false;
+            current = tail.getInput();
+        } else {
+            return false;
+        }
+
+        run._chain.push_back(op);
+    }
+
+    return false;
+}
+
 bool fuseUnwindRange(Unwind unwind, mlir::RewriterBase& rewriter) {
-    Range range = unwind.getSource().getDefiningOp<Range>();
-    if (!range) {
+    RangeRun run;
+    if (!matchRangeRun(unwind.getSource(), run)) {
         return false;
     }
 
+    Range range = run._range;
     const Location loc = unwind.getLoc();
     rewriter.setInsertionPoint(unwind);
 
@@ -1364,14 +1427,27 @@ bool fuseUnwindRange(Unwind unwind, mlir::RewriterBase& rewriter) {
         step = rewriter.create<ConstantOp>(loc, rewriter.getI64IntegerAttr(1)).getResult();
     }
 
+    Value from = run._from;
+    if (run._fromOne) {
+        from = rewriter.create<ConstantOp>(loc, rewriter.getI64IntegerAttr(1)).getResult();
+    }
+
     UnwindRange fused = rewriter.create<UnwindRange>(loc,
                                                      unwind->getResultTypes(),
                                                      range.getStart(),
                                                      range.getEnd(),
                                                      step,
-                                                     unwind.getColumnsToFilter());
+                                                     from,
+                                                     run._to,
+                                                     unwind.getColumnsToFilter(),
+                                                     run._reversed);
 
     rewriter.replaceOp(unwind, fused->getResults());
+
+    for (Operation* const op : run._chain) {
+        eraseIfUnused(op, rewriter);
+    }
+
     eraseIfUnused(range.getOperation(), rewriter);
 
     return true;
@@ -1381,6 +1457,157 @@ struct FuseUnwindRange : public impl::FuseUnwindRangeBase<FuseUnwindRange> {
     void runOnOperation() override {
         runWorklist<Unwind>(getOperation(), [](Operation* op, mlir::RewriterBase& rewriter) {
             return fuseUnwindRange(cast<Unwind>(op), rewriter);
+        });
+    }
+};
+
+// The values a comprehension's row tag reaches: the tag and what each WHERE cuts it to. False
+// where the tag reaches anything but those cuts and the yield, which an unwind has no row
+// tag to give.
+bool collectRowTags(Block& body, ComprehensionYield yield, llvm::SmallPtrSetImpl<Value>& rowTags) {
+    llvm::SmallVector<Value> worklist {body.getArgument(1)};
+
+    while (!worklist.empty()) {
+        const Value rowTag = worklist.pop_back_val();
+        rowTags.insert(rowTag);
+
+        for (OpOperand& use : rowTag.getUses()) {
+            Operation* const user = use.getOwner();
+            FilterOp filter = dyn_cast<FilterOp>(user);
+            const unsigned operandNumber = use.getOperandNumber();
+
+            const bool cutByAFilter = filter && filter->getBlock() == &body && operandNumber != 0;
+            if (cutByAFilter) {
+                worklist.push_back(filter->getResult(operandNumber - 1));
+            } else if (user != yield.getOperation()) {
+                return false;
+            }
+        }
+    }
+
+    return rowTags.contains(yield.getRowTags());
+}
+
+// Re-emits a WHERE of the body over the unwound rows. The tag is dropped from what it cuts,
+// and every column of the rows it does not cut yet is cut alongside, so @param rows, the
+// columns of the rows in flight, stays row-aligned with the elements.
+void cutUnwoundRows(FilterOp filter,
+                    const llvm::SmallPtrSetImpl<Value>& rowTags,
+                    mlir::IRMapping& mapping,
+                    llvm::SmallVectorImpl<Value>& rows,
+                    mlir::RewriterBase& rewriter) {
+    const OperandRange filteredColumns = filter.getColumnsToFilter();
+
+    llvm::SmallVector<Value> cutColumns;
+    for (const Value column : filteredColumns) {
+        if (!rowTags.contains(column)) {
+            cutColumns.push_back(mapping.lookupOrDefault(column));
+        }
+    }
+
+    for (const Value column : rows) {
+        if (!llvm::is_contained(cutColumns, column)) {
+            cutColumns.push_back(column);
+        }
+    }
+
+    llvm::SmallVector<Type> cutTypes;
+    for (const Value column : cutColumns) {
+        cutTypes.push_back(column.getType());
+    }
+
+    FilterOp cut = rewriter.create<FilterOp>(filter.getLoc(),
+                                             cutTypes,
+                                             mapping.lookupOrDefault(filter.getMask()),
+                                             cutColumns);
+
+    size_t cutIndex = 0;
+    for (const auto [column, result] : llvm::zip(filteredColumns, filter.getResults())) {
+        if (!rowTags.contains(column)) {
+            mapping.map(result, cut.getResult(cutIndex));
+            cutIndex++;
+        }
+    }
+
+    for (Value& column : rows) {
+        const size_t position = llvm::find(cutColumns, column) - cutColumns.begin();
+        column = cut.getResult(position);
+    }
+}
+
+// UNWIND [x IN xs WHERE p | f] AS y is UNWIND xs AS x WITH x WHERE p, then f as y: the body
+// of the comprehension runs over the unwound rows, so no list is built for it.
+bool unnestUnwindComprehension(Unwind unwind, mlir::RewriterBase& rewriter) {
+    ListComprehension comprehension = unwind.getSource().getDefiningOp<ListComprehension>();
+    if (!comprehension || !comprehension->hasOneUse()) {
+        return false;
+    }
+
+    Block& body = comprehension.getBody().front();
+    ComprehensionYield yield = cast<ComprehensionYield>(body.getTerminator());
+
+    // A value standing for every element would stand for one row once it is unwound
+    if (::db::yieldsConstantColumn(yield.getValue())) {
+        return false;
+    }
+
+    llvm::SmallPtrSet<Value, 4> rowTags;
+    if (!collectRowTags(body, yield, rowTags)) {
+        return false;
+    }
+
+    const OperandRange bodyColumns = comprehension.getColumnsToFilter();
+    const OperandRange unwoundColumns = unwind.getColumnsToFilter();
+
+    llvm::SmallVector<Value> carried(bodyColumns.begin(), bodyColumns.end());
+    for (const Value column : unwoundColumns) {
+        if (!llvm::is_contained(carried, column)) {
+            carried.push_back(column);
+        }
+    }
+
+    llvm::SmallVector<Type> resultTypes {unwind.getElement().getType()};
+    for (const Value column : carried) {
+        resultTypes.push_back(column.getType());
+    }
+
+    rewriter.setInsertionPoint(unwind);
+    Unwind unnested = rewriter.create<Unwind>(unwind.getLoc(), resultTypes, comprehension.getSource(), carried);
+
+    const ResultRange unnestedCarried = unnested.getCarried();
+    llvm::SmallVector<Value> rows(unnestedCarried.begin(), unnestedCarried.end());
+
+    mlir::IRMapping mapping;
+    mapping.map(body.getArgument(0), unnested.getElement());
+
+    for (size_t carriedIndex = 0; carriedIndex < bodyColumns.size(); carriedIndex++) {
+        mapping.map(body.getArgument(carriedIndex + 2), rows[carriedIndex]);
+    }
+
+    for (Operation& op : body.without_terminator()) {
+        if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+            cutUnwoundRows(filter, rowTags, mapping, rows, rewriter);
+        } else {
+            rewriter.clone(op, mapping);
+        }
+    }
+
+    llvm::SmallVector<Value> replacements {mapping.lookupOrDefault(yield.getValue())};
+    for (const Value column : unwoundColumns) {
+        const size_t position = llvm::find(carried, column) - carried.begin();
+        replacements.push_back(rows[position]);
+    }
+
+    rewriter.replaceOp(unwind, replacements);
+    rewriter.eraseOp(comprehension);
+
+    return true;
+}
+
+struct UnnestUnwindComprehension : public impl::UnnestUnwindComprehensionBase<UnnestUnwindComprehension> {
+    void runOnOperation() override {
+        runWorklist<Unwind>(getOperation(), [](Operation* op, mlir::RewriterBase& rewriter) {
+            return unnestUnwindComprehension(cast<Unwind>(op), rewriter);
         });
     }
 };

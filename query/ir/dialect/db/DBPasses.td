@@ -24,7 +24,12 @@ def FuseUnwindEquality : Pass<"fuse_unwind_equality"> {
 }
 
 def FuseUnwindRange : Pass<"fuse_unwind_range"> {
-    let summary = "Fuse an unwind of a range into an unwind_range, which counts the integers out instead of building the list";
+    let summary = "Fuse an unwind of a range, or of its reversal or a slice of it, into an unwind_range, which counts the integers out instead of building the list";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def UnnestUnwindComprehension : Pass<"unnest_unwind_comprehension"> {
+    let summary = "Unwind a list comprehension's source and run its body over the unwound rows, instead of building its lists";
     let dependentDialects = ["mlir::db::DB"];
 }
 

@@ -50,3 +50,10 @@ add_call_v3_test(test_query_ir_unwind_unread_element UnwindUnreadElementTest.cpp
 
 add_turing_test(test_query_ir_unwind_range_codegen UnwindRangeCodegenTest.cpp)
 target_include_directories(test_query_ir_unwind_range_codegen PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_unwind_comprehension UnwindComprehensionTest.cpp)
+
+add_call_v3_test(test_query_ir_unwind_range_window UnwindRangeWindowTest.cpp)
+
+add_turing_test(test_query_ir_unwind_list_producer_codegen UnwindListProducerCodegenTest.cpp)
+target_include_directories(test_query_ir_unwind_list_producer_codegen PRIVATE ${IR_TEST_DIR})

@@ -4401,9 +4401,17 @@ private:
     Column* _result {nullptr};
 };
 
-// nl.unwind_range loop data: the bounds each row is counted out by, the element chunk a
-// step fills with the next integers, and the carry set gathered by the row each integer
-// came from.
+// The run of each row's range an nl.unwind_range keeps: the slice bounds, absent where the
+// query gave none, and whether the run is counted out backwards.
+struct NLRangeWindowBounds {
+    NLRangeBound _from;
+    NLRangeBound _to;
+    bool _reversed {false};
+};
+
+// nl.unwind_range loop data: the bounds each row is counted out by and the run of it kept,
+// the element chunk a step fills with the next integers, and the carry set gathered by the
+// row each integer came from.
 class NLUnwindRangeLoopData : public NLFunctionData {
 public:
     using CarriedColumns = std::vector<NLCarriedColumn>;
@@ -4411,10 +4419,12 @@ public:
     NLUnwindRangeLoopData(const NLRangeBound& start,
                           const NLRangeBound& end,
                           const NLRangeBound& step,
+                          const NLRangeWindowBounds& window,
                           Column* elementOutput)
         : _start(start),
         _end(end),
         _step(step),
+        _window(window),
         _elementOutput(elementOutput)
     {
     }
@@ -4422,6 +4432,7 @@ public:
     const NLRangeBound& getStart() const { return _start; }
     const NLRangeBound& getEnd() const { return _end; }
     const NLRangeBound& getStep() const { return _step; }
+    const NLRangeWindowBounds& getWindow() const { return _window; }
     Column* getElementOutput() const { return _elementOutput; }
 
     const CarriedColumns& carriedColumns() const { return _carriedColumns; }
@@ -4442,6 +4453,7 @@ private:
     NLRangeBound _start;
     NLRangeBound _end;
     NLRangeBound _step;
+    NLRangeWindowBounds _window;
     Column* _elementOutput {nullptr};
 
     NLLimitState* _limit {nullptr};

@@ -240,7 +240,7 @@ def Unwind : NLOp<"unwind", [Pure]> {
 * UnwindRange
 */
 // Pure: counting out a row's integers is deterministic; the per-integer fan-out is in the nl.for.
-def UnwindRange : NLOp<"unwind_range", [Pure]> {
+def UnwindRange : NLOp<"unwind_range", [Pure, AttrSizedOperandSegments]> {
   let summary = "Create a database iterator that counts out the integers each row's bounds span";
   let description = [{
     Imperative counterpart of db.unwind_range. Each step of an enclosing nl.for fills one
@@ -254,14 +254,22 @@ def UnwindRange : NLOp<"unwind_range", [Pure]> {
 
     Every bound carries rows - lowering lays a constant one out over them first - and is
     read as a nullable value chunk. The integers are computed as the chunk is filled, so
-    the iterator holds one chunk of them however many a row spans.
+    the iterator holds one chunk of them however many a row spans. `from`, `to` and
+    `reversed` are db.unwind_range's, and the slice bounds are read as its range bounds are.
   }];
 
-  let arguments = (ins NLChunk:$start, NLChunk:$end, NLChunk:$step, Variadic<NLChunk>:$columns_to_filter);
+  let arguments = (ins NLChunk:$start,
+                       NLChunk:$end,
+                       NLChunk:$step,
+                       Optional<NLChunk>:$from,
+                       Optional<NLChunk>:$to,
+                       Variadic<NLChunk>:$columns_to_filter,
+                       UnitAttr:$reversed);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    `(` $start `,` $end `,` $step `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+    `(` $start `,` $end `,` $step (`,` `from` $from^)? (`,` `to` $to^)? `,` `{` $columns_to_filter `}` `)`
+    (`reversed` $reversed^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 

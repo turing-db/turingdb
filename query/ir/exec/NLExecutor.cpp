@@ -221,11 +221,69 @@ public:
             throw IRException("range() cannot count by a step of 0");
         }
 
+        _windowFirst = 0;
+        _reversed = false;
         _ascending = *by > 0;
         _empty = _ascending ? *from > *to : *from < *to;
         _first = static_cast<uint64_t>(*from);
         _stride = _ascending ? static_cast<uint64_t>(*by) : 0 - static_cast<uint64_t>(*by);
         _steps = countRangeSteps(*from, *to, *by);
+
+        return true;
+    }
+
+    // Narrows the span to the run a slice of its list keeps, as runListSlice cuts it, and
+    // counts that run out backwards where @param window is reversed. Returns false where a
+    // slice bound of @param row holds no value.
+    bool keepWindow(const NLRangeWindowBounds& window, size_t row) {
+        const NLRangeBound& from = window._from;
+        const NLRangeBound& to = window._to;
+
+        const std::optional<types::Int64::Primitive> lower =
+            from._column ? from._read(from._column, row) : std::optional<types::Int64::Primitive> {0};
+        const std::optional<types::Int64::Primitive> upper =
+            to._column ? to._read(to._column, row) : std::optional<types::Int64::Primitive> {};
+
+        const bool boundsPresent = lower.has_value() && (!to._column || upper.has_value());
+        if (!boundsPresent) {
+            return false;
+        }
+
+        _reversed = window._reversed;
+
+        if (_empty) {
+            return true;
+        }
+
+        // The list holds _steps + 1 integers, up to 2^64, so the run is located by its first
+        // and last positions, and a bound counting from the end by how far it stops short of it
+        uint64_t first = 0;
+        if (*lower >= 0) {
+            first = static_cast<uint64_t>(*lower);
+        } else {
+            const uint64_t shortOfLast = static_cast<uint64_t>(-(*lower + 1));
+            first = shortOfLast >= _steps ? 0 : _steps - shortOfLast;
+        }
+
+        const types::Int64::Primitive upperBound = upper.value_or(0);
+
+        uint64_t last = 0;
+        bool upperKeepsAny = true;
+        if (!to._column) {
+            last = _steps;
+        } else if (upperBound > 0) {
+            last = std::min(static_cast<uint64_t>(upperBound) - 1, _steps);
+        } else if (upperBound == 0) {
+            upperKeepsAny = false;
+        } else {
+            const uint64_t shortOfLast = static_cast<uint64_t>(-(upperBound + 1));
+            upperKeepsAny = shortOfLast < _steps;
+            last = upperKeepsAny ? _steps - shortOfLast - 1 : 0;
+        }
+
+        _empty = !upperKeepsAny || first > last;
+        _windowFirst = first;
+        _steps = _empty ? 0 : last - first;
 
         return true;
     }
@@ -236,7 +294,8 @@ public:
     // The stride can be wider than an int64 holds, so every integer is offset from the
     // first unsigned
     types::Int64::Primitive at(uint64_t position) const {
-        const uint64_t offset = position * _stride;
+        const uint64_t listPosition = _reversed ? _windowFirst + _steps - position : _windowFirst + position;
+        const uint64_t offset = listPosition * _stride;
         return static_cast<types::Int64::Primitive>(_ascending ? _first + offset : _first - offset);
     }
 
@@ -244,8 +303,10 @@ private:
     uint64_t _first {0};
     uint64_t _stride {0};
     uint64_t _steps {0};
+    uint64_t _windowFirst {0};
     bool _ascending {true};
     bool _empty {true};
+    bool _reversed {false};
 };
 
 // The cursor an unwind_range loop walks: every (row, integer) pair the bounds span, in row
@@ -257,10 +318,16 @@ public:
         : _start(loopData->getStart()),
         _end(loopData->getEnd()),
         _step(loopData->getStep()),
+        _window(loopData->getWindow()),
         _rowCount(_start._column->size())
     {
-        bioassert(_end._column->size() == _rowCount && _step._column->size() == _rowCount,
-                  "Bound columns of an unwind_range are not row-aligned.");
+        const auto isRowAligned = [this](const NLRangeBound& bound) {
+            return !bound._column || bound._column->size() == _rowCount;
+        };
+
+        const bool boundsRowAligned = isRowAligned(_end) && isRowAligned(_step)
+                                   && isRowAligned(_window._from) && isRowAligned(_window._to);
+        bioassert(boundsRowAligned, "Bound columns of an unwind_range are not row-aligned.");
 
         openNextRow();
     }
@@ -305,6 +372,7 @@ private:
     NLRangeBound _start;
     NLRangeBound _end;
     NLRangeBound _step;
+    NLRangeWindowBounds _window;
     size_t _rowCount {0};
     size_t _row {0};
     uint64_t _position {0};
@@ -314,7 +382,9 @@ private:
         _position = 0;
 
         while (_row < _rowCount) {
-            const bool spansIntegers = _span.read(_start, _end, _step, _row) && !_span.isEmpty();
+            const bool spansIntegers = _span.read(_start, _end, _step, _row)
+                                    && _span.keepWindow(_window, _row)
+                                    && !_span.isEmpty();
             if (spansIntegers) {
                 return;
             }

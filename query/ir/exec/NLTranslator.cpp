@@ -906,7 +906,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::UnwindRange unwindRange = mlir::dyn_cast<nl::UnwindRange>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::UnwindRange;
-            config._rangeBounds = {unwindRange.getStart(), unwindRange.getEnd(), unwindRange.getStep()};
+            config._rangeBounds = {unwindRange.getStart(),
+                                   unwindRange.getEnd(),
+                                   unwindRange.getStep(),
+                                   unwindRange.getFrom(),
+                                   unwindRange.getTo()};
+            config._rangeReversed = unwindRange.getReversed();
 
             const mlir::OperandRange carriedColumns = unwindRange.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
@@ -1769,11 +1774,18 @@ void NLTranslator::translateUnwindRangeLoop(const IteratorConfig& config,
                                             mlir::Block& loopBody,
                                             NLLimitState* limit,
                                             NLStmtContainer* body) {
-    const llvm::SmallVector<mlir::Value, 3>& bounds = config._rangeBounds;
+    const llvm::SmallVector<mlir::Value, 5>& bounds = config._rangeBounds;
+
+    const NLRangeWindowBounds window {
+        ._from = rangeBound(bounds[3]),
+        ._to = rangeBound(bounds[4]),
+        ._reversed = config._rangeReversed,
+    };
 
     NLUnwindRangeLoopData* loopData = _program->allocFunctionData<NLUnwindRangeLoopData>(rangeBound(bounds[0]),
                                                                                          rangeBound(bounds[1]),
                                                                                          rangeBound(bounds[2]),
+                                                                                         window,
                                                                                          allocColumnIfUsed(loopBody.getArgument(0)));
     loopData->setLimit(limit);
     loopData->getRows()->reserve(_program->getChunkSize());

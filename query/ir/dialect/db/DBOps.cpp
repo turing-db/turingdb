@@ -1886,11 +1886,13 @@ LogicalResult Unwind::verify() {
 
 LogicalResult UnwindRange::verify() {
     const ColumnType elementColumn = dyn_cast<ColumnType>(getElement().getType());
-    const storage::NullableType nullable = elementColumn ? dyn_cast<storage::NullableType>(elementColumn.getType())
-                                                         : storage::NullableType {};
+    const Type element = elementColumn ? elementColumn.getType() : Type {};
+    const storage::NullableType nullable = dyn_cast_or_null<storage::NullableType>(element);
 
-    if (!nullable || !isa<IntegerType>(nullable.getValueType())) {
-        return emitOpError("element must be a column of nullable integers");
+    const bool nullableInteger = nullable && isa<IntegerType>(nullable.getValueType());
+    const bool resolvedInLowering = isa_and_nonnull<NoneType>(element);
+    if (!nullableInteger && !resolvedInLowering) {
+        return emitOpError("element must be a column of nullable integers, or of none for lowering to resolve");
     }
 
     return verifyCarriedResults(getOperation(), getColumnsToFilter(), getCarried());

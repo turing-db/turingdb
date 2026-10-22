@@ -1758,9 +1758,20 @@ void DBLowering::lowerUnwindRange(mlir::db::UnwindRange unwindRange) {
         carriedChunks.push_back(mapValue(carriedColumn));
     }
 
-    std::array<mlir::Value, 3> bounds {mapValue(unwindRange.getStart()),
-                                       mapValue(unwindRange.getEnd()),
-                                       mapValue(unwindRange.getStep())};
+    const mlir::Value from = unwindRange.getFrom();
+    const mlir::Value to = unwindRange.getTo();
+
+    llvm::SmallVector<mlir::Value, 5> bounds {mapValue(unwindRange.getStart()),
+                                              mapValue(unwindRange.getEnd()),
+                                              mapValue(unwindRange.getStep())};
+
+    if (from) {
+        bounds.push_back(mapValue(from));
+    }
+
+    if (to) {
+        bounds.push_back(mapValue(to));
+    }
 
     llvm::SmallVector<mlir::Value, 8> operandChunks(carriedChunks.begin(), carriedChunks.end());
     operandChunks.append(bounds.begin(), bounds.end());
@@ -1787,12 +1798,18 @@ void DBLowering::lowerUnwindRange(mlir::db::UnwindRange unwindRange) {
 
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
 
+    const mlir::Value fromChunk = from ? bounds[3] : mlir::Value {};
+    const mlir::Value toChunk = to ? bounds.back() : mlir::Value {};
+
     nl::UnwindRange rows = _builder.create<nl::UnwindRange>(_builder.getUnknownLoc(),
                                                             iteratorType,
                                                             bounds[0],
                                                             bounds[1],
                                                             bounds[2],
-                                                            carriedChunks);
+                                                            fromChunk,
+                                                            toChunk,
+                                                            carriedChunks,
+                                                            unwindRange.getReversed());
     buildLoopForSource(rows.getResult(), unwindRange.getOperation());
 }
 
