@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <optional>
+#include <span>
+#include <unordered_set>
 
 #include <range/v3/view/reverse.hpp>
 
@@ -42,30 +44,74 @@ size_t countIndexedEdges(const LabelSetIndexer<EdgeIndexer::EdgeSpans>& indexer,
     return count;
 }
 
-// Whether a data part after @param partIndex holds this property type at all. Only those
-// parts can hold a newer entry overriding one of this part's.
-bool holdsPropertyLater(DataPartSpan parts, size_t partIndex, PropertyTypeID propertyTypeID) {
-    for (size_t newer = partIndex + 1; newer < parts.size(); newer++) {
-        if (parts[newer]->nodeProperties().hasPropertyType(propertyTypeID)) {
-            return true;
+// The matched entries of one part that stand for a live node: those whose node is neither
+// deleted nor held by an entry of a newer part. The excluded entries are found from the
+// smaller side: each matched entry checked against the exclusions, or each exclusion
+// checked against the part's entries and the labels.
+size_t countLiveEntries(const GraphReader& reader,
+                        const PropertyManager& properties,
+                        PropertyTypeID propertyTypeID,
+                        const LabelSetHandle& labelset,
+                        const std::unordered_set<EntityID>& overridden) {
+    const LabelSetPropertyIndexer* indexer = properties.tryGetIndexer(propertyTypeID);
+    bioassert(indexer, "A part holding a property container has no label set indexer for it");
+
+    size_t matchedCount = 0;
+    for (auto labelsetIt = indexer->matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
+        for (const PropertyRange& range : labelsetIt.getValue()) {
+            matchedCount += range._count;
         }
     }
 
-    return false;
-}
+    const Tombstones& tombstones = reader.getView().tombstones();
+    const size_t exclusionCount = tombstones.numNodes() + overridden.size();
+    if (exclusionCount == 0) {
+        return matchedCount;
+    }
 
-// Whether a data part after @param partIndex holds this property for the entity too
-bool isPropertyOverriddenLater(DataPartSpan parts,
-                               size_t partIndex,
-                               PropertyTypeID propertyTypeID,
-                               EntityID entityID) {
-    for (size_t newer = partIndex + 1; newer < parts.size(); newer++) {
-        if (parts[newer]->nodeProperties().hasEntry(propertyTypeID, entityID)) {
-            return true;
+    if (matchedCount <= exclusionCount) {
+        const std::span<const EntityID> entityIDs = properties.ids(propertyTypeID);
+
+        size_t liveCount = 0;
+        for (auto labelsetIt = indexer->matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
+            for (const PropertyRange& range : labelsetIt.getValue()) {
+                for (const EntityID entityID : entityIDs.subspan(range._offset, range._count)) {
+                    const bool deleted = tombstones.containsNode(NodeID {entityID.getValue()});
+                    if (!deleted && !overridden.contains(entityID)) {
+                        liveCount++;
+                    }
+                }
+            }
+        }
+
+        return liveCount;
+    }
+
+    const PropertyContainer& container = *properties.find(propertyTypeID)->second;
+    const auto holdsMatchedEntry = [&reader, &container, &labelset](NodeID nodeID) {
+        if (!container.has(EntityID {nodeID.getValue()})) {
+            return false;
+        }
+
+        const LabelSetHandle nodeLabels = reader.getNodeLabelSet(nodeID);
+        return nodeLabels.isValid() && nodeLabels.hasAtLeastLabels(labelset);
+    };
+
+    size_t excludedCount = 0;
+    for (const NodeID nodeID : tombstones.nodeTombstones()) {
+        if (holdsMatchedEntry(nodeID)) {
+            excludedCount++;
         }
     }
 
-    return false;
+    for (const EntityID entityID : overridden) {
+        const NodeID nodeID {entityID.getValue()};
+        if (!tombstones.containsNode(nodeID) && holdsMatchedEntry(nodeID)) {
+            excludedCount++;
+        }
+    }
+
+    return matchedCount - excludedCount;
 }
 
 }
@@ -227,40 +273,35 @@ size_t GraphReader::getInEdgeCountMatchingLabelset(const LabelSetHandle& labelse
 size_t GraphReader::getNodeCountWithProperty(const LabelSetHandle& labelset,
                                              PropertyTypeID propertyTypeID) const {
     const DataPartSpan parts = _view.dataparts();
-    const Tombstones& tombstones = _view.tombstones();
+
+    size_t oldestHolder = parts.size();
+    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
+        if (parts[partIndex]->nodeProperties().hasPropertyType(propertyTypeID)) {
+            oldestHolder = partIndex;
+            break;
+        }
+    }
+
+    // The entities a newer part holds an entry for, a value or an explicit null. That entry
+    // stands for the node, so an older part's entry for it no longer counts.
+    std::unordered_set<EntityID> overridden;
 
     size_t count = 0;
-    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
+    for (size_t newerParts = parts.size(); newerParts > oldestHolder; newerParts--) {
+        const size_t partIndex = newerParts - 1;
         const PropertyManager& properties = parts[partIndex]->nodeProperties();
         if (!properties.hasPropertyType(propertyTypeID)) {
             continue;
         }
 
-        const LabelSetPropertyIndexer* indexer = properties.tryGetIndexer(propertyTypeID);
-        bioassert(indexer, "A part holding a property container has no label set indexer for it");
+        count += countLiveEntries(*this, properties, propertyTypeID, labelset, overridden);
 
-        // An entry is only read to exclude it: its node is deleted, or a later part holds a
-        // newer entry standing for the same node. With neither possible the indexed ranges
-        // answer on their own, one addition per range.
-        const bool excludesEntries = tombstones.hasNodes() || holdsPropertyLater(parts, partIndex, propertyTypeID);
-        const std::span<const EntityID> entityIDs = properties.ids(propertyTypeID);
-
-        for (auto labelsetIt = indexer->matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
-            for (const PropertyRange& range : labelsetIt.getValue()) {
-                if (!excludesEntries) {
-                    count += range._count;
-                    continue;
-                }
-
-                for (const EntityID entityID : entityIDs.subspan(range._offset, range._count)) {
-                    const bool deleted = tombstones.containsNode(NodeID {entityID.getValue()});
-                    const bool overridden = isPropertyOverriddenLater(parts, partIndex, propertyTypeID, entityID);
-
-                    if (!deleted && !overridden) {
-                        count++;
-                    }
-                }
-            }
+        if (partIndex > oldestHolder) {
+            const PropertyContainer& container = *properties.find(propertyTypeID)->second;
+            const PropertyContainer::IDs& valueIDs = container.ids();
+            const PropertyContainer::IDs& nullIDs = container.nullIds();
+            overridden.insert(valueIDs.begin(), valueIDs.end());
+            overridden.insert(nullIDs.begin(), nullIDs.end());
         }
     }
 
