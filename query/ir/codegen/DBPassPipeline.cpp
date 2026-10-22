@@ -36,7 +36,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createNarrowEdgeTypeReads(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanOutEdgesByLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanInEdgesByLabel(); },
-    [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },
+    [](const mlir::db::DBPassContext* context) { return mlir::db::createFuseScanEdgesByEndpointLabel(context); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createRemoveRedundantLabelChecks(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreEndConstraint(); },

@@ -58,27 +58,61 @@ protected:
     }
 };
 
-// Remy is the one SoftwareEngineering node with an edge to an Exotic one.
-TEST_F(ScanEdgesByEndpointLabelsTest, labelledOutHopReadsTheSourceIndex) {
+// Both ends carry labels, so the scan walks the index of the end with fewer nodes: 2 Founder
+// nodes against 10 Interest ones, and 2 Exotic nodes against 5 SoftwareEngineering ones.
+TEST_F(ScanEdgesByEndpointLabelsTest, outHopReadsTheSourceIndexWhenTheSourceHasFewerNodes) {
+    const std::string_view query = "MATCH (n:Founder)-->(m:Interest) RETURN n.name, m.name";
+
+    expectScan(query, "db.scan_out_edges_by_label_src_tgt([\"Founder\"], [\"Interest\"])");
+    expectRows(query,
+               {{"Adam", "Bio"},
+                {"Adam", "Cooking"},
+                {"Remy", "Computers"},
+                {"Remy", "Eighties"},
+                {"Remy", "Ghosts"}});
+}
+
+TEST_F(ScanEdgesByEndpointLabelsTest, outHopReadsTheTargetIndexWhenTheTargetHasFewerNodes) {
     const std::string_view query = "MATCH (n:SoftwareEngineering)-->(m:Exotic) RETURN n.name, m.name";
 
-    expectScan(query, "db.scan_out_edges_by_label_src_tgt([\"SoftwareEngineering\"], [\"Exotic\"])");
+    expectScan(query, "db.scan_in_edges_by_label_src_tgt([\"SoftwareEngineering\"], [\"Exotic\"])");
     expectRows(query, {{"Remy", "Eighties"}, {"Remy", "Ghosts"}});
 }
 
-TEST_F(ScanEdgesByEndpointLabelsTest, labelledInHopReadsTheTargetIndex) {
-    const std::string_view query = "MATCH (n:Exotic)<--(m:Founder) RETURN n.name, m.name";
+TEST_F(ScanEdgesByEndpointLabelsTest, inHopReadsTheTargetIndexWhenTheTargetHasFewerNodes) {
+    const std::string_view query = "MATCH (n:Exotic)<--(m:Person) RETURN n.name, m.name";
 
-    expectScan(query, "db.scan_in_edges_by_label_src_tgt([\"Founder\"], [\"Exotic\"])");
+    expectScan(query, "db.scan_in_edges_by_label_src_tgt([\"Person\"], [\"Exotic\"])");
     expectRows(query, {{"Eighties", "Remy"}, {"Ghosts", "Remy"}});
 }
 
-// The pattern labels the target, so the scan keeps reading the target's index and checks
-// the source the WHERE labels.
-TEST_F(ScanEdgesByEndpointLabelsTest, whereOnTheSourceOfATargetLabelledScanKeepsTheTargetIndex) {
+TEST_F(ScanEdgesByEndpointLabelsTest, inHopReadsTheSourceIndexWhenTheSourceHasFewerNodes) {
+    const std::string_view query = "MATCH (n:Interest)<--(m:Founder) RETURN n.name, m.name";
+
+    expectScan(query, "db.scan_out_edges_by_label_src_tgt([\"Founder\"], [\"Interest\"])");
+    expectRows(query,
+               {{"Bio", "Adam"},
+                {"Computers", "Remy"},
+                {"Cooking", "Adam"},
+                {"Eighties", "Remy"},
+                {"Ghosts", "Remy"}});
+}
+
+// 2 Founder nodes and 2 Exotic ones: a tie reads the source's index, whichever end the
+// pattern labels first.
+TEST_F(ScanEdgesByEndpointLabelsTest, tieReadsTheSourceIndex) {
+    const std::string_view query = "MATCH (n:Exotic)<--(m:Founder) RETURN n.name, m.name";
+
+    expectScan(query, "db.scan_out_edges_by_label_src_tgt([\"Founder\"], [\"Exotic\"])");
+    expectRows(query, {{"Eighties", "Remy"}, {"Ghosts", "Remy"}});
+}
+
+// The pattern labels the target, but the 3 Bioinformatics nodes the WHERE labels the source
+// by are fewer than the 10 Interest ones.
+TEST_F(ScanEdgesByEndpointLabelsTest, whereOnTheSourceOfATargetLabelledScanMovesToTheSourceIndex) {
     const std::string_view query = "MATCH (n)-->(m:Interest) WHERE n:Bioinformatics RETURN n.name, m.name";
 
-    expectScan(query, "db.scan_in_edges_by_label_src_tgt([\"Bioinformatics\"], [\"Interest\"])");
+    expectScan(query, "db.scan_out_edges_by_label_src_tgt([\"Bioinformatics\"], [\"Interest\"])");
     expectRows(query,
                {{"Adam", "Bio"},
                 {"Adam", "Cooking"},
@@ -156,8 +190,8 @@ TEST_F(ScanEdgesByEndpointLabelsTest, keepsTheCreatedEdgesBetweenTheLabelsOffThe
     const std::string_view query = "CREATE (a:Person:Founder {name: 'Ana'})-[:INTERESTED_IN]->(o:Interest:Exotic {name: 'Opera'}), "
                                    "(a)-[:INTERESTED_IN]->(:Interest {name: 'Chess'}), "
                                    "(:Person {name: 'Bo'})-[:INTERESTED_IN]->(o) "
-                                   "WITH count(*) AS created MATCH (m:Exotic)<--(n:Founder) RETURN n.name, m.name";
+                                   "WITH count(*) AS created MATCH (m:Exotic)<--(n:Person) RETURN n.name, m.name";
 
-    expectScan(query, "db.scan_in_edges_by_label_src_tgt([\"Founder\"], [\"Exotic\"])", true);
-    expectWrittenRows(query, {{"Ana", "Opera"}, {"Remy", "Eighties"}, {"Remy", "Ghosts"}});
+    expectScan(query, "db.scan_in_edges_by_label_src_tgt([\"Person\"], [\"Exotic\"])", true);
+    expectWrittenRows(query, {{"Ana", "Opera"}, {"Bo", "Opera"}, {"Remy", "Eighties"}, {"Remy", "Ghosts"}});
 }

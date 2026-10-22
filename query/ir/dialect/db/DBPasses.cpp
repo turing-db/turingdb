@@ -3595,6 +3595,59 @@ bool readEdgeScanLabels(Operation* op, EdgeScanLabels& scanLabels) {
     return false;
 }
 
+// The label set a scan's label names stand for, resolved against the schema, and whether
+// the schema holds every one of them.
+bool collectScanLabels(ArrayAttr labelNames, const ::db::GraphMetadata& metadata, ::db::LabelSet& labels) {
+    const ::db::LabelMap& labelMap = metadata.labels();
+    bool resolvesEveryLabel = true;
+    for (const Attribute labelAttr : labelNames) {
+        const StringAttr nameAttr = dyn_cast<StringAttr>(labelAttr);
+        if (!nameAttr) {
+            continue;
+        }
+
+        const llvm::StringRef name = nameAttr.getValue();
+        const std::optional<::db::LabelID> label = labelMap.get(std::string_view(name.data(), name.size()));
+
+        if (label) {
+            labels.set(*label);
+        } else {
+            resolvesEveryLabel = false;
+        }
+    }
+
+    return resolvesEveryLabel;
+}
+
+// The nodes carrying every one of these labels, none when the schema lacks one of them.
+size_t estimateLabelledNodes(ArrayAttr labelNames,
+                             const ::db::GraphMetadata& metadata,
+                             const ::db::CardinalityEstimation& estimation) {
+    ::db::LabelSet labels;
+    if (!collectScanLabels(labelNames, metadata, labels)) {
+        return 0;
+    }
+
+    return estimation.estimateNodeCount(labels);
+}
+
+// The index a scan labelled on both ends walks: the one keyed by the end with fewer nodes,
+// the source's on a tie. With no graph to count, the one the scan already walks.
+bool indexesByTarget(const EdgeScanLabels& scanLabels, const DBPassContext& context) {
+    if (!context._view) {
+        return scanLabels._indexedByTarget;
+    }
+
+    const ::db::GraphView& view = *context._view;
+    const ::db::GraphMetadata& metadata = view.metadata();
+    const ::db::CardinalityEstimation estimation(view);
+
+    const size_t sourceNodes = estimateLabelledNodes(scanLabels._source, metadata, estimation);
+    const size_t targetNodes = estimateLabelledNodes(scanLabels._target, metadata, estimation);
+
+    return targetNodes < sourceNodes;
+}
+
 // An edge scan whose rows are then cut down to the edges one endpoint of which carries a
 // set of labels: the scan reading that endpoint by those labels as well, which never builds
 // the rows the filter goes on to drop.
@@ -3685,7 +3738,7 @@ bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& la
 }
 
 // The by-label edge scan reading the endpoints by these labels. A scan labelled on one end
-// walks that end's index; one labelled on both walks the index the scan it replaces walked.
+// walks that end's index; one labelled on both walks the index _indexedByTarget names.
 Operation* createLabelledEdgeScan(Operation* scan, const EdgeScanLabels& scanLabels, mlir::RewriterBase& rewriter) {
     const Location loc = scan->getLoc();
     const mlir::TypeRange types = scan->getResultTypes();
@@ -3701,32 +3754,29 @@ Operation* createLabelledEdgeScan(Operation* scan, const EdgeScanLabels& scanLab
     return rewriter.create<ScanOutEdgesByLabelSrcTgt>(loc, types, scanLabels._source, scanLabels._target);
 }
 
-llvm::StringRef endLabelsAttrName(Operation* scan, bool target) {
-    if (isa<ScanOutEdgesByLabelSrcTgt, ScanInEdgesByLabelSrcTgt>(scan)) {
-        return target ? "tgt_labels" : "src_labels";
-    }
-
-    return "labels";
-}
-
-void fuseScanEdgesByEndpointLabel(EndpointLabelledEdgeScan& labelledScan, mlir::RewriterBase& rewriter) {
+void fuseScanEdgesByEndpointLabel(EndpointLabelledEdgeScan& labelledScan,
+                                  const DBPassContext& context,
+                                  mlir::RewriterBase& rewriter) {
     Operation* const scan = labelledScan._scan;
-    const bool labelledTarget = labelledScan._labelledTarget;
     const ArrayAttr endLabels = rewriter.getArrayAttr(labelledScan._endLabels);
 
-    if (labelledScan._endWasLabelled) {
-        const llvm::StringRef attrName = endLabelsAttrName(scan, labelledTarget);
-        rewriter.modifyOpInPlace(scan, [scan, attrName, endLabels]() {
-            scan->setAttr(attrName, endLabels);
+    EdgeScanLabels& scanLabels = labelledScan._scanLabels;
+    if (labelledScan._labelledTarget) {
+        scanLabels._target = endLabels;
+    } else {
+        scanLabels._source = endLabels;
+    }
+
+    const bool labelsBothEnds = scanLabels._source && scanLabels._target;
+    if (labelsBothEnds) {
+        scanLabels._indexedByTarget = indexesByTarget(scanLabels, context);
+    }
+
+    if (labelledScan._endWasLabelled && !labelsBothEnds) {
+        rewriter.modifyOpInPlace(scan, [scan, endLabels]() {
+            scan->setAttr("labels", endLabels);
         });
     } else {
-        EdgeScanLabels& scanLabels = labelledScan._scanLabels;
-        if (labelledTarget) {
-            scanLabels._target = endLabels;
-        } else {
-            scanLabels._source = endLabels;
-        }
-
         rewriter.setInsertionPoint(scan);
         Operation* const labelledEdgeScan = createLabelledEdgeScan(scan, scanLabels, rewriter);
         rewriter.replaceOp(scan, labelledEdgeScan->getResults());
@@ -3740,11 +3790,24 @@ void fuseScanEdgesByEndpointLabel(EndpointLabelledEdgeScan& labelledScan, mlir::
 }
 
 struct FuseScanEdgesByEndpointLabel : public impl::FuseScanEdgesByEndpointLabelBase<FuseScanEdgesByEndpointLabel> {
-    void runOnOperation() override {
-        runFilterWorklist<EndpointLabelledEdgeScan>(getOperation(),
-                                                    matchEndpointLabelledEdgeScan,
-                                                    fuseScanEdgesByEndpointLabel);
+    FuseScanEdgesByEndpointLabel() {}
+
+    FuseScanEdgesByEndpointLabel(const DBPassContext* context)
+        : _context(context)
+    {
     }
+
+    void runOnOperation() override {
+        const DBPassContext& context = *_context;
+        const auto fuse = [&context](EndpointLabelledEdgeScan& labelledScan, mlir::RewriterBase& rewriter) {
+            fuseScanEdgesByEndpointLabel(labelledScan, context, rewriter);
+        };
+
+        runFilterWorklist<EndpointLabelledEdgeScan>(getOperation(), matchEndpointLabelledEdgeScan, fuse);
+    }
+
+private:
+    const DBPassContext* _context {&defaultPassContext};
 };
 
 // A hop whose rows are then cut down to the edges the endpoint it reaches carries a set of
@@ -7112,24 +7175,6 @@ bool factorHoldsAProduct(Region& factor) {
     return walked.wasInterrupted();
 }
 
-// The label set a scan's label names stand for, resolved against the schema.
-void collectScanLabels(ArrayAttr labelNames, const ::db::GraphMetadata& metadata, ::db::LabelSet& labels) {
-    const ::db::LabelMap& labelMap = metadata.labels();
-    for (const Attribute labelAttr : labelNames) {
-        const StringAttr nameAttr = dyn_cast<StringAttr>(labelAttr);
-        if (!nameAttr) {
-            continue;
-        }
-
-        const llvm::StringRef name = nameAttr.getValue();
-        const std::optional<::db::LabelID> label = labelMap.get(std::string_view(name.data(), name.size()));
-
-        if (label) {
-            labels.set(*label);
-        }
-    }
-}
-
 // The label set the rows of one side are scanned under, when the db level knows one: the
 // labels of a by-label node scan, and none at all otherwise - every node of the graph,
 // which is what the v2 planner estimates a variable with no label constraint at.
@@ -7238,10 +7283,7 @@ std::optional<size_t> estimateSourceRows(Operation* op,
     } else if (UnwindConst unwind = dyn_cast<UnwindConst>(op)) {
         return unwind.getElements().size();
     } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
-        ::db::LabelSet labels;
-        collectScanLabels(byLabel.getLabels(), metadata, labels);
-
-        return estimation.estimateNodeCount(labels);
+        return estimateLabelledNodes(byLabel.getLabels(), metadata, estimation);
     } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
         return estimation.estimateNodeCount(::db::LabelSet {});
     } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(op, scanLabels)) {
@@ -7255,9 +7297,7 @@ std::optional<size_t> estimateSourceRows(Operation* op,
         size_t rows = estimation.estimateEdgeCount();
         for (const ArrayAttr endLabels : {scanLabels._source, scanLabels._target}) {
             if (endLabels) {
-                ::db::LabelSet labels;
-                collectScanLabels(endLabels, metadata, labels);
-                rows = multiplySaturating(estimation.estimateNodeCount(labels), rows) / nodeCount;
+                rows = multiplySaturating(estimateLabelledNodes(endLabels, metadata, estimation), rows) / nodeCount;
             }
         }
 
@@ -8956,6 +8996,10 @@ private:
     const DBPassContext* _context {&defaultPassContext};
 };
 
+}
+
+std::unique_ptr<Pass> createFuseScanEdgesByEndpointLabel(const DBPassContext* context) {
+    return std::make_unique<FuseScanEdgesByEndpointLabel>(context);
 }
 
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context) {
