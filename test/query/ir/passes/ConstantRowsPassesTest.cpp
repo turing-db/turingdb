@@ -151,6 +151,19 @@ TEST_F(ConstantRowsPassesTest, fusesUnwoundIDsUnderAConstantProjection) {
     }
 }
 
+// The broadcast reads only the rows of i, so nothing recomputes i from the fused scan
+TEST_F(ConstantRowsPassesTest, drivesTheConstantFromTheFusedScan) {
+    const std::string_view query = "UNWIND [0, 1] AS i MATCH (n) WHERE id(n) = i RETURN 1";
+
+    std::string program;
+    programOf(query, program);
+
+    EXPECT_TRUE(contains(program, "db.const_scan_nodes")) << program;
+    EXPECT_FALSE(contains(program, "db.element_id")) << program;
+
+    expectFusedConstantRows({"UNWIND [0, 1] AS i MATCH (n) WHERE id(n) = i", "db.const_scan_nodes", 2});
+}
+
 TEST_F(ConstantRowsPassesTest, fusesExplorationsUnderAConstantProjection) {
     const PassCase cases[] = {
         {"MATCH (a:Person)-[e*1..3]->(b:Interest)", "end_labels", 27},

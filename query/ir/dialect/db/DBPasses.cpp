@@ -71,6 +71,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEXPLOREENDSET
 #define GEN_PASS_DEF_FUSEEXPLORELISTPREDICATE
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
+#define GEN_PASS_DEF_DRIVEBROADCASTSFROMROWSOURCES
 #define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
@@ -5764,6 +5765,82 @@ struct FuseExploreDistinctEnds : public impl::FuseExploreDistinctEndsBase<FuseEx
                 exploration.setDistinctAttr(builder.getUnitAttr());
             }
         });
+    }
+};
+
+// The column @param driver takes its rows from: past each row-wise op of its block that
+// cannot raise, up to the first column carrying rows it was computed from
+Value rowSourceOf(Value driver) {
+    Value column = driver;
+    while (Operation* const op = column.getDefiningOp()) {
+        if (!isRowWiseOp(op) || !::db::runsWithoutRaising(op)) {
+            break;
+        }
+
+        const auto rowOperand = llvm::find_if(op->getOperands(), [op](Value operand) {
+            const bool sameBlock = operand.getParentBlock() == op->getBlock();
+            return sameBlock && isa<ColumnType>(operand.getType()) && !::db::yieldsConstantColumn(operand);
+        });
+
+        if (rowOperand == op->getOperands().end()) {
+            break;
+        }
+
+        column = *rowOperand;
+    }
+
+    return column;
+}
+
+// Erases the row-wise ops computing @param column that nothing reads any more
+void eraseUnreadComputation(Value column, mlir::RewriterBase& rewriter) {
+    llvm::SmallPtrSet<Operation*, 8> erased;
+    llvm::SmallVector<Operation*> pending;
+    if (Operation* const op = column.getDefiningOp()) {
+        pending.push_back(op);
+    }
+
+    while (!pending.empty()) {
+        Operation* const op = pending.pop_back_val();
+        if (erased.contains(op) || !isRowWiseOp(op) || !mlir::isOpTriviallyDead(op)) {
+            continue;
+        }
+
+        for (const Value operand : op->getOperands()) {
+            if (Operation* const operandOp = operand.getDefiningOp()) {
+                pending.push_back(operandOp);
+            }
+        }
+
+        erased.insert(op);
+        rewriter.eraseOp(op);
+    }
+}
+
+struct DriveBroadcastsFromRowSources : public impl::DriveBroadcastsFromRowSourcesBase<DriveBroadcastsFromRowSources> {
+    void runOnOperation() override {
+        mlir::IRRewriter rewriter(&getContext());
+
+        llvm::SmallVector<BroadcastConstant> broadcasts;
+        getOperation()->walk([&broadcasts](BroadcastConstant broadcast) {
+            if (broadcast.getDriver()) {
+                broadcasts.push_back(broadcast);
+            }
+        });
+
+        for (BroadcastConstant broadcast : broadcasts) {
+            const Value driver = broadcast.getDriver();
+            const Value source = rowSourceOf(driver);
+            if (source == driver) {
+                continue;
+            }
+
+            rewriter.modifyOpInPlace(broadcast, [&broadcast, source]() {
+                broadcast.getDriverMutable().assign(source);
+            });
+
+            eraseUnreadComputation(driver, rewriter);
+        }
     }
 };
 

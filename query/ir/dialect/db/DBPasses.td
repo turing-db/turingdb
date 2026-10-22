@@ -163,6 +163,11 @@ def FuseExploreListPredicate : Pass<"fuse_explore_list_predicate"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def DriveBroadcastsFromRowSources : Pass<"drive_broadcasts_from_row_sources"> {
+    let summary = "Drive each db.broadcast_constant from the column its driver's rows come from, and drop the row-wise ops that only computed the driver";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreDistinctEnds : Pass<"fuse_explore_distinct_ends"> {
     let summary = "Mark a path exploration whose path is unread and whose rows are only ever deduplicated as distinct, so it emits each end once";
     let dependentDialects = ["mlir::db::DB"];

@@ -125,3 +125,5 @@ target_include_directories(test_query_ir_reroot_pattern_at_seed PRIVATE ${IR_TES
 add_call_v3_test(test_query_ir_push_down_filters_past_writes PushDownFiltersPastWritesTest.cpp)
 
 add_call_v3_test(test_query_ir_constant_rows_passes ConstantRowsPassesTest.cpp)
+
+add_ir_tests(test_query_ir_drive_broadcasts_from_row_sources DriveBroadcastsFromRowSourcesTest.cpp)
