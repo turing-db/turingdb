@@ -102,6 +102,19 @@ concept ComparesAMapEntry = (MapEntryOperand<T> || MapEntryOperand<U>)
                          && !TaggedCellOperand<T> && !TaggedCellOperand<U>
                          && !HoldsPropertyNull<T, U>;
 
+template <typename T>
+concept IDOperand = TypedInternalID<TypeUtils::unwrap_optional_t<std::decay_t<T>>>;
+
+template <typename T>
+concept IntegerOperand = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, types::Int64::Primitive>
+                      || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, types::UInt64::Primitive>;
+
+// An entity against an entity or an id, e.g. (n) = (m), (n) = 42. The null entity an OPTIONAL
+// MATCH leaves where its pattern missed is an invalid ID, so the comparison is three-valued.
+template <typename T, typename U>
+concept ComparesAnID = (IDOperand<T> && (IDOperand<U> || IntegerOperand<U>))
+                    || (IntegerOperand<T> && IDOperand<U>);
+
 template <typename T, typename U>
 concept OrdersToANullableBool = ComparesATaggedCell<T, U>
                              || ComparesAMapEntry<T, U>
@@ -756,25 +769,23 @@ struct TuringEqual {
         return equal;
     }
 
-    /// Specialisations to allow for ID <-> int, e.g  (n) = 42, (e) = n.age, etc.
-    template <TypedInternalID IDT>
-    bool operator()(IDT n, types::Int64::Primitive i) {
-        return std::cmp_equal(n.getValue(), i);
-    }
+    template <typename T, typename U>
+        requires ComparesAnID<T, U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
+            return std::nullopt;
+        }
 
-    template <TypedInternalID IDT>
-    bool operator()(types::Int64::Primitive i, IDT n) {
-        return std::cmp_equal(n.getValue(), i);
-    }
+        const auto& lhs = TypeUtils::unwrap(a);
+        const auto& rhs = TypeUtils::unwrap(b);
 
-    template <TypedInternalID IDT>
-    bool operator()(IDT n, types::UInt64::Primitive i) {
-        return n.getValue() == i;
-    }
-
-    template <TypedInternalID IDT>
-    bool operator()(types::UInt64::Primitive i, IDT n) {
-        return n.getValue() == i;
+        if constexpr (IDOperand<T> && IDOperand<U>) {
+            return CustomBool {lhs == rhs};
+        } else if constexpr (IDOperand<T>) {
+            return CustomBool {std::cmp_equal(lhs.getValue(), rhs)};
+        } else {
+            return CustomBool {std::cmp_equal(lhs, rhs.getValue())};
+        }
     }
 
     // Generalist fallback for all other types
@@ -782,6 +793,7 @@ struct TuringEqual {
         requires (!ListOperand<T> || !ListOperand<U>)
               && (!ComparesATaggedCell<T, U>)
               && (!ComparesAMapEntry<T, U>)
+              && (!ComparesAnID<T, U>)
     bool operator()(const T& a, const U& b) {
         if constexpr (MixedNumbers<T, U>) {
             return numbersEqual(a, b);
@@ -793,7 +805,7 @@ struct TuringEqual {
 
 struct TuringNotEqual {
     template <typename T, typename U>
-        requires (ListOperand<T> && ListOperand<U>) || ComparesATaggedCell<T, U>
+        requires NullableResultPredicate<TuringEqual, T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) {
         const std::optional<CustomBool> equal = TuringEqual {}(a, b);
         if (!equal.has_value()) {
@@ -804,20 +816,7 @@ struct TuringNotEqual {
     }
 
     template <typename T, typename U>
-        requires ComparesAMapEntry<T, U>
-    std::optional<CustomBool> operator()(const T& a, const U& b) {
-        const std::optional<CustomBool> equal = TuringEqual {}(a, b);
-        if (!equal.has_value()) {
-            return std::nullopt;
-        }
-
-        return CustomBool {!*equal};
-    }
-
-    template <typename T, typename U>
-        requires (!ListOperand<T> || !ListOperand<U>)
-              && (!ComparesATaggedCell<T, U>)
-              && (!ComparesAMapEntry<T, U>)
+        requires (!NullableResultPredicate<TuringEqual, T, U>)
     bool operator()(T&& a, U&& b) {
         return !TuringEqual {}(std::forward<T>(a), std::forward<U>(b));
     }

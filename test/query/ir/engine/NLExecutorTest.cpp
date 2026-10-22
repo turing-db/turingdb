@@ -601,8 +601,8 @@ constexpr const char* eqSelfProgram = R"mlir(
 func.func @main() {
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
-    %r = nl.eq %a, %a : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>) -> !nl.chunk<i1>
-    nl.output(%r) : !nl.chunk<i1>
+    %r = nl.eq %a, %a : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.nullable<i1>>
+    nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
   }
   func.return
 }
@@ -675,8 +675,8 @@ func.func @main() {
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
     %p = nl.eq %v, %k200 : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
-    %q = nl.eq %a, %k1 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<i1>
-    %r = nl.and %p, %q : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+    %q = nl.eq %a, %k1 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %r = nl.and %p, %q : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.nullable<i1>>) -> !nl.chunk<!storage.nullable<i1>>
     nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
   }
   func.return
@@ -735,8 +735,8 @@ func.func @main() {
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
     %p = nl.eq %v, %k200 : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
-    %q = nl.eq %a, %k2 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<i1>
-    %r = nl.or %p, %q : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+    %q = nl.eq %a, %k2 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %r = nl.or %p, %q : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.nullable<i1>>) -> !nl.chunk<!storage.nullable<i1>>
     nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
   }
   func.return
@@ -776,13 +776,13 @@ func.func @main() {
 )mlir";
 
 // MATCH (n) WHERE n = 1 RETURN n
-constexpr const char* filterPlainMaskProgram = R"mlir(
+constexpr const char* filterEntityMaskProgram = R"mlir(
 func.func @main() {
   %k1 = nl.constant(1 : i64)
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
-    %mask = nl.eq %a, %k1 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<i1>
-    %a2 = nl.filter %mask, (%a) : (!nl.chunk<i1>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+    %mask = nl.eq %a, %k1 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %a2 = nl.filter %mask, (%a) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
     nl.output(%a2) : !nl.chunk<!storage.node_id>
   }
   func.return
@@ -1690,12 +1690,16 @@ TEST_F(NLExecutorTest, eqNodeToItselfIsAllTrue) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingNodeBoolSink sink;
     runProgram(eqSelfProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     // The diamond has four nodes, and every node equals itself.
-    const std::vector<bool> expected {true, true, true, true};
-    EXPECT_EQ(sink.values(), expected);
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, true}, {1, true}, {2, true}, {3, true}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(NLExecutorTest, eqNodePropertyToConstantBroadcasting) {
@@ -1865,15 +1869,15 @@ TEST_F(NLExecutorTest, filterAlignsCarriedColumns) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(NLExecutorTest, filterPlainMaskKeepsMatchingNode) {
+TEST_F(NLExecutorTest, filterEntityMaskKeepsMatchingNode) {
     auto graph = buildScoredGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
     CollectingNodeSink sink;
-    runProgram(filterPlainMaskProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+    runProgram(filterEntityMaskProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
-    // (n = 1) is a non-null mask true only for node 1.
+    // (n = 1) is true only for node 1.
     const std::vector<std::vector<uint64_t>> expected {{1}};
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);

@@ -144,3 +144,7 @@ add_turing_test(test_query_ir_null_entity_against_id NullEntityAgainstIDTest.cpp
 add_turing_test(test_query_ir_match_null_property MatchNullPropertyTest.cpp)
 
 add_turing_test(test_query_ir_map_value_against_a_mask MapValueAgainstAMaskTest.cpp)
+
+add_ir_tests(test_query_ir_entity_comparison_lowering EntityComparisonLoweringTest.cpp)
+target_sources(test_query_ir_entity_comparison_lowering PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_entity_comparison_lowering PRIVATE ${IR_TEST_DIR})

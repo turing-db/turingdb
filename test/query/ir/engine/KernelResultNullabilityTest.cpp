@@ -86,8 +86,23 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (n) WHERE n = 1 RETURN n
-constexpr const char* TWO_VALUED_COMPARISON_FILTER_PROGRAM = R"mlir(
+// MATCH (n) WHERE n = 1 RETURN n: an ID column carries an OPTIONAL MATCH's null in the ID,
+// so the comparison is three-valued
+constexpr const char* ENTITY_COMPARISON_FILTER_PROGRAM = R"mlir(
+func.func @main() {
+  %k = nl.constant(1 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %mask = nl.eq %a, %k : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %a2 = nl.filter %mask, (%a) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+    nl.output(%a2) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+// The same comparison declared two-valued: its kernel still writes a nullable mask
+constexpr const char* ENTITY_COMPARISON_DECLARED_TWO_VALUED_PROGRAM = R"mlir(
 func.func @main() {
   %k = nl.constant(1 : i64)
   %nodes = nl.scan_nodes()
@@ -100,13 +115,15 @@ func.func @main() {
 }
 )mlir";
 
-// The same comparison declared three-valued: its kernel still writes a plain mask
+// MATCH (n) WHERE 1 = 2 RETURN n, with the comparison declared three-valued: its kernel
+// writes a plain mask
 constexpr const char* TWO_VALUED_COMPARISON_DECLARED_NULLABLE_PROGRAM = R"mlir(
 func.func @main() {
-  %k = nl.constant(1 : i64)
+  %k1 = nl.constant(1 : i64)
+  %k2 = nl.constant(2 : i64)
   %nodes = nl.scan_nodes()
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
-    %mask = nl.eq %a, %k : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %mask = nl.eq %k1, %k2 : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
     %a2 = nl.filter %mask, (%a) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
     nl.output(%a2) : !nl.chunk<!storage.node_id>
   }
@@ -205,9 +222,9 @@ TEST_F(KernelResultNullabilityTest, nullableComparisonFilter) {
     EXPECT_EQ(nodes, remyAndAdam);
 }
 
-TEST_F(KernelResultNullabilityTest, twoValuedComparisonFilter) {
+TEST_F(KernelResultNullabilityTest, entityComparisonFilter) {
     NodeIDSink sink;
-    runProgram(TWO_VALUED_COMPARISON_FILTER_PROGRAM, sink);
+    runProgram(ENTITY_COMPARISON_FILTER_PROGRAM, sink);
 
     std::vector<uint64_t> nodes;
     sink.sortedNodes(nodes);
@@ -218,6 +235,10 @@ TEST_F(KernelResultNullabilityTest, twoValuedComparisonFilter) {
 
 TEST_F(KernelResultNullabilityTest, nullableComparisonDeclaredTwoValuedIsRejected) {
     expectRejected(NULLABLE_COMPARISON_DECLARED_TWO_VALUED_PROGRAM, "nl.eq declares a !nl.chunk<i1> result");
+}
+
+TEST_F(KernelResultNullabilityTest, entityComparisonDeclaredTwoValuedIsRejected) {
+    expectRejected(ENTITY_COMPARISON_DECLARED_TWO_VALUED_PROGRAM, "nl.eq declares a !nl.chunk<i1> result");
 }
 
 TEST_F(KernelResultNullabilityTest, twoValuedComparisonDeclaredNullableIsRejected) {

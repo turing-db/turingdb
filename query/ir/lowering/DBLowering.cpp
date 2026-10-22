@@ -5842,7 +5842,18 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const bool comparesAMapValue = !testsATaggedCellForNull
                                         && (isMapElementChunk(lhsType) || isMapElementChunk(rhsType));
 
-            const bool alwaysNullable = operandNullable || comparesTwoLists || comparesATaggedCell || comparesAMapValue;
+            // An ID column carries its null in the ID: the invalid one an OPTIONAL MATCH leaves
+            const bool lhsIsAnEntity = isEntityChunk(lhsType);
+            const bool rhsIsAnEntity = isEntityChunk(rhsType);
+            const bool comparesAnEntity = kind == BinaryResultKind::Comparison
+                                       && ((lhsIsAnEntity && (rhsIsAnEntity || isIntegerChunk(_builder, rhsType)))
+                                           || (rhsIsAnEntity && isIntegerChunk(_builder, lhsType)));
+
+            const bool alwaysNullable = operandNullable
+                                     || comparesTwoLists
+                                     || comparesATaggedCell
+                                     || comparesAMapValue
+                                     || comparesAnEntity;
 
             return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
                                   : boolElement;
@@ -5965,14 +5976,6 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     const mlir::Type lhsChunkType = lhsChunk.getType();
     const mlir::Type rhsChunkType = rhsChunk.getType();
 
-    const bool lhsIsAnEntity = isEntityChunk(lhsChunkType);
-    const bool rhsIsAnEntity = isEntityChunk(rhsChunkType);
-
-    const bool comparesTwoEntities = lhsIsAnEntity && rhsIsAnEntity;
-    const bool comparesAnEntityToAnID = kind == BinaryResultKind::Comparison
-                                     && ((lhsIsAnEntity && isIntegerChunk(_builder, rhsChunkType))
-                                         || (rhsIsAnEntity && isIntegerChunk(_builder, lhsChunkType)));
-
     const bool readsScalarOperands = kind != BinaryResultKind::Index
                                   && kind != BinaryResultKind::Membership;
 
@@ -5994,17 +5997,6 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
         lhsChunk = nullTestedChunk(lhsChunk);
     } else if (nullAgainstLhs) {
         rhsChunk = nullTestedChunk(rhsChunk);
-    } else if (comparesTwoEntities || comparesAnEntityToAnID) {
-        // An entity is compared as the ID it is, and an ID column carries its null in the
-        // ID: read raw, the invalid ID two missed matches hold compares equal to itself, and
-        // unequal to every id. Read as nullable ui64, a null compares as a null.
-        if (lhsIsAnEntity) {
-            lhsChunk = nullableValueChunk(lhsChunk);
-        }
-
-        if (rhsIsAnEntity) {
-            rhsChunk = nullableValueChunk(rhsChunk);
-        }
     }
 
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
