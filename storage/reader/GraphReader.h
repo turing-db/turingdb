@@ -77,6 +77,14 @@ public:
     [[nodiscard]] size_t getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const;
 
     /**
+     * @brief Returns the number of edges the out-edge (in-edge) index holds under the label
+     * sets matching @p labelset, which is the number of edges a scan of that index walks.
+     * @detail Counts the edges a tombstone deleted, since the walk visits them too.
+     */
+    [[nodiscard]] size_t getOutEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const;
+    [[nodiscard]] size_t getInEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const;
+
+    /**
      * @brief Returns the number of nodes matching @p labelset which hold property @p
      * propertyTypeID, counting each node once and none that a tombstone deleted.
      * @detail A node written twice holds the property in two data parts; only the newest

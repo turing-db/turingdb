@@ -26,6 +26,11 @@ public:
     // count is what a by-type scan is read at, an upper bound on its rows.
     size_t estimateEdgeCount() const;
 
+    // The edges a scan of the out-edge (in-edge) index walks under a label set: those of the
+    // nodes matching it, deleted ones included.
+    size_t estimateOutEdgeCount(const LabelSet& labelset) const;
+    size_t estimateInEdgeCount(const LabelSet& labelset) const;
+
     // Returns true when cartesian product + filter is likely cheaper
     // than value hash join, either because the product is small or
     // because a small LIMIT makes early-termination effective.

@@ -35,6 +35,7 @@ add_turing_test(test_storage_comparator ComparatorTest.cpp)
 add_turing_test(test_storage_arcmanager ArcManagerTest.cpp)
 add_turing_test(test_storage_graphwriter GraphWriterTest.cpp)
 add_turing_test(test_storage_node_count_with_property NodeCountWithPropertyTest.cpp)
+add_turing_test(test_storage_edge_count_matching_labelset EdgeCountMatchingLabelsetTest.cpp)
 
 add_turing_test(test_storage_iterator iterators/IteratorsTest.cpp)
 add_turing_test(test_storage_scan_nodes_by_property_value iterators/ScanNodesByPropertyValueTest.cpp)

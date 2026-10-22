@@ -3631,8 +3631,24 @@ size_t estimateLabelledNodes(ArrayAttr labelNames,
     return estimation.estimateNodeCount(labels);
 }
 
-// The index a scan labelled on both ends walks: the one keyed by the end with fewer nodes,
-// the source's on a tie. With no graph to count, the one the scan already walks.
+// The edges the index keyed by one end's labels holds under these labels, which is what a
+// scan of it walks, and none when the schema lacks one of them.
+size_t estimateIndexedEdges(ArrayAttr labelNames,
+                            bool indexedByTarget,
+                            const ::db::GraphMetadata& metadata,
+                            const ::db::CardinalityEstimation& estimation) {
+    ::db::LabelSet labels;
+    if (!collectScanLabels(labelNames, metadata, labels)) {
+        return 0;
+    } else if (indexedByTarget) {
+        return estimation.estimateInEdgeCount(labels);
+    }
+
+    return estimation.estimateOutEdgeCount(labels);
+}
+
+// The index a scan labelled on both ends walks: the one holding fewer edges under its end's
+// labels, the source's on a tie. With no graph to count, the one the scan already walks.
 bool indexesByTarget(const EdgeScanLabels& scanLabels, const DBPassContext& context) {
     if (!context._view) {
         return scanLabels._indexedByTarget;
@@ -3642,10 +3658,10 @@ bool indexesByTarget(const EdgeScanLabels& scanLabels, const DBPassContext& cont
     const ::db::GraphMetadata& metadata = view.metadata();
     const ::db::CardinalityEstimation estimation(view);
 
-    const size_t sourceNodes = estimateLabelledNodes(scanLabels._source, metadata, estimation);
-    const size_t targetNodes = estimateLabelledNodes(scanLabels._target, metadata, estimation);
+    const size_t sourceEdges = estimateIndexedEdges(scanLabels._source, false, metadata, estimation);
+    const size_t targetEdges = estimateIndexedEdges(scanLabels._target, true, metadata, estimation);
 
-    return targetNodes < sourceNodes;
+    return targetEdges < sourceEdges;
 }
 
 // An edge scan whose rows are then cut down to the edges one endpoint of which carries a
@@ -7292,13 +7308,19 @@ std::optional<size_t> estimateSourceRows(Operation* op,
             return 0;
         }
 
-        // A labelled endpoint keeps the share of the edges its labels select of the nodes,
-        // the two endpoints' labels taken as independent.
+        const bool indexedByTarget = scanLabels._indexedByTarget;
+        const ArrayAttr indexedLabels = indexedByTarget ? scanLabels._target : scanLabels._source;
+        const ArrayAttr otherLabels = indexedByTarget ? scanLabels._source : scanLabels._target;
+
+        // The other end's labels keep the share of the walked edges they select of the nodes,
+        // the two ends' labels taken as independent.
         size_t rows = estimation.estimateEdgeCount();
-        for (const ArrayAttr endLabels : {scanLabels._source, scanLabels._target}) {
-            if (endLabels) {
-                rows = multiplySaturating(estimateLabelledNodes(endLabels, metadata, estimation), rows) / nodeCount;
-            }
+        if (indexedLabels) {
+            rows = estimateIndexedEdges(indexedLabels, indexedByTarget, metadata, estimation);
+        }
+
+        if (otherLabels) {
+            rows = multiplySaturating(estimateLabelledNodes(otherLabels, metadata, estimation), rows) / nodeCount;
         }
 
         return rows;

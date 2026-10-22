@@ -48,6 +48,8 @@ add_ir_tests(test_query_ir_fuse_scan_edges_by_endpoint_label FuseScanEdgesByEndp
 add_turing_test(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen FuseScanEdgesByEndpointLabelCodegenTest.cpp)
 target_include_directories(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen PRIVATE ${IR_TEST_DIR})
 
+add_ir_tests(test_query_ir_edge_scan_index_cost EdgeScanIndexCostTest.cpp)
+
 # The by-label hop fusion tests: the same two checks for the hops that walk the edges the
 # endpoint they reach carries a set of labels on.
 add_ir_tests(test_query_ir_fuse_edges_by_endpoint_label FuseEdgesByEndpointLabelTest.cpp)

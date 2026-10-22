@@ -21,6 +21,17 @@ namespace rv = ranges::views;
 
 namespace {
 
+size_t countIndexedEdges(const LabelSetIndexer<EdgeIndexer::EdgeSpans>& indexer, const LabelSetHandle& labelset) {
+    size_t count = 0;
+    for (auto labelsetIt = indexer.matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
+        for (const EdgeIndexer::EdgeSpan& span : labelsetIt.getValue()) {
+            count += span.size();
+        }
+    }
+
+    return count;
+}
+
 // Whether a data part after @param partIndex holds this property type at all. Only those
 // parts can hold a newer entry overriding one of this part's.
 bool holdsPropertyLater(DataPartSpan parts, size_t partIndex, PropertyTypeID propertyTypeID) {
@@ -129,6 +140,26 @@ size_t GraphReader::getNodeCountMatchingLabelset(const LabelSetHandle& labelset)
         for (auto it = indexer.matchIterate(labelset); it.isValid(); it.next()) {
             count += filteredNodeCount(it.getValue(), tombstones);
         }
+    }
+
+    return count;
+}
+
+size_t GraphReader::getOutEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const {
+    size_t count = 0;
+    for (const auto& part : _view.dataparts()) {
+        const EdgeIndexer& indexer = part->edgeIndexer();
+        count += countIndexedEdges(indexer.getOutsByLabelSet(), labelset);
+    }
+
+    return count;
+}
+
+size_t GraphReader::getInEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const {
+    size_t count = 0;
+    for (const auto& part : _view.dataparts()) {
+        const EdgeIndexer& indexer = part->edgeIndexer();
+        count += countIndexedEdges(indexer.getInsByLabelSet(), labelset);
     }
 
     return count;
