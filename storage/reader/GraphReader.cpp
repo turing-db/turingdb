@@ -21,6 +21,16 @@ namespace rv = ranges::views;
 
 namespace {
 
+template <typename VisitRange>
+void visitMatchingNodeRanges(DataPartSpan parts, const LabelSetHandle& labelset, VisitRange visitRange) {
+    for (const auto& part : parts) {
+        const LabelSetIndexer<NodeRange>& indexer = part->nodes().getLabelSetIndexer();
+        for (auto labelsetIt = indexer.matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
+            visitRange(labelsetIt.getValue());
+        }
+    }
+}
+
 size_t countIndexedEdges(const LabelSetIndexer<EdgeIndexer::EdgeSpans>& indexer, const LabelSetHandle& labelset) {
     size_t count = 0;
     for (auto labelsetIt = indexer.matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
@@ -159,34 +169,39 @@ size_t GraphReader::getEdgePartIndex(EdgeID edgeID) const {
 }
 
 size_t GraphReader::getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const {
-    // Iterate each data part exactly once, summing the node counts of that
-    // part's own labelsets that match `labelset`. Every node is counted once,
-    // in the part that owns it.
-    size_t count = 0;
+    const DataPartSpan parts = _view.dataparts();
 
-    auto filteredNodeCount = [](NodeRange range, const Tombstones* tombstones) {
-        size_t count = range._count;
-        if (tombstones->hasNodes()) {
-            for (const auto id : range) {
-                if (tombstones->containsNode(id)) {
-                    count -= 1;
+    size_t count = 0;
+    visitMatchingNodeRanges(parts, labelset, [&count](NodeRange range) {
+        count += range._count;
+    });
+
+    const Tombstones& tombstones = _view.tombstones();
+    if (!tombstones.hasNodes()) {
+        return count;
+    }
+
+    // The deleted nodes are found from the smaller side: each matched node checked against
+    // the deletions, or each deletion checked against the labels.
+    size_t deletedCount = 0;
+    if (count <= tombstones.numNodes()) {
+        visitMatchingNodeRanges(parts, labelset, [&deletedCount, &tombstones](NodeRange range) {
+            for (const NodeID nodeID : range) {
+                if (tombstones.containsNode(nodeID)) {
+                    deletedCount++;
                 }
             }
-        }
-
-        return count;
-    };
-
-    const auto* tombstones = &_view.tombstones();
-    for (const auto& part : _view.dataparts()) {
-        const NodeContainer& nodes = part->nodes();
-        const LabelSetIndexer<NodeRange>& indexer = nodes.getLabelSetIndexer();
-        for (auto it = indexer.matchIterate(labelset); it.isValid(); it.next()) {
-            count += filteredNodeCount(it.getValue(), tombstones);
+        });
+    } else {
+        for (const NodeID nodeID : tombstones.nodeTombstones()) {
+            const LabelSetHandle nodeLabels = getNodeLabelSet(nodeID);
+            if (nodeLabels.isValid() && nodeLabels.hasAtLeastLabels(labelset)) {
+                deletedCount++;
+            }
         }
     }
 
-    return count;
+    return count - deletedCount;
 }
 
 size_t GraphReader::getOutEdgeCountMatchingLabelset(const LabelSetHandle& labelset) const {
