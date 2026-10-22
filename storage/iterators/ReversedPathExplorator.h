@@ -1,8 +1,10 @@
 #pragma once
 
+#include <set>
 #include <span>
 #include <stdint.h>
 #include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "ChunkWriter.h"
@@ -14,6 +16,7 @@
 #include "PathStep.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
+#include "list/PathTrie.h"
 #include "metadata/LabelSet.h"
 
 namespace db {
@@ -73,7 +76,14 @@ private:
     std::vector<SeedRow> _seedRows;
     ColumnVector<size_t> _walkIndices;
     ColumnNodeIDs _walkTargets;
+    ColumnVector<PathRef> _walkPaths;
+    PathTrie _trie;
     PathExplorator _explorator;
+
+    bool _distinctEnds {false};
+    ExcludedEdges _excluded;
+    std::vector<EdgeID> _trailEdges;
+    std::set<std::pair<size_t, size_t>> _emittedPairs;
 
     ColumnVector<size_t>* _indices {nullptr};
     ColumnNodeIDs* _targets {nullptr};
@@ -86,6 +96,7 @@ private:
     static bool isBefore(const SeedRow& lhs, const SeedRow& rhs);
 
     void startWalkRow();
+    bool emitsRow(size_t row);
 };
 
 static_assert(NonRootChunkWriter<ReversedPathExplorator>);

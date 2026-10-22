@@ -7646,12 +7646,12 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
     return index;
 }
 
-// A walk to an end set emits the same rows from either end when no path is read, no hop
-// test sees which way the hop was taken and no seed row leaves edges out
+// A walk to an end set emits the same rows from either end when no path is read and no hop
+// test sees which way the hop was taken
 bool emitsTheSameFromEitherEnd(const NLExplorePathsLoopData* loopData, std::span<const PathStep> walkedBody) {
     const bool hasHopFilter = std::ranges::any_of(walkedBody, [](const PathStep& step) { return step._hopFilter != nullptr; });
 
-    return !loopData->getPaths() && !hasHopFilter && !loopData->excludesEdges();
+    return !loopData->getPaths() && !hasHopFilter;
 }
 
 void runFromTheEndSet(NLExecutionContext* context,

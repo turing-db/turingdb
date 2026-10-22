@@ -842,7 +842,6 @@ public:
     void addExcludedEdges(const ColumnEdgeIDs* edges) { _excludedEdges.push_back(edges); }
     void addExcludedPaths(const ColumnVector<PathRef>* paths) { _excludedPaths.push_back(paths); }
     void setExclusionTrie(const PathTrie* trie) { _exclusionTrie = trie; }
-    bool excludesEdges() const { return !_excludedEdges.empty() || !_excludedPaths.empty(); }
 
     // Lays the excluded edges of the input's rows out flat, a span per row, which is what
     // the writers read; empty when nothing is excluded

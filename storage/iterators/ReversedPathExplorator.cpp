@@ -82,11 +82,22 @@ bool ReversedPathExplorator::isCheaper(const PartDirectory& parts,
 }
 
 void ReversedPathExplorator::setDistinctEnds(bool distinct) {
-    _explorator.setDistinctEnds(distinct);
+    _distinctEnds = distinct;
+    _explorator.setDistinctEnds(distinct && !_excluded.isSet());
 }
 
+// A trail from an end serves only the rows of its seed that bound none of its edges, which
+// the walk learns once it reaches the seed: it keeps each trail's edges, and the distinct
+// mode leaves the repeated (row, end) pairs out itself
 void ReversedPathExplorator::setExcludedEdges(const ExcludedEdges& excluded) {
-    bioassert(!excluded.isSet(), "The walk from the end set leaves no seed row's edges out");
+    _excluded = excluded;
+    if (!_excluded.isSet()) {
+        return;
+    }
+
+    _explorator.setDistinctEnds(false);
+    _explorator.setPaths(&_walkPaths, &_trie);
+    _explorator.reset();
 }
 
 void ReversedPathExplorator::setTargetIndex(const PathTargetIndex* index) {
@@ -111,6 +122,38 @@ void ReversedPathExplorator::startWalkRow() {
 
     _seedRowCursor = rowsOfSeed.first - _seedRows.begin();
     _seedRowEnd = rowsOfSeed.second - _seedRows.begin();
+
+    if (!_excluded.isSet()) {
+        return;
+    }
+
+    _trailEdges.clear();
+    PathRef current = _walkPaths[_walkRow];
+    for (uint64_t depth = _trie.getDepth(current); depth > 0; depth--) {
+        const PathTrieEntry& entry = _trie.get(current);
+        _trailEdges.push_back(entry._edge);
+        current = entry._parent;
+    }
+}
+
+bool ReversedPathExplorator::emitsRow(size_t row) {
+    if (!_excluded.isSet()) {
+        return true;
+    }
+
+    for (const EdgeID edge : _excluded.rowEdges(row)) {
+        if (ExcludedEdges::holds(_trailEdges, edge)) {
+            return false;
+        }
+    }
+
+    if (!_distinctEnds) {
+        return true;
+    }
+
+    const size_t endIndex = _walkIndices[_walkRow];
+
+    return _emittedPairs.emplace(row, endIndex).second;
 }
 
 void ReversedPathExplorator::fill(size_t maxCount) {
@@ -140,7 +183,12 @@ void ReversedPathExplorator::fill(size_t maxCount) {
 
         const NodeID end = _ends[_walkIndices[_walkRow]];
         for (; _seedRowCursor < _seedRowEnd && written < maxCount; _seedRowCursor++) {
-            indices[written] = _seedRows[_seedRowCursor]._row;
+            const size_t row = _seedRows[_seedRowCursor]._row;
+            if (!emitsRow(row)) {
+                continue;
+            }
+
+            indices[written] = row;
             if (targets) {
                 (*targets)[written] = end;
             }
