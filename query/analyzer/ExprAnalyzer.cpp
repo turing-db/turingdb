@@ -42,6 +42,20 @@ using namespace db;
 
 namespace {
 
+// What <, <=, > and >= answer over two types: null against a null or across order classes,
+// a boolean within one, and Invalid for a type no ordering takes
+EvaluatedType orderingResultType(EvaluatedType a, EvaluatedType b) {
+    if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+        return EvaluatedType::Null;
+    } else if (!namesAnOrderingOperand(a) || !namesAnOrderingOperand(b)) {
+        return EvaluatedType::Invalid;
+    } else if (ordersAsDisjointTypes(a, b)) {
+        return EvaluatedType::Null;
+    }
+
+    return EvaluatedType::Bool;
+}
+
 std::string_view componentOwnerName(bool namesADateTimePart, bool namesADurationPart) {
     if (namesADateTimePart) {
         return "datetime";
@@ -439,7 +453,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     switch (expr->getOperator()) {
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal: {
-            type = EvaluatedType::Bool;
+            type = (a == EvaluatedType::Null || b == EvaluatedType::Null) ? EvaluatedType::Null : EvaluatedType::Bool;
 
             if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
                 const std::string error = fmt::format(
@@ -586,21 +600,13 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::GreaterThan:
         case BinaryOperator::LessThanOrEqual:
         case BinaryOperator::GreaterThanOrEqual: {
-            type = EvaluatedType::Bool;
-
-            // Ordering a value against a null is null, the same as comparing it against one
-            const bool ordersAgainstNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
-
-            // Two values of one class compare, a tagged cell is ordered on the type it holds
-            // in each row, and two values of different classes are null
-            const bool ordersTwoValues = namesAnOrderingOperand(a) && namesAnOrderingOperand(b);
-
-            if (ordersAgainstNull || ordersTwoValues) {
+            type = orderingResultType(a, b);
+            if (type != EvaluatedType::Invalid) {
                 break;
             }
 
             const std::string error = fmt::format(
-                "Operands are not valid or compatible numeric types: '{}' and '{}'",
+                "Operands are not valid or compatible types for an ordering: '{}' and '{}'",
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 
@@ -814,12 +820,12 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         } break;
 
         case BinaryOperator::In: {
-            type = EvaluatedType::Bool;
-
             // A type-erased cell holds whatever its row put there, so the test reads the
             // list out of its tag and answers null for a row holding something else
             const bool searchesACell = b == EvaluatedType::ListItem;
             const bool searchesNull = b == EvaluatedType::Null;
+
+            type = searchesNull ? EvaluatedType::Null : EvaluatedType::Bool;
 
             if (b != EvaluatedType::List && b != EvaluatedType::Map && !searchesACell && !searchesNull) {
                 const std::string error = fmt::format("IN operand must be a list or map, not '{}'",
@@ -854,6 +860,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
     const std::string_view op = LogicalOperatorDescription::value(expr->getOperator());
 
+    // A side that holds a value can answer AND, OR and XOR for a null one: false AND null is
+    // false. With every side null there is no value to answer against
+    bool everyOperandIsNull = true;
+
     for (Expr* operand : expr->getOperands()) {
         analyzeExpr(operand);
 
@@ -868,6 +878,8 @@ void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
             throwError(error, operand);
         }
 
+        everyOperandIsNull = everyOperandIsNull && operandType == EvaluatedType::Null;
+
         if (operand->isDynamic()) {
             expr->setDynamic();
         }
@@ -877,9 +889,10 @@ void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
         }
     }
 
-    expr->setType(EvaluatedType::Bool);
+    const EvaluatedType type = everyOperandIsNull ? EvaluatedType::Null : EvaluatedType::Bool;
+    expr->setType(type);
 
-    const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool);
+    const VarDecl* decl = _ctxt->createUnnamedVariable(_ast, type);
     expr->setExprVarDecl(decl);
 }
 
@@ -901,7 +914,7 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
                 throwError(error, expr);
             }
 
-            type = EvaluatedType::Bool;
+            type = operandType == EvaluatedType::Null ? EvaluatedType::Null : EvaluatedType::Bool;
         } break;
 
         case UnaryOperator::Minus:
@@ -2158,7 +2171,24 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
 
     analyzeExpr(test._value);
 
-    if (isEntity(subject->getType())) {
+    const EvaluatedType subjectType = subject->getType();
+    const EvaluatedType valueType = test._value->getType();
+    const BinaryOperator op = test._operator;
+
+    const bool testsOrdering = test._kind == CaseExpr::TestKind::Comparison
+                               && (op == BinaryOperator::LessThan
+                                   || op == BinaryOperator::GreaterThan
+                                   || op == BinaryOperator::LessThanOrEqual
+                                   || op == BinaryOperator::GreaterThanOrEqual);
+
+    if (testsOrdering) {
+        if (orderingResultType(subjectType, valueType) == EvaluatedType::Invalid) {
+            throwError(fmt::format("A CASE cannot order '{}' against '{}'",
+                                   EvaluatedTypeName::value(subjectType),
+                                   EvaluatedTypeName::value(valueType)),
+                       test._value);
+        }
+    } else if (isEntity(subjectType)) {
         requireComparableToEntity(subject, test);
     } else {
         requireCaseValue(test._value);
@@ -2184,7 +2214,7 @@ void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
     const EvaluatedType type = subject->getType();
 
     const bool isScalar = type == EvaluatedType::Null
-                          || type == EvaluatedType::ListItem
+                          || namesATaggedCell(type)
                           || convertibleToValueType(type);
 
     if (isScalar || isEntity(type)) {
@@ -2200,7 +2230,7 @@ void ExprAnalyzer::requireCaseValue(const Expr* value) const {
     const EvaluatedType type = value->getType();
 
     const bool isScalar = type == EvaluatedType::Null
-                          || type == EvaluatedType::ListItem
+                          || namesATaggedCell(type)
                           || convertibleToValueType(type);
 
     if (isScalar) {
@@ -2216,15 +2246,6 @@ void ExprAnalyzer::requireCaseValue(const Expr* value) const {
 void ExprAnalyzer::requireComparableToEntity(const Expr* subject, const CaseExpr::Test& test) const {
     const EvaluatedType subjectType = subject->getType();
     const EvaluatedType valueType = test._value->getType();
-
-    const bool comparesForEquality = test._kind == CaseExpr::TestKind::Value
-                                     || test._operator == BinaryOperator::Equal;
-
-    if (!comparesForEquality) {
-        throwError("A CASE compares a node or an edge for equality, so its branches cannot "
-                   "order one",
-                   test._value);
-    }
 
     const bool comparable = valueType == EvaluatedType::Null
                             || valueType == EvaluatedType::Integer

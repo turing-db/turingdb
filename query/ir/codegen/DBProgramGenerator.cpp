@@ -8251,8 +8251,10 @@ mlir::Value DBProgramGenerator::translateCaseTest(const Expr* subjectExpr,
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
+    const EvaluatedType subjectType = subjectExpr ? subjectExpr->getType() : EvaluatedType::Invalid;
+
     const bool subjectIsNull = subjectExpr
-                               && (subjectExpr->getType() == EvaluatedType::Null || isUntypedNullColumn(subject));
+                               && (subjectType == EvaluatedType::Null || isUntypedNullColumn(subject));
 
     if (test._kind == CaseExpr::TestKind::IsNull) {
         if (subjectIsNull) {
@@ -8278,8 +8280,8 @@ mlir::Value DBProgramGenerator::translateCaseTest(const Expr* subjectExpr,
     // no order between them is null, so a branch comparing across either is never taken.
     // IS NULL above is how a Cypher CASE tests for a null
     const bool comparesAgainstNull = subjectIsNull || valueType == EvaluatedType::Null;
-    const bool comparesDisjointTypes = subjectExpr && comparesAsDisjointTypes(subjectExpr->getType(), valueType);
-    const bool ordersDisjointTypes = subjectExpr && ordersAsDisjointTypes(subjectExpr->getType(), valueType);
+    const bool comparesDisjointTypes = subjectExpr && comparesAsDisjointTypes(subjectType, valueType);
+    const bool ordersDisjointTypes = subjectExpr && ordersAsDisjointTypes(subjectType, valueType);
 
     const bool testsEquality = test._operator == BinaryOperator::Equal
                                || test._operator == BinaryOperator::NotEqual;
@@ -8380,39 +8382,22 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 
     const BinaryOperator op = binExpr->getOperator();
 
-    // Null is equal to nothing, itself included, so a comparison against it is null on
-    // every row whichever side carries it. IS NULL is the operator that tests for one
-    const bool comparesAgainstNull = lhsExpr->getType() == EvaluatedType::Null
-                                     || rhsExpr->getType() == EvaluatedType::Null;
-
-    // Two types that can never hold equal values answer the equality without reading a
-    // row, and two types with no order between them answer an ordering null
+    // Two types that can never hold equal values answer the equality without reading a row
     const bool comparesDisjointTypes = comparesAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
-    const bool ordersNothing = comparesAgainstNull || ordersAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
 
     const bool testsKnownNull = lhsExpr->getType() == EvaluatedType::Null || isUntypedNullColumn(lhs);
 
-    // Arithmetic or concatenation over an unknown value is unknown, and the null names no
-    // column the result could be carried in, so the analyzer types such an expression Null.
-    // A '+' appending to a list is not one of them: [1, 2] + null is [1, 2, null]
-    const bool propagatesNull = op == BinaryOperator::Add
-                                || op == BinaryOperator::Sub
-                                || op == BinaryOperator::Mult
-                                || op == BinaryOperator::Div
-                                || op == BinaryOperator::Mod
-                                || op == BinaryOperator::Pow
-                                || op == BinaryOperator::Concat;
-
-    if (propagatesNull && binExpr->getType() == EvaluatedType::Null) {
+    // The analyzer types Null an expression that is null on every row - a comparison with a
+    // null, an ordering across types, arithmetic over a null - and the null names no column
+    // the result could be carried in
+    if (binExpr->getType() == EvaluatedType::Null) {
         _part._exprMap[expr] = nullConstantColumn();
         return;
     }
 
     switch (op) {
         case BinaryOperator::Equal:
-            if (comparesAgainstNull) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else if (comparesDisjointTypes) {
+            if (comparesDisjointTypes) {
                 _part._exprMap[expr] = disjointComparison(lhs, rhs, /*equality=*/true);
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
@@ -8465,37 +8450,19 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::DivOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::GreaterThan:
-            if (ordersNothing) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
-            }
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::LessThan:
-            if (ordersNothing) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::LtOp>(loc, boolType, lhs, rhs).getResult();
-            }
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::LtOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::GreaterThanOrEqual:
-            if (ordersNothing) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::GteOp>(loc, boolType, lhs, rhs).getResult();
-            }
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::GteOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::LessThanOrEqual:
-            if (ordersNothing) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
-            }
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::NotEqual:
-            if (comparesAgainstNull) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else if (comparesDisjointTypes) {
+            if (comparesDisjointTypes) {
                 _part._exprMap[expr] = disjointComparison(lhs, rhs, /*equality=*/false);
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
@@ -8508,11 +8475,7 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::In:
-            if (rhsExpr->getType() == EvaluatedType::Null) {
-                _part._exprMap[expr] = nullConstantColumn();
-            } else {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::InOp>(loc, boolType, lhs, rhs).getResult();
-            }
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::InOp>(loc, boolType, lhs, rhs).getResult();
         break;
 
         case BinaryOperator::_SIZE:

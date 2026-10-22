@@ -67,6 +67,7 @@ private:
 
     void throwOnEntityWhere(const Pattern* pattern, std::string_view clause) const;
     void throwOnUndirectedEdge(const Pattern* pattern) const;
+    void throwOnNullProperty(const Pattern* pattern) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 

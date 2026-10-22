@@ -59,7 +59,10 @@ namespace {
 // test written as a WHERE does. Two types that can never hold equal values settle it too -
 // the constraint is false wherever the property is there.
 bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
-    if (exprType == EvaluatedType::ListItem || exprType == EvaluatedType::MapValue) {
+    const bool comparesPerRow = namesATaggedCell(exprType);
+    const bool matchesNothing = exprType == EvaluatedType::Null;
+
+    if (comparesPerRow || matchesNothing) {
         return true;
     }
 

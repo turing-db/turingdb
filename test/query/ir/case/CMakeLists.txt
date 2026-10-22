@@ -19,3 +19,5 @@ add_call_v3_test(test_query_ir_case_list_item_subject CaseListItemSubjectTest.cp
 add_turing_test(test_query_ir_case_over_projection_alias CaseOverProjectionAliasTest.cpp)
 target_sources(test_query_ir_case_over_projection_alias PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_case_over_projection_alias PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_case_entity_inequality CaseEntityInequalityTest.cpp)

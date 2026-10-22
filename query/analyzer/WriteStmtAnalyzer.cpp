@@ -85,6 +85,7 @@ void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
 
     throwOnEntityWhere(pattern, "MERGE");
     analyze(pattern);
+    throwOnNullProperty(pattern);
 
     for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
         if (!actions) {
@@ -134,6 +135,25 @@ void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_v
         for (const EntityPattern* entity : element->getEntities()) {
             if (entity->getWhere()) {
                 throwError(fmt::format("WHERE is not allowed in a {} pattern", clause), entity);
+            }
+        }
+    }
+}
+
+void WriteStmtAnalyzer::throwOnNullProperty(const Pattern* pattern) const {
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const MapLiteral* properties = entity->getProperties();
+            if (!properties) {
+                continue;
+            }
+
+            for (const auto& [propertyName, expr] : *properties) {
+                if (expr->getType() == EvaluatedType::Null) {
+                    throwError(fmt::format("MERGE cannot match on property '{}', which is null",
+                                           propertyName->getName()),
+                               expr);
+                }
             }
         }
     }
@@ -240,21 +260,26 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
                 throwError("Invalid use of aggregate expression in this context", nodePattern);
             }
 
+            const EvaluatedType exprType = expr->getType();
+            if (exprType == EvaluatedType::Null) {
+                continue;
+            }
+
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
                 // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
+                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, exprType)) {
                     throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
-                                           EvaluatedTypeName::value(expr->getType())),
+                                           EvaluatedTypeName::value(exprType)),
                                nodePattern);
                 }
                 data->addExprConstraint(propName->getName(), propType->_valueType, expr);
             } else {
                 // Property type needs to be created
-                const ValueType valueType = evaluatedToValueType(expr->getType());
+                const ValueType valueType = evaluatedToValueType(exprType);
                 if (valueType == ValueType::Invalid) {
-                    throwError(fmt::format("Cannot evaluate node property: unsupported type '{}'", EvaluatedTypeName::value(expr->getType())),
+                    throwError(fmt::format("Cannot evaluate node property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                                expr);
                 }
                 data->addExprConstraint(propName->getName(), valueType, expr);
@@ -315,21 +340,26 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                 throwError("Invalid use of aggregate expression in this context", edgePattern);
             }
 
+            const EvaluatedType exprType = expr->getType();
+            if (exprType == EvaluatedType::Null) {
+                continue;
+            }
+
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
                 // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
+                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, exprType)) {
                     throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
-                                           EvaluatedTypeName::value(expr->getType())),
+                                           EvaluatedTypeName::value(exprType)),
                                edgePattern);
                 }
                 data->addExprConstraint(propName->getName(), propType->_valueType, expr);
             } else {
                 // Property type needs to be created
-                const ValueType valueType = evaluatedToValueType(expr->getType());
+                const ValueType valueType = evaluatedToValueType(exprType);
                 if (valueType == ValueType::Invalid) {
-                    throwError(fmt::format("Cannot evaluate edge property: unsupported type '{}'", EvaluatedTypeName::value(expr->getType())),
+                    throwError(fmt::format("Cannot evaluate edge property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                                expr);
                 }
                 data->addExprConstraint(propName->getName(), valueType, expr);

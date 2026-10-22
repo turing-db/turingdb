@@ -584,6 +584,11 @@ mlir::Type chunkValueElement(mlir::OpBuilder& builder, mlir::Type chunkType) {
     return element;
 }
 
+bool isIntegerChunk(mlir::OpBuilder& builder, mlir::Type chunkType) {
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(chunkValueElement(builder, chunkType));
+    return integerType && integerType.getWidth() == 64;
+}
+
 // Whether an element type is one arithmetic promotes: the two Cypher number columns.
 bool isNumericElement(mlir::Type element) {
     if (mlir::isa<mlir::Float64Type>(element)) {
@@ -5960,7 +5965,13 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     const mlir::Type lhsChunkType = lhsChunk.getType();
     const mlir::Type rhsChunkType = rhsChunk.getType();
 
-    const bool comparesTwoEntities = isEntityChunk(lhsChunkType) && isEntityChunk(rhsChunkType);
+    const bool lhsIsAnEntity = isEntityChunk(lhsChunkType);
+    const bool rhsIsAnEntity = isEntityChunk(rhsChunkType);
+
+    const bool comparesTwoEntities = lhsIsAnEntity && rhsIsAnEntity;
+    const bool comparesAnEntityToAnID = kind == BinaryResultKind::Comparison
+                                     && ((lhsIsAnEntity && isIntegerChunk(_builder, rhsChunkType))
+                                         || (rhsIsAnEntity && isIntegerChunk(_builder, lhsChunkType)));
 
     const bool readsScalarOperands = kind != BinaryResultKind::Index
                                   && kind != BinaryResultKind::Membership;
@@ -5983,12 +5994,17 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
         lhsChunk = nullTestedChunk(lhsChunk);
     } else if (nullAgainstLhs) {
         rhsChunk = nullTestedChunk(rhsChunk);
-    } else if (comparesTwoEntities) {
-        // Two entities are compared as the IDs they are, and an ID column carries its null
-        // in the ID: read raw, the invalid ID two missed matches hold compares equal to
-        // itself. Read as nullable ui64, a null compares as a null - which a WHERE drops.
-        lhsChunk = nullableValueChunk(lhsChunk);
-        rhsChunk = nullableValueChunk(rhsChunk);
+    } else if (comparesTwoEntities || comparesAnEntityToAnID) {
+        // An entity is compared as the ID it is, and an ID column carries its null in the
+        // ID: read raw, the invalid ID two missed matches hold compares equal to itself, and
+        // unequal to every id. Read as nullable ui64, a null compares as a null.
+        if (lhsIsAnEntity) {
+            lhsChunk = nullableValueChunk(lhsChunk);
+        }
+
+        if (rhsIsAnEntity) {
+            rhsChunk = nullableValueChunk(rhsChunk);
+        }
     }
 
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());

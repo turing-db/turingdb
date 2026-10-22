@@ -99,12 +99,15 @@ TEST_F(CaseEntitySubjectTest, comparesAnEntityAgainstAnID) {
                {{"Adam", "Remy"}, {"Remy", "someone else"}});
 }
 
-// Nothing orders a node or an edge, so a branch that compares one with an ordering
-// operator is reported rather than answered
-TEST_F(CaseEntitySubjectTest, rejectsAnOrderingBranchOverAnEntity) {
-    runQueryExpectingError("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->(f) "
-                           "RETURN CASE r WHEN < 3 THEN 'low' ELSE 'high' END",
-                           "cannot order one");
+// Nothing orders a node or an edge, so an ordering of one is null and its branch is
+// never taken, whether the edge matched or not
+TEST_F(CaseEntitySubjectTest, neverTakesAnOrderingBranchOverAnEntity) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->(f) "
+               "RETURN p.name, CASE r WHEN < 3 THEN 'low' ELSE 'high' END",
+               {
+                   {"Adam", "high"}, {"Cyrus", "high"}, {"Doruk", "high"}, {"Luc", "high"},
+                   {"Martina", "high"}, {"Maxime", "high"}, {"Remy", "high"}, {"Suhas", "high"},
+               });
 }
 
 // A node is equal to a node or to an id, and to nothing else

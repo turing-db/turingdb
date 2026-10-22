@@ -283,73 +283,7 @@ struct PairRestrictions<Op> {
 };
 
 template <ColumnOperator Op>
-    requires (Op == OP_GREATER_THAN) || (Op == OP_LESS_THAN)
-struct PairRestrictions<Op> {
-    using Allowed = GenerateKindPairList<
-        // Standard ordering of numeric types
-        OptionalKindPairs<types::Int64::Primitive, types::Int64::Primitive>::Pairs,
-        OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-
-        // A datetime orders against another datetime only: it is an instant, not a number
-        OptionalKindPairs<types::DateTime::Primitive, types::DateTime::Primitive>::Pairs,
-
-        OptionalKindPairs<types::Duration::Primitive, types::Duration::Primitive>::Pairs,
-
-        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
-
-        // Lexicographic ordering of strings, whether each side borrows its characters
-        // from the graph or owns them - what labels(), type() and a CSV field answer -
-        // either way round, since which side the query writes it on is its choice
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
-        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
-
-        // Ordering against a type-erased cell, which holds its own type: it is ordered as
-        // an element holding the other side would be
-        ListElementKindPairs<types::Int64::Primitive>::Pairs,
-        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
-        ListElementKindPairs<types::Double::Primitive>::Pairs,
-        ListElementKindPairs<types::String::Primitive>::Pairs,
-        ListElementKindPairs<types::Bool::Primitive>::Pairs,
-        ListElementKindPairs<types::DateTime::Primitive>::Pairs,
-        ListElementKindPairs<types::Duration::Primitive>::Pairs,
-        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
-
-        // A map value is a type-erased cell too, and orders the same way
-        MapEntryKindPairs<types::Int64::Primitive>::Pairs,
-        MapEntryKindPairs<types::UInt64::Primitive>::Pairs,
-        MapEntryKindPairs<types::Double::Primitive>::Pairs,
-        MapEntryKindPairs<types::String::Primitive>::Pairs,
-        MapEntryKindPairs<types::Bool::Primitive>::Pairs,
-        MapEntryKindPairs<types::DateTime::Primitive>::Pairs,
-        MapEntryKindPairs<types::Duration::Primitive>::Pairs,
-        MapEntryKindPairs<ListView>::Pairs,
-        MapEntryKindPairs<ListElementView>::Pairs,
-        std::tuple<KindPair<MapEntryView, MapEntryView>>,
-
-        OptionalKindPairs<ListView, ListView>::Pairs,
-        ListElementKindPairs<ListView>::Pairs
-    >;
-
-    using AllowedMixed = AllowedMixedList<
-        MixedKind<ColumnMask, CustomBool>,
-        MixedKind<ColumnMask, std::optional<CustomBool>>,
-        MixedKind<ColumnMask, ListElementView>,
-        MixedKind<ColumnMask, std::optional<ListElementView>>
-    >;
-
-    using Excluded = ExcludedContainers<
-        ContainerKind::code<ColumnSet>()
-    >;
-};
-
-template <ColumnOperator Op>
-    requires (Op == OP_GREATER_THAN_OR_EQUAL) || (Op == OP_LESS_THAN_OR_EQUAL)
+    requires (Op == OP_GREATER_THAN) || (Op == OP_LESS_THAN) || (Op == OP_GREATER_THAN_OR_EQUAL) || (Op == OP_LESS_THAN_OR_EQUAL)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         // Standard ordering of numeric types
