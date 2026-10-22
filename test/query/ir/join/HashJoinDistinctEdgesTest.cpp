@@ -11,7 +11,7 @@ using namespace db;
 using namespace turing::test;
 
 // The check between the edges of two patterns a hash join brings together folds into the
-// join as distinct_from, so the probe leaves the pairs of one edge out and no filter runs
+// join as distinct_pairs, so the probe leaves the pairs of one edge out and no filter runs
 // after it. The oracle of each case is the same patterns in two MATCH clauses, which the
 // rule does not reach, with the pairs written out in the WHERE.
 class HashJoinDistinctEdgesTest : public HashJoinQueryTest {
@@ -29,7 +29,7 @@ protected:
         dbProgram(query, program);
 
         EXPECT_TRUE(contains(program, "db.hash_join")) << program;
-        EXPECT_TRUE(contains(program, "distinct_from [")) << program;
+        EXPECT_TRUE(contains(program, "distinct_pairs [")) << program;
         EXPECT_FALSE(contains(program, "db.check_edge_distinct")) << program;
 
         std::string lowered;

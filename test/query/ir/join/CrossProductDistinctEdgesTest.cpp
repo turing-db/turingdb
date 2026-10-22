@@ -102,7 +102,7 @@ func.func @main() {
   } factor {
     %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
     db.yield %d, %e : !db.column<!storage.node_id>, !db.column<!storage.edge_id>
-  } distinct_from [0, 1]
+  } distinct_pairs [0, 1]
   db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>
   return
 }
@@ -116,7 +116,7 @@ func.func @main() {
   } factor {
     %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
     db.yield %d, %e : !db.column<!storage.node_id>, !db.column<!storage.edge_id>
-  } distinct_from [0, 1]
+  } distinct_pairs [0, 1]
   %1:4 = db.limit(%0#0, %0#1, %0#2, %0#3) count 40 : (!db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>) -> (!db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>)
   db.output(%1#0, %1#1, %1#2, %1#3) : !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>
   return
@@ -139,7 +139,7 @@ func.func @main() {
       db.yield %n : !db.column<!storage.node_id>
     }
     db.yield %1#0, %1#1 : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
-  } distinct_from [0, 0]
+  } distinct_pairs [0, 0]
   db.output(%0#0, %0#1, %0#2) : !db.column<!storage.edge_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>
   return
 }
@@ -160,7 +160,7 @@ func.func @main() {
   } factor {
     %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
     db.yield %e : !db.column<!storage.edge_id>
-  } distinct_from [0, 0, 1, 0]
+  } distinct_pairs [0, 0, 1, 0]
   db.output(%0#0, %0#1, %0#2) : !db.column<!storage.edge_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_id>
   return
 }
@@ -175,7 +175,7 @@ func.func @main() {
   } factor {
     %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
     db.yield %e, %d : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
-  } on 1, 1 distinct_from [0, 0]
+  } on 1, 1 distinct_pairs [0, 0]
   db.output(%0#0, %0#1, %0#2, %0#3) : !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>
   return
 }
@@ -189,7 +189,7 @@ func.func @main() {
   } factor {
     %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
     db.yield %e, %d : !db.column<!storage.edge_id>, !db.column<!storage.node_id>
-  } on 1, 1 distinct_from [0, 0]
+  } on 1, 1 distinct_pairs [0, 0]
   %1:4 = db.limit(%0#0, %0#1, %0#2, %0#3) count 5 : (!db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>)
   db.output(%1#0, %1#1, %1#2, %1#3) : !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>
   return
@@ -226,7 +226,7 @@ void sorted(std::vector<Tuple> tuples, std::vector<Tuple>& result) {
 
 }
 
-// A cross product or a hash join with distinct_from leaves out the pairs whose two edges
+// A cross product or a hash join with distinct_pairs leaves out the pairs whose two edges
 // are one edge, whatever chunk size cuts it, and never lays out a chunk past that size.
 class CrossProductDistinctEdgesTest : public TuringTest {
 protected:

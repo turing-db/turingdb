@@ -41,6 +41,7 @@ protected:
         EXPECT_EQ(reported, pairs) << query;
         EXPECT_FALSE(contains(program, "db.check_edge_distinct")) << program;
         EXPECT_FALSE(contains(program, "distinct_from")) << program;
+        EXPECT_FALSE(contains(program, "distinct_pairs")) << program;
 
         expectCount(query, count);
     }
@@ -51,7 +52,8 @@ protected:
         explain(query, reported, program);
 
         EXPECT_EQ(reported, pairs) << query;
-        EXPECT_TRUE(contains(program, "db.check_edge_distinct") || contains(program, "distinct_from")) << program;
+        const bool leavesEdgesOut = contains(program, "distinct_from") || contains(program, "distinct_pairs");
+        EXPECT_TRUE(contains(program, "db.check_edge_distinct") || leavesEdgesOut) << program;
 
         expectCount(query, count);
     }
@@ -152,7 +154,7 @@ TEST_F(ProveDistinctEdgesTest, narrowsACheckOverACrossProduct) {
     EXPECT_EQ(pairs, "e2 <> e1: proven by types\ne1 <> e3: kept\ne2 <> e3: proven by types\n");
     EXPECT_FALSE(contains(program, "db.check_edge_distinct(")) << program;
     EXPECT_TRUE(contains(program, "db.cross_product")) << program;
-    EXPECT_EQ(countOf(program, "distinct_from"), 1u) << program;
+    EXPECT_EQ(countOf(program, "distinct_pairs"), 1u) << program;
 
     expectCount(query, "16");
 }

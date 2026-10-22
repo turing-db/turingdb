@@ -2143,7 +2143,7 @@ def CrossProduct : TuringOp<"cross_product", [Pure]> {
     from the two yields and the verifier checks they line up. Reading the graph
     is deterministic, so the op is Pure.
 
-    `distinct_from` leaves out the pairs whose two rows hold one edge: it lists
+    `distinct_pairs` leaves out the pairs whose two rows hold one edge: it lists
     pairs of edge columns, a left factor's yield index followed by a right
     factor's, and a pair of rows is kept only where every listed pair of columns
     holds two different edges. It is the relationship isomorphism of the pattern
@@ -2151,10 +2151,10 @@ def CrossProduct : TuringOp<"cross_product", [Pure]> {
     over the product:
 
       %e1, %e2 = db.cross_product factor { ... db.yield %e : ... }
-                                  factor { ... db.yield %f : ... } distinct_from [0, 0]
+                                  factor { ... db.yield %f : ... } distinct_pairs [0, 0]
   }];
 
-  let arguments = (ins OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
+  let arguments = (ins OptionalAttr<DenseI64ArrayAttr>:$distinct_pairs);
 
   // The results are the concatenation of the two factors' yielded columns; the
   // count and types are recovered from the yields, never spelled out.
@@ -2218,16 +2218,16 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
     the parser recovers them from the two yields and the verifier checks they line
     up. Reading the graph is deterministic, so the op is Pure.
 
-    `distinct_from` leaves out the joined pairs whose two rows hold one edge, as
+    `distinct_pairs` leaves out the joined pairs whose two rows hold one edge, as
     on db.cross_product: pairs of edge columns, a left factor's yield index
     followed by a right factor's.
 
-      ... } on 2, 1 distinct_from [1, 0]
+      ... } on 2, 1 distinct_pairs [1, 0]
   }];
 
   // Which column of each factor's yield carries the join key: the left factor's,
   // then the right factor's.
-  let arguments = (ins UI64Attr:$leftKey, UI64Attr:$rightKey, OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
+  let arguments = (ins UI64Attr:$leftKey, UI64Attr:$rightKey, OptionalAttr<DenseI64ArrayAttr>:$distinct_pairs);
 
   // The results are the concatenation of the two factors' yielded columns; the
   // count and types are recovered from the yields, never spelled out.

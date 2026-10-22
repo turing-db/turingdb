@@ -3767,7 +3767,7 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
                                                                outerColumns,
                                                                innerColumns,
-                                                               product.getDistinctFromAttr());
+                                                               product.getDistinctPairsAttr());
 
     // The pairs come out chunk by chunk, so the product drives a loop of its own
     // nested in the inner factor's - the third level of the nest, below the two the
@@ -3821,7 +3821,7 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
                                                                  iteratorType,
                                                                  state,
                                                                  probeColumns,
-                                                                 join.getDistinctFromAttr());
+                                                                 join.getDistinctPairsAttr());
 
     // A key many build rows carry makes more pairs than the probe chunk holds, so the
     // pairs come out chunk by chunk and the probe drives a loop of its own nested in the

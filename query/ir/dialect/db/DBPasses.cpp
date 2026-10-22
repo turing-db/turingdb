@@ -1359,6 +1359,12 @@ void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 Value seedColumnOf(ExplorePaths exploration, Value column);
 
+// The pairs a crossing leaves out, as pairs of its result indices, which a rewrite rebuilding
+// the crossing renumbers into the results of the op built in its place and places back
+using ResultPair = std::pair<size_t, size_t>;
+void collectDistinctPairs(Operation* crossing, llvm::SmallVectorImpl<ResultPair>& pairs);
+void placeDistinctPairs(Operation* crossing, llvm::ArrayRef<ResultPair> pairs);
+
 // What an unwound list is when it is a run of a range: the range, the one slice taken of it
 // in its own order - db.tail being the slice from 1 - and whether the run is reversed. The
 // chain holds the ops above the range, from the unwind down.
@@ -2226,6 +2232,9 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
     const size_t leftWidth = leftFactorWidth(product);
     const size_t firstResult = placement._sinksLeft ? 0 : leftWidth;
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(product, pairs);
+
     Yield yield = cast<Yield>(factor.front().getTerminator());
     const llvm::SmallVector<Value> yielded(yield.getColumns().begin(), yield.getColumns().end());
 
@@ -2261,12 +2270,22 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
 
     // The element follows the factor's columns, so a right factor sitting after a widened
     // left one starts a column further along
-    for (const Value result : product.getResults()) {
-        const size_t resultIndex = cast<OpResult>(result).getResultNumber();
+    const auto widenedIndex = [&placement, leftWidth](size_t resultIndex) {
         const bool shifts = placement._sinksLeft && resultIndex >= leftWidth;
 
-        rewriter.replaceAllUsesWith(result, widened.getResult(shifts ? resultIndex + 1 : resultIndex));
+        return shifts ? resultIndex + 1 : resultIndex;
+    };
+
+    for (const Value result : product.getResults()) {
+        const size_t resultIndex = cast<OpResult>(result).getResultNumber();
+        rewriter.replaceAllUsesWith(result, widened.getResult(widenedIndex(resultIndex)));
     }
+
+    for (auto& [first, second] : pairs) {
+        first = widenedIndex(first);
+        second = widenedIndex(second);
+    }
+    placeDistinctPairs(widened, pairs);
 
     Value element = widened.getResult(firstResult + yielded.size());
     for (FilterOp filter : llvm::reverse(placement._filters)) {
@@ -2612,6 +2631,11 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
     const size_t keptWidth = factorYieldColumns(keptFactor).size();
     const size_t otherWidth = factorYieldColumns(otherFactor).size();
 
+    llvm::SmallVector<ResultPair, 2> productPairs;
+    llvm::SmallVector<ResultPair, 2> nestedPairs;
+    collectDistinctPairs(product, productPairs);
+    collectDistinctPairs(nested, nestedPairs);
+
     // The other factor keeps its side, so an outer factor is not re-run once per chunk of the
     // nested side it is crossed with
     Region& innerLeft = rotation._nestedOnTheLeft ? keptFactor : otherFactor;
@@ -2638,17 +2662,7 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
 
     // The rotated product holds the inner product's columns, then the rest of the nested
     // product's
-    const auto rotatedIndex = [&](size_t resultIndex) {
-        const bool fromTheNested = (resultIndex < productLeftWidth) == rotation._nestedOnTheLeft;
-        if (!fromTheNested) {
-            const size_t otherFirst = rotation._nestedOnTheLeft ? productLeftWidth : 0;
-            return otherFirstInInner + (resultIndex - otherFirst);
-        }
-
-        const size_t nestedFirst = rotation._nestedOnTheLeft ? 0 : productLeftWidth;
-        const Value column = nestedYield[resultIndex - nestedFirst];
-        const size_t nestedIndex = cast<OpResult>(column).getResultNumber();
-
+    const auto rotatedNestedIndex = [&](size_t nestedIndex) {
         const bool fromTheLeft = nestedIndex < nestedLeftWidth;
         const size_t sidePosition = fromTheLeft ? nestedIndex : nestedIndex - nestedLeftWidth;
         if (fromTheLeft == rotation._keepsTheNestedLeft) {
@@ -2658,10 +2672,34 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
         return keptWidth + otherWidth + sidePosition;
     };
 
+    const auto rotatedIndex = [&](size_t resultIndex) {
+        const bool fromTheNested = (resultIndex < productLeftWidth) == rotation._nestedOnTheLeft;
+        if (!fromTheNested) {
+            const size_t otherFirst = rotation._nestedOnTheLeft ? productLeftWidth : 0;
+            return otherFirstInInner + (resultIndex - otherFirst);
+        }
+
+        const size_t nestedFirst = rotation._nestedOnTheLeft ? 0 : productLeftWidth;
+        const Value column = nestedYield[resultIndex - nestedFirst];
+
+        return rotatedNestedIndex(cast<OpResult>(column).getResultNumber());
+    };
+
     for (const Value result : product.getResults()) {
         const size_t resultIndex = cast<OpResult>(result).getResultNumber();
         rewriter.replaceAllUsesWith(result, rotated.getResult(rotatedIndex(resultIndex)));
     }
+
+    for (auto& [first, second] : productPairs) {
+        first = rotatedIndex(first);
+        second = rotatedIndex(second);
+    }
+    for (auto& [first, second] : nestedPairs) {
+        first = rotatedNestedIndex(first);
+        second = rotatedNestedIndex(second);
+    }
+    placeDistinctPairs(rotated, productPairs);
+    placeDistinctPairs(rotated, nestedPairs);
 
     rewriter.eraseOp(product);
 
@@ -4861,6 +4899,56 @@ bool findCrossedEdgePair(Operation* crossing, size_t first, size_t second, Cross
     }
 }
 
+
+DenseI64ArrayAttr distinctPairsOf(Operation* crossing) {
+    if (CrossProduct product = dyn_cast<CrossProduct>(crossing)) {
+        return product.getDistinctPairsAttr();
+    } else if (HashJoin join = dyn_cast<HashJoin>(crossing)) {
+        return join.getDistinctPairsAttr();
+    } else {
+        return {};
+    }
+}
+
+void appendDistinctPair(Operation* crossing, int64_t left, int64_t right) {
+    llvm::SmallVector<int64_t, 4> pairs;
+    if (const DenseI64ArrayAttr held = distinctPairsOf(crossing)) {
+        llvm::append_range(pairs, held.asArrayRef());
+    }
+    pairs.push_back(left);
+    pairs.push_back(right);
+
+    const DenseI64ArrayAttr appended = DenseI64ArrayAttr::get(crossing->getContext(), pairs);
+    if (CrossProduct product = dyn_cast<CrossProduct>(crossing)) {
+        product.setDistinctPairsAttr(appended);
+    } else {
+        cast<HashJoin>(crossing).setDistinctPairsAttr(appended);
+    }
+}
+
+void collectDistinctPairs(Operation* crossing, llvm::SmallVectorImpl<ResultPair>& pairs) {
+    const DenseI64ArrayAttr held = distinctPairsOf(crossing);
+    if (!held) {
+        return;
+    }
+
+    const size_t leftCount = factorYieldColumns(crossing->getRegion(0)).size();
+    const llvm::ArrayRef<int64_t> indices = held.asArrayRef();
+    for (size_t position = 0; position + 1 < indices.size(); position += 2) {
+        pairs.emplace_back(static_cast<size_t>(indices[position]), leftCount + static_cast<size_t>(indices[position + 1]));
+    }
+}
+
+void placeDistinctPairs(Operation* crossing, llvm::ArrayRef<ResultPair> pairs) {
+    for (const auto& [first, second] : pairs) {
+        CrossedEdgePair pair;
+        const bool placed = findCrossedEdgePair(crossing, first, second, pair);
+        bioassert(placed, "No crossing pairs the results {} and {} of a rebuilt crossing", first, second);
+
+        appendDistinctPair(pair._crossing, pair._left, pair._right);
+    }
+}
+
 bool matchCrossedEdgePairs(FilterOp filter, CrossedEdgePairs& crossed) {
     CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
     if (!check || !holdsEdges(check.getSubject())) {
@@ -4914,16 +5002,7 @@ void fuseProductDistinctEdges(CrossedEdgePairs& crossed, mlir::RewriterBase& rew
     CheckEdgeDistinct check = crossed._check;
 
     for (const CrossedEdgePair& pair : crossed._pairs) {
-        Operation* const crossing = pair._crossing;
-
-        llvm::SmallVector<int64_t, 4> pairs;
-        if (const DenseI64ArrayAttr held = crossing->getAttrOfType<DenseI64ArrayAttr>(DISTINCT_FROM_ATTRIBUTE_NAME)) {
-            llvm::append_range(pairs, held.asArrayRef());
-        }
-        pairs.push_back(pair._left);
-        pairs.push_back(pair._right);
-
-        crossing->setAttr(DISTINCT_FROM_ATTRIBUTE_NAME, rewriter.getDenseI64ArrayAttr(pairs));
+        appendDistinctPair(pair._crossing, pair._left, pair._right);
     }
 
     bypassFilter(filter);
@@ -5522,6 +5601,14 @@ void narrowFactorColumn(const FactorColumnLevel& level, Value hoisted, mlir::OpB
     const FactorColumn& column = level._column;
     const size_t resultIndex = level._resultIndex;
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(product, pairs);
+    for (auto& [first, second] : pairs) {
+        bioassert(first != resultIndex && second != resultIndex, "A narrowed product drops a column of a left-out edge pair");
+        first -= first > resultIndex ? 1 : 0;
+        second -= second > resultIndex ? 1 : 0;
+    }
+
     Yield yield = cast<Yield>(column._factor->front().getTerminator());
     yield.getColumnsMutable().erase(static_cast<unsigned>(column._position));
 
@@ -5547,6 +5634,7 @@ void narrowFactorColumn(const FactorColumnLevel& level, Value hoisted, mlir::OpB
         }
     }
 
+    placeDistinctPairs(narrowed, pairs);
     product.erase();
 }
 
@@ -6929,10 +7017,18 @@ bool selectKeptFactorColumns(Operation* op, llvm::SmallBitVector& keep) {
     }
 
     // A join reads its two key columns to match on whether or not anything downstream
-    // reads them, the way a sort orders by its keys.
+    // reads them, the way a sort orders by its keys, and a crossing the edge columns of the
+    // pairs it leaves out.
     if (HashJoin join = dyn_cast<HashJoin>(op)) {
         keep.set(join.getLeftKey());
         keep.set(leftCount + join.getRightKey());
+    }
+
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(op, pairs);
+    for (const auto& [first, second] : pairs) {
+        keep.set(first);
+        keep.set(second);
     }
 
     keepRowCarryingColumn(leftYield.getColumns(), 0, keep);
@@ -6974,6 +7070,9 @@ void replaceWithTrimmedFactors(Operation* op,
     Yield leftYield = factorYield(op, 0);
     Yield rightYield = factorYield(op, 1);
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(op, pairs);
+
     trimmed->getRegion(0).takeBody(op->getRegion(0));
     trimmed->getRegion(1).takeBody(op->getRegion(1));
 
@@ -6981,12 +7080,21 @@ void replaceWithTrimmedFactors(Operation* op,
     eraseUnkeptYields(rightYield, keep, leftCount);
 
     const Operation::result_range results = op->getResults();
+    llvm::SmallVector<size_t> trimmedIndices(results.size(), results.size());
     size_t trimmedIndex = 0;
     for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
         if (keep[resultIndex]) {
+            trimmedIndices[resultIndex] = trimmedIndex;
             results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
         }
     }
+
+    for (auto& [first, second] : pairs) {
+        bioassert(keep[first] && keep[second], "A trim drops a column of a left-out edge pair");
+        first = trimmedIndices[first];
+        second = trimmedIndices[second];
+    }
+    placeDistinctPairs(trimmed, pairs);
 }
 
 // A product's results are the columns its two factors yield; a result nobody reads leaves
@@ -8189,6 +8297,9 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     const size_t leftCount = leftYield.getNumOperands();
     const size_t rightCount = rightYield.getNumOperands();
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(product, pairs);
+
     const size_t leftKey = sinkKeyIntoFactor(match._left, 0, builder);
     const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, builder);
 
@@ -8225,6 +8336,12 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     for (size_t columnIndex = 0; columnIndex < rightCount; columnIndex++) {
         joinColumns.push_back(join.getResult(rightFirstResult + columnIndex));
     }
+
+    for (auto& [first, second] : pairs) {
+        first = cast<OpResult>(joinColumns[first]).getResultNumber();
+        second = cast<OpResult>(joinColumns[second]).getResultNumber();
+    }
+    placeDistinctPairs(join, pairs);
 
     // A sunk key sits past the columns its factor already yielded, so it is none of those.
     const Value leftKeyColumn = join.getResult(leftFirstResult + leftKey);

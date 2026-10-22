@@ -14,7 +14,7 @@ using namespace turing::test;
 using Rows = std::vector<StringRowSink::Row>;
 
 // The check between the edges of two patterns a cross product brings together folds into
-// the product as distinct_from, so the product leaves the pairs of one edge out and no
+// the product as distinct_pairs, so the product leaves the pairs of one edge out and no
 // filter runs after it. The oracle of each case is the same patterns in two MATCH clauses,
 // which the rule does not reach, with the pairs written out as a WHERE.
 class FuseProductDistinctEdgesTest : public CallV3Test {
@@ -43,7 +43,7 @@ protected:
         dump(query, program);
 
         EXPECT_TRUE(contains(program, "db.cross_product")) << program;
-        EXPECT_TRUE(contains(program, "distinct_from [")) << program;
+        EXPECT_TRUE(contains(program, "distinct_pairs [")) << program;
         EXPECT_FALSE(contains(program, "db.check_edge_distinct")) << program;
 
         Rows rows;

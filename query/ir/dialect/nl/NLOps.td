@@ -1638,12 +1638,12 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     (outer, inner) order - a step lays out only the prefix the following
     nl.limit_update/nl.output can still emit.
 
-    `distinct_from` lists pairs of edge columns, an outer column's index in its
+    `distinct_pairs` lists pairs of edge columns, an outer column's index in its
     brace group followed by an inner one's, and leaves out every pair of rows in
     which a listed pair holds one edge: the steps fill up with the pairs that
     remain, so no column is laid out for a pair that is left out.
 
-      %pairs = nl.cross_product {%e} {%f} distinct_from [0, 0]
+      %pairs = nl.cross_product {%e} {%f} distinct_pairs [0, 0]
                  : {!nl.chunk<!storage.edge_id>} {!nl.chunk<!storage.edge_id>}
   }];
 
@@ -1651,7 +1651,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   // size need AttrSizedOperandSegments to record each group's size.
   let arguments = (ins Variadic<NLChunk>:$outer_columns,
                        Variadic<NLChunk>:$inner_columns,
-                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_pairs);
 
   // An iterator over the crossed columns, outer group then inner group; inferred
   // from the operands since the broadcast keeps each chunk's element type.
@@ -1663,7 +1663,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   // operandSegmentSizes attribute is populated and elided automatically by the
   // generated parser/printer.
   let assemblyFormat = [{
-    `{` $outer_columns `}` `{` $inner_columns `}` (`distinct_from` $distinct_from^)? attr-dict `:`
+    `{` $outer_columns `}` `{` $inner_columns `}` (`distinct_pairs` $distinct_pairs^)? attr-dict `:`
     `{` qualified(type($outer_columns)) `}` `{` qualified(type($inner_columns)) `}`
   }];
 }
@@ -2205,18 +2205,18 @@ def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
     product: the loop stops once the budget is spent, and a step lays out only the
     prefix the following nl.limit_update/nl.output can still emit.
 
-    `distinct_from` lists pairs of edge columns, a probe column's index followed by
+    `distinct_pairs` lists pairs of edge columns, a probe column's index followed by
     a build column's, and leaves out every matched pair in which a listed pair holds
     one edge, as on nl.cross_product.
   }];
 
   let arguments = (ins NLHashJoinStateHandle:$state,
                        Variadic<NLChunk>:$columns,
-                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_pairs);
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    $state `,` `(` $columns `)` (`distinct_from` $distinct_from^)? attr-dict `:`
+    $state `,` `(` $columns `)` (`distinct_pairs` $distinct_pairs^)? attr-dict `:`
     `(` qualified(type($columns)) `)` `->` qualified(type($result))
   }];
   let hasVerifier = 1;

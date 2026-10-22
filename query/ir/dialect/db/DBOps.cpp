@@ -405,16 +405,16 @@ LogicalResult verifyFactorResults(Operation* op, Region& leftFactor, Region& rig
     return success();
 }
 
-// distinct_from on a two-factor op lists pairs of edge columns, a left factor's yield index
+// distinct_pairs on a two-factor op lists pairs of edge columns, a left factor's yield index
 // followed by a right factor's
-LogicalResult verifyFactorDistinctFrom(Operation* op, Region& leftFactor, Region& rightFactor, DenseI64ArrayAttr pairs) {
+LogicalResult verifyDistinctPairs(Operation* op, Region& leftFactor, Region& rightFactor, DenseI64ArrayAttr pairs) {
     if (!pairs) {
         return success();
     }
 
     const llvm::ArrayRef<int64_t> indices = pairs.asArrayRef();
     if (indices.size() % 2 != 0) {
-        return op->emitOpError("distinct_from lists pairs of a left and a right column, but holds ") << indices.size() << " indices";
+        return op->emitOpError("distinct_pairs lists pairs of a left and a right column, but holds ") << indices.size() << " indices";
     }
 
     const Operation::operand_range leftColumns = getFactorYield(leftFactor).getColumns();
@@ -426,21 +426,21 @@ LogicalResult verifyFactorDistinctFrom(Operation* op, Region& leftFactor, Region
         const int64_t index = indices[position];
 
         if (index < 0 || static_cast<size_t>(index) >= columns.size()) {
-            return op->emitOpError("distinct_from index ") << index << " names no column the " << (onTheLeft ? "left" : "right") << " factor yields";
+            return op->emitOpError("distinct_pairs index ") << index << " names no column the " << (onTheLeft ? "left" : "right") << " factor yields";
         }
 
         const ColumnType column = cast<ColumnType>(columns[index].getType());
         if (!isa<storage::EdgeIDType>(column.getType())) {
-            return op->emitOpError("distinct_from names the ") << (onTheLeft ? "left" : "right") << " column " << index << ", which holds no edges";
+            return op->emitOpError("distinct_pairs names the ") << (onTheLeft ? "left" : "right") << " column " << index << ", which holds no edges";
         }
     }
 
     return success();
 }
 
-// The optional `distinct_from [...]` a two-factor op spells after its regions
-ParseResult parseDistinctFrom(OpAsmParser& parser, OperationState& result, StringAttr name) {
-    if (failed(parser.parseOptionalKeyword("distinct_from"))) {
+// The optional `distinct_pairs [...]` a two-factor op spells after its regions
+ParseResult parseDistinctPairs(OpAsmParser& parser, OperationState& result, StringAttr name) {
+    if (failed(parser.parseOptionalKeyword("distinct_pairs"))) {
         return success();
     }
 
@@ -454,9 +454,9 @@ ParseResult parseDistinctFrom(OpAsmParser& parser, OperationState& result, Strin
     return success();
 }
 
-void printDistinctFrom(OpAsmPrinter& printer, DenseI64ArrayAttr pairs) {
+void printDistinctPairs(OpAsmPrinter& printer, DenseI64ArrayAttr pairs) {
     if (pairs) {
-        printer << " distinct_from ";
+        printer << " distinct_pairs ";
         pairs.print(printer);
     }
 }
@@ -1047,7 +1047,7 @@ ParseResult CrossProduct::parse(OpAsmParser& parser, OperationState& result) {
         return failure();
     }
 
-    if (parseDistinctFrom(parser, result, getDistinctFromAttrName(result.name))
+    if (parseDistinctPairs(parser, result, getDistinctPairsAttrName(result.name))
         || parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
@@ -1069,9 +1069,9 @@ void CrossProduct::print(OpAsmPrinter& printer) {
     printer << " " << factorKeyword << " ";
     printer.printRegion(getRightFactor());
 
-    printDistinctFrom(printer, getDistinctFromAttr());
+    printDistinctPairs(printer, getDistinctPairsAttr());
 
-    printer.printOptionalAttrDict((*this)->getAttrs(), {getDistinctFromAttrName()});
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getDistinctPairsAttrName()});
 }
 
 LogicalResult CrossProduct::verify() {
@@ -1079,7 +1079,7 @@ LogicalResult CrossProduct::verify() {
         return failure();
     }
 
-    return verifyFactorDistinctFrom(getOperation(), getLeftFactor(), getRightFactor(), getDistinctFromAttr());
+    return verifyDistinctPairs(getOperation(), getLeftFactor(), getRightFactor(), getDistinctPairsAttr());
 }
 
 // Builds the op from the branch count alone and creates that many empty blocks. The
@@ -1305,7 +1305,7 @@ ParseResult HashJoin::parse(OpAsmParser& parser, OperationState& result) {
         return failure();
     }
 
-    if (parseDistinctFrom(parser, result, getDistinctFromAttrName(result.name))
+    if (parseDistinctPairs(parser, result, getDistinctPairsAttrName(result.name))
         || parser.parseOptionalAttrDict(result.attributes)) {
         return failure();
     }
@@ -1333,9 +1333,9 @@ void HashJoin::print(OpAsmPrinter& printer) {
 
     printer << " " << keysKeyword << " " << getLeftKey() << ", " << getRightKey();
 
-    printDistinctFrom(printer, getDistinctFromAttr());
+    printDistinctPairs(printer, getDistinctPairsAttr());
 
-    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName(), getDistinctFromAttrName()});
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName(), getDistinctPairsAttrName()});
 }
 
 // The results line up with the two factors' yields exactly as a cross product's do, and
@@ -1359,7 +1359,7 @@ LogicalResult HashJoin::verify() {
                                                 << rightCount << " columns the right factor yields";
     }
 
-    return verifyFactorDistinctFrom(getOperation(), getLeftFactor(), getRightFactor(), getDistinctFromAttr());
+    return verifyDistinctPairs(getOperation(), getLeftFactor(), getRightFactor(), getDistinctPairsAttr());
 }
 
 LogicalResult CreateNode::verify() {

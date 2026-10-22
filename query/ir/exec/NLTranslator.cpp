@@ -1157,8 +1157,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange innerColumns = crossProduct.getInnerColumns();
             config._crossInnerColumns.assign(innerColumns.begin(), innerColumns.end());
 
-            if (const std::optional<llvm::ArrayRef<int64_t>> pairs = crossProduct.getDistinctFrom()) {
-                config._crossedDistinctFrom.assign(pairs->begin(), pairs->end());
+            if (const std::optional<llvm::ArrayRef<int64_t>> pairs = crossProduct.getDistinctPairs()) {
+                config._crossedDistinctPairs.assign(pairs->begin(), pairs->end());
             }
 
             _iteratorConfigs[crossProduct.getResult()] = config;
@@ -1196,8 +1196,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange probeColumns = hashJoinProbe.getColumns();
             config._probeColumns.assign(probeColumns.begin(), probeColumns.end());
 
-            if (const std::optional<llvm::ArrayRef<int64_t>> pairs = hashJoinProbe.getDistinctFrom()) {
-                config._crossedDistinctFrom.assign(pairs->begin(), pairs->end());
+            if (const std::optional<llvm::ArrayRef<int64_t>> pairs = hashJoinProbe.getDistinctPairs()) {
+                config._crossedDistinctPairs.assign(pairs->begin(), pairs->end());
             }
 
             _iteratorConfigs[hashJoinProbe.getResult()] = config;
@@ -5264,10 +5264,10 @@ void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
                         selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
                         selectKeyMatchableForChunkType(keyColumn.getType()));
 
-    const std::span<const int64_t> distinctFrom = config._crossedDistinctFrom;
-    for (size_t position = 0; position + 1 < distinctFrom.size(); position += 2) {
-        const Column* probeEdges = getColumn(columns[distinctFrom[position]]);
-        const Column* buildEdges = state->buffer(distinctFrom[position + 1]);
+    const std::span<const int64_t> distinctPairs = config._crossedDistinctPairs;
+    for (size_t position = 0; position + 1 < distinctPairs.size(); position += 2) {
+        const Column* probeEdges = getColumn(columns[distinctPairs[position]]);
+        const Column* buildEdges = state->buffer(distinctPairs[position + 1]);
         data->addEdgePair(NLJoinEdgePair {._probe = static_cast<const ColumnEdgeIDs*>(probeEdges),
                                           ._build = static_cast<const ColumnEdgeIDs*>(buildEdges)});
     }
@@ -7073,10 +7073,10 @@ void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,
     loopData->setOuterRows(getColumn(outerColumns.front()));
     loopData->setInnerRows(getColumn(innerColumns.front()));
 
-    const std::span<const int64_t> distinctFrom = config._crossedDistinctFrom;
-    for (size_t position = 0; position + 1 < distinctFrom.size(); position += 2) {
-        const Column* outer = getColumn(outerColumns[distinctFrom[position]]);
-        const Column* inner = getColumn(innerColumns[distinctFrom[position + 1]]);
+    const std::span<const int64_t> distinctPairs = config._crossedDistinctPairs;
+    for (size_t position = 0; position + 1 < distinctPairs.size(); position += 2) {
+        const Column* outer = getColumn(outerColumns[distinctPairs[position]]);
+        const Column* inner = getColumn(innerColumns[distinctPairs[position + 1]]);
         loopData->addEdgePair(NLCrossEdgePair {._outer = static_cast<const ColumnEdgeIDs*>(outer),
                                                ._inner = static_cast<const ColumnEdgeIDs*>(inner)});
     }
