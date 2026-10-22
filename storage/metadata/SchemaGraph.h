@@ -61,9 +61,10 @@ public:
 
     // Whether the pattern maps homomorphically into the summary: every node onto a label
     // set carrying its labels, every edge onto an arc of one of its types between the two,
-    // and an edge closing on its own node onto an arc some self-loop holds. A search that
-    // outgrows its budget answers true.
-    bool embeds(const SchemaPattern& pattern, const LabelSetMap& labelSets) const;
+    // and an edge closing on its own node onto an arc some self-loop holds. The search takes
+    // its steps from @param steps, which a caller shares between its searches, and answers
+    // true once they run out.
+    bool embeds(const SchemaPattern& pattern, const LabelSetMap& labelSets, size_t& steps) const;
 
 private:
     mutable std::mutex _mutex;

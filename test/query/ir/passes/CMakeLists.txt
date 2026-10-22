@@ -134,6 +134,8 @@ add_call_v3_test(test_query_ir_fuse_distinct_edges FuseDistinctEdgesTest.cpp)
 
 add_call_v3_test(test_query_ir_prove_distinct_edges ProveDistinctEdgesTest.cpp)
 
+add_call_v3_test(test_query_ir_prove_distinct_edges_long_chain ProveDistinctEdgesLongChainTest.cpp)
+
 add_call_v3_test(test_query_ir_fuse_product_distinct_edges FuseProductDistinctEdgesTest.cpp)
 
 add_ir_tests(test_query_ir_distinct_pairs_rewrite DistinctPairsRewriteTest.cpp)

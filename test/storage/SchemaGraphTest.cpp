@@ -79,6 +79,7 @@ protected:
 
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<Graph> _graph;
+    size_t _steps {1000000};
 };
 
 TEST_F(SchemaGraphTest, countsEveryEdgeUnderItsEndsAndType) {
@@ -119,10 +120,10 @@ TEST_F(SchemaGraphTest, embedsAHopThePartsHold) {
     SchemaPattern pattern;
     pattern._nodes = {{labels(view, {"Person"})}, {labels(view, {"Interest"})}};
     pattern._edges = {edge(0, 1, types(view, {"INTERESTED_IN"}))};
-    EXPECT_TRUE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_TRUE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
 
     pattern._edges = {edge(0, 1, {})};
-    EXPECT_TRUE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_TRUE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
 }
 
 TEST_F(SchemaGraphTest, embedsNoSelfLoopWhereNoneIs) {
@@ -132,11 +133,11 @@ TEST_F(SchemaGraphTest, embedsNoSelfLoopWhereNoneIs) {
     SchemaPattern pattern;
     pattern._nodes = {{labels(view, {"Person"})}};
     pattern._edges = {edge(0, 0, types(view, {"KNOWS_WELL"}))};
-    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
 
     pattern._nodes = {{LabelSet {}}};
     pattern._edges = {edge(0, 0, {})};
-    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
 }
 
 // Remy and Adam know each other, and no interest is interested in a person
@@ -147,12 +148,12 @@ TEST_F(SchemaGraphTest, embedsATwoCycleOnlyWhereTheArcsClose) {
     SchemaPattern people;
     people._nodes = {{labels(view, {"Person"})}, {labels(view, {"Person"})}};
     people._edges = {edge(0, 1, types(view, {"KNOWS_WELL"})), edge(1, 0, types(view, {"KNOWS_WELL"}))};
-    EXPECT_TRUE(view.schemaGraph().embeds(people, view.metadata().labelsets()));
+    EXPECT_TRUE(view.schemaGraph().embeds(people, view.metadata().labelsets(), _steps));
 
     SchemaPattern interest;
     interest._nodes = {{labels(view, {"Person"})}, {labels(view, {"Interest"})}};
     interest._edges = {edge(0, 1, types(view, {"INTERESTED_IN"})), edge(1, 0, types(view, {"INTERESTED_IN"}))};
-    EXPECT_FALSE(view.schemaGraph().embeds(interest, view.metadata().labelsets()));
+    EXPECT_FALSE(view.schemaGraph().embeds(interest, view.metadata().labelsets(), _steps));
 }
 
 // Ghosts knows Remy well: an interest to a person, which the undirected edge reads
@@ -163,10 +164,10 @@ TEST_F(SchemaGraphTest, readsAnUndirectedEdgeEitherWay) {
     SchemaPattern pattern;
     pattern._nodes = {{labels(view, {"Person"})}, {labels(view, {"Interest"})}};
     pattern._edges = {edge(0, 1, types(view, {"KNOWS_WELL"}))};
-    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
 
     pattern._edges = {edge(0, 1, types(view, {"KNOWS_WELL"}), true)};
-    EXPECT_TRUE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_TRUE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
 }
 
 TEST_F(SchemaGraphTest, embedsNoNodeNoLabelSetAllows) {
@@ -175,7 +176,28 @@ TEST_F(SchemaGraphTest, embedsNoNodeNoLabelSetAllows) {
 
     SchemaPattern pattern;
     pattern._nodes = {{labels(view, {"Person", "Interest"})}};
-    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets()));
+    EXPECT_FALSE(view.schemaGraph().embeds(pattern, view.metadata().labelsets(), _steps));
+}
+
+// A person can reach a person or an interest over any edge, so the chain has a way of its own
+// at every link, but no INTERESTED_IN edge ends on a person: the last link rules out every
+// way at once, however long the chain
+TEST_F(SchemaGraphTest, embedsNoChainItsLastLinkRulesOut) {
+    constexpr size_t LINK_COUNT = 40;
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    SchemaPattern chain;
+    chain._nodes.resize(LINK_COUNT + 1);
+    chain._nodes.front()._labels = labels(view, {"Person"});
+    chain._nodes.back()._labels = labels(view, {"Person"});
+    for (size_t link = 0; link + 1 < LINK_COUNT; link++) {
+        chain._edges.push_back(edge(link, link + 1, {}));
+    }
+    chain._edges.push_back(edge(LINK_COUNT - 1, LINK_COUNT, types(view, {"INTERESTED_IN"})));
+
+    EXPECT_FALSE(view.schemaGraph().embeds(chain, view.metadata().labelsets(), _steps));
 }
 
 // 40 parts after simpledb's, each adding one node, Even or Odd by turns, and three edges:
@@ -269,6 +291,6 @@ TEST_F(SchemaGraphTest, refreshesToThePartsAViewHolds) {
     SchemaPattern loop;
     loop._nodes = {{labels(viewAfter, {"Person"})}};
     loop._edges = {edge(0, 0, types(viewAfter, {"KNOWS_WELL"}))};
-    EXPECT_TRUE(viewAfter.schemaGraph().embeds(loop, viewAfter.metadata().labelsets()));
-    EXPECT_FALSE(viewBefore.schemaGraph().embeds(loop, viewBefore.metadata().labelsets()));
+    EXPECT_TRUE(viewAfter.schemaGraph().embeds(loop, viewAfter.metadata().labelsets(), _steps));
+    EXPECT_FALSE(viewBefore.schemaGraph().embeds(loop, viewBefore.metadata().labelsets(), _steps));
 }
