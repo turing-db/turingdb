@@ -518,11 +518,12 @@ private:
     void checkEdgeDistinct(const VariableDependency* edge);
     // The pairs the hops could not check, their columns having met only in a cross product
     void checkCrossedEdgesDistinct();
-    void collectEdgesToDiffer(const VariableDependency* edge,
-                              llvm::SmallVectorImpl<mlir::Value>& others,
-                              llvm::SmallVectorImpl<llvm::StringRef>& names);
-    mlir::Value checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others, llvm::ArrayRef<llvm::StringRef> names);
+    void collectEdgesToDiffer(const VariableDependency* edge, llvm::SmallVectorImpl<mlir::Value>& others);
+    mlir::Value checkEdgeDistinctMask(mlir::Value subject, mlir::ValueRange others);
     const VarDecl* edgeIdentityOf(const VariableDependency* edge) const;
+
+    // The location of the op binding an edge or a path, named after the query's name for it
+    mlir::Location edgeLocation(const VariableDependency* edge) const;
 
     // Joins each pattern variable to the column a CALL yielded under its name: the two are
     // one Cypher variable, and the call has already paired its rows with the ones the

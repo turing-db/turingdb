@@ -10121,51 +10121,46 @@ void collectJoinedNodes(LineageClimbs& climbs, RowFlow& flow) {
     }
 }
 
-// The op that bound an edge or path column, climbing back through the filters, carry sets
-// and product yields the column came down: a hop's eids or an exploration's paths
-bool climbToBindingOp(Value column, Operation*& op) {
-    for (;;) {
-        Operation* const def = column.getDefiningOp();
-        if (!def) {
-            return false;
-        }
+// The op that bound an edge or path column: the hop whose eids or the exploration whose paths
+// the column's lineage climbs to
+bool bindingOpOf(Value column, LineageClimbs& climbs, Operation*& op) {
+    constexpr unsigned EDGE_IDS_RESULT_INDEX = 1;
+    constexpr unsigned PATHS_RESULT_INDEX = 2;
 
-        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
-        if (FilterOp filter = dyn_cast<FilterOp>(def)) {
-            column = filter.getColumnsToFilter()[resultIndex];
-        } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
-            FactorColumn factorColumn;
-            locateFactorColumn(product, resultIndex, factorColumn);
-            column = factorYieldColumns(*factorColumn._factor)[factorColumn._position];
-        } else if (isEdgeHop(def)) {
-            constexpr size_t EDGE_IDS_RESULT_INDEX = 1;
-            if (resultIndex == EDGE_IDS_RESULT_INDEX) {
-                op = def;
-                return true;
-            } else if (resultIndex >= hopFixedResultCount) {
-                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
-            } else {
-                return false;
-            }
-        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
-            constexpr size_t PATHS_RESULT_INDEX = 2;
-            if (resultIndex == PATHS_RESULT_INDEX) {
-                op = def;
-                return true;
-            } else if (resultIndex >= pathFixedResultCount) {
-                column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
+    const OpResult anchor = dyn_cast_or_null<OpResult>(climbs.anchorOf(column));
+    if (!anchor) {
+        return false;
     }
+
+    Operation* const def = anchor.getOwner();
+    const unsigned resultIndex = anchor.getResultNumber();
+    const bool bindsEdges = isEdgeHop(def) && resultIndex == EDGE_IDS_RESULT_INDEX;
+    const bool bindsPaths = isa<ExplorePaths>(def) && resultIndex == PATHS_RESULT_INDEX;
+    if (!bindsEdges && !bindsPaths) {
+        return false;
+    }
+
+    op = def;
+
+    return true;
 }
 
-bool describeEdge(Value column, const RowFlow& flow, PatternEdge& edge) {
+// The query's name for an edge or path column, which codegen leaves on the location of the
+// op binding it
+llvm::StringRef edgeName(Value column, LineageClimbs& climbs) {
     Operation* op = nullptr;
-    if (!climbToBindingOp(column, op)) {
+    if (!bindingOpOf(column, climbs, op)) {
+        return "?";
+    }
+
+    const NameLoc name = dyn_cast<NameLoc>(op->getLoc());
+
+    return name ? name.getName().getValue() : llvm::StringRef("?");
+}
+
+bool describeEdge(Value column, const RowFlow& flow, LineageClimbs& climbs, PatternEdge& edge) {
+    Operation* op = nullptr;
+    if (!bindingOpOf(column, climbs, op)) {
         return false;
     }
 
@@ -10686,14 +10681,6 @@ bool matchDistinctnessFilter(FilterOp filter, DistinctnessFilter& matched) {
     return true;
 }
 
-llvm::StringRef pairName(ArrayAttr names, size_t index) {
-    if (!names) {
-        return "?";
-    }
-
-    return cast<StringAttr>(names[index]).getValue();
-}
-
 // What the proofs may read of the graph: its label sets, and its parts' edges through the
 // summary and the sort by type, when every edge the query will see is in the parts
 struct ProofSources {
@@ -10731,29 +10718,28 @@ void provePairs(const ProofSources& sources,
                 std::string& report,
                 ProvenPairs& proven) {
     CheckEdgeDistinct check = proven._matched._check;
-    const ArrayAttr names = check.getNamesAttr();
-
     RowFlow flow;
     collectRowFlow(check.getSubject(), index, climbs, flow);
     collectDownstreamFilters(proven._matched._filter, flow);
     collectJoinedNodes(climbs, flow);
 
     PatternEdge subject;
-    const bool subjectKnown = describeEdge(check.getSubject(), flow, subject);
+    const bool subjectKnown = describeEdge(check.getSubject(), flow, climbs, subject);
+    const llvm::StringRef subjectName = edgeName(check.getSubject(), climbs);
 
     const Operation::operand_range others = check.getOthers();
     for (size_t index = 0; index < others.size(); index++) {
         PatternEdge edge;
-        const bool known = subjectKnown && describeEdge(others[index], flow, edge);
+        const bool known = subjectKnown && describeEdge(others[index], flow, climbs, edge);
 
         const DistinctEdgesVerdict verdict = known ? proveDistinct(sources, flow, subject, edge, steps) : DistinctEdgesVerdict::Kept;
         if (verdict == DistinctEdgesVerdict::Kept) {
             proven._kept.push_back(index);
         }
 
-        report += pairName(names, 0);
+        report += subjectName;
         report += " <> ";
-        report += pairName(names, index + 1);
+        report += edgeName(others[index], climbs);
         report += ": ";
         report += verdictName(verdict);
         report += '\n';
@@ -10762,39 +10748,28 @@ void provePairs(const ProofSources& sources,
 
 // Drops the operands the pair proofs settled: the check goes with its filter when none is
 // left, and narrows to the kept ones otherwise
-void narrowCheck(const ProvenPairs& proven, mlir::OpBuilder& builder) {
+void narrowCheck(const ProvenPairs& proven, mlir::RewriterBase& rewriter) {
     CheckEdgeDistinct check = proven._matched._check;
     FilterOp filter = proven._matched._filter;
-    const ArrayAttr names = check.getNamesAttr();
     const Operation::operand_range others = check.getOthers();
 
     if (proven._kept.size() == others.size()) {
         return;
-    }
-
-    if (proven._kept.empty()) {
+    } else if (proven._kept.empty()) {
         bypassFilter(filter);
-        filter.erase();
-        check.erase();
+        rewriter.eraseOp(filter);
+        rewriter.eraseOp(check);
         return;
     }
 
     llvm::SmallVector<Value, 4> kept;
-    llvm::SmallVector<llvm::StringRef, 4> keptNames {pairName(names, 0)};
     for (const size_t index : proven._kept) {
         kept.push_back(others[index]);
-        keptNames.push_back(pairName(names, index + 1));
     }
 
-    builder.setInsertionPoint(check);
-    CheckEdgeDistinct narrowed = builder.create<CheckEdgeDistinct>(check.getLoc(),
-                                                                   check.getResult().getType(),
-                                                                   check.getSubject(),
-                                                                   kept,
-                                                                   names ? builder.getStrArrayAttr(keptNames) : ArrayAttr());
-
-    check.getResult().replaceAllUsesWith(narrowed.getResult());
-    check.erase();
+    rewriter.modifyOpInPlace(check, [&check, &kept]() {
+        check.getOthersMutable().assign(kept);
+    });
 }
 
 struct ProveDistinctEdges : public impl::ProveDistinctEdgesBase<ProveDistinctEdges> {
@@ -10831,9 +10806,9 @@ struct ProveDistinctEdges : public impl::ProveDistinctEdgesBase<ProveDistinctEdg
             provePairs(sources, index, climbs, steps, report, proven);
         }
 
-        mlir::OpBuilder builder(&getContext());
+        mlir::IRRewriter rewriter(&getContext());
         for (const ProvenPairs& proven : checks) {
-            narrowCheck(proven, builder);
+            narrowCheck(proven, rewriter);
         }
 
         ::db::ExplainReport* const explain = context._explain;
