@@ -34,6 +34,7 @@ add_mlir_library(turing_db_ir_storagedialect_s
   PathHopArguments.cpp
   LabelAlternativesFormat.cpp
   MergePatternShape.cpp
+  MakePathShape.cpp
   ColumnIndicesFormat.cpp
   PropertyScanLiteral.cpp
 

@@ -1,5 +1,7 @@
 add_ir_tests(test_query_ir_explore_paths_dialect ExplorePathsDialectTest.cpp)
 
+add_ir_tests(test_query_ir_make_path_dialect MakePathDialectTest.cpp)
+
 add_ir_tests(test_query_ir_explore_end_constraint ExploreEndConstraintTest.cpp)
 
 add_ir_tests(test_query_ir_explore_bound_ends ExploreBoundEndsTest.cpp)

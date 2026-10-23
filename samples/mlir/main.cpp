@@ -561,12 +561,19 @@ private:
             return true;
         }
 
-        const std::span<const NodeID> nodes = path.getNodes();
-        const std::span<const EdgeID> edges = path.getEdges();
+        const std::span<const uint64_t> ids = path.getIDs();
 
-        std::cout << "[(" << nodes.front().getValue() << ")";
-        for (size_t hop = 0; hop < edges.size(); hop++) {
-            std::cout << ", [" << edges[hop].getValue() << "], (" << nodes[hop + 1].getValue() << ")";
+        std::cout << "[";
+        for (size_t position = 0; position < ids.size(); position++) {
+            if (position > 0) {
+                std::cout << ", ";
+            }
+
+            if (GraphPath::isNodeAt(position)) {
+                std::cout << "(" << ids[position] << ")";
+            } else {
+                std::cout << "[" << ids[position] << "]";
+            }
         }
         std::cout << "]";
 

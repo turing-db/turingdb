@@ -368,14 +368,12 @@ private:
     }
 
     void writePath(const db::GraphPath& path) {
-        const std::span<const db::NodeID> nodes = path.getNodes();
-        const std::span<const db::EdgeID> edges = path.getEdges();
-        bioassert(nodes.size_bytes() <= MAX_WIRE_SIZE, "Path length exceeds maximum wire size");
+        const std::span<const uint64_t> ids = path.getIDs();
+        bioassert(ids.size_bytes() <= MAX_WIRE_SIZE, "Path length exceeds maximum wire size");
 
-        const WireSize nodeCount = static_cast<WireSize>(nodes.size());
+        const WireSize nodeCount = static_cast<WireSize>(path.getNodeCount());
         _outBuf->copyFixedLenData(&nodeCount, sizeof(nodeCount));
-        _outBuf->copyVarLenData(nodes.data(), nodes.size_bytes());
-        _outBuf->copyVarLenData(edges.data(), edges.size_bytes());
+        _outBuf->copyVarLenData(ids.data(), ids.size_bytes());
     }
 
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};

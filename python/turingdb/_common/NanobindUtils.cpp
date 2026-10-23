@@ -422,14 +422,11 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                         continue;
                     }
 
-                    const std::span<const db::NodeID> nodes = path.getNodes();
-                    const std::span<const db::EdgeID> edges = path.getEdges();
+                    const std::span<const uint64_t> ids = path.getIDs();
 
                     nb::list rowList;
-                    rowList.append(pathEntityDict("node", nodes.front().getValue()));
-                    for (size_t hop = 0; hop < edges.size(); hop++) {
-                        rowList.append(pathEntityDict("edge", edges[hop].getValue()));
-                        rowList.append(pathEntityDict("node", nodes[hop + 1].getValue()));
+                    for (size_t position = 0; position < ids.size(); position++) {
+                        rowList.append(pathEntityDict(db::GraphPath::isNodeAt(position) ? "node" : "edge", ids[position]));
                     }
                     lst.append(rowList);
                 }

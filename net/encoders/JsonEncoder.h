@@ -212,17 +212,15 @@ private:
             return;
         }
 
-        const std::span<const NodeID> nodes = value.getNodes();
-        const std::span<const EdgeID> edges = value.getEdges();
+        const std::span<const uint64_t> ids = value.getIDs();
 
         _writer.write('[');
-        encodePathEntity("node", nodes.front().getValue());
+        for (size_t position = 0; position < ids.size(); position++) {
+            if (position > 0) {
+                _writer.write(',');
+            }
 
-        for (size_t hop = 0; hop < edges.size(); hop++) {
-            _writer.write(',');
-            encodePathEntity("edge", edges[hop].getValue());
-            _writer.write(',');
-            encodePathEntity("node", nodes[hop + 1].getValue());
+            encodePathEntity(GraphPath::isNodeAt(position) ? "node" : "edge", ids[position]);
         }
 
         _writer.write(']');

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <optional>
 #include <span>
+#include <string>
 
 #include "DecodedColumnSchema.h"
 #include "GraphPath.h"
@@ -236,8 +237,8 @@ struct VectorColumnDecoder<SinkMapEntryView<Sink>, Sink> {
     }
 };
 
-// A path is [nodeCount][nodes][edges], with one edge fewer than nodes, or none for the
-// null path.
+// A path is [nodeCount][ids], its IDs in path order, nodes and edges alternating: one
+// fewer edge than nodes, or no ID at all for the null path.
 template <ProtoDecodeSink Sink>
 struct VectorColumnDecoder<db::GraphPath, Sink> {
     using T = db::GraphPath;
@@ -251,30 +252,24 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
         }
 
         for (size_t i = 0; context->_rowIndex + i < columnState->getNumRows(); ++i) {
-            db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
-
-            if (!context->_pathNodesRead) {
-                if (context->_inBuf->readable() < sizeof(WireSize)) {
-                    context->_rowIndex += i;
-                    return false;
-                }
-
-                WireSize nodeCount = 0;
-                context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
-                path.resize(nodeCount, nodeCount == 0 ? 0 : nodeCount - 1);
-
-                const std::span<db::NodeID> nodes = path.getNodes();
-                if (!readVarLenPayload(context, reinterpret_cast<char*>(nodes.data()), nodes.size_bytes())) {
-                    context->_rowIndex += i;
-                    context->_pathNodesRead = true;
-                    return false;
-                }
+            if (context->_inBuf->readable() < sizeof(WireSize)) {
+                context->_rowIndex += i;
+                return false;
             }
 
-            context->_pathNodesRead = false;
+            WireSize nodeCount = 0;
+            context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
 
-            const std::span<db::EdgeID> edges = path.getEdges();
-            if (!readVarLenPayload(context, reinterpret_cast<char*>(edges.data()), edges.size_bytes())) {
+            const size_t idBytes = db::GraphPath::idCountOf(nodeCount) * sizeof(uint64_t);
+            if (idBytes > MAX_WIRE_SIZE) {
+                throw TuringException("Invalid path node count " + std::to_string(nodeCount));
+            }
+
+            db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
+            path.setNodeCount(nodeCount);
+
+            const std::span<uint64_t> ids = path.getIDs();
+            if (!readVarLenPayload(context, reinterpret_cast<char*>(ids.data()), ids.size_bytes())) {
                 context->_rowIndex += i + 1;
                 return false;
             }

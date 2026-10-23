@@ -821,8 +821,8 @@ public:
     // count_distinct use only the per-group tally, so their grow/emit ignore the
     // value type. count's fold has an all-rows form (count(*) over an ID chunk) and a
     // present-values form (count(x) over a nullable value chunk); count_distinct's
-    // has an ID form and a present-values form the same way, both keyed on the
-    // value's bytes - so, unlike count, an embedding column is rejected.
+    // has a chunk form, keyed as a whole-row DISTINCT keys the row, and a present-values
+    // form keyed on the value's bytes - so, unlike count, an embedding column is rejected.
     static NLGroupAggregateGrowFunction selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType);
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
 

@@ -16,6 +16,7 @@
 #include "LabelAlternativesFormat.h"
 #include "StorageAttributes.h"
 #include "MergePatternShape.h"
+#include "MakePathShape.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
 
@@ -631,6 +632,16 @@ LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
     }
 
     return success();
+}
+
+LogicalResult MakePath::verify() {
+    llvm::SmallVector<Type> elementTypes;
+    for (const Value entity : getEntities()) {
+        const auto chunk = dyn_cast<ChunkType>(entity.getType());
+        elementTypes.push_back(chunk ? chunk.getElementType() : Type());
+    }
+
+    return verifyMakePath(getOperation(), elementTypes, getReversedPaths());
 }
 
 LogicalResult CountSubqueryTally::verify() {
