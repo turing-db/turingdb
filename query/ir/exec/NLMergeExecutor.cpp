@@ -6,9 +6,12 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <variant>
 #include <vector>
+
+#include <spdlog/fmt/bundled/format.h>
 
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
@@ -20,6 +23,7 @@
 
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
+#include "writers/MetadataBuilder.h"
 
 #include "NLExecutionContext.h"
 #include "NLWriteProperties.h"
@@ -146,6 +150,26 @@ void throwIfBoundNodeIsNull(const NLMergeData::Node& node, size_t rowCount) {
     }
 }
 
+// A null matches no stored value, so a merge keyed on one would write the pattern again
+// on every run
+void throwIfKeyIsNull(const MetadataBuilder* metadataBuilder,
+                      const std::vector<NLMergeProperty>& properties,
+                      const NLMergeWorkingSet::PropertiesPerRow& extracted) {
+    for (size_t index = 0; index < properties.size(); index++) {
+        const bool holdsNull = !std::ranges::all_of(extracted[index], [](const CommitWriteBuffer::UntypedProperty& property) {
+            return holdsValue(property.value);
+        });
+
+        if (holdsNull) {
+            const PropertyTypeID propertyTypeID = properties[index]._propertyType._id;
+            const std::optional<std::string_view> name = metadataBuilder->findPropertyTypeName(propertyTypeID);
+            bioassert(name, "Property type {} is not in the change's metadata", propertyTypeID.getValue());
+
+            throw IRException(fmt::format("MERGE cannot match on property '{}', which is null", *name));
+        }
+    }
+}
+
 }
 
 NLMergeExecutor::NLMergeExecutor(NLExecutionContext* context, NLMergeData* data)
@@ -174,14 +198,26 @@ void NLMergeExecutor::run() {
     clearResults();
     extractProperties(rowCount);
 
-    for (const NLMergeData::Node& node : _data->nodes()) {
+    const std::vector<NLMergeData::Node>& nodes = _data->nodes();
+    const std::vector<NLMergeData::Hop>& hops = _data->hops();
+    const MetadataBuilder* metadataBuilder = _context->getMetadataBuilder();
+
+    for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
+        const NLMergeData::Node& node = nodes[nodeIndex];
+
         if (node._boundColumn) {
             throwIfBoundNodeIsNull(node, rowCount);
         }
+
+        throwIfKeyIsNull(metadataBuilder, node._properties, _work->_nodeProperties[nodeIndex]);
     }
 
-    _work->_candidates.resize(_data->nodes().size());
-    _work->_candidateKeys.resize(_data->nodes().size());
+    for (size_t hopIndex = 0; hopIndex < hops.size(); hopIndex++) {
+        throwIfKeyIsNull(metadataBuilder, hops[hopIndex]._properties, _work->_hopProperties[hopIndex]);
+    }
+
+    _work->_candidates.resize(nodes.size());
+    _work->_candidateKeys.resize(nodes.size());
 
     for (size_t row = 0; row < rowCount; row++) {
         matchRow(row);

@@ -95,6 +95,67 @@ TEST_F(MergeRejectionTest, rejectsAPatternOnANodeAnOptionalMatchMissed) {
         << status.getError();
 }
 
+// A null matches nothing, so a merge keyed on one would write a node on every run. The
+// analyzer turns away a key that is null by type.
+TEST_F(MergeRejectionTest, rejectsANodeKeyThatIsNullByType) {
+    QueryStatus status;
+    runQuery("MERGE (t:Tag {name: 'k', flag: 1 < 'a'})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'flag', which is null"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(MergeRejectionTest, rejectsANodeKeyThatIsNullOnOneRow) {
+    QueryStatus status;
+    runQuery("UNWIND [null, 'a'] AS v MERGE (t:Tag {name: v}) RETURN t.name", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'name', which is null"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(MergeRejectionTest, rejectsANodeKeyThatIsNullOnTheLastRow) {
+    QueryStatus status;
+    runQuery("UNWIND ['a', 'b', null] AS v MERGE (t:Tag {name: v})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'name', which is null"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(MergeRejectionTest, rejectsANodeKeyACaseMakesNullOnOneRow) {
+    QueryStatus status;
+    runQuery("MATCH (p:Person) "
+             "MERGE (t:Tag {name: CASE WHEN p.name = 'Remy' THEN null ELSE p.name END})",
+             status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'name', which is null"), std::string::npos)
+        << status.getError();
+}
+
+// Remy and Adam have an age, the other Person nodes do not
+TEST_F(MergeRejectionTest, rejectsANodeKeyReadFromAMissingProperty) {
+    QueryStatus status;
+    runQuery("MATCH (p:Person) MERGE (t:Tag {name: 'x', age: p.age})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'age', which is null"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(MergeRejectionTest, rejectsAnEdgeKeyThatIsNullOnOneRow) {
+    QueryStatus status;
+    runQuery("MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Adam'}) "
+             "UNWIND [1, null] AS w MERGE (a)-[:PROBE {weight: w}]->(b)",
+             status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'weight', which is null"), std::string::npos)
+        << status.getError();
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

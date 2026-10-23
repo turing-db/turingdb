@@ -1,6 +1,7 @@
 #include "NLWriteProperties.h"
 
 #include <optional>
+#include <variant>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -390,6 +391,10 @@ size_t db::committedEdgeCount(const GraphView* view) {
 
     const GraphReader reader = view->read();
     return reader.getTotalEdgesAllocated();
+}
+
+bool db::holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value) {
+    return std::visit([](const auto& held) { return held.has_value(); }, value);
 }
 
 void db::fillNullProperties(size_t rowCount,

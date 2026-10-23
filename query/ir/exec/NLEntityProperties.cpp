@@ -122,10 +122,6 @@ MapBuffer<>::MapItemVariant writtenValue(NLWrittenValues& written,
     return PropertyNull {};
 }
 
-bool holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value) {
-    return std::visit([](const auto& held) { return held.has_value(); }, value);
-}
-
 }
 
 NLEntityProperties::NLEntityProperties(NLExecutionContext* context, NLValueStore* readValues)

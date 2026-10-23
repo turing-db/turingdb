@@ -16,6 +16,8 @@ class GraphView;
 size_t committedNodeCount(const GraphView* view);
 size_t committedEdgeCount(const GraphView* view);
 
+bool holdsValue(const CommitWriteBuffer::SupportedTypeVariant& value);
+
 // The values one property column holds, as the write buffer takes them: one entry per
 // row, owning whatever the column only borrows. What a create, a set and a merge all
 // turn a row's asked-for value into before writing it.
