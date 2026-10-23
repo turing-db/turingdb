@@ -1646,6 +1646,41 @@ void applyNotOnOptMask(Column* result, const Column* operand) {
                                                static_cast<const ColumnOptMask*>(operand));
 }
 
+std::optional<CustomBool> negatedTruth(const auto& cell) {
+    const std::optional<CustomBool> truth = truthValue(cell);
+    if (!truth.has_value()) {
+        return std::nullopt;
+    }
+
+    return CustomBool {!truth->_boolean};
+}
+
+void applyNotOnTaggedCells(Column* result, const Column* operand) {
+    const std::vector<ListElementView>& operandRaw = static_cast<const ColumnVector<ListElementView>*>(operand)->getRaw();
+    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ListElementView cell) {
+        return negatedTruth(cell);
+    });
+}
+
+void applyNotOnOptTaggedCells(Column* result, const Column* operand) {
+    const std::vector<std::optional<ListElementView>>& operandRaw =
+        static_cast<const ColumnOptVector<ListElementView>*>(operand)->getRaw();
+    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const std::optional<ListElementView>& cell) {
+        return negatedTruth(cell);
+    });
+}
+
+void applyNotOnConstTaggedCell(Column* result, const Column* operand) {
+    const ListElementView cell = static_cast<const ColumnConst<ListElementView>*>(operand)->getRaw();
+    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->getRaw() = negatedTruth(cell);
+}
+
 void applyNotOnConst(Column* result, const Column* operand) {
     const ColumnConst<CustomBool>* typedOperand = static_cast<const ColumnConst<CustomBool>*>(operand);
     ColumnConst<CustomBool>* typedResult = static_cast<ColumnConst<CustomBool>*>(result);
@@ -9199,6 +9234,15 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
     } else if (kind == ColumnOptMask::staticKind()) {
         result = memory->alloc<ColumnOptMask>();
         return &applyNotOnOptMask;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        result = memory->alloc<ColumnOptMask>();
+        return &applyNotOnTaggedCells;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        result = memory->alloc<ColumnOptMask>();
+        return &applyNotOnOptTaggedCells;
+    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+        return &applyNotOnConstTaggedCell;
     }
 
     result = memory->alloc<ColumnMask>();
@@ -9542,6 +9586,22 @@ NLUnaryFunctionKernel NLExecutor::selectNumberFunction(const Column* input, bool
     }
 
     throw IRException("A numeric function reads an integer or a double column");
+}
+
+NLUnaryFunctionKernel NLExecutor::selectNegateFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Duration::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::Duration::Primitive>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedNegateFunction>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("A unary minus reads an integer, a double or a duration column");
 }
 
 template <FloatFunctionKind Kind>

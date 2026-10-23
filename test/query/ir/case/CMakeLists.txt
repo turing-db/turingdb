@@ -27,3 +27,5 @@ add_turing_test(test_query_ir_case_equality_rule CaseEqualityRuleTest.cpp)
 add_call_v3_test(test_query_ir_case_branch_value_type CaseBranchValueTypeTest.cpp)
 
 add_call_v3_test(test_query_ir_case_any_binary_operator CaseAnyBinaryOperatorTest.cpp)
+
+add_call_v3_test(test_query_ir_case_any_unary_operator CaseAnyUnaryOperatorTest.cpp)

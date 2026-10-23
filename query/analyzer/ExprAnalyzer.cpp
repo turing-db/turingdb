@@ -835,7 +835,8 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
         case UnaryOperator::Not: {
             const EvaluatedType operandType = operand->getType();
             const bool negatesATruthValue = operandType == EvaluatedType::Bool
-                                            || operandType == EvaluatedType::Null;
+                                            || operandType == EvaluatedType::Null
+                                            || operandType == EvaluatedType::Any;
 
             if (!negatesATruthValue) {
                 const std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
@@ -857,6 +858,8 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
                 type = EvaluatedType::Duration;
             } else if (operandType == EvaluatedType::Null) {
                 type = EvaluatedType::Null;
+            } else if (operandType == EvaluatedType::Any) {
+                type = EvaluatedType::Any;
             } else {
                 const std::string error = fmt::format("Operand must be an integer, a double or a duration, not '{}'",
                                                       EvaluatedTypeName::value(operandType));

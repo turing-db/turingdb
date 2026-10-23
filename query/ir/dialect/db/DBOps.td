@@ -2947,6 +2947,9 @@ def Last : ListFunctionOp<"last">;
 def Tail : ListFunctionOp<"tail">;
 
 def Abs : NumberFunctionOp<"abs">;
+
+// Unary minus: the number or the duration of the opposite sign
+def Negate : TypedUnaryFunctionOp<"negate", "::mlir::IntegerType, ::mlir::FloatType, ::mlir::storage::DurationType">;
 def Sign : NumberFunctionOp<"sign">;
 def Ceil : NumberFunctionOp<"ceil">;
 def Floor : NumberFunctionOp<"floor">;

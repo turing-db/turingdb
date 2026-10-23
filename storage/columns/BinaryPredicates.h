@@ -285,8 +285,8 @@ concept ConnectsTruthValues = std::same_as<F, std::logical_and<>>
 template <typename F, typename T, typename U>
 concept ConnectsATaggedCell = ConnectsTruthValues<F> && (TaggedCellOperand<T> || TaggedCellOperand<U>);
 
-// The truth value an operand of AND, OR or XOR holds. A cell holds one where it is tagged
-// as a boolean or a null, and anything else is a type error, as it is in a WHERE.
+// The truth value an operand of AND, OR, XOR or NOT holds. A cell holds one where it is
+// tagged as a boolean or a null, and anything else is a type error, as it is in a WHERE.
 template <typename T>
 inline std::optional<CustomBool> truthValue(const T& value) {
     using Decayed = std::decay_t<T>;
@@ -306,7 +306,7 @@ inline std::optional<CustomBool> truthValue(const T& value) {
             return std::nullopt;
         }
 
-        throw TuringException("AND, OR and XOR operands must be booleans");
+        throw TuringException("Logical operands must be booleans");
     } else if constexpr (std::is_same_v<Decayed, PropertyNull>) {
         return std::nullopt;
     } else {

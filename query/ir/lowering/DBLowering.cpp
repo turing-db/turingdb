@@ -144,6 +144,15 @@ mlir::Type absFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement)
     return inputElement;
 }
 
+mlir::Type negatedFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(inputElement);
+    if (integerType && integerType.isUnsigned()) {
+        return builder.getIntegerType(64);
+    }
+
+    return inputElement;
+}
+
 mlir::Type booleanFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI1Type();
 }
@@ -308,6 +317,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
 
     {"db.abs",      {&emitNLUnaryFunction<nl::Abs>,      &absFunctionElement,     ResultNullability::FollowsInput}},
+    {"db.negate",   {&emitNLUnaryFunction<nl::Negate>,   &negatedFunctionElement, ResultNullability::FollowsInput}},
     {"db.sign",     {&emitNLUnaryFunction<nl::Sign>,     &integerFunctionElement, ResultNullability::FollowsInput}},
     {"db.ceil",     {&emitNLUnaryFunction<nl::Ceil>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
     {"db.floor",    {&emitNLUnaryFunction<nl::Floor>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
@@ -6511,7 +6521,9 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
     const mlir::Value operandChunk = mapValue(notOp.getOperand());
 
     const mlir::Type operandType = operandChunk.getType();
-    const bool resultNull = isNullableChunk(operandType);
+
+    // A cell may hold a null, so its negation may be one
+    const bool resultNull = isNullableChunk(operandType) || holdsTaggedCells(operandType);
 
     mlir::MLIRContext* bldCtxt = _builder.getContext();
 

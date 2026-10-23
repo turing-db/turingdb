@@ -7705,19 +7705,8 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
                 break;
             }
 
-            // -x is 0 - x, the subtraction the engine already lowers: the promotion of the
-            // zero against the operand is what gives the negation its type
             const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-            const mlir::TypedAttr zeroAttr = _opBuilder.getI64IntegerAttr(0);
-            const mlir::db::ColumnType zeroType = allocColumnType(zeroAttr.getType());
-            const mlir::Value zero = _opBuilder.create<mlir::db::ConstantOp>(loc, zeroType, zeroAttr).getResult();
-
-            const bool negatesADuration = expr->getType() == EvaluatedType::Duration;
-            const mlir::Value origin = negatesADuration
-                                         ? _opBuilder.create<mlir::db::ToDuration>(loc, noneType, zero).getResult()
-                                         : zero;
-
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, origin, operandVal).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::Negate>(loc, noneType, operandVal).getResult();
         }
         break;
 

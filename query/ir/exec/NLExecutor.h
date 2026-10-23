@@ -530,6 +530,8 @@ public:
     template <template <typename> typename NumberFunctor>
     static NLUnaryFunctionKernel selectNumberFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    static NLUnaryFunctionKernel selectNegateFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
     template <FloatFunctionKind Kind>
     static NLUnaryFunctionKernel selectFloatFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 

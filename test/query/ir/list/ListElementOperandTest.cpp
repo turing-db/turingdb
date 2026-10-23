@@ -203,6 +203,15 @@ TEST_F(ListElementOperandTest, connectsABooleanCell) {
                {{"true", "true", "false"}, {"false", "false", "true"}, {"null", "null", "null"}});
 }
 
+TEST_F(ListElementOperandTest, negatesABooleanCell) {
+    expectRows("WITH [true, 'a', false, null] AS l UNWIND [0, 2, 3] AS i RETURN NOT l[i]",
+               {{"false"}, {"true"}, {"null"}});
+}
+
+TEST_F(ListElementOperandTest, negatesANumberCell) {
+    expectRows("UNWIND [1, 2.5, null] AS x RETURN -x, +x", {{"-1", "1"}, {"-2.5", "2.5"}, {"null", "null"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

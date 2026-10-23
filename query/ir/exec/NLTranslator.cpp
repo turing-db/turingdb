@@ -179,6 +179,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.tail",       &NLExecutor::selectFunction<ListTailFunction>},
 
     {"nl.abs",      &NLExecutor::selectNumberFunction<AbsFunction>},
+    {"nl.negate",   &NLExecutor::selectNegateFunction},
     {"nl.sign",     &NLExecutor::selectNumberFunction<SignFunction>},
     {"nl.ceil",     &NLExecutor::selectFloatFunction<FloatFunctionKind::Ceil>},
     {"nl.floor",    &NLExecutor::selectFloatFunction<FloatFunctionKind::Floor>},
