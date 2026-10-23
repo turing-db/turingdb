@@ -236,34 +236,50 @@ struct VectorColumnDecoder<SinkMapEntryView<Sink>, Sink> {
     }
 };
 
+// A path is [nodeCount][nodes][edges], with one edge fewer than nodes, or none for the
+// null path.
 template <ProtoDecodeSink Sink>
-struct VectorColumnDecoder<db::Path, Sink> {
-    using T = db::Path;
+struct VectorColumnDecoder<db::GraphPath, Sink> {
+    using T = db::GraphPath;
 
     static bool decode(DecodeContext* context,
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
         if (context->_rowIndex == 0) {
-            typedColumn->reserve(columnState->getNumRows());
+            typedColumn->resize(columnState->getNumRows());
         }
 
         for (size_t i = 0; context->_rowIndex + i < columnState->getNumRows(); ++i) {
-            if (context->_inBuf->readable() < sizeof(WireSize)) {
-                context->_rowIndex += i;
-                return false;
+            db::GraphPath& path = (*typedColumn)[context->_rowIndex + i];
+
+            if (!context->_pathNodesRead) {
+                if (context->_inBuf->readable() < sizeof(WireSize)) {
+                    context->_rowIndex += i;
+                    return false;
+                }
+
+                WireSize nodeCount = 0;
+                context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
+                path.resize(nodeCount, nodeCount == 0 ? 0 : nodeCount - 1);
+
+                const std::span<db::NodeID> nodes = path.getNodes();
+                if (!readVarLenPayload(context, reinterpret_cast<char*>(nodes.data()), nodes.size_bytes())) {
+                    context->_rowIndex += i;
+                    context->_pathNodesRead = true;
+                    return false;
+                }
             }
 
-            WireSize pathByteSize = 0;
-            context->_inBuf->readData(&pathByteSize, sizeof(pathByteSize));
-            const size_t numEntities = checkedElementCount<db::EntityID>(pathByteSize, "path");
+            context->_pathNodesRead = false;
 
-            auto& path = typedColumn->emplace_back(numEntities);
-            if (!readVarLenPayload(context, reinterpret_cast<char*>(path.data()), pathByteSize)) {
+            const std::span<db::EdgeID> edges = path.getEdges();
+            if (!readVarLenPayload(context, reinterpret_cast<char*>(edges.data()), edges.size_bytes())) {
                 context->_rowIndex += i + 1;
                 return false;
             }
         }
+
         return true;
     }
 };
@@ -299,59 +315,6 @@ struct VectorColumnDecoder<db::types::Embedding::Primitive, Sink> {
                 return false;
             }
         }
-        return true;
-    }
-};
-
-template <ProtoDecodeSink Sink>
-struct VectorColumnDecoder<db::EntityList, Sink> {
-    using T = db::EntityList;
-
-    static bool decode(DecodeContext* context,
-                       Sink* sink,
-                       SinkColumnVector<T, Sink>* typedColumn,
-                       ProtoColumnState* columnState) {
-        if (context->_rowIndex == 0) {
-            typedColumn->resize(columnState->getNumRows());
-        }
-
-        for (size_t i = 0; context->_rowIndex + i < columnState->getNumRows(); ++i) {
-            auto& entityList = (*typedColumn)[context->_rowIndex + i];
-
-            if (!context->_entityListEntryCount.has_value()) {
-                if (context->_inBuf->readable() < sizeof(WireSize)) {
-                    context->_rowIndex += i;
-                    return false;
-                }
-
-                WireSize numberOfEntries = 0;
-                context->_inBuf->readData(&numberOfEntries, sizeof(numberOfEntries));
-                context->_entityListEntryCount = numberOfEntries;
-                entityList.reserve(numberOfEntries);
-            }
-
-            const size_t expectedEntries = *context->_entityListEntryCount;
-
-            while (entityList.size() < expectedEntries) {
-                if (context->_inBuf->readable() < sizeof(db::EntityList::Entry::_type)) {
-                    context->_rowIndex += i;
-                    return false;
-                }
-
-                entityList.add();
-
-                context->_inBuf->readData(&entityList.back()._type, sizeof(db::EntityList::Entry::_type));
-
-                if (context->_inBuf->readable() < sizeof(db::EntityList::Entry::_id)) {
-                    throw TuringException("Entity List Entry can't be broken up across packet/buffer boundaries");
-                }
-
-                context->_inBuf->readData(&entityList.back()._id, sizeof(db::EntityList::Entry::_id));
-            }
-
-            context->_entityListEntryCount.reset();
-        }
-
         return true;
     }
 };
@@ -627,35 +590,6 @@ struct ConstColumnDecoder<db::types::String::Primitive, Sink> {
             // A const column has no row dimension: draining the queued resume completes it,
             // so advance _columnIndex now or the resumed pass would re-enter this decoder
             // and read the next column's bytes as fresh framing.
-            ++context->_columnIndex;
-            context->_rowIndex = 0;
-            return false;
-        }
-        return true;
-    }
-};
-
-template <ProtoDecodeSink Sink>
-struct ConstColumnDecoder<db::Path, Sink> {
-    using T = db::Path;
-
-    template <ConstColumnOf<T, Sink> Column>
-    static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
-        if (context->_inBuf->readable() < sizeof(WireSize)) {
-            return false;
-        }
-
-        WireSize pathByteSize = 0;
-        context->_inBuf->readData(&pathByteSize, sizeof(pathByteSize));
-        const size_t numEntities = checkedElementCount<db::EntityID>(pathByteSize, "path");
-
-        db::Path path(numEntities);
-        char* pathBytes = reinterpret_cast<char*>(path.data());
-
-        // db::Path is a std::vector, so moving it into the column keeps pathBytes valid.
-        typedColumn->set(std::move(path));
-        if (!readVarLenPayload(context, pathBytes, pathByteSize)) {
-            // See the string branch: completing the resume completes the column.
             ++context->_columnIndex;
             context->_rowIndex = 0;
             return false;

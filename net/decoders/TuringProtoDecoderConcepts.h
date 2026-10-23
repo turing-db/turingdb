@@ -2,7 +2,6 @@
 
 #include <type_traits>
 
-#include "EntityList.h"
 #include "GraphPath.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -42,8 +41,7 @@ concept SupportedColumnVectorTypes = std::is_same_v<T, db::types::UInt64::Primit
 || std::is_same_v<T, db::LabelID>
 || std::is_same_v<T, db::LabelSetID>
 || std::is_same_v<T, db::ChangeID>
-|| std::is_same_v<T, db::Path>
-|| std::is_same_v<T, db::EntityList>
+|| std::is_same_v<T, db::GraphPath>
 || std::is_same_v<T, typename Sink::ListElementView>
 || std::is_same_v<T, typename Sink::ListView>
 || std::is_same_v<T, typename Sink::MapView>

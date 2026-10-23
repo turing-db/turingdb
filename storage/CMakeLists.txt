@@ -3,7 +3,7 @@ set(storage_sources
         ChangeManager.cpp
         DebugDump.cpp
         RowStore.cpp
-        EntityList.cpp
+        GraphPath.cpp
 
         buffers/BufferChunk.cpp
         buffers/RawBuffer.cpp

@@ -2,12 +2,15 @@
 #include <string.h>
 #include <array>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#include "EntityType.h"
+#include "GraphPath.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
@@ -83,6 +86,14 @@ size_t utf16Length(std::string_view text) {
     return length;
 }
 
+// A path exports as the entries it runs through, each [u8 entity type][u64 id]
+void appendPathEntry(ExportBuffers& out, db::EntityType type, uint64_t id) {
+    const char* idBytes = reinterpret_cast<const char*>(&id);
+
+    out._values.push_back(static_cast<char>(type));
+    out._values.insert(out._values.end(), idBytes, idBytes + sizeof(id));
+}
+
 template <typename T>
 void appendVariableWidthItem(ExportBuffers& out, const T& item) {
     if constexpr (isString<T>) {
@@ -90,16 +101,17 @@ void appendVariableWidthItem(ExportBuffers& out, const T& item) {
     } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
         const char* bytes = reinterpret_cast<const char*>(item.data());
         out._values.insert(out._values.end(), bytes, bytes + item.size_bytes());
-    } else if constexpr (std::is_same_v<T, db::Path>) {
-        const char* bytes = reinterpret_cast<const char*>(item.data());
-        out._values.insert(out._values.end(), bytes, bytes + item.size() * sizeof(db::EntityID));
-    } else if constexpr (std::is_same_v<T, db::EntityList>) {
-        for (const db::EntityList::Entry& entry : item) {
-            const uint64_t id = entry._id.getValue();
-            const char* idBytes = reinterpret_cast<const char*>(&id);
+    } else if constexpr (std::is_same_v<T, db::GraphPath>) {
+        const std::span<const db::NodeID> nodes = item.getNodes();
+        const std::span<const db::EdgeID> edges = item.getEdges();
+        if (nodes.empty()) {
+            return;
+        }
 
-            out._values.push_back(static_cast<char>(entry._type));
-            out._values.insert(out._values.end(), idBytes, idBytes + sizeof(id));
+        appendPathEntry(out, db::EntityType::Node, nodes.front().getValue());
+        for (size_t hop = 0; hop < edges.size(); hop++) {
+            appendPathEntry(out, db::EntityType::Edge, edges[hop].getValue());
+            appendPathEntry(out, db::EntityType::Node, nodes[hop + 1].getValue());
         }
     } else {
         static_assert(sizeof(T) == 0, "No export layout for this element type");

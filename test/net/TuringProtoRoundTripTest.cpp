@@ -23,6 +23,7 @@
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
 #include "TuringProtoOutBuf.h"
+#include "GraphPath.h"
 #include "LocalMemory.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
@@ -1950,4 +1951,59 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfMaps) {
     ASSERT_EQ(second.size(), 1u);
     EXPECT_EQ(second.front().getKey(), "b");
     EXPECT_EQ(second.front().getValueAs<Int64>(), 2);
+}
+
+// A path goes over as its node count, then its nodes, then its edges. The long path's two
+// payloads each span several packets at these sizes, so a resume lands inside the nodes,
+// between them and the edges, and inside the edges. The null path and the zero-length path
+// carry no edges at all.
+TEST(TuringProtoRoundTripTest, RoundTripsGraphPathColumnsAcrossChunkSizes) {
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        db::GraphPath longPath;
+        longPath.addNode(db::NodeID(1000));
+        for (uint64_t hop = 1; hop <= 40; hop++) {
+            longPath.addEdge(db::EdgeID(2000 + hop));
+            longPath.addNode(db::NodeID(1000 + hop));
+        }
+
+        db::GraphPath zeroLengthPath;
+        zeroLengthPath.addNode(db::NodeID(7));
+
+        db::GraphPath twoHopPath;
+        twoHopPath.addNode(db::NodeID(3));
+        twoHopPath.addEdge(db::EdgeID(4));
+        twoHopPath.addNode(db::NodeID(5));
+        twoHopPath.addEdge(db::EdgeID(6));
+        twoHopPath.addNode(db::NodeID(3));
+
+        const std::vector<db::GraphPath> paths {longPath, db::GraphPath {}, zeroLengthPath, twoHopPath, longPath};
+
+        auto* column = localMem.alloc<db::ColumnVector<db::GraphPath>>();
+        for (const db::GraphPath& path : paths) {
+            column->push_back(path);
+        }
+        addColumn(&dfMan, &source, "p", column);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::MapBuffer<> mapBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 1u);
+        const auto* decodedPaths = decoded.cols().at(0)->as<db::ColumnVector<db::GraphPath>>();
+        ASSERT_NE(decodedPaths, nullptr);
+        EXPECT_EQ(decodedPaths->getRaw(), paths);
+    }
 }

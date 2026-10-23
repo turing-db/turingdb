@@ -749,9 +749,9 @@ mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::
 }
 
 // Whether a column of @param element spells a null as a value of its own: the invalid ID of
-// an entity, the tag of a cell, or the empty path
+// an entity, the tag of a cell, or the path with no node
 bool holdsItsOwnNull(mlir::Type element) {
-    return mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType, storage::EntityListType>(element);
+    return mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType, storage::PathType>(element);
 }
 
 // Whether a column can hold the null literal beside its values: in the optional a nullable
@@ -7399,13 +7399,13 @@ mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
     }
 }
 
-// A path's null is the empty path, and no value of a path is read here: tested against null
-// it reads as its entry count, absent where the path is empty. A walk's handle is an ID, absent
+// A path's null is the path with no node, and no value of a path is read here: tested
+// against null it reads as its node count, absent where the path is null. A walk's handle is an ID, absent
 // where it is invalid: the handle of a walk of no hops is valid.
 mlir::Value DBLowering::nullTestedChunk(mlir::Value chunk) {
     const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
     const mlir::Type element = chunkType.getElementType();
-    if (mlir::isa<storage::EntityListType, storage::PathRefType>(element)) {
+    if (mlir::isa<storage::PathType, storage::PathRefType>(element)) {
         return toNullableChunk(chunk, _builder.getIntegerType(64, /*isSigned=*/false));
     } else if (mlir::isa<storage::ListType, storage::MapType>(element)) {
         return nullableContainerChunk(chunk);

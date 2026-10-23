@@ -2287,7 +2287,7 @@ LogicalResult OptionalMatch::verify() {
         const bool isPaddable = llvm::isa_and_present<storage::NodeIDType,
                                                       storage::EdgeIDType,
                                                       storage::ListType,
-                                                      storage::EntityListType>(elementType);
+                                                      storage::PathType>(elementType);
 
         if (!isPaddable) {
             return emitOpError("pattern variable column ")

@@ -38,9 +38,9 @@ export const ColumnType = Object.freeze({
     DOUBLE: 2,
     STRING: 3,
     BOOL: 4,
-    PATH: 5,
+    RETIRED_PATH: 5,
     EMBEDDING: 6,
-    ENTITY_LIST: 7,
+    RETIRED_ENTITY_LIST: 7,
     LIST_VIEW: 8,
     VALUE_TYPE: 9,
     LIST_ELEMENT_VIEW: 10,
@@ -57,6 +57,7 @@ export const ColumnType = Object.freeze({
     MAP_ENTRY_VIEW: 21,
     DATE_TIME: 22,
     DURATION: 23,
+    GRAPH_PATH: 24,
 });
 
 // The column types whose values the nested reader walks out of the flat nested bytes
@@ -345,8 +346,8 @@ export class NestedReader {
     }
 }
 
-// Entity list entries are [u8 type][u64 id], 9 bytes each.
-function readEntityList(bytes, view, start, end) {
+// A path's entries are [u8 type][u64 id], 9 bytes each, in the order the path runs.
+function readGraphPath(bytes, view, start, end) {
     const entries = [];
     for (let offset = start; offset < end; offset += 9) {
         entries.push({ type: bytes[offset], id: view.getBigUint64(offset + 1, true) });
@@ -378,11 +379,9 @@ function makeItemReader(buffers, nestedReader) {
             return variable(makeStringReader(buffers.values, offsets, new Uint32Array(buffers.utf16Offsets.buffer)));
         case ColumnType.EMBEDDING:
             return variable((index) => new Float32Array(buffers.values.buffer, offsets[index], (offsets[index + 1] - offsets[index]) / 4));
-        case ColumnType.PATH:
-            return variable((index) => Array.from(new BigUint64Array(buffers.values.buffer, offsets[index], (offsets[index + 1] - offsets[index]) / 8)));
-        case ColumnType.ENTITY_LIST: {
+        case ColumnType.GRAPH_PATH: {
             const view = new DataView(buffers.values.buffer);
-            return variable((index) => readEntityList(buffers.values, view, offsets[index], offsets[index + 1]));
+            return variable((index) => readGraphPath(buffers.values, view, offsets[index], offsets[index + 1]));
         }
         case ColumnType.LIST_VIEW:
             return variable((index) => nestedReader.readListAt(offsets[index]));
@@ -397,7 +396,7 @@ function makeItemReader(buffers, nestedReader) {
     }
 }
 
-// Only a nested column's plain objects are maps: an entity list's entries are plain objects
+// Only a nested column's plain objects are maps: a path's entries are plain objects
 // too, and keep their BigInt ids.
 function bigIntToNumberDeep(value, convertsMaps) {
     if (typeof value === "bigint") {

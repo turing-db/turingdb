@@ -1998,18 +1998,18 @@ void entityToNullableColumn(Column* result, const Column* operand) {
     }
 }
 
-// A path an OPTIONAL MATCH did not match is empty, where any other holds at least the node
-// it starts on, so the empty path is the null and every other reads as its entry count
+// Every path but the null one holds at least the node it starts on, so it reads as its
+// node count
 void pathToNullableColumn(Column* result, const Column* operand) {
-    const std::vector<EntityList>& paths = static_cast<const ColumnVector<EntityList>*>(operand)->getRaw();
+    const std::vector<GraphPath>& paths = static_cast<const ColumnVector<GraphPath>*>(operand)->getRaw();
     auto& nullables = static_cast<ColumnOptVector<types::UInt64::Primitive>*>(result)->getRaw();
 
     nullables.resize(paths.size());
     for (size_t row = 0; row < paths.size(); row++) {
-        if (paths[row].empty()) {
+        if (paths[row].isNull()) {
             nullables[row] = std::nullopt;
         } else {
-            nullables[row] = paths[row].size();
+            nullables[row] = paths[row].getNodes().size();
         }
     }
 }
@@ -2150,32 +2150,18 @@ bool caseTestOptTaggedCell(const Column* condition, size_t row) {
     return readOptTaggedCellTruth(condition, row).value_or(false);
 }
 
-EntityID pathEntityAt(const EntityList& path, size_t index) {
-    return path.getEntries()[index]._id;
-}
+template <typename IDType>
+ListView listPathEntities(std::span<const IDType> entities, ListBufferTypeTag tag, QueryListBuffer& buffer) {
+    ListWriteCursor cursor = buffer.reserveList(entities.size(), entities.size() * sizeof(IDType));
 
-EntityID pathEntityAt(const Path& path, size_t index) {
-    return path[index];
-}
-
-// The entities of one kind a path runs through, in the order the path holds them. A path
-// alternates node and edge from its first node, so they are every other entry from @param first
-template <typename IDType, typename PathType>
-ListView listPathEntities(const PathType& path, size_t first, ListBufferTypeTag tag, QueryListBuffer& buffer) {
-    const size_t count = (path.size() - first + 1) / 2;
-    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
-
-    for (size_t index = 0; index < count; index++) {
-        cursor.writeValueAt(index, tag, IDType(pathEntityAt(path, first + 2 * index).getValue()));
+    for (size_t index = 0; index < entities.size(); index++) {
+        cursor.writeValueAt(index, tag, entities[index]);
     }
 
     return cursor.getView();
 }
 
-// A path an OPTIONAL MATCH missed is an empty sequence; every path found runs
-// through at least one node
-template <typename PathType>
-void readPathElements(const std::vector<PathType>& paths,
+void readPathElements(const std::vector<GraphPath>& paths,
                       PathElementsKind kind,
                       Column* output,
                       QueryListBuffer& listBuffer) {
@@ -2184,11 +2170,11 @@ void readPathElements(const std::vector<PathType>& paths,
         lengths.resize(paths.size());
 
         for (size_t row = 0; row < paths.size(); row++) {
-            const PathType& path = paths[row];
-            if (path.empty()) {
+            const GraphPath& path = paths[row];
+            if (path.isNull()) {
                 lengths[row] = std::nullopt;
             } else {
-                lengths[row] = path.size() / 2;
+                lengths[row] = path.getLength();
             }
         }
 
@@ -2199,13 +2185,13 @@ void readPathElements(const std::vector<PathType>& paths,
     lists.resize(paths.size());
 
     for (size_t row = 0; row < paths.size(); row++) {
-        const PathType& path = paths[row];
-        if (path.empty()) {
+        const GraphPath& path = paths[row];
+        if (path.isNull()) {
             lists[row] = std::nullopt;
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities<NodeID>(path, 0, ListBufferTypeTag::NodeID, listBuffer);
+            lists[row] = listPathEntities(path.getNodes(), ListBufferTypeTag::NodeID, listBuffer);
         } else {
-            lists[row] = listPathEntities<EdgeID>(path, 1, ListBufferTypeTag::EdgeID, listBuffer);
+            lists[row] = listPathEntities(path.getEdges(), ListBufferTypeTag::EdgeID, listBuffer);
         }
     }
 }
@@ -2911,17 +2897,22 @@ void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& k
     distinctAppendMapBytes(key, raw[row]);
 }
 
-// A null path is an empty one, so it keys as length 0, apart from every path
-void distinctKeyAppendEntityListColumn(const Column* column, size_t row, std::string& key) {
-    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(column)->getRaw();
-    const EntityList& path = raw[row];
+// The null path has no node, so it keys as node count 0, apart from every path. The node
+// count also fixes the edge count, so the IDs that follow it need no separator.
+void distinctKeyAppendPathColumn(const Column* column, size_t row, std::string& key) {
+    const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
+    const GraphPath& path = raw[row];
 
-    const size_t size = path.size();
-    key.append(reinterpret_cast<const char*>(&size), sizeof(size));
+    const std::span<const NodeID> nodes = path.getNodes();
+    const size_t nodeCount = nodes.size();
+    key.append(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
 
-    for (const EntityList::Entry& entry : path) {
-        key.push_back(static_cast<char>(entry._type));
-        distinctAppendValueBytes(key, entry._id.getValue());
+    for (const NodeID node : nodes) {
+        distinctAppendValueBytes(key, node.getValue());
+    }
+
+    for (const EdgeID edge : path.getEdges()) {
+        distinctAppendValueBytes(key, edge.getValue());
     }
 }
 
@@ -3173,9 +3164,9 @@ size_t countValidIDs(const Column* column) {
 }
 
 size_t countPresentPaths(const Column* column) {
-    const std::vector<EntityList>& raw = static_cast<const ColumnVector<EntityList>*>(column)->getRaw();
+    const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
 
-    return std::ranges::count_if(raw, [](const EntityList& path) { return !path.empty(); });
+    return std::ranges::count_if(raw, [](const GraphPath& path) { return !path.isNull(); });
 }
 
 // Count the present (non-null) values of a nullable value column - a
@@ -4110,10 +4101,10 @@ void groupFoldCountPresentPath(Column* accumulator,
                                const std::vector<size_t>& groups,
                                NLGroupDistinctTally& distinct,
                                NLValueStore& values) {
-    const std::vector<EntityList>& inputRaw = static_cast<const ColumnVector<EntityList>*>(input)->getRaw();
+    const std::vector<GraphPath>& inputRaw = static_cast<const ColumnVector<GraphPath>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        if (!inputRaw[row].empty()) {
+        if (!inputRaw[row].isNull()) {
             counts[groups[row]]++;
         }
     }
@@ -6095,30 +6086,33 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
 
     Column* dist = loopData->getDistanceOutput();
     auto* distCol = static_cast<ColumnVector<EdgePropType>*>(dist);
-    ColumnVector<Path>* pathCol = loopData->getPathOutput();
+    ColumnVector<GraphPath>* pathCol = loopData->getPathOutput();
 
     distCol->clear();
     pathCol->clear();
 
     // Get the total length of the path
     distCol->push_back(heap.top().distance);
-    auto& pathVec = pathCol->emplace_back();
+    GraphPath& path = pathCol->emplace_back();
 
     // In the heap all the (non-stale) values represent the shortest path to that
     // nodeID from the source set. So we can find the shortet path by following the
     // previousNode back from the target node that we have found.
     auto lastNode = heap.top().prevNode;
     auto edge = heap.top().edge;
-    pathVec.push_back(heap.top().id.getValue());
+    path.addNode(heap.top().id);
 
     while (lastNode.isValid()) {
-        pathVec.push_back(edge.getValue());
-        pathVec.push_back(lastNode.getValue());
+        path.addEdge(edge);
+        path.addNode(lastNode);
 
         const auto& pathInfo = heapValueMap[lastNode];
         lastNode = pathInfo.prevNode;
         edge = pathInfo.edge;
     }
+
+    std::ranges::reverse(path.getNodes());
+    std::ranges::reverse(path.getEdges());
 
     runBody(context, loopData->getStmts());
 }
@@ -7911,17 +7905,13 @@ void NLExecutor::runPathElements(NLExecutionContext* context, NLFunctionData* da
     QueryListBuffer& listBuffer = *elements->getListBuffer();
     listBuffer.clear();
 
-    if (paths->getKind() == ColumnVector<Path>::staticKind()) {
-        readPathElements(static_cast<const ColumnVector<Path>*>(paths)->getRaw(), kind, output, listBuffer);
-    } else {
-        readPathElements(static_cast<const ColumnVector<EntityList>*>(paths)->getRaw(), kind, output, listBuffer);
-    }
+    readPathElements(static_cast<const ColumnVector<GraphPath>*>(paths)->getRaw(), kind, output, listBuffer);
 }
 
 void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) {
     const NLMakePathData* make = static_cast<NLMakePathData*>(data);
     const NLMakePathData::PathEntities& entities = make->entities();
-    std::vector<EntityList>& paths = make->getOutput()->getRaw();
+    std::vector<GraphPath>& paths = make->getOutput()->getRaw();
     const PathTrie& trie = *make->getTrie();
 
     bioassert(!entities.empty(), "nl.make_path builds a path out of at least one node");
@@ -7936,7 +7926,7 @@ void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) 
               "Entity columns of a path build are not row-aligned.");
 
     paths.resize(rowCount);
-    for (EntityList& path : paths) {
+    for (GraphPath& path : paths) {
         path.clear();
     }
 
@@ -7945,7 +7935,7 @@ void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) 
             case NLPathEntity::Kind::Node: {
                 const std::vector<NodeID>& nodes = static_cast<const ColumnNodeIDs*>(entity._column)->getRaw();
                 for (size_t row = 0; row < rowCount; row++) {
-                    paths[row].add(EntityType::Node, EntityID(nodes[row].getValue()));
+                    paths[row].addNode(nodes[row]);
                 }
             }
             break;
@@ -7953,7 +7943,7 @@ void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) 
             case NLPathEntity::Kind::Edge: {
                 const std::vector<EdgeID>& edges = static_cast<const ColumnEdgeIDs*>(entity._column)->getRaw();
                 for (size_t row = 0; row < rowCount; row++) {
-                    paths[row].add(EntityType::Edge, EntityID(edges[row].getValue()));
+                    paths[row].addEdge(edges[row]);
                 }
             }
             break;
@@ -11869,7 +11859,7 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::Path:
-            throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
+            return &distinctKeyAppendPathColumn;
         break;
 
         case NLChunkKind::DateTime:
@@ -11882,10 +11872,6 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
 
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a DISTINCT or grouping key: expand it into its list first");
-        break;
-
-        case NLChunkKind::EntityList:
-            return &distinctKeyAppendEntityListColumn;
         break;
     }
 
@@ -12055,10 +12041,6 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a join key: expand it into its list first");
-        break;
-
-        case NLChunkKind::EntityList:
-            throw IRException("A path column cannot be a join key: a path has no scalar value to key on");
         break;
     }
 
@@ -12542,10 +12524,6 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         case NLChunkKind::PathRef:
             throw IRException("count(DISTINCT) cannot key on a path column: expand it into its list first");
         break;
-
-        case NLChunkKind::EntityList:
-            throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
-        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -12735,7 +12713,6 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::Map:
         case NLChunkKind::Path:
         case NLChunkKind::PathRef:
-        case NLChunkKind::EntityList:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
         break;
 
@@ -12983,10 +12960,6 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a sort key: expand it into its list first");
-        break;
-
-        case NLChunkKind::EntityList:
-            throw IRException("A path column cannot be a sort key: a path has no order here");
         break;
     }
 

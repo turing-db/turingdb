@@ -30,7 +30,6 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 
-#include "EntityList.h"
 #include "Graph.h"
 #include "GraphPath.h"
 #include "ID.h"
@@ -80,19 +79,20 @@ std::string valueToString(const std::string_view value) {
     return std::string(value);
 }
 
-std::string valueToString(const Path& value) {
-    std::string result;
-
-    size_t index = 0;
-    for (const auto entity : value | std::views::reverse) {
-        if (index % 2 == 0) {
-            result += fmt::format("({})", entity.getValue());
-        } else {
-            result += fmt::format("-[{}]->", entity.getValue());
-        }
-        index++;
+std::string valueToString(const GraphPath& value) {
+    if (value.isNull()) {
+        return "null";
     }
 
+    const std::span<const NodeID> nodes = value.getNodes();
+    const std::span<const EdgeID> edges = value.getEdges();
+
+    std::string result = fmt::format("[({})", nodes.front().getValue());
+    for (size_t hop = 0; hop < edges.size(); hop++) {
+        result += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
+    }
+
+    result += "]";
     return result;
 }
 
@@ -171,26 +171,6 @@ std::string valueToString(const std::optional<T>& value) {
     }
 
     return valueToString(*value);
-}
-
-std::string valueToString(const EntityList& value) {
-    std::string result = "[";
-    size_t index = 0;
-
-    for (const auto& entity : value) {
-        if (index++ > 0) {
-            result += ", ";
-        }
-
-        if (entity._type == EntityType::Node) {
-            result += fmt::format("({})", entity._id.getValue());
-        } else {
-            result += fmt::format("[{}]", entity._id.getValue());
-        }
-    }
-
-    result += "]";
-    return result;
 }
 
 std::string valueToString(const ListElementView element) {
