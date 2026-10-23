@@ -2304,6 +2304,22 @@ void caseWriteEntityCell(Column* result, size_t resultRow, const Column* value, 
     results[resultRow] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[valueRow];
 }
 
+void writeCell(Column* result,
+               size_t resultRow,
+               const NLCellWrite& write,
+               const Column* value,
+               size_t valueRow,
+               NLStepBuffers* stepBuffers,
+               NLValueStore& values) {
+    if (write._write) {
+        write._write(result, resultRow, value, valueRow);
+        return;
+    }
+
+    ListBuffer<>::ListItemVariant item = write._taggedRead(value, valueRow, stepBuffers);
+    static_cast<ColumnVector<ListElementView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
+}
+
 void resetTaggedCells(Column* result, size_t rowCount) {
     std::vector<ListElementView>& results = static_cast<ColumnVector<ListElementView>*>(result)->getRaw();
     results.assign(rowCount, ListElementView::nullElement());
@@ -8031,11 +8047,15 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
     Column* const result = caseData->getResult();
     const size_t rowCount = caseData->getCardinality()->size();
 
+    NLStepBuffers* const stepBuffers = caseData->getStepBuffers();
+    stepBuffers->clear();
+    NLValueStore& values = stepBuffers->valueStore();
+
     caseData->getReset()(result, rowCount);
 
     const std::vector<NLCaseData::Branch>& branches = caseData->branches();
     const Column* const defaultValue = caseData->getDefaultValue();
-    const NLCaseWriteFn writeDefault = caseData->getWriteDefault();
+    const NLCellWrite& writeDefault = caseData->getWriteDefault();
 
     // A row takes the first branch whose condition holds, so the branches are walked per
     // row rather than the rows per branch: the first match ends the row
@@ -8047,13 +8067,13 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
                 continue;
             }
 
-            branch._write(result, row, branch._value, row);
+            writeCell(result, row, branch._write, branch._value, row, stepBuffers, values);
             matched = true;
             break;
         }
 
-        if (!matched && writeDefault) {
-            writeDefault(result, row, defaultValue, row);
+        if (!matched && defaultValue) {
+            writeCell(result, row, writeDefault, defaultValue, row, stepBuffers, values);
         }
     }
 }
@@ -8064,11 +8084,15 @@ void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
     Column* const result = caseData->getResult();
     const size_t rowCount = caseData->getCardinality()->size();
 
+    NLStepBuffers* const stepBuffers = caseData->getStepBuffers();
+    stepBuffers->clear();
+    NLValueStore& values = stepBuffers->valueStore();
+
     caseData->getReset()(result, rowCount);
 
     const std::vector<NLCaseData::Branch>& branches = caseData->branches();
     const Column* const defaultValue = caseData->getDefaultValue();
-    const NLCaseWriteFn writeDefault = caseData->getWriteDefault();
+    const NLCellWrite& writeDefault = caseData->getWriteDefault();
 
     std::vector<NLCaseData::BranchCursor>& cursors = caseData->cursors();
     std::fill(cursors.begin(), cursors.end(), NLCaseData::BranchCursor {});
@@ -8089,14 +8113,14 @@ void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
                 continue;
             }
 
-            branch._write(result, row, branch._value, cursor._valueRow);
+            writeCell(result, row, branch._write, branch._value, cursor._valueRow, stepBuffers, values);
             cursor._valueRow++;
             matched = true;
             break;
         }
 
-        if (!matched && writeDefault) {
-            writeDefault(result, row, defaultValue, defaultRow);
+        if (!matched && defaultValue) {
+            writeCell(result, row, writeDefault, defaultValue, defaultRow, stepBuffers, values);
             defaultRow++;
         }
     }
@@ -8651,14 +8675,8 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
     const size_t sourceRows = source->size();
     const size_t chunkSize = context->getChunkSize();
 
-    const auto write = [&](const NLReduceWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
-        if (rowWrite._write) {
-            rowWrite._write(accumulator, row, written, writtenRow);
-            return;
-        }
-
-        ListBuffer<>::ListItemVariant item = rowWrite._taggedRead(written, writtenRow, memory);
-        static_cast<ColumnVector<ListElementView>*>(accumulator)->getRaw()[row] = accumulatorValues.getActive().ownCell(item);
+    const auto write = [&](const NLCellWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
+        writeCell(accumulator, row, rowWrite, written, writtenRow, memory, accumulatorValues.getActive());
     };
 
     accumulatorValues.clear();
@@ -8725,8 +8743,12 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
     }
 }
 
-NLCaseResetFn NLExecutor::selectTaggedReduceReset() {
+NLCaseResetFn NLExecutor::selectTaggedCellReset() {
     return &resetTaggedCells;
+}
+
+NLCaseWriteFn NLExecutor::selectNullCellWrite() {
+    return &caseWriteNullCell;
 }
 
 NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {

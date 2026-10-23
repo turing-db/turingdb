@@ -639,13 +639,14 @@ private:
 
     // The value element type a CASE's branches share: the one they all carry, the
     // promotion of their numbers when they carry two, a list of tagged cells when they
-    // carry lists of different elements, and an i64 when every branch is null. A branch
-    // no value column can hold is rejected here.
+    // carry lists of different elements, !storage.any when they share no type, and an i64
+    // when every branch is null. A branch no value column can hold is rejected here.
     mlir::Type caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks);
 
     // @param chunk as a column of @param resultElement: itself when it already carries
-    // that element or is a list, whose cells are list views whatever their elements, and
-    // an nl.to_float / nl.to_integer of it otherwise. An untyped null is left untyped.
+    // that element or is a list, whose cells are list views whatever their elements, its
+    // list-item chunk when the result is a !storage.any the cells are tagged into, and an
+    // nl.to_float / nl.to_integer of it otherwise. An untyped null is left untyped.
     mlir::Value chunkAsElement(mlir::Value chunk, mlir::Type resultElement);
 
     mlir::Value propertyWriteChunk(llvm::StringRef propertyName, mlir::Value chunk);
@@ -862,6 +863,10 @@ private:
     // The chunks a container build reads its cells from: every operand laid out over the
     // same rows, and a scalar value read as nullable
     void containerCellChunks(mlir::ValueRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
+
+    // @param chunk as a list-item read takes it: a scalar value read as nullable, any other
+    // chunk as it stands
+    mlir::Value listItemChunk(mlir::Value chunk);
 
     mlir::Value unionColumnChunk(mlir::Value chunk);
 

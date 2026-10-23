@@ -9,8 +9,8 @@
 
 using namespace turing::test;
 
-// A CASE branch selects a value of any type Cypher has. Remy and Adam are 32; the other
-// six people have no age.
+// A CASE branch selects a value of any type Cypher has, and branches need not agree on
+// one. Remy and Adam are 32; the other six people have no age.
 class CaseBranchValueTypeTest : public CallV3Test {
 protected:
     void expectRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {
@@ -21,6 +21,13 @@ protected:
         sink.sortedRows(rows);
 
         EXPECT_EQ(rows, expected) << query;
+    }
+
+    void expectOrderedRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {
+        StringRowSink sink;
+        runQuery(query, sink);
+
+        EXPECT_EQ(sink.getRows(), expected) << query;
     }
 };
 
@@ -77,6 +84,48 @@ TEST_F(CaseBranchValueTypeTest, selectsADurationPerRow) {
                    {"Adam", "PT768H"}, {"Cyrus", "PT0S"}, {"Doruk", "PT0S"}, {"Luc", "PT0S"},
                    {"Martina", "PT0S"}, {"Maxime", "PT0S"}, {"Remy", "PT768H"}, {"Suhas", "PT0S"},
                });
+}
+
+TEST_F(CaseBranchValueTypeTest, selectsBranchesOfDifferentTypes) {
+    expectRows("MATCH (p:Person) RETURN p.name, CASE WHEN p.age IS NULL THEN p.name ELSE p.age END",
+               {
+                   {"Adam", "32"}, {"Cyrus", "Cyrus"}, {"Doruk", "Doruk"}, {"Luc", "Luc"},
+                   {"Martina", "Martina"}, {"Maxime", "Maxime"}, {"Remy", "32"}, {"Suhas", "Suhas"},
+               });
+}
+
+TEST_F(CaseBranchValueTypeTest, selectsLiteralBranchesOfDifferentTypes) {
+    expectRows("RETURN CASE WHEN true THEN 1 ELSE 'none' END", {{"1"}});
+    expectRows("RETURN CASE WHEN false THEN 1 ELSE 'none' END", {{"none"}});
+}
+
+TEST_F(CaseBranchValueTypeTest, selectsANodeOrAScalar) {
+    expectRows("MATCH (p:Person) WHERE p.name = 'Remy' OR p.name = 'Luc' "
+               "RETURN p.name, CASE WHEN p.age IS NULL THEN 'nobody' ELSE p END",
+               {{"Luc", "nobody"}, {"Remy", "0"}});
+}
+
+TEST_F(CaseBranchValueTypeTest, keepsEachRowsNumberType) {
+    expectRows("MATCH (p:Person) WHERE p.name IN ['Remy', 'Luc'] "
+               "RETURN p.name, CASE WHEN p.age > 30 THEN p.age + 0.5 WHEN p.age IS NULL THEN 'none' ELSE 1 END",
+               {{"Luc", "none"}, {"Remy", "32.5"}});
+}
+
+TEST_F(CaseBranchValueTypeTest, selectsATaggedBranchBesideATypedOne) {
+    expectRows("UNWIND [1, 'a', 2.5] AS x RETURN CASE WHEN x = 1 THEN x ELSE true END",
+               {{"1"}, {"true"}, {"true"}});
+}
+
+// Cypher orders a string before a number
+TEST_F(CaseBranchValueTypeTest, ordersBranchesOfDifferentTypes) {
+    expectOrderedRows("MATCH (p:Person) WHERE p.name IN ['Remy', 'Luc', 'Adam', 'Cyrus'] "
+                      "RETURN CASE WHEN p.age IS NULL THEN p.name ELSE p.age END AS v ORDER BY v",
+                      {{"Cyrus"}, {"Luc"}, {"32"}, {"32"}});
+}
+
+TEST_F(CaseBranchValueTypeTest, groupsOnBranchesOfDifferentTypes) {
+    expectRows("MATCH (p:Person) RETURN CASE WHEN p.age IS NULL THEN 'none' ELSE p.age END AS v, count(*)",
+               {{"32", "2"}, {"none", "6"}});
 }
 
 int main(int argc, char** argv) {

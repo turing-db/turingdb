@@ -2201,8 +2201,6 @@ nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
     // branch or a null test reads as the null it is rather than as a value of some type
     if (!accumulated) {
         return nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getNoneType()));
-    } else if (mlir::isa<storage::AnyType>(accumulated)) {
-        return nl::ChunkType::get(context, accumulated);
     }
 
     return caseResultChunkType(accumulated);
@@ -2429,22 +2427,26 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
     const mlir::Value cardinality = cardinalityDriver(chunks);
 
     for (mlir::Value& chunk : chunks) {
-        chunk = rowAlignedChunk(chunk, cardinality);
-
-        // An entity ID, a list, a map and a tagged cell are present in every row and go
-        // into the container as they stand; only a scalar value column is read as nullable,
-        // the way lowerCollect reads the column it gathers.
-        const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
-        const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                           storage::EdgeIDType,
-                                                           storage::ListType,
-                                                           storage::MapType,
-                                                           storage::AnyType>(element);
-
-        if (!holdsCellsPresentInEveryRow) {
-            chunk = nullableValueChunk(chunk);
-        }
+        chunk = listItemChunk(rowAlignedChunk(chunk, cardinality));
     }
+}
+
+mlir::Value DBLowering::listItemChunk(mlir::Value chunk) {
+    // An entity ID, a list, a map and a tagged cell are present in every row and are read
+    // as they stand; only a scalar value column is read as nullable, the way lowerCollect
+    // reads the column it gathers.
+    const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
+    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
+                                                       storage::EdgeIDType,
+                                                       storage::ListType,
+                                                       storage::MapType,
+                                                       storage::AnyType>(element);
+
+    if (holdsCellsPresentInEveryRow) {
+        return chunk;
+    }
+
+    return nullableValueChunk(chunk);
 }
 
 void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
@@ -6207,11 +6209,8 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
             continue;
         }
 
-        unified = unifiedValueElement(_builder, unified, element);
-        if (!unified) {
-            throw IRException("db.case requires branches of one type, of numeric types "
-                              "that promote against each other, or of lists");
-        }
+        const mlir::Type shared = unifiedValueElement(_builder, unified, element);
+        unified = shared ? shared : storage::AnyType::get(_builder.getContext());
     }
 
     // Every branch is the null literal, so no branch says what the column holds. The rows
@@ -6227,8 +6226,9 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
     // neither pair unifies.
     const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
     const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
+    const bool isAny = mlir::isa<storage::AnyType>(unified);
 
-    if (!isEntity && !isValue) {
+    if (!isEntity && !isValue && !isAny) {
         throw IRException("db.case requires value or entity branches");
     }
 
@@ -6246,6 +6246,8 @@ mlir::Value DBLowering::chunkAsElement(mlir::Value chunk, mlir::Type resultEleme
         return chunk;
     } else if (mlir::isa<storage::ListType>(resultElement)) {
         return chunk;
+    } else if (mlir::isa<storage::AnyType>(resultElement)) {
+        return listItemChunk(chunk);
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
@@ -6338,10 +6340,11 @@ nl::ChunkType DBLowering::caseResultChunkType(mlir::Type resultElement) {
     // A row matching no branch of a defaultless CASE is absent, and so is one taking a
     // null branch, so the selection always lands in a column that can hold an absent row.
     // An entity column already can - it carries its null in the ID an OPTIONAL MATCH left
-    // invalid - so entities land in a plain ID chunk and every scalar in a nullable one.
+    // invalid - and so can a !storage.any column, in the tag; every scalar lands in a
+    // nullable one.
     mlir::MLIRContext* const context = _builder.getContext();
-    const bool selectsEntities = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
-    const mlir::Type resultChunkElement = selectsEntities
+    const bool holdsItsNull = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::AnyType>(resultElement);
+    const mlir::Type resultChunkElement = holdsItsNull
         ? resultElement
         : storage::NullableType::get(context, resultElement);
 

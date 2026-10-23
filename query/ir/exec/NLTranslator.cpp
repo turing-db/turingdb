@@ -3982,13 +3982,13 @@ void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
     const bool accumulatesTaggedCells = isAnyChunk(resultType);
 
     if (accumulatesTaggedCells) {
-        data->setReset(NLExecutor::selectTaggedReduceReset());
-        data->setWrites(NLReduceWrite {._taggedRead = selectListItemRead(initialValue.getType())},
-                        NLReduceWrite {._taggedRead = selectListItemRead(yieldedValue.getType())});
+        data->setReset(NLExecutor::selectTaggedCellReset());
+        data->setWrites(NLCellWrite {._taggedRead = selectListItemRead(initialValue.getType())},
+                        NLCellWrite {._taggedRead = selectListItemRead(yieldedValue.getType())});
     } else {
         data->setReset(selectCaseResetForChunkType(resultType));
-        data->setWrites(NLReduceWrite {._write = selectCaseWriteForChunkType(resultType, initial, initialValue.getType())},
-                        NLReduceWrite {._write = selectCaseWriteForChunkType(resultType, yielded, yieldedValue.getType())});
+        data->setWrites(NLCellWrite {._write = selectCaseWriteForChunkType(resultType, initial, initialValue.getType())},
+                        NLCellWrite {._write = selectCaseWriteForChunkType(resultType, yielded, yieldedValue.getType())});
     }
 
     const NLReownRowsFunction reownRows = accumulatesTaggedCells ? nullptr
@@ -4012,7 +4012,8 @@ void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtCon
     // The first condition holds one row per row this step writes
     NLCaseData* data = _program->allocFunctionData<NLCaseData>(getColumn(conditions.front()),
                                                                result,
-                                                               selectCaseResetForChunkType(resultChunkType));
+                                                               selectCaseResetForChunkType(resultChunkType),
+                                                               _program->allocStepBuffers());
 
     for (size_t branchIndex = 0; branchIndex < conditions.size(); branchIndex++) {
         const mlir::Type conditionType = conditions[branchIndex].getType();
@@ -4024,7 +4025,7 @@ void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtCon
         branch._test = NLExecutor::selectCaseTest(branch._condition,
                                                   isNullableChunk(conditionType),
                                                   isUntypedNullChunk(conditionType));
-        branch._write = selectCaseWriteForChunkType(resultChunkType, branch._value, valueChunkType);
+        branch._write = selectCellWriteForChunkType(resultChunkType, branch._value, valueChunkType);
 
         data->addBranch(branch);
     }
@@ -4035,7 +4036,7 @@ void NLTranslator::translateCase(CaseOp caseOp, NLHandlerFunction run, NLStmtCon
         const Column* const defaultColumn = getColumn(defaultValue);
 
         data->setDefault(defaultColumn,
-                         selectCaseWriteForChunkType(resultChunkType, defaultColumn, defaultType));
+                         selectCellWriteForChunkType(resultChunkType, defaultColumn, defaultType));
     }
 
     body->emplaceStmt(run, data);
@@ -4063,9 +4064,23 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
 
     if (isEntityIDElement(elementType)) {
         return NLExecutor::selectEntityCaseReset(chunkKindFromElementType(elementType));
+    } else if (mlir::isa<storage::AnyType>(elementType)) {
+        return NLExecutor::selectTaggedCellReset();
     }
 
     return NLExecutor::selectCaseReset(nullableChunkValueType(chunkType));
+}
+
+NLCellWrite NLTranslator::selectCellWriteForChunkType(mlir::Type resultChunkType,
+                                                      const Column* value,
+                                                      mlir::Type valueChunkType) {
+    if (!isAnyChunk(resultChunkType)) {
+        return NLCellWrite {._write = selectCaseWriteForChunkType(resultChunkType, value, valueChunkType)};
+    } else if (isUntypedNullChunk(valueChunkType)) {
+        return NLCellWrite {._write = NLExecutor::selectNullCellWrite()};
+    }
+
+    return NLCellWrite {._taggedRead = selectListItemRead(valueChunkType)};
 }
 
 NLCaseWriteFn NLTranslator::selectCaseWriteForChunkType(mlir::Type resultChunkType,

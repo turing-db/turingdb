@@ -205,13 +205,15 @@ std::string elementText(const ListElementView& element) {
 // A type-erased column of tagged scalars - the column a heterogeneous UNWIND drives - reads
 // each cell through the tag it carries rather than through the column's type.
 bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<ListElementView>*>(chunk);
-    if (!column) {
-        return false;
+    if (const auto* column = dynamic_cast<const ColumnVector<ListElementView>*>(chunk)) {
+        text = elementText(column->getRaw()[rowIndex]);
+        return true;
+    } else if (const auto* constant = dynamic_cast<const ColumnConst<ListElementView>*>(chunk)) {
+        text = elementText(constant->getRaw());
+        return true;
     }
 
-    text = elementText(column->getRaw()[rowIndex]);
-    return true;
+    return false;
 }
 
 // The nullable sibling of textOfListElement: what an index into a list naming no one type

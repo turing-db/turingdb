@@ -456,7 +456,8 @@ public:
     static void runReduce(NLExecutionContext* context, NLFunctionData* data);
 
     // Size a type-erased accumulator to the step's rows, every cell a tagged null
-    static NLCaseResetFn selectTaggedReduceReset();
+    static NLCaseResetFn selectTaggedCellReset();
+    static NLCaseWriteFn selectNullCellWrite();
 
     // Read one element's predicate: a mask, a nullable mask - where a null row is unknown
     // -, a type-erased cell holding a boolean or a null, or the null literal, which is

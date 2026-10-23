@@ -326,6 +326,27 @@ bool isEntity(EvaluatedType type) {
     return type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern;
 }
 
+bool holdsAsAny(EvaluatedType type) {
+    return type == EvaluatedType::Any
+        || type == EvaluatedType::Char
+        || isEntity(type)
+        || convertibleToValueType(type);
+}
+
+// The type one column holding values of @param carried and of @param value takes: the type
+// the two unify to, Any when they share none but each rides a tagged cell, Invalid otherwise
+EvaluatedType selectedType(EvaluatedType carried, EvaluatedType value) {
+    const EvaluatedType unified = unifiedBranchType(carried, value);
+
+    if (unified != EvaluatedType::Invalid) {
+        return unified;
+    } else if (holdsAsAny(carried) && holdsAsAny(value)) {
+        return EvaluatedType::Any;
+    }
+
+    return EvaluatedType::Invalid;
+}
+
 }
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
@@ -1866,11 +1887,10 @@ EvaluatedType ExprAnalyzer::unifiedArgumentType(std::string_view name,
 
     for (const Expr* arg : args) {
         const EvaluatedType argType = arg->getType();
-        const EvaluatedType folded = unifiedBranchType(unified, argType);
+        const EvaluatedType folded = selectedType(unified, argType);
 
         if (folded == EvaluatedType::Invalid) {
-            throwError(fmt::format("'{}' answers one column, so its arguments must share a "
-                                   "type: '{}' and '{}' cannot be mixed",
+            throwError(fmt::format("'{}' cannot mix '{}' and '{}' arguments",
                                    name,
                                    EvaluatedTypeName::value(unified),
                                    EvaluatedTypeName::value(argType)),
@@ -2096,11 +2116,10 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
 
 EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
     const EvaluatedType branchType = branch->getType();
-    const EvaluatedType unified = unifiedBranchType(carried, branchType);
+    const EvaluatedType unified = selectedType(carried, branchType);
 
     if (unified == EvaluatedType::Invalid) {
-        throwError(fmt::format("A CASE returns one column, so its branches must share a "
-                               "type: '{}' and '{}' cannot be mixed",
+        throwError(fmt::format("A CASE cannot mix '{}' and '{}' branches",
                                EvaluatedTypeName::value(carried),
                                EvaluatedTypeName::value(branchType)),
                    branch);

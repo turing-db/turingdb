@@ -24,6 +24,20 @@ protected:
     }
 };
 
+TEST_F(CoalesceArgumentValueTypeTest, answersArgumentsOfDifferentTypes) {
+    expectRows("MATCH (p:Person) RETURN p.name, coalesce(p.age, 'none')",
+               {
+                   {"Adam", "32"}, {"Cyrus", "none"}, {"Doruk", "none"}, {"Luc", "none"},
+                   {"Martina", "none"}, {"Maxime", "none"}, {"Remy", "32"}, {"Suhas", "none"},
+               });
+}
+
+TEST_F(CoalesceArgumentValueTypeTest, answersANodeOrAScalar) {
+    expectRows("MATCH (p:Person) WHERE p.name = 'Remy' OR p.name = 'Luc' "
+               "OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) RETURN p.name, coalesce(f, 'nobody')",
+               {{"Luc", "nobody"}, {"Remy", "1"}});
+}
+
 TEST_F(CoalesceArgumentValueTypeTest, answersAList) {
     expectRows("MATCH (p:Person) "
                "RETURN p.name, coalesce(CASE WHEN p.age IS NOT NULL THEN [p.age] END, ['none'])",
