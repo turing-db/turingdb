@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GetInEdgesIterator.h"
+#include "ExcludedEdges.h"
 
 #include <span>
 
@@ -23,6 +24,8 @@ public:
     void setSrcIDs(ColumnNodeIDs* srcs) { _srcs = srcs; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
+
 private:
     // Borrowed, not owned: the caller keeps the types alive for the writer's lifetime
     std::span<const EdgeTypeID> _edgeTypes;
@@ -33,6 +36,8 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    ExcludedEdges _excluded;
+    size_t _heldInRun {0};
 
     void filterTombstones();
 };

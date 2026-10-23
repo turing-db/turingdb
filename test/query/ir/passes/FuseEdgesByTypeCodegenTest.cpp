@@ -166,12 +166,16 @@ TEST_F(FuseEdgesByTypeCodegenTest, bothHopsOfATypedChainFuse) {
 
     expectFusedToTypedHop(*module);
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeDistinct>(*module), 0u);
 
     llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 2u);
     EXPECT_EQ(onlyEdgeType(hops[0].getEdgeTypes()), "KNOWS_WELL");
     EXPECT_EQ(onlyEdgeType(hops[1].getEdgeTypes()), "INTERESTED_IN");
     EXPECT_EQ(hops[1].getInputNodes(), hops[0].getTgtids());
+
+    // Two hops typed apart are proven two edges, so the second leaves nothing out
+    EXPECT_FALSE(hops[1].getDistinctFrom().has_value());
 }
 
 // A whole-graph scan and its hop are the edge set, which the edge-scan fusion takes first,

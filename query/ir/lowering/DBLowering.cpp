@@ -1439,6 +1439,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerCheckLabelConstraint(checkLabelConstraint);
     } else if (mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<mlir::db::CheckEdgeTypeConstraint>(operation)) {
         lowerCheckEdgeTypeConstraint(checkEdgeTypeConstraint);
+    } else if (mlir::db::CheckEdgeDistinct checkEdgeDistinct = mlir::dyn_cast<mlir::db::CheckEdgeDistinct>(operation)) {
+        lowerCheckEdgeDistinct(checkEdgeDistinct);
     } else if (mlir::db::CreateNode createNode = mlir::dyn_cast<mlir::db::CreateNode>(operation)) {
         lowerCreateNode(createNode);
     } else if (mlir::db::CreateEdge createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(operation)) {
@@ -2809,7 +2811,7 @@ void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
 
     // The result iterator type - the four fixed edge chunks plus one per
     // carried chunk - is inferred from the operands.
-    nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
+    nl::GetOutEdges edges = _builder.create<nl::GetOutEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks, getOutEdges.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdges.getOperation());
 }
 
@@ -2828,7 +2830,7 @@ void DBLowering::lowerGetInEdges(mlir::db::GetInEdges getInEdges) {
 
     // The result iterator type - the four fixed edge chunks plus one per
     // carried chunk - is inferred from the operands.
-    nl::GetInEdges edges = _builder.create<nl::GetInEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
+    nl::GetInEdges edges = _builder.create<nl::GetInEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks, getInEdges.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdges.getOperation());
 }
 
@@ -2844,7 +2846,7 @@ void DBLowering::lowerGetEdges(mlir::db::GetEdges getEdges) {
 
 
     const mlir::Location uloc = _builder.getUnknownLoc();
-    nl::GetEdges edges = _builder.create<nl::GetEdges>(uloc, inputChunk, carriedChunks);
+    nl::GetEdges edges = _builder.create<nl::GetEdges>(uloc, inputChunk, carriedChunks, getEdges.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getEdges.getOperation());
 }
 
@@ -2862,7 +2864,8 @@ void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesB
     nl::GetOutEdgesByType edges = _builder.create<nl::GetOutEdgesByType>(_builder.getUnknownLoc(),
                                                                          inputChunk,
                                                                          edgeTypeHandle,
-                                                                         carriedChunks);
+                                                                         carriedChunks,
+                                                                         getOutEdgesByType.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByType.getOperation());
 }
 
@@ -2884,7 +2887,8 @@ void DBLowering::lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByTy
     nl::GetInEdgesByType edges = _builder.create<nl::GetInEdgesByType>(_builder.getUnknownLoc(),
                                                                        inputChunk,
                                                                        edgeTypeHandle,
-                                                                       carriedChunks);
+                                                                       carriedChunks,
+                                                                       getInEdgesByType.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByType.getOperation());
 }
 
@@ -2903,7 +2907,8 @@ void DBLowering::lowerGetOutEdgesByLabel(mlir::db::GetOutEdgesByLabel getOutEdge
     nl::GetOutEdgesByLabel edges = _builder.create<nl::GetOutEdgesByLabel>(_builder.getUnknownLoc(),
                                                                            inputChunk,
                                                                            getOutEdgesByLabel.getLabelsAttr(),
-                                                                           carriedChunks);
+                                                                           carriedChunks,
+                                                                           getOutEdgesByLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByLabel.getOperation());
 }
 
@@ -2922,7 +2927,8 @@ void DBLowering::lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesBy
     nl::GetInEdgesByLabel edges = _builder.create<nl::GetInEdgesByLabel>(_builder.getUnknownLoc(),
                                                                          inputChunk,
                                                                          getInEdgesByLabel.getLabelsAttr(),
-                                                                         carriedChunks);
+                                                                         carriedChunks,
+                                                                         getInEdgesByLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByLabel.getOperation());
 }
 
@@ -2941,7 +2947,8 @@ void DBLowering::lowerGetOutEdgesByTypeAndLabel(mlir::db::GetOutEdgesByTypeAndLa
                                                                                          inputChunk,
                                                                                          edgeTypeHandle,
                                                                                          getOutEdgesByTypeAndLabel.getLabelsAttr(),
-                                                                                         carriedChunks);
+                                                                                         carriedChunks,
+                                                                                         getOutEdgesByTypeAndLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getOutEdgesByTypeAndLabel.getOperation());
 }
 
@@ -2960,7 +2967,8 @@ void DBLowering::lowerGetInEdgesByTypeAndLabel(mlir::db::GetInEdgesByTypeAndLabe
                                                                                        inputChunk,
                                                                                        edgeTypeHandle,
                                                                                        getInEdgesByTypeAndLabel.getLabelsAttr(),
-                                                                                       carriedChunks);
+                                                                                       carriedChunks,
+                                                                                       getInEdgesByTypeAndLabel.getDistinctFromAttr());
     buildLoopForSource(edges.getResult(), getInEdgesByTypeAndLabel.getOperation());
 }
 
@@ -3076,6 +3084,27 @@ mlir::Type DBLowering::checkResultChunkType(bool nullable) {
     }
 
     return nl::ChunkType::get(context, storage::BoolType::get(context));
+}
+
+void DBLowering::lowerCheckEdgeDistinct(mlir::db::CheckEdgeDistinct checkEdgeDistinct) {
+    const mlir::Value subjectChunk = mapValue(checkEdgeDistinct.getSubject());
+
+    llvm::SmallVector<mlir::Value, 4> otherChunks;
+    for (const mlir::Value other : checkEdgeDistinct.getOthers()) {
+        otherChunks.push_back(mapValue(other));
+    }
+
+    setInsertionInto(deepestOwnerBlock(otherChunks, ownerBlock(subjectChunk)));
+
+    mlir::MLIRContext* context = _builder.getContext();
+    const mlir::Type boolChunkType = nl::ChunkType::get(context, storage::BoolType::get(context));
+
+    nl::CheckEdgeDistinct check = _builder.create<nl::CheckEdgeDistinct>(_builder.getUnknownLoc(),
+                                                                         boolChunkType,
+                                                                         subjectChunk,
+                                                                         otherChunks);
+
+    _valueMap[checkEdgeDistinct.getResult()] = check.getResult();
 }
 
 mlir::Block* DBLowering::deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback) {
@@ -3366,7 +3395,7 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
     // One row against N pairs the input row with each of the N rows the body yielded for
     // it, which is the op's result: the inputs then the body's columns
     setInsertionInto(deepestOwnerBlock(yieldedChunks, rowBody));
-    nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, rowChunks, yieldedChunks);
+    nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, rowChunks, yieldedChunks, mlir::DenseI64ArrayAttr());
 
     buildLoopForSource(cross.getResult(), call.getOperation());
 }
@@ -3448,7 +3477,7 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
         outer.push_back(buffer.getTag());
 
         setInsertionInto(deepestOwnerBlock(yieldedChunks, bodyRoot));
-        nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, outer, yieldedChunks);
+        nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, outer, yieldedChunks, mlir::DenseI64ArrayAttr());
         nl::For pairs = _builder.create<nl::For>(loc, cross.getResult(), mlir::Value {});
 
         const mlir::Block::BlockArgListType pairChunks = pairs.getBody()->getArguments();
@@ -3737,7 +3766,8 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
 
     nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
                                                                outerColumns,
-                                                               innerColumns);
+                                                               innerColumns,
+                                                               product.getDistinctPairsAttr());
 
     // The pairs come out chunk by chunk, so the product drives a loop of its own
     // nested in the inner factor's - the third level of the nest, below the two the
@@ -3790,7 +3820,8 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
     nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc,
                                                                  iteratorType,
                                                                  state,
-                                                                 probeColumns);
+                                                                 probeColumns,
+                                                                 join.getDistinctPairsAttr());
 
     // A key many build rows carry makes more pairs than the probe chunk holds, so the
     // pairs come out chunk by chunk and the probe drives a loop of its own nested in the
@@ -6857,6 +6888,7 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      explorePaths.getEndColumnAttr(),
                                                                      explorePaths.getEndsOnSeedAttr(),
                                                                      explorePaths.getDistinctAttr(),
+                                                                     explorePaths.getDistinctFromAttr(),
                                                                      static_cast<unsigned>(stepCount));
 
     const mlir::MutableArrayRef<mlir::Region> dbHops = explorePaths.getHops();

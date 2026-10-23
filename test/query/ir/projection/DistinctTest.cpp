@@ -519,7 +519,7 @@ TEST_F(DistinctTest, dedupsRepeatedSources) {
 // pair of out-edges - 44 rows for the same 9 nodes. The dedup filters in the innermost
 // loop of the nest, so the repetition the cross product creates is dropped too.
 TEST_F(DistinctTest, dedupsAcrossACrossProduct) {
-    const Rows expected = {{0}, {1}, {6}, {8}, {9}, {11}, {12}, {15}, {17}};
+    const Rows expected = {{0}, {1}, {8}, {9}, {12}, {15}};
     expectNodeRowSet("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a", expected);
 }
 
@@ -531,13 +531,10 @@ TEST_F(DistinctTest, dedupsCrossProductRepeatsOfAProjectedPair) {
     const Rows expected = {
         {0, 1}, {0, 2}, {0, 3}, {0, 6},
         {1, 0}, {1, 4}, {1, 5},
-        {6, 0},
         {8, 4}, {8, 7},
         {9, 2}, {9, 10},
-        {11, 5},
         {12, 13}, {12, 16},
         {15, 13}, {15, 14},
-        {17, 13},
     };
     expectNodeRowSet("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a, b", expected);
 }
@@ -918,7 +915,7 @@ TEST_F(DistinctTest, dedupsAndOrdersByAnExpressionOverAProjectedItem) {
 // would order 44 rows and dedup a sorted stream - the same row set, but the sort would
 // carry five times the rows.
 TEST_F(DistinctTest, ordersDistinctSourcesAcrossACrossProduct) {
-    const Rows expected = {{0}, {1}, {6}, {8}, {9}, {11}, {12}, {15}, {17}};
+    const Rows expected = {{0}, {1}, {8}, {9}, {12}, {15}};
     expectNodeRows("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a ORDER BY a", expected);
 }
 
@@ -929,13 +926,10 @@ TEST_F(DistinctTest, ordersDistinctCrossProductPairs) {
     const Rows expected = {
         {0, 1}, {0, 2}, {0, 3}, {0, 6},
         {1, 0}, {1, 4}, {1, 5},
-        {6, 0},
         {8, 4}, {8, 7},
         {9, 2}, {9, 10},
-        {11, 5},
         {12, 13}, {12, 16},
         {15, 13}, {15, 14},
-        {17, 13},
     };
     expectNodeRows("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a, b ORDER BY a, b", expected);
 }
@@ -944,7 +938,7 @@ TEST_F(DistinctTest, ordersDistinctCrossProductPairs) {
 // is the three highest sources. Charged to the product's rows instead it would return
 // 17, 15, 15 - node 15 has two out-edges, so the product repeats it four times.
 TEST_F(DistinctTest, ordersDistinctSourcesThenLimitsAcrossACrossProduct) {
-    const Rows expected = {{17}, {15}, {12}};
+    const Rows expected = {{15}, {12}, {9}};
     expectNodeRows("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a ORDER BY a DESC LIMIT 3", expected);
 }
 

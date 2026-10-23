@@ -4,7 +4,9 @@
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistory.h"
 #include "metadata/EdgeBranchingCache.h"
+#include "metadata/EdgeTypeAcyclicityCache.h"
 #include "metadata/GraphMetadata.h"
+#include "metadata/SchemaGraph.h"
 #include "versioning/Tombstones.h"
 
 namespace db {
@@ -39,6 +41,8 @@ public:
     [[nodiscard]] CommitHash hash() const { return _hash; }
     [[nodiscard]] const Tombstones& tombstones() const { return _tombstones; }
     [[nodiscard]] EdgeBranchingCache& branchingCache() const { return _branchingCache; }
+    [[nodiscard]] EdgeTypeAcyclicityCache& acyclicityCache() const { return _acyclicityCache; }
+    [[nodiscard]] SchemaGraph& schemaGraph() const { return _schemaGraph; }
     std::span<const WeakArc<Index>> indexes() const { return _history.validIndexes(); }
 
 private:
@@ -56,6 +60,8 @@ private:
     Tombstones _tombstones;
 
     mutable EdgeBranchingCache _branchingCache;
+    mutable EdgeTypeAcyclicityCache _acyclicityCache;
+    mutable SchemaGraph _schemaGraph;
 };
 
 }

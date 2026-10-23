@@ -154,7 +154,7 @@ TEST_F(ConstantRowsPassesTest, fusesExplorationsUnderAConstantProjection) {
     const PassCase cases[] = {
         {"MATCH (a:Person)-[e*1..3]->(b:Interest)", "end_labels", 27},
         {"MATCH (a:Person)((x)-[r]->(y:Person)){1,3}(b)", "hop_labels", 4},
-        {"MATCH (a:Person)-[e*1..3]->(b), (a)-->(b)", "end_column", 26},
+        {"MATCH (a:Person)-[e*1..3]->(b) MATCH (a)-->(b)", "end_column", 26},
         {"MATCH (a:Person)-[e*1..3]->(b), (b:Interest {name: 'Bio'})", "end_nodes", 4},
         {"MATCH (a:Person)-[e*1..3]->(b {name: 'Bio'})", "end_nodes", 4},
         {"MATCH (a:Person)-[e*1..3]->(b)-->(c {name: 'Bio'})", "end_nodes", 3},

@@ -1236,10 +1236,19 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpA
 
       %b = get_out_edges(%a, {})
       %c, %b2, %a2 = get_out_edges(%b, {%a})   // eids/etypes omitted
+
+    `distinct_from` names carried columns by their index in the carry set, edge or path
+    columns the same MATCH clause bound before this hop: the hop takes no edge a row of
+    them holds, which is what db.check_edge_distinct over `eids` would cut afterwards,
+    done in the writer before the row exists. The fuse_distinct_edges pass sets it from
+    that check.
+
+      %c, %e2, %et, %d, %e1f = get_out_edges(%c, {%e1}) distinct_from [0]
   }];
 
   // `columns_to_filter`: the only variadic operand, after the fixed `input_nodes`.
-  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1249,8 +1258,10 @@ def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpA
                         Variadic<Column>:$filtered_columns);
 
   // Brace-wrap the carry set so it reads like `get_out_edges(%b, {%a})`.
+  let hasVerifier = 1;
+
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1278,7 +1289,8 @@ def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsm
   }];
 
   // `columns_to_filter`: the only variadic operand, after the fixed `input_nodes`.
-  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1288,8 +1300,10 @@ def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsm
                         Variadic<Column>:$filtered_columns);
 
   // Brace-wrap the carry set so it reads like `get_in_edges(%b, {%a})`.
+  let hasVerifier = 1;
+
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1305,7 +1319,8 @@ def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInt
       %c, %b2, %a2 = get_edges(%b, {%a})
   }];
 
-  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1313,8 +1328,10 @@ def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInt
                         ColumnNodeIDs:$tgtids,
                         Variadic<Column>:$filtered_columns);
 
+  let hasVerifier = 1;
+
   let assemblyFormat = [{
-    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1351,7 +1368,8 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
   // not an SSA value, they are absent from `operands`; lowering hoists them into an
   // nl.get_edge_type_set handle so they are resolved once above the loops.
   // `columns_to_filter` is the variadic carry set.
-  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1363,8 +1381,10 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
   // The type names print inside the parens as `["KNOWS"]`, between input_nodes and
   // the brace-wrapped carry set; MLIR elides them from attr-dict because the format
   // already names them. functional-type spells only the operand and result types.
+  let hasVerifier = 1;
+
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1389,7 +1409,8 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
     nothing resolved into, or an empty one a pass wrote, yields no rows.
   }];
 
-  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1397,8 +1418,10 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
                         ColumnNodeIDs:$tgtids,
                         Variadic<Column>:$filtered_columns);
 
+  let hasVerifier = 1;
+
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1433,7 +1456,8 @@ def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInte
   // `labels` is the label conjunction the target must carry, spelled as in the query.
   // Being an attribute and not an SSA value, it is absent from `operands`; lowering
   // hands the list to the nl hop, which resolves each name once.
-  let arguments = (ins Column:$input_nodes, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1446,7 +1470,7 @@ def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInte
   // The label list prints inside the parens as `["Person"]`, between input_nodes and
   // the brace-wrapped carry set, the way get_out_edges_by_type prints its type name.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1471,7 +1495,8 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
     absent name yields no rows.
   }];
 
-  let arguments = (ins Column:$input_nodes, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1481,7 +1506,7 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1505,7 +1530,8 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
     match get_out_edges.
   }];
 
-  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1515,7 +1541,7 @@ def GetOutEdgesByTypeAndLabel : TuringOp<"get_out_edges_by_type_and_label", [Pur
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1537,7 +1563,8 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
     as on get_in_edges_by_label.
   }];
 
-  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, EdgeTypeRefArrayAttr:$edge_types, LabelRefArrayAttr:$labels, Variadic<Column>:$columns_to_filter,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -1547,7 +1574,7 @@ def GetInEdgesByTypeAndLabel : TuringOp<"get_in_edges_by_type_and_label", [Pure,
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` $labels `,` `{` $columns_to_filter `}` `)` (`distinct_from` $distinct_from^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1655,6 +1682,15 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     always shortens to a trail of as many; deeper minimums keep the trail semantics and
     walk, remembering each subtree no held edge constrained so that the prefixes arriving
     at a node later stop there. `paths` must have no use, which the verifier requires.
+
+    `distinct_from` names carried columns by their index in the carry set, edge or path
+    columns the same MATCH clause bound before the path: `e1` in
+    `MATCH (a)-[e1]->(b)-[e]->{1,3}(c)`, or the first path of two. No path takes one of
+    its seed row's edges, so the rows come out as db.check_edge_distinct over the paths
+    would leave them, without the paths being built; the fuse_distinct_edges pass sets it
+    from that check, as on get_out_edges. The search of the distinct mode honours it too.
+
+      %s, %t, %p, %e1f = db.explore_paths(%b, {%e1}) forward hops 1 to 3 distinct_from [0]
   }];
 
   let arguments = (ins Column:$input_nodes,
@@ -1669,7 +1705,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                        OptionalAttr<LabelRefArrayArrayAttr>:$hop_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
-                       UnitAttr:$distinct);
+                       UnitAttr:$distinct,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinct_from);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnNodeIDs:$tgtids,
@@ -1682,8 +1719,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` custom<PathDirections>($directions) `hops` $min_hops
     (`to` $max_hops^)? (`edge_types` custom<StepNames>($edge_types)^)? (`end_labels` $end_labels^)?
     (`hop_labels` custom<StepNames>($hop_labels)^)? (`end_nodes` $end_nodes^)? (`end_column` $end_column^)?
-    (`hop_imports` `{` $hop_imports^ `}`)? (`ends_on_seed` $ends_on_seed^)?
-    (`distinct` $distinct^)? `` custom<HopRegions>($hops, ref($directions))
+    (`hop_imports` `{` $hop_imports^ `}`)? (`distinct_from` $distinct_from^)?
+    (`ends_on_seed` $ends_on_seed^)? (`distinct` $distinct^)? `` custom<HopRegions>($hops, ref($directions))
     attr-dict `:` functional-type(operands, results)
   }];
 
@@ -2039,6 +2076,33 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
   }];
 }
 
+def CheckEdgeDistinct : TuringOp<"check_edge_distinct", [Pure]> {
+  let summary = "Test each row's edge, or path, against the edges bound before it in the clause";
+
+  let description = [{
+    Relationship isomorphism: within one MATCH clause no edge is bound twice, whether by
+    two hops, by a hop and a variable-length path, or by two paths. `subject` is the edge
+    or path column the newest hop bound; `others` are edge or path columns bound before
+    it, row-aligned with it. The mask is true where the subject shares no edge with any
+    of them: an edge differs from an edge, is not on a path, and a path has no edge on
+    another path.
+
+      %ok = db.check_edge_distinct(%e2, {%e1})
+              : (!db.column<!storage.edge_id>, !db.column<!storage.edge_id>) -> !db.column<!storage.bool>
+      %ok = db.check_edge_distinct(%p, {%e1, %q})
+              : (!db.column<!storage.path_ref>, !db.column<!storage.edge_id>, !db.column<!storage.path_ref>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$subject, Variadic<Column>:$others);
+  let results   = (outs Column:$result);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $subject `,` `{` $others `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 /**
 * CrossProduct
 */
@@ -2072,7 +2136,19 @@ def CrossProduct : TuringOp<"cross_product", [Pure]> {
     The result types are not spelled after the regions; the parser recovers them
     from the two yields and the verifier checks they line up. Reading the graph
     is deterministic, so the op is Pure.
+
+    `distinct_pairs` leaves out the pairs whose two rows hold one edge: it lists
+    pairs of edge columns, a left factor's yield index followed by a right
+    factor's, and a pair of rows is kept only where every listed pair of columns
+    holds two different edges. It is the relationship isomorphism of the pattern
+    the two factors come from, folded in from the db.check_edge_distinct filter
+    over the product:
+
+      %e1, %e2 = db.cross_product factor { ... db.yield %e : ... }
+                                  factor { ... db.yield %f : ... } distinct_pairs [0, 0]
   }];
+
+  let arguments = (ins OptionalAttr<DenseI64ArrayAttr>:$distinct_pairs);
 
   // The results are the concatenation of the two factors' yielded columns; the
   // count and types are recovered from the yields, never spelled out.
@@ -2135,11 +2211,17 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
     As on db.cross_product the result types are not spelled after the regions;
     the parser recovers them from the two yields and the verifier checks they line
     up. Reading the graph is deterministic, so the op is Pure.
+
+    `distinct_pairs` leaves out the joined pairs whose two rows hold one edge, as
+    on db.cross_product: pairs of edge columns, a left factor's yield index
+    followed by a right factor's.
+
+      ... } on 2, 1 distinct_pairs [1, 0]
   }];
 
   // Which column of each factor's yield carries the join key: the left factor's,
   // then the right factor's.
-  let arguments = (ins UI64Attr:$leftKey, UI64Attr:$rightKey);
+  let arguments = (ins UI64Attr:$leftKey, UI64Attr:$rightKey, OptionalAttr<DenseI64ArrayAttr>:$distinct_pairs);
 
   // The results are the concatenation of the two factors' yielded columns; the
   // count and types are recovered from the yields, never spelled out.

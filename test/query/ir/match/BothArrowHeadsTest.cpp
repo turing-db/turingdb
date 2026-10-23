@@ -38,8 +38,8 @@ TEST_F(BothArrowHeadsTest, acceptsSpacesBetweenTheTokens) {
 }
 
 TEST_F(BothArrowHeadsTest, closesACycle) {
-    expectRows("MATCH (a)-->(b)<-->(a) RETURN count(*)", {{"22"}});
-    expectRows("MATCH (a)<-->(b)<-->(a) RETURN count(*)", {{"44"}});
+    expectRows("MATCH (a)-->(b)<-->(a) RETURN count(*)", {{"4"}});
+    expectRows("MATCH (a)<-->(b)<-->(a) RETURN count(*)", {{"8"}});
 }
 
 TEST_F(BothArrowHeadsTest, walksAVariableLengthPath) {

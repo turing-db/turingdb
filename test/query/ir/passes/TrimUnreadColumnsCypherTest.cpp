@@ -110,10 +110,8 @@ TEST_F(TrimUnreadColumnsCypherTest, readsTheTailOfATwoHopChain) {
 
 TEST_F(TrimUnreadColumnsCypherTest, readsTheTailOfAThreeHopChain) {
     expectRows("MATCH (a)-->(b)-->(c)-->(d) RETURN d.name",
-               {{"Remy"}, {"Bio"}, {"Cooking"}, {"Remy"}, {"Bio"}, {"Cooking"},
-                {"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"},
-                {"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"},
-                {"Remy"}, {"Remy"}});
+               {{"Adam"}, {"Bio"}, {"Bio"}, {"Computers"}, {"Computers"}, {"Cooking"}, {"Cooking"},
+                {"Eighties"}, {"Eighties"}, {"Ghosts"}, {"Remy"}, {"Remy"}});
 }
 
 // Remy and Adam are the only nodes aged 32; Remy has two edges in, Adam one.
@@ -174,9 +172,9 @@ TEST_F(TrimUnreadColumnsCypherTest, hopsFromASortedAndSkippedWith) {
 // KNOWS_WELL runs Remy -> Adam, Adam -> Remy and Ghosts -> Remy on each side of the product.
 TEST_F(TrimUnreadColumnsCypherTest, crossesTwoTypedHopsReadingTheirTargets) {
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b), (c)-[:KNOWS_WELL]->(d) RETURN b.name, d.name",
-               {{"Adam", "Adam"}, {"Adam", "Remy"}, {"Adam", "Remy"},
+               {{"Adam", "Remy"}, {"Adam", "Remy"},
                 {"Remy", "Adam"}, {"Remy", "Adam"},
-                {"Remy", "Remy"}, {"Remy", "Remy"}, {"Remy", "Remy"}, {"Remy", "Remy"}});
+                {"Remy", "Remy"}, {"Remy", "Remy"}});
 }
 
 // 18 nodes crossed with 18 edges.
