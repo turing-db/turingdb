@@ -93,6 +93,13 @@ TEST_F(PathEdgeUniquenessTest, excludesTheFirstPathFromTheSecond) {
     expectCount("MATCH (a)-[e*1..2]->(b)-[f*1..2]->(c) RETURN count(*)", "46");
 }
 
+// The two walks meet only in the cross product, so the check between their paths runs over
+// the product's rows
+TEST_F(PathEdgeUniquenessTest, excludesThePathOfOnePatternFromThePathOfAnother) {
+    expectCount("MATCH (a)-[e*1..2]->(b), (c)-[f*1..2]->(d) RETURN count(*)", "756");
+    expectCount("MATCH (a)-[e*1..2]-(b), (c)-[f*1..2]-(d) RETURN count(*)", "8248");
+}
+
 TEST_F(PathEdgeUniquenessTest, distinctSearchExcludesTheHopBeforeIt) {
     std::string dump;
     optimisedDump("EXPLAIN (db) MATCH (a)-[e1]->(b)-[*1..2]->(c) WITH DISTINCT a, b, c RETURN count(*)", dump);

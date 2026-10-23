@@ -102,51 +102,59 @@ using namespace db;
 
 namespace {
 
-EdgeID edgeAt(const NLEdgeHolder& holder, size_t row) {
-    return (*static_cast<const ColumnEdgeIDs*>(holder._column))[row];
+const ColumnEdgeIDs& edgesOf(const NLEdgeHolder& holder) {
+    return *static_cast<const ColumnEdgeIDs*>(holder._column);
 }
 
-PathRef pathAt(const NLEdgeHolder& holder, size_t row) {
-    return (*static_cast<const ColumnVector<PathRef>*>(holder._column))[row];
+const ColumnVector<PathRef>& pathsOf(const NLEdgeHolder& holder) {
+    return *static_cast<const ColumnVector<PathRef>*>(holder._column);
 }
 
-bool pathHoldsEdge(const PathTrie& trie, PathRef path, EdgeID edge) {
-    PathRef current = path;
-    for (uint64_t depth = trie.getDepth(path); depth > 0; depth--) {
-        const PathTrieEntry& entry = trie.get(current);
-        if (entry._edge == edge) {
-            return true;
+void leaveOutRepeatedEdges(const ColumnEdgeIDs& first, const ColumnEdgeIDs& second, ColumnMask& distinct) {
+    const size_t rowCount = distinct.size();
+    for (size_t row = 0; row < rowCount; row++) {
+        distinct[row] = distinct[row] && first[row] != second[row];
+    }
+}
+
+void leaveOutPathsHoldingEdges(const ColumnVector<PathRef>& paths, const ColumnEdgeIDs& edges, const PathTrie& trie, ColumnMask& distinct) {
+    const size_t rowCount = distinct.size();
+    for (size_t row = 0; row < rowCount; row++) {
+        PathRef current = paths[row];
+        for (uint64_t depth = trie.getDepth(current); depth > 0 && distinct[row]; depth--) {
+            const PathTrieEntry& entry = trie.get(current);
+            distinct[row] = entry._edge != edges[row];
+            current = entry._parent;
+        }
+    }
+}
+
+// The first path's edges are sorted once per row, so each edge of the second is one search
+// rather than a walk of the first
+void leaveOutPathsSharingEdges(const ColumnVector<PathRef>& first, const ColumnVector<PathRef>& second, const PathTrie& trie, ColumnMask& distinct) {
+    std::vector<uint64_t> firstEdges;
+
+    const size_t rowCount = distinct.size();
+    for (size_t row = 0; row < rowCount; row++) {
+        if (!distinct[row]) {
+            continue;
         }
 
-        current = entry._parent;
-    }
-
-    return false;
-}
-
-bool pathsShareAnEdge(const PathTrie& trie, PathRef first, PathRef second) {
-    PathRef current = first;
-    for (uint64_t depth = trie.getDepth(first); depth > 0; depth--) {
-        const PathTrieEntry& entry = trie.get(current);
-        if (pathHoldsEdge(trie, second, entry._edge)) {
-            return true;
+        firstEdges.clear();
+        PathRef current = first[row];
+        for (uint64_t depth = trie.getDepth(current); depth > 0; depth--) {
+            const PathTrieEntry& entry = trie.get(current);
+            firstEdges.push_back(entry._edge.getValue());
+            current = entry._parent;
         }
+        std::sort(firstEdges.begin(), firstEdges.end());
 
-        current = entry._parent;
-    }
-
-    return false;
-}
-
-bool sharesAnEdge(const NLEdgeHolder& subject, const NLEdgeHolder& other, size_t row, const PathTrie& trie) {
-    if (!subject._holdsPaths && !other._holdsPaths) {
-        return edgeAt(subject, row) == edgeAt(other, row);
-    } else if (subject._holdsPaths && other._holdsPaths) {
-        return pathsShareAnEdge(trie, pathAt(subject, row), pathAt(other, row));
-    } else if (subject._holdsPaths) {
-        return pathHoldsEdge(trie, pathAt(subject, row), edgeAt(other, row));
-    } else {
-        return pathHoldsEdge(trie, pathAt(other, row), edgeAt(subject, row));
+        current = second[row];
+        for (uint64_t depth = trie.getDepth(current); depth > 0 && distinct[row]; depth--) {
+            const PathTrieEntry& entry = trie.get(current);
+            distinct[row] = !std::binary_search(firstEdges.begin(), firstEdges.end(), entry._edge.getValue());
+            current = entry._parent;
+        }
     }
 }
 
@@ -13144,23 +13152,22 @@ void NLExecutor::runCheckEdgeDistinct(NLExecutionContext* context, NLFunctionDat
     const NLCheckEdgeDistinctData* check = static_cast<NLCheckEdgeDistinctData*>(data);
 
     const NLEdgeHolder& subject = check->getSubject();
-    const std::span<const NLEdgeHolder> others = check->getOthers();
     const PathTrie& trie = *check->getTrie();
     ColumnMask* output = check->getOutput();
 
-    const size_t rowCount = subject._column->size();
-    output->resize(rowCount);
+    output->resize(subject._column->size());
+    std::fill(output->begin(), output->end(), true);
 
-    for (size_t row = 0; row < rowCount; row++) {
-        bool distinct = true;
-        for (const NLEdgeHolder& other : others) {
-            if (sharesAnEdge(subject, other, row, trie)) {
-                distinct = false;
-                break;
-            }
+    for (const NLEdgeHolder& other : check->getOthers()) {
+        if (!subject._holdsPaths && !other._holdsPaths) {
+            leaveOutRepeatedEdges(edgesOf(subject), edgesOf(other), *output);
+        } else if (subject._holdsPaths && other._holdsPaths) {
+            leaveOutPathsSharingEdges(pathsOf(subject), pathsOf(other), trie, *output);
+        } else if (subject._holdsPaths) {
+            leaveOutPathsHoldingEdges(pathsOf(subject), edgesOf(other), trie, *output);
+        } else {
+            leaveOutPathsHoldingEdges(pathsOf(other), edgesOf(subject), trie, *output);
         }
-
-        (*output)[row] = distinct;
     }
 }
 
