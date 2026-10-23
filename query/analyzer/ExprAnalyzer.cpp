@@ -56,6 +56,33 @@ EvaluatedType orderingResultType(EvaluatedType a, EvaluatedType b) {
     return EvaluatedType::Bool;
 }
 
+// What = and <> answer over two types: null against a null, a boolean between two operands
+// an equality takes, and Invalid for any other pair. A double is not tested for equality
+// with a number, which rounding makes unreliable, and a label, an edge type or a property
+// type is the id of one, equal only to an id of its kind.
+EvaluatedType equalityResultType(EvaluatedType a, EvaluatedType b) {
+    const TypePairBitset pair(a, b);
+
+    const bool equatesADouble = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
+                             || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer);
+    const bool equatesMetadataIDs = a == b
+                                 && (a == EvaluatedType::Label
+                                     || a == EvaluatedType::EdgeType
+                                     || a == EvaluatedType::PropertyType);
+    const bool takesA = a == EvaluatedType::Null || namesAnEqualityOperand(a);
+    const bool takesB = b == EvaluatedType::Null || namesAnEqualityOperand(b);
+
+    if (equatesMetadataIDs) {
+        return EvaluatedType::Bool;
+    } else if (!takesA || !takesB || equatesADouble) {
+        return EvaluatedType::Invalid;
+    } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+        return EvaluatedType::Null;
+    }
+
+    return EvaluatedType::Bool;
+}
+
 std::string_view componentOwnerName(bool namesADateTimePart, bool namesADurationPart) {
     if (namesADateTimePart) {
         return "datetime";
@@ -453,133 +480,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     switch (expr->getOperator()) {
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal: {
-            type = (a == EvaluatedType::Null || b == EvaluatedType::Null) ? EvaluatedType::Null : EvaluatedType::Bool;
-
-            if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
-                const std::string error = fmt::format(
-                    "Equality of types '{}' and '{}' is not encouraged due to "
-                    "potential rounding innaccuracy. Please constrain with '<' "
-                    "and '>' instead.",
-                    EvaluatedTypeName::value(a), EvaluatedTypeName::value(b));
-                throwError(error, expr);
-            }
-
-            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
-                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)
-                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Embedding)
-                || pair == TypePairBitset(EvaluatedType::Label, EvaluatedType::Label)
-                || pair == TypePairBitset(EvaluatedType::EdgeType, EvaluatedType::EdgeType)
-                || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)
-                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
-                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::DateTime)
-                || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
-                break;
-            }
-
-            // Comparing against a null is null, so the pairs a null takes part in are as
-            // valid as any other; the two nulls of 'null = null' included
-            if (pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::DateTime, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Null)
-            ) {
-                break;
-            }
-
-            // A type-erased cell is equal only to a cell holding the same value, so it
-            // compares against the types it can hold - a list and a null among them, the
-            // null being what IS (NOT) NULL tests a cell for
-            const bool comparesListItem =
-                pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Map)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::NodePattern)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::EdgePattern);
-
-            // A map value is a type-erased cell too, so it compares against the types a
-            // map can hold, and against null for IS (NOT) NULL
-            const bool comparesMapValue =
-                pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::MapValue)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::ListItem)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::DateTime)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Duration)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Integer)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::String)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::List)
-                || pair == TypePairBitset(EvaluatedType::MapValue, EvaluatedType::Map);
-
-            // A stored list compares against another list, and against null for
-            // IS (NOT) NULL
-            const bool comparesList =
-                pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
-                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::Null);
-
-            const bool comparesMap =
-                pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Map)
-                || pair == TypePairBitset(EvaluatedType::Map, EvaluatedType::Null);
-
-            if (comparesListItem || comparesMapValue || comparesList || comparesMap) {
-                break;
-            }
-
-            // Values of two types that can never be equal are not equal, so the comparison
-            // answers false rather than turning the query away
-            if (comparesAsDisjointTypes(a, b)) {
-                break;
-            }
-
-            // Allows NodeID <-> NodeID and NodeID <-> Integer comparisons
-            if (pair == TypePairBitset(EvaluatedType::NodePattern,
-                                       EvaluatedType::NodePattern)
-                || pair == TypePairBitset(EvaluatedType::Integer,
-                                          EvaluatedType::NodePattern)) {
-                break;
-            }
-
-            // Allows EdgeID <-> EdgeID and EdgeID <-> Integer comparisons
-            if (pair == TypePairBitset(EvaluatedType::EdgePattern,
-                                       EvaluatedType::EdgePattern)
-                || pair == TypePairBitset(EvaluatedType::Integer,
-                                          EvaluatedType::EdgePattern)) {
-                break;
-            }
-
-            // n IS NULL over a node or an edge, which an OPTIONAL MATCH leaves null when
-            // its pattern missed
-            const bool comparesEntityToNull =
-                pair == TypePairBitset(EvaluatedType::NodePattern, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::EdgePattern, EvaluatedType::Null);
-
-            if (comparesEntityToNull) {
-                break;
-            }
-
-            const std::string error = fmt::format(
-                "Operands are not valid or compatible types: '{}' and '{}'",
-                EvaluatedTypeName::value(a),
-                EvaluatedTypeName::value(b));
-
-            throwError(error, expr);
+            type = analyzeEquality(a, b, expr);
         } break;
 
         case BinaryOperator::IsNull:
@@ -2188,10 +2089,8 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    EvaluatedTypeName::value(valueType)),
                        test._value);
         }
-    } else if (isEntity(subjectType)) {
-        requireComparableToEntity(subject, test);
     } else {
-        requireCaseValue(test._value);
+        analyzeEquality(subjectType, valueType, test._value);
     }
 }
 
@@ -2226,37 +2125,26 @@ void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
                subject);
 }
 
-void ExprAnalyzer::requireCaseValue(const Expr* value) const {
-    const EvaluatedType type = value->getType();
+EvaluatedType ExprAnalyzer::analyzeEquality(EvaluatedType a, EvaluatedType b, const Expr* expr) const {
+    const EvaluatedType type = equalityResultType(a, b);
 
-    const bool isScalar = type == EvaluatedType::Null
-                          || namesATaggedCell(type)
-                          || convertibleToValueType(type);
+    const bool equatesTwoDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
 
-    if (isScalar) {
-        return;
+    if (type != EvaluatedType::Invalid) {
+        return type;
+    } else if (equatesTwoDoubles) {
+        throwError(fmt::format("Equality of types '{}' and '{}' is not encouraged due to "
+                               "potential rounding innaccuracy. Please constrain with '<' "
+                               "and '>' instead.",
+                               EvaluatedTypeName::value(a),
+                               EvaluatedTypeName::value(b)),
+                   expr);
     }
 
-    throwError(fmt::format("The values a CASE compares its subject against must be scalars, "
-                           "not '{}'",
-                           EvaluatedTypeName::value(type)),
-               value);
-}
-
-void ExprAnalyzer::requireComparableToEntity(const Expr* subject, const CaseExpr::Test& test) const {
-    const EvaluatedType subjectType = subject->getType();
-    const EvaluatedType valueType = test._value->getType();
-
-    const bool comparable = valueType == EvaluatedType::Null
-                            || valueType == EvaluatedType::Integer
-                            || valueType == subjectType;
-
-    if (!comparable) {
-        throwError(fmt::format("A node or an edge is equal to one of its kind or to an id, "
-                               "not to '{}'",
-                               EvaluatedTypeName::value(valueType)),
-                   test._value);
-    }
+    throwError(fmt::format("Operands are not valid or compatible types: '{}' and '{}'",
+                           EvaluatedTypeName::value(a),
+                           EvaluatedTypeName::value(b)),
+               expr);
 }
 
 void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {

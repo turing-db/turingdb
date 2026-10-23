@@ -110,11 +110,13 @@ TEST_F(CaseEntitySubjectTest, neverTakesAnOrderingBranchOverAnEntity) {
                });
 }
 
-// A node is equal to a node or to an id, and to nothing else
-TEST_F(CaseEntitySubjectTest, rejectsAValueNoEntityCompares) {
-    runQueryExpectingError("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->(f) "
-                           "RETURN CASE r WHEN 'Remy' THEN 'low' ELSE 'high' END",
-                           "not to 'String'");
+TEST_F(CaseEntitySubjectTest, neverTakesABranchComparingAnEntityToAString) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->(f) "
+               "RETURN p.name, CASE r WHEN 'Remy' THEN 'low' ELSE 'high' END",
+               {
+                   {"Adam", "high"}, {"Cyrus", "high"}, {"Doruk", "high"}, {"Luc", "high"},
+                   {"Martina", "high"}, {"Maxime", "high"}, {"Remy", "high"}, {"Suhas", "high"},
+               });
 }
 
 int main(int argc, char** argv) {

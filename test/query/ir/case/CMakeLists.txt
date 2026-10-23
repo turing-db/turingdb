@@ -21,3 +21,5 @@ target_sources(test_query_ir_case_over_projection_alias PRIVATE ${IR_TEST_DIR}/S
 target_include_directories(test_query_ir_case_over_projection_alias PRIVATE ${IR_TEST_DIR})
 
 add_turing_test(test_query_ir_case_entity_inequality CaseEntityInequalityTest.cpp)
+
+add_turing_test(test_query_ir_case_equality_rule CaseEqualityRuleTest.cpp)

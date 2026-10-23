@@ -158,33 +158,42 @@ inline bool namesAComparableValue(EvaluatedType e) {
         || e == EvaluatedType::Map;
 }
 
+inline bool namesATaggedCell(EvaluatedType e) {
+    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+}
+
+// The types = and <> take: every value and every entity
+inline bool namesAnEqualityOperand(EvaluatedType e) {
+    return namesAComparableValue(e)
+        || namesATaggedCell(e)
+        || e == EvaluatedType::NodePattern
+        || e == EvaluatedType::EdgePattern;
+}
+
 // Whether two types can never hold equal values, which makes an equality between them
-// false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - and
-// neither is a string against a char, which compare as the characters they carry.
+// false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - nor is a
+// string against a char, which compare as the characters they carry, nor an entity against
+// the integer its id is. A tagged cell holds the row's type, so it is disjoint from none.
 inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
-    if (!namesAComparableValue(a) || !namesAComparableValue(b) || a == b) {
+    const bool comparesACell = namesATaggedCell(a) || namesATaggedCell(b);
+
+    if (!namesAnEqualityOperand(a) || !namesAnEqualityOperand(b) || a == b || comparesACell) {
         return false;
     }
 
     const TypePairBitset pair(a, b);
     const bool bothNumeric = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double);
     const bool bothTextual = pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char);
+    const bool comparesAnID = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::NodePattern)
+                           || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::EdgePattern);
 
-    return !bothNumeric && !bothTextual;
-}
-
-inline bool namesATaggedCell(EvaluatedType e) {
-    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+    return !bothNumeric && !bothTextual && !comparesAnID;
 }
 
 // The types <, <=, > and >= take: every value, entities and paths included, though only
 // numbers, strings, booleans, datetimes, durations and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {
-    return namesAComparableValue(e)
-        || namesATaggedCell(e)
-        || e == EvaluatedType::NodePattern
-        || e == EvaluatedType::EdgePattern
-        || e == EvaluatedType::GraphPath;
+    return namesAnEqualityOperand(e) || e == EvaluatedType::GraphPath;
 }
 
 // The class a type is ordered in, or nullopt for a type with no order: a map, an

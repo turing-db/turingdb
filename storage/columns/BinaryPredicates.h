@@ -139,17 +139,24 @@ inline bool holdsAValue(const T& operand) {
     }
 }
 
-template <TypedInternalID IDT>
-inline bool elementIsID(const ListElementView element, const IDT id) {
+inline bool holdsAnInteger(const ListElementView element) {
     const ListBufferTypeTag tag = element.getTag();
-    const bool holdsAnInteger = tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+    return tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+}
 
-    if (holdsAnInteger) {
+inline bool holdsAnInteger(const MapEntryView entry) {
+    const MapBufferTypeTag tag = entry.getValueTag();
+    return tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt;
+}
+
+template <typename Cell, TypedInternalID IDT>
+inline bool cellIsID(const Cell cell, const IDT id) {
+    if (holdsAnInteger(cell)) {
         const types::UInt64::Primitive value = id.getValue();
-        return element == value;
+        return cell == value;
     }
 
-    return element == id;
+    return cell == id;
 }
 
 // The list a map entry holds, absent where it holds anything else, as taggedList answers
@@ -721,7 +728,7 @@ struct TuringEqual {
 
     // A cell holding a list compares as that list, so its null elements answer as a list's do
     template <typename T, typename U>
-        requires ComparesATaggedCell<T, U>
+        requires ComparesATaggedCell<T, U> || ComparesAMapEntry<T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) {
         if (!holdsAValue(a) || !holdsAValue(b)) {
             return std::nullopt;
@@ -740,31 +747,12 @@ struct TuringEqual {
         using Rhs = std::decay_t<decltype(rhs)>;
 
         if constexpr (TypedInternalID<Lhs>) {
-            return CustomBool {elementIsID(rhs, lhs)};
+            return CustomBool {cellIsID(rhs, lhs)};
         } else if constexpr (TypedInternalID<Rhs>) {
-            return CustomBool {elementIsID(lhs, rhs)};
+            return CustomBool {cellIsID(lhs, rhs)};
         } else {
             return CustomBool {lhs == rhs};
         }
-    }
-
-    template <typename T, typename U>
-        requires ComparesAMapEntry<T, U>
-    std::optional<CustomBool> operator()(const T& a, const U& b) {
-        if (!holdsAValue(a) || !holdsAValue(b)) {
-            return std::nullopt;
-        }
-
-        const auto& lhs = TypeUtils::unwrap(a);
-        const auto& rhs = TypeUtils::unwrap(b);
-
-        const std::optional<ListView> lhsList = heldList(lhs);
-        const std::optional<ListView> rhsList = heldList(rhs);
-        if (lhsList && rhsList) {
-            return (*this)(*lhsList, *rhsList);
-        }
-
-        return CustomBool {lhs == rhs};
     }
 
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
@@ -1002,7 +990,7 @@ struct TuringIn {
                     return CustomBool {true};
                 }
             } else if constexpr (TypedInternalID<Scalar>) {
-                if (elementIsID(element, scalar)) {
+                if (cellIsID(element, scalar)) {
                     return CustomBool {true};
                 }
             } else if (element == scalar) {
