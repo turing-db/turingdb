@@ -572,11 +572,17 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            // A cell holding text concatenates with a string, as the string it holds
-            // would: the type it holds is settled row by row, so a cell holding a number
-            // joins as the text Cypher writes that number with
-            if (concatenatesAny(pair) || concatenatesAsText(pair)) {
+            if (concatenatesAsText(pair)) {
                 type = EvaluatedType::String;
+                break;
+            }
+
+            // A cell meets a string row by row: holding text or a number it joins it as
+            // text, holding a list it takes it as an element
+            const bool addsATextToAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String)
+                                     || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Char);
+            if (addsATextToAny) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -791,7 +797,8 @@ void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
 
         const EvaluatedType operandType = operand->getType();
         const bool isATruthValue = operandType == EvaluatedType::Bool
-                                   || operandType == EvaluatedType::Null;
+                                   || operandType == EvaluatedType::Null
+                                   || operandType == EvaluatedType::Any;
 
         if (!isATruthValue) {
             const std::string error = fmt::format("{} operand must be a boolean, not '{}'",

@@ -8769,10 +8769,16 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 
             if (isConcatenation) {
                 // A scalar concatenated with a list joins it as the one-element list it
-                // stands for, so both sides of the concatenation are lists
+                // stands for, so both sides of the concatenation are lists. A cell may hold
+                // a list itself, so the concatenation reads it row by row instead.
                 const bool concatenatesLists = resultType == EvaluatedType::List;
-                const bool lhsJoinsAList = concatenatesLists && lhsExpr->getType() != EvaluatedType::List;
-                const bool rhsJoinsAList = concatenatesLists && rhsExpr->getType() != EvaluatedType::List;
+                const auto joinsAsAList = [](const Expr* operand) {
+                    const EvaluatedType operandType = operand->getType();
+                    return operandType != EvaluatedType::List && operandType != EvaluatedType::Any;
+                };
+
+                const bool lhsJoinsAList = concatenatesLists && joinsAsAList(lhsExpr);
+                const bool rhsJoinsAList = concatenatesLists && joinsAsAList(rhsExpr);
 
                 const mlir::Value lhsColumn = lhsJoinsAList ? singletonList(lhs) : lhs;
                 const mlir::Value rhsColumn = rhsJoinsAList ? singletonList(rhs) : rhs;

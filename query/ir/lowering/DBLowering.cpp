@@ -6020,8 +6020,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
 
             // A cell may hold a null, or a value of another type than the one it meets
-            const bool comparesATaggedCell = kind == BinaryResultKind::Comparison
-                                          && !testsACarriedNull
+            const bool comparesATaggedCell = !testsACarriedNull
                                           && (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType));
 
             const bool comparesAMapValue = !testsACarriedNull
@@ -6086,7 +6085,19 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Concat: {
-            const bool concatenatesLists = isListChunk(lhsType) && isListChunk(rhsType);
+            const bool lhsIsAList = isListChunk(lhsType);
+            const bool rhsIsAList = isListChunk(rhsType);
+            const bool concatenatesLists = lhsIsAList && rhsIsAList;
+            const bool joinsACellToAList = (lhsIsAList && holdsTaggedCells(rhsType))
+                                        || (rhsIsAList && holdsTaggedCells(lhsType));
+
+            // The cell joins the list as the list it holds or as one element, whose type
+            // is the row's
+            if (joinsACellToAList) {
+                const mlir::Type joined = storage::ListType::get(ctx, storage::AnyType::get(ctx));
+
+                return operandNullable ? storage::NullableType::get(ctx, joined) : joined;
+            }
 
             if (!concatenatesLists) {
                 if (isListChunk(lhsType) || isListChunk(rhsType)) {
@@ -6181,6 +6192,22 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
         lhsChunk = nullTestedChunk(lhsChunk);
     } else if (nullAgainstLhs) {
         rhsChunk = nullTestedChunk(rhsChunk);
+    }
+
+    // AND, OR and XOR read a cell's truth value against a nullable boolean
+    constexpr bool connectsTruthValues = std::is_same_v<NLOp, nl::And>
+                                      || std::is_same_v<NLOp, nl::Or>
+                                      || std::is_same_v<NLOp, nl::Xor>;
+
+    if constexpr (connectsTruthValues) {
+        const bool lhsHoldsCells = holdsTaggedCells(lhsChunkType);
+        const bool rhsHoldsCells = holdsTaggedCells(rhsChunkType);
+
+        if (lhsHoldsCells && !rhsHoldsCells && !isUntypedNullChunk(rhsChunkType)) {
+            rhsChunk = nullableValueChunk(rhsChunk);
+        } else if (rhsHoldsCells && !lhsHoldsCells && !isUntypedNullChunk(lhsChunkType)) {
+            lhsChunk = nullableValueChunk(lhsChunk);
+        }
     }
 
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());

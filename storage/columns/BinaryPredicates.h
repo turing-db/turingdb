@@ -275,6 +275,45 @@ inline std::optional<CustomBool> optionalAnd(const T& a, const U& b) {
     return std::nullopt;
 }
 
+struct TuringXor;
+
+template <typename F>
+concept ConnectsTruthValues = std::same_as<F, std::logical_and<>>
+                           || std::same_as<F, std::logical_or<>>
+                           || std::same_as<F, TuringXor>;
+
+template <typename F, typename T, typename U>
+concept ConnectsATaggedCell = ConnectsTruthValues<F> && (TaggedCellOperand<T> || TaggedCellOperand<U>);
+
+// The truth value an operand of AND, OR or XOR holds. A cell holds one where it is tagged
+// as a boolean or a null, and anything else is a type error, as it is in a WHERE.
+template <typename T>
+inline std::optional<CustomBool> truthValue(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (TypeUtils::is_optional_v<Decayed>) {
+        if (!value.has_value()) {
+            return std::nullopt;
+        }
+
+        return truthValue(*value);
+    } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        const ListBufferTypeTag tag = value.getTag();
+
+        if (tag == ListBufferTypeTag::Bool) {
+            return value.template getAs<types::Bool::Primitive>();
+        } else if (tag == ListBufferTypeTag::Null) {
+            return std::nullopt;
+        }
+
+        throw TuringException("AND, OR and XOR operands must be booleans");
+    } else if constexpr (std::is_same_v<Decayed, PropertyNull>) {
+        return std::nullopt;
+    } else {
+        return value;
+    }
+}
+
 /**
  * @brief Generic function to apply a generic predicate to two possibly-optional
  * operands, where either operand being nullopt results in the final result being
@@ -649,10 +688,30 @@ struct BinaryPredicate {
         return F {}(std::forward<T>(a), std::forward<U>(b));
     }
 
+    template <typename T, typename U>
+        requires ConnectsATaggedCell<F, T, U>
+    inline std::optional<CustomBool> operator()(T&& a, U&& b) {
+        const std::optional<CustomBool> lhs = truthValue(a);
+        const std::optional<CustomBool> rhs = truthValue(b);
+
+        if constexpr (std::is_same_v<F, std::logical_or<>>) {
+            return optionalOr(lhs, rhs);
+        } else if constexpr (std::is_same_v<F, std::logical_and<>>) {
+            return optionalAnd(lhs, rhs);
+        } else {
+            if (!lhs.has_value() || !rhs.has_value()) {
+                return std::nullopt;
+            }
+
+            return CustomBool {lhs->_boolean != rhs->_boolean};
+        }
+    }
+
     // Handle optional cases
     template<typename T, typename U>
         requires (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
               && (!NullableResultPredicate<F, T, U>)
+              && (!ConnectsATaggedCell<F, T, U>)
     inline std::optional<CustomBool> operator()(T&& a, U&& b) {
         // Short-circuiting implementations for AND and OR
         if constexpr (std::is_same_v<F, std::logical_or<>>) {
@@ -854,6 +913,15 @@ inline std::optional<types::String::Primitive> predicateText(const ListElementVi
     return element.getAs<types::String::Primitive>();
 }
 
+template <typename T>
+inline std::optional<types::String::Primitive> predicateText(const std::optional<T>& value) {
+    if (!value.has_value()) {
+        return std::nullopt;
+    }
+
+    return predicateText(*value);
+}
+
 /**
  * @brief Applies a string test @param F to the characters each operand holds, whichever of
  * the string column kinds - or type-erased cells - the operands are.
@@ -861,15 +929,24 @@ inline std::optional<types::String::Primitive> predicateText(const ListElementVi
 template <typename F>
 struct StringPredicate {
     template <typename T, typename U>
+        requires (!TaggedCellOperand<T>) && (!TaggedCellOperand<U>)
     bool operator()(const T& text, const U& pattern) const {
+        return F {}(*predicateText(text), *predicateText(pattern));
+    }
+
+    // A cell holding anything but a string - a number, a list, a null - has no characters
+    // to test, so the predicate is unknown over it
+    template <typename T, typename U>
+        requires TaggedCellOperand<T> || TaggedCellOperand<U>
+    std::optional<CustomBool> operator()(const T& text, const U& pattern) const {
         const std::optional<types::String::Primitive> textView = predicateText(text);
         const std::optional<types::String::Primitive> patternView = predicateText(pattern);
 
         if (!textView || !patternView) {
-            return false;
+            return std::nullopt;
         }
 
-        return F {}(*textView, *patternView);
+        return CustomBool {F {}(*textView, *patternView)};
     }
 };
 

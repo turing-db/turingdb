@@ -386,10 +386,16 @@ struct PairRestrictions<Op> {
         // Boolean properties; optional (3-valued logic) and non-optional
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
 
+        // A type-erased cell, read as the truth value it holds
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
+
         std::tuple<
             // A null of unknown type, which the truth tables read as an unknown truth
             // value: the lowering reads the other side as nullable to meet it
-            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>
+            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
+            KindPair<ListElementView, PropertyNull>,
+            KindPair<std::optional<ListElementView>, PropertyNull>
         >
     >;
 
@@ -441,6 +447,20 @@ struct TemporalArithmeticKindPairs<Op> {
     >::Type;
 };
 
+// A cell meets a string under '+' alone, which joins it as text or as a list element
+template <ColumnOperator Op>
+struct CellTextKindPairs {
+    using Pairs = std::tuple<>;
+};
+
+template <>
+struct CellTextKindPairs<OP_ADD> {
+    using Pairs = TupleFlatten<
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::String::OwningPrimitive>::Pairs
+    >::Type;
+};
+
 template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
           || (Op == OP_MOD) || (Op == OP_POW)
@@ -463,7 +483,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
         // Temporal arithmetic operations.
-        typename TemporalArithmeticKindPairs<Op>::Pairs
+        typename TemporalArithmeticKindPairs<Op>::Pairs,
+
+        typename CellTextKindPairs<Op>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
@@ -480,6 +502,9 @@ struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<ListView, ListView>::Pairs,
+
+        // A cell joins a list as the list it holds, or as one element
+        OptionalKindPairs<ListView, ListElementView>::Pairs,
 
         // A string a function produced owns its characters - what type() and a CSV field
         // answer - and concatenates with one the graph lends, either way round

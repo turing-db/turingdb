@@ -186,6 +186,23 @@ TEST_F(ListElementOperandTest, unwindsAnIndexedListForEveryMatchedRow) {
                {{"1"}, {"1"}, {"2"}, {"2"}});
 }
 
+TEST_F(ListElementOperandTest, joinsAListCellToAnElement) {
+    expectRows("UNWIND [[1, 2], 'a'] AS x RETURN x + 1", {{"[1, 2, 1]"}, {"a1"}});
+}
+
+TEST_F(ListElementOperandTest, joinsAListCellToAList) {
+    expectRows("UNWIND [[1, 2], 'a'] AS x RETURN x + [3]", {{"1, 2, 3"}, {"a, 3"}});
+}
+
+TEST_F(ListElementOperandTest, testsAStringPredicateOverAMixedList) {
+    expectRows("UNWIND ['ab', 1, null] AS x RETURN x STARTS WITH 'a'", {{"true"}, {"null"}, {"null"}});
+}
+
+TEST_F(ListElementOperandTest, connectsABooleanCell) {
+    expectRows("UNWIND [true, false, null] AS x RETURN x AND true, x OR false, x XOR true",
+               {{"true", "true", "false"}, {"false", "false", "true"}, {"null", "null", "null"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

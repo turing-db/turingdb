@@ -12,6 +12,7 @@
 #include "GraphPath.h"
 #include "ID.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBufferTypeTag.h"
@@ -141,6 +142,8 @@ bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+void appendListText(const ListView& list, std::string& text);
+
 std::string elementText(const ListElementView& element) {
     switch (element.getTag()) {
         case ListBufferTypeTag::Int:
@@ -191,8 +194,15 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
+        case ListBufferTypeTag::ListView: {
+            std::string elements;
+            appendListText(element.getAs<ListView>(), elements);
+
+            return "[" + elements + "]";
+        }
+        break;
+
         case ListBufferTypeTag::Embedding:
-        case ListBufferTypeTag::ListView:
         case ListBufferTypeTag::MapView:
         case ListBufferTypeTag::INVALID:
             throw std::runtime_error("StringRowSink cannot read this list element as text");
@@ -324,6 +334,16 @@ std::string boolText(const std::optional<CustomBool>& value) {
     }
 
     return *value ? "true" : "false";
+}
+
+bool textOfMask(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnMask*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = (*column)[rowIndex] ? "true" : "false";
+    return true;
 }
 
 // A nullable boolean, which a three-valued predicate such as IN produces
@@ -496,6 +516,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptionalID<NodeID>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalID<EdgeID>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfMask(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalBool(chunk, rowIndex, text)) {
         return text;
