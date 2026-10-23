@@ -80,3 +80,11 @@ TEST_F(EntityComparisonLoweringTest, comparesTwoNodesWithoutACopy) {
 TEST_F(EntityComparisonLoweringTest, comparesTwoEdgesWithoutACopy) {
     expectComparesTheIDColumnAsItStands("MATCH ()-[e]->()-[f]->() RETURN e = f", "nl.eq");
 }
+
+TEST_F(EntityComparisonLoweringTest, testsAMissedNodeForNullWithoutACopy) {
+    expectComparesTheIDColumnAsItStands("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) RETURN f IS NULL", "nl.eq");
+}
+
+TEST_F(EntityComparisonLoweringTest, testsAMissedEdgeForNullWithoutACopy) {
+    expectComparesTheIDColumnAsItStands("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->() RETURN r IS NOT NULL", "nl.neq");
+}

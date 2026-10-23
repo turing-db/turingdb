@@ -734,6 +734,12 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::ListElementType, storage::MapElementType>(chunk.getElementType());
 }
 
+// A tagged cell holds its null in its tag and an ID column in the invalid ID, so a null test
+// reads either as it stands, and always answers
+bool carriesItsOwnNull(mlir::Type chunkType) {
+    return isTaggedCellChunk(chunkType) || isEntityChunk(chunkType);
+}
+
 bool mayHoldANull(mlir::Type chunkType) {
     return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
 }
@@ -5817,13 +5823,13 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                            mlir::Type rhsType) {
     mlir::MLIRContext* const ctx = _builder.getContext();
 
-    // A tagged cell holds its null in its own tag, so a null test on one always answers:
-    // the mask carries no null of its own, unlike the one a nullable value column gives.
-    const bool testsATaggedCellForNull =
-        (isTaggedCellChunk(lhsType) && isUntypedNullChunk(rhsType))
-        || (isTaggedCellChunk(rhsType) && isUntypedNullChunk(lhsType));
+    // The mask of a null test on a column carrying its own null holds no null of its own,
+    // unlike the one a nullable value column gives.
+    const bool testsACarriedNull =
+        (carriesItsOwnNull(lhsType) && isUntypedNullChunk(rhsType))
+        || (carriesItsOwnNull(rhsType) && isUntypedNullChunk(lhsType));
 
-    const bool operandNullable = !testsATaggedCellForNull
+    const bool operandNullable = !testsACarriedNull
                               && (isNullableChunk(lhsType) || isNullableChunk(rhsType));
 
     switch (kind) {
@@ -5836,10 +5842,10 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             // A cell may hold a null, or a value of another type than the one it meets
             const bool comparesATaggedCell = kind == BinaryResultKind::Comparison
-                                          && !testsATaggedCellForNull
+                                          && !testsACarriedNull
                                           && (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType));
 
-            const bool comparesAMapValue = !testsATaggedCellForNull
+            const bool comparesAMapValue = !testsACarriedNull
                                         && (isMapElementChunk(lhsType) || isMapElementChunk(rhsType));
 
             // An ID column carries its null in the ID: the invalid one an OPTIONAL MATCH leaves
@@ -5979,10 +5985,9 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     const bool readsScalarOperands = kind != BinaryResultKind::Index
                                   && kind != BinaryResultKind::Membership;
 
-    // A tagged cell holds its null in its own tag, and the comparison reads that tag, so
-    // such a column is compared as it stands.
-    const bool lhsReadsItsOwnNull = mayHoldANull(lhsChunkType);
-    const bool rhsReadsItsOwnNull = mayHoldANull(rhsChunkType);
+    // A column carrying its own null is compared as it stands
+    const bool lhsReadsItsOwnNull = mayHoldANull(lhsChunkType) || carriesItsOwnNull(lhsChunkType);
+    const bool rhsReadsItsOwnNull = mayHoldANull(rhsChunkType) || carriesItsOwnNull(rhsChunkType);
 
     const bool nullAgainstRhs = readsScalarOperands
                              && isUntypedNullChunk(rhsChunkType)

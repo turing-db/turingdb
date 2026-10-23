@@ -115,6 +115,10 @@ template <typename T, typename U>
 concept ComparesAnID = (IDOperand<T> && (IDOperand<U> || IntegerOperand<U>))
                     || (IntegerOperand<T> && IDOperand<U>);
 
+// IS NULL over an entity, which reads the ID: the null is the invalid one
+template <typename T, typename U>
+concept TestsAnIDForNull = TypedInternalID<std::decay_t<T>> && std::same_as<std::decay_t<U>, PropertyNull>;
+
 template <typename T, typename U>
 concept OrdersToANullableBool = ComparesATaggedCell<T, U>
                              || ComparesAMapEntry<T, U>
@@ -788,12 +792,19 @@ struct TuringEqual {
         }
     }
 
+    template <typename T, typename U>
+        requires TestsAnIDForNull<T, U>
+    bool operator()(const T& id, const U& null) {
+        return !id.isValid();
+    }
+
     // Generalist fallback for all other types
     template <typename T, typename U>
         requires (!ListOperand<T> || !ListOperand<U>)
               && (!ComparesATaggedCell<T, U>)
               && (!ComparesAMapEntry<T, U>)
               && (!ComparesAnID<T, U>)
+              && (!TestsAnIDForNull<T, U>)
     bool operator()(const T& a, const U& b) {
         if constexpr (MixedNumbers<T, U>) {
             return numbersEqual(a, b);
