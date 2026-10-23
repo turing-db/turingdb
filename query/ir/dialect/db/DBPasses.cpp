@@ -7406,19 +7406,21 @@ struct EqualityCross {
     bool _buildsTheLeftFactor {false};
 };
 
-// The property a one-op key cone reads, null for any other cone. A property column's
-// value type is resolved from the name during lowering, so two keys read from one name
-// are two columns of one type.
-StringAttr conePropertyName(const MaskCone& cone) {
-    if (cone._ops.size() != 1) {
-        return nullptr;
-    }
+// The type a key's rows carry at run time, when its db column fixes it: a column the
+// product yields, or a property read, whose chunk lowering builds from the type it
+// declares. Null for a column typed none, and for a key computed by any other op, whose
+// type lowering derives from its operands rather than from the one the op declares.
+Type fixedKeyType(const JoinKeySide& side) {
+    const llvm::SmallVector<Operation*>& coneOps = side._cone._ops;
+    const Type keyType = side._key.getType();
 
-    Operation* const read = cone._ops.front();
-    if (GetNodeProperties nodeRead = dyn_cast<GetNodeProperties>(read)) {
-        return nodeRead.getPropertyAttr();
-    } else if (GetEdgeProperties edgeRead = dyn_cast<GetEdgeProperties>(read)) {
-        return edgeRead.getPropertyAttr();
+    const bool isAColumn = coneOps.empty();
+    const bool isAPropertyRead = coneOps.size() == 1
+                              && isa<GetNodeProperties, GetEdgeProperties>(coneOps.front());
+    const bool typeIsResolved = !isa<mlir::NoneType>(cast<ColumnType>(keyType).getType());
+
+    if ((isAColumn || isAPropertyRead) && typeIsResolved) {
+        return keyType;
     }
 
     return nullptr;
@@ -7427,21 +7429,11 @@ StringAttr conePropertyName(const MaskCone& cone) {
 // Whether the two sides' keys are provably columns of one type. The join matches a build
 // key against a probe key by the bytes each serializes to, so two columns that could
 // serialize differently - an integer property against a string one, a node against a
-// number - would answer a comparison the equality did not. A db column type is concrete
-// only for the entity and metadata columns; a column typed none carries no type at all
-// until lowering resolves it, so two of those are only provably alike when both are read
-// from one property name.
+// number - would answer a comparison the equality did not.
 bool keysShareAColumnType(const JoinKeySide& left, const JoinKeySide& right) {
-    if (left._cone._ops.empty() && right._cone._ops.empty()) {
-        const Type leftType = left._key.getType();
-        const bool typeIsResolved = !isa<mlir::NoneType>(cast<ColumnType>(leftType).getType());
+    const Type leftType = fixedKeyType(left);
 
-        return typeIsResolved && leftType == right._key.getType();
-    }
-
-    const StringAttr leftProperty = conePropertyName(left._cone);
-
-    return leftProperty && leftProperty == conePropertyName(right._cone);
+    return leftType && leftType == fixedKeyType(right);
 }
 
 // Reads into side the one product column a key is computed over, along with the ops

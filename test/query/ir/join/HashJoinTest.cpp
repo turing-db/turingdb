@@ -6,8 +6,10 @@
 #include <vector>
 
 #include "HashJoinQueryTest.h"
+#include "JobSystem.h"
 #include "StringRowSink.h"
 #include "TuringTest.h"
+#include "writers/GraphWriter.h"
 
 using namespace db;
 using namespace turing::test;
@@ -160,14 +162,51 @@ TEST_F(HashJoinTest, keepsTheProductWhenTheKeysNeedNotShareAType) {
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
 }
 
-// Two different property names could resolve to two different value types, so only a
-// shared name fuses.
-TEST_F(HashJoinTest, keepsTheProductWhenTheSidesReadDifferentProperties) {
+// Two property names of one value type are read into one column type, so a shared name is
+// not needed. No node's name is another's dob, here as in the product.
+TEST_F(HashJoinTest, fusesTwoPropertiesOfOneType) {
     std::string program;
     dbProgram("MATCH (n), (m) WHERE n.name = m.dob RETURN n, m", program);
 
-    EXPECT_TRUE(contains(program, "db.cross_product")) << program;
-    EXPECT_FALSE(contains(program, "db.hash_join")) << program;
+    EXPECT_TRUE(contains(program, "db.hash_join")) << program;
+    EXPECT_FALSE(contains(program, "db.cross_product")) << program;
+
+    expectCount("MATCH (n), (m) WHERE n.name = m.dob RETURN count(*)", 0);
+}
+
+// Two nodes added beside SimpleGraph carry Remy's and Adam's names as an alias, so the join
+// of the name with the alias matches each of them, as the product does.
+TEST_F(HashJoinTest, joinsTwoPropertiesOfOneTypeAsTheProductDoes) {
+    JobSystem jobSystem;
+    jobSystem.init();
+
+    GraphWriter writer(_graph.get(), &jobSystem);
+    const NodeID remyAlias = writer.addNode({"Alias"});
+    writer.addNodeProperty<types::String>(remyAlias, "alias", "Remy");
+    const NodeID adamAlias = writer.addNode({"Alias"});
+    writer.addNodeProperty<types::String>(adamAlias, "alias", "Adam");
+    ASSERT_TRUE(writer.submit());
+
+    const std::string query = "MATCH (n), (a:Alias) WHERE n.name = a.alias RETURN n, a";
+
+    std::string program;
+    dbProgram(query, program);
+    EXPECT_TRUE(contains(program, "db.hash_join")) << program;
+
+    const Rows expected {{"0", std::to_string(remyAlias.getValue())},
+                         {"1", std::to_string(adamAlias.getValue())}};
+
+    StringRowSink joined;
+    runQuery(query, joined);
+    Rows joinedRows;
+    joined.sortedRows(joinedRows);
+    EXPECT_EQ(joinedRows, expected);
+
+    StringRowSink product;
+    runQuery(query, product, false);
+    Rows productRows;
+    product.sortedRows(productRows);
+    EXPECT_EQ(productRows, expected);
 }
 
 // A hash join answers equality alone; an ordering predicate stays a filter over the
