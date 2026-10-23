@@ -30,6 +30,7 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -7751,6 +7752,8 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
                           /*cutsElements=*/true,
                           comprehension->getProjection());
 
+    dropUnreadCarriedColumns(comprehensionOp, comprehensionOp.getColumnsToFilter());
+
     _part._exprMap[expr] = comprehensionOp.getResult();
 }
 
@@ -7776,6 +7779,8 @@ void DBProgramGenerator::translateListPredicateExpr(const Expr* expr, const List
                           carrySet,
                           /*cutsElements=*/false,
                           comprehension->getPredicate());
+
+    dropUnreadCarriedColumns(predicateOp, predicateOp.getColumnsToFilter());
 
     _part._exprMap[expr] = predicateOp.getResult();
 }
@@ -7836,13 +7841,15 @@ void DBProgramGenerator::translateReduceExpr(const Expr* expr, const ReduceExpr*
     _part._projectedColumns = outerProjectedColumns;
     _part._namedPaths = outerNamedPaths;
 
+    dropUnreadCarriedColumns(reduceOp, reduceOp.getColumnsToFilter());
+
     _part._exprMap[expr] = reduceOp.getResult();
 }
 
 void DBProgramGenerator::collectElementCarrySet(CarrySet& carrySet) {
     // The body reads the elements of one row's list rather than the rows in flight, so
-    // every column of those rows is carried: the op repeats each over the elements of its
-    // own row. A constant stands for every row already and needs no carrying, which is
+    // every column of those rows may be carried: the op repeats each over the elements of
+    // its own row. A constant stands for every row already and needs no carrying, which is
     // the one column the collection leaves out.
     if (_part._aggregateOp) {
         collectGroupedColumns(carrySet);
@@ -7907,6 +7914,7 @@ void DBProgramGenerator::generateElementRegion(mlir::Region& region,
     mlir::Value rowTags = bodyBlock->getArgument(1);
 
     // The WHERE cuts the elements themselves rather than masking what they contribute
+    mlir::db::FilterOp elementFilter;
     const Expr* const predicateExpr = comprehension->getPredicate();
     if (cutsElements && predicateExpr) {
         const mlir::Value predicate = getOrTranslateExprColumn(predicateExpr);
@@ -7918,14 +7926,14 @@ void DBProgramGenerator::generateElementRegion(mlir::Region& region,
             filteredTypes.push_back(column.getType());
         }
 
-        auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, filteredTypes, predicate, filtered);
+        elementFilter = _opBuilder.create<mlir::db::FilterOp>(loc, filteredTypes, predicate, filtered);
 
-        _part._comprehensionElements[itemDecl] = filterOp.getResult(0);
-        rowTags = filterOp.getResult(1);
+        _part._comprehensionElements[itemDecl] = elementFilter.getResult(0);
+        rowTags = elementFilter.getResult(1);
 
         _part._exprMap.clear();
-        rebindCarrySet(filterOp.getResults(), /*firstColumn=*/2, carrySet);
-        rebindProjectedColumns(filtered, filterOp.getResults());
+        rebindCarrySet(elementFilter.getResults(), /*firstColumn=*/2, carrySet);
+        rebindProjectedColumns(filtered, elementFilter.getResults());
     }
 
     const mlir::Value value = valueExpr ? getOrTranslateExprColumn(valueExpr)
@@ -7941,6 +7949,91 @@ void DBProgramGenerator::generateElementRegion(mlir::Region& region,
     _part._exprMap = outerExprMap;
     _part._projectedColumns = outerProjectedColumns;
     _part._namedPaths = outerNamedPaths;
+
+    if (elementFilter) {
+        dropUnreadFilteredColumns(elementFilter);
+    }
+}
+
+void DBProgramGenerator::dropUnreadCarriedColumns(mlir::Operation* op, mlir::OperandRange carried) {
+    if (carried.empty()) {
+        return;
+    }
+
+    const size_t carriedCount = carried.size();
+    const size_t operandOffset = carried.getBeginOperandIndex();
+
+    llvm::BitVector unread(carriedCount, true);
+    for (mlir::Region& region : op->getRegions()) {
+        const mlir::Block::BlockArgListType carriedArguments = region.front().getArguments().take_back(carriedCount);
+
+        for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+            if (!carriedArguments[carriedIndex].use_empty()) {
+                unread.reset(carriedIndex);
+            }
+        }
+    }
+
+    if (unread.none()) {
+        return;
+    }
+
+    for (mlir::Region& region : op->getRegions()) {
+        mlir::Block& block = region.front();
+        const size_t argumentOffset = block.getNumArguments() - carriedCount;
+
+        llvm::BitVector erasedArguments(block.getNumArguments());
+        for (const unsigned carriedIndex : unread.set_bits()) {
+            _constantColumns.erase(block.getArgument(argumentOffset + carriedIndex));
+            erasedArguments.set(argumentOffset + carriedIndex);
+        }
+
+        block.eraseArguments(erasedArguments);
+    }
+
+    llvm::BitVector erasedOperands(op->getNumOperands());
+    for (const unsigned carriedIndex : unread.set_bits()) {
+        erasedOperands.set(operandOffset + carriedIndex);
+    }
+
+    op->eraseOperands(erasedOperands);
+}
+
+void DBProgramGenerator::dropUnreadFilteredColumns(mlir::db::FilterOp filter) {
+    const mlir::OperandRange columns = filter.getColumnsToFilter();
+    const mlir::ResultRange results = filter.getResults();
+
+    llvm::SmallVector<mlir::Value> keptColumns;
+    llvm::SmallVector<mlir::Type> keptTypes;
+    llvm::SmallVector<mlir::Value> keptResults;
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Value result = results[columnIndex];
+        if (!result.use_empty()) {
+            keptColumns.push_back(columns[columnIndex]);
+            keptTypes.push_back(result.getType());
+            keptResults.push_back(result);
+        }
+    }
+
+    if (keptColumns.size() == columns.size()) {
+        return;
+    }
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    _opBuilder.setInsertionPoint(filter);
+
+    auto trimmed = _opBuilder.create<mlir::db::FilterOp>(filter.getLoc(), keptTypes, filter.getMask(), keptColumns);
+
+    for (size_t keptIndex = 0; keptIndex < keptResults.size(); keptIndex++) {
+        keptResults[keptIndex].replaceAllUsesWith(trimmed.getResult(keptIndex));
+    }
+
+    for (const mlir::Value result : results) {
+        _constantColumns.erase(result);
+    }
+
+    filter.erase();
 }
 
 void DBProgramGenerator::translatePatternComprehensionExpr(const Expr* expr,
@@ -8418,6 +8511,8 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
             return translateValue(elseExpr);
         });
     }
+
+    dropUnreadCarriedColumns(caseOp, caseOp.getColumnsToFilter());
 
     _part._exprMap[expr] = caseOp.getResult();
 }

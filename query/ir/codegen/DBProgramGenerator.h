@@ -1204,8 +1204,8 @@ private:
                                            std::string_view tagName);
 
     // Emits the db.list_comprehension of `[x IN xs WHERE p(x) | f(x)]`: the source column,
-    // the columns in flight as its carry set, and a body region binding the element to
-    // the variable and yielding what each one contributes
+    // the columns in flight its body reads as its carry set, and a body region binding the
+    // element to the variable and yielding what each one contributes
     void translateListComprehensionExpr(const Expr* expr, const ListComprehensionExpr* comprehension);
 
     // Emits the db.list_predicate of `all(x IN xs WHERE p(x))` and its three siblings: the
@@ -1213,13 +1213,20 @@ private:
     void translateListPredicateExpr(const Expr* expr, const ListPredicateExpr* predicate);
 
     // Emits the db.reduce of `reduce(acc = init, x IN xs | f(acc, x))`: the source and
-    // initial value columns, the columns in flight as its carry set, and a body region
-    // binding the element and the accumulator, yielding the next accumulator
+    // initial value columns, the columns in flight its body reads as its carry set, and a
+    // body region binding the element and the accumulator, yielding the next accumulator
     void translateReduceExpr(const Expr* expr, const ReduceExpr* reduce);
 
-    // The columns an op over the elements of one row's list carries: every column in
+    // The columns an op over the elements of one row's list may carry: every column in
     // flight, since the body reads the elements rather than the rows
     void collectElementCarrySet(CarrySet& carrySet);
+
+    // Drops from @param op's carry set every column none of its regions reads, so an op
+    // whose regions read only constants is a constant itself
+    void dropUnreadCarriedColumns(mlir::Operation* op, mlir::OperandRange carried);
+
+    // Rebuilds @param filter without the columns nothing reads past it
+    void dropUnreadFilteredColumns(mlir::db::FilterOp filter);
 
     // Generates the body region of such an op: the entry block binds the element to the
     // comprehension's variable, the row tag and the carry set. With @param cutsElements the

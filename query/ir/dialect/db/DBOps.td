@@ -3377,11 +3377,12 @@ def LazyCase : TuringOp<"lazy_case", [Pure, ConstantThroughOperands]> {
           db.case_yield %q : !db.column<none>
       }) : (!db.column<i64>) -> !db.column<none>
 
-    Every region takes one argument per carried column: the rows in flight, as
-    db.list_comprehension carries them. A condition region sees the rows no earlier
-    condition held for, a value region the rows its condition held for, and the ELSE the
-    rows no condition held for. A row takes the first branch whose condition is true and
-    null when none is and there is no ELSE. A constant needs no carrying.
+    Every region takes one argument per carried column: the columns of the rows in flight
+    that some region reads, as db.list_comprehension carries them. A condition region sees
+    the rows no earlier condition held for, a value region the rows its condition held
+    for, and the ELSE the rows no condition held for. A row takes the first branch whose
+    condition is true and null when none is and there is no ELSE. A constant needs no
+    carrying.
 
     The simple form `CASE s WHEN v THEN ...` is the generic one, with a db.eq of the
     subject against each WHEN value as the condition. The subject is computed once over

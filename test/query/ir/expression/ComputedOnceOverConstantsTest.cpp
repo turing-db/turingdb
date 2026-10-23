@@ -321,3 +321,79 @@ TEST_F(ComputedOnceOverConstantsTest, raisesOnADivisionOfTheSingleRow) {
 TEST_F(ComputedOnceOverConstantsTest, raisesNothingForAMapEntryFunctionNoRowReaches) {
     expectRows("WITH {v: 1} AS m MATCH (n:Person) WHERE n.name = 'Nobody' RETURN properties(m.v)", {});
 }
+
+TEST_F(ComputedOnceOverConstantsTest, comprehendsConstantsOnceInsideALoop) {
+    expectComputedOnce<mlir::nl::ListComprehension>("UNWIND range(1, 4) AS i RETURN i, [x IN [1, 2, 3] WHERE x > 1]");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, testsAListPredicateOverConstantsOnceInsideALoop) {
+    expectComputedOnce<mlir::nl::ListPredicate>("UNWIND range(1, 4) AS i RETURN i, any(x IN [1, 2, 3] WHERE x > 1)");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, reducesConstantsOnceInsideALoop) {
+    expectComputedOnce<mlir::nl::Reduce>("UNWIND range(1, 4) AS i RETURN i, reduce(s = 'v', x IN range(1, 4) | s)");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, selectsACaseOverConstantsOnceInsideALoop) {
+    expectComputedOnce<mlir::nl::CaseMerge>("UNWIND range(1, 4) AS i RETURN i, CASE WHEN 1 > 0 THEN 'a' ELSE 'b' END");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, comprehendsConstantsOnceAfterAGrouping) {
+    expectComputedOnce<mlir::nl::ListComprehension>("UNWIND range(1, 4) AS i WITH i, count(*) AS c RETURN i, c, [x IN [1, 2, 3] WHERE x > 1]");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, keepsAComprehensionFilteringOnTheRowOnTheRows) {
+    expectComputedPerRow<mlir::nl::ListComprehension>("UNWIND range(1, 4) AS i RETURN [x IN [1, 2, 3] WHERE x > i]");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, keepsACaseTestingTheRowOnTheRows) {
+    expectComputedPerRow<mlir::nl::CaseMerge>("UNWIND range(1, 4) AS i RETURN CASE WHEN i > 2 THEN 'a' ELSE 'b' END");
+}
+
+TEST_F(ComputedOnceOverConstantsTest, collectsAReduceOverConstantsOncePerRow) {
+    expectRows("UNWIND range(1, 3) AS i RETURN count(*), collect(reduce(s = 'v', x IN range(1, 4) | s))",
+               {{"3", "[v, v, v]"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, groupsOnAComprehensionOverConstants) {
+    expectRows("UNWIND range(1, 3) AS i RETURN [x IN [1, 2, 3] WHERE x > 1] AS xs, count(*)", {{"[2, 3]", "3"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, projectsOnlyAComprehensionOverConstantsOnEveryRow) {
+    expectRows("UNWIND range(1, 3) AS i RETURN [x IN [1, 2, 3] WHERE x > 1]", {{"[2, 3]"}, {"[2, 3]"}, {"[2, 3]"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, projectsAListPredicateOverConstantsOnEveryRow) {
+    expectRows("UNWIND range(1, 3) AS i RETURN i, all(x IN [1, 2] WHERE x > 0)",
+               {{"1", "true"}, {"2", "true"}, {"3", "true"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, comprehendsWithAWhereReadingTheRow) {
+    expectRows("UNWIND range(1, 3) AS i RETURN i, [x IN range(1, 3) WHERE x > i]",
+               {{"1", "[2, 3]"}, {"2", "[3]"}, {"3", "[]"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, comprehendsWithAProjectionReadingTheRow) {
+    expectRows("UNWIND range(1, 3) AS i RETURN i, [x IN range(1, 3) WHERE x > 1 | x * i]",
+               {{"1", "[2, 3]"}, {"2", "[4, 6]"}, {"3", "[6, 9]"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, comprehendsConstantsWithARaisingBodyAfterAFilter) {
+    expectRows("UNWIND range(1, 4) AS i WITH i WHERE i > 2 RETURN i, [x IN [1, 2, 3] | x * 2]",
+               {{"3", "[2, 4, 6]"}, {"4", "[2, 4, 6]"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, selectsACaseOverConstantsWithARaisingBranchAfterAFilter) {
+    expectRows("UNWIND range(1, 4) AS i WITH i WHERE i > 2 RETURN i, CASE WHEN 1 > 2 THEN 1 / 0 ELSE 0 END",
+               {{"3", "0"}, {"4", "0"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, selectsASimpleCaseOverTheRow) {
+    expectRows("UNWIND range(1, 3) AS i RETURN i, CASE i WHEN 1 THEN 'one' ELSE 'other' END",
+               {{"1", "one"}, {"2", "other"}, {"3", "other"}});
+}
+
+TEST_F(ComputedOnceOverConstantsTest, projectsAComprehensionOverConstantsOnEveryMatchedNode) {
+    expectRows("MATCH (n:Person) WHERE n.name = 'Remy' OR n.name = 'Adam' RETURN n.name, [x IN [1, 2, 3] WHERE x > 2]",
+               {{"Adam", "[3]"}, {"Remy", "[3]"}});
+}
