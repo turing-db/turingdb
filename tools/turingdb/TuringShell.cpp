@@ -532,44 +532,18 @@ std::string TuringShell::composePrompt() {
              : fmt::format("{}:{}@{}(detached {})> ", basePrompt, _graphName, _changeID, _hash);
 }
 
-void asString(std::string& out, const db::Path& path) {
-    if (path.empty()) {
-        return;
-    }
-
-    const auto reversed = path | std::views::reverse;
-    size_t i = 0;
-    for (auto val : reversed) {
-        if (i % 2 == 0) {
-            // NodeID
-            out += fmt::format("({})", val);
-        } else {
-            // EdgeID
-            out += fmt::format("-[{}]->", val);
-        }
-        ++i;
-    }
-}
-
-void asString(std::string& out, const db::EntityList& list) {
-    if (list.empty()) {
+void asString(std::string& out, const db::GraphPath& path) {
+    if (path.isNull()) {
         out += "null";
         return;
     }
 
-    const auto& entries = list.getEntries();
+    const std::span<const db::NodeID> nodes = path.getNodes();
+    const std::span<const db::EdgeID> edges = path.getEdges();
 
-    size_t i = 0;
-    for (const auto& [type, val] : entries) {
-        if (i++ != 0) {
-            out += ", ";
-        }
-
-        if (type == EntityType::Node) {
-            out += fmt::format("({})", val);
-        } else {
-            out += fmt::format("[{}]", val);
-        }
+    out += fmt::format("({})", nodes.front().getValue());
+    for (size_t hop = 0; hop < edges.size(); hop++) {
+        out += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
     }
 }
 

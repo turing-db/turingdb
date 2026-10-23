@@ -155,21 +155,6 @@ private:
         _writer.write(value ? "true" : "false");
     }
 
-    void encodeValue(const Path& value) {
-        _writer.write("[");
-        if(!value.empty()) {
-            auto it = value.rbegin();
-            _writer.write(it->getValue());
-            ++it;
-            while(it != value.rend()) {
-                _writer.write(",");
-                _writer.write(it->getValue());
-                ++it;
-            }
-        }
-        _writer.write("]");
-    }
-
     void encodeValue(ValueType value) {
         JsonStringEscaper::escapeAndSurroundByQuotes(ValueTypeName::value(value), _sanitized);
         _writer.write(_sanitized);
@@ -221,31 +206,34 @@ private:
         _writer.write(_sanitized);
     }
 
-    void encodeValue(const EntityList& value) {
-        if (value.empty()) {
+    void encodeValue(const GraphPath& value) {
+        if (value.isNull()) {
             _writer.write("null");
             return;
         }
 
-        const auto& entries = value.getEntries();
-        const auto& firstValue = entries.front();
+        const std::span<const NodeID> nodes = value.getNodes();
+        const std::span<const EdgeID> edges = value.getEdges();
 
-        _writer.write("[{\"type\":\"");
-        _writer.write(firstValue._type == EntityType::Node ? "node" : "edge");
-        _writer.write("\",\"id\":");
-        _writer.write(std::to_string(firstValue._id.getValue()));
-        _writer.write('}');
+        _writer.write('[');
+        encodePathEntity("node", nodes.front().getValue());
 
-        for (const auto& [type, id] : entries | std::views::drop(1)) {
+        for (size_t hop = 0; hop < edges.size(); hop++) {
             _writer.write(',');
-            _writer.write('{');
-            _writer.write("\"type\":\"");
-            _writer.write(type == EntityType::Node ? "node" : "edge");
-            _writer.write("\",\"id\":");
-            _writer.write(std::to_string(id.getValue()));
-            _writer.write('}');
+            encodePathEntity("edge", edges[hop].getValue());
+            _writer.write(',');
+            encodePathEntity("node", nodes[hop + 1].getValue());
         }
-        _writer.write("]");
+
+        _writer.write(']');
+    }
+
+    void encodePathEntity(const char* type, uint64_t id) {
+        _writer.write("{\"type\":\"");
+        _writer.write(type);
+        _writer.write("\",\"id\":");
+        _writer.write(id);
+        _writer.write('}');
     }
 
     void encodeValue(const ListElementView ele) {

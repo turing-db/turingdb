@@ -138,7 +138,11 @@ def Any : StorageType<"Any", "any"> {
 def Path : StorageType<"Path", "path"> {
     let summary = "A graph path value";
     let description = [{
-        Chunk representation of ColumnVector<Path>.
+        The element type of a chunk holding one path per row - storage's
+        ColumnVector<GraphPath>. Each cell holds the nodes and the edges the path runs
+        through, in order, so a path reads back as nodes and relationships told apart at
+        output. A path with no node is null. Produced by db.make_path and
+        db.shortest_path.
     }];
 }
 
@@ -151,16 +155,6 @@ def PathRef : StorageType<"PathRef", "path_ref"> {
         copies in O(1) whatever the path's length and a prefix shared by many paths is
         stored once. Produced by db.explore_paths; expanded into a list of edge or node
         IDs by db.expand_path where a list is consumed, and at output.
-    }];
-}
-
-def EntityList : StorageType<"EntityList", "entity_list"> {
-    let summary = "A sequence of graph entities";
-    let description = [{
-        The element type of a chunk holding one entity sequence per row - storage's
-        ColumnVector<EntityList>. Each entry carries whether it is a node or an edge
-        beside its ID, so a path reads back as the nodes and the relationships it runs
-        through, told apart at output. Produced by db.make_path.
     }];
 }
 

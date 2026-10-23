@@ -1776,44 +1776,44 @@ def PathLength : TuringOp<"path_length", [Pure]> {
 * MakePath
 */
 def MakePath : TuringOp<"make_path", [Pure]> {
-  let summary = "Build the path a named pattern element binds, one entity sequence per row";
+  let summary = "Build the path a named pattern element binds, one path per row";
 
   let description = [{
     `MATCH p = (a)-[x]->(b)` binds `p` to the path the element spells out. This op lays
-    that path out as one sequence of graph entities per row - the nodes and the edges it
-    runs through, in the order they are written, each entry saying which of the two it is.
+    that path out as one path per row - the nodes and the edges it runs through, in the
+    order they are written.
 
       %p = db.make_path(%a, %x, %b)
              : (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>)
-               -> !db.column<!storage.entity_list>
+               -> !db.column<!storage.path>
 
     The operands are the element's entities in written order. A node column contributes
-    one node entry, an edge column one edge entry, and a path column - what a quantified
-    relationship binds - the whole walk it stands for: one edge entry and one node entry
-    per hop, its seed left out because the node operand ahead of it already holds it. So
+    one node, an edge column one edge, and a path column - what a quantified relationship
+    binds - the whole walk it stands for: one edge and one node per hop, its seed left
+    out because the node operand ahead of it already holds it. So
     `MATCH p = (a)-[e]->+(b)` is `db.make_path(%a, %pe)`, with no operand for `b`: the
     last node the walk reaches is `b`.
 
-      %p = db.make_path(%a, %pe) : (...) -> !db.column<!storage.entity_list>
-      %p = db.make_path(%a, %x, %b, %pe) : (...) -> !db.column<!storage.entity_list>
+      %p = db.make_path(%a, %pe) : (...) -> !db.column<!storage.path>
+      %p = db.make_path(%a, %x, %b, %pe) : (...) -> !db.column<!storage.path>
 
-    A path of no hops contributes no entry, so `MATCH p = (a)-[e]->*(m)` reads back as
+    A path of no hops contributes nothing, so `MATCH p = (a)-[e]->*(m)` reads back as
     the single node `a` on the rows where the walk stayed put.
 
     `reversed_paths` lists the path operands the exploration walked against the pattern,
     because the pattern's far end was bound first and seeding there was cheaper. Such an
     operand contributes its hops from the far end back - the node an edge lands on, then
-    that edge - so the sequence still reads the way the pattern is written. The node the
+    that edge - so the path still reads the way the pattern is written. The node the
     walk seeded from is written after the path rather than before it. Written after a
     node, the path writes over that node, which is the one the walk ended at.
 
-      %p = db.make_path(%pe, %b) {reversed_paths = [0]} : (...) -> !db.column<!storage.entity_list>
-      %p = db.make_path(%a, %x, %k, %pe, %b) {reversed_paths = [3]} : (...) -> !db.column<!storage.entity_list>
+      %p = db.make_path(%pe, %b) {reversed_paths = [0]} : (...) -> !db.column<!storage.path>
+      %p = db.make_path(%a, %x, %k, %pe, %b) {reversed_paths = [3]} : (...) -> !db.column<!storage.path>
   }];
 
   let arguments = (ins Variadic<Column>:$entities,
                        OptionalAttr<I64ArrayAttr>:$reversed_paths);
-  let results   = (outs ColumnEntityList:$result);
+  let results   = (outs ColumnPath:$result);
 
   let assemblyFormat = [{
     `(` $entities `)` attr-dict `:` functional-type(operands, results)
@@ -1831,21 +1831,21 @@ def PathElements : TuringOp<"path_elements", [Pure]> {
   let description = [{
     `nodes(p)`, `relationships(p)` and `length(p)` over the path a named pattern
     element binds: one list of node IDs, one list of edge IDs or one hop count per row,
-    read off the entity sequence db.make_path laid out, or off the path db.shortest_path
+    read off the path db.make_path laid out, or off the path db.shortest_path
     found.
 
       %ns = db.path_elements(%p) kind nodes
-              : (!db.column<!storage.entity_list>) -> !db.column<!storage.nullable<!storage.list<!storage.node_id>>>
+              : (!db.column<!storage.path>) -> !db.column<!storage.nullable<!storage.list<!storage.node_id>>>
       %n = db.path_elements(%p) kind length
-              : (!db.column<!storage.entity_list>) -> !db.column<!storage.nullable<ui64>>
+              : (!db.column<!storage.path>) -> !db.column<!storage.nullable<ui64>>
 
-    A path an OPTIONAL MATCH missed is an empty sequence, and each function of it is
+    A path an OPTIONAL MATCH missed is null, and each function of it is
     null, so the results are nullable. Over the path of one node and one walk,
     fuse_path_elements answers from the walk's handles instead: db.path_length for the
     length and db.expand_path for the two lists.
   }];
 
-  let arguments = (ins AnyTypeOf<[ColumnEntityList, ColumnPath]>:$path, PathElementsKind:$kind);
+  let arguments = (ins ColumnPath:$path, PathElementsKind:$kind);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{

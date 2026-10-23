@@ -7,8 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "EntityList.h"
-#include "EntityType.h"
+#include "GraphPath.h"
 #include "LocalMemory.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
@@ -169,6 +168,13 @@ nb::object embeddingToNdarray(std::span<const float> s) {
 }
 
 namespace {
+
+nb::dict pathEntityDict(const char* type, uint64_t id) {
+    nb::dict entity;
+    entity["type"] = nb::cast(type);
+    entity["id"] = nb::cast(id);
+    return entity;
+}
 
 // Converts a list or map value (or a single list element / map entry) to plain Python
 // objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
@@ -407,26 +413,28 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "String";
                 break;
             }
-            case db::ColumnVector<db::EntityList>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::EntityList>*>(col)->getRaw();
+            case db::ColumnVector<db::GraphPath>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::GraphPath>*>(col)->getRaw();
                 nb::list lst;
-                for (const db::EntityList& entityList : src) {
-                    if (entityList.empty()) {
+                for (const db::GraphPath& path : src) {
+                    if (path.isNull()) {
                         lst.append(nb::none());
                         continue;
                     }
 
+                    const std::span<const db::NodeID> nodes = path.getNodes();
+                    const std::span<const db::EdgeID> edges = path.getEdges();
+
                     nb::list rowList;
-                    for (const db::EntityList::Entry& entry : entityList.getEntries()) {
-                        nb::dict d;
-                        d["type"] = nb::cast(entry._type == db::EntityType::Node ? "node" : "edge");
-                        d["id"] = nb::cast(entry._id.getValue());
-                        rowList.append(d);
+                    rowList.append(pathEntityDict("node", nodes.front().getValue()));
+                    for (size_t hop = 0; hop < edges.size(); hop++) {
+                        rowList.append(pathEntityDict("edge", edges[hop].getValue()));
+                        rowList.append(pathEntityDict("node", nodes[hop + 1].getValue()));
                     }
                     lst.append(rowList);
                 }
                 value = lst;
-                dtypeName = "EntityList";
+                dtypeName = "Path";
                 break;
             }
             case db::ColumnVector<db::ListView>::staticKind(): {

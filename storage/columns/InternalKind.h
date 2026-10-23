@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <string>
 
-#include "EntityList.h"
 #include "columns/KindTypes.h"
 #include "map/MapEntryView.h"
 #include "metadata/PropertyNull.h"
@@ -55,8 +54,7 @@ public:
         NodeID,
         EdgeID,
         PathRef,
-        Path,
-        EntityList,
+        GraphPath,
         LabelSetID,
         LabelSet,
         EdgeTypeID,

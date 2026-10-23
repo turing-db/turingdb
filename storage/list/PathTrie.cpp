@@ -83,22 +83,24 @@ PathRef PathTrie::handleOf(size_t arena, size_t index) {
     return PathRef((static_cast<uint64_t>(arena) << indexBits) | index);
 }
 
-void PathTrie::appendHops(PathRef path, EntityList& entities, bool reversed) const {
+void PathTrie::appendHops(PathRef path, GraphPath& graphPath, bool reversed) const {
     const uint64_t depth = getDepth(path);
-    const bool writesOverTheNodeAhead = reversed && !entities.empty();
-    const size_t firstEntry = writesOverTheNodeAhead ? entities.size() - 1 : entities.size();
-    entities.resize(firstEntry + depth * 2);
+    const size_t nodeCount = graphPath.getNodes().size();
+    const size_t firstEdge = graphPath.getLength();
+    const bool writesOverTheLastNode = reversed && !graphPath.isNull();
+    const size_t firstNode = writesOverTheLastNode ? nodeCount - 1 : nodeCount;
+    graphPath.resize(firstNode + depth, firstEdge + depth);
+
+    const std::span<NodeID> nodes = graphPath.getNodes();
+    const std::span<EdgeID> edges = graphPath.getEdges();
 
     PathRef current = path;
     for (uint64_t hop = depth; hop > 0; hop--) {
         const PathTrieEntry& entry = get(current);
-        const size_t entryIndex = firstEntry + (reversed ? (depth - hop) : (hop - 1)) * 2;
+        const size_t step = reversed ? (depth - hop) : (hop - 1);
 
-        const EntityList::Entry edge {EntityType::Edge, EntityID(entry._edge.getValue())};
-        const EntityList::Entry node {EntityType::Node, EntityID(entry._node.getValue())};
-
-        entities[entryIndex] = reversed ? node : edge;
-        entities[entryIndex + 1] = reversed ? edge : node;
+        nodes[firstNode + step] = entry._node;
+        edges[firstEdge + step] = entry._edge;
 
         current = entry._parent;
     }

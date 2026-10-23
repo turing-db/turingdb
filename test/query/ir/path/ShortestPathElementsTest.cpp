@@ -13,8 +13,8 @@ using Rows = std::vector<StringRowSink::Row>;
 
 }
 
-// nodes(p), relationships(p) and length(p) over the path a SHORTESTPATH binds. The path is
-// stored target-first: Adam reaches Ghosts through Remy as Ghosts(6) -e1- Remy(0) -e4- Adam(1).
+// nodes(p), relationships(p) and length(p) over the path a SHORTESTPATH binds: Adam reaches
+// Ghosts through Remy as Adam(1) -e4- Remy(0) -e1- Ghosts(6).
 class ShortestPathElementsTest : public CallV3Test {
 };
 
@@ -24,7 +24,7 @@ TEST_F(ShortestPathElementsTest, readsTheElementsOfATwoHopPath) {
              "SHORTESTPATH(n, m, duration, d, p) RETURN d, nodes(p), relationships(p), length(p)",
              sink);
 
-    EXPECT_EQ(sink.getRows(), (Rows {{"40", "6, 0, 1", "1, 4", "2"}}));
+    EXPECT_EQ(sink.getRows(), (Rows {{"40", "1, 0, 6", "4, 1", "2"}}));
 }
 
 TEST_F(ShortestPathElementsTest, readsTheElementsOfAZeroLengthPath) {

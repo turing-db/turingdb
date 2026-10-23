@@ -19,7 +19,6 @@
 namespace db {
 
 class ColumnMask;
-class EntityList;
 
 template <typename T>
 struct IsHash : std::false_type {};
@@ -63,10 +62,7 @@ concept IsBool = std::is_same_v<T, CustomBool>
               || OptionalBool<T>;
 
 template <typename T>
-concept IsPath = std::is_same_v<T, Path>;
-
-template <typename T>
-concept IsEntityList = std::is_same_v<T, EntityList>;
+concept IsPath = std::is_same_v<T, GraphPath>;
 
 template <typename T>
 concept IsListView = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ListView>;
@@ -119,8 +115,6 @@ struct ColumnTypeGenerator {
             _name = fmt::format("Path");
         } else if constexpr (IsNull<T>) {
             _name = fmt::format("NULL");
-        } else if constexpr (IsEntityList<T>) {
-            _name = fmt::format("EntityList");
         } else if constexpr (IsListView<T>) {
             _name = fmt::format("List");
         } else if constexpr (IsListElement<T>) {

@@ -47,7 +47,7 @@ if (EMSCRIPTEN)
         ${TURINGDB_ROOT}/common/BioAssert.cpp
         ${TURINGDB_ROOT}/common/FatalException.cpp
         ${TURINGDB_ROOT}/common/TuringException.cpp
-        ${TURINGDB_ROOT}/storage/EntityList.cpp)
+        ${TURINGDB_ROOT}/storage/GraphPath.cpp)
 
     target_include_directories(turing_wasm_decoder PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
