@@ -28,6 +28,11 @@ def FuseUnwindRange : Pass<"fuse_unwind_range"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def AnchorRowCounts : Pass<"anchor_row_counts"> {
+    let summary = "Read each row count off the cheapest column holding those rows, so the column it read can be trimmed";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def SinkUnwindSource : Pass<"sink_unwind_source"> {
     let summary = "Move the ops computing an unwind's source into a db.unwind_computed, which computes it a few rows at a time";
     let dependentDialects = ["mlir::db::DB"];

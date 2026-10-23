@@ -5,6 +5,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <tuple>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -45,6 +46,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEUNWINDRANGE
 #define GEN_PASS_DEF_UNNESTUNWINDCOMPREHENSION
 #define GEN_PASS_DEF_SINKUNWINDSOURCE
+#define GEN_PASS_DEF_ANCHORROWCOUNTS
 #define GEN_PASS_DEF_PLACEINFACTORS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
@@ -6783,6 +6785,113 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
         for (Operation* const op : order) {
             trimUnreadColumnsOf(op, builder);
         }
+    }
+};
+
+// The operands @param op reads for the number of rows they hold and nothing else: what a
+// count(*) tallies, and the rows a constant is laid out over.
+void collectRowCountReads(Operation* op, llvm::SmallVectorImpl<OpOperand*>& reads) {
+    if (Count count = dyn_cast<Count>(op)) {
+        if (count.getRows()) {
+            reads.push_back(&count->getOpOperand(0));
+        }
+    } else if (GroupAggregate aggregate = dyn_cast<GroupAggregate>(op)) {
+        const size_t keyCount = aggregate.getKeyCount();
+        const llvm::ArrayRef<int64_t> kinds = aggregate.getKinds();
+
+        for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+            const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+            if (kind == storage::GroupAggregateKind::CountRows) {
+                reads.push_back(&op->getOpOperand(static_cast<unsigned>(keyCount + aggregateIndex)));
+            }
+        }
+    } else if (BroadcastConstant broadcast = dyn_cast<BroadcastConstant>(op)) {
+        if (broadcast.getDriver()) {
+            reads.push_back(&op->getOpOperand(1));
+        }
+    }
+}
+
+bool readsMoreThanRowCount(Value column) {
+    llvm::SmallVector<OpOperand*, 4> reads;
+    for (OpOperand& use : column.getUses()) {
+        reads.clear();
+        collectRowCountReads(use.getOwner(), reads);
+
+        if (!llvm::is_contained(reads, &use)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// What carrying a column costs, by what its cells hold: a fixed-width value, a value
+// lowering has yet to type, a string, then a value owning data of its own.
+size_t carryCost(Value column) {
+    Type element = cast<ColumnType>(column.getType()).getType();
+    if (storage::NullableType nullable = dyn_cast<storage::NullableType>(element)) {
+        element = nullable.getValueType();
+    }
+
+    if (isa<NoneType>(element)) {
+        return 1;
+    } else if (isa<storage::StringType>(element)) {
+        return 2;
+    } else if (isa<storage::ListType,
+                   storage::MapType,
+                   storage::ListElementType,
+                   storage::MapElementType,
+                   storage::EmbeddingType,
+                   storage::PathType,
+                   storage::EntityListType>(element)) {
+        return 3;
+    }
+
+    return 0;
+}
+
+// The results of an op holding a carry set are all row-aligned, so a read of one of them
+// for its row count can read any other. It takes one something else reads already, else the
+// cheapest to carry, else one the op computes rather than a replica keeping its input alive.
+void anchorRowCount(OpOperand& read) {
+    const Value column = read.get();
+    Operation* const producer = column.getDefiningOp();
+
+    CarrySetLayout layout;
+    if (!producer || !matchCarrySetLayout(producer, layout)) {
+        return;
+    }
+
+    const auto anchorRank = [&layout](Value candidate) {
+        const bool carried = cast<OpResult>(candidate).getResultNumber() >= layout._resultOffset;
+        return std::make_tuple(!readsMoreThanRowCount(candidate), carryCost(candidate), carried);
+    };
+
+    Value anchor = column;
+    std::tuple<bool, size_t, bool> rank = anchorRank(column);
+    for (const Value sibling : producer->getResults()) {
+        const std::tuple<bool, size_t, bool> siblingRank = anchorRank(sibling);
+        if (siblingRank < rank) {
+            anchor = sibling;
+            rank = siblingRank;
+        }
+    }
+
+    read.set(anchor);
+}
+
+struct AnchorRowCounts : public impl::AnchorRowCountsBase<AnchorRowCounts> {
+    void runOnOperation() override {
+        llvm::SmallVector<OpOperand*, 4> reads;
+        getOperation()->walk([&reads](Operation* op) {
+            reads.clear();
+            collectRowCountReads(op, reads);
+
+            for (OpOperand* const read : reads) {
+                anchorRowCount(*read);
+            }
+        });
     }
 };
 

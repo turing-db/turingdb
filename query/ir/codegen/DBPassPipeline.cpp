@@ -10,7 +10,7 @@ namespace {
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext*);
 
-constexpr size_t DB_PASS_COUNT = 41;
+constexpr size_t DB_PASS_COUNT = 42;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -18,14 +18,15 @@ constexpr size_t DB_PASS_COUNT = 41;
 // the context; only the join's cost model and the metadata count read it, the rewrites
 // beside them answering off the IR alone.
 const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
-    [](const mlir::db::DBPassContext*) { return mlir::db::createUnnestUnwindComprehension(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createHoistHopConjuncts(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkMakePath(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseLabelPredicates(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createPlaceInFactors(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createPushDownFilters(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createAnchorRowCounts(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createTrimUnreadColumns(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createUnnestUnwindComprehension(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createRerootPatternAtSeed(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseUnwindEquality(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByNodeIDs(); },
