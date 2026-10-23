@@ -9070,8 +9070,7 @@ mlir::Value DBProgramGenerator::constantLabelList(llvm::ArrayRef<std::string> la
     return constant.getResult();
 }
 
-mlir::Type DBProgramGenerator::propertyValueType(const PropertyExpr* propExpr) {
-    const ValueType valueType = propExpr->getValueType();
+mlir::Type DBProgramGenerator::propertyValueType(ValueType valueType) {
     if (valueType == ValueType::Invalid) {
         return mlir::NoneType::get(_mlirCtxt);
     }
@@ -9124,7 +9123,7 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType resultType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::db::ColumnType resultType = allocColumnType(propertyValueType(lookupExpr->getValueType()));
     const mlir::StringAttr propAttr = _opBuilder.getStringAttr(lookupExpr->getPropName());
 
     if (base->getType() == EvaluatedType::NodePattern) {
@@ -9344,7 +9343,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     bioassert(entityColumn, "WHERE clause property access on unknown variable: {}", varName);
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType resultType = allocColumnType(propertyValueType(propExpr));
+    const mlir::db::ColumnType resultType = allocColumnType(propertyValueType(propExpr->getValueType()));
     const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
 
     const bool isNode = entityType == EvaluatedType::NodePattern;

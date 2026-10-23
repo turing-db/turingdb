@@ -1284,7 +1284,7 @@ private:
 
     mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
-    mlir::Type propertyValueType(const PropertyExpr* propExpr);
+    mlir::Type propertyValueType(ValueType valueType);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
     mlir::Value emitComponentOf(const PropertyExpr* propExpr, mlir::Value value);
 

@@ -867,6 +867,19 @@ VarDecl* ExprAnalyzer::resolveVariable(std::string_view name) {
     return outer;
 }
 
+ValueType ExprAnalyzer::resolvePropertyType(std::string_view name) const {
+    const std::optional<PropertyType> graphType = _graphMetadata.propTypes().get(name);
+    const auto toBeCreated = _toBeCreatedTypes.find(name);
+
+    if (graphType) {
+        return graphType->_valueType;
+    } else if (toBeCreated != _toBeCreatedTypes.end()) {
+        return toBeCreated->second;
+    }
+
+    return ValueType::Invalid;
+}
+
 void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
     VarDecl* varDecl = resolveVariable(expr->getSymbol()->getName());
     if (!varDecl) {
@@ -989,16 +1002,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         // read as a new one. Which of the two it is only the property's type says, and an
         // unknown property names no map, so it is the component this turns away.
         if (allowCreate) {
-            const auto propTypeFound = _graphMetadata.propTypes().get(propName->getName());
-            const auto toBeCreated = _toBeCreatedTypes.find(propName->getName());
-
             const bool readsAMapVariable = varType == EvaluatedType::Map;
-            const bool storesAMap = propTypeFound.has_value()
-                                 && propTypeFound.value()._valueType == ValueType::Map;
-            const bool willStoreAMap = toBeCreated != _toBeCreatedTypes.end()
-                                    && toBeCreated->second == ValueType::Map;
+            const bool storesAMap = resolvePropertyType(propName->getName()) == ValueType::Map;
 
-            const bool namesAMapKey = readsAMapVariable || storesAMap || willStoreAMap;
+            const bool namesAMapKey = readsAMapVariable || storesAMap;
 
             if (namesAMapKey) {
                 throwError(mapKeyNotAProperty, expr);
@@ -1135,50 +1142,29 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
                    expr);
     }
 
-    const auto propTypeFound = _graphMetadata.propTypes().get(propName->getName());
+    const std::string_view name = propName->getName();
+    ValueType vt = resolvePropertyType(name);
 
-    ValueType vt = ValueType::Invalid;
+    if (vt == ValueType::Invalid && allowCreate) {
+        addToBeCreatedType(name, defaultType, expr);
+        vt = defaultType;
+    }
 
     // A name no property in the graph carries has no value on any row and no type: the
     // read is null.
-    bool readsAsNull = false;
+    const bool readsAsNull = vt == ValueType::Invalid && !allowCreate;
 
-    if (!propTypeFound) {
-        // Property does not exist yet
-
-        const std::string_view name = propName->getName();
-        auto it = _toBeCreatedTypes.find(name);
-
-        if (it == _toBeCreatedTypes.end()) {
-            if (allowCreate) {
-                // Property does not exist but is created
-                addToBeCreatedType(propName->getName(), defaultType, expr);
-                it = _toBeCreatedTypes.find(name);
-            } else {
-                readsAsNull = true;
-            }
-        }
-
-        if (!readsAsNull) {
-            // Property is meant to be created in this query
-            vt = it->second;
-            expr->setValueType(vt);
-        }
-
-        expr->setPropertyName(name);
-    } else {
-        // Property already exists
-        vt = propTypeFound.value()._valueType;
+    if (!readsAsNull) {
         expr->setValueType(vt);
-        expr->setPropertyName(propName->getName());
     }
+
+    expr->setPropertyName(name);
 
     EvaluatedType type = EvaluatedType::Null;
 
     if (!readsAsNull) {
         const auto maybeEvalType = toEvaluatedType(vt);
         if (!maybeEvalType.has_value()) {
-            const std::string_view name = propName->getName();
             const std::string error = fmt::format("Property type '{}' is invalid", name);
             throwError(error, expr);
         }
@@ -1292,14 +1278,15 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
         expr->setDurationPart(part);
         type = EvaluatedType::Integer;
     } else if (readsAnEntity) {
-        const auto propTypeFound = _graphMetadata.propTypes().get(propName);
+        const ValueType valueType = resolvePropertyType(propName);
 
-        if (propTypeFound) {
-            const auto maybeEvalType = toEvaluatedType(propTypeFound.value()._valueType);
+        if (valueType != ValueType::Invalid) {
+            const auto maybeEvalType = toEvaluatedType(valueType);
             if (!maybeEvalType.has_value()) {
                 throwError(fmt::format("Property type '{}' is invalid", propName), expr);
             }
 
+            expr->setValueType(valueType);
             type = *maybeEvalType;
         }
     } else if (readsAMapKey) {

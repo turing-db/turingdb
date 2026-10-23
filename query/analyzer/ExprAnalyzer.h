@@ -146,6 +146,10 @@ private:
     // The declaration a name reads as, noting it when it came from an enclosing scope
     VarDecl* resolveVariable(std::string_view name);
 
+    // The type property @param name has in this query: the graph's, or the one a write
+    // earlier in the query creates it with. Invalid for a name neither knows.
+    ValueType resolvePropertyType(std::string_view name) const;
+
     // Lets @param expr and the expressions under it be analyzed again, as a reduce's body
     // is once its accumulator has widened
     void forgetAnalysis(const Expr* expr);

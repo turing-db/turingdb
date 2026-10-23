@@ -58,3 +58,5 @@ add_turing_test(test_query_ir_create_set CreateSetTest.cpp)
 add_turing_test(test_query_ir_uncommitted_write_count UncommittedWriteCountTest.cpp)
 
 add_turing_test(test_query_ir_match_after_delete MatchAfterDeleteTest.cpp)
+
+add_turing_test(test_query_ir_created_property_lookup CreatedPropertyLookupTest.cpp)

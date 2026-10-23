@@ -4,6 +4,7 @@
 
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -17,6 +18,9 @@ public:
 
     Expr* getBase() const { return _base; }
     std::string_view getPropName() const { return _propName; }
+
+    ValueType getValueType() const { return _valueType; }
+    void setValueType(ValueType valueType) { _valueType = valueType; }
 
     bool readsADateTimeComponent() const { return _readsADateTimeComponent; }
     DateTimePart getDateTimePart() const { return _dateTimePart; }
@@ -32,6 +36,7 @@ public:
 private:
     Expr* _base {nullptr};
     std::string_view _propName;
+    ValueType _valueType {ValueType::Invalid};
     DateTimePart _dateTimePart {DateTimePart::Year};
     DurationPart _durationPart {DurationPart::Years};
     bool _readsADateTimeComponent {false};
