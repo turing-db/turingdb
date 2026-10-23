@@ -547,8 +547,8 @@ async function testGraphPathIdsStayExact(module) {
     chunk.u32(1);
     chunk.u32(2);
     chunk.u64(9007199254740993n);
-    chunk.u64(5n);
     chunk.u64(9007199254740995n);
+    chunk.u64(5n);
 
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(1), makeEnd(1.0)]);
     const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");

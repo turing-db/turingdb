@@ -83,27 +83,40 @@ PathRef PathTrie::handleOf(size_t arena, size_t index) {
     return PathRef((static_cast<uint64_t>(arena) << indexBits) | index);
 }
 
-void PathTrie::appendHops(PathRef path, GraphPath& graphPath, bool reversed) const {
-    const uint64_t depth = getDepth(path);
-    const size_t nodeCount = graphPath.getNodes().size();
-    const size_t firstEdge = graphPath.getLength();
-    const bool writesOverTheLastNode = reversed && !graphPath.isNull();
-    const size_t firstNode = writesOverTheLastNode ? nodeCount - 1 : nodeCount;
-    graphPath.resize(firstNode + depth, firstEdge + depth);
+void PathTrie::appendHops(PathRef path, GraphPath& graphPath) const {
+    bioassert(!graphPath.isNull(), "A walk taken with the pattern continues a path that opened on a node");
 
-    const std::span<NodeID> nodes = graphPath.getNodes();
-    const std::span<EdgeID> edges = graphPath.getEdges();
+    const uint64_t depth = getDepth(path);
+    const size_t firstHop = graphPath.getLength();
+    graphPath.setNodeCount(firstHop + depth + 1);
 
     PathRef current = path;
     for (uint64_t hop = depth; hop > 0; hop--) {
         const PathTrieEntry& entry = get(current);
-        const size_t step = reversed ? (depth - hop) : (hop - 1);
 
-        nodes[firstNode + step] = entry._node;
-        edges[firstEdge + step] = entry._edge;
+        graphPath.setNode(firstHop + hop, entry._node);
+        graphPath.setEdge(firstHop + hop - 1, entry._edge);
 
         current = entry._parent;
     }
+}
+
+void PathTrie::appendReversedHops(PathRef path, NodeID seed, GraphPath& graphPath) const {
+    const uint64_t depth = getDepth(path);
+    const size_t firstHop = graphPath.getLength();
+    graphPath.setNodeCount(firstHop + depth + 1);
+
+    PathRef current = path;
+    for (uint64_t step = 0; step < depth; step++) {
+        const PathTrieEntry& entry = get(current);
+
+        graphPath.setNode(firstHop + step, entry._node);
+        graphPath.setEdge(firstHop + step, entry._edge);
+
+        current = entry._parent;
+    }
+
+    graphPath.setNode(firstHop + depth, seed);
 }
 
 ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer, bool reversed, PathHopStride hops) const {

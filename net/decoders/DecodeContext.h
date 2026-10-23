@@ -31,9 +31,6 @@ struct DecodeContext {
     // Pointer to the TuringProto receive buffer
     TuringProtoInBuf* _inBuf {nullptr};
     InterruptedBufferState _bufferState;
-    // Set once the nodes of the path row being decoded have arrived, so a resumed pass
-    // goes on to its edges rather than reading a node count again.
-    bool _pathNodesRead {false};
     // Set once a constant list column's header has been read and its space reserved, so a
     // resumed pass drains elements rather than reading the header again. An optional
     // constant spends _rowIndex on its has-value flag, so the two cannot share it.
@@ -43,7 +40,6 @@ struct DecodeContext {
         _columnIndex = 0;
         _rowIndex = 0;
         _bufferState.reset();
-        _pathNodesRead = false;
         _constListStarted = false;
     }
 };

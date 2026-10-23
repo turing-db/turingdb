@@ -1898,7 +1898,7 @@ void pathToNullableColumn(Column* result, const Column* operand) {
         if (paths[row].isNull()) {
             nullables[row] = std::nullopt;
         } else {
-            nullables[row] = paths[row].getNodes().size();
+            nullables[row] = paths[row].getNodeCount();
         }
     }
 }
@@ -2032,11 +2032,15 @@ std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
 }
 
 template <typename IDType>
-ListView listPathEntities(std::span<const IDType> entities, ListBufferTypeTag tag, QueryListBuffer& buffer) {
-    ListWriteCursor cursor = buffer.reserveList(entities.size(), entities.size() * sizeof(IDType));
+ListView listPathEntities(const GraphPath& path,
+                          size_t count,
+                          IDType (GraphPath::*readEntity)(size_t) const,
+                          ListBufferTypeTag tag,
+                          QueryListBuffer& buffer) {
+    ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
 
-    for (size_t index = 0; index < entities.size(); index++) {
-        cursor.writeValueAt(index, tag, entities[index]);
+    for (size_t index = 0; index < count; index++) {
+        cursor.writeValueAt(index, tag, (path.*readEntity)(index));
     }
 
     return cursor.getView();
@@ -2070,9 +2074,9 @@ void readPathElements(const std::vector<GraphPath>& paths,
         if (path.isNull()) {
             lists[row] = std::nullopt;
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities(path.getNodes(), ListBufferTypeTag::NodeID, listBuffer);
+            lists[row] = listPathEntities(path, path.getNodeCount(), &GraphPath::getNode, ListBufferTypeTag::NodeID, listBuffer);
         } else {
-            lists[row] = listPathEntities(path.getEdges(), ListBufferTypeTag::EdgeID, listBuffer);
+            lists[row] = listPathEntities(path, path.getLength(), &GraphPath::getEdge, ListBufferTypeTag::EdgeID, listBuffer);
         }
     }
 }
@@ -2750,23 +2754,15 @@ void distinctKeyAppendMapColumn(const Column* column, size_t row, std::string& k
     distinctAppendMapBytes(key, raw[row]);
 }
 
-// The null path has no node, so it keys as node count 0, apart from every path. The node
-// count also fixes the edge count, so the IDs that follow it need no separator.
+// The null path has no ID, so it keys as count 0, apart from every path. The count
+// fixes how many IDs follow it, so they need no separator.
 void distinctKeyAppendPathColumn(const Column* column, size_t row, std::string& key) {
     const std::vector<GraphPath>& raw = static_cast<const ColumnVector<GraphPath>*>(column)->getRaw();
-    const GraphPath& path = raw[row];
+    const std::span<const uint64_t> ids = raw[row].getIDs();
 
-    const std::span<const NodeID> nodes = path.getNodes();
-    const size_t nodeCount = nodes.size();
-    key.append(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
-
-    for (const NodeID node : nodes) {
-        distinctAppendValueBytes(key, node.getValue());
-    }
-
-    for (const EdgeID edge : path.getEdges()) {
-        distinctAppendValueBytes(key, edge.getValue());
-    }
+    const size_t idCount = ids.size();
+    key.append(reinterpret_cast<const char*>(&idCount), sizeof(idCount));
+    key.append(reinterpret_cast<const char*>(ids.data()), ids.size_bytes());
 }
 
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
@@ -3963,51 +3959,43 @@ void groupFoldCountPresentPath(Column* accumulator,
     }
 }
 
-// Tally each group's distinct IDs (count(DISTINCT n) over a node/edge column): an
-// invalid ID is a null, which count(DISTINCT x) does not charge, so only the valid ones
-// are keyed.
+// A row of a chunk an expression or a procedure filled is never null. An ID or a path is
+// null on the rows an OPTIONAL MATCH missed.
 template <typename ElementType>
-void groupFoldCountDistinctID(Column* accumulator,
-                              std::vector<uint64_t>& counts,
-                              const Column* input,
-                              const std::vector<size_t>& groups,
-                              NLGroupDistinctTally& distinct,
-                              NLValueStore& values) {
-    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
+bool presentChunkRow(const ElementType& value) {
+    return true;
+}
+
+template <IntegralType T, int tag>
+bool presentChunkRow(const ID<T, tag>& id) {
+    return id.isValid();
+}
+
+bool presentChunkRow(const GraphPath& path) {
+    return !path.isNull();
+}
+
+// Tally each group's distinct present values of a chunk. The tally keys a row the way a
+// whole-row DISTINCT keys it, so two rows count once exactly when DISTINCT would fold
+// them together.
+template <typename ElementType>
+void groupFoldCountDistinctChunk(Column* accumulator,
+                                 std::vector<uint64_t>& counts,
+                                 const Column* input,
+                                 const std::vector<size_t>& groups,
+                                 NLGroupDistinctTally& distinct,
+                                 NLValueStore& values) {
+    const std::vector<ElementType>& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        if (!inputRaw[row].isValid()) {
+        if (!presentChunkRow(inputRaw[row])) {
             continue;
         }
 
         const size_t group = groups[row];
 
         distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), inputRaw[row].getValue());
-
-        if (distinct.insertIfNew()) {
-            counts[group]++;
-        }
-    }
-}
-
-// Tally each group's distinct values over a chunk holding them plainly - a column a
-// procedure yielded. No row of such a chunk is null, so every row is charged the first
-// time its value is seen in its group; the ID sibling keys on the ID's integer instead.
-template <typename ElementType>
-void groupFoldCountDistinctValue(Column* accumulator,
-                                 std::vector<uint64_t>& counts,
-                                 const Column* input,
-                                 const std::vector<size_t>& groups,
-                                 NLGroupDistinctTally& distinct,
-                                 NLValueStore& values) {
-    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const size_t group = groups[row];
-
-        distinct.beginKey(group);
-        distinctAppendValueBytes(distinct.getKey(), inputRaw[row]);
+        distinct.appendRowKey(input, row);
 
         if (distinct.insertIfNew()) {
             counts[group]++;
@@ -4113,26 +4101,6 @@ void groupFoldCountDistinctPresentList(Column* accumulator,
 
         distinct.beginKey(group);
         distinctAppendListBytes(distinct.getKey(), *value);
-
-        if (distinct.insertIfNew()) {
-            counts[group]++;
-        }
-    }
-}
-
-void groupFoldCountDistinctList(Column* accumulator,
-                                std::vector<uint64_t>& counts,
-                                const Column* input,
-                                const std::vector<size_t>& groups,
-                                NLGroupDistinctTally& distinct,
-                                NLValueStore& values) {
-    const auto& inputRaw = static_cast<const ColumnVector<ListView>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const size_t group = groups[row];
-
-        distinct.beginKey(group);
-        distinctAppendListBytes(distinct.getKey(), inputRaw[row]);
 
         if (distinct.insertIfNew()) {
             counts[group]++;
@@ -5888,19 +5856,17 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
     // previousNode back from the target node that we have found.
     auto lastNode = heap.top().prevNode;
     auto edge = heap.top().edge;
-    path.addNode(heap.top().id);
+    path.start(heap.top().id);
 
     while (lastNode.isValid()) {
-        path.addEdge(edge);
-        path.addNode(lastNode);
+        path.addHop(edge, lastNode);
 
         const auto& pathInfo = heapValueMap[lastNode];
         lastNode = pathInfo.prevNode;
         edge = pathInfo.edge;
     }
 
-    std::ranges::reverse(path.getNodes());
-    std::ranges::reverse(path.getEdges());
+    std::ranges::reverse(path.getIDs());
 
     runBody(context, loopData->getStmts());
 }
@@ -7562,19 +7528,23 @@ void NLExecutor::runPathElements(NLExecutionContext* context, NLFunctionData* da
 
 void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) {
     const NLMakePathData* make = static_cast<NLMakePathData*>(data);
-    const NLMakePathData::PathEntities& entities = make->entities();
+    const NLMakePathData::PathSteps& steps = make->steps();
     std::vector<GraphPath>& paths = make->getOutput()->getRaw();
     const PathTrie& trie = *make->getTrie();
 
-    bioassert(!entities.empty(), "nl.make_path builds a path out of at least one node");
+    bioassert(!steps.empty(), "nl.make_path builds a path out of at least one node");
 
-    // Every entity column is row-aligned with the others, so the first gives the rows
-    const size_t rowCount = entities.front()._column->size();
+    const NLPathStep& firstStep = steps.front();
+    const size_t rowCount = firstStep._nodes ? firstStep._nodes->size() : firstStep._walks->size();
 
-    const auto isRowAligned = [rowCount](const NLPathEntity& entity) {
-        return entity._column->size() == rowCount;
+    const auto isRowAligned = [rowCount](const NLPathStep& step) {
+        const bool nodesAligned = !step._nodes || step._nodes->size() == rowCount;
+        const bool edgesAligned = !step._edges || step._edges->size() == rowCount;
+        const bool walksAligned = !step._walks || step._walks->size() == rowCount;
+
+        return nodesAligned && edgesAligned && walksAligned;
     };
-    bioassert(std::ranges::all_of(entities, isRowAligned),
+    bioassert(std::ranges::all_of(steps, isRowAligned),
               "Entity columns of a path build are not row-aligned.");
 
     paths.resize(rowCount);
@@ -7582,28 +7552,38 @@ void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) 
         path.clear();
     }
 
-    for (const NLPathEntity& entity : entities) {
-        switch (entity._kind) {
-            case NLPathEntity::Kind::Node: {
-                const std::vector<NodeID>& nodes = static_cast<const ColumnNodeIDs*>(entity._column)->getRaw();
+    for (const NLPathStep& step : steps) {
+        switch (step._kind) {
+            case NLPathStep::Kind::Start: {
+                const std::vector<NodeID>& nodes = step._nodes->getRaw();
                 for (size_t row = 0; row < rowCount; row++) {
-                    paths[row].addNode(nodes[row]);
+                    paths[row].start(nodes[row]);
                 }
             }
             break;
 
-            case NLPathEntity::Kind::Edge: {
-                const std::vector<EdgeID>& edges = static_cast<const ColumnEdgeIDs*>(entity._column)->getRaw();
+            case NLPathStep::Kind::Hop: {
+                const std::vector<EdgeID>& edges = step._edges->getRaw();
+                const std::vector<NodeID>& nodes = step._nodes->getRaw();
                 for (size_t row = 0; row < rowCount; row++) {
-                    paths[row].addEdge(edges[row]);
+                    paths[row].addHop(edges[row], nodes[row]);
                 }
             }
             break;
 
-            case NLPathEntity::Kind::Path: {
-                const std::vector<PathRef>& handles = static_cast<const ColumnVector<PathRef>*>(entity._column)->getRaw();
+            case NLPathStep::Kind::Walk: {
+                const std::vector<PathRef>& walks = step._walks->getRaw();
                 for (size_t row = 0; row < rowCount; row++) {
-                    trie.appendHops(handles[row], paths[row], entity._reversed);
+                    trie.appendHops(walks[row], paths[row]);
+                }
+            }
+            break;
+
+            case NLPathStep::Kind::ReversedWalk: {
+                const std::vector<PathRef>& walks = step._walks->getRaw();
+                const std::vector<NodeID>& seeds = step._nodes->getRaw();
+                for (size_t row = 0; row < rowCount; row++) {
+                    trie.appendReversedHops(walks[row], seeds[row], paths[row]);
                 }
             }
             break;
@@ -11953,83 +11933,11 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
     return nullptr;
 }
 
-// count(DISTINCT x) over a chunk that is never null - an ID column, or one a procedure
-// yielded: each group is charged once per distinct value it sees. The chunk kind picks
-// the column layout the key is read from, the way selectKeyAppendFunction does for a
-// DISTINCT row key. An ID keys on its integer, everything else on the value itself.
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &groupFoldCountDistinctID<NodeID>;
-        break;
+    NLGroupAggregateFoldFunction fold = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { fold = &groupFoldCountDistinctChunk<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &groupFoldCountDistinctID<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &groupFoldCountDistinctID<EdgeTypeID>;
-        break;
-
-        case NLChunkKind::LabelID:
-            return &groupFoldCountDistinctID<LabelID>;
-        break;
-
-        case NLChunkKind::PropertyTypeID:
-            return &groupFoldCountDistinctID<PropertyTypeID>;
-        break;
-
-        case NLChunkKind::ValueTypeCode:
-            return &groupFoldCountDistinctValue<ValueType>;
-        break;
-
-        case NLChunkKind::UInt64:
-            return &groupFoldCountDistinctValue<types::UInt64::Primitive>;
-        break;
-
-        case NLChunkKind::Int64:
-            return &groupFoldCountDistinctValue<types::Int64::Primitive>;
-        break;
-
-        case NLChunkKind::Double:
-            return &groupFoldCountDistinctValue<types::Double::Primitive>;
-        break;
-
-        case NLChunkKind::Bool:
-            return &groupFoldCountDistinctValue<types::Bool::Primitive>;
-        break;
-
-        case NLChunkKind::String:
-            return &groupFoldCountDistinctValue<types::String::Primitive>;
-        break;
-
-        case NLChunkKind::List:
-            return &groupFoldCountDistinctList;
-        break;
-
-        case NLChunkKind::Map:
-            throw IRException("count(DISTINCT) cannot key on a map column: a map has no scalar value to count distinct");
-        break;
-
-        case NLChunkKind::Path:
-            throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
-        break;
-
-        case NLChunkKind::DateTime:
-            return &groupFoldCountDistinctValue<types::DateTime::Primitive>;
-        break;
-
-        case NLChunkKind::Duration:
-            return &groupFoldCountDistinctValue<types::Duration::Primitive>;
-        break;
-
-        case NLChunkKind::PathRef:
-            throw IRException("count(DISTINCT) cannot key on a path column: expand it into its list first");
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return fold;
 }
 
 NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType) {

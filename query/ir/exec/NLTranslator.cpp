@@ -2441,24 +2441,36 @@ void NLTranslator::translateMakePath(nl::MakePath makePath, NLStmtContainer* bod
         }
     }
 
+    const mlir::OperandRange entities = makePath.getEntities();
     size_t entityIndex = 0;
-    for (const mlir::Value entityValue : makePath.getEntities()) {
-        NLPathEntity entity;
-        entity._column = getColumn(entityValue);
-        entity._reversed = reversedPaths[entityIndex];
-        entityIndex++;
+    while (entityIndex < entities.size()) {
+        const mlir::Value entityValue = entities[entityIndex];
+        NLPathStep step;
 
         switch (getChunkKind(entityValue.getType())) {
             case NLChunkKind::NodeID:
-                entity._kind = NLPathEntity::Kind::Node;
+                step._kind = NLPathStep::Kind::Start;
+                step._nodes = static_cast<const ColumnNodeIDs*>(getColumn(entityValue));
+                entityIndex += 1;
             break;
 
             case NLChunkKind::EdgeID:
-                entity._kind = NLPathEntity::Kind::Edge;
+                step._kind = NLPathStep::Kind::Hop;
+                step._edges = static_cast<const ColumnEdgeIDs*>(getColumn(entityValue));
+                step._nodes = static_cast<const ColumnNodeIDs*>(getColumn(entities[entityIndex + 1]));
+                entityIndex += 2;
             break;
 
             case NLChunkKind::PathRef:
-                entity._kind = NLPathEntity::Kind::Path;
+                step._walks = static_cast<const ColumnVector<PathRef>*>(getColumn(entityValue));
+                if (reversedPaths[entityIndex]) {
+                    step._kind = NLPathStep::Kind::ReversedWalk;
+                    step._nodes = static_cast<const ColumnNodeIDs*>(getColumn(entities[entityIndex + 1]));
+                    entityIndex += 2;
+                } else {
+                    step._kind = NLPathStep::Kind::Walk;
+                    entityIndex += 1;
+                }
             break;
 
             default:
@@ -2466,7 +2478,7 @@ void NLTranslator::translateMakePath(nl::MakePath makePath, NLStmtContainer* bod
             break;
         }
 
-        data->addEntity(entity);
+        data->addStep(step);
     }
 
     body->emplaceStmt(&NLExecutor::runMakePath, data);
@@ -5406,7 +5418,9 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             } else if (mlir::isa<storage::ListElementType>(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctListElementFold();
             } else {
-                aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(getChunkKind(chunkType));
+                const NLChunkKind distinctKind = getChunkKind(chunkType);
+                aggregate._distinct.setRowKey(NLExecutor::selectKeyAppendFunction(distinctKind));
+                aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(distinctKind);
             }
         }
         break;

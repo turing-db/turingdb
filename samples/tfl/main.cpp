@@ -391,7 +391,9 @@ int main(int argc, const char** argv) {
     PropertyTypeID linePropID = linePropOpt.value()._id;
 
     std::vector<std::string> stops;
-    for (const NodeID nodeID : pathResult.getNodes()) {
+    const size_t stopCount = pathResult.getNodeCount();
+    for (size_t index = 0; index < stopCount; index++) {
+        const NodeID nodeID = pathResult.getNode(index);
         const auto* name =
             reader.tryGetNodeProperty<types::String>(
                 namePropID, nodeID).value_or(nullptr);
@@ -401,7 +403,9 @@ int main(int argc, const char** argv) {
     }
 
     std::vector<std::string> edgeLines;
-    for (const EdgeID edgeID : pathResult.getEdges()) {
+    const size_t legCount = pathResult.getLength();
+    for (size_t index = 0; index < legCount; index++) {
+        const EdgeID edgeID = pathResult.getEdge(index);
         const auto* line =
             reader.tryGetEdgeProperty<types::String>(
                 linePropID, edgeID).value_or(nullptr);
