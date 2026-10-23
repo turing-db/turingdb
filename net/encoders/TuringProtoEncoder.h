@@ -358,6 +358,11 @@ public:
     }
 
 private:
+    net::proto::TuringProtoOutBuf* _outBuf {nullptr};
+    NestedContainerWriter& _nestedWriter;
+    size_t _offset {0};
+    size_t _rowCount {0};
+
     // We don't assume dataframes to be rectangular in the encoder. For each column we
     // calculate the appropriate span.
     template <typename T>
@@ -375,11 +380,6 @@ private:
         _outBuf->copyFixedLenData(&nodeCount, sizeof(nodeCount));
         _outBuf->copyVarLenData(ids.data(), ids.size_bytes());
     }
-
-    net::proto::TuringProtoOutBuf* _outBuf {nullptr};
-    NestedContainerWriter& _nestedWriter;
-    size_t _offset {0};
-    size_t _rowCount {0};
 };
 
 class TuringProtoEncoder {
