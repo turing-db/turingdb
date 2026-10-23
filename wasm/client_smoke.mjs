@@ -560,6 +560,26 @@ async function testGraphPathIdsStayExact(module) {
     ]]]]);
 }
 
+// The null path an OPTIONAL MATCH leaves arrives as a path of 0 nodes and reads as null,
+// as the JSON and Python clients read it.
+async function testNullGraphPath(module) {
+    const header = makeHeader([{ name: "path", typeCode: TYPE_GRAPH_PATH, encoding: ENCODING_VECTOR }]);
+
+    const chunk = new Writer();
+    chunk.u32(2);
+    chunk.u32(1);
+    chunk.u64(7n);
+    chunk.u32(0);
+
+    const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(2), makeEnd(1.0)]);
+    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+
+    assert.deepStrictEqual(data, [[[
+        [{ type: 0, id: 7n }],
+        null,
+    ]]]);
+}
+
 createTuringDecoderModule().then(async (module) => {
     await testQuery(module);
     await testQueryData(module);
@@ -568,5 +588,6 @@ createTuringDecoderModule().then(async (module) => {
     await testMaps(module, true);
     await testRaggedQueryData(module);
     await testGraphPathIdsStayExact(module);
-    console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, paths");
+    await testNullGraphPath(module);
+    console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, paths, null paths");
 });

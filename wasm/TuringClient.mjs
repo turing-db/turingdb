@@ -442,7 +442,8 @@ export class Column {
         return this.isConstant ? null : this._typedValues;
     }
 
-    // Optional encodings: one bit per row, LSB first, set where the row has a value.
+    // One bit per row, LSB first, set where the row has a value. Optional encodings carry
+    // it, and so does a path column, whose null arrives as the path with no node.
     get validity() {
         return this._validity;
     }

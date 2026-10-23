@@ -44,6 +44,11 @@ constexpr bool isNestedHandle = std::is_same_v<T, wasm::ListView>
 template <typename T>
 constexpr bool isString = std::is_same_v<T, db::types::String::Primitive>;
 
+// A path is null in-band, as the path with no node, so even a vector of paths has items
+// to mark missing
+template <typename T>
+constexpr bool isNullInBand = std::is_same_v<T, db::GraphPath>;
+
 struct ExportBuffers {
     std::vector<char> _values;
     std::vector<uint32_t> _offsets;
@@ -112,6 +117,15 @@ void appendVariableWidthItem(ExportBuffers& out, const T& item) {
     }
 }
 
+template <typename T>
+const T* presentItem(const T& item) {
+    if constexpr (isNullInBand<T>) {
+        return item.isNull() ? nullptr : &item;
+    } else {
+        return &item;
+    }
+}
+
 // A null item contributes zero bytes to a fixed-width column and an empty range to a
 // variable-width one.
 template <typename T>
@@ -145,7 +159,8 @@ template <typename T, typename GetItem>
 val exportItems(ExportBuffers& out, ColumnInternalKind typeCode, ColumnKind encoding, size_t itemCount, const GetItem& getItem) {
     out.clear();
 
-    const bool optional = encoding == ColumnKind::OPTIONAL_VECTOR || encoding == ColumnKind::OPTIONAL_CONSTANT;
+    const bool optionalEncoding = encoding == ColumnKind::OPTIONAL_VECTOR || encoding == ColumnKind::OPTIONAL_CONSTANT;
+    const bool hasValidity = optionalEncoding || isNullInBand<T>;
 
     if constexpr (isFixedWidth<T>) {
         out._values.reserve(itemCount * sizeof(T));
@@ -156,14 +171,14 @@ val exportItems(ExportBuffers& out, ColumnInternalKind typeCode, ColumnKind enco
         }
     }
 
-    if (optional) {
+    if (hasValidity) {
         out._validity.assign((itemCount + 7) / 8, 0);
     }
 
     for (size_t index = 0; index < itemCount; ++index) {
         const T* item = getItem(index);
 
-        if (item && optional) {
+        if (item && hasValidity) {
             out._validity[index / 8] |= static_cast<uint8_t>(1u << (index % 8));
         }
         appendItem<T>(out, item);
@@ -187,7 +202,7 @@ val exportItems(ExportBuffers& out, ColumnInternalKind typeCode, ColumnKind enco
         }
     }
 
-    if (optional) {
+    if (hasValidity) {
         descriptor.set("validity", copyToUint8Array(out._validity));
     }
 
@@ -207,7 +222,7 @@ struct ColumnBuffersFn {
             case ColumnKind::VECTOR: {
                 if constexpr (SupportedColumnVectorTypes<T, wasm::WasmSink>) {
                     wasm::ColumnVector<T>* column = static_cast<wasm::ColumnVector<T>*>(_column);
-                    const auto getItem = [column](size_t index) -> const T* { return &(*column)[index]; };
+                    const auto getItem = [column](size_t index) -> const T* { return presentItem((*column)[index]); };
                     return exportItems<T>(*_buffers, typeCode, encoding, column->size(), getItem);
                 } else {
                     throw TuringException("Unsupported type for Vector");
@@ -219,7 +234,7 @@ struct ColumnBuffersFn {
                     wasm::ColumnVector<std::optional<T>>* column = static_cast<wasm::ColumnVector<std::optional<T>>*>(_column);
                     const auto getItem = [column](size_t index) -> const T* {
                         const std::optional<T>& value = (*column)[index];
-                        return value.has_value() ? &*value : nullptr;
+                        return value.has_value() ? presentItem(*value) : nullptr;
                     };
                     return exportItems<T>(*_buffers, typeCode, encoding, column->size(), getItem);
                 } else {
@@ -230,7 +245,7 @@ struct ColumnBuffersFn {
             case ColumnKind::CONSTANT: {
                 if constexpr (SupportedColumnConstTypes<T, wasm::WasmSink>) {
                     wasm::ColumnConst<T>* column = static_cast<wasm::ColumnConst<T>*>(_column);
-                    const auto getItem = [column](size_t) -> const T* { return &column->getValue(); };
+                    const auto getItem = [column](size_t) -> const T* { return presentItem(column->getValue()); };
                     return exportItems<T>(*_buffers, typeCode, encoding, column->size(), getItem);
                 } else {
                     throw TuringException("Unsupported type for Constant");
@@ -242,7 +257,7 @@ struct ColumnBuffersFn {
                     wasm::ColumnConst<std::optional<T>>* column = static_cast<wasm::ColumnConst<std::optional<T>>*>(_column);
                     const auto getItem = [column](size_t) -> const T* {
                         const std::optional<T>& value = column->getValue();
-                        return value.has_value() ? &*value : nullptr;
+                        return value.has_value() ? presentItem(*value) : nullptr;
                     };
                     return exportItems<T>(*_buffers, typeCode, encoding, column->size(), getItem);
                 } else {
