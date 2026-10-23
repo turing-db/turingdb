@@ -5,7 +5,6 @@
 #include "datapart/DataPart.h"
 #include "datapart/NodeContainer.h"
 #include "metadata/LabelSetHandle.h"
-#include "reader/GraphReader.h"
 
 #include "BioAssert.h"
 
@@ -27,13 +26,15 @@ void GetNodeLabelSetIterator::next() {
 }
 
 LabelSetID GetNodeLabelSetIterator::get() const {
-    const GraphReader reader(_view);
-    const LabelSetHandle labelset = reader.getNodeLabelSet(*_nodeIt);
-    if (!labelset.isValid()) {
-        return LabelSetID {};
+    const NodeID nodeID = *_nodeIt;
+
+    for (const auto& part : _view.dataparts()) {
+        if (part->hasNode(nodeID)) {
+            return part->nodes().getNodeLabelSet(nodeID).getID();
+        }
     }
 
-    return labelset.getID();
+    return LabelSetID {};
 }
 
 GetNodeLabelSetChunkWriter::GetNodeLabelSetChunkWriter(const GraphView& view,

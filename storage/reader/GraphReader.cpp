@@ -153,65 +153,21 @@ size_t GraphReader::getEdgeCount() const {
 }
 
 LabelSetHandle GraphReader::getNodeLabelSet(NodeID nodeID) const {
-    const DataPartSpan parts = _view.dataparts();
-    const size_t partIndex = getNodePartIndex(nodeID);
-    if (partIndex == parts.size()) {
-        return LabelSetHandle {};
+    for (const auto& part : _view.dataparts()) {
+        if (part->hasNode(nodeID)) {
+            return part->nodes().getNodeLabelSet(nodeID);
+        }
     }
-
-    return parts[partIndex]->nodes().getNodeLabelSet(nodeID);
+    return LabelSetHandle {};
 }
 
 const EdgeRecord* GraphReader::getEdge(EdgeID edgeID) const {
-    const DataPartSpan parts = _view.dataparts();
-    const size_t partIndex = getEdgePartIndex(edgeID);
-    if (partIndex == parts.size()) {
-        return nullptr;
+    for (const auto& part : _view.dataparts()) {
+        if (part->hasEdge(edgeID)) {
+            return &part->edges().get(edgeID);
+        }
     }
-
-    return &parts[partIndex]->edges().get(edgeID);
-}
-
-// Parts hold ascending, disjoint ranges of node IDs and of edge IDs, so the part holding an
-// ID is the last one whose range starts at or before it.
-size_t GraphReader::getNodePartIndex(NodeID nodeID) const {
-    const DataPartSpan parts = _view.dataparts();
-    const auto afterOwner = std::upper_bound(parts.begin(),
-                                             parts.end(),
-                                             nodeID,
-                                             [](NodeID node, const WeakArc<DataPart>& part) {
-                                                 return node < part->getFirstNodeID();
-                                             });
-    if (afterOwner == parts.begin()) {
-        return parts.size();
-    }
-
-    const size_t partIndex = static_cast<size_t>(afterOwner - parts.begin()) - 1;
-    if (!parts[partIndex]->hasNode(nodeID)) {
-        return parts.size();
-    }
-
-    return partIndex;
-}
-
-size_t GraphReader::getEdgePartIndex(EdgeID edgeID) const {
-    const DataPartSpan parts = _view.dataparts();
-    const auto afterOwner = std::upper_bound(parts.begin(),
-                                             parts.end(),
-                                             edgeID,
-                                             [](EdgeID edge, const WeakArc<DataPart>& part) {
-                                                 return edge < part->getFirstEdgeID();
-                                             });
-    if (afterOwner == parts.begin()) {
-        return parts.size();
-    }
-
-    const size_t partIndex = static_cast<size_t>(afterOwner - parts.begin()) - 1;
-    if (!parts[partIndex]->hasEdge(edgeID)) {
-        return parts.size();
-    }
-
-    return partIndex;
+    return nullptr;
 }
 
 size_t GraphReader::getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const {
@@ -402,18 +358,31 @@ GetNodeViewsRange GraphReader::getNodeViews(const ColumnNodeIDs* inputNodeIDs) c
 
 NodeView GraphReader::getNodeView(NodeID id) const {
     NodeView view;
-    const DataPartSpan parts = _view.dataparts();
-    const size_t ownerIndex = getNodePartIndex(id);
-    if (ownerIndex == parts.size()) {
+    PartIterator partIt(_view);
+    LabelSetHandle labelset;
+
+    // Find definition of the node
+    for (; partIt.isNotEnd(); partIt.next()) {
+        const auto* part = partIt.get();
+        const NodeContainer& nodes = part->nodes();
+
+        labelset = nodes.getNodeLabelSet(id);
+        if (labelset.isValid()) {
+            view._labelset = labelset;
+            view._nodeID = id;
+            break;
+        }
+    }
+
+    if (!view.isValid()) {
         return view;
     }
 
-    const LabelSetHandle labelset = parts[ownerIndex]->nodes().getNodeLabelSet(id);
-    view._labelset = labelset;
-    view._nodeID = id;
-
-    for (size_t partIndex = ownerIndex; partIndex < parts.size(); partIndex++) {
-        const DataPart* part = parts[partIndex].get();
+    // Once we found the labelset of a node,
+    // it means we found the definition of the node
+    // We can start gathering properties and edges
+    for (; partIt.isNotEnd(); partIt.next()) {
+        const auto* part = partIt.get();
         const EdgeIndexer& edgeIndexer = part->edgeIndexer();
         const PropertyManager& nodeProperties = part->nodeProperties();
 
@@ -426,21 +395,35 @@ NodeView GraphReader::getNodeView(NodeID id) const {
 
 EdgeView GraphReader::getEdgeView(EdgeID id) const {
     EdgeView view;
-    const DataPartSpan parts = _view.dataparts();
-    const size_t ownerIndex = getEdgePartIndex(id);
-    if (ownerIndex == parts.size()) {
+    PartIterator partIt(_view);
+    LabelSetHandle labelset;
+    const EdgeRecord* edge = nullptr;
+
+    // Find definition of the edge
+    for (; partIt.isNotEnd(); partIt.next()) {
+        const auto* part = partIt.get();
+        const EdgeContainer& edges = part->edges();
+        edge = edges.tryGet(id);
+
+        if (edge) {
+            labelset = getNodeLabelSet(edge->_nodeID);
+            view._edgeID = edge->_edgeID;
+            view._srcID = edge->_nodeID;
+            view._tgtID = edge->_otherID;
+            view._typeID = edge->_edgeTypeID;
+            break;
+        }
+    }
+
+    if (!view.isValid()) {
         return view;
     }
 
-    const EdgeRecord& edge = parts[ownerIndex]->edges().get(id);
-    const LabelSetHandle labelset = getNodeLabelSet(edge._nodeID);
-    view._edgeID = edge._edgeID;
-    view._srcID = edge._nodeID;
-    view._tgtID = edge._otherID;
-    view._typeID = edge._edgeTypeID;
+    // Once we found the edge, we can start gathering its properties
+    for (; partIt.isNotEnd(); partIt.next()) {
+        const auto* part = partIt.get();
+        const PropertyManager& edgeProperties = part->edgeProperties();
 
-    for (size_t partIndex = ownerIndex; partIndex < parts.size(); partIndex++) {
-        const PropertyManager& edgeProperties = parts[partIndex]->edgeProperties();
         edgeProperties.fillEntityPropertyView(id.getValue(), labelset, view._props);
     }
 
@@ -448,12 +431,13 @@ EdgeView GraphReader::getEdgeView(EdgeID id) const {
 }
 
 EdgeTypeID GraphReader::getEdgeTypeID(EdgeID edgeID) const {
-    const EdgeRecord* edge = getEdge(edgeID);
-    if (!edge) {
-        return {};
+    for (const auto& part : _view.dataparts()) {
+        const auto* edge = part->edges().tryGet(edgeID);
+        if (edge) {
+            return edge->_edgeTypeID;
+        }
     }
-
-    return edge->_edgeTypeID;
+    return {};
 }
 
 MatchLabelSetIterator GraphReader::matchLabelSets(const LabelSetHandle& labelSet) const {

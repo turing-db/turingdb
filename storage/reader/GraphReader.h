@@ -74,13 +74,6 @@ public:
     [[nodiscard]] DataPartSpan dataparts() const { return _view.dataparts(); }
     [[nodiscard]] const EdgeRecord* getEdge(EdgeID edgeID) const;
     [[nodiscard]] LabelSetHandle getNodeLabelSet(NodeID nodeID) const;
-
-    /**
-     * @brief Returns the index in dataparts() of the part holding @p nodeID (@p edgeID), or
-     * dataparts().size() when no part does.
-     */
-    [[nodiscard]] size_t getNodePartIndex(NodeID nodeID) const;
-    [[nodiscard]] size_t getEdgePartIndex(EdgeID edgeID) const;
     [[nodiscard]] size_t getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const;
 
     /**
