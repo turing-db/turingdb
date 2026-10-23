@@ -18,7 +18,7 @@ EvaluatedType ListShape::unwoundType() const {
         return _leafType;
     }
 
-    return EvaluatedType::ListItem;
+    return EvaluatedType::Any;
 }
 
 ListShape ListShape::unwound() const {
@@ -32,7 +32,7 @@ ListShape ListShape::unwound() const {
 ListShape ListShape::collecting(EvaluatedType type, const ListShape& shape) {
     if (type == EvaluatedType::List) {
         return ListShape(shape.getLeafType(), shape.getDepth() + 1);
-    } else if (type == EvaluatedType::ListItem) {
+    } else if (type == EvaluatedType::Any) {
         // A tagged scalar names no type its list could be homogeneous in, so the list it
         // gathers into hands tagged scalars back out.
         return ListShape(EvaluatedType::Invalid, 1);

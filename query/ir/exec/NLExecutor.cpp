@@ -11173,7 +11173,7 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     return read;
 }
 
-// A list_element chunk is a ColumnVector<ListElementView> of fixed-width tagged
+// A !storage.any chunk is a ColumnVector<ListElementView> of fixed-width tagged
 // scalars, so the same broadcast templates carry the tag along with the value.
 NLBroadcastFunction NLExecutor::selectListElementBlockRepeatFunction() {
     return &blockRepeatColumn<ListElementView>;

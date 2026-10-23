@@ -118,7 +118,7 @@ def UnwindConst : NLOp<"unwind_const", [Pure]> {
     attribute keeping its own type. A homogeneous list yields a nullable value chunk of
     that type - the shape a property fetch and the unwind_collect drain emit, so the
     unwound column feeds the same consumers, even though such a literal is never null;
-    a heterogeneous or empty list yields a type-erased !storage.list_element chunk (a
+    a heterogeneous or empty list yields a type-erased !storage.any chunk (a
     tagged scalar per row), which is also what a list holding a null or a nested list
     unwinds into. The single chunk element type depends on the elements, so -
     unlike nl.scan_nodes, whose node-ID iterator is fixed and inferred - it is spelled
@@ -209,17 +209,17 @@ def Unwind : NLOp<"unwind", [Pure]> {
 
       %rows = nl.unwind(%names, {%nodes})
                 : (!nl.chunk<!storage.list<!storage.string>>, !nl.chunk<!storage.node_id>)
-                -> !nl.iter<!nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>>
-      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>> {
-        nl.output(%x, %n) : !nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>
+                -> !nl.iter<!nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>>
+      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>> {
+        nl.output(%x, %n) : !nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>
       }
 
     A list cell contributes one row per element, a null cell none, and any other cell
-    the single row it is - a tagged scalar included, so a list_element cell that is
+    the single row it is - a tagged scalar included, so a !storage.any cell that is
     itself a list unwinds one level deeper. Unlike nl.unwind_const it reads an input
     chunk, so it nests in the loop that binds it, the way nl.get_out_edges nests in the
     loop binding its nodes. The element chunk type follows the source's - a list unwinds
-    into the type-erased list_element chunk, a scalar column into its own - and, like
+    into the type-erased !storage.any chunk, a scalar column into its own - and, like
     nl.collect's, is spelled out rather than inferred.
   }];
 
@@ -2564,7 +2564,7 @@ def Concat : NLOp<"concat", [Pure, ConstantThroughOperands, RowAlignedThroughOpe
 def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise read of one element of a list chunk, by position";
   let description = [{
-      %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.list_element>>
+      %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.any>>
 
       A list of nodes or of edges hands its elements back as the entity chunk they were
       gathered from, an invalid ID standing for a position the list does not hold:

@@ -63,7 +63,7 @@ bool holdsAMapPerRow(Type chunkType) {
     const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
     const Type read = nullable ? nullable.getValueType() : chunk.getElementType();
 
-    return isa<storage::MapType, storage::ListElementType, storage::MapElementType>(read);
+    return isa<storage::MapType, storage::AnyType, storage::MapElementType>(read);
 }
 
 // The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
@@ -572,7 +572,7 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
     // so the element type is the homogeneity verdict over the elements.
     if (const auto elements = dyn_cast<ArrayAttr>(adaptor.getValue())) {
         const Type shared = ::db::sharedLiteralElementType(elements);
-        const Type listElement = shared ? shared : storage::ListElementType::get(context);
+        const Type listElement = shared ? shared : storage::AnyType::get(context);
         const Type listType = storage::ListType::get(context, listElement);
 
         inferredReturnTypes.push_back(ChunkType::get(context, listType));
@@ -891,9 +891,9 @@ LogicalResult RowConstant::verify() {
 }
 
 LogicalResult Split::verify() {
-    const bool readsStrings = llvm::isa<storage::StringType, storage::ListElementType>(
+    const bool readsStrings = llvm::isa<storage::StringType, storage::AnyType>(
                                   valueElementOf(getString().getType()))
-                           && llvm::isa<storage::StringType, storage::ListElementType>(
+                           && llvm::isa<storage::StringType, storage::AnyType>(
                                   valueElementOf(getDelimiter().getType()));
     if (!readsStrings) {
         return emitOpError("operands must be string chunks or chunks of tagged cells");
@@ -1192,13 +1192,13 @@ LogicalResult AggregateUpdate::verify() {
     const Type rowsElement = rowsChunk.getElementType();
     const auto rowsNullable = dyn_cast<storage::NullableType>(rowsElement);
     const Type reducedElement = rowsNullable ? rowsNullable.getValueType() : rowsElement;
-    const bool taggedCells = isa<storage::ListElementType>(reducedElement);
+    const bool taggedCells = isa<storage::AnyType>(reducedElement);
     if (taggedCells) {
         const bool isSum = kind == storage::AggregateKind::Sum;
 
         if ((foldsIntoDouble || isSum) && !isa<Float64Type>(accumulatorType)) {
             return emitOpError("a sum, avg or stdev over type-erased cells must fold into an f64 accumulator state");
-        } else if (!foldsIntoDouble && !isSum && !isa<storage::ListElementType>(accumulatorType)) {
+        } else if (!foldsIntoDouble && !isSum && !isa<storage::AnyType>(accumulatorType)) {
             return emitOpError("a min or max over type-erased cells must fold into a tagged cell accumulator state");
         }
     }

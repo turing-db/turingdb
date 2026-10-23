@@ -1040,7 +1040,7 @@ UnwindConst matchUnwindFactor(Region& factor) {
 // the rows it matches once per copy, which a membership test does not express.
 bool elementsCompareDistinctly(UnwindConst unwind) {
     const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
-    if (isa<storage::ListElementType>(column.getType())) {
+    if (isa<storage::AnyType>(column.getType())) {
         return false;
     }
 

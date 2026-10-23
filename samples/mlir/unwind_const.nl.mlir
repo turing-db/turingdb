@@ -10,7 +10,7 @@
 // and the unwind_collect drain emit - even though a literal is never null: every
 // value-chunk consumer (a cross product broadcast, a filter, a skip, an aggregate)
 // dispatches on nullable<T>, so the uniform shape is what makes the unwound column
-// composable. A heterogeneous list keeps its !storage.list_element chunk instead.
+// composable. A heterogeneous list keeps its !storage.any chunk instead.
 module {
   func.func @main() {
     %0 = nl.unwind_const([1, 2, 3]) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>

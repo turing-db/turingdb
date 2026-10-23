@@ -668,12 +668,12 @@ public:
     // no value type to dispatch on
     static NLBroadcastConstantFunction selectOptListElementBroadcast(const Column* value);
 
-    // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
+    // Block-repeat (outer column) and tile (inner column) for a !storage.any chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
     static NLBroadcastFunction selectListElementBlockRepeatFunction();
     static NLBroadcastFunction selectListElementTileFunction();
 
-    // Sort-accumulator append, emit-phase gather and 3-way compare for a list_element
+    // Sort-accumulator append, emit-phase gather and 3-way compare for a !storage.any
     // chunk, so a heterogeneous unwind can be sorted and its rows re-emitted.
     static NLAppendFunction selectListElementAppendFunction();
     static NLGatherFunction selectListElementGatherFunction();
@@ -682,12 +682,12 @@ public:
     static NLGatherFunction selectOptListElementGatherFunction();
     static NLCompareFunction selectListElementCompareFunction();
 
-    // Distinct row key and non-null tally for a list_element chunk, so a heterogeneous
+    // Distinct row key and non-null tally for a !storage.any chunk, so a heterogeneous
     // unwind can be deduped and counted.
     static NLKeyAppendFunction selectListElementKeyAppendFunction();
     static NLCountFunction selectListElementCountFunction();
 
-    // Key-buffer gather-append and emit-phase range copy for a list_element chunk, so a
+    // Key-buffer gather-append and emit-phase range copy for a !storage.any chunk, so a
     // heterogeneous unwind's cells can be a grouping key rather than only a counted column.
     static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
     static NLCopyFunction selectListElementCopyFunction();

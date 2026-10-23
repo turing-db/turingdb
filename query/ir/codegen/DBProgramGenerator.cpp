@@ -828,7 +828,7 @@ mlir::Type sharedColumnElement(mlir::MLIRContext* context, llvm::ArrayRef<mlir::
         if (!shared) {
             shared = element;
         } else if (shared != element) {
-            return mlir::storage::ListElementType::get(context);
+            return mlir::storage::AnyType::get(context);
         }
     }
 
@@ -1126,7 +1126,7 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
 
     const mlir::Type sharedType = sharedLiteralElementType(elementsAttr);
     const mlir::Type elementType = sharedType ? sharedType
-                                              : mlir::storage::ListElementType::get(_mlirCtxt);
+                                              : mlir::storage::AnyType::get(_mlirCtxt);
 
     const mlir::db::ColumnType resultType = allocColumnType(elementType);
 
@@ -9295,7 +9295,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
                                         || entityType == EvaluatedType::Duration
                                         || entityType == EvaluatedType::Map
-                                        || entityType == EvaluatedType::ListItem
+                                        || entityType == EvaluatedType::Any
                                         || entityType == EvaluatedType::MapValue;
 
     if (readsOffTheVariableItself) {

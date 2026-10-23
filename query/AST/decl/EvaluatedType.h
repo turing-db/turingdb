@@ -26,7 +26,7 @@ enum class EvaluatedType : uint8_t {
     Char,
     Bool,
     List,
-    ListItem,
+    Any,
     Map,
     MapValue,
     Wildcard,
@@ -79,7 +79,7 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Char, "Char">,
     EnumStringPair<EvaluatedType::Bool, "Bool">,
     EnumStringPair<EvaluatedType::List, "List">,
-    EnumStringPair<EvaluatedType::ListItem, "ListItem">,
+    EnumStringPair<EvaluatedType::Any, "Any">,
     EnumStringPair<EvaluatedType::Map, "Map">,
     EnumStringPair<EvaluatedType::MapValue, "MapValue">,
     EnumStringPair<EvaluatedType::Wildcard, "Wildcard">,
@@ -159,7 +159,7 @@ inline bool namesAComparableValue(EvaluatedType e) {
 }
 
 inline bool namesATaggedCell(EvaluatedType e) {
-    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+    return e == EvaluatedType::Any || e == EvaluatedType::MapValue;
 }
 
 // The types = and <> take: every value and every entity

@@ -64,15 +64,15 @@ void FunctionDecls::initDefault() {
     // list binds: the list names no element type, so its entities are known per row rather
     // than in the plan. A cell holding neither a node nor an edge is the row's type error.
     FunctionSignature* startNodeOfCell = createFunction("startNode");
-    startNodeOfCell->setArguments({EvaluatedType::ListItem});
+    startNodeOfCell->setArguments({EvaluatedType::Any});
     startNodeOfCell->setReturnTypes({{EvaluatedType::NodePattern}});
 
     FunctionSignature* endNodeOfCell = createFunction("endNode");
-    endNodeOfCell->setArguments({EvaluatedType::ListItem});
+    endNodeOfCell->setArguments({EvaluatedType::Any});
     endNodeOfCell->setReturnTypes({{EvaluatedType::NodePattern}});
 
     FunctionSignature* idOfCell = createFunction("id");
-    idOfCell->setArguments({EvaluatedType::ListItem});
+    idOfCell->setArguments({EvaluatedType::Any});
     idOfCell->setReturnTypes({{EvaluatedType::Integer}});
 
     FunctionSignature* keysNodes = createFunction("keys");
@@ -91,7 +91,7 @@ void FunctionDecls::initDefault() {
     keysMap->setReturnedListShape(ListShape(EvaluatedType::String, 1));
 
     FunctionSignature* keysCell = createFunction("keys");
-    keysCell->setArguments({EvaluatedType::ListItem});
+    keysCell->setArguments({EvaluatedType::Any});
     keysCell->setReturnTypes({{EvaluatedType::List}});
     keysCell->setReturnedListShape(ListShape(EvaluatedType::String, 1));
 
@@ -113,7 +113,7 @@ void FunctionDecls::initDefault() {
     propertiesMap->setReturnTypes({{EvaluatedType::Map}});
 
     FunctionSignature* propertiesCell = createFunction("properties");
-    propertiesCell->setArguments({EvaluatedType::ListItem});
+    propertiesCell->setArguments({EvaluatedType::Any});
     propertiesCell->setReturnTypes({{EvaluatedType::Map}});
 
     FunctionSignature* propertiesMapValue = createFunction("properties");
@@ -172,10 +172,10 @@ void FunctionDecls::initDefault() {
     countDurations->setReturnTypes({{EvaluatedType::Integer}});
     countDurations->setIsAggregate(true);
 
-    FunctionSignature* countListItems = createFunction("count");
-    countListItems->setArguments({EvaluatedType::ListItem});
-    countListItems->setReturnTypes({{EvaluatedType::Integer}});
-    countListItems->setIsAggregate(true);
+    FunctionSignature* countAnyValues = createFunction("count");
+    countAnyValues->setArguments({EvaluatedType::Any});
+    countAnyValues->setReturnTypes({{EvaluatedType::Integer}});
+    countAnyValues->setIsAggregate(true);
 
     // collect gathers the values of its group into a list, so it reduces like the others
     // but returns a list rather than a scalar
@@ -238,11 +238,11 @@ void FunctionDecls::initDefault() {
     // A type-erased cell collects too: the list gathers the values the cells hold, each
     // keeping its own type, so the list is homogeneous in nothing and hands tagged
     // scalars back out.
-    FunctionSignature* collectListItems = createFunction("collect");
-    collectListItems->setArguments({EvaluatedType::ListItem});
-    collectListItems->setReturnTypes({{EvaluatedType::List}});
-    collectListItems->setIsAggregate(true);
-    collectListItems->setCollectsItsArgument(true);
+    FunctionSignature* collectAnyValues = createFunction("collect");
+    collectAnyValues->setArguments({EvaluatedType::Any});
+    collectAnyValues->setReturnTypes({{EvaluatedType::List}});
+    collectAnyValues->setIsAggregate(true);
+    collectAnyValues->setCollectsItsArgument(true);
 
     // collect(null) is a query that can be asked: every row's null is dropped, so the list
     // comes out empty, and the overload is what keeps the answer from being an argument error
@@ -397,15 +397,15 @@ void FunctionDecls::initDefault() {
     maxMap->setReturnTypes({{EvaluatedType::Map}});
     maxMap->setIsAggregate(true);
 
-    FunctionSignature* minListItems = createFunction("min");
-    minListItems->setArguments({EvaluatedType::ListItem});
-    minListItems->setReturnTypes({{EvaluatedType::ListItem}});
-    minListItems->setIsAggregate(true);
+    FunctionSignature* minAnyValues = createFunction("min");
+    minAnyValues->setArguments({EvaluatedType::Any});
+    minAnyValues->setReturnTypes({{EvaluatedType::Any}});
+    minAnyValues->setIsAggregate(true);
 
-    FunctionSignature* maxListItems = createFunction("max");
-    maxListItems->setArguments({EvaluatedType::ListItem});
-    maxListItems->setReturnTypes({{EvaluatedType::ListItem}});
-    maxListItems->setIsAggregate(true);
+    FunctionSignature* maxAnyValues = createFunction("max");
+    maxAnyValues->setArguments({EvaluatedType::Any});
+    maxAnyValues->setReturnTypes({{EvaluatedType::Any}});
+    maxAnyValues->setIsAggregate(true);
 
     // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
     // null, so a column that is null on every row - a name no property in the graph carries,
@@ -434,10 +434,10 @@ void FunctionDecls::initDefault() {
     // avg over a type-erased column of tagged cells - what a list mixing numeric types,
     // holding a null or holding nothing unwinds into. Each cell is read through its tag,
     // and an average is a double whatever those tags were.
-    FunctionSignature* avgListItems = createFunction("avg");
-    avgListItems->setArguments({EvaluatedType::ListItem});
-    avgListItems->setReturnTypes({{EvaluatedType::Double}});
-    avgListItems->setIsAggregate(true);
+    FunctionSignature* avgAnyValues = createFunction("avg");
+    avgAnyValues->setArguments({EvaluatedType::Any});
+    avgAnyValues->setReturnTypes({{EvaluatedType::Double}});
+    avgAnyValues->setIsAggregate(true);
 
     FunctionSignature* avgNulls = createFunction("avg");
     avgNulls->setArguments({EvaluatedType::Null});
@@ -464,10 +464,10 @@ void FunctionDecls::initDefault() {
     // A type-erased cell carries its number's type per row. Mixed numeric tags are what
     // leaves a list type-erased, and Cypher sums those to a float, so this reduces to one
     // whichever tags turn up - and errors on a cell that is no number at all.
-    FunctionSignature* sumListItems = createFunction("sum");
-    sumListItems->setArguments({EvaluatedType::ListItem});
-    sumListItems->setReturnTypes({{EvaluatedType::Double}});
-    sumListItems->setIsAggregate(true);
+    FunctionSignature* sumAnyValues = createFunction("sum");
+    sumAnyValues->setArguments({EvaluatedType::Any});
+    sumAnyValues->setReturnTypes({{EvaluatedType::Double}});
+    sumAnyValues->setIsAggregate(true);
 
     // stDev spreads the values as a sample of a population, stDevP as the whole of it. Too
     // few values to spread - none, or the one a sample has no second for - spread by 0
@@ -475,7 +475,7 @@ void FunctionDecls::initDefault() {
     const std::vector<EvaluatedType> numbers = {
         EvaluatedType::Integer,
         EvaluatedType::Double,
-        EvaluatedType::ListItem,
+        EvaluatedType::Any,
         EvaluatedType::Null,
     };
 
@@ -523,14 +523,14 @@ void FunctionDecls::initDefault() {
     // scalar an UNWIND of the list binds. An empty list - and an absent one - heads into null.
     FunctionSignature* head = createFunction("head");
     head->setArguments({EvaluatedType::List});
-    head->setReturnTypes({{EvaluatedType::ListItem}});
+    head->setReturnTypes({{EvaluatedType::Any}});
     head->setReturnsAnElementOfItsArgument(true);
 
     // The last element, typed as head types the first; an empty list - and an absent one -
     // has no final element, so it reads as null.
     FunctionSignature* last = createFunction("last");
     last->setArguments({EvaluatedType::List});
-    last->setReturnTypes({{EvaluatedType::ListItem}});
+    last->setReturnTypes({{EvaluatedType::Any}});
     last->setReturnsAnElementOfItsArgument(true);
 
     // Dropping the first element leaves a list over the same elements, so it nests as
@@ -551,21 +551,21 @@ void FunctionDecls::initDefault() {
     // answers null; one holding neither a list nor, under size(), a string is the type
     // error the row raises.
     FunctionSignature* sizeCell = createFunction("size");
-    sizeCell->setArguments({EvaluatedType::ListItem});
+    sizeCell->setArguments({EvaluatedType::Any});
     sizeCell->setReturnTypes({{EvaluatedType::Integer}});
 
     FunctionSignature* headCell = createFunction("head");
-    headCell->setArguments({EvaluatedType::ListItem});
-    headCell->setReturnTypes({{EvaluatedType::ListItem}});
+    headCell->setArguments({EvaluatedType::Any});
+    headCell->setReturnTypes({{EvaluatedType::Any}});
 
     FunctionSignature* lastCell = createFunction("last");
-    lastCell->setArguments({EvaluatedType::ListItem});
-    lastCell->setReturnTypes({{EvaluatedType::ListItem}});
+    lastCell->setArguments({EvaluatedType::Any});
+    lastCell->setReturnTypes({{EvaluatedType::Any}});
 
     // The cell names no element type, so the list left of it names none either: an UNWIND
     // of this tail binds tagged cells again rather than a type it could promise
     FunctionSignature* tailCell = createFunction("tail");
-    tailCell->setArguments({EvaluatedType::ListItem});
+    tailCell->setArguments({EvaluatedType::Any});
     tailCell->setReturnTypes({{EvaluatedType::List}});
 
     // length() is the other Cypher name for size(): the same three arguments answered the
@@ -579,7 +579,7 @@ void FunctionDecls::initDefault() {
     lengthString->setReturnTypes({{EvaluatedType::Integer}});
 
     FunctionSignature* lengthCell = createFunction("length");
-    lengthCell->setArguments({EvaluatedType::ListItem});
+    lengthCell->setArguments({EvaluatedType::Any});
     lengthCell->setReturnTypes({{EvaluatedType::Integer}});
 
     // range counts from its first bound to its second, both included, by the stride the
@@ -676,7 +676,7 @@ void FunctionDecls::initDefault() {
 
         for (const std::string_view name : {conversion._name, conversion._orNullName}) {
             FunctionSignature* ofACell = createFunction(name);
-            ofACell->setArguments({EvaluatedType::ListItem});
+            ofACell->setArguments({EvaluatedType::Any});
             ofACell->setReturnTypes({{conversion._result}});
         }
 
@@ -712,11 +712,11 @@ void FunctionDecls::initDefault() {
     durationOfMap->setReturnTypes({{EvaluatedType::Duration}});
 
     FunctionSignature* durationOfCell = createFunction("duration");
-    durationOfCell->setArguments({EvaluatedType::ListItem});
+    durationOfCell->setArguments({EvaluatedType::Any});
     durationOfCell->setReturnTypes({{EvaluatedType::Duration}});
 
     // Numeric functions
-    for (const EvaluatedType numberType : {EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::ListItem}) {
+    for (const EvaluatedType numberType : {EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Any}) {
         FunctionSignature* abs = createFunction("abs");
         abs->setArguments({numberType});
         abs->setReturnTypes({{numberType}});
@@ -753,19 +753,19 @@ void FunctionDecls::initDefault() {
 
     for (const std::string_view name : {"toUpper", "toLower", "trim", "ltrim", "rtrim"}) {
         FunctionSignature* stringFunctionOfCell = createFunction(name);
-        stringFunctionOfCell->setArguments({EvaluatedType::ListItem});
+        stringFunctionOfCell->setArguments({EvaluatedType::Any});
         stringFunctionOfCell->setReturnTypes({{EvaluatedType::String}});
     }
 
     // A cell holds a string or a list, so what its reversal is is known per row
     FunctionSignature* reverseCell = createFunction("reverse");
-    reverseCell->setArguments({EvaluatedType::ListItem});
-    reverseCell->setReturnTypes({{EvaluatedType::ListItem}});
+    reverseCell->setArguments({EvaluatedType::Any});
+    reverseCell->setReturnTypes({{EvaluatedType::Any}});
 
-    const std::vector<FunctionArgumentType> stringOrCell = {EvaluatedType::String, EvaluatedType::ListItem};
+    const std::vector<FunctionArgumentType> stringOrCell = {EvaluatedType::String, EvaluatedType::Any};
 
     std::vector<FunctionArgumentType> nonNullIntegerOrCell;
-    for (const EvaluatedType etype : {EvaluatedType::Integer, EvaluatedType::ListItem}) {
+    for (const EvaluatedType etype : {EvaluatedType::Integer, EvaluatedType::Any}) {
         FunctionArgumentType integer(etype);
         integer.setRejectsNull(true);
         nonNullIntegerOrCell.push_back(integer);
@@ -834,7 +834,7 @@ void FunctionDecls::initDefault() {
     }
 
     for (const std::string_view name : {"char_length", "character_length"}) {
-        for (const EvaluatedType argumentType : {EvaluatedType::String, EvaluatedType::ListItem}) {
+        for (const EvaluatedType argumentType : {EvaluatedType::String, EvaluatedType::Any}) {
             FunctionSignature* charLength = createFunction(name);
             charLength->setArguments({argumentType});
             charLength->setReturnTypes({{EvaluatedType::Integer}});

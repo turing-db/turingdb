@@ -54,7 +54,7 @@ std::string typeText(mlir::Type type) {
 // The element type db.constant infers for a list literal is the homogeneity verdict, and
 // it is the only place that verdict is visible: the runtime column is a ColumnConst of
 // ListViews either way and every cell keeps its own type tag, so a list typed as i64 and
-// one typed as list_element render the same rows. These tests read the type off the
+// one typed as !storage.any render the same rows. These tests read the type off the
 // generated op rather than the rows, so a wrong verdict cannot pass unnoticed.
 class ListLiteralElementTypeTest : public TuringTest {
 protected:
@@ -121,7 +121,7 @@ protected:
                                          << ", expected " << typeText(expected);
     }
 
-    mlir::Type listElementType() { return mlir::storage::ListElementType::get(&_context); }
+    mlir::Type listElementType() { return mlir::storage::AnyType::get(&_context); }
 
     mlir::Type listOfType(mlir::Type element) { return mlir::storage::ListType::get(&_context, element); }
 

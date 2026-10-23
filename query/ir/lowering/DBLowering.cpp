@@ -159,13 +159,13 @@ mlir::Type durationFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEle
 // A list function reads a list cell, or the type-erased cell an unwind of a list of lists
 // hands its nested lists on as. Anything else is IR no query produces.
 void throwIfNotAListInput(mlir::Type inputElement) {
-    if (!llvm::isa<storage::ListType, storage::ListElementType>(inputElement)) {
+    if (!llvm::isa<storage::ListType, storage::AnyType>(inputElement)) {
         throw IRException("a list function reads a list column");
     }
 }
 
 mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    const bool readsAList = llvm::isa<storage::ListType, storage::ListElementType>(inputElement);
+    const bool readsAList = llvm::isa<storage::ListType, storage::AnyType>(inputElement);
     const bool readsAString = mlir::isa<storage::StringType>(inputElement);
 
     if (!readsAList && !readsAString) {
@@ -181,7 +181,7 @@ mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement
 mlir::Type listElementFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     throwIfNotAListInput(inputElement);
 
-    return storage::ListElementType::get(builder.getContext());
+    return storage::AnyType::get(builder.getContext());
 }
 
 // The list a tail leaves is over the elements the list it came from held, so it keeps that
@@ -190,7 +190,7 @@ mlir::Type listElementFunctionElement(mlir::OpBuilder& builder, mlir::Type input
 mlir::Type listTailFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     throwIfNotAListInput(inputElement);
 
-    if (llvm::isa<storage::ListElementType>(inputElement)) {
+    if (llvm::isa<storage::AnyType>(inputElement)) {
         return storage::ListType::get(builder.getContext(), inputElement);
     }
 
@@ -198,7 +198,7 @@ mlir::Type listTailFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEle
 }
 
 mlir::Type reverseFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    if (mlir::isa<storage::ListType, storage::ListElementType>(inputElement)) {
+    if (mlir::isa<storage::ListType, storage::AnyType>(inputElement)) {
         return inputElement;
     }
 
@@ -473,7 +473,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isString = mlir::isa<storage::StringType>(inputElement);
     const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
     const bool isDuration = mlir::isa<storage::DurationType>(inputElement);
-    const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
+    const bool isTaggedCell = mlir::isa<storage::AnyType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
     // or the null literal - so every reduction over it sees nothing: min, max and avg
@@ -555,7 +555,7 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     // A type-erased cell is numeric only once read. '^' answers a double whatever it
     // reads, so a cell reaching here computes in f64 and answers null on a row holding no
     // number; every other operator keeps the cell and never asks.
-    if (mlir::isa<storage::ListElementType>(element)) {
+    if (mlir::isa<storage::AnyType>(element)) {
         return {.numeric = mlir::Float64Type::get(chunkType.getContext()), .nullable = true};
     }
 
@@ -645,7 +645,7 @@ bool isIndexableChunk(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type indexed = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::ListType, storage::ListElementType, storage::MapElementType>(indexed);
+    return mlir::isa<storage::ListType, storage::AnyType, storage::MapElementType>(indexed);
 }
 
 // The chunk shapes a key read accepts: a column of maps, and a tagged cell the row may
@@ -660,7 +660,7 @@ bool holdsAMapPerRow(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type read = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::MapType, storage::ListElementType, storage::MapElementType>(read);
+    return mlir::isa<storage::MapType, storage::AnyType, storage::MapElementType>(read);
 }
 
 // The element type an indexed list hands out, read through the nullable an optional list
@@ -731,7 +731,7 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
 
 bool isTaggedCellChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    return chunk && mlir::isa<storage::ListElementType, storage::MapElementType>(chunk.getElementType());
+    return chunk && mlir::isa<storage::AnyType, storage::MapElementType>(chunk.getElementType());
 }
 
 // A tagged cell holds its null in its tag and an ID column in the invalid ID, so a null test
@@ -744,7 +744,7 @@ bool mayHoldANull(mlir::Type chunkType) {
     return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
 }
 
-// A list element's null rides the column's optional, so a plain list_element column holds
+// A list element's null rides the column's optional, so a plain !storage.any column holds
 // none. A map value's null rides the entry's own tag, so even a plain column can answer
 // one - which is what makes comparing it three-valued whatever the column's shape.
 bool isMapElementChunk(mlir::Type chunkType) {
@@ -764,7 +764,7 @@ bool holdsTaggedCells(mlir::Type chunkType) {
     const mlir::Type element = chunk.getElementType();
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
 
-    return mlir::isa<storage::ListElementType>(nullable ? nullable.getValueType() : element);
+    return mlir::isa<storage::AnyType>(nullable ? nullable.getValueType() : element);
 }
 
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
@@ -788,7 +788,7 @@ mlir::Type unifiedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::T
         return promoteNumeric(builder, lhs, rhs);
     } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
         mlir::MLIRContext* const context = builder.getContext();
-        return storage::ListType::get(context, storage::ListElementType::get(context));
+        return storage::ListType::get(context, storage::AnyType::get(context));
     }
 
     return mlir::Type {};
@@ -906,7 +906,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const mlir::Type inputElement = inputChunkType.getElementType();
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputElement);
-            const bool taggedCells = mlir::isa<storage::ListElementType>(inputElement);
+            const bool taggedCells = mlir::isa<storage::AnyType>(inputElement);
             if (!inputNullable && !taggedCells) {
                 throw IRException("db.group_aggregate sum/min/max/avg/stdev/first requires a property value column");
             }
@@ -1682,7 +1682,7 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
     // its loop sits at the top of the current root block. The literals are the rows to
     // emit, forwarded as-is; translation materializes them into a ListView. Unlike a
     // node-ID scan the chunk element type varies with the list (a homogeneous value
-    // type, or list_element for a heterogeneous one), so - like nl.collect - the
+    // type, or !storage.any for a heterogeneous one), so - like nl.collect - the
     // iterator type is spelled here from the db column's element type rather than
     // inferred.
     setInsertionInto(_rootBlock);
@@ -1695,9 +1695,9 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
     // unwind_collect drain do: the elements are never null, but every value-chunk
     // consumer (a cross product broadcast, a filter, a skip, an aggregate) dispatches
     // on nullable<T>, so the uniform shape is what makes the unwound column composable.
-    // A heterogeneous list keeps its type-erased list_element chunk, which only
+    // A heterogeneous list keeps its type-erased !storage.any chunk, which only
     // pass-through consumers accept.
-    const bool heterogeneous = mlir::isa<storage::ListElementType>(elementType);
+    const bool heterogeneous = mlir::isa<storage::AnyType>(elementType);
     const mlir::Type chunkElementType = heterogeneous ? elementType
                                                       : storage::NullableType::get(context, elementType);
 
@@ -2036,7 +2036,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
                                                        storage::EdgeIDType,
                                                        storage::ListType,
                                                        storage::MapType,
-                                                       storage::ListElementType>(valueElement);
+                                                       storage::AnyType>(valueElement);
 
     if (!holdsCellsPresentInEveryRow) {
         valueChunk = nullableValueChunk(valueChunk);
@@ -2188,7 +2188,7 @@ mlir::Type DBLowering::accumulatedElement(mlir::Type accumulated, mlir::Type chu
 
     const mlir::Type unified = unifiedValueElement(_builder, accumulated, element);
     if (!unified) {
-        return storage::ListElementType::get(_builder.getContext());
+        return storage::AnyType::get(_builder.getContext());
     }
 
     return unified;
@@ -2201,7 +2201,7 @@ nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
     // branch or a null test reads as the null it is rather than as a value of some type
     if (!accumulated) {
         return nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getNoneType()));
-    } else if (mlir::isa<storage::ListElementType>(accumulated)) {
+    } else if (mlir::isa<storage::AnyType>(accumulated)) {
         return nl::ChunkType::get(context, accumulated);
     }
 
@@ -2323,7 +2323,7 @@ mlir::Value DBLowering::rowListsValueChunk(mlir::Value valueChunk, mlir::Value r
     const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                        storage::EdgeIDType,
                                                        storage::ListType,
-                                                       storage::ListElementType>(valueElement);
+                                                       storage::AnyType>(valueElement);
 
     if (holdsCellsPresentInEveryRow) {
         return aligned;
@@ -2351,7 +2351,7 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
         if (!shared) {
             shared = element;
         } else if (shared != element) {
-            return storage::ListElementType::get(context);
+            return storage::AnyType::get(context);
         }
     }
 
@@ -2439,7 +2439,7 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
                                                            storage::EdgeIDType,
                                                            storage::ListType,
                                                            storage::MapType,
-                                                           storage::ListElementType>(element);
+                                                           storage::AnyType>(element);
 
         if (!holdsCellsPresentInEveryRow) {
             chunk = nullableValueChunk(chunk);
@@ -2508,8 +2508,8 @@ void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     const mlir::Type value = nullable ? nullable.getValueType() : listElement;
 
     const mlir::Type sliced =
-        mlir::isa<storage::ListElementType>(value)
-            ? storage::ListType::get(context, storage::ListElementType::get(context))
+        mlir::isa<storage::AnyType>(value)
+            ? storage::ListType::get(context, storage::AnyType::get(context))
             : value;
 
     const nl::ChunkType resultType = nl::ChunkType::get(context,
@@ -2559,7 +2559,7 @@ void DBLowering::lowerPercentile(mlir::Operation* operation) {
     const bool interpolates = mlir::isa<mlir::db::PercentileCont>(operation);
     const bool listsNumbers = listsIntegers || listsDoubles;
 
-    mlir::Type resultElement = storage::ListElementType::get(context);
+    mlir::Type resultElement = storage::AnyType::get(context);
     if (interpolates) {
         resultElement = storage::NullableType::get(context, _builder.getF64Type());
     } else if (listsNumbers) {
@@ -4745,7 +4745,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // A type-erased column is read as the tagged cell it holds; every other input is a
     // nullable value chunk, and the reduction is resolved from the value type it wraps.
     const mlir::Type inputChunkElement = mlir::cast<nl::ChunkType>(inputChunk.getType()).getElementType();
-    const bool taggedCells = mlir::isa<storage::ListElementType>(inputChunkElement);
+    const bool taggedCells = mlir::isa<storage::AnyType>(inputChunkElement);
     const mlir::Type inputElement = taggedCells
         ? inputChunkElement
         : mlir::cast<storage::NullableType>(inputChunkElement).getValueType();
@@ -4945,7 +4945,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                               storage::EdgeIDType,
                                                               storage::ListType,
-                                                              storage::ListElementType>(collectedElement);
+                                                              storage::AnyType>(collectedElement);
 
         if (!collectsCellsPresentInEveryRow) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
@@ -6045,7 +6045,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
         case BinaryResultKind::Numeric: {
             if (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType)) {
-                return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+                return storage::NullableType::get(ctx, storage::AnyType::get(ctx));
             }
 
             const mlir::Type lhsElement = chunkValueElement(_builder, lhsType);
@@ -6106,7 +6106,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const bool sharedType = lhsInnerType == rhsInnerType;
             const mlir::Type resultInnerType =
-                sharedType ? lhsInnerType : storage::ListElementType::get(ctx);
+                sharedType ? lhsInnerType : storage::AnyType::get(ctx);
             const mlir::Type concatenated = storage::ListType::get(ctx, resultInnerType);
 
             return operandNullable ? storage::NullableType::get(ctx, concatenated)
@@ -6130,7 +6130,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const mlir::Type indexed = namesAnIndexedValueType(element)
                                            ? element
-                                           : storage::ListElementType::get(ctx);
+                                           : storage::AnyType::get(ctx);
 
             return storage::NullableType::get(ctx, indexed);
         }
@@ -6565,7 +6565,7 @@ void DBLowering::lowerHeadOrLast(mlir::Operation& operation) {
     const mlir::Type listChunkType = listChunk.getType();
 
     const bool listsTypedElements = isListChunk(listChunkType)
-                                 && !mlir::isa<storage::ListElementType, mlir::NoneType>(indexedListElementType(listChunkType));
+                                 && !mlir::isa<storage::AnyType, mlir::NoneType>(indexedListElementType(listChunkType));
     if (!listsTypedElements) {
         lowerUnaryFunction(&operation);
         return;
@@ -7212,7 +7212,7 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
 mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
 
-    if (mlir::isa<storage::ListElementType>(element)) {
+    if (mlir::isa<storage::AnyType>(element)) {
         return chunk;
     } else if (mlir::isa<storage::ListType, storage::MapType>(element)) {
         return toNullableChunk(chunk, element);

@@ -31,7 +31,7 @@ protected:
         std::string program = R"mlir(
 !strings = !db.column<!storage.nullable<!storage.string>>
 !texts = !db.column<!storage.string>
-!cells = !db.column<!storage.list_element>
+!cells = !db.column<!storage.any>
 !unresolved = !db.column<none>
 !integers = !db.column<!storage.nullable<i64>>
 !reals = !db.column<f64>

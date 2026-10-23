@@ -11,7 +11,7 @@ module {
     // i64. Elements that disagree, or one that is itself a list or a null, carry no shared
     // type and give a list of type-erased tagged scalars instead:
     //
-    //   %xs = db.constant([10, true, [1, 2]])   // !db.column<!storage.list<!storage.list_element>>
+    //   %xs = db.constant([10, true, [1, 2]])   // !db.column<!storage.list<!storage.any>>
     //
     // An empty list is that same type-erased form and is still a value: one list holding no
     // element, where UNWIND of it yields no row at all. The result type is inferred and so

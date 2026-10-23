@@ -200,13 +200,13 @@ def UnwindConst : TuringOp<"unwind_const", [Pure]> {
     nested array attribute for a nested list. When they share one type the list is
     homogeneous and the result is that typed column; when they differ - or the list
     is empty, or holds a null or a nested list, neither of which has a type - it is
-    heterogeneous and the result is a type-erased !storage.list_element column, a
+    heterogeneous and the result is a type-erased !storage.any column, a
     tagged scalar per row, matching Cypher's LIST OF ANY:
 
-      %row = db.unwind_const([true, "s", 10]) : !db.column<!storage.list_element>
+      %row = db.unwind_const([true, "s", 10]) : !db.column<!storage.any>
 
     So the result element type is the homogeneity verdict: a downstream op sees a
-    concrete typed column for a homogeneous list, and a list_element column - which
+    concrete typed column for a homogeneous list, and a !storage.any column - which
     only pass-through ops (a cross_product broadcast, the output) accept - for a
     heterogeneous one. An empty list yields no row, matching UNWIND of an empty list.
     Producing a fixed list is deterministic, so the op is Pure. With incoming rows
@@ -365,7 +365,7 @@ def Unwind : TuringOp<"unwind", [Pure]> {
 
     The element column's type is the source's to decide and is resolved during
     lowering, as a property fetch's value column is: unwinding a list yields a
-    type-erased !storage.list_element column of tagged scalars, matching Cypher's LIST
+    type-erased !storage.any column of tagged scalars, matching Cypher's LIST
     OF ANY, while a source that is already a scalar column keeps its own type - the
     singleton is the value it already holds.
   }];
@@ -2935,7 +2935,7 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 // element count as an integer, db.tail the same list one element shorter - a subspan of
 // the cell, so the row still costs O(1) - and db.head and db.last the list's first and
 // final element. A stored list may mix types, so those two answer with the type-erased
-// !storage.list_element every element of a heterogeneous list rides, and an empty list
+// !storage.any every element of a heterogeneous list rides, and an empty list
 // reads as the null such a cell carries itself rather than as a nullable column of its own.
 // The ID of a node, an edge, or the entity a type-erased cell holds, as an integer.
 def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType">;

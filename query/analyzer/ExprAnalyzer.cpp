@@ -132,13 +132,13 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
 // The type a reduce's accumulator takes once it has held @param accumulator and then
 // @param value: what a CASE unifies, and a tagged cell when the two share no column type
 EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
-    if (accumulator == EvaluatedType::ListItem) {
+    if (accumulator == EvaluatedType::Any) {
         return accumulator;
     }
 
     const EvaluatedType unified = unifiedBranchType(accumulator, value);
     if (unified == EvaluatedType::Invalid) {
-        return EvaluatedType::ListItem;
+        return EvaluatedType::Any;
     }
 
     return unified;
@@ -159,14 +159,14 @@ ListShape accumulatedShape(const ListShape& accumulator, const ListShape& value)
 
 // A type-erased cell concatenates as the text it holds, which is how the element of a list
 // joins a string.
-bool concatenatesListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String);
+bool concatenatesAny(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String);
 }
 
 // Two cells join as the texts they hold under '||', which concatenates whatever it is
 // given. '+' computes over them instead, as the other arithmetic operators do.
-bool concatenatesTwoListItems(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem);
+bool concatenatesTwoAnyValues(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any);
 }
 
 // A number joins a string as the text Cypher writes it with: 1 + ' apples' is '1 apples'.
@@ -179,15 +179,15 @@ bool concatenatesAsText(TypePairBitset pair) {
 // Whether an arithmetic operator's operands are a type-erased cell and a number, or two
 // cells. A cell is numeric only once read, and its tag names a type per row rather than
 // one for the column, so the answer is the double a reduction over cells lands on too.
-bool computesOverListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double);
+bool computesOverAny(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any)
+        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Integer)
+        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Double);
 }
 
-bool computesTimeOverListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+bool computesTimeOverAny(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::DateTime)
+        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
 }
 
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
@@ -292,7 +292,7 @@ bool joinsAList(EvaluatedType type) {
     return namesAListElementType(type)
         || type == EvaluatedType::Char
         || type == EvaluatedType::Null
-        || type == EvaluatedType::ListItem;
+        || type == EvaluatedType::Any;
 }
 
 // The shape of the list appending a scalar makes: the list's own where the scalar is the
@@ -554,7 +554,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             // A cell holding text concatenates with a string, as the string it holds
             // would: the type it holds is settled row by row, so a cell holding a number
             // joins as the text Cypher writes that number with
-            if (concatenatesListItem(pair) || concatenatesAsText(pair)) {
+            if (concatenatesAny(pair) || concatenatesAsText(pair)) {
                 type = EvaluatedType::String;
                 break;
             }
@@ -565,8 +565,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             } else if (pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
                 type = EvaluatedType::Duration;
                 break;
-            } else if (computesTimeOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
+            } else if (computesTimeOverAny(pair)) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -577,8 +577,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (computesOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
+            if (computesOverAny(pair)) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -602,7 +602,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (concatenatesListItem(pair) || concatenatesTwoListItems(pair)) {
+            if (concatenatesAny(pair) || concatenatesTwoAnyValues(pair)) {
                 type = EvaluatedType::String;
                 break;
             }
@@ -643,21 +643,21 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 } else if (subtractsADuration) {
                     type = EvaluatedType::DateTime;
                     break;
-                } else if (computesTimeOverListItem(pair)) {
-                    type = EvaluatedType::ListItem;
+                } else if (computesTimeOverAny(pair)) {
+                    type = EvaluatedType::Any;
                     break;
                 }
             } else if (isMultiplication || isDivision) {
                 const bool scalesByANumber = pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Integer)
                                           || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Double);
-                const bool scalesAListItem = pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+                const bool scalesAnAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
                 const bool scalesTheDuration = isMultiplication || a == EvaluatedType::Duration;
 
                 if (scalesByANumber && scalesTheDuration) {
                     type = EvaluatedType::Duration;
                     break;
-                } else if (scalesAListItem) {
-                    type = EvaluatedType::ListItem;
+                } else if (scalesAnAny) {
+                    type = EvaluatedType::Any;
                     break;
                 }
             }
@@ -673,8 +673,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (computesOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
+            if (computesOverAny(pair)) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -702,7 +702,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (computesOverListItem(pair)) {
+            if (computesOverAny(pair)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -723,7 +723,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::In: {
             // A type-erased cell holds whatever its row put there, so the test reads the
             // list out of its tag and answers null for a row holding something else
-            const bool searchesACell = b == EvaluatedType::ListItem;
+            const bool searchesACell = b == EvaluatedType::Any;
             const bool searchesNull = b == EvaluatedType::Null;
 
             type = searchesNull ? EvaluatedType::Null : EvaluatedType::Bool;
@@ -1093,7 +1093,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     }
 
     const bool readsAKeyOfTheVariable = varType == EvaluatedType::Map
-                                     || varType == EvaluatedType::ListItem
+                                     || varType == EvaluatedType::Any
                                      || varType == EvaluatedType::MapValue;
 
     // m.key, where m was bound to a map rather than to an entity, or to a tagged cell whose
@@ -1271,7 +1271,7 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
     // A map, and a tagged cell the row may have put a map in: both answer a key read
     const bool readsAMapKey = baseType == EvaluatedType::Map
                            || baseType == EvaluatedType::MapValue
-                           || baseType == EvaluatedType::ListItem;
+                           || baseType == EvaluatedType::Any;
 
     EvaluatedType type = EvaluatedType::Null;
 
@@ -1347,7 +1347,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool indexesAMap = baseType == EvaluatedType::Map;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
-    const bool indexesATaggedCell = baseType == EvaluatedType::ListItem
+    const bool indexesATaggedCell = baseType == EvaluatedType::Any
                                  || baseType == EvaluatedType::MapValue;
 
     const bool indexesANullValue = baseType == EvaluatedType::Null;
@@ -1422,7 +1422,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool readsAnEntity = elementType == EvaluatedType::NodePattern
                             || elementType == EvaluatedType::EdgePattern;
     const bool readsTheElementType = readsAValue || readsAnEntity;
-    const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
+    const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::Any;
 
     expr->setType(indexedType);
 
@@ -1525,9 +1525,9 @@ void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
     // A type-erased cell carries its own type, so the characters it holds are read row by
     // row, exactly as an equality against one is.
     const bool lhsReadsAsString = lhsType == EvaluatedType::String
-                               || lhsType == EvaluatedType::ListItem;
+                               || lhsType == EvaluatedType::Any;
     const bool rhsReadsAsString = rhsType == EvaluatedType::String
-                               || rhsType == EvaluatedType::ListItem;
+                               || rhsType == EvaluatedType::Any;
 
     if (!lhsReadsAsString || !rhsReadsAsString) {
         const std::string error = fmt::format(
@@ -1943,7 +1943,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::PropertyType:
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
-        case EvaluatedType::ListItem:
+        case EvaluatedType::Any:
             return false;
         break;
     }
@@ -2155,7 +2155,7 @@ void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
 
     // A tagged cell names no type until a row is in hand, and a null slices into a null
     const bool slicesAList = baseType == EvaluatedType::List
-                          || baseType == EvaluatedType::ListItem
+                          || baseType == EvaluatedType::Any
                           || baseType == EvaluatedType::Null;
 
     if (!slicesAList) {
@@ -2175,7 +2175,7 @@ void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
 
         const EvaluatedType boundType = bound->getType();
         const bool countsPositions = boundType == EvaluatedType::Integer
-                                  || boundType == EvaluatedType::ListItem
+                                  || boundType == EvaluatedType::Any
                                   || boundType == EvaluatedType::Null;
 
         if (!countsPositions) {
@@ -2223,7 +2223,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     // rather than into a type error - as an UNWIND of one emits no row
     const bool iteratesAList = iteratesAPath
                             || sourceType == EvaluatedType::List
-                            || sourceType == EvaluatedType::ListItem
+                            || sourceType == EvaluatedType::Any
                             || sourceType == EvaluatedType::Null;
 
     if (!iteratesAList) {
@@ -2271,7 +2271,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
         // list naming no type for its elements is read as a truth value row by row
         const bool predicateIsBoolean = predicateType == EvaluatedType::Bool
                                      || predicateType == EvaluatedType::Null
-                                     || predicateType == EvaluatedType::ListItem;
+                                     || predicateType == EvaluatedType::Any;
 
         if (!predicateIsBoolean) {
             throwError("The WHERE of a list comprehension must be a boolean", predicate);
@@ -2338,7 +2338,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
     const EvaluatedType sourceType = source->getType();
 
     const bool iteratesAList = sourceType == EvaluatedType::List
-                            || sourceType == EvaluatedType::ListItem
+                            || sourceType == EvaluatedType::Any
                             || sourceType == EvaluatedType::Null;
 
     if (!iteratesAList) {

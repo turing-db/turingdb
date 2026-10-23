@@ -355,7 +355,7 @@ TEST_F(ListIndexTest, typesAnIndexIntoAMixedListAsANullableTaggedScalar) {
     const std::string resultType = indexResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 'a'][1]");
 
     EXPECT_NE(resultType.find("nullable"), std::string::npos) << "index result type: " << resultType;
-    EXPECT_NE(resultType.find("list_element"), std::string::npos) << "index result type: " << resultType;
+    EXPECT_NE(resultType.find("!storage.any"), std::string::npos) << "index result type: " << resultType;
 }
 
 // Out of range reads null, so the result is nullable however the index is written.

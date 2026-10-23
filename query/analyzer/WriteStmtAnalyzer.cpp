@@ -399,7 +399,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
 
             // An element of a mixed list carries its type per row, so the write checks it
             // against the property's type
-            const bool writesAListElement = rhsType == EvaluatedType::ListItem;
+            const bool writesAListElement = rhsType == EvaluatedType::Any;
             const bool propertyHasAType = lhsEvaluatedVt != ValueType::Invalid;
             const bool checksTheTypePerRow = writesAListElement && propertyHasAType;
 
@@ -477,7 +477,7 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
         case EvaluatedType::PropertyType:
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
-        case EvaluatedType::ListItem:
+        case EvaluatedType::Any:
             return ValueType::Invalid;
         break;
     }
