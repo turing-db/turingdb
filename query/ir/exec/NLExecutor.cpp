@@ -9604,6 +9604,22 @@ NLUnaryFunctionKernel NLExecutor::selectNegateFunction(const Column* input, bool
     throw IRException("A unary minus reads an integer, a double or a duration column");
 }
 
+NLUnaryFunctionKernel NLExecutor::selectUnaryPlusFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Duration::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::Duration::Primitive>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedUnaryPlusFunction>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("A unary plus reads an integer, a double or a duration column");
+}
+
 template <FloatFunctionKind Kind>
 NLUnaryFunctionKernel NLExecutor::selectFloatFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<types::Int64::Primitive>(input)) {

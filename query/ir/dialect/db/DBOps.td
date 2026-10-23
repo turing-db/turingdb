@@ -2950,6 +2950,9 @@ def Abs : NumberFunctionOp<"abs">;
 
 // Unary minus: the number or the duration of the opposite sign
 def Negate : TypedUnaryFunctionOp<"negate", "::mlir::IntegerType, ::mlir::FloatType, ::mlir::storage::DurationType">;
+
+// Unary plus: the number or the duration itself, and a type error on any other value
+def UnaryPlus : TypedUnaryFunctionOp<"unary_plus", "::mlir::IntegerType, ::mlir::FloatType, ::mlir::storage::DurationType">;
 def Sign : NumberFunctionOp<"sign">;
 def Ceil : NumberFunctionOp<"ceil">;
 def Floor : NumberFunctionOp<"floor">;

@@ -20,6 +20,7 @@
 
 #include "NLOps.h"
 
+#include "DBColumnElement.h"
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
 #include "MergePatternShape.h"
@@ -93,7 +94,6 @@ using NLUnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                                nl::ChunkType resultType,
                                                mlir::Value input,
                                                mlir::Operation* source);
-using UnaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder, mlir::Type inputElement);
 
 template <typename NLOp>
 mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
@@ -115,103 +115,20 @@ mlir::Value emitNLNormalFormFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, input, normalFormOp.getForm()).getResult();
 }
 
-mlir::Type stringFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::StringType::get(builder.getContext());
-}
+bool holdsTaggedCells(mlir::Type chunkType);
 
-mlir::Type nodeIDFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::NodeIDType::get(builder.getContext());
-}
-
-mlir::Type labelListFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    mlir::MLIRContext* const context = builder.getContext();
-    return storage::ListType::get(context, storage::StringType::get(context));
-}
-
-mlir::Type mapFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::MapType::get(builder.getContext());
-}
-
-mlir::Type integerFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return builder.getI64Type();
-}
-
-mlir::Type floatFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return builder.getF64Type();
-}
-
-mlir::Type absFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return inputElement;
-}
-
-mlir::Type negatedFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(inputElement);
-    if (integerType && integerType.isUnsigned()) {
-        return builder.getIntegerType(64);
+// A number or a duration is its own unary plus, which the analyzer already checked. Only a
+// cell, whose type is the row's, is checked when the program runs.
+mlir::Value emitUnaryPlus(mlir::OpBuilder& builder,
+                          mlir::Location loc,
+                          nl::ChunkType resultType,
+                          mlir::Value input,
+                          mlir::Operation* source) {
+    if (!holdsTaggedCells(input.getType())) {
+        return input;
     }
 
-    return inputElement;
-}
-
-mlir::Type booleanFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return builder.getI1Type();
-}
-
-mlir::Type dateTimeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::DateTimeType::get(builder.getContext());
-}
-
-mlir::Type durationFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::DurationType::get(builder.getContext());
-}
-
-// A list function reads a list cell, or the type-erased cell an unwind of a list of lists
-// hands its nested lists on as. Anything else is IR no query produces.
-void throwIfNotAListInput(mlir::Type inputElement) {
-    if (!llvm::isa<storage::ListType, storage::AnyType>(inputElement)) {
-        throw IRException("a list function reads a list column");
-    }
-}
-
-mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    const bool readsAList = llvm::isa<storage::ListType, storage::AnyType>(inputElement);
-    const bool readsAString = mlir::isa<storage::StringType>(inputElement);
-
-    if (!readsAList && !readsAString) {
-        throw IRException("size() and length() read a list column or a string column");
-    }
-
-    return builder.getI64Type();
-}
-
-// A stored list may mix the types of its elements, so one read out of a cell is the
-// type-erased tagged scalar a heterogeneous list's elements ride, whatever element type
-// the cell's own column resolved to.
-mlir::Type listElementFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    throwIfNotAListInput(inputElement);
-
-    return storage::AnyType::get(builder.getContext());
-}
-
-// The list a tail leaves is over the elements the list it came from held, so it keeps that
-// list's own element type. A list read out of a tagged cell names no element type of its
-// own, so what is left of it is a list of tagged cells.
-mlir::Type listTailFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    throwIfNotAListInput(inputElement);
-
-    if (llvm::isa<storage::AnyType>(inputElement)) {
-        return storage::ListType::get(builder.getContext(), inputElement);
-    }
-
-    return inputElement;
-}
-
-mlir::Type reverseFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    if (mlir::isa<storage::ListType, storage::AnyType>(inputElement)) {
-        return inputElement;
-    }
-
-    return storage::StringType::get(builder.getContext());
+    return builder.create<nl::UnaryPlus>(loc, resultType, input).getResult();
 }
 
 // The nl sibling of each db system command. They are copied across one for one -
@@ -251,7 +168,6 @@ enum class ResultNullability {
 
 struct UnaryFunctionLowering {
     NLUnaryFunctionEmitter emit {nullptr};
-    UnaryFunctionElement element {nullptr};
     ResultNullability nullability {ResultNullability::FollowsInput};
 };
 
@@ -259,92 +175,93 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     // Both read an entity column, which carries its null in the ID an OPTIONAL MATCH left
     // invalid rather than in an optional, so their result is nullable whatever the input
     // chunk's own type says
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,      ResultNullability::AlwaysNullable}},
-    {"db.keys",       {&emitNLUnaryFunction<nl::Keys>,      &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.properties", {&emitNLUnaryFunction<nl::PropertyMap>, &mapFunctionElement,       ResultNullability::AlwaysNullable}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>, ResultNullability::AlwaysNullable}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>, ResultNullability::AlwaysNullable}},
+    {"db.keys",       {&emitNLUnaryFunction<nl::Keys>, ResultNullability::AlwaysNullable}},
+    {"db.properties", {&emitNLUnaryFunction<nl::PropertyMap>, ResultNullability::AlwaysNullable}},
 
     // An end of an edge is a node, and a node column spells its null as an invalid ID, so
     // the result stays a plain node chunk where labels() and type() need a nullable one
-    {"db.start_node", {&emitNLUnaryFunction<nl::StartNode>,  &nodeIDFunctionElement,      ResultNullability::NeverNullable}},
-    {"db.end_node",   {&emitNLUnaryFunction<nl::EndNode>,    &nodeIDFunctionElement,      ResultNullability::NeverNullable}},
+    {"db.start_node", {&emitNLUnaryFunction<nl::StartNode>, ResultNullability::NeverNullable}},
+    {"db.end_node",   {&emitNLUnaryFunction<nl::EndNode>, ResultNullability::NeverNullable}},
 
-    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
-    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
-    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
-    {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, &dateTimeFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.to_duration", {&emitNLUnaryFunction<nl::ToDuration>, &durationFunctionElement,   ResultNullability::AlwaysNullable}},
+    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, ResultNullability::AlwaysNullable}},
+    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>, ResultNullability::AlwaysNullable}},
+    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, ResultNullability::AlwaysNullable}},
+    {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, ResultNullability::AlwaysNullable}},
+    {"db.to_duration", {&emitNLUnaryFunction<nl::ToDuration>, ResultNullability::AlwaysNullable}},
 
     // A calendar field of an instant is always readable, so the field is null exactly
     // where the instant it was read off is
-    {"db.datetime_year",        {&emitNLUnaryFunction<nl::DateTimeYear>,        &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_month",       {&emitNLUnaryFunction<nl::DateTimeMonth>,       &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_day",         {&emitNLUnaryFunction<nl::DateTimeDay>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_hour",        {&emitNLUnaryFunction<nl::DateTimeHour>,        &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_minute",      {&emitNLUnaryFunction<nl::DateTimeMinute>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_second",      {&emitNLUnaryFunction<nl::DateTimeSecond>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_millisecond", {&emitNLUnaryFunction<nl::DateTimeMillisecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_microsecond", {&emitNLUnaryFunction<nl::DateTimeMicrosecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_year",        {&emitNLUnaryFunction<nl::DateTimeYear>, ResultNullability::FollowsInput}},
+    {"db.datetime_month",       {&emitNLUnaryFunction<nl::DateTimeMonth>, ResultNullability::FollowsInput}},
+    {"db.datetime_day",         {&emitNLUnaryFunction<nl::DateTimeDay>, ResultNullability::FollowsInput}},
+    {"db.datetime_hour",        {&emitNLUnaryFunction<nl::DateTimeHour>, ResultNullability::FollowsInput}},
+    {"db.datetime_minute",      {&emitNLUnaryFunction<nl::DateTimeMinute>, ResultNullability::FollowsInput}},
+    {"db.datetime_second",      {&emitNLUnaryFunction<nl::DateTimeSecond>, ResultNullability::FollowsInput}},
+    {"db.datetime_millisecond", {&emitNLUnaryFunction<nl::DateTimeMillisecond>, ResultNullability::FollowsInput}},
+    {"db.datetime_microsecond", {&emitNLUnaryFunction<nl::DateTimeMicrosecond>, ResultNullability::FollowsInput}},
 
-    {"db.duration_years",                  {&emitNLUnaryFunction<nl::DurationYears>,                &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_quarters",               {&emitNLUnaryFunction<nl::DurationQuarters>,             &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_months",                 {&emitNLUnaryFunction<nl::DurationMonths>,               &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_weeks",                  {&emitNLUnaryFunction<nl::DurationWeeks>,                &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_days",                   {&emitNLUnaryFunction<nl::DurationDays>,                 &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_hours",                  {&emitNLUnaryFunction<nl::DurationHours>,                &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_minutes",                {&emitNLUnaryFunction<nl::DurationMinutes>,              &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_seconds",                {&emitNLUnaryFunction<nl::DurationSeconds>,              &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_milliseconds",           {&emitNLUnaryFunction<nl::DurationMilliseconds>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_microseconds",           {&emitNLUnaryFunction<nl::DurationMicroseconds>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_quarters_of_year",       {&emitNLUnaryFunction<nl::DurationQuartersOfYear>,       &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_months_of_year",         {&emitNLUnaryFunction<nl::DurationMonthsOfYear>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_months_of_quarter",      {&emitNLUnaryFunction<nl::DurationMonthsOfQuarter>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_days_of_week",           {&emitNLUnaryFunction<nl::DurationDaysOfWeek>,           &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_minutes_of_hour",        {&emitNLUnaryFunction<nl::DurationMinutesOfHour>,        &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_seconds_of_minute",      {&emitNLUnaryFunction<nl::DurationSecondsOfMinute>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_milliseconds_of_second", {&emitNLUnaryFunction<nl::DurationMillisecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_microseconds_of_second", {&emitNLUnaryFunction<nl::DurationMicrosecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>,  &stringFunctionElement,      ResultNullability::FollowsInput}},
-    {"db.to_integer_or_null", {&emitNLUnaryFunction<nl::ToIntegerOrNull>, &integerFunctionElement, ResultNullability::AlwaysNullable}},
-    {"db.to_float_or_null",   {&emitNLUnaryFunction<nl::ToFloatOrNull>,   &floatFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.to_boolean_or_null", {&emitNLUnaryFunction<nl::ToBooleanOrNull>, &booleanFunctionElement, ResultNullability::AlwaysNullable}},
-    {"db.to_string_or_null",  {&emitNLUnaryFunction<nl::ToStringOrNull>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::AlwaysNullable}},
-    {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
-    {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, &integerFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
-    {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
-    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
+    {"db.duration_years",                  {&emitNLUnaryFunction<nl::DurationYears>, ResultNullability::FollowsInput}},
+    {"db.duration_quarters",               {&emitNLUnaryFunction<nl::DurationQuarters>, ResultNullability::FollowsInput}},
+    {"db.duration_months",                 {&emitNLUnaryFunction<nl::DurationMonths>, ResultNullability::FollowsInput}},
+    {"db.duration_weeks",                  {&emitNLUnaryFunction<nl::DurationWeeks>, ResultNullability::FollowsInput}},
+    {"db.duration_days",                   {&emitNLUnaryFunction<nl::DurationDays>, ResultNullability::FollowsInput}},
+    {"db.duration_hours",                  {&emitNLUnaryFunction<nl::DurationHours>, ResultNullability::FollowsInput}},
+    {"db.duration_minutes",                {&emitNLUnaryFunction<nl::DurationMinutes>, ResultNullability::FollowsInput}},
+    {"db.duration_seconds",                {&emitNLUnaryFunction<nl::DurationSeconds>, ResultNullability::FollowsInput}},
+    {"db.duration_milliseconds",           {&emitNLUnaryFunction<nl::DurationMilliseconds>, ResultNullability::FollowsInput}},
+    {"db.duration_microseconds",           {&emitNLUnaryFunction<nl::DurationMicroseconds>, ResultNullability::FollowsInput}},
+    {"db.duration_quarters_of_year",       {&emitNLUnaryFunction<nl::DurationQuartersOfYear>, ResultNullability::FollowsInput}},
+    {"db.duration_months_of_year",         {&emitNLUnaryFunction<nl::DurationMonthsOfYear>, ResultNullability::FollowsInput}},
+    {"db.duration_months_of_quarter",      {&emitNLUnaryFunction<nl::DurationMonthsOfQuarter>, ResultNullability::FollowsInput}},
+    {"db.duration_days_of_week",           {&emitNLUnaryFunction<nl::DurationDaysOfWeek>, ResultNullability::FollowsInput}},
+    {"db.duration_minutes_of_hour",        {&emitNLUnaryFunction<nl::DurationMinutesOfHour>, ResultNullability::FollowsInput}},
+    {"db.duration_seconds_of_minute",      {&emitNLUnaryFunction<nl::DurationSecondsOfMinute>, ResultNullability::FollowsInput}},
+    {"db.duration_milliseconds_of_second", {&emitNLUnaryFunction<nl::DurationMillisecondsOfSecond>, ResultNullability::FollowsInput}},
+    {"db.duration_microseconds_of_second", {&emitNLUnaryFunction<nl::DurationMicrosecondsOfSecond>, ResultNullability::FollowsInput}},
+    {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>, ResultNullability::FollowsInput}},
+    {"db.to_integer_or_null", {&emitNLUnaryFunction<nl::ToIntegerOrNull>, ResultNullability::AlwaysNullable}},
+    {"db.to_float_or_null",   {&emitNLUnaryFunction<nl::ToFloatOrNull>, ResultNullability::AlwaysNullable}},
+    {"db.to_boolean_or_null", {&emitNLUnaryFunction<nl::ToBooleanOrNull>, ResultNullability::AlwaysNullable}},
+    {"db.to_string_or_null",  {&emitNLUnaryFunction<nl::ToStringOrNull>, ResultNullability::FollowsInput}},
+    {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>, ResultNullability::AlwaysNullable}},
+    {"db.size",       {&emitNLUnaryFunction<nl::Size>, ResultNullability::FollowsInput}},
+    {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, ResultNullability::FollowsInput}},
+    {"db.head",       {&emitNLUnaryFunction<nl::Head>, ResultNullability::NeverNullable}},
+    {"db.last",       {&emitNLUnaryFunction<nl::Last>, ResultNullability::NeverNullable}},
+    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>, ResultNullability::FollowsInput}},
 
-    {"db.abs",      {&emitNLUnaryFunction<nl::Abs>,      &absFunctionElement,     ResultNullability::FollowsInput}},
-    {"db.negate",   {&emitNLUnaryFunction<nl::Negate>,   &negatedFunctionElement, ResultNullability::FollowsInput}},
-    {"db.sign",     {&emitNLUnaryFunction<nl::Sign>,     &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.ceil",     {&emitNLUnaryFunction<nl::Ceil>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.floor",    {&emitNLUnaryFunction<nl::Floor>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.round",    {&emitNLUnaryFunction<nl::Round>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.sqrt",     {&emitNLUnaryFunction<nl::Sqrt>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.exp",      {&emitNLUnaryFunction<nl::Exp>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.log",      {&emitNLUnaryFunction<nl::Log>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.log10",    {&emitNLUnaryFunction<nl::Log10>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.sin",      {&emitNLUnaryFunction<nl::Sin>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.cos",      {&emitNLUnaryFunction<nl::Cos>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.tan",      {&emitNLUnaryFunction<nl::Tan>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.cot",      {&emitNLUnaryFunction<nl::Cot>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.asin",     {&emitNLUnaryFunction<nl::Asin>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.acos",     {&emitNLUnaryFunction<nl::Acos>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.atan",     {&emitNLUnaryFunction<nl::Atan>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.degrees",  {&emitNLUnaryFunction<nl::Degrees>,  &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.radians",  {&emitNLUnaryFunction<nl::Radians>,  &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.haversin", {&emitNLUnaryFunction<nl::Haversin>, &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.abs",      {&emitNLUnaryFunction<nl::Abs>, ResultNullability::FollowsInput}},
+    {"db.negate",   {&emitNLUnaryFunction<nl::Negate>, ResultNullability::FollowsInput}},
+    {"db.unary_plus", {&emitUnaryPlus, ResultNullability::FollowsInput}},
+    {"db.sign",     {&emitNLUnaryFunction<nl::Sign>, ResultNullability::FollowsInput}},
+    {"db.ceil",     {&emitNLUnaryFunction<nl::Ceil>, ResultNullability::FollowsInput}},
+    {"db.floor",    {&emitNLUnaryFunction<nl::Floor>, ResultNullability::FollowsInput}},
+    {"db.round",    {&emitNLUnaryFunction<nl::Round>, ResultNullability::FollowsInput}},
+    {"db.sqrt",     {&emitNLUnaryFunction<nl::Sqrt>, ResultNullability::FollowsInput}},
+    {"db.exp",      {&emitNLUnaryFunction<nl::Exp>, ResultNullability::FollowsInput}},
+    {"db.log",      {&emitNLUnaryFunction<nl::Log>, ResultNullability::FollowsInput}},
+    {"db.log10",    {&emitNLUnaryFunction<nl::Log10>, ResultNullability::FollowsInput}},
+    {"db.sin",      {&emitNLUnaryFunction<nl::Sin>, ResultNullability::FollowsInput}},
+    {"db.cos",      {&emitNLUnaryFunction<nl::Cos>, ResultNullability::FollowsInput}},
+    {"db.tan",      {&emitNLUnaryFunction<nl::Tan>, ResultNullability::FollowsInput}},
+    {"db.cot",      {&emitNLUnaryFunction<nl::Cot>, ResultNullability::FollowsInput}},
+    {"db.asin",     {&emitNLUnaryFunction<nl::Asin>, ResultNullability::FollowsInput}},
+    {"db.acos",     {&emitNLUnaryFunction<nl::Acos>, ResultNullability::FollowsInput}},
+    {"db.atan",     {&emitNLUnaryFunction<nl::Atan>, ResultNullability::FollowsInput}},
+    {"db.degrees",  {&emitNLUnaryFunction<nl::Degrees>, ResultNullability::FollowsInput}},
+    {"db.radians",  {&emitNLUnaryFunction<nl::Radians>, ResultNullability::FollowsInput}},
+    {"db.haversin", {&emitNLUnaryFunction<nl::Haversin>, ResultNullability::FollowsInput}},
 
-    {"db.to_upper", {&emitNLUnaryFunction<nl::ToUpper>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.to_lower", {&emitNLUnaryFunction<nl::ToLower>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.trim",     {&emitNLUnaryFunction<nl::Trim>,     &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.ltrim",    {&emitNLUnaryFunction<nl::LTrim>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.rtrim",    {&emitNLUnaryFunction<nl::RTrim>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.reverse",  {&emitNLUnaryFunction<nl::Reverse>,  &reverseFunctionElement, ResultNullability::FollowsInput}},
-    {"db.normalize", {&emitNLNormalFormFunction<mlir::db::Normalize, nl::Normalize>, &stringFunctionElement, ResultNullability::FollowsInput}},
-    {"db.is_normalized", {&emitNLNormalFormFunction<mlir::db::IsNormalized, nl::IsNormalized>, &booleanFunctionElement, ResultNullability::FollowsInput}}
+    {"db.to_upper", {&emitNLUnaryFunction<nl::ToUpper>, ResultNullability::FollowsInput}},
+    {"db.to_lower", {&emitNLUnaryFunction<nl::ToLower>, ResultNullability::FollowsInput}},
+    {"db.trim",     {&emitNLUnaryFunction<nl::Trim>, ResultNullability::FollowsInput}},
+    {"db.ltrim",    {&emitNLUnaryFunction<nl::LTrim>, ResultNullability::FollowsInput}},
+    {"db.rtrim",    {&emitNLUnaryFunction<nl::RTrim>, ResultNullability::FollowsInput}},
+    {"db.reverse",  {&emitNLUnaryFunction<nl::Reverse>, ResultNullability::FollowsInput}},
+    {"db.normalize", {&emitNLNormalFormFunction<mlir::db::Normalize, nl::Normalize>, ResultNullability::FollowsInput}},
+    {"db.is_normalized", {&emitNLNormalFormFunction<mlir::db::IsNormalized, nl::IsNormalized>, ResultNullability::FollowsInput}}
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
@@ -368,9 +285,15 @@ mlir::Value emitNLBinaryFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, lhs, rhs).getResult();
 }
 
+using BinaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder, mlir::Type lhsElement);
+
+mlir::Type floatFunctionElement(mlir::OpBuilder& builder, mlir::Type lhsElement) {
+    return builder.getF64Type();
+}
+
 struct BinaryFunctionLowering {
     NLBinaryFunctionEmitter emit {nullptr};
-    UnaryFunctionElement element {nullptr};
+    BinaryFunctionElement element {nullptr};
 };
 
 const std::unordered_map<std::string_view, BinaryFunctionLowering> binaryFunctionLowerings = {
@@ -6582,7 +6505,10 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
     const auto inputNullableElement = mlir::dyn_cast<storage::NullableType>(inputElement);
     const mlir::Type inputValueElement = inputNullableElement ? inputNullableElement.getValueType() : inputElement;
 
-    const mlir::Type baseElement = spec->element(_builder, inputValueElement);
+    const mlir::Type baseElement = unaryFunctionElement(op, inputValueElement);
+    if (!baseElement) {
+        throw IRException(fmt::format("{} reads no column of this element type", op->getName().getStringRef().str()));
+    }
 
     const bool inputCanBeNull = mayHoldANull(inputChunk.getType());
 

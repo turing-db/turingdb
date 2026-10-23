@@ -863,6 +863,30 @@ private:
 
 [[noreturn]] void throwNegationOverflow();
 
+[[noreturn]] void throwSignOperandType(std::string_view operatorName);
+
+// A unary plus over a cell answers the cell itself where it holds a number or a duration
+class TaggedUnaryPlusFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<ListElementView>;
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+template <typename Value>
+class UnaryPlusFunction {
+public:
+    using ArgType = Value;
+    using ResultType = Value;
+    using TaggedCounterpart = TaggedUnaryPlusFunction;
+
+    ResultType operator()(const Value value) const {
+        return value;
+    }
+};
+
 // A unary minus. An unsigned count negates into the signed integer Cypher has, and a value
 // whose opposite an int64 cannot hold is an overflow rather than a wrap.
 template <typename Value>

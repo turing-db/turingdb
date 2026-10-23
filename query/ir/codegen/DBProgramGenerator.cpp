@@ -7710,8 +7710,15 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         }
         break;
 
-        case UnaryOperator::Plus:
-            _part._exprMap[expr] = operandVal;
+        case UnaryOperator::Plus: {
+            if (expr->getType() == EvaluatedType::Null) {
+                _part._exprMap[expr] = nullConstantColumn();
+                break;
+            }
+
+            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::UnaryPlus>(loc, noneType, operandVal).getResult();
+        }
         break;
 
         case UnaryOperator::_SIZE:

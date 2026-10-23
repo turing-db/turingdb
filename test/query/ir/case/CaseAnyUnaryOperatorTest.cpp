@@ -76,6 +76,24 @@ TEST_F(CaseAnyUnaryOperatorTest, rejectsAStringUnderMinus) {
     runQueryExpectingError(query("'Cyrus'", "RETURN -v"), "must be an integer, a double or a duration");
 }
 
+// Plus reads a number or a duration too, so a string or a boolean is a type error there
+TEST_F(CaseAnyUnaryOperatorTest, rejectsAStringUnderPlus) {
+    runQueryExpectingError(query("'Cyrus'", "RETURN +v"), "must be an integer, a double or a duration");
+}
+
+TEST_F(CaseAnyUnaryOperatorTest, rejectsABooleanUnderPlus) {
+    runQueryExpectingError(query("'Maxime'", "RETURN +v"), "must be an integer, a double or a duration");
+}
+
+// Plus has no opposite to take, so the lowest int64 passes through it unchanged
+TEST_F(CaseAnyUnaryOperatorTest, keepsTheLowestIntegerUnderPlus) {
+    StringRowSink sink;
+    runQuery("WITH [-9223372036854775807 - 1, 'x'] AS l RETURN +l[0]", sink);
+
+    const std::vector<StringRowSink::Row> expected = {{"-9223372036854775808"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

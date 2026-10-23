@@ -9,6 +9,7 @@
 
 #include "columns/CharacterArgument.h"
 
+#include "DBColumnElement.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
 #include "StorageEnums.h"
@@ -30,10 +31,7 @@ namespace storage = mlir::storage;
 namespace {
 
 Type columnElement(Value column) {
-    const Type element = cast<ColumnType>(column.getType()).getType();
-    const storage::NullableType nullable = dyn_cast<storage::NullableType>(element);
-
-    return nullable ? nullable.getValueType() : element;
+    return ::db::inferredColumnElement(column);
 }
 
 bool isNumberColumn(Value column) {
@@ -141,7 +139,15 @@ bool isStringColumn(Type type) {
 }
 
 bool isIntegerColumn(Value column) {
-    return isa<ColumnType>(column.getType()) && isa<IntegerType, storage::AnyType, NoneType>(columnElement(column));
+    const ColumnType columnType = dyn_cast<ColumnType>(column.getType());
+    if (!columnType) {
+        return false;
+    }
+
+    const storage::NullableType nullable = dyn_cast<storage::NullableType>(columnType.getType());
+    const Type element = nullable ? nullable.getValueType() : columnType.getType();
+
+    return isa<IntegerType, storage::AnyType, NoneType>(element);
 }
 
 LogicalResult verifyStringResult(Operation* op, Value result) {
