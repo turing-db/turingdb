@@ -153,9 +153,9 @@ func.func @main() {
 const char* const hopCarryingAColumn = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %srcs, %eids, %etypes, %tgts, %agef = db.get_in_edges(%a, {%age}) : (!db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<i64>)
-  db.output(%srcs, %agef) : !db.column<!storage.node_id>, !db.column<i64>
+  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %srcs, %eids, %etypes, %tgts, %agef = db.get_in_edges(%a, {%age}) : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%srcs, %agef) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

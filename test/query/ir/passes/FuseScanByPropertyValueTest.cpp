@@ -77,9 +77,9 @@ protected:
 const char* const integerEquality = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -114,8 +114,8 @@ const char* const constantOnTheLeft = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %k = db.constant(32 : i64)
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %mask = db.eq %k, %age : (!db.column<i64>, !db.column<none>) -> !db.column<!storage.bool>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %mask = db.eq %k, %age : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -138,9 +138,9 @@ TEST_F(FuseScanByPropertyValueTest, acceptsConstantOnEitherSide) {
 const char* const stringEquality = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %k = db.constant("Remy" : !storage.string)
-  %mask = db.eq %name, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %mask = db.eq %name, %k : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -167,9 +167,9 @@ TEST_F(FuseScanByPropertyValueTest, fusesStringEquality) {
 const char* const doubleEquality = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %ratio = db.get_node_properties(%n, "ratio") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %ratio = db.get_node_properties(%n, "ratio") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<f64>>
   %k = db.constant(5.000000e-01 : f64)
-  %mask = db.eq %ratio, %k : (!db.column<none>, !db.column<f64>) -> !db.column<!storage.bool>
+  %mask = db.eq %ratio, %k : (!db.column<!storage.nullable<f64>>, !db.column<f64>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -194,9 +194,9 @@ TEST_F(FuseScanByPropertyValueTest, fusesDoubleEquality) {
 const char* const boolEquality = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i1>>
   %k = db.constant(true)
-  %mask = db.eq %french, %k : (!db.column<none>, !db.column<i1>) -> !db.column<!storage.bool>
+  %mask = db.eq %french, %k : (!db.column<!storage.nullable<i1>>, !db.column<i1>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -221,9 +221,9 @@ TEST_F(FuseScanByPropertyValueTest, fusesBoolEquality) {
 const char* const propertyAgainstProperty = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %phd = db.get_node_properties(%n, "hasPhD") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %mask = db.eq %french, %phd : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i1>>
+  %phd = db.get_node_properties(%n, "hasPhD") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i1>>
+  %mask = db.eq %french, %phd : (!db.column<!storage.nullable<i1>>, !db.column<!storage.nullable<i1>>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -262,12 +262,12 @@ TEST_F(FuseScanByPropertyValueTest, leavesNodeIDEqualityAlone) {
 const char* const conjunction = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %e1 = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
-  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %e1 = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i1>>
   %t = db.constant(true)
-  %e2 = db.eq %french, %t : (!db.column<none>, !db.column<i1>) -> !db.column<!storage.bool>
+  %e2 = db.eq %french, %t : (!db.column<!storage.nullable<i1>>, !db.column<i1>) -> !db.column<!storage.bool>
   %mask = db.and %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
@@ -312,15 +312,15 @@ TEST_F(FuseScanByPropertyValueTest, fusesOneConjunctAndRebuildsTheOtherOverTheFu
 const char* const threeConjuncts = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %r = db.constant("Remy" : !storage.string)
-  %e1 = db.eq %name, %r : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %e1 = db.eq %name, %r : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %e2 = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
-  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %e2 = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i1>>
   %t = db.constant(true)
-  %e3 = db.eq %french, %t : (!db.column<none>, !db.column<i1>) -> !db.column<!storage.bool>
+  %e3 = db.eq %french, %t : (!db.column<!storage.nullable<i1>>, !db.column<i1>) -> !db.column<!storage.bool>
   %m1 = db.and %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   %mask = db.and %m1, %e3 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
@@ -351,9 +351,9 @@ TEST_F(FuseScanByPropertyValueTest, fusesTheFirstConjunctAndConjoinsTheRest) {
 const char* const sharedMask = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %ns = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf, %ns) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
@@ -377,11 +377,11 @@ TEST_F(FuseScanByPropertyValueTest, leavesASharedMaskAlone) {
 const char* const readAlsoProjected = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  db.output(%nf, %age) : !db.column<!storage.node_id>, !db.column<none>
+  db.output(%nf, %age) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -399,12 +399,12 @@ TEST_F(FuseScanByPropertyValueTest, leavesAProjectedPropertyReadAlone) {
 const char* const filterCarryingAnotherColumn = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
-  %nf, %namef = db.filter(%mask, {%n, %name}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%nf, %namef) : !db.column<!storage.node_id>, !db.column<none>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %nf, %namef = db.filter(%mask, {%n, %name}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>)
+  db.output(%nf, %namef) : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
   return
 }
 )mlir";
@@ -421,9 +421,9 @@ TEST_F(FuseScanByPropertyValueTest, leavesFilterCarryingAnotherColumnAlone) {
 const char* const labelScan = R"mlir(
 func.func @main() {
   %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
   return
@@ -472,9 +472,9 @@ const char* const equalityInFactor = R"mlir(
 func.func @main() {
   %p:2 = db.cross_product factor {
     %n = db.scan_nodes() : !db.column<!storage.node_id>
-    %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
     %k = db.constant(32 : i64)
-    %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
     %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
     db.yield %nf : !db.column<!storage.node_id>
   } factor {
@@ -515,9 +515,9 @@ const char* const equalityAfterHop = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%n, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %name = db.get_node_properties(%s, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%s, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %k = db.constant("Remy" : !storage.string)
-  %mask = db.eq %name, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %mask = db.eq %name, %k : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %sf, %tf = db.filter(%mask, {%s, %t}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%sf, %tf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -550,9 +550,9 @@ const char* const hopTargetEquality = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%n, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %name = db.get_node_properties(%t, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%t, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %k = db.constant("Bio" : !storage.string)
-  %mask = db.eq %name, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %mask = db.eq %name, %k : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %sf = db.filter(%mask, {%s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%sf) : !db.column<!storage.node_id>
   return
@@ -574,9 +574,9 @@ TEST_F(FuseScanByPropertyValueTest, leavesHopTargetEqualityAlone) {
 const char* const scanReadBesideTheFilter = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%n, %nf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -608,9 +608,9 @@ const char* const factorFilterOverAnOuterScan = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %p:2 = db.cross_product factor {
-    %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
     %k = db.constant(32 : i64)
-    %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
     %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
     db.yield %nf : !db.column<!storage.node_id>
   } factor {

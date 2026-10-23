@@ -4,16 +4,14 @@ module {
     // each into a new column. A node that lacks the property comes back with a
     // null value - none are dropped (the lowering uses the with-null fetch).
     //
-    // "name" must be a property that exists in the loaded graph (-graph): the
-    // db -> nl lowering resolves the name against the schema and bakes its value
-    // type into the result chunk. Swap it for a property your graph actually has.
-    // The value column type is left as none in the db dialect - the concrete
-    // type is only known once the property name is resolved during lowering.
+    // "name" must be a property that exists in the loaded graph (-graph), and the
+    // value column is its value type made nullable: a String in simpledb. Swap both
+    // for a property your graph actually has.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    db.output(%a, %name) : !db.column<!storage.node_id>, !db.column<none>
+    db.output(%a, %name) : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
 
     return
   }

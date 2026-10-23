@@ -21,7 +21,7 @@ namespace {
 std::string branch(const char* label, const char* output) {
     return "  {\n"
            "    %n = db.scan_nodes_by_label([\"" + std::string(label) + "\"]) : !db.column<!storage.node_id>\n"
-           "    %name = db.get_node_properties(%n, \"name\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+           "    %name = db.get_node_properties(%n, \"name\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
            + std::string(output)
            + "\n  }";
 }
@@ -34,18 +34,18 @@ std::string unionProgram(const std::string& first, const std::string& second, co
              "}\n";
 }
 
-const char* const outputsName = "    db.output(%name) names [\"name\"] : !db.column<none>";
-const char* const outputsOther = "    db.output(%name) names [\"other\"] : !db.column<none>";
+const char* const outputsName = "    db.output(%name) names [\"name\"] : !db.column<!storage.nullable<!storage.string>>";
+const char* const outputsOther = "    db.output(%name) names [\"other\"] : !db.column<!storage.nullable<!storage.string>>";
 const char* const outputsTwoColumns
-    = "    db.output(%name, %name) names [\"name\", \"again\"] : !db.column<none>, !db.column<none>";
+    = "    db.output(%name, %name) names [\"name\", \"again\"] : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>";
 const char* const outputsNothing = "    %unused = db.constant(1 : i64)";
 
 // A deduping union: the set is opened above the op and both branches record their rows in
 // it, which is what makes the dedup span them
 const char* const opensADistinctSet = "  %seen = db.distinct_set : !db.distinct_set\n";
 const char* const dedupsAgainstTheSet
-    = "    %deduped = db.remove_duplicates(%name) against %seen : (!db.column<none>) -> !db.column<none>\n"
-      "    db.output(%deduped) names [\"name\"] : !db.column<none>";
+    = "    %deduped = db.remove_duplicates(%name) against %seen : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.nullable<!storage.string>>\n"
+      "    db.output(%deduped) names [\"name\"] : !db.column<!storage.nullable<!storage.string>>";
 
 }
 

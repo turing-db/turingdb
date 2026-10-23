@@ -20,9 +20,9 @@ namespace {
 std::string caseProgram(const char* branches) {
     return "func.func @main() {\n"
            "  %n = db.scan_nodes() : !db.column<!storage.node_id>\n"
-           "  %age = db.get_node_properties(%n, \"age\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+           "  %age = db.get_node_properties(%n, \"age\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
            "  %limit = db.constant(30 : i64)\n"
-           "  %old = db.gt %age, %limit : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>\n"
+           "  %old = db.gt %age, %limit : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>\n"
            "  %one = db.constant(1 : i64)\n"
            "  %zero = db.constant(0 : i64)\n"
            "  %pick = db.case("

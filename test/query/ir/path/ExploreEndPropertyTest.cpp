@@ -51,9 +51,9 @@ const char* const pinnedEndProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %4, %5 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %6 = db.eq %4, %5 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%7#1, %7#0) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -65,9 +65,9 @@ const char* const swappedPinnedEndProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %5, %4 : (!db.column<!storage.string>, !db.column<none>) -> !db.column<!storage.bool>
+  %6 = db.eq %5, %4 : (!db.column<!storage.string>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%7#1, %7#0) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -80,9 +80,9 @@ const char* const labelledPinnedEndProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string, ["Person"]) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 end_labels ["Person"] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %4, %5 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %6 = db.eq %4, %5 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%7#1, %7#0) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -95,13 +95,13 @@ const char* const correlatedEndProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %4, %5 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %6 = db.eq %4, %5 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %8 = db.get_node_properties(%7#0, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %9 = db.get_node_properties(%7#1, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %10 = db.eq %8, %9 : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %8 = db.get_node_properties(%7#0, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %9 = db.get_node_properties(%7#1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %10 = db.eq %8, %9 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
   %11:2 = db.filter(%10, {%7#0, %7#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%11#1, %11#0) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -113,9 +113,9 @@ const char* const seedPropertyProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %4, %5 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %6 = db.eq %4, %5 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%7#1, %7#0) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -127,9 +127,9 @@ const char* const sharedEndProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%2, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %4, %5 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %6 = db.eq %4, %5 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%7#1, %7#0, %2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -142,9 +142,9 @@ func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
   %h:4 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %0:4 = db.explore_paths(%h#0, {%h#3}) forward hops 1 to 3 end_column 0 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<!storage.node_id>)
-  %p = db.get_node_properties(%0#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %p = db.get_node_properties(%0#1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %c = db.constant("Adam" : !storage.string)
-  %m = db.eq %p, %c : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %m = db.eq %p, %c : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %1:2 = db.filter(%m, {%0#0, %0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%1#0, %1#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -156,9 +156,9 @@ const char* const pendingReadProgram = R"mlir(
 func.func @main() {
   %0 = db.scan_nodes_by_property_value("name", "Remy" : !storage.string) : !db.column<!storage.node_id>
   %1, %2, %3 = db.explore_paths(%0, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %4 = db.get_node_properties(%2, "name") all_pending : (!db.column<!storage.node_id>) -> !db.column<none>
+  %4 = db.get_node_properties(%2, "name") all_pending : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %5 = db.constant("Adam" : !storage.string)
-  %6 = db.eq %4, %5 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %6 = db.eq %4, %5 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %7:2 = db.filter(%6, {%2, %1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%7#1, %7#0) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return

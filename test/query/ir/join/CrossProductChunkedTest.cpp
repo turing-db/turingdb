@@ -175,8 +175,8 @@ func.func @main() {
 constexpr const char* leftTagScanProgram = R"mlir(
 func.func @main() {
   %l = db.scan_nodes_by_label(["L"]) : !db.column<!storage.node_id>
-  %lt = db.get_node_properties(%l, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%lt) : !db.column<none>
+  %lt = db.get_node_properties(%l, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%lt) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -184,8 +184,8 @@ func.func @main() {
 constexpr const char* rightTagScanProgram = R"mlir(
 func.func @main() {
   %r = db.scan_nodes_by_label(["R"]) : !db.column<!storage.node_id>
-  %rt = db.get_node_properties(%r, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%rt) : !db.column<none>
+  %rt = db.get_node_properties(%r, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%rt) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -239,9 +239,9 @@ func.func @main() {
     %r = db.scan_nodes_by_label(["R"]) : !db.column<!storage.node_id>
     db.yield %r : !db.column<!storage.node_id>
   }
-  %lt = db.get_node_properties(%0#0, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %rt = db.get_node_properties(%0#1, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%lt, %rt) : !db.column<none>, !db.column<none>
+  %lt = db.get_node_properties(%0#0, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %rt = db.get_node_properties(%0#1, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%lt, %rt) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

@@ -18,9 +18,9 @@ module {
     // swap "score" for a property your graph actually has.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 
-    %total = db.sum(%score) : (!db.column<none>) -> !db.column<none>
+    %total = db.sum(%score) : (!db.column<!storage.nullable<i64>>) -> !db.column<none>
 
     db.output(%total) : !db.column<none>
 

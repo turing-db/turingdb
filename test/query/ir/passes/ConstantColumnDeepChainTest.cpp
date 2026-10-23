@@ -27,7 +27,7 @@ protected:
     mlir::OwningOpRef<mlir::ModuleOp> parseDisjunction(const std::string& firstOperand, const std::string& firstOperandType) {
         std::string program = "func.func @main() {\n";
         program += "  %n = db.scan_nodes() : !db.column<!storage.node_id>\n";
-        program += "  %age = db.get_node_properties(%n, \"age\") : (!db.column<!storage.node_id>) -> !db.column<none>\n";
+        program += "  %age = db.get_node_properties(%n, \"age\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n";
         program += "  %k = db.constant(0 : i64)\n";
         program += "  %m0 = db.eq " + firstOperand + ", %k : (" + firstOperandType
                  + ", !db.column<i64>) -> !db.column<!storage.bool>\n";
@@ -68,7 +68,7 @@ TEST_F(ConstantColumnDeepChainTest, classifiesALongDisjunctionOverConstants) {
 }
 
 TEST_F(ConstantColumnDeepChainTest, classifiesALongDisjunctionOverAPropertyRead) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parseDisjunction("%age", "!db.column<none>");
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parseDisjunction("%age", "!db.column<!storage.nullable<i64>>");
     ASSERT_TRUE(module);
 
     EXPECT_FALSE(db::yieldsConstantColumn(getFilterPredicate(*module)));

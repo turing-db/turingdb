@@ -21,13 +21,13 @@ module {
     // "age" and "name" are simpledb properties; swap them for properties your graph has.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %gage, %names = db.collect(%age, %name) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
+    %gage, %names = db.collect(%age, %name) keys 1 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<i64>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>)
 
-    db.output(%gage, %names) : !db.column<none>, !db.column<!storage.list<none>>
+    db.output(%gage, %names) : !db.column<!storage.nullable<i64>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>
 
     return
   }

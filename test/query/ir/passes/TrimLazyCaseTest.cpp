@@ -12,6 +12,7 @@
 #include "DBOps.h"
 #include "DBPasses.h"
 #include "StorageDialect.h"
+#include "StorageTypes.h"
 
 #include "IRTestOps.h"
 
@@ -59,23 +60,23 @@ protected:
 const char* const caseReadingTheAgeAlone = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %zero = db.constant(0 : i64)
   %ten = db.constant(10 : i64)
   %r = db.lazy_case({%n, %age, %name}) {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<none>, %nameIn: !db.column<none>):
-    %c = db.eq %ageIn, %zero : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
+    %c = db.eq %ageIn, %zero : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
     db.case_yield %c : !db.column<!storage.bool>
   }, {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<none>, %nameIn: !db.column<none>):
+  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
     db.case_yield %zero : !db.column<i64>
   }, {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<none>, %nameIn: !db.column<none>):
-    %q = db.div %ten, %ageIn : (!db.column<i64>, !db.column<none>) -> !db.column<none>
+  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
+    %q = db.div %ten, %ageIn : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
     db.case_yield %q : !db.column<none>
-  } : (!db.column<!storage.node_id>, !db.column<none>, !db.column<none>) -> !db.column<none>
-  db.output(%name, %r) : !db.column<none>, !db.column<none>
+  } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -142,21 +143,21 @@ TEST_F(TrimLazyCaseTest, carriesAColumnOnce) {
 const char* const caseReadingNoCarriedColumn = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %r = db.lazy_case({%n, %name}) {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %nameIn: !db.column<none>):
+  ^bb0(%nIn: !db.column<!storage.node_id>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
     %c = db.constant(true)
     db.case_yield %c : !db.column<i1>
   }, {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %nameIn: !db.column<none>):
+  ^bb0(%nIn: !db.column<!storage.node_id>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
     %one = db.constant(1 : i64)
     db.case_yield %one : !db.column<i64>
   }, {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %nameIn: !db.column<none>):
+  ^bb0(%nIn: !db.column<!storage.node_id>, %nameIn: !db.column<!storage.nullable<!storage.string>>):
     %two = db.constant(2 : i64)
     db.case_yield %two : !db.column<i64>
-  } : (!db.column<!storage.node_id>, !db.column<none>) -> !db.column<none>
-  db.output(%name, %r) : !db.column<none>, !db.column<none>
+  } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -184,33 +185,33 @@ TEST_F(TrimLazyCaseTest, keepsOneColumnToBeSizedBy) {
 const char* const nestedCases = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %zero = db.constant(0 : i64)
   %one = db.constant(1 : i64)
   %ten = db.constant(10 : i64)
   %r = db.lazy_case({%n, %age}) {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<none>):
-    %c = db.eq %ageIn, %zero : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>):
+    %c = db.eq %ageIn, %zero : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
     db.case_yield %c : !db.column<!storage.bool>
   }, {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<none>):
+  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>):
     db.case_yield %zero : !db.column<i64>
   }, {
-  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<none>):
+  ^bb0(%nIn: !db.column<!storage.node_id>, %ageIn: !db.column<!storage.nullable<i64>>):
     %inner = db.lazy_case({%nIn, %ageIn}) {
-    ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<none>):
-      %d = db.eq %ageInner, %one : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<!storage.nullable<i64>>):
+      %d = db.eq %ageInner, %one : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
       db.case_yield %d : !db.column<!storage.bool>
     }, {
-    ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<none>):
+    ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<!storage.nullable<i64>>):
       db.case_yield %one : !db.column<i64>
     }, {
-    ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<none>):
-      %q = db.div %ten, %ageInner : (!db.column<i64>, !db.column<none>) -> !db.column<none>
+    ^bb0(%nInner: !db.column<!storage.node_id>, %ageInner: !db.column<!storage.nullable<i64>>):
+      %q = db.div %ten, %ageInner : (!db.column<i64>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
       db.case_yield %q : !db.column<none>
-    } : (!db.column<!storage.node_id>, !db.column<none>) -> !db.column<none>
+    } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
     db.case_yield %inner : !db.column<none>
-  } : (!db.column<!storage.node_id>, !db.column<none>) -> !db.column<none>
+  } : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
   db.output(%r) : !db.column<none>
   return
 }
@@ -231,7 +232,7 @@ TEST_F(TrimLazyCaseTest, trimsANestedCaseInOneRun) {
         const mlir::OperandRange carried = caseOp.getColumnsToFilter();
         ASSERT_EQ(carried.size(), 1u);
         const mlir::db::ColumnType keptType = mlir::cast<mlir::db::ColumnType>(carried.front().getType());
-        EXPECT_TRUE(mlir::isa<mlir::NoneType>(keptType.getType()));
+        EXPECT_TRUE(mlir::isa<mlir::storage::NullableType>(keptType.getType()));
 
         expectRegionArguments(caseOp);
     }

@@ -45,12 +45,12 @@ const char* const joinOnVector = R"mlir(
 func.func @main() {
   %0:4 = db.hash_join factor {
     %1 = db.scan_nodes() : !db.column<!storage.node_id>
-    %2 = db.get_node_properties(%1, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<none>
+    %2 = db.get_node_properties(%1, "vec") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.embedding>>
+    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.embedding>>
   } factor {
     %1 = db.scan_nodes() : !db.column<!storage.node_id>
-    %2 = db.get_node_properties(%1, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<none>
+    %2 = db.get_node_properties(%1, "vec") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.embedding>>
+    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.embedding>>
   } on 1, 1
   db.output(%0#0, %0#2) names ["n", "m"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -69,9 +69,9 @@ func.func @main() {
     %1 = db.scan_nodes() : !db.column<!storage.node_id>
     db.yield %1 : !db.column<!storage.node_id>
   }
-  %1 = db.get_node_properties(%0#0, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %2 = db.get_node_properties(%0#1, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %3 = db.eq %1, %2 : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %1 = db.get_node_properties(%0#0, "vec") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.embedding>>
+  %2 = db.get_node_properties(%0#1, "vec") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.embedding>>
+  %3 = db.eq %1, %2 : (!db.column<!storage.nullable<!storage.embedding>>, !db.column<!storage.nullable<!storage.embedding>>) -> !db.column<!storage.bool>
   %4:2 = db.filter(%3, {%0#0, %0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%4#0, %4#1) names ["n", "m"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return

@@ -248,10 +248,10 @@ private:
 constexpr const char* distinctScoresProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %scores = db.collect(%team, %score) keys 1 distinct [0] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
-  db.output(%gteam, %scores) : !db.column<none>, !db.column<!storage.list<none>>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %scores = db.collect(%team, %score) keys 1 distinct [0] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>)
+  db.output(%gteam, %scores) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";
@@ -260,10 +260,10 @@ func.func @main() {
 constexpr const char* everyScoreProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %scores = db.collect(%team, %score) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
-  db.output(%gteam, %scores) : !db.column<none>, !db.column<!storage.list<none>>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %scores = db.collect(%team, %score) keys 1 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>)
+  db.output(%gteam, %scores) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";
@@ -273,9 +273,9 @@ func.func @main() {
 constexpr const char* distinctScoresKeylessProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %scores = db.collect(%score) keys 0 distinct [0] : (!db.column<none>) -> !db.column<!storage.list<none>>
-  db.output(%scores) : !db.column<!storage.list<none>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %scores = db.collect(%score) keys 0 distinct [0] : (!db.column<!storage.nullable<i64>>) -> !db.column<!storage.list<!storage.nullable<i64>>>
+  db.output(%scores) : !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";
@@ -285,10 +285,10 @@ func.func @main() {
 constexpr const char* distinctNamesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %names = db.collect(%team, %name) keys 1 distinct [0] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
-  db.output(%gteam, %names) : !db.column<none>, !db.column<!storage.list<none>>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %gteam, %names = db.collect(%team, %name) keys 1 distinct [0] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>)
+  db.output(%gteam, %names) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>
   return
 }
 )mlir";
@@ -299,9 +299,9 @@ constexpr const char* distinctTargetsProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %src, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %team = db.get_node_properties(%src, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %targets = db.collect(%team, %b) keys 1 distinct [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.list<!storage.node_id>>)
-  db.output(%gteam, %targets) : !db.column<none>, !db.column<!storage.list<!storage.node_id>>
+  %team = db.get_node_properties(%src, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %gteam, %targets = db.collect(%team, %b) keys 1 distinct [0] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.node_id>>)
+  db.output(%gteam, %targets) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.node_id>>
   return
 }
 )mlir";
@@ -311,10 +311,10 @@ func.func @main() {
 constexpr const char* reductionsProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %scores, %n, %total, %low, %high = db.collect(%team, %score, %score, %score, %score, %score) keys 1 aggregates [count, sum, min, max] : (!db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>)
-  db.output(%gteam, %scores, %n, %total, %low, %high) : !db.column<none>, !db.column<!storage.list<none>>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %scores, %n, %total, %low, %high = db.collect(%team, %score, %score, %score, %score, %score) keys 1 aggregates [count, sum, min, max] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>)
+  db.output(%gteam, %scores, %n, %total, %low, %high) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>
   return
 }
 )mlir";
@@ -324,10 +324,10 @@ func.func @main() {
 constexpr const char* distinctReductionsProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %scores, %n, %total, %mean = db.collect(%team, %score, %score, %score, %score) keys 1 aggregates [count_distinct, sum_distinct, avg_distinct] : (!db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>, !db.column<none>, !db.column<none>, !db.column<none>)
-  db.output(%gteam, %scores, %n, %total, %mean) : !db.column<none>, !db.column<!storage.list<none>>, !db.column<none>, !db.column<none>, !db.column<none>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %scores, %n, %total, %mean = db.collect(%team, %score, %score, %score, %score) keys 1 aggregates [count_distinct, sum_distinct, avg_distinct] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>, !db.column<none>, !db.column<none>)
+  db.output(%gteam, %scores, %n, %total, %mean) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>, !db.column<none>, !db.column<none>
   return
 }
 )mlir";
@@ -337,10 +337,10 @@ func.func @main() {
 constexpr const char* distinctReductionsAndListProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %scores, %n, %total, %mean = db.collect(%team, %score, %score, %score, %score) keys 1 aggregates [count_distinct, sum_distinct, avg_distinct] distinct [0] : (!db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>, !db.column<none>, !db.column<none>, !db.column<none>)
-  db.output(%gteam, %scores, %n, %total, %mean) : !db.column<none>, !db.column<!storage.list<none>>, !db.column<none>, !db.column<none>, !db.column<none>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %scores, %n, %total, %mean = db.collect(%team, %score, %score, %score, %score) keys 1 aggregates [count_distinct, sum_distinct, avg_distinct] distinct [0] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>, !db.column<none>, !db.column<none>)
+  db.output(%gteam, %scores, %n, %total, %mean) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>, !db.column<none>, !db.column<none>
   return
 }
 )mlir";

@@ -47,9 +47,9 @@ protected:
 const char* const callCarryingAnUnreadAge = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %size = db.constant(3 : i64)
-  %tgt, %nc, %agec = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n, %age}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<i64>)
+  %tgt, %nc, %agec = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n, %age}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
   db.output(%nc, %tgt) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -122,10 +122,10 @@ TEST_F(TrimCallCarrySetTest, dropsTheWholeCarrySetOfACallNothingReadsPast) {
 const char* const callWhoseCarrySetIsRead = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %size = db.constant(3 : i64)
-  %tgt, %nc, %agec = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n, %age}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<i64>)
-  db.output(%nc, %agec, %tgt) : !db.column<!storage.node_id>, !db.column<i64>, !db.column<none>
+  %tgt, %nc, %agec = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n, %age}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%nc, %agec, %tgt) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>, !db.column<none>
   return
 }
 )mlir";
@@ -152,10 +152,10 @@ TEST_F(TrimCallCarrySetTest, leavesACallWhoseCarrySetIsReadAlone) {
 const char* const chainedCallsCarryingAnUnreadAge = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %size = db.constant(3 : i64)
-  %m, %nc, %agec = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n, %age}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<i64>)
-  %k, %ncc, %mc, %agecc = db.call_procedure("gnn.neighbourhoodSample", {%m, %size}, {%nc, %m, %agec}) yields ["tgt"] : (!db.column<none>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<none>, !db.column<i64>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>, !db.column<i64>)
+  %m, %nc, %agec = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n, %age}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  %k, %ncc, %mc, %agecc = db.call_procedure("gnn.neighbourhoodSample", {%m, %size}, {%nc, %m, %agec}) yields ["tgt"] : (!db.column<none>, !db.column<i64>, !db.column<!storage.node_id>, !db.column<none>, !db.column<!storage.nullable<i64>>) -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>, !db.column<!storage.nullable<i64>>)
   db.output(%ncc, %mc, %k) : !db.column<!storage.node_id>, !db.column<none>, !db.column<none>
   return
 }

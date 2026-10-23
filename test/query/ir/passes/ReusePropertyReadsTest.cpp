@@ -54,11 +54,11 @@ protected:
 const char* const twoReadsOfOneColumn = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %again = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %again = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %one = db.constant(1 : i64)
-  %sum = db.add %again, %one : (!db.column<none>, !db.column<i64>) -> !db.column<none>
-  db.output(%age, %sum) : !db.column<none>, !db.column<none>
+  %sum = db.add %again, %one : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
+  db.output(%age, %sum) : !db.column<!storage.nullable<i64>>, !db.column<none>
   return
 }
 )mlir";
@@ -86,9 +86,9 @@ TEST_F(ReusePropertyReadsTest, collapsesTwoReadsOfTheSameColumn) {
 const char* const twoPropertiesOfOneColumn = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%age, %name) : !db.column<none>, !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  db.output(%age, %name) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>
   return
 }
 )mlir";
@@ -107,13 +107,13 @@ TEST_F(ReusePropertyReadsTest, keepsTheReadsOfTwoProperties) {
 const char* const splitRangeFilter = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %low = db.constant(42 : i64)
-  %above = db.gt %age, %low : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %above = db.gt %age, %low : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %kept = db.filter(%above, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %keptAge = db.get_node_properties(%kept, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %keptAge = db.get_node_properties(%kept, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %high = db.constant(50 : i64)
-  %below = db.lt %keptAge, %high : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %below = db.lt %keptAge, %high : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %left = db.filter(%below, {%kept}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%left) : !db.column<!storage.node_id>
   return
@@ -151,16 +151,16 @@ TEST_F(ReusePropertyReadsTest, carriesTheAgeThroughTheFilterOfARange) {
 const char* const splitRangeFilterReturningAge = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %low = db.constant(42 : i64)
-  %above = db.gt %age, %low : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %above = db.gt %age, %low : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %kept = db.filter(%above, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %keptAge = db.get_node_properties(%kept, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %keptAge = db.get_node_properties(%kept, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %high = db.constant(50 : i64)
-  %below = db.lt %keptAge, %high : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %below = db.lt %keptAge, %high : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %left = db.filter(%below, {%kept}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %leftAge = db.get_node_properties(%left, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%leftAge) : !db.column<none>
+  %leftAge = db.get_node_properties(%left, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%leftAge) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -203,13 +203,13 @@ TEST_F(ReusePropertyReadsTest, leavesTheTrimAFilterOfOneColumn) {
 const char* const readAcrossAHop = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %low = db.constant(42 : i64)
-  %above = db.gt %age, %low : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %above = db.gt %age, %low : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %kept = db.filter(%above, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%kept, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %hoppedAge = db.get_node_properties(%s, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%hoppedAge, %t) : !db.column<none>, !db.column<!storage.node_id>
+  %hoppedAge = db.get_node_properties(%s, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%hoppedAge, %t) : !db.column<!storage.nullable<i64>>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -237,10 +237,10 @@ TEST_F(ReusePropertyReadsTest, carriesTheAgeThroughAHop) {
 const char* const readAcrossAReverseHop = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %s, %e, %et, %t = db.get_in_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %hoppedAge = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%age, %hoppedAge) : !db.column<none>, !db.column<none>
+  %hoppedAge = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%age, %hoppedAge) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -263,10 +263,10 @@ TEST_F(ReusePropertyReadsTest, carriesTheAgeThroughAReverseHop) {
 const char* const readOfTheHopTarget = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %targetAge = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%age, %targetAge) : !db.column<none>, !db.column<none>
+  %targetAge = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%age, %targetAge) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -285,12 +285,12 @@ TEST_F(ReusePropertyReadsTest, keepsTheReadOfAHopTarget) {
 const char* const readAcrossASortAndCuts = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %sn, %sage = db.sort(%n, %age) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %sn, %sage = db.sort(%n, %age) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
   %kn = db.skip(%sn) count 1 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %ln = db.limit(%kn) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %cutAge = db.get_node_properties(%ln, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%cutAge) : !db.column<none>
+  %cutAge = db.get_node_properties(%ln, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%cutAge) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -327,10 +327,10 @@ TEST_F(ReusePropertyReadsTest, carriesTheSortKeyThroughTheCuts) {
 const char* const readAcrossRemoveDuplicates = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %dn = db.remove_duplicates(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %dage = db.get_node_properties(%dn, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%age, %dage) : !db.column<none>, !db.column<none>
+  %dage = db.get_node_properties(%dn, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%age, %dage) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -350,10 +350,10 @@ TEST_F(ReusePropertyReadsTest, keepsTheReadPastARemoveDuplicates) {
 const char* const readAcrossAGroupAggregate = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %gn, %gc = db.group_aggregate(%n, %n) keys 1 aggregates [count] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<ui64>)
-  %gage = db.get_node_properties(%gn, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%age, %gage, %gc) : !db.column<none>, !db.column<none>, !db.column<ui64>
+  %gage = db.get_node_properties(%gn, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%age, %gage, %gc) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<ui64>
   return
 }
 )mlir";
@@ -373,13 +373,13 @@ TEST_F(ReusePropertyReadsTest, keepsTheReadPastAGroupAggregate) {
 const char* const readAfterTheFilter = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %who = db.constant("Remy" : !storage.string)
-  %mask = db.neq %name, %who : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %mask = db.neq %name, %who : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %kept = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %keptAge = db.get_node_properties(%kept, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%age, %keptAge) : !db.column<none>, !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %keptAge = db.get_node_properties(%kept, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%age, %keptAge) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -400,12 +400,12 @@ const char* const edgePropertyAcrossAFilter = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %weight = db.get_edge_properties(%e, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
+  %weight = db.get_edge_properties(%e, "weight") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
   %low = db.constant(1 : i64)
-  %above = db.gt %weight, %low : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %above = db.gt %weight, %low : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %kept = db.filter(%above, {%e}) : (!db.column<!storage.bool>, !db.column<!storage.edge_id>) -> !db.column<!storage.edge_id>
-  %keptWeight = db.get_edge_properties(%kept, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
-  db.output(%keptWeight) : !db.column<none>
+  %keptWeight = db.get_edge_properties(%kept, "weight") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%keptWeight) : !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -433,12 +433,12 @@ TEST_F(ReusePropertyReadsTest, carriesAnEdgePropertyThroughAFilter) {
 const char* const twoReadsPastOneCarriedAge = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %low = db.constant(42 : i64)
-  %above = db.gt %age, %low : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
-  %kn, %kage = db.filter(%above, {%n, %age}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  %readAgain = db.get_node_properties(%kn, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%kage, %readAgain) : !db.column<none>, !db.column<none>
+  %above = db.gt %age, %low : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %kn, %kage = db.filter(%above, {%n, %age}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  %readAgain = db.get_node_properties(%kn, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%kage, %readAgain) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

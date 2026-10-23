@@ -1378,8 +1378,7 @@ def GetNodeProperties : NLOp<"get_node_properties", [Pure, RowAlignedThroughOper
 
     A node may not have the property, so the result is a nullable value chunk -
     !nl.chunk<!storage.nullable<...>>, storage's ColumnOptVector. Missing values come
-    back null; no row is dropped. The wrapped type is the concrete primitive the
-    property resolved to during lowering.
+    back null; no row is dropped. The wrapped type is the one the db read declares.
 
       %weight = nl.get_property_type("weight")
       nl.for %nodes in %scan {

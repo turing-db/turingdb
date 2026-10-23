@@ -19,13 +19,12 @@ module {
 
     // Read the "duration" property of the last hop's edge `r`. An edge that lacks
     // it comes back null - none are dropped. "duration" must exist in the loaded
-    // graph (-graph): the db -> nl lowering resolves the name against the schema
-    // and bakes its value type into the result chunk (in simpledb "duration" is
-    // an Int64). The input is an edge ID column, so the op chosen is the edge-side
-    // db.get_edge_properties.
-    %dur = db.get_edge_properties(%h2e, "duration") : (!db.column<!storage.edge_id>) -> !db.column<none>
+    // graph (-graph), and the value column is its value type made nullable (in
+    // simpledb "duration" is an Int64). The input is an edge ID column, so the op
+    // chosen is the edge-side db.get_edge_properties.
+    %dur = db.get_edge_properties(%h2e, "duration") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
 
-    db.output(%h2e, %dur) : !db.column<!storage.edge_id>, !db.column<none>
+    db.output(%h2e, %dur) : !db.column<!storage.edge_id>, !db.column<!storage.nullable<i64>>
 
     return
   }

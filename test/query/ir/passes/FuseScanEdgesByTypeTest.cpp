@@ -96,9 +96,9 @@ func.func @main() {
 const char* const edgeScanReadPastItsFilter = R"mlir(
 func.func @main() {
   %s, %e, %et, %t = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
-  %name = db.get_edge_properties(%e, "name") : (!db.column<!storage.edge_id>) -> !db.column<none>
+  %name = db.get_edge_properties(%e, "name") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<!storage.string>>
   %knows = db.check_edge_type_constraint(%et, ["KNOWS_WELL"]) : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
-  %sf, %ef, %etf, %tf, %namef = db.filter(%knows, {%s, %e, %et, %t, %name}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<none>)
+  %sf, %ef, %etf, %tf, %namef = db.filter(%knows, {%s, %e, %et, %t, %name}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>)
   db.output(%sf, %tf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }

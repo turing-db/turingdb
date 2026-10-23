@@ -22,12 +22,12 @@ namespace {
 std::string collectAndReduceProgram(int64_t kind) {
     return "func.func @main() {\n"
            "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-           "  %name = db.get_node_properties(%a, \"name\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-           "  %age = db.get_node_properties(%a, \"age\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+           "  %name = db.get_node_properties(%a, \"name\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+           "  %age = db.get_node_properties(%a, \"age\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
            "  %names, %n = \"db.collect\"(%name, %age) {keyCount = 0 : ui64, kinds = array<i64: "
            + std::to_string(kind)
-           + ">} : (!db.column<none>, !db.column<none>) -> (!db.column<!storage.list<none>>, !db.column<none>)\n"
-             "  db.output(%names, %n) : !db.column<!storage.list<none>>, !db.column<none>\n"
+           + ">} : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.list<!storage.nullable<!storage.string>>>, !db.column<none>)\n"
+             "  db.output(%names, %n) : !db.column<!storage.list<!storage.nullable<!storage.string>>>, !db.column<none>\n"
              "  return\n"
              "}\n";
 }

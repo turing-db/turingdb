@@ -50,9 +50,9 @@ TEST_F(DeepChainPassesTest, fusesAPropertyScanUnderALongConjunction) {
     std::string program = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %m0 = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %m0 = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
 )mlir";
 
     for (size_t link = 1; link <= CHAIN_LENGTH; link++) {
@@ -61,7 +61,7 @@ func.func @main() {
 
         program += "  %c" + index + " = db.constant(" + index + " : i64)\n";
         program += "  %ne" + index + " = db.neq %age, %c" + index
-                 + " : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>\n";
+                 + " : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>\n";
         program += "  %m" + index + " = db.and %m" + previous + ", %ne" + index
                  + " : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>\n";
     }
@@ -83,7 +83,7 @@ TEST_F(DeepChainPassesTest, dedupsTheEndsOfAnExplorationFilteredByALongDisjuncti
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 )mlir";
 
     // The walk visits the users of the age newest first, so the equality the chain starts
@@ -93,7 +93,7 @@ func.func @main() {
 
         program += "  %c" + index + " = db.constant(" + index + " : i64)\n";
         program += "  %e" + index + " = db.eq %age, %c" + index
-                 + " : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>\n";
+                 + " : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>\n";
     }
 
     for (size_t link = 1; link <= CHAIN_LENGTH; link++) {
@@ -124,7 +124,7 @@ TEST_F(DeepChainPassesTest, reusesAPropertyReadFromAboveALongChainOfFilters) {
     std::string program = R"mlir(
 func.func @main() {
   %f0 = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%f0, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%f0, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %true = db.constant(true)
 )mlir";
 
@@ -135,8 +135,8 @@ func.func @main() {
 
     const std::string last = std::to_string(CHAIN_LENGTH);
     program += "  %again = db.get_node_properties(%f" + last
-             + ", \"age\") : (!db.column<!storage.node_id>) -> !db.column<none>\n";
-    program += "  db.output(%age, %again) : !db.column<none>, !db.column<none>\n  return\n}\n";
+             + ", \"age\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n";
+    program += "  db.output(%age, %again) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>\n  return\n}\n";
 
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
     ASSERT_TRUE(module);

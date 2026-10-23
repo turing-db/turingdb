@@ -120,9 +120,9 @@ const char* const filteredTarget = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(3 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %tf, %ef, %sf, %etf = db.filter(%mask, {%t, %e, %s, %et}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>)
   db.output(%tf) : !db.column<!storage.node_id>
   return
@@ -206,9 +206,9 @@ const char* const filterNothingReads = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(3 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %tf, %ef, %sf, %etf = db.filter(%mask, {%t, %e, %s, %et}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>)
   %one = db.constant(1 : i64)
   db.output(%one) : !db.column<i64>
@@ -245,8 +245,8 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %c = db.constant(3 : i64)
-  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %mask = db.gt %age, %c : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %mask = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %cf, %tf = db.filter(%mask, {%c, %t}) : (!db.column<!storage.bool>, !db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<i64>, !db.column<!storage.node_id>)
   db.output(%c) : !db.column<i64>
   return
@@ -478,9 +478,9 @@ const char* const sortInAWith = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%t1, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %name = db.get_node_properties(%t1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %sa, %sb, %sage, %sname = db.sort(%s1, %t1, %age, %name) keys [3, 2] ascending [false, true] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.string>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.string>)
+  %age = db.get_node_properties(%t1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %name = db.get_node_properties(%t1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %sa, %sb, %sage, %sname = db.sort(%s1, %t1, %age, %name) keys [3, 2] ascending [false, true] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>)
   %s2, %e2, %et2, %t2 = db.get_out_edges(%sb, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%t2) : !db.column<!storage.node_id>
   return
@@ -524,10 +524,10 @@ const char* const sortOnAnUnreadKey = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %name = db.get_node_properties(%t, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %sname, %sage = db.sort(%name, %age) keys [1] ascending [true] : (!db.column<!storage.string>, !db.column<i64>) -> (!db.column<!storage.string>, !db.column<i64>)
-  db.output(%sname) : !db.column<!storage.string>
+  %name = db.get_node_properties(%t, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%t, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %sname, %sage = db.sort(%name, %age) keys [1] ascending [true] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>)
+  db.output(%sname) : !db.column<!storage.nullable<!storage.string>>
   return
 }
 )mlir";
@@ -673,10 +673,10 @@ TEST_F(TrimUnreadColumnsTest, keepsARowCarryingYieldBesideAReadConstant) {
 const char* const groupAggregateWithAnUnreadAggregate = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %g:3 = db.group_aggregate(%name, %n, %age) keys 1 aggregates [count_rows, sum] : (!db.column<!storage.string>, !db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<!storage.string>, !db.column<none>, !db.column<none>)
-  db.output(%g#0, %g#2) : !db.column<!storage.string>, !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %g:3 = db.group_aggregate(%name, %n, %age) keys 1 aggregates [count_rows, sum] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>, !db.column<none>)
+  db.output(%g#0, %g#2) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -715,9 +715,9 @@ TEST_F(TrimUnreadColumnsTest, dropsTheUnreadAggregatesOfAGroupAggregate) {
 const char* const groupAggregateNothingReads = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %g:3 = db.group_aggregate(%name, %n, %age) keys 1 aggregates [count_rows, sum] : (!db.column<!storage.string>, !db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<!storage.string>, !db.column<none>, !db.column<none>)
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %g:3 = db.group_aggregate(%name, %n, %age) keys 1 aggregates [count_rows, sum] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>, !db.column<none>)
   %one = db.constant(1 : i64)
   db.output(%one) : !db.column<i64>
   return
@@ -746,8 +746,8 @@ TEST_F(TrimUnreadColumnsTest, keepsTheKeyAndOneAggregateOfAGroupAggregateNothing
 const char* const groupAggregateWithAnUnreadKey = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %g:2 = db.group_aggregate(%name, %n) keys 1 aggregates [count_rows] : (!db.column<!storage.string>, !db.column<!storage.node_id>) -> (!db.column<!storage.string>, !db.column<none>)
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %g:2 = db.group_aggregate(%name, %n) keys 1 aggregates [count_rows] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>)
   db.output(%g#1) : !db.column<none>
   return
 }
@@ -773,12 +773,12 @@ TEST_F(TrimUnreadColumnsTest, leavesAGroupAggregateWhoseOnlyUnreadColumnIsAKeyAl
 const char* const collectWithUnreadValuesAndAggregate = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %k = db.get_node_properties(%n, "k") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %v0 = db.get_node_properties(%n, "v0") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %v1 = db.get_node_properties(%n, "v1") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %v2 = db.get_node_properties(%n, "v2") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %c:5 = db.collect(%k, %v0, %v1, %v2, %n) keys 1 aggregates [count_rows] distinct [0, 2] : (!db.column<!storage.string>, !db.column<i64>, !db.column<i64>, !db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<!storage.string>, !db.column<!storage.list<i64>>, !db.column<!storage.list<i64>>, !db.column<!storage.list<i64>>, !db.column<none>)
-  db.output(%c#2, %c#3) : !db.column<!storage.list<i64>>, !db.column<!storage.list<i64>>
+  %k = db.get_node_properties(%n, "k") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %v0 = db.get_node_properties(%n, "v0") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %v1 = db.get_node_properties(%n, "v1") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %v2 = db.get_node_properties(%n, "v2") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %c:5 = db.collect(%k, %v0, %v1, %v2, %n) keys 1 aggregates [count_rows] distinct [0, 2] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>)
+  db.output(%c#2, %c#3) : !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";
@@ -813,9 +813,9 @@ TEST_F(TrimUnreadColumnsTest, dropsTheUnreadValuesAndAggregatesOfACollectAndRenu
 const char* const collectReadingTheCountOnly = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %k = db.get_node_properties(%n, "k") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %v = db.get_node_properties(%n, "v") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %c:3 = db.collect(%k, %v, %n) keys 1 aggregates [count_rows] : (!db.column<!storage.string>, !db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<!storage.string>, !db.column<!storage.list<i64>>, !db.column<none>)
+  %k = db.get_node_properties(%n, "k") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %v = db.get_node_properties(%n, "v") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %c:3 = db.collect(%k, %v, %n) keys 1 aggregates [count_rows] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<i64>>>, !db.column<none>)
   db.output(%c#2) : !db.column<none>
   return
 }
@@ -840,10 +840,10 @@ TEST_F(TrimUnreadColumnsTest, leavesACollectWhoseOnlyUnreadColumnsAreItsKeyAndVa
 const char* const ungroupedCollectWithAnUnreadList = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.string>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
-  %c:2 = db.collect(%name, %age) keys 0 : (!db.column<!storage.string>, !db.column<i64>) -> (!db.column<!storage.list<!storage.string>>, !db.column<!storage.list<i64>>)
-  db.output(%c#1) : !db.column<!storage.list<i64>>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %c:2 = db.collect(%name, %age) keys 0 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.list<!storage.nullable<!storage.string>>>, !db.column<!storage.list<!storage.nullable<i64>>>)
+  db.output(%c#1) : !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";

@@ -22,13 +22,13 @@ module {
     // sum/avg need a numeric column.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 
-    %gteam, %total, %mean = db.group_aggregate(%team, %score, %score) keys 1 aggregates [sum, avg] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
+    %gteam, %total, %mean = db.group_aggregate(%team, %score, %score) keys 1 aggregates [sum, avg] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>, !db.column<none>)
 
-    db.output(%gteam, %total, %mean) : !db.column<none>, !db.column<none>, !db.column<none>
+    db.output(%gteam, %total, %mean) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>, !db.column<none>
 
     return
   }

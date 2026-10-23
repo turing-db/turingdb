@@ -208,9 +208,9 @@ func.func @main() {
   ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
     %els = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
     %eok = db.check_label_constraint(%els, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
-    %age = db.get_node_properties(%end, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%end, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
     %c = db.constant(30 : i64)
-    %old = db.gt %age, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    %old = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
     %both = db.and %eok, %old : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
     %sls = db.get_node_label_set(%src) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
     %sok = db.check_label_constraint(%sls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>

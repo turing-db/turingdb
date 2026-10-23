@@ -27,11 +27,11 @@ module {
 
     %src, %edge, %type, %tgt = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
 
-    %name = db.get_node_properties(%src, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%src, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %gname, %targets = db.collect(%name, %tgt) keys 1 distinct [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.list<!storage.node_id>>)
+    %gname, %targets = db.collect(%name, %tgt) keys 1 distinct [0] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.node_id>>)
 
-    db.output(%gname, %targets) : !db.column<none>, !db.column<!storage.list<!storage.node_id>>
+    db.output(%gname, %targets) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.node_id>>
 
     return
   }

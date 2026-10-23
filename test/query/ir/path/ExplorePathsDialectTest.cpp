@@ -174,12 +174,12 @@ const char* const pushDownProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) forward hops 1 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %age = db.get_node_properties(%0#0, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%0#0, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %c = db.constant(30 : i64)
-  %seedMask = db.gt %age, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %seedMask = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %1:3 = db.filter(%seedMask, {%0#0, %0#1, %0#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %endAge = db.get_node_properties(%1#1, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %endMask = db.gt %endAge, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %endAge = db.get_node_properties(%1#1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %endMask = db.gt %endAge, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %2:3 = db.filter(%endMask, {%1#0, %1#1, %1#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   db.output(%2#0, %2#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return

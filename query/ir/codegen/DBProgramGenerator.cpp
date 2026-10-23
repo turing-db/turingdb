@@ -9071,10 +9071,6 @@ mlir::Value DBProgramGenerator::constantLabelList(llvm::ArrayRef<std::string> la
 }
 
 mlir::Type DBProgramGenerator::propertyValueType(ValueType valueType) {
-    if (valueType == ValueType::Invalid) {
-        return mlir::NoneType::get(_mlirCtxt);
-    }
-
     return mlir::storage::NullableType::get(_mlirCtxt, valueTypeToElementType(_opBuilder, valueType));
 }
 

@@ -46,16 +46,16 @@ protected:
 const char* const comprehensionReadingTheAge = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %xs = db.constant([1, 2])
   %r = db.list_comprehension(%xs, {%n, %name, %age}) {
-  ^bb0(%x: !db.column<none>, %tag: !db.column<ui64>, %nIn: !db.column<!storage.node_id>, %nameIn: !db.column<none>, %ageIn: !db.column<none>):
-    %keep = db.gt %x, %ageIn : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  ^bb0(%x: !db.column<none>, %tag: !db.column<ui64>, %nIn: !db.column<!storage.node_id>, %nameIn: !db.column<!storage.nullable<!storage.string>>, %ageIn: !db.column<!storage.nullable<i64>>):
+    %keep = db.gt %x, %ageIn : (!db.column<none>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
     %kept:2 = db.filter(%keep, {%x, %tag}) : (!db.column<!storage.bool>, !db.column<none>, !db.column<ui64>) -> (!db.column<none>, !db.column<ui64>)
     db.comprehension_yield %kept#1, %kept#0 : !db.column<none>
-  } : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>, !db.column<none>, !db.column<none>) -> !db.column<none>
-  db.output(%name, %r) : !db.column<none>, !db.column<none>
+  } : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -82,8 +82,8 @@ func.func @main() {
   %ys = db.constant([30, 32])
   %ok = db.list_predicate(%ys, {%s, %e, %t}) kind any {
   ^bb0(%y: !db.column<none>, %tag: !db.column<ui64>, %sIn: !db.column<!storage.node_id>, %eIn: !db.column<!storage.edge_id>, %tIn: !db.column<!storage.node_id>):
-    %age = db.get_node_properties(%tIn, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %p = db.eq %y, %age : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+    %age = db.get_node_properties(%tIn, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    %p = db.eq %y, %age : (!db.column<none>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
     db.comprehension_yield %tag, %p : !db.column<!storage.bool>
   } : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
   %sk = db.filter(%ok, {%s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
@@ -114,17 +114,17 @@ TEST_F(TrimListComprehensionTest, dropsTheCarriedColumnsAPredicateDoesNotRead) {
 const char* const reduceReadingTheNode = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %zero = db.constant(0 : i64)
   %zs = db.constant([1, 2])
   %r = db.reduce(%zs, %zero, {%name, %n}) {
-  ^bb0(%z: !db.column<none>, %s: !db.column<none>, %nameIn: !db.column<none>, %nIn: !db.column<!storage.node_id>):
+  ^bb0(%z: !db.column<none>, %s: !db.column<none>, %nameIn: !db.column<!storage.nullable<!storage.string>>, %nIn: !db.column<!storage.node_id>):
     %sum = db.add %s, %z : (!db.column<none>, !db.column<none>) -> !db.column<none>
-    %age = db.get_node_properties(%nIn, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %next = db.add %sum, %age : (!db.column<none>, !db.column<none>) -> !db.column<none>
+    %age = db.get_node_properties(%nIn, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    %next = db.add %sum, %age : (!db.column<none>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
     db.reduce_yield %next : !db.column<none>
-  } : (!db.column<!storage.list<i64>>, !db.column<i64>, !db.column<none>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%name, %r) : !db.column<none>, !db.column<none>
+  } : (!db.column<!storage.list<i64>>, !db.column<i64>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -147,14 +147,14 @@ TEST_F(TrimListComprehensionTest, dropsTheCarriedColumnsAReduceDoesNotRead) {
 const char* const comprehensionOverARowList = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %x = db.constant("x" : !storage.string)
-  %xs = db.make_list(%name, %x) : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.list<none>>
+  %xs = db.make_list(%name, %x) : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.list<none>>
   %r = db.list_comprehension(%xs, {%n}) {
   ^bb0(%element: !db.column<none>, %tag: !db.column<ui64>, %nIn: !db.column<!storage.node_id>):
     db.comprehension_yield %tag, %element : !db.column<none>
   } : (!db.column<!storage.list<none>>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%name, %r) : !db.column<none>, !db.column<none>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -178,15 +178,15 @@ TEST_F(TrimListComprehensionTest, carriesNothingOverARowList) {
 const char* const comprehensionOverAConstantList = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %xs = db.constant([1, 2])
   %r = db.list_comprehension(%xs, {%name, %n}) {
-  ^bb0(%x: !db.column<none>, %tag: !db.column<ui64>, %nameIn: !db.column<none>, %nIn: !db.column<!storage.node_id>):
+  ^bb0(%x: !db.column<none>, %tag: !db.column<ui64>, %nameIn: !db.column<!storage.nullable<!storage.string>>, %nIn: !db.column<!storage.node_id>):
     %ten = db.constant(10 : i64)
     %times = db.mul %x, %ten : (!db.column<none>, !db.column<i64>) -> !db.column<none>
     db.comprehension_yield %tag, %times : !db.column<none>
-  } : (!db.column<!storage.list<i64>>, !db.column<none>, !db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%name, %r) : !db.column<none>, !db.column<none>
+  } : (!db.column<!storage.list<i64>>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }
 )mlir";
@@ -223,8 +223,8 @@ func.func @main() {
     ^bb0(%arg6: !db.column<none>, %arg7: !db.column<ui64>, %arg8: !db.column<!storage.node_id>, %arg9: !db.column<!storage.edge_id>, %arg10: !db.column<!storage.node_id>, %arg11: !db.column<!storage.edge_type_id>, %arg12: !db.column<none>):
       %16 = db.gt %arg6, %arg12 : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
       %17:2 = db.filter(%16, {%arg7, %arg10}) : (!db.column<!storage.bool>, !db.column<ui64>, !db.column<!storage.node_id>) -> (!db.column<ui64>, !db.column<!storage.node_id>)
-      %18 = db.get_node_properties(%17#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-      db.comprehension_yield %17#0, %18 : !db.column<none>
+      %18 = db.get_node_properties(%17#1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+      db.comprehension_yield %17#0, %18 : !db.column<!storage.nullable<!storage.string>>
     } : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>, !db.column<none>) -> !db.column<none>
     db.comprehension_yield %13#1, %15 : !db.column<none>
   } : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_type_id>) -> !db.column<none>

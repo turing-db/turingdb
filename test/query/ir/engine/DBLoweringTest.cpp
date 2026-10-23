@@ -810,9 +810,9 @@ func.func @main() {
 constexpr const char* addPropertyConstantProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(10 : i64)
-  %sum = db.add %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+  %sum = db.add %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
   db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -822,9 +822,9 @@ func.func @main() {
 constexpr const char* addTwoPropertiesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %sum = db.add %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %sum = db.add %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
   db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -856,9 +856,9 @@ func.func @main() {
 constexpr const char* subPropertyConstantProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(10 : i64)
-  %diff = db.sub %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+  %diff = db.sub %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
   db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -868,9 +868,9 @@ func.func @main() {
 constexpr const char* subTwoPropertiesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %diff = db.sub %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %diff = db.sub %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
   db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -902,9 +902,9 @@ func.func @main() {
 constexpr const char* mulPropertyConstantProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(10 : i64)
-  %prod = db.mul %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+  %prod = db.mul %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<none>
   db.output(%a, %prod) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -914,9 +914,9 @@ func.func @main() {
 constexpr const char* mulTwoPropertiesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %prod = db.mul %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %prod = db.mul %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<none>
   db.output(%a, %prod) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
@@ -958,9 +958,9 @@ func.func @main() {
 constexpr const char* eqPropertyConstantProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(200 : i64)
-  %r = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.eq %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
   return
 }
@@ -996,9 +996,9 @@ func.func @main() {
 constexpr const char* andPropertySelfProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(200 : i64)
-  %p = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %p = db.eq %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %r = db.and %p, %p : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
   return
@@ -1009,9 +1009,9 @@ func.func @main() {
 constexpr const char* andNullShortCircuitProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k200 = db.constant(200 : i64)
-  %p = db.eq %score, %k200 : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %p = db.eq %score, %k200 : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %k1 = db.constant(1 : i64)
   %q = db.eq %a, %k1 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
   %r = db.and %p, %q : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
@@ -1050,9 +1050,9 @@ func.func @main() {
 constexpr const char* orPropertySelfProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(200 : i64)
-  %p = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %p = db.eq %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %r = db.or %p, %p : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
   return
@@ -1063,9 +1063,9 @@ func.func @main() {
 constexpr const char* orNullShortCircuitProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k200 = db.constant(200 : i64)
-  %p = db.eq %score, %k200 : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %p = db.eq %score, %k200 : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %k2 = db.constant(2 : i64)
   %q = db.eq %a, %k2 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
   %r = db.or %p, %q : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
@@ -1078,9 +1078,9 @@ func.func @main() {
 constexpr const char* filterKeepsMatchingNodesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %mask = db.eq %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %mask = db.eq %score, %score2 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
   %a2 = db.filter(%mask, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%a2) : !db.column<!storage.node_id>
   return
@@ -1091,11 +1091,11 @@ func.func @main() {
 constexpr const char* filterAlignsCarriedColumnsProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(200 : i64)
-  %mask = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
-  %a2, %score2 = db.filter(%mask, {%a, %score}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%a2, %score2) : !db.column<!storage.node_id>, !db.column<none>
+  %mask = db.eq %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+  %a2, %score2 = db.filter(%mask, {%a, %score}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%a2, %score2) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -1116,9 +1116,9 @@ func.func @main() {
 constexpr const char* filterAllFalseProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(999 : i64)
-  %mask = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %score, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %a2 = db.filter(%mask, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%a2) : !db.column<!storage.node_id>
   return
@@ -1464,8 +1464,8 @@ func.func @main() {
 constexpr const char* nodePropertiesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%a, %score) : !db.column<!storage.node_id>, !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%a, %score) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -1474,8 +1474,8 @@ func.func @main() {
 constexpr const char* nodeNameProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%a, %name) : !db.column<!storage.node_id>, !db.column<none>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  db.output(%a, %name) : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
   return
 }
 )mlir";
@@ -1484,8 +1484,8 @@ func.func @main() {
 constexpr const char* nodeVecProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %vec = db.get_node_properties(%a, "vec") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%a, %vec) : !db.column<!storage.node_id>, !db.column<none>
+  %vec = db.get_node_properties(%a, "vec") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.embedding>>
+  db.output(%a, %vec) : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.embedding>>
   return
 }
 )mlir";
@@ -1498,8 +1498,8 @@ constexpr const char* edgePropertiesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %srcs, %eids, %etypes, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %weight = db.get_edge_properties(%eids, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
-  db.output(%eids, %weight) : !db.column<!storage.edge_id>, !db.column<none>
+  %weight = db.get_edge_properties(%eids, "weight") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
+  db.output(%eids, %weight) : !db.column<!storage.edge_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -1570,10 +1570,10 @@ func.func @main() {
     db.yield %a : !db.column<!storage.node_id>
   } factor {
     %b = db.scan_nodes() : !db.column<!storage.node_id>
-    %score = db.get_node_properties(%b, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %b, %score : !db.column<!storage.node_id>, !db.column<none>
+    %score = db.get_node_properties(%b, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    db.yield %b, %score : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   }
-  db.output(%0#0, %0#2) : !db.column<!storage.node_id>, !db.column<none>
+  db.output(%0#0, %0#2) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -1676,11 +1676,11 @@ std::string limitTwoHopProgram(uint64_t count) {
 std::string limitNodePropertyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %la, %lscore = db.limit(%a, %score) count ")
            + std::to_string(count)
-           + " : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
-             "  db.output(%la, %lscore) : !db.column<!storage.node_id>, !db.column<none>\n"
+           + " : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)\n"
+             "  db.output(%la, %lscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>\n"
              "  return\n"
              "}\n";
 }
@@ -1691,11 +1691,11 @@ std::string limitNodePropertyProgram(uint64_t count) {
 std::string limitOnlyPropertyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %lscore = db.limit(%score) count ")
            + std::to_string(count)
-           + " : (!db.column<none>) -> !db.column<none>\n"
-             "  db.output(%lscore) : !db.column<none>\n"
+           + " : (!db.column<!storage.nullable<i64>>) -> !db.column<!storage.nullable<i64>>\n"
+             "  db.output(%lscore) : !db.column<!storage.nullable<i64>>\n"
              "  return\n"
              "}\n";
 }
@@ -1787,11 +1787,11 @@ std::string skipTwoHopProgram(uint64_t count) {
 std::string skipNodePropertyProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %sa, %sscore = db.skip(%a, %score) count ")
            + std::to_string(count)
-           + " : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
-             "  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>\n"
+           + " : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)\n"
+             "  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>\n"
              "  return\n"
              "}\n";
 }
@@ -1869,9 +1869,9 @@ func.func @main() {
 constexpr const char* sortByScoreAscProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -1881,9 +1881,9 @@ func.func @main() {
 constexpr const char* sortByScoreDescProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [false] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [false] : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -1920,12 +1920,12 @@ std::string topKNodesDescProgram(uint64_t count) {
 std::string topKByScoreAscProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-                       "  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
+                       "  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true] : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)\n"
                        "  %la, %lscore = db.limit(%sa, %sscore) count ")
            + std::to_string(count)
-           + " : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)\n"
-             "  db.output(%la, %lscore) : !db.column<!storage.node_id>, !db.column<none>\n"
+           + " : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)\n"
+             "  db.output(%la, %lscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>\n"
              "  return\n"
              "}\n";
 }
@@ -2012,9 +2012,9 @@ std::string removeDuplicatesLimitProgram(uint64_t count) {
 const char* const removeDuplicatesNodeScoreProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -2048,8 +2048,8 @@ func.func @main() {
 const char* const countScoresProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%score) : (!db.column<none>) -> !db.column<ui64>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %n = db.count(%score) : (!db.column<!storage.nullable<i64>>) -> !db.column<ui64>
   db.output(%n) : !db.column<ui64>
   return
 }
@@ -2075,10 +2075,10 @@ std::string countNodesLimitProgram(uint64_t count) {
 std::string aggregateScoreLimitProgram(const char* op, uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %r = db.")
            + op
-           + "(%score) : (!db.column<none>) -> !db.column<none>\n"
+           + "(%score) : (!db.column<!storage.nullable<i64>>) -> !db.column<none>\n"
              "  %lr = db.limit(%r) count "
            + std::to_string(count)
            + " : (!db.column<none>) -> !db.column<none>\n"
@@ -2090,15 +2090,14 @@ std::string aggregateScoreLimitProgram(const char* op, uint64_t count) {
 // MATCH (a) RETURN <agg>(a.score): reduce the non-null scores with the given
 // aggregate op (db.sum / db.min / db.max / db.avg). The db result value type is
 // resolved during lowering (the property is Int64, so sum/min/max stay Int64 and
-// avg widens to f64), so the db column types are left as none - the same way the
-// property column is spelled.
+// avg widens to f64), so the db column types are left as none.
 std::string aggregateScoreProgram(const char* op) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %r = db.")
            + op
-           + "(%score) : (!db.column<none>) -> !db.column<none>\n"
+           + "(%score) : (!db.column<!storage.nullable<i64>>) -> !db.column<none>\n"
              "  db.output(%r) : !db.column<none>\n"
              "  return\n"
              "}\n";

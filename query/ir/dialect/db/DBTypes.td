@@ -48,6 +48,7 @@ def ColumnChangeIDs : ColumnOf<"::mlir::storage::ChangeIDType", "change_id">;
 
 // Property Types
 def ColumnBools : ColumnOf<"::mlir::storage::BoolType", "bool">;
+def ColumnNullables : ColumnOf<"::mlir::storage::NullableType", "nullable">;
 
 // The two element types the system commands report their result tables in: a
 // name or signature they looked up, and a size or tally they counted.

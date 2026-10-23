@@ -47,9 +47,9 @@ func.func @main() {
   %last = db.constant(3 : i64)
   %list = db.range(%first, %last) : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.list<i64>>
   %i, %ac = db.unwind(%list, {%a}) : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(30 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %af, %if = db.filter(%mask, {%ac, %i}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
   db.output(%af, %if) : !db.column<!storage.node_id>, !db.column<none>
   return
@@ -112,8 +112,8 @@ func.func @main() {
   %last = db.constant(3 : i64)
   %list = db.range(%first, %last) : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.list<i64>>
   %i, %ac = db.unwind(%list, {%a}) : (!db.column<!storage.list<i64>>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %mask = db.eq %age, %i : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %mask = db.eq %age, %i : (!db.column<!storage.nullable<i64>>, !db.column<none>) -> !db.column<!storage.bool>
   %af, %if = db.filter(%mask, {%ac, %i}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
   db.output(%af, %if) : !db.column<!storage.node_id>, !db.column<none>
   return

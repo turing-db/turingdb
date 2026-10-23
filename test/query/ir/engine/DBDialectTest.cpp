@@ -75,9 +75,11 @@ protected:
 
         EXPECT_EQ(aggregate.getDistinct(), distinct) << op;
 
-        // One property column in, one reduced column out - the two spelled i64 columns.
-        const mlir::Type int64ColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64));
-        EXPECT_EQ(aggregate.getInput().getType(), int64ColumnType) << op;
+        // One property column in, one reduced column out - a nullable i64 and an i64.
+        const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+        const mlir::Type propertyColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NullableType::get(&_context, int64Type));
+        const mlir::Type int64ColumnType = mlir::db::ColumnType::get(&_context, int64Type);
+        EXPECT_EQ(aggregate.getInput().getType(), propertyColumnType) << op;
         EXPECT_EQ(aggregate.getResult().getType(), int64ColumnType) << op;
 
         std::string printed;
@@ -247,8 +249,8 @@ func.func @main() {
 const char* const setNodePropertyProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %v = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.set_node_property(%n, "age", %v) : (!db.column<!storage.node_id>, !db.column<none>) -> ()
+  %v = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.set_node_property(%n, "age", %v) : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> ()
   return
 }
 )mlir";
@@ -257,8 +259,8 @@ func.func @main() {
 const char* const setEdgePropertyProgram = R"mlir(
 func.func @main() {
   %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
-  %v = db.get_edge_properties(%e, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
-  db.set_edge_property(%e, "weight", %v) : (!db.column<!storage.edge_id>, !db.column<none>) -> ()
+  %v = db.get_edge_properties(%e, "weight") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
+  db.set_edge_property(%e, "weight", %v) : (!db.column<!storage.edge_id>, !db.column<!storage.nullable<i64>>) -> ()
   return
 }
 )mlir";
@@ -266,8 +268,28 @@ func.func @main() {
 const char* const emptyPropertySetProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %v = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  db.set_node_property(%n, "", %v) : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> ()
+  return
+}
+)mlir";
+
+// MATCH (n) RETURN n.age, with the value column left untyped
+const char* const untypedNodePropertyProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
   %v = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.set_node_property(%n, "", %v) : (!db.column<!storage.node_id>, !db.column<none>) -> ()
+  db.output(%v) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH ()-[e]->() RETURN e.weight, with the value column typed but not nullable
+const char* const nonNullableEdgePropertyProgram = R"mlir(
+func.func @main() {
+  %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %v = db.get_edge_properties(%e, "weight") : (!db.column<!storage.edge_id>) -> !db.column<i64>
+  db.output(%v) : !db.column<i64>
   return
 }
 )mlir";
@@ -304,9 +326,9 @@ func.func @main() {
 const char* const sortProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [false] : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %sa, %sscore = db.sort(%a, %score) keys [1] ascending [false] : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -347,9 +369,9 @@ func.func @main() {
 const char* const removeDuplicatesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-  db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %da, %dscore = db.remove_duplicates(%a, %score) : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%da, %dscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";
@@ -387,12 +409,12 @@ func.func @main() {
 std::string aggregateProgram(const char* op, bool distinct) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %s = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<i64>\n"
+                       "  %s = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %r = db.")
            + op
            + "(%s)"
            + (distinct ? " distinct" : "")
-           + " : (!db.column<i64>) -> !db.column<i64>\n"
+           + " : (!db.column<!storage.nullable<i64>>) -> !db.column<i64>\n"
              "  db.output(%r) : !db.column<i64>\n"
              "  return\n"
              "}\n";
@@ -2145,6 +2167,16 @@ TEST_F(DBDialectTest, setEdgePropertyRoundTripsThroughTextualForm) {
 
 TEST_F(DBDialectTest, verifierRejectsEmptySetProperty) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyPropertySetProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsAnUntypedPropertyRead) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(untypedNodePropertyProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsANonNullablePropertyRead) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nonNullableEdgePropertyProgram);
     EXPECT_FALSE(module);
 }
 

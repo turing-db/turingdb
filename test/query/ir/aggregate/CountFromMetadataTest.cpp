@@ -262,8 +262,8 @@ const char* const skippedScanPropertyCount = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
   %sa = db.skip(%a) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-  %name = db.get_node_properties(%sa, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%sa, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -305,8 +305,8 @@ func.func @main() {
 const char* const propertyCount = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -316,8 +316,8 @@ func.func @main() {
 const char* const wholeGraphPropertyCount = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -329,8 +329,8 @@ func.func @main() {
 const char* const propertyAnchoredWildcardCount = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) rows : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) rows : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -341,8 +341,8 @@ func.func @main() {
 const char* const distinctPropertyCount = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) distinct : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) distinct : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -359,8 +359,8 @@ func.func @main() {
     %b = db.scan_nodes_by_label(["Interest"]) : !db.column<!storage.node_id>
     db.yield %b : !db.column<!storage.node_id>
   }
-  %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -377,8 +377,8 @@ func.func @main() {
     %b = db.scan_nodes_by_label(["Interest"]) : !db.column<!storage.node_id>
     db.yield %b : !db.column<!storage.node_id>
   }
-  %name = db.get_node_properties(%p#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%p#0, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -403,8 +403,8 @@ func.func @main() {
     }
     db.yield %q#1 : !db.column<!storage.node_id>
   }
-  %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -416,8 +416,8 @@ const char* const hopPropertyCount = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
   %s, %e, %t, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %name = db.get_node_properties(%b, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  %name = db.get_node_properties(%b, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %n = db.count(%name) : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }

@@ -8,7 +8,7 @@ func.func @main() {
     %2 = db.call_procedure("db.labels", {}, {}) yields ["label"] : () -> !db.column<none>
     db.yield %2 : !db.column<none>
   }
-  %1 = db.get_node_properties(%0#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%1, %0#1) names ["n.name", "label"] : !db.column<none>, !db.column<none>
+  %1 = db.get_node_properties(%0#0, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  db.output(%1, %0#1) names ["n.name", "label"] : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
   return
 }

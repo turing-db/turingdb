@@ -8,7 +8,7 @@ module {
     //
     // keys 0 is the ungrouped form: one global group, re-emitted element by element.
     // Cypher collect drops nulls, so a node with no "name" contributes no row. The
-    // unwound value type is resolved during lowering (hence -graph); name is a String.
+    // unwound value has the collected column's type, a nullable String.
     //
     // db.unwind_collect lowers to a hoisted nl.collect_buffer, an nl.collect_update
     // inside the scan loop, and an nl.unwind_collect source draining the single group's
@@ -17,11 +17,11 @@ module {
     // "name" is a simpledb property; swap it for a property your graph has.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %uname = db.unwind_collect(%name) keys 0 : (!db.column<none>) -> !db.column<none>
+    %uname = db.unwind_collect(%name) keys 0 : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.nullable<!storage.string>>
 
-    db.output(%uname) : !db.column<none>
+    db.output(%uname) : !db.column<!storage.nullable<!storage.string>>
 
     return
   }

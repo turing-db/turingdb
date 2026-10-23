@@ -20,16 +20,16 @@ module {
 
     // The pattern's {name: row[0]} constraint: a property of the node against a field of
     // the record.
-    %1 = db.get_node_properties(%0#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %2 = db.eq %1, %0#1 : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+    %1 = db.get_node_properties(%0#0, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+    %2 = db.eq %1, %0#1 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
 
     // Every column in flight goes through the filter - the node and both fields - so they
     // stay row-aligned with each other.
     %3:3 = db.filter(%2, {%0#0, %0#1, %0#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.string>, !db.column<!storage.string>) -> (!db.column<!storage.node_id>, !db.column<!storage.string>, !db.column<!storage.string>)
 
-    %4 = db.get_node_properties(%3#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %4 = db.get_node_properties(%3#0, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    db.output(%4, %3#2) names ["n.name", "row[2]"] : !db.column<none>, !db.column<!storage.string>
+    db.output(%4, %3#2) names ["n.name", "row[2]"] : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>
 
     return
   }

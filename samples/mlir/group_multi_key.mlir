@@ -26,15 +26,15 @@ module {
     // graph has; sum needs a numeric column.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 
-    %gteam, %gcity, %total = db.group_aggregate(%team, %city, %score) keys 2 aggregates [sum] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
+    %gteam, %gcity, %total = db.group_aggregate(%team, %city, %score) keys 2 aggregates [sum] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<none>)
 
-    db.output(%gteam, %gcity, %total) : !db.column<none>, !db.column<none>, !db.column<none>
+    db.output(%gteam, %gcity, %total) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<none>
 
     return
   }

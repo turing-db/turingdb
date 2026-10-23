@@ -48,9 +48,9 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%t1, {%s1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(30 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %af, %bf, %cf = db.filter(%mask, {%ac, %s2, %t2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%af, %bf, %cf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -95,9 +95,9 @@ func.func @main() {
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %same = db.eq %t, %s : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
   %tj, %sj = db.filter(%same, {%t, %s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%tj, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%tj, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(30 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %tf, %sf = db.filter(%mask, {%tj, %sj}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%tf, %sf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -135,9 +135,9 @@ func.func @main() {
   %j1, %j2, %j3 = db.filter(%sameEnd, {%t2, %s2, %sc}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
   %sameSeed = db.eq %j2, %j3 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
   %k1, %k2, %k3 = db.filter(%sameSeed, {%j1, %j2, %j3}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%k1, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%k1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(30 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %f1, %f2, %f3 = db.filter(%mask, {%k1, %k2, %k3}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%f1, %f2, %f3) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -162,14 +162,14 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %same = db.eq %t, %s : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
-  %rank = db.get_node_properties(%s, "rank") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %rank = db.get_node_properties(%s, "rank") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %zero = db.constant(0 : i64)
-  %positive = db.gt %rank, %zero : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %positive = db.gt %rank, %zero : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %both = db.and %same, %positive : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   %tj, %sj = db.filter(%both, {%t, %s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%tj, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%tj, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(30 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %tf, %sf = db.filter(%mask, {%tj, %sj}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%tf, %sf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -194,9 +194,9 @@ TEST_F(PushDownFilterTest, readsAnEqualityOutOfAConjunction) {
 const char* const rootOnlyPredicate = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(30 : i64)
-  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %af = db.filter(%mask, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%af) : !db.column<!storage.node_id>
   return
@@ -222,13 +222,13 @@ const char* const twoRootPredicatesStack = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%s1, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%s1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %c32 = db.constant(32 : i64)
-  %m1 = db.eq %age, %c32 : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %m1 = db.eq %age, %c32 : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %a1, %b1 = db.filter(%m1, {%s1, %t1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %score = db.get_node_properties(%a1, "score") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %score = db.get_node_properties(%a1, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %c5 = db.constant(5 : i64)
-  %m2 = db.eq %score, %c5 : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %m2 = db.eq %score, %c5 : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %a2, %b2 = db.filter(%m2, {%a1, %b1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%a2, %b2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -263,9 +263,9 @@ const char* const edgePredicate = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %dur = db.get_edge_properties(%e1, "duration") : (!db.column<!storage.edge_id>) -> !db.column<i64>
+  %dur = db.get_edge_properties(%e1, "duration") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
   %lim = db.constant(10 : i64)
-  %mask = db.gt %dur, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %dur, %lim : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %sf, %tf = db.filter(%mask, {%s1, %t1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%sf, %tf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -297,9 +297,9 @@ func.func @main() {
     %m = db.scan_nodes() : !db.column<!storage.node_id>
     db.yield %m : !db.column<!storage.node_id>
   }
-  %age = db.get_node_properties(%0#0, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%0#0, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %c32 = db.constant(32 : i64)
-  %mask = db.eq %age, %c32 : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %c32 : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf, %mf = db.filter(%mask, {%0#0, %0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%nf, %mf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -341,8 +341,8 @@ func.func @main() {
   %c = db.constant("Remy" : !storage.string)
   %0:2 = db.cross_product factor {
     %n = db.scan_nodes() : !db.column<!storage.node_id>
-    %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %mask = db.eq %name, %c : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+    %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+    %mask = db.eq %name, %c : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
     %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
     db.yield %nf : !db.column<!storage.node_id>
   } factor {
@@ -377,9 +377,9 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_in_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%s1, {%t1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%s2, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%s2, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k = db.constant(32 : i64)
-  %mask = db.eq %age, %k : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %k : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %nf, %mf, %af = db.filter(%mask, {%s2, %t2, %ac}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%af, %nf, %mf) names ["a", "n", "m"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -420,11 +420,11 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%t1, {%s1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %base = db.constant(2 : i64)
   %exp = db.constant(5 : i64)
   %pow = db.pow %base, %exp : (!db.column<i64>, !db.column<i64>) -> !db.column<f64>
-  %mask = db.eq %age, %pow : (!db.column<i64>, !db.column<f64>) -> !db.column<!storage.bool>
+  %mask = db.eq %age, %pow : (!db.column<!storage.nullable<i64>>, !db.column<f64>) -> !db.column<!storage.bool>
   %af, %bf, %cf = db.filter(%mask, {%ac, %s2, %t2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%af, %bf, %cf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -473,9 +473,9 @@ func.func @main() {
   %ls = db.get_node_label_set(%t1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
   %ok = db.check_label_constraint(%ls, ["Complex"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
   %bl, %al = db.filter(%ok, {%t1, %s1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %id = db.get_node_properties(%al, "stId") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %id = db.get_node_properties(%al, "stId") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %k = db.constant("R-HSA-177934" : !storage.string)
-  %mask = db.eq %id, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %mask = db.eq %id, %k : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %bf = db.filter(%mask, {%bl}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%bf) names ["b"] : !db.column<!storage.node_id>
   return
@@ -518,9 +518,9 @@ func.func @main() {
   %ok = db.check_edge_type_constraint(%et1, ["hasComponent"]) : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
   %bl, %al = db.filter(%ok, {%t1, %s1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%bl, {%al}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-  %id = db.get_node_properties(%ac, "stId") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %id = db.get_node_properties(%ac, "stId") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %k = db.constant("R-HSA-8867037" : !storage.string)
-  %mask = db.eq %id, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %mask = db.eq %id, %k : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %cf = db.filter(%mask, {%t2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%cf) names ["c"] : !db.column<!storage.node_id>
   return

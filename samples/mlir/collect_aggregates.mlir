@@ -21,15 +21,15 @@ module {
     // graph has.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %dob = db.get_node_properties(%a, "dob") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %dob = db.get_node_properties(%a, "dob") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 
-    %gdob, %names, %n, %low, %high = db.collect(%dob, %name, %age, %age, %age) keys 1 aggregates [count, min, max] : (!db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>, !db.column<ui64>, !db.column<none>, !db.column<none>)
+    %gdob, %names, %n, %low, %high = db.collect(%dob, %name, %age, %age, %age) keys 1 aggregates [count, min, max] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>, !db.column<ui64>, !db.column<none>, !db.column<none>)
 
-    db.output(%gdob, %names, %n, %low, %high) : !db.column<none>, !db.column<!storage.list<none>>, !db.column<ui64>, !db.column<none>, !db.column<none>
+    db.output(%gdob, %names, %n, %low, %high) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>, !db.column<ui64>, !db.column<none>, !db.column<none>
 
     return
   }

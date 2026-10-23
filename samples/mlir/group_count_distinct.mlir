@@ -18,11 +18,11 @@ module {
 
     %src, %edge, %type, %tgt = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
 
-    %name = db.get_node_properties(%src, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%src, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %gname, %n = db.group_aggregate(%name, %tgt) keys 1 aggregates [count_distinct] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
+    %gname, %n = db.group_aggregate(%name, %tgt) keys 1 aggregates [count_distinct] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)
 
-    db.output(%gname, %n) : !db.column<none>, !db.column<ui64>
+    db.output(%gname, %n) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>
 
     return
   }

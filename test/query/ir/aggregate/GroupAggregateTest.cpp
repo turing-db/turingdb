@@ -574,9 +574,9 @@ private:
 constexpr const char* groupCountStarProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
-  db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)
+  db.output(%gteam, %n) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>
   return
 }
 )mlir";
@@ -586,10 +586,10 @@ func.func @main() {
 constexpr const char* groupCountScoreProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n = db.group_aggregate(%team, %score) keys 1 aggregates [count] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>)
-  db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %n = db.group_aggregate(%team, %score) keys 1 aggregates [count] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)
+  db.output(%gteam, %n) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>
   return
 }
 )mlir";
@@ -601,12 +601,12 @@ func.func @main() {
 std::string groupScoreProgram(const char* kind) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>\n"
                        "  %gteam, %r = db.group_aggregate(%team, %score) keys 1 aggregates [")
            + kind
-           + "] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)\n"
-             "  db.output(%gteam, %r) : !db.column<none>, !db.column<none>\n"
+           + "] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>)\n"
+             "  db.output(%gteam, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>\n"
              "  return\n"
              "}\n";
 }
@@ -618,10 +618,10 @@ std::string groupScoreProgram(const char* kind) {
 constexpr const char* groupCountSumProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n, %s = db.group_aggregate(%team, %a, %score) keys 1 aggregates [count, sum] : (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>, !db.column<none>)
-  db.output(%gteam, %n, %s) : !db.column<none>, !db.column<ui64>, !db.column<none>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %n, %s = db.group_aggregate(%team, %a, %score) keys 1 aggregates [count, sum] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>, !db.column<none>)
+  db.output(%gteam, %n, %s) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>, !db.column<none>
   return
 }
 )mlir";
@@ -635,11 +635,11 @@ func.func @main() {
 constexpr const char* groupTeamCityProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %gcity, %n, %s, %m = db.group_aggregate(%team, %city, %a, %score, %score) keys 2 aggregates [count, sum, max] : (!db.column<none>, !db.column<none>, !db.column<!storage.node_id>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>)
-  db.output(%gteam, %gcity, %n, %s, %m) : !db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gteam, %gcity, %n, %s, %m = db.group_aggregate(%team, %city, %a, %score, %score) keys 2 aggregates [count, sum, max] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>, !db.column<none>, !db.column<none>)
+  db.output(%gteam, %gcity, %n, %s, %m) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>, !db.column<none>, !db.column<none>
   return
 }
 )mlir";
@@ -651,12 +651,12 @@ func.func @main() {
 std::string groupCityCountProgram(const char* kind) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-                       "  %city = db.get_node_properties(%a, \"city\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+                       "  %city = db.get_node_properties(%a, \"city\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
                        "  %gteam, %n = db.group_aggregate(%team, %city) keys 1 aggregates [")
            + kind
-           + "] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>)\n"
-             "  db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>\n"
+           + "] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)\n"
+             "  db.output(%gteam, %n) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>\n"
              "  return\n"
              "}\n";
 }
@@ -668,9 +668,9 @@ std::string groupCityCountProgram(const char* kind) {
 constexpr const char* groupNodeCountDistinctProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count_distinct] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
-  db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count_distinct] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)
+  db.output(%gteam, %n) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>
   return
 }
 )mlir";
@@ -682,12 +682,12 @@ func.func @main() {
 std::string groupCountStarLimitProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-                       "  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)\n"
+                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+                       "  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)\n"
                        "  %lteam, %ln = db.limit(%gteam, %n) count ")
            + std::to_string(count)
-           + " : (!db.column<none>, !db.column<ui64>) -> (!db.column<none>, !db.column<ui64>)\n"
-             "  db.output(%lteam, %ln) : !db.column<none>, !db.column<ui64>\n"
+           + " : (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<ui64>)\n"
+             "  db.output(%lteam, %ln) : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>\n"
              "  return\n"
              "}\n";
 }
@@ -698,9 +698,9 @@ std::string groupCountStarLimitProgram(uint64_t count) {
 constexpr const char* groupWeightCountProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %weight = db.get_node_properties(%a, "weight") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gweight, %n = db.group_aggregate(%weight, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
-  db.output(%gweight, %n) : !db.column<none>, !db.column<ui64>
+  %weight = db.get_node_properties(%a, "weight") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<f64>>
+  %gweight, %n = db.group_aggregate(%weight, %a) keys 1 aggregates [count] : (!db.column<!storage.nullable<f64>>, !db.column<!storage.node_id>) -> (!db.column<!storage.nullable<f64>>, !db.column<ui64>)
+  db.output(%gweight, %n) : !db.column<!storage.nullable<f64>>, !db.column<ui64>
   return
 }
 )mlir";

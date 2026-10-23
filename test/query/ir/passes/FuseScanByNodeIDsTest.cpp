@@ -169,9 +169,9 @@ func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %k1 = db.constant(1 : i64)
   %e1 = db.eq %n, %k1 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k32 = db.constant(32 : i64)
-  %e2 = db.eq %age, %k32 : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %e2 = db.eq %age, %k32 : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %mask = db.or %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
   %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   db.output(%nf) : !db.column<!storage.node_id>
@@ -317,11 +317,11 @@ TEST_F(FuseScanByNodeIDsTest, fusesLabelScanIntoConstScanWithLabelCheck) {
 const char* const filterCarryingProperty = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %k3 = db.constant(3 : i64)
   %mask = db.eq %n, %k3 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
-  %nf, %agef = db.filter(%mask, {%n, %age}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<i64>) -> (!db.column<!storage.node_id>, !db.column<i64>)
-  db.output(%nf, %agef) : !db.column<!storage.node_id>, !db.column<i64>
+  %nf, %agef = db.filter(%mask, {%n, %age}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+  db.output(%nf, %agef) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   return
 }
 )mlir";

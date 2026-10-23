@@ -145,9 +145,9 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %ten = db.constant(10 : i64)
   %key = db.to_float(%ten) : (!db.column<i64>) -> !db.column<none>
-  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gkey, %scores = db.collect(%key, %score) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
-  db.output(%gkey, %scores) : !db.column<none>, !db.column<!storage.list<none>>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %gkey, %scores = db.collect(%key, %score) keys 1 : (!db.column<none>, !db.column<!storage.nullable<i64>>) -> (!db.column<none>, !db.column<!storage.list<!storage.nullable<i64>>>)
+  db.output(%gkey, %scores) : !db.column<none>, !db.column<!storage.list<!storage.nullable<i64>>>
   return
 }
 )mlir";

@@ -11,7 +11,7 @@ module {
     // column (name) is collected then unwound, so the op emits one row per collected
     // element: the group's age (repeated across its elements) then one name. An empty
     // or all-null group contributes no row, matching UNWIND of an empty list. The
-    // unwound value type is resolved during lowering (hence -graph); name is a String.
+    // unwound value has the collected column's type, a nullable String.
     //
     // db.unwind_collect is a pipeline breaker: it lowers to a hoisted nl.collect_buffer,
     // an nl.collect_update inside the scan loop, and - after the loop - an nl.unwind_collect
@@ -20,13 +20,13 @@ module {
     // "age" and "name" are simpledb properties; swap them for properties your graph has.
     %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %age = db.get_node_properties(%a, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    %gage, %uname = db.unwind_collect(%age, %name) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
+    %gage, %uname = db.unwind_collect(%age, %name) keys 1 : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>)
 
-    db.output(%gage, %uname) : !db.column<none>, !db.column<none>
+    db.output(%gage, %uname) : !db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<!storage.string>>
 
     return
   }

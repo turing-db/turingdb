@@ -19,12 +19,12 @@ module {
     %h2src, %h2e, %h2et, %c = db.get_out_edges(%b, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
 
     // Read the "name" property of the final node `c`. A node that lacks it comes
-    // back null - none are dropped. "name" must exist in the loaded graph (-graph):
-    // the db -> nl lowering resolves the name against the schema and bakes its
-    // value type into the result chunk (in simpledb "name" is a String).
-    %name = db.get_node_properties(%c, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    // back null - none are dropped. "name" must exist in the loaded graph (-graph),
+    // and the value column is its value type made nullable (in simpledb "name" is a
+    // String).
+    %name = db.get_node_properties(%c, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
-    db.output(%c, %name) : !db.column<!storage.node_id>, !db.column<none>
+    db.output(%c, %name) : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
 
     return
   }

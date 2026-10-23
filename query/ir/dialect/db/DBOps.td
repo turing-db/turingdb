@@ -1866,10 +1866,12 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
     one per node, into a new column:
 
       %a    = db.scan_nodes() : !db.column<!storage.node_id>
-      %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+      %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
 
     A node may not have the property, so missing values come back null and no
-    node is dropped - the lowering uses the with-null property fetch. One op
+    node is dropped - the lowering uses the with-null property fetch. The value
+    column is the property's value type made nullable, which the analyzer resolves
+    against the schema and the properties the query itself creates. One op
     reads one property; `RETURN a.name, a.age` is two ops sharing %a. Reading a
     property is a deterministic read of the graph, so the op is Pure.
 
@@ -1880,14 +1882,14 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
     property on none of them.
 
       %v = db.get_node_properties(%n, "age") pending %mask
-             : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<none>
+             : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<!storage.nullable<i64>>
 
     `all_pending` says the same of every row without a mask to say it row by row,
     which is what a db.create_node's column is: the read comes wholly out of the
     write buffer.
 
       %v = db.get_node_properties(%n, "age") all_pending
-             : (!db.column<!storage.node_id>) -> !db.column<none>
+             : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   }];
 
   // `property` is the symbolic property name, the same `name`/`age` spelled in
@@ -1897,7 +1899,7 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
                        StrAttr:$property,
                        Optional<Column>:$pending,
                        UnitAttr:$all_pending);
-  let results   = (outs Column:$result);
+  let results   = (outs ColumnNullables:$result);
 
   // The string attribute prints inside the parens, ahead of the colon, and MLIR
   // elides it from attr-dict because the format already names it. The optional
@@ -1920,12 +1922,12 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
     this op fetches the value behind `e.weight`, one per edge, with missing
     values null:
 
-      %weight = db.get_edge_properties(%eids, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
+      %weight = db.get_edge_properties(%eids, "weight") : (!db.column<!storage.edge_id>) -> !db.column<!storage.nullable<i64>>
 
     The input column carries its element type - !storage.edge_id here - and the
     op chosen (get_node_properties vs get_edge_properties) selects which side of
-    the graph the property is read from. The value column is left typed none: the
-    property's value type is only resolved against the schema during lowering.
+    the graph the property is read from. The value column is typed as
+    get_node_properties' is.
 
     `pending` is get_node_properties' mask, over edges: a row a db.merge wrote
     holds a write-buffer offset, and its value is read out of the write buffer.
@@ -1936,7 +1938,7 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
                        StrAttr:$property,
                        Optional<Column>:$pending,
                        UnitAttr:$all_pending);
-  let results   = (outs Column:$result);
+  let results   = (outs ColumnNullables:$result);
 
   let assemblyFormat = [{
     `(` $input_edges `,` $property `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
@@ -2109,12 +2111,12 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
 
       %a, %ka, %b, %kb = db.hash_join factor {
         %x = db.scan_nodes() : !db.column<!storage.node_id>
-        %k = db.get_node_properties(%x, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-        db.yield %x, %k : !db.column<!storage.node_id>, !db.column<none>
+        %k = db.get_node_properties(%x, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+        db.yield %x, %k : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
       } factor {
         %y = db.scan_nodes() : !db.column<!storage.node_id>
-        %k = db.get_node_properties(%y, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-        db.yield %y, %k : !db.column<!storage.node_id>, !db.column<none>
+        %k = db.get_node_properties(%y, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+        db.yield %y, %k : !db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>
       } on 1, 1
 
     `on` names the key column of each side as an index into that factor's
@@ -2213,9 +2215,8 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
     procedure does not return, or a result count that disagrees with `yields` and
     the carry set, is rejected.
 
-    The result value types come from the procedure's declared return types, so -
-    like db.get_node_properties' value column - they are left typed none here and
-    resolved during lowering.
+    The result value types come from the procedure's declared return types, so they
+    are left typed none here and resolved during lowering.
 
     An argument-less call is a source: the procedure produces rows on its own and is
     driven until it declares itself finished, so it lowers to an nl.procedure_init
@@ -2371,10 +2372,10 @@ def Sort : TuringOp<"sort", [Pure]> {
     projection stays row-aligned:
 
       %a     = db.scan_nodes() : !db.column<!storage.node_id>
-      %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+      %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
       %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true]
-                       : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
-      db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
+                       : (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>)
+      db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
 
     A row is sorted across several columns: `keys` is the list of column indices
     to sort by, most significant first (so `keys [1, 0]` sorts by column 1, ties
@@ -2556,12 +2557,12 @@ def Union : TuringOp<"union", [NoTerminator]> {
 
       db.union {
         %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-        %n = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-        db.output(%n) names ["name"] : !db.column<none>
+        %n = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+        db.output(%n) names ["name"] : !db.column<!storage.nullable<!storage.string>>
       }, {
         %c = db.scan_nodes_by_label(["City"]) : !db.column<!storage.node_id>
-        %m = db.get_node_properties(%c, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-        db.output(%m) names ["name"] : !db.column<none>
+        %m = db.get_node_properties(%c, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+        db.output(%m) names ["name"] : !db.column<!storage.nullable<!storage.string>>
       }
 
     The branches share no SSA value and read none from outside, bar the db.distinct_set
@@ -3443,9 +3444,9 @@ def CreateNode : TuringOp<"create_node", [AttrSizedOperandSegments]> {
 
     `MATCH ... CREATE`,
       %a    = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-      %name = db.get_node_properties(%a, "name") : ... -> !db.column<none>
+      %name = db.get_node_properties(%a, "name") : ... -> !db.column<!storage.nullable<!storage.string>>
       %b    = db.create_node (["Bot"], ["name"], {%name})
-                : (!db.column<none>) -> !db.column<!storage.node_id>
+                : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.node_id>
   }];
 
   let arguments = (ins LabelRefArrayAttr:$labels,
@@ -3707,11 +3708,11 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
     dropping repeated values cannot move an extremum.
 
       %a     = db.scan_nodes() : !db.column<!storage.node_id>
-      %city  = db.get_node_properties(%a, "city")  : (!db.column<!storage.node_id>) -> !db.column<none>
-      %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+      %city  = db.get_node_properties(%a, "city")  : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+      %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
       %gcity, %total = db.group_aggregate(%city, %score) keys 1 aggregates [sum]
-                         : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
-      db.output(%gcity, %total) : !db.column<none>, !db.column<none>
+                         : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<i64>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<none>)
+      db.output(%gcity, %total) : !db.column<!storage.nullable<!storage.string>>, !db.column<none>
 
     The results are the grouping-key columns (in operand order, same types) then
     one column per aggregate: count and count_distinct are ui64 counts, sum/min/max
@@ -3764,7 +3765,7 @@ def Collect : TuringOp<"collect", [Pure]> {
     tuple: the key values then a list of the group's non-null collected values.
 
       %gcity, %names = db.collect(%city, %name) keys 1
-                         : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
+                         : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.list<!storage.nullable<!storage.string>>>)
 
     keyCount is how many leading columns are keys (0 = ungrouped); the collected value
     columns follow, one per list the projection returns, and then one input per aggregate
@@ -3777,13 +3778,13 @@ def Collect : TuringOp<"collect", [Pure]> {
                              : (...) -> (...)
 
       %names, %ages = db.collect(%name, %age) keys 0
-                        : (...) -> (!db.column<!storage.list<none>>, !db.column<!storage.list<none>>)
+                        : (...) -> (!db.column<!storage.list<!storage.nullable<!storage.string>>>, !db.column<!storage.list<!storage.nullable<i64>>>)
 
     `distinct` is Cypher's collect(DISTINCT x): a value repeated in a group is collected
     once, so the list holds each of the group's distinct values. It names the value
     columns that dedupe by index, since one projection may collect a column both ways.
 
-      %names = db.collect(%name) keys 0 distinct [0] : (!db.column<none>) -> !db.column<!storage.list<none>>
+      %names = db.collect(%name) keys 0 distinct [0] : (!db.column<!storage.nullable<!storage.string>>) -> !db.column<!storage.list<!storage.nullable<!storage.string>>>
   }];
 
   // keyCount grouping-key columns, one or more collected columns, then one input per
@@ -3815,7 +3816,7 @@ def UnwindCollect : TuringOp<"unwind_collect", [Pure]> {
     the key values (repeated) then that value.
 
       %gcity, %y = db.unwind_collect(%city, %name) keys 1
-                     : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
+                     : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>)
 
     Same operands as db.collect (keyCount keys, one value column); results are the keys
     (unchanged) then one scalar value column of the unwound elements.

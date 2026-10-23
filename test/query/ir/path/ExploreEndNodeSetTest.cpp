@@ -47,9 +47,9 @@ const char* const endFilterProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_property_value("name", "Remy" : !storage.string, ["Person"]) : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%a, {}) forward hops 1 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %p = db.get_node_properties(%0#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %p = db.get_node_properties(%0#1, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %c = db.constant("Adam" : !storage.string)
-  %m = db.eq %p, %c : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %m = db.eq %p, %c : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.string>) -> !db.column<!storage.bool>
   %1:3 = db.filter(%m, {%0#0, %0#1, %0#2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   %e = db.expand_path(%1#2, %1#0) kind edges : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
   db.output(%1#0, %e, %1#1) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.edge_id>>, !db.column<!storage.node_id>

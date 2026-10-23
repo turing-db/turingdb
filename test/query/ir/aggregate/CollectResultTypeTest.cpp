@@ -15,20 +15,20 @@
 namespace {
 
 // MATCH (a) WITH a.team AS team, collect(a.name) AS names RETURN team, names, with the
-// element type of the trailing list result spelled by the caller. The frontend leaves a
-// property column unresolved as !db.column<none>, so none is what this collect gathers
-// and the only list element the lowering can produce for it.
+// element type of the trailing list result spelled by the caller. The name column is a
+// nullable string, so that is what this collect gathers and the only list element the
+// lowering can produce for it.
 std::string collectNamesProgram(const char* listElement) {
     const std::string listColumn = std::string("!db.column<!storage.list<") + listElement + ">>";
 
     return "func.func @main() {\n"
            "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-           "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-           "  %name = db.get_node_properties(%a, \"name\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-           "  %gteam, %names = db.collect(%team, %name) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, "
+           "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+           "  %name = db.get_node_properties(%a, \"name\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+           "  %gteam, %names = db.collect(%team, %name) keys 1 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, "
            + listColumn
            + ")\n"
-             "  db.output(%gteam, %names) : !db.column<none>, "
+             "  db.output(%gteam, %names) : !db.column<!storage.nullable<!storage.string>>, "
            + listColumn
            + "\n"
              "  return\n"
@@ -57,18 +57,18 @@ std::string collectNodesProgram(const char* listElement) {
 // MATCH (a) WITH a.team AS team, collect(a.name) AS names UNWIND names AS name RETURN
 // team, name, with the element type of the trailing value result spelled by the caller.
 // The unwound value is one element of the collected column, so its type is the collected
-// column's - none for an unresolved property column.
+// column's.
 std::string unwindNamesProgram(const char* valueElement) {
     const std::string valueColumn = std::string("!db.column<") + valueElement + ">";
 
     return "func.func @main() {\n"
            "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
-           "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-           "  %name = db.get_node_properties(%a, \"name\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
-           "  %gteam, %uname = db.unwind_collect(%team, %name) keys 1 : (!db.column<none>, !db.column<none>) -> (!db.column<none>, "
+           "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+           "  %name = db.get_node_properties(%a, \"name\") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>\n"
+           "  %gteam, %uname = db.unwind_collect(%team, %name) keys 1 : (!db.column<!storage.nullable<!storage.string>>, !db.column<!storage.nullable<!storage.string>>) -> (!db.column<!storage.nullable<!storage.string>>, "
            + valueColumn
            + ")\n"
-             "  db.output(%gteam, %uname) : !db.column<none>, "
+             "  db.output(%gteam, %uname) : !db.column<!storage.nullable<!storage.string>>, "
            + valueColumn
            + "\n"
              "  return\n"
@@ -122,13 +122,13 @@ protected:
 // The control for the two db.collect rejections below: a list result whose element is
 // the collected column's own type is the shape the lowering produces, and it verifies.
 TEST_F(CollectResultTypeTest, acceptsCollectListElementMatchingValueColumn) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(collectNamesProgram("none"));
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(collectNamesProgram("!storage.nullable<!storage.string>"));
     EXPECT_TRUE(module);
 }
 
 // REVIEW.md #15: Collect::verify checks only that the trailing result is *some* list
 // column, never that its element is the collected column's type. A list<i64> declared
-// over a none value column passes the isa<storage::ListType> check, and lowerCollect
+// over a string value column passes the isa<storage::ListType> check, and lowerCollect
 // then builds the emit chunk from the collected column instead, so the declared element
 // type is silently discarded rather than diagnosed.
 TEST_F(CollectResultTypeTest, verifierRejectsCollectListElementTypeMismatch) {
@@ -153,7 +153,7 @@ TEST_F(CollectResultTypeTest, verifierRejectsCollectNodeIDsDeclaredAsInt64List) 
 // The control for the two db.unwind_collect rejections below: a value result carrying
 // the collected column's type is the shape the lowering produces, and it verifies.
 TEST_F(CollectResultTypeTest, acceptsUnwindValueResultMatchingValueColumn) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindNamesProgram("none"));
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindNamesProgram("!storage.nullable<!storage.string>"));
     EXPECT_TRUE(module);
 }
 

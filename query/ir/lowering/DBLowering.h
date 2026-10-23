@@ -81,10 +81,9 @@ class ProcedureManager;
 //                                          db.count; one db op per reduction, each
 //                                          carrying its nl.aggregate kind
 //
-// db.get_node_properties / db.get_edge_properties resolve their property name
-// against the graph schema here (hence the GraphView): the name is hoisted into
-// one nl.get_property_type above the loops, and the concrete value type is baked
-// into the nullable value chunk the fetch produces inside the binding loop.
+// db.get_node_properties / db.get_edge_properties hoist their property name into
+// one nl.get_property_type above the loops, and the nullable value type the read
+// declares becomes the type of the chunk the fetch produces inside the binding loop.
 //
 // db.hash_join lowers to two sibling loop nests instead: an nl.hash_join_buffer
 // hoisted to the top of the block they are rooted in, the right (built) factor's
@@ -771,10 +770,6 @@ private:
     mlir::Value getOrCreateEdgeTypeSetHandle(mlir::ArrayAttr edgeTypeNames);
 
     static mlir::Type columnType(mlir::Value column);
-
-    // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T the
-    // value type the name resolves to in the schema, or the one the read declares
-    mlir::Type propertyValueChunkType(llvm::StringRef propertyName, mlir::Type declared);
 
     // Point the builder just before the terminator of block, where the next
     // lowered op belongs

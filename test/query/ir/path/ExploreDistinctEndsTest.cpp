@@ -59,9 +59,9 @@ const char* const filteredDedupProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %c = db.constant(30 : i64)
-  %mask = db.gt %age, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %1:2 = db.filter(%mask, {%0#0, %0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   %d:2 = db.remove_duplicates(%1#0, %1#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
@@ -155,9 +155,9 @@ const char* const filterThenConstantOutputProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
-  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %age = db.get_node_properties(%0#1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
   %c = db.constant(30 : i64)
-  %mask = db.gt %age, %c : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.gt %age, %c : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
   %1 = db.filter(%mask, {%0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %one = db.constant(1 : i64)
   db.output(%one) : !db.column<i64>

@@ -25,12 +25,12 @@ func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) [forward, forward] hops 1 to 2 hop_imports{%n} {}, {
   ^bb0(%x: !db.column<!storage.node_id>, %r: !db.column<!storage.edge_id>, %y: !db.column<!storage.node_id>, %s: !db.column<!storage.edge_id>, %z: !db.column<!storage.node_id>, %seed: !db.column<!storage.node_id>):
-    %xAge = db.get_node_properties(%x, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %xAge = db.get_node_properties(%x, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
     %three = db.constant(3 : i64)
-    %first = db.gt %xAge, %three : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
-    %yAge = db.get_node_properties(%y, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %zAge = db.get_node_properties(%z, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
-    %second = db.eq %yAge, %zAge : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+    %first = db.gt %xAge, %three : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
+    %yAge = db.get_node_properties(%y, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    %zAge = db.get_node_properties(%z, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    %second = db.eq %yAge, %zAge : (!db.column<!storage.nullable<i64>>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
     %seeded = db.eq %seed, %seed : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
     %both = db.and %first, %second : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
     %all = db.and %both, %seeded : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
@@ -47,9 +47,9 @@ func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %0:3 = db.explore_paths(%n, {}) [forward, forward] hops 1 to 2 {}, {
   ^bb0(%x: !db.column<!storage.node_id>, %r: !db.column<!storage.edge_id>, %y: !db.column<!storage.node_id>, %s: !db.column<!storage.edge_id>, %z: !db.column<!storage.node_id>):
-    %xAge = db.get_node_properties(%x, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %xAge = db.get_node_properties(%x, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
     %three = db.constant(3 : i64)
-    %first = db.gt %xAge, %three : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    %first = db.gt %xAge, %three : (!db.column<!storage.nullable<i64>>, !db.column<i64>) -> !db.column<!storage.bool>
     db.yield %first : !db.column<!storage.bool>
   } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   db.output(%0#1) : !db.column<!storage.node_id>

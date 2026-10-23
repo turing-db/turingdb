@@ -131,12 +131,12 @@ constexpr const char* joinProgram = R"mlir(
 func.func @main() {
   %0:4 = db.hash_join factor {
     %l = db.scan_nodes_by_label(["L"]) : !db.column<!storage.node_id>
-    %lt = db.get_node_properties(%l, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %l, %lt : !db.column<!storage.node_id>, !db.column<none>
+    %lt = db.get_node_properties(%l, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    db.yield %l, %lt : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   } factor {
     %r = db.scan_nodes_by_label(["R"]) : !db.column<!storage.node_id>
-    %rt = db.get_node_properties(%r, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %r, %rt : !db.column<!storage.node_id>, !db.column<none>
+    %rt = db.get_node_properties(%r, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    db.yield %r, %rt : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   } on 1, 1
   db.output(%0#0, %0#2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -149,12 +149,12 @@ constexpr const char* limitedJoinProgram = R"mlir(
 func.func @main() {
   %0:4 = db.hash_join factor {
     %l = db.scan_nodes_by_label(["L"]) : !db.column<!storage.node_id>
-    %lt = db.get_node_properties(%l, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %l, %lt : !db.column<!storage.node_id>, !db.column<none>
+    %lt = db.get_node_properties(%l, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    db.yield %l, %lt : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   } factor {
     %r = db.scan_nodes_by_label(["R"]) : !db.column<!storage.node_id>
-    %rt = db.get_node_properties(%r, "tag") : (!db.column<!storage.node_id>) -> !db.column<none>
-    db.yield %r, %rt : !db.column<!storage.node_id>, !db.column<none>
+    %rt = db.get_node_properties(%r, "tag") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    db.yield %r, %rt : !db.column<!storage.node_id>, !db.column<!storage.nullable<i64>>
   } on 1, 1
   %la, %lb = db.limit(%0#0, %0#2) count 7 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%la, %lb) : !db.column<!storage.node_id>, !db.column<!storage.node_id>

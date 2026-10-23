@@ -2968,9 +2968,9 @@ void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodePrope
     const mlir::Value inputChunk = mapValue(getNodeProperties.getInputNodes());
     const llvm::StringRef property = getNodeProperties.getProperty();
 
-    // Resolve the name once, hoisted above the loops, and bake the value type.
+    // Resolve the name once, hoisted above the loops.
     const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
-    const mlir::Type valueChunkType = propertyValueChunkType(property, columnType(getNodeProperties.getResult()));
+    const mlir::Type valueChunkType = nl::ChunkType::get(_builder.getContext(), columnType(getNodeProperties.getResult()));
 
     // A property read maps the input chunk in place, one value per node, so the
     // fetch nests in the loop that binds that chunk - it opens no loop of its own.
@@ -2990,7 +2990,7 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
     const llvm::StringRef property = getEdgeProperties.getProperty();
 
     const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
-    const mlir::Type valueChunkType = propertyValueChunkType(property, columnType(getEdgeProperties.getResult()));
+    const mlir::Type valueChunkType = nl::ChunkType::get(_builder.getContext(), columnType(getEdgeProperties.getResult()));
 
     setInsertionInto(ownerBlock(inputChunk));
 
@@ -3886,29 +3886,6 @@ mlir::Value DBLowering::getOrCreateEdgeTypeSetHandle(mlir::ArrayAttr edgeTypeNam
 
 mlir::Type DBLowering::columnType(mlir::Value column) {
     return mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
-}
-
-// `declared` is the db read's own result type: none for a name the graph carries, whose
-// type the schema answers for, and the nullable value type the analyzer resolved for a name
-// only this query's CREATE introduces, which no schema holds until the commit
-mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName, mlir::Type declared) {
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(declared)) {
-        return nl::ChunkType::get(_builder.getContext(), nullableType);
-    }
-
-    if (!_view) {
-        throw IRException("Lowering a property fetch needs a graph to resolve the type of '" + propertyName.str() + "'");
-    }
-
-    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
-    if (!propertyType) {
-        throw IRException("Unknown property '" + propertyName.str() + "'");
-    }
-
-    const mlir::Type elementType = valueTypeToElementType(_builder, propertyType->_valueType);
-    storage::NullableType nullableType = storage::NullableType::get(_builder.getContext(), elementType);
-
-    return nl::ChunkType::get(_builder.getContext(), nullableType);
 }
 
 void DBLowering::lowerLimit(mlir::db::Limit limit) {
