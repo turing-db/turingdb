@@ -125,7 +125,7 @@ TEST_F(ConstantRowsPassesTest, placesFactorsAndReRootsUnderAConstantProjection) 
     const PassCase cases[] = {
         {"MATCH (a:Person), (b:Interest) WHERE b.name = 'Bio'", "db.scan_nodes_by_property_value", 8},
         {"MATCH (a)-->(b:Person {name: 'Remy'})", "db.scan_out_edges_by_label_tgt", 2},
-        {"MATCH (a:Interest)<--(b:Person {name: 'Adam'})", "db.scan_in_edges_by_label_tgt", 2},
+        {"MATCH (a:Interest)<--(b:Person {name: 'Adam'})", "db.scan_in_edges_by_label_src_tgt", 2},
     };
 
     for (const PassCase& passCase : cases) {
