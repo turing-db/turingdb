@@ -124,9 +124,6 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
             return fn.template operator()<db::types::Duration::Primitive>(encoding);
         case ColumnInternalKind::GRAPH_PATH:
             return fn.template operator()<db::GraphPath>(encoding);
-        case ColumnInternalKind::RETIRED_PATH:
-        case ColumnInternalKind::RETIRED_ENTITY_LIST:
-            break;
     }
 
     throw TuringException("Unsupported incoming column type");
