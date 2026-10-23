@@ -20,11 +20,11 @@ const MESSAGE_ERROR = 4;
 const TYPE_UINT64 = 0;
 const TYPE_DOUBLE = 2;
 const TYPE_STRING = 3;
-const TYPE_ENTITY_LIST = 7;
-const TYPE_LIST_VIEW = 8;
-const TYPE_LIST_ELEMENT_VIEW = 10;
-const TYPE_NODE_ID = 11;
-const TYPE_MAP_VIEW = 20;
+const TYPE_LIST_VIEW = 6;
+const TYPE_LIST_ELEMENT_VIEW = 8;
+const TYPE_NODE_ID = 9;
+const TYPE_MAP_VIEW = 18;
+const TYPE_GRAPH_PATH = 22;
 
 const ENCODING_VECTOR = 0;
 const ENCODING_OPTIONAL_VECTOR = 1;
@@ -538,21 +538,26 @@ async function testRaggedQueryData(module) {
     ]]);
 }
 
-// An entity list's entries are plain objects, but not maps: queryData keeps their ids BigInt,
-// so an id above 2^53 survives exactly.
-async function testEntityListIdsStayExact(module) {
-    const header = makeHeader([{ name: "path", typeCode: TYPE_ENTITY_LIST, encoding: ENCODING_VECTOR }]);
+// A path's entries are plain objects, but not maps: queryData keeps their ids BigInt, so an
+// id above 2^53 survives exactly.
+async function testGraphPathIdsStayExact(module) {
+    const header = makeHeader([{ name: "path", typeCode: TYPE_GRAPH_PATH, encoding: ENCODING_VECTOR }]);
 
     const chunk = new Writer();
     chunk.u32(1);
-    chunk.u32(1);
-    chunk.u8(0);
+    chunk.u32(2);
     chunk.u64(9007199254740993n);
+    chunk.u64(5n);
+    chunk.u64(9007199254740995n);
 
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(1), makeEnd(1.0)]);
     const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
 
-    assert.deepStrictEqual(data, [[[[{ type: 0, id: 9007199254740993n }]]]]);
+    assert.deepStrictEqual(data, [[[[
+        { type: 0, id: 9007199254740993n },
+        { type: 1, id: 9007199254740995n },
+        { type: 0, id: 5n },
+    ]]]]);
 }
 
 createTuringDecoderModule().then(async (module) => {
@@ -562,6 +567,6 @@ createTuringDecoderModule().then(async (module) => {
     await testMaps(module, false);
     await testMaps(module, true);
     await testRaggedQueryData(module);
-    await testEntityListIdsStayExact(module);
-    console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, entity lists");
+    await testGraphPathIdsStayExact(module);
+    console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, paths");
 });

@@ -7212,13 +7212,13 @@ mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
     }
 }
 
-// A path's null is the empty path, and no value of a path is read here: tested against null
-// it reads as its entry count, absent where the path is empty. A walk's handle is an ID, absent
+// A path's null is the path with no node, and no value of a path is read here: tested
+// against null it reads as its node count, absent where the path is null. A walk's handle is an ID, absent
 // where it is invalid: the handle of a walk of no hops is valid.
 mlir::Value DBLowering::nullTestedChunk(mlir::Value chunk) {
     const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
     const mlir::Type element = chunkType.getElementType();
-    if (mlir::isa<storage::EntityListType, storage::PathRefType>(element)) {
+    if (mlir::isa<storage::PathType, storage::PathRefType>(element)) {
         return toNullableChunk(chunk, _builder.getIntegerType(64, /*isSigned=*/false));
     } else if (mlir::isa<storage::ListType>(element)) {
         return nullableListChunk(chunk);

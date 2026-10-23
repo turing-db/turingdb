@@ -59,9 +59,7 @@ enum class ColumnInternalKind : uint32_t {
     DOUBLE,
     STRING,
     BOOL,
-    PATH,
     EMBEDDING,
-    ENTITY_LIST,
     LIST_VIEW,
     VALUE_TYPE,
     LIST_ELEMENT_VIEW,
@@ -78,6 +76,7 @@ enum class ColumnInternalKind : uint32_t {
     MAP_ENTRY_VIEW,
     DATE_TIME,
     DURATION,
+    GRAPH_PATH,
 };
 
 enum class ColumnKind : uint8_t {

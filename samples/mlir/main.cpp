@@ -547,23 +547,26 @@ private:
         return true;
     }
 
-    // Print one cell of a path column (a ColumnVector<Path> from an nl.shortest_path)
-    // as the alternating node and edge IDs it holds, target first; returns whether the
-    // column matched.
+    // Print one cell of a path column as its nodes and edges in order, a node as (id) and
+    // an edge as [id]; returns whether the column matched.
     static bool printPathCell(const Column* column, size_t row) {
-        const auto* paths = dynamic_cast<const ColumnVector<Path>*>(column);
+        const auto* paths = dynamic_cast<const ColumnVector<GraphPath>*>(column);
         if (!paths) {
             return false;
         }
 
-        std::cout << "[";
-        for (size_t index = 0; const EntityID entity : (*paths)[row]) {
-            if (index > 0) {
-                std::cout << ", ";
-            }
+        const GraphPath& path = (*paths)[row];
+        if (path.isNull()) {
+            std::cout << "null";
+            return true;
+        }
 
-            std::cout << entity.getValue();
-            index++;
+        const std::span<const NodeID> nodes = path.getNodes();
+        const std::span<const EdgeID> edges = path.getEdges();
+
+        std::cout << "[(" << nodes.front().getValue() << ")";
+        for (size_t hop = 0; hop < edges.size(); hop++) {
+            std::cout << ", [" << edges[hop].getValue() << "], (" << nodes[hop + 1].getValue() << ")";
         }
         std::cout << "]";
 

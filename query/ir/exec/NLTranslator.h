@@ -1220,7 +1220,6 @@ private:
     // A column of list cells, each a view over the query's list buffer
     Column* allocListColumn();
     Column* allocOptListColumn();
-    Column* allocEntityListColumn();
 
     Column* allocListElementColumn();
     Column* allocOptListElementColumn();

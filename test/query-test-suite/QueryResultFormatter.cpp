@@ -1,14 +1,12 @@
 #include "QueryResultFormatter.h"
 
 #include <optional>
-#include <ranges>
 #include <span>
 #include <sstream>
 
 #include <spdlog/fmt/bundled/format.h>
 
 #include "BioAssert.h"
-#include "EntityList.h"
 #include "GraphPath.h"
 #include "ID.h"
 #include "list/ListElementView.h"
@@ -44,24 +42,20 @@ namespace {
     return value;
 }
 
-[[maybe_unused]] std::string valueToString(const db::Path& value) {
-    std::string result;
-
-    if (value.empty()) {
-        return "";
+[[maybe_unused]] std::string valueToString(const db::GraphPath& value) {
+    if (value.isNull()) {
+        return "null";
     }
 
-    const auto reversed = value | std::views::reverse;
-    size_t i = 0;
-    for (auto val : reversed) {
-        if (i % 2 == 0) {
-            result += fmt::format("({})", val.getValue());
-        } else {
-            result += fmt::format("-[{}]->", val.getValue());
-        }
-        ++i;
+    const std::span<const db::NodeID> nodes = value.getNodes();
+    const std::span<const db::EdgeID> edges = value.getEdges();
+
+    std::string result = fmt::format("[({})", nodes.front().getValue());
+    for (size_t hop = 0; hop < edges.size(); hop++) {
+        result += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
     }
 
+    result += "]";
     return result;
 }
 
@@ -144,26 +138,6 @@ template <typename T>
     }
 
     return valueToString(*value);
-}
-
-[[maybe_unused]] std::string valueToString(const db::EntityList& value) {
-    std::string result = "[";
-    size_t i = 0;
-
-    for (const auto& entry : value) {
-        if (i++ > 0) {
-            result += ", ";
-        }
-
-        if (entry._type == db::EntityType::Node) {
-            result += fmt::format("({})", entry._id.getValue());
-        } else {
-            result += fmt::format("[{}]", entry._id.getValue());
-        }
-    }
-
-    result += "]";
-    return result;
 }
 
 [[maybe_unused]] std::string valueToString(const db::ListElementView element) {

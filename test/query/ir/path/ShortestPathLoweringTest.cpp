@@ -222,9 +222,9 @@ private:
 TEST_F(ShortestPathLoweringTest, findsCheapestTwoHopPath) {
     const std::unique_ptr<Graph> graph = buildWeightedGraph();
 
-    // A -> B -> C = 1 + 2 = 3 beats the direct A -> C edge at 4. Path stored target-first
-    // as alternating node/edge IDs: C(2), edge B->C(2), B(1), edge A->B(0), A(0).
-    const std::vector<StringRowSink::Row> expected {{"3", "2, 2, 1, 0, 0"}};
+    // A -> B -> C = 1 + 2 = 3 beats the direct A -> C edge at 4: A(0), edge A->B(0), B(1),
+    // edge B->C(2), C(2).
+    const std::vector<StringRowSink::Row> expected {{"3", "(0), [0], (1), [2], (2)"}};
     EXPECT_EQ(run(*graph, "0", "2"), expected);
 }
 
@@ -232,7 +232,7 @@ TEST_F(ShortestPathLoweringTest, findsCheapestThreeHopPath) {
     const std::unique_ptr<Graph> graph = buildWeightedGraph();
 
     // A -> B -> C -> D = 1 + 2 + 1 = 4 beats A -> C -> D (5) and A -> B -> D (8).
-    const std::vector<StringRowSink::Row> expected {{"4", "3, 4, 2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"4", "(0), [0], (1), [2], (2), [4], (3)"}};
     EXPECT_EQ(run(*graph, "0", "3"), expected);
 }
 
@@ -240,7 +240,7 @@ TEST_F(ShortestPathLoweringTest, findsCheapestFourHopPath) {
     const std::unique_ptr<Graph> graph = buildWeightedGraph();
 
     // A -> B -> C -> D -> E = 5 beats A -> C -> E (6) and A -> B -> C -> E (6).
-    const std::vector<StringRowSink::Row> expected {{"5", "4, 6, 3, 4, 2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"5", "(0), [0], (1), [2], (2), [4], (3), [6], (4)"}};
     EXPECT_EQ(run(*graph, "0", "4"), expected);
 }
 
@@ -249,7 +249,7 @@ TEST_F(ShortestPathLoweringTest, multiSourcePicksCheapest) {
 
     // With both A and B as sources, D is cheapest from B (B -> C -> D = 3) rather than from
     // A (A -> B -> C -> D = 4), so the path stops at B.
-    const std::vector<StringRowSink::Row> expected {{"3", "3, 4, 2, 2, 1"}};
+    const std::vector<StringRowSink::Row> expected {{"3", "(1), [2], (2), [4], (3)"}};
     EXPECT_EQ(run(*graph, "0, 1", "3"), expected);
 }
 
@@ -257,7 +257,7 @@ TEST_F(ShortestPathLoweringTest, multiTargetStopsAtNearest) {
     const std::unique_ptr<Graph> graph = buildWeightedGraph();
 
     // D (distance 4) is nearer than F (distance 7), so the search halts at D.
-    const std::vector<StringRowSink::Row> expected {{"4", "3, 4, 2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"4", "(0), [0], (1), [2], (2), [4], (3)"}};
     EXPECT_EQ(run(*graph, "0", "3, 5"), expected);
 }
 
@@ -266,7 +266,7 @@ TEST_F(ShortestPathLoweringTest, zeroLengthPathWhenSourceIsTarget) {
 
     // A source that is already a target is reached at distance 0, and the path is the lone
     // node with no edges.
-    const std::vector<StringRowSink::Row> expected {{"0", "0"}};
+    const std::vector<StringRowSink::Row> expected {{"0", "(0)"}};
     EXPECT_EQ(run(*graph, "0", "0"), expected);
 }
 
@@ -289,7 +289,7 @@ TEST_F(ShortestPathLoweringTest, handlesDoubleWeights) {
     const std::unique_ptr<Graph> graph = buildTriangleGraph<types::Double>(ValueType::Double, 1.5, 2.0, 5.0);
 
     // A -> B -> C = 3.5 beats the direct A -> C at 5.0, exercising the f64 search.
-    const std::vector<StringRowSink::Row> expected {{"3.5", "2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"3.5", "(0), [0], (1), [2], (2)"}};
     EXPECT_EQ(run(*graph, "0", "2"), expected);
 }
 
@@ -297,6 +297,6 @@ TEST_F(ShortestPathLoweringTest, handlesUnsignedWeights) {
     const std::unique_ptr<Graph> graph = buildTriangleGraph<types::UInt64>(ValueType::UInt64, 1, 2, 5);
 
     // A -> B -> C = 3 beats the direct A -> C at 5, exercising the ui64 search.
-    const std::vector<StringRowSink::Row> expected {{"3", "2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"3", "(0), [0], (1), [2], (2)"}};
     EXPECT_EQ(run(*graph, "0", "2"), expected);
 }

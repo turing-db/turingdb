@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stddef.h>
-#include <optional>
 
 namespace net::proto {
 
@@ -32,9 +31,9 @@ struct DecodeContext {
     // Pointer to the TuringProto receive buffer
     TuringProtoInBuf* _inBuf {nullptr};
     InterruptedBufferState _bufferState;
-    // Entry count of the EntityList row being decoded. The count and actual data can be
-    // split across chunks so we need to store state here.
-    std::optional<size_t> _entityListEntryCount;
+    // Set once the nodes of the path row being decoded have arrived, so a resumed pass
+    // goes on to its edges rather than reading a node count again.
+    bool _pathNodesRead {false};
     // Set once a constant list column's header has been read and its space reserved, so a
     // resumed pass drains elements rather than reading the header again. An optional
     // constant spends _rowIndex on its has-value flag, so the two cannot share it.
@@ -44,7 +43,7 @@ struct DecodeContext {
         _columnIndex = 0;
         _rowIndex = 0;
         _bufferState.reset();
-        _entityListEntryCount.reset();
+        _pathNodesRead = false;
         _constListStarted = false;
     }
 };

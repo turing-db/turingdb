@@ -12,7 +12,7 @@ const MESSAGE_END_CHUNK = 2;
 const TYPE_UINT64 = 0;
 const TYPE_DOUBLE = 2;
 const TYPE_STRING = 3;
-const TYPE_NODE_ID = 11;
+const TYPE_NODE_ID = 9;
 
 const ENCODING_VECTOR = 0;
 const ENCODING_OPTIONAL_VECTOR = 1;

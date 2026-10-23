@@ -87,8 +87,7 @@ private:
     //   B -7-> D          G -1-> A
     //
     // Roads are added grouped by source in node order, so the committed edge IDs are
-    // A->B 0, A->C 1, B->C 2, B->D 3, C->D 4, C->E 5, D->E 6, E->F 7, G->A 8 - the paths
-    // below are stored target-first as alternating node and edge IDs.
+    // A->B 0, A->C 1, B->C 2, B->D 3, C->D 4, C->E 5, D->E 6, E->F 7, G->A 8.
     void buildWeightedGraph(Graph* graph) {
         JobSystem jobSystem;
         jobSystem.init();
@@ -162,7 +161,7 @@ private:
 };
 
 TEST_F(CypherShortestPathTest, findsCheapestTwoHopPath) {
-    const std::vector<StringRowSink::Row> expected {{"3", "2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"3", "(0), [0], (1), [2], (2)"}};
     EXPECT_EQ(run(_graphName,
                   "MATCH (a {name: 'A'}), (b {name: 'C'}) "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
@@ -170,7 +169,7 @@ TEST_F(CypherShortestPathTest, findsCheapestTwoHopPath) {
 }
 
 TEST_F(CypherShortestPathTest, findsCheapestFourHopPath) {
-    const std::vector<StringRowSink::Row> expected {{"5", "4, 6, 3, 4, 2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"5", "(0), [0], (1), [2], (2), [4], (3), [6], (4)"}};
     EXPECT_EQ(run(_graphName,
                   "MATCH (a {name: 'A'}), (b {name: 'E'}) "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
@@ -178,7 +177,7 @@ TEST_F(CypherShortestPathTest, findsCheapestFourHopPath) {
 }
 
 TEST_F(CypherShortestPathTest, multiSourceMatchPicksCheapest) {
-    const std::vector<StringRowSink::Row> expected {{"3", "3, 4, 2, 2, 1"}};
+    const std::vector<StringRowSink::Row> expected {{"3", "(1), [2], (2), [4], (3)"}};
     EXPECT_EQ(run(_graphName,
                   "MATCH (a), (b {name: 'D'}) WHERE a.name = 'A' OR a.name = 'B' "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
@@ -186,7 +185,7 @@ TEST_F(CypherShortestPathTest, multiSourceMatchPicksCheapest) {
 }
 
 TEST_F(CypherShortestPathTest, multiTargetMatchStopsAtNearest) {
-    const std::vector<StringRowSink::Row> expected {{"4", "3, 4, 2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"4", "(0), [0], (1), [2], (2), [4], (3)"}};
     EXPECT_EQ(run(_graphName,
                   "MATCH (a {name: 'A'}), (b) WHERE b.name = 'D' OR b.name = 'F' "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
@@ -194,7 +193,7 @@ TEST_F(CypherShortestPathTest, multiTargetMatchStopsAtNearest) {
 }
 
 TEST_F(CypherShortestPathTest, multiSourceMultiTargetPicksGlobalCheapest) {
-    const std::vector<StringRowSink::Row> expected {{"3", "3, 4, 2, 2, 1"}};
+    const std::vector<StringRowSink::Row> expected {{"3", "(1), [2], (2), [4], (3)"}};
     EXPECT_EQ(run(_graphName,
                   "MATCH (a), (b) WHERE (a.name = 'A' OR a.name = 'B') "
                   "AND (b.name = 'D' OR b.name = 'E') "
@@ -203,7 +202,7 @@ TEST_F(CypherShortestPathTest, multiSourceMultiTargetPicksGlobalCheapest) {
 }
 
 TEST_F(CypherShortestPathTest, zeroLengthPathWhenSourceIsTarget) {
-    const std::vector<StringRowSink::Row> expected {{"0", "0"}};
+    const std::vector<StringRowSink::Row> expected {{"0", "(0)"}};
     EXPECT_EQ(run(_graphName,
                   "MATCH (a {name: 'A'}), (b {name: 'A'}) "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
@@ -225,7 +224,7 @@ TEST_F(CypherShortestPathTest, emitsNoRowWhenTargetUnreachable) {
 }
 
 TEST_F(CypherShortestPathTest, handlesDoubleWeights) {
-    const std::vector<StringRowSink::Row> expected {{"3.5", "2, 2, 1, 0, 0"}};
+    const std::vector<StringRowSink::Row> expected {{"3.5", "(0), [0], (1), [2], (2)"}};
     EXPECT_EQ(run(_doubleGraphName,
                   "MATCH (a {name: 'A'}), (b {name: 'C'}) "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),

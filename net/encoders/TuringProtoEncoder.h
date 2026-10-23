@@ -53,15 +53,13 @@ struct ColInternalKindToProtoEnum {
         } else if constexpr (db::IsBool<T>) {
             return Enum::BOOL;
         } else if constexpr (db::IsPath<T>) {
-            return Enum::PATH;
+            return Enum::GRAPH_PATH;
         } else if constexpr (db::IsEmbedding<T>) {
             return Enum::EMBEDDING;
         } else if constexpr (db::IsDateTime<T>) {
             return Enum::DATE_TIME;
         } else if constexpr (db::IsDuration<T>) {
             return Enum::DURATION;
-        } else if constexpr (db::IsEntityList<T>) {
-            return Enum::ENTITY_LIST;
         } else if constexpr (db::IsListView<T>) {
             return Enum::LIST_VIEW;
         } else if constexpr (db::IsMap<T>) {
@@ -171,11 +169,8 @@ public:
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
         } else if constexpr (db::IsPath<T>) {
-            for (const auto& val : values) {
-                bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Path length exceeds maximum wire size");
-                const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
-                _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
-                _outBuf->copyVarLenData(val.data(), columnByteSize);
+            for (const db::GraphPath& path : values) {
+                writePath(path);
             }
         } else if constexpr (db::IsEmbedding<T>) {
             for (const auto& val : values) {
@@ -183,21 +178,6 @@ public:
                 const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
-            }
-        } else if constexpr (db::IsEntityList<T>) {
-            constexpr size_t sizeOfEntry = sizeof(db::EntityList::Entry::_id) + sizeof(db::EntityList::Entry::_type);
-
-            for (const auto& entityList : values) {
-                bioassert(entityList.size() <= MAX_WIRE_SIZE, "Entity list length exceeds maximum wire size");
-                const WireSize columnByteSize = static_cast<WireSize>(entityList.size());
-                _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
-                for (const auto& entry : entityList) {
-                    // Ensure that we can copy a full entry into the packet
-                    _outBuf->checkRemainingAndFlush(sizeOfEntry);
-
-                    _outBuf->copyFixedLenData(&entry._type, sizeof(entry._type));
-                    _outBuf->copyFixedLenData(&entry._id, sizeof(entry._id));
-                }
             }
         } else if constexpr (db::IsListView<T>) {
             for (const auto& listView : values) {
@@ -244,19 +224,6 @@ public:
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
-        } else if constexpr (db::IsPath<T>) {
-            for (const auto& val : values) {
-                if (!val.has_value()) {
-                    const WireSize columnByteSize = 0;
-                    _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
-                    continue;
-                }
-
-                bioassert(val->size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Optional path length exceeds maximum wire size");
-                const WireSize columnByteSize = static_cast<WireSize>(val->size() * sizeof(db::EntityID));
-                _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
-                _outBuf->copyVarLenData(val->data(), columnByteSize);
-            }
         } else if constexpr (db::IsEmbedding<T>) {
             for (const auto& val : values) {
                 if (!val.has_value()) {
@@ -280,8 +247,6 @@ public:
             for (const auto& val : values) {
                 _nestedWriter.writeMapView(val.has_value() ? *val : db::MapView {});
             }
-        } else if constexpr (db::IsEntityList<T>) {
-            static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
         } else if constexpr (db::IsListView<T>) {
             for (const auto& val : *col) {
                 _nestedWriter.writeListView(val.has_value() ? *val : db::ListView {});
@@ -314,21 +279,13 @@ public:
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsPath<T>) {
-            const auto& val = col->at(0);
-            bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Const path length exceeds maximum wire size");
-            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
-            _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
-            _outBuf->copyVarLenData(val.data(), columnByteSize);
+            writePath(col->at(0));
         } else if constexpr (db::IsEmbedding<T>) {
             const auto& val = col->at(0);
             bioassert(val.size() * sizeof(float) <= MAX_WIRE_SIZE, "Const embedding length exceeds maximum wire size");
             const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
-        } else if constexpr (db::IsEntityList<T>) {
-            // It is not used/returned anywhere in the codebase so we disable support for
-            // it now. We can renable it if ever needed.
-            throw FatalException("ColumnConst<EntityList> is not supported");
         } else if constexpr (db::IsListView<T>) {
             _nestedWriter.writeListView(col->at(0));
         } else if constexpr (db::IsMap<T>) {
@@ -364,12 +321,6 @@ public:
             const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(char));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
-        } else if constexpr (db::IsPath<T>) {
-            const auto& val = *opt;
-            bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Optional const path length exceeds maximum wire size");
-            const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
-            _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
-            _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsEmbedding<T>) {
             const auto& val = *opt;
             bioassert(val.size() * sizeof(float) <= MAX_WIRE_SIZE, "Optional const embedding length exceeds maximum wire size");
@@ -380,10 +331,6 @@ public:
             _nestedWriter.writeListView(*opt);
         } else if constexpr (db::IsMap<T>) {
             _nestedWriter.writeMapView(*opt);
-        } else if constexpr (db::IsEntityList<T>) {
-            // EntityList is only used as ColumnVector<EntityList>, never optional.
-            // Dependent condition (see the ColumnOptVector<EntityList> branch above).
-            static_assert(sizeof(T) == 0, "ColumnOptConst<EntityList> is not supported");
         } else if constexpr (db::IsListView<T>) {
             _nestedWriter.writeListView(*opt);
         } else if constexpr (db::IsListElement<T>) {
@@ -418,6 +365,17 @@ private:
         const size_t available = columnSize > _offset ? columnSize - _offset : 0;
 
         return std::span<const T>(data + _offset, std::min(_rowCount, available));
+    }
+
+    void writePath(const db::GraphPath& path) {
+        const std::span<const db::NodeID> nodes = path.getNodes();
+        const std::span<const db::EdgeID> edges = path.getEdges();
+        bioassert(nodes.size_bytes() <= MAX_WIRE_SIZE, "Path length exceeds maximum wire size");
+
+        const WireSize nodeCount = static_cast<WireSize>(nodes.size());
+        _outBuf->copyFixedLenData(&nodeCount, sizeof(nodeCount));
+        _outBuf->copyVarLenData(nodes.data(), nodes.size_bytes());
+        _outBuf->copyVarLenData(edges.data(), edges.size_bytes());
     }
 
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
