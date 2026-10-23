@@ -74,7 +74,7 @@ private:
 
 class ShortestPathNLSink : public NLOutputSink {
 public:
-    ShortestPathNLSink(double& distance, Path& path)
+    ShortestPathNLSink(double& distance, GraphPath& path)
         : _distance(distance),
         _path(path)
     {
@@ -86,12 +86,12 @@ public:
         }
 
         _distance = (*static_cast<const ColumnVector<double>*>(chunks[0]))[offset];
-        _path = (*static_cast<const ColumnVector<Path>*>(chunks[1]))[offset];
+        _path = (*static_cast<const ColumnVector<GraphPath>*>(chunks[1]))[offset];
     }
 
 private:
     double& _distance;
-    Path& _path;
+    GraphPath& _path;
 };
 
 }
@@ -352,7 +352,7 @@ int main(int argc, const char** argv) {
         "RETURN dist, path";
 
     double distance = 0;
-    Path pathResult;
+    GraphPath pathResult;
 
     ShortestPathNLSink shortestPathSink(distance, pathResult);
     const auto spStatus = runQuery(spQuery, &shortestPathSink);
@@ -390,33 +390,25 @@ int main(int argc, const char** argv) {
     }
     PropertyTypeID linePropID = linePropOpt.value()._id;
 
-    // Path is [target, edge, node, edge, node, ...] reversed
-    // Even indices are nodes, odd indices are edges
     std::vector<std::string> stops;
-    std::vector<std::string> edgeLines;
-    for (size_t i = 0; i < pathResult.size(); i++) {
-        if (i % 2 == 0) {
-            NodeID nodeID(pathResult[i].getValue());
-            const auto* name =
-                reader.tryGetNodeProperty<types::String>(
-                    namePropID, nodeID).value_or(nullptr);
-            if (name) {
-                stops.emplace_back(*name);
-            }
-        } else {
-            EdgeID edgeID(pathResult[i].getValue());
-            const auto* line =
-                reader.tryGetEdgeProperty<types::String>(
-                    linePropID, edgeID).value_or(nullptr);
-            if (line) {
-                edgeLines.emplace_back(*line);
-            }
+    for (const NodeID nodeID : pathResult.getNodes()) {
+        const auto* name =
+            reader.tryGetNodeProperty<types::String>(
+                namePropID, nodeID).value_or(nullptr);
+        if (name) {
+            stops.emplace_back(*name);
         }
     }
 
-    // Reverse: path goes target->source, we want source->target
-    std::reverse(stops.begin(), stops.end());
-    std::reverse(edgeLines.begin(), edgeLines.end());
+    std::vector<std::string> edgeLines;
+    for (const EdgeID edgeID : pathResult.getEdges()) {
+        const auto* line =
+            reader.tryGetEdgeProperty<types::String>(
+                linePropID, edgeID).value_or(nullptr);
+        if (line) {
+            edgeLines.emplace_back(*line);
+        }
+    }
 
     // Strip virtual hub nodes (__src at front, __dst at back)
     if (stops.size() >= 2 && stops.front() == "__src") {

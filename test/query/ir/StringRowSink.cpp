@@ -8,7 +8,6 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include "EntityList.h"
 #include "GraphPath.h"
 #include "ID.h"
 #include "columns/ColumnConst.h"
@@ -316,19 +315,25 @@ bool textOfOptionalList(const Column* chunk, size_t rowIndex, std::string& text)
     return true;
 }
 
+// A path, read as its nodes and edges in order: a node as (id), an edge as [id]
 bool textOfPath(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<Path>*>(chunk);
+    const auto* column = dynamic_cast<const ColumnVector<GraphPath>*>(chunk);
     if (!column) {
         return false;
     }
 
-    text.clear();
-    for (const EntityID entity : column->getRaw()[rowIndex]) {
-        if (!text.empty()) {
-            text += ", ";
-        }
+    const GraphPath& path = column->getRaw()[rowIndex];
+    if (path.isNull()) {
+        text = "null";
+        return true;
+    }
 
-        text += fmt::format("{}", entity.getValue());
+    const std::span<const NodeID> nodes = path.getNodes();
+    const std::span<const EdgeID> edges = path.getEdges();
+
+    text = fmt::format("({})", nodes.front().getValue());
+    for (size_t hop = 0; hop < edges.size(); hop++) {
+        text += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
     }
 
     return true;
@@ -362,35 +367,6 @@ bool textOfConstOptionalBool(const Column* chunk, size_t rowIndex, std::string& 
     }
 
     text = boolText(column->at(rowIndex));
-    return true;
-}
-
-// A named path, read as its nodes and edges in order: a node as (id), an edge as [id]
-bool textOfEntityList(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<EntityList>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const EntityList& path = column->getRaw()[rowIndex];
-    if (path.empty()) {
-        text = "null";
-        return true;
-    }
-
-    text.clear();
-    for (const EntityList::Entry& entry : path) {
-        if (!text.empty()) {
-            text += ", ";
-        }
-
-        if (entry._type == EntityType::Node) {
-            text += fmt::format("({})", entry._id.getValue());
-        } else {
-            text += fmt::format("[{}]", entry._id.getValue());
-        }
-    }
-
     return true;
 }
 
@@ -546,8 +522,6 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptionalList(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPath(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfEntityList(chunk, rowIndex, text)) {
         return text;
     }
 

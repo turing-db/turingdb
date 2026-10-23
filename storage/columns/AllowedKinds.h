@@ -19,8 +19,6 @@
 
 namespace db {
 
-class EntityList;
-
 template <typename... Tuples>
 struct TupleFlatten {
     using Type = decltype(std::tuple_cat(std::declval<Tuples>()...));
@@ -608,7 +606,7 @@ struct MaskedPairs {
         MixedKind<ColumnMask, NodeID>,
         MixedKind<ColumnMask, EdgeID>,
         MixedKind<ColumnMask, LabelID>,
-        MixedKind<ColumnMask, Path>,
+        MixedKind<ColumnMask, GraphPath>,
         MixedKind<ColumnMask, LabelSetID>,
         MixedKind<ColumnMask, EdgeTypeID>,
         MixedKind<ColumnMask, ValueType>,
@@ -616,8 +614,7 @@ struct MaskedPairs {
         MixedKind<ColumnMask, CommitHash>,
         MixedKind<ColumnMask, ChangeID>,
         MixedKind<ColumnMask, std::string>,
-        MixedKind<ColumnMask, size_t>,
-        MixedKind<ColumnMask, EntityList>
+        MixedKind<ColumnMask, size_t>
     >;
 
     using Excluded = ExcludedContainers<
@@ -740,7 +737,7 @@ struct OutputtedTypes {
         NodeID,
         EdgeID,
         LabelID,
-        Path,
+        GraphPath,
         LabelSetID,
         EdgeTypeID,
         ValueType,
@@ -758,7 +755,6 @@ struct OutputtedTypes {
 
         std::string,
         size_t,
-        EntityList,
 
         ListView,
         std::optional<ListView>,
@@ -1011,7 +1007,7 @@ struct CartesianProductKinds {
         // Lists
         ListView,
         ListElementView,
-        EntityList,
+        GraphPath,
 
         // Owning strings occasionally needed for procedures; tests
         std::string

@@ -15,11 +15,11 @@ We can provide the source and target sets through patterns that come before the 
 ```
 turing:dijkstraMinimalExample>   match (n{name:"Ashchurch"}), (m{name:"Worcestershire Parkway"}) shortestPath(n,m,distance,dist,path) return dist,path
 
-+-------+--------------+
-| dist  | path         |
-+-------+--------------+
-| 11.29 | (0)-[1]->(6) |
-+-------+--------------+
++-------+---------------+
+| dist  | path          |
++-------+---------------+
+| 11.29 | (0), [1], (6) |
++-------+---------------+
 ```
 
 note that we cannot access the variables of any branch being used by the shortest path processor:
@@ -34,11 +34,11 @@ we can access branches that aren't being used by the shortest path processor (th
 ```
 turing:dijkstraMinimalExample>   match (n{name:"Ashchurch"}), (m{name:"Worcestershire Parkway"}), (p{name:"Cheltenham Spa"}) shortestPath(n,m,distance,dist,path) return dist,path,p.name
 
-+-------+--------------+----------------+
-| dist  | path         | p.name         |
-+-------+--------------+----------------+
-| 11.29 | (0)-[1]->(6) | Cheltenham Spa |
-+-------+--------------+----------------+
++-------+---------------+----------------+
+| dist  | path          | p.name         |
++-------+---------------+----------------+
+| 11.29 | (0), [1], (6) | Cheltenham Spa |
++-------+---------------+----------------+
 
 ```
 
@@ -55,14 +55,14 @@ turing:dijkstraMinimalExample>   match (n{name:"Ashchurch"}), (m{name:"Worcester
 +-------+
 ```
 
-The path variable is a string representing the shortest path (in the format ...(nodeID)-\[edgeID\]->(nodeID)...) 
+The path variable is the shortest path from source to target: its nodes and edges in order, a node as (nodeID) and an edge as \[edgeID\]
 ```
 turing:dijkstraMinimalExample>   match (n{name:"Ashchurch"}), (m{name:"Worcestershire Parkway"}) shortestPath(n,m,distance,dist,path) return path
-+--------------+
-| path         |
-+--------------+
-| (0)-[1]->(6) |
-+--------------+
++---------------+
+| path          |
++---------------+
+| (0), [1], (6) |
++---------------+
 ```
 
 As you can see the path does match the ids
@@ -104,11 +104,11 @@ As you can see below we can pass multiple sources to the shortest path processor
 ```
 turing:dijkstraMinimalExample> match (n), (m{name:"Worcestershire Parkway"}) where n.name="Bromsgrove" or n.name = "Cheltenham Spa" shortestPath(n,m,distance,dist,path) return dist,path
 
-+------+--------------+
-| dist | path         |
-+------+--------------+
-| 12.6 | (1)-[5]->(6) |
-+------+--------------+
++------+---------------+
+| dist | path          |
++------+---------------+
+| 12.6 | (1), [5], (6) |
++------+---------------+
 ```
 ### Cypher Sample
 the following cypher sample was used in the above examples

@@ -1159,15 +1159,15 @@ def PathLength : NLOp<"path_length", [Pure, RowAlignedThroughOperands]> {
 * MakePath
 */
 def MakePath : NLOp<"make_path", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Build the path of a named pattern element, one entity sequence per row";
+  let summary = "Build the path of a named pattern element, one path per row";
   let description = [{
-    Imperative counterpart of db.make_path: one sequence of graph entities per row, the
-    nodes and edges the element runs through in written order, a path operand expanded
-    into the hops it stands for.
+    Imperative counterpart of db.make_path: one path per row, the nodes and edges the
+    element runs through in written order, a path operand expanded into the hops it
+    stands for.
 
       %p = nl.make_path(%a, %x, %b)
              : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>)
-               -> !nl.chunk<!storage.entity_list>
+               -> !nl.chunk<!storage.path>
   }];
 
   let arguments = (ins Variadic<NLChunk>:$entities,
@@ -1186,12 +1186,12 @@ def PathElements : NLOp<"path_elements", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read the nodes, the relationships or the length of each named path of a chunk";
   let description = [{
     Imperative counterpart of db.path_elements: one list of node IDs, one list of edge
-    IDs or one hop count per row, read off the entity sequence nl.make_path laid out
-    or the path nl.shortest_path found, and null on the rows whose sequence is empty -
-    the paths an OPTIONAL MATCH missed.
+    IDs or one hop count per row, read off the path nl.make_path laid out or the path
+    nl.shortest_path found, and null on the rows whose path is null - the paths an
+    OPTIONAL MATCH missed.
 
       %ns = nl.path_elements(%p) kind nodes
-              : (!nl.chunk<!storage.entity_list>) -> !nl.chunk<!storage.nullable<!storage.list<!storage.node_id>>>
+              : (!nl.chunk<!storage.path>) -> !nl.chunk<!storage.nullable<!storage.list<!storage.node_id>>>
   }];
 
   let arguments = (ins NLChunk:$path, PathElementsKind:$kind);

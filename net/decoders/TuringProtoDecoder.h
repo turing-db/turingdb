@@ -88,14 +88,10 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
             return fn.template operator()<db::types::String::Primitive>(encoding);
         case ColumnInternalKind::BOOL:
             return fn.template operator()<db::types::Bool::Primitive>(encoding);
-        case ColumnInternalKind::PATH:
-            return fn.template operator()<db::Path>(encoding);
         case ColumnInternalKind::EMBEDDING:
             return fn.template operator()<db::types::Embedding::Primitive>(encoding);
         case ColumnInternalKind::VALUE_TYPE:
             return fn.template operator()<db::ValueType>(encoding);
-        case ColumnInternalKind::ENTITY_LIST:
-            return fn.template operator()<db::EntityList>(encoding);
         case ColumnInternalKind::LIST_VIEW:
             return fn.template operator()<SinkListView<Sink>>(encoding);
         case net::proto::ColumnInternalKind::MAP_VIEW:
@@ -126,6 +122,11 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
             return fn.template operator()<db::types::DateTime::Primitive>(encoding);
         case ColumnInternalKind::DURATION:
             return fn.template operator()<db::types::Duration::Primitive>(encoding);
+        case ColumnInternalKind::GRAPH_PATH:
+            return fn.template operator()<db::GraphPath>(encoding);
+        case ColumnInternalKind::RETIRED_PATH:
+        case ColumnInternalKind::RETIRED_ENTITY_LIST:
+            break;
     }
 
     throw TuringException("Unsupported incoming column type");

@@ -14,7 +14,6 @@
 #include <variant>
 #include <vector>
 
-#include "EntityList.h"
 #include "GraphPath.h"
 #include "ID.h"
 #include "LocalMemory.h"
@@ -76,7 +75,6 @@ enum class NLChunkKind {
     DateTime,
     Duration,
     PathRef,
-    EntityList,
 };
 
 // Invoke handler with the column element type a chunk kind stands for, so the families of
@@ -142,7 +140,7 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
         break;
 
         case NLChunkKind::Path:
-            return handler.template operator()<Path>();
+            return handler.template operator()<GraphPath>();
         break;
 
         case NLChunkKind::DateTime:
@@ -155,10 +153,6 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::PathRef:
             return handler.template operator()<PathRef>();
-        break;
-
-        case NLChunkKind::EntityList:
-            return handler.template operator()<EntityList>();
         break;
     }
 
@@ -1102,9 +1096,8 @@ enum class PathElementsKind {
 };
 
 // nl.path_elements data: one list of node IDs, one list of edge IDs or one hop count per
-// row, read off the entity sequence of each path and null where that sequence is empty.
-// The paths are entity lists or the bare alternating IDs of a shortest path. The lists
-// are written into the query's list buffer.
+// row, read off each path and null where the path is null. The lists are written into the
+// query's list buffer.
 class NLPathElementsData : public NLFunctionData {
 public:
     NLPathElementsData(const Column* paths,
@@ -1145,20 +1138,20 @@ struct NLPathEntity {
     bool _reversed {false};
 };
 
-// nl.make_path data: one entity sequence per row, appended in operand order. A Path
+// nl.make_path data: one path per row, appended in operand order. A Path
 // entity contributes the hops its handle stands for, read out of the trie.
 class NLMakePathData : public NLFunctionData {
 public:
     using PathEntities = std::vector<NLPathEntity>;
 
-    NLMakePathData(ColumnVector<EntityList>* output, const PathTrie* trie)
+    NLMakePathData(ColumnVector<GraphPath>* output, const PathTrie* trie)
         : _output(output),
         _trie(trie)
     {
     }
 
     const PathEntities& entities() const { return _entities; }
-    ColumnVector<EntityList>* getOutput() const { return _output; }
+    ColumnVector<GraphPath>* getOutput() const { return _output; }
     const PathTrie* getTrie() const { return _trie; }
 
     void addEntity(const NLPathEntity& entity) {
@@ -1167,7 +1160,7 @@ public:
 
 private:
     PathEntities _entities;
-    ColumnVector<EntityList>* _output {nullptr};
+    ColumnVector<GraphPath>* _output {nullptr};
     const PathTrie* _trie {nullptr};
 };
 
@@ -3282,10 +3275,10 @@ public:
     NLShortestPathState* getState() const { return _state; }
 
     void setDistanceOutput(Column* distance) { _distance = distance; }
-    void setPathOutput(ColumnVector<Path>* path) { _path = path; }
+    void setPathOutput(ColumnVector<GraphPath>* path) { _path = path; }
 
     Column* getDistanceOutput() const { return _distance; }
-    ColumnVector<Path>* getPathOutput() const { return _path; }
+    ColumnVector<GraphPath>* getPathOutput() const { return _path; }
 
     // The scratch the search reuses to expand one popped node's out-edges and read their
     // weights, allocated once at translation. The edge/node/weight columns are LocalMemory
@@ -3313,7 +3306,7 @@ private:
     NLShortestPathState* _state {nullptr};
 
     Column* _distance {nullptr};
-    ColumnVector<Path>* _path {nullptr};
+    ColumnVector<GraphPath>* _path {nullptr};
 
     ColumnNodeIDs* _expansionInput {nullptr};
     ColumnEdgeIDs* _expandedEdges {nullptr};

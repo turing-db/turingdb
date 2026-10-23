@@ -285,7 +285,7 @@ private:
 
         std::unordered_map<const VarDecl*, NamedPathWalk> _namedPathWalks;
 
-        // The entity sequence each `MATCH p = ...` built for an element that names no
+        // The path each `MATCH p = ...` built for an element that names no
         // single walk. A path variable appears in no pattern, so it is no VDG variable and
         // cannot live in _varMap.
         std::unordered_map<const VarDecl*, mlir::Value> _namedPaths;
@@ -815,7 +815,7 @@ private:
     void generateMatchFilter(const MatchStmt* matchStmt);
 
     // Binds every element a `MATCH p = ...` named: to the walk when the element is one
-    // quantified relationship, and otherwise to the entity sequence built here out of the
+    // quantified relationship, and otherwise to the path built here out of the
     // columns its entities are bound to
     void generateNamedPaths(const MatchStmt* matchStmt);
     void generateNamedPath(const PatternElement* element, const VarDecl* pathDecl);

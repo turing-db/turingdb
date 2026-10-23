@@ -1849,8 +1849,8 @@ mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Valu
 
 mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
     const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    const bool readsAPath = columnType && mlir::isa<mlir::storage::EntityListType, mlir::storage::PathType>(columnType.getType());
-    bioassert(readsAPath, "A named path is read off the entity sequence its element built or the path a SHORTESTPATH found");
+    const bool readsAPath = columnType && mlir::isa<mlir::storage::PathType>(columnType.getType());
+    bioassert(readsAPath, "A named path is read off the path its element built or the path a SHORTESTPATH found");
 
     const mlir::Type resultType = pathElementsType(_mlirCtxt, kind);
     const mlir::db::ColumnType nullableType =
@@ -3678,7 +3678,7 @@ void DBProgramGenerator::generateNamedPath(const PatternElement* element, const 
 }
 
 mlir::Value DBProgramGenerator::makePathColumn(llvm::ArrayRef<mlir::Value> entities, llvm::ArrayRef<int64_t> reversedPaths) {
-    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::EntityListType::get(_mlirCtxt));
+    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::PathType::get(_mlirCtxt));
     const mlir::ArrayAttr reversedAttr = reversedPaths.empty() ? mlir::ArrayAttr() : _opBuilder.getI64ArrayAttr(reversedPaths);
 
     return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities, reversedAttr).getResult();
@@ -3717,7 +3717,7 @@ mlir::Value DBProgramGenerator::namedPathColumn(const PartScope::NamedPathWalk& 
         entities = {seedColumn, pathColumn};
     }
 
-    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::EntityListType::get(_mlirCtxt));
+    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::PathType::get(_mlirCtxt));
 
     return _opBuilder.create<mlir::db::MakePath>(_opBuilder.getUnknownLoc(), pathType, entities, reversedPaths).getResult();
 }

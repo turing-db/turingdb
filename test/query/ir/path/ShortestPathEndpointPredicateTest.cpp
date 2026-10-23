@@ -40,8 +40,6 @@ using Rows = std::vector<StringRowSink::Row>;
 //   Remy(0) -e1-> Ghosts(6) 20
 //   Adam(1) -e4-> Remy(0) 20
 //   Ghosts(6) -e7-> Remy(0) 200
-//
-// Paths are read target-first as alternating node and edge IDs.
 class ShortestPathEndpointPredicateTest : public TuringTest {
 protected:
     void initialize() override {
@@ -77,14 +75,14 @@ protected:
 // Remy and Adam both reach Ghosts, Remy in one hop and Adam in two, so the source the
 // predicate keeps is the one the answer names.
 TEST_F(ShortestPathEndpointPredicateTest, keepsBothSourcesWithoutAPredicateOverTheEndpoints) {
-    const Rows expected = {{"20", "6, 1, 0"}};
+    const Rows expected = {{"20", "(0), [1], (6)"}};
     expectRows("MATCH (n), (m) WHERE m.name = 'Ghosts' AND (n.name = 'Remy' OR n.name = 'Adam') "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
                expected);
 }
 
 TEST_F(ShortestPathEndpointPredicateTest, narrowsTheSourceSetToRemy) {
-    const Rows expected = {{"20", "6, 1, 0"}};
+    const Rows expected = {{"20", "(0), [1], (6)"}};
     expectRows("MATCH (n), (m) WHERE m.name = 'Ghosts' AND (n.name = 'Remy' OR n.name = 'Adam') "
                "AND n.name > m.name "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
@@ -92,7 +90,7 @@ TEST_F(ShortestPathEndpointPredicateTest, narrowsTheSourceSetToRemy) {
 }
 
 TEST_F(ShortestPathEndpointPredicateTest, narrowsTheSourceSetToAdam) {
-    const Rows expected = {{"40", "6, 1, 0, 4, 1"}};
+    const Rows expected = {{"40", "(1), [4], (0), [1], (6)"}};
     expectRows("MATCH (n), (m) WHERE m.name = 'Ghosts' AND (n.name = 'Remy' OR n.name = 'Adam') "
                "AND n.name < m.name "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
@@ -101,14 +99,14 @@ TEST_F(ShortestPathEndpointPredicateTest, narrowsTheSourceSetToAdam) {
 
 // The same over the target set: Ghosts reaches Remy at 200 and Adam one hop further.
 TEST_F(ShortestPathEndpointPredicateTest, keepsBothTargetsWithoutAPredicateOverTheEndpoints) {
-    const Rows expected = {{"200", "0, 7, 6"}};
+    const Rows expected = {{"200", "(6), [7], (0)"}};
     expectRows("MATCH (n), (m) WHERE n.name = 'Ghosts' AND (m.name = 'Remy' OR m.name = 'Adam') "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
                expected);
 }
 
 TEST_F(ShortestPathEndpointPredicateTest, narrowsTheTargetSetToRemy) {
-    const Rows expected = {{"200", "0, 7, 6"}};
+    const Rows expected = {{"200", "(6), [7], (0)"}};
     expectRows("MATCH (n), (m) WHERE n.name = 'Ghosts' AND (m.name = 'Remy' OR m.name = 'Adam') "
                "AND m.name > n.name "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
@@ -116,7 +114,7 @@ TEST_F(ShortestPathEndpointPredicateTest, narrowsTheTargetSetToRemy) {
 }
 
 TEST_F(ShortestPathEndpointPredicateTest, narrowsTheTargetSetToAdam) {
-    const Rows expected = {{"220", "1, 0, 0, 7, 6"}};
+    const Rows expected = {{"220", "(6), [7], (0), [0], (1)"}};
     expectRows("MATCH (n), (m) WHERE n.name = 'Ghosts' AND (m.name = 'Remy' OR m.name = 'Adam') "
                "AND m.name < n.name "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
@@ -134,7 +132,7 @@ TEST_F(ShortestPathEndpointPredicateTest, emitsNoRowWhenThePredicateEmptiesTheMa
 }
 
 TEST_F(ShortestPathEndpointPredicateTest, answersTheZeroLengthPathWithoutTheInequality) {
-    const Rows expected = {{"0", "0"}};
+    const Rows expected = {{"0", "(0)"}};
     expectRows("MATCH (n), (m) WHERE n.name = 'Remy' AND m.name = 'Remy' "
                "SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
                expected);
@@ -144,13 +142,13 @@ TEST_F(ShortestPathEndpointPredicateTest, answersTheZeroLengthPathWithoutTheIneq
 // each came from, so an inequality over the whole graph answers what no predicate at all
 // answers: every node is both a source and a target, and the zero-length path wins.
 TEST_F(ShortestPathEndpointPredicateTest, answersZeroForTheInequalityOverTheWholeGraph) {
-    const Rows expected = {{"0", "0"}};
+    const Rows expected = {{"0", "(0)"}};
     expectRows("MATCH (n), (m) WHERE n <> m SHORTESTPATH(n, m, duration, d, p) RETURN d, p",
                expected);
 }
 
 TEST_F(ShortestPathEndpointPredicateTest, answersZeroForTheWholeGraphWithoutAPredicate) {
-    const Rows expected = {{"0", "0"}};
+    const Rows expected = {{"0", "(0)"}};
     expectRows("MATCH (n), (m) SHORTESTPATH(n, m, duration, d, p) RETURN d, p", expected);
 }
 

@@ -2429,7 +2429,7 @@ void NLTranslator::translatePathElements(nl::PathElements elements, NLStmtContai
 }
 
 void NLTranslator::translateMakePath(nl::MakePath makePath, NLStmtContainer* body) {
-    ColumnVector<EntityList>* output = static_cast<ColumnVector<EntityList>*>(allocEntityListColumn());
+    ColumnVector<GraphPath>* output = static_cast<ColumnVector<GraphPath>*>(allocColumnForChunkType(makePath.getResult().getType()));
     _valueSlots[makePath.getResult()] = output;
 
     NLMakePathData* data = _program->allocFunctionData<NLMakePathData>(output, &_memory->pathTrie());
@@ -3319,7 +3319,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     const auto operandChunk = mlir::cast<nl::ChunkType>(operandValue.getType());
     const mlir::Type operandElement = operandChunk.getElementType();
     const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathRefType>(operandElement);
-    const bool readsAPath = mlir::isa<storage::EntityListType>(operandElement);
+    const bool readsAPath = mlir::isa<storage::PathType>(operandElement);
     const bool readsAMask = isMaskElementType(operandElement);
 
     Column* result = nullptr;
@@ -5363,7 +5363,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 // its valid rows alone.
                 const NLChunkKind countKind = chunkKindFromElementType(countElementType);
                 aggregate._fold = NLExecutor::selectGroupCountValidIDFold(countKind);
-            } else if (mlir::isa<storage::EntityListType>(countElementType)) {
+            } else if (mlir::isa<storage::PathType>(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountPresentPathFold();
             } else {
                 // Every other non-nullable chunk holds no null to skip - a column a CALL
@@ -5883,7 +5883,7 @@ void NLTranslator::translateShortestPathLoop(const IteratorConfig& config,
     _valueSlots[distanceVariable] = distanceOutput;
     loopData->setDistanceOutput(distanceOutput);
 
-    ColumnVector<Path>* pathOutput = static_cast<ColumnVector<Path>*>(allocColumnForChunkType(pathVariable.getType()));
+    ColumnVector<GraphPath>* pathOutput = static_cast<ColumnVector<GraphPath>*>(allocColumnForChunkType(pathVariable.getType()));
     _valueSlots[pathVariable] = pathOutput;
     loopData->setPathOutput(pathOutput);
 
@@ -6673,12 +6673,12 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     }
 
     // An entity an OPTIONAL MATCH did not match is an invalid ID and a path it did not match
-    // is empty, so those chunks count their other rows; every other plain chunk holds no
+    // is null, so those chunks count their other rows; every other plain chunk holds no
     // null and counts them all, whether or not it is one chunkKindFromElementType has a
     // kind for.
     if (isEntityIDElement(elementType)) {
         return NLExecutor::selectIDCountFunction(chunkKindFromElementType(elementType));
-    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+    } else if (mlir::isa<storage::PathType>(elementType)) {
         return NLExecutor::selectPathCountFunction();
     }
 
@@ -7138,13 +7138,6 @@ Column* NLTranslator::allocOptListColumn() {
     return column;
 }
 
-Column* NLTranslator::allocEntityListColumn() {
-    ColumnVector<EntityList>* column = _memory->alloc<ColumnVector<EntityList>>();
-    column->reserve(_program->getChunkSize());
-
-    return column;
-}
-
 Column* NLTranslator::allocListElementColumn() {
     ColumnVector<ListElementView>* column = _memory->alloc<ColumnVector<ListElementView>>();
     column->reserve(_program->getChunkSize());
@@ -7235,8 +7228,6 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::Duration;
     } else if (mlir::isa<storage::PathRefType>(elementType)) {
         return NLChunkKind::PathRef;
-    } else if (mlir::isa<storage::EntityListType>(elementType)) {
-        return NLChunkKind::EntityList;
     } else if (mlir::isa<storage::BoolType>(elementType)) {
         return NLChunkKind::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
