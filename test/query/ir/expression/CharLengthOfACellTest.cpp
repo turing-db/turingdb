@@ -18,6 +18,7 @@ TEST_F(CharLengthOfACellTest, aListCellIsATypeError) {
     expectError("UNWIND [[1, 2, 3], 'ab'] AS v RETURN char_length(v)", "char_length");
     expectError("UNWIND [[1, 2, 3], 'ab'] AS v RETURN character_length(v)", "char_length");
     expectError("UNWIND [7, 'ab'] AS v RETURN char_length(v)", "char_length");
+    expectError("UNWIND [{a: 1}, 'ab'] AS v RETURN char_length(v)", "char_length");
 }
 
 int main(int argc, char** argv) {
