@@ -1953,10 +1953,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfMaps) {
     EXPECT_EQ(second.front().getValueAs<Int64>(), 2);
 }
 
-// A path goes over as its node count, then its nodes, then its edges. The long path's two
-// payloads each span several packets at these sizes, so a resume lands inside the nodes,
-// between them and the edges, and inside the edges. The null path and the zero-length path
-// carry no edges at all.
+// A path goes over as its node count, then its IDs in path order. The long path's payload
+// spans several packets at these sizes, so a resume lands inside it. The null path carries
+// no ID and the zero-length path a single one.
 TEST(TuringProtoRoundTripTest, RoundTripsGraphPathColumnsAcrossChunkSizes) {
     for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
         SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
@@ -1966,21 +1965,18 @@ TEST(TuringProtoRoundTripTest, RoundTripsGraphPathColumnsAcrossChunkSizes) {
         db::Dataframe source;
 
         db::GraphPath longPath;
-        longPath.addNode(db::NodeID(1000));
+        longPath.start(db::NodeID(1000));
         for (uint64_t hop = 1; hop <= 40; hop++) {
-            longPath.addEdge(db::EdgeID(2000 + hop));
-            longPath.addNode(db::NodeID(1000 + hop));
+            longPath.addHop(db::EdgeID(2000 + hop), db::NodeID(1000 + hop));
         }
 
         db::GraphPath zeroLengthPath;
-        zeroLengthPath.addNode(db::NodeID(7));
+        zeroLengthPath.start(db::NodeID(7));
 
         db::GraphPath twoHopPath;
-        twoHopPath.addNode(db::NodeID(3));
-        twoHopPath.addEdge(db::EdgeID(4));
-        twoHopPath.addNode(db::NodeID(5));
-        twoHopPath.addEdge(db::EdgeID(6));
-        twoHopPath.addNode(db::NodeID(3));
+        twoHopPath.start(db::NodeID(3));
+        twoHopPath.addHop(db::EdgeID(4), db::NodeID(5));
+        twoHopPath.addHop(db::EdgeID(6), db::NodeID(3));
 
         const std::vector<db::GraphPath> paths {longPath, db::GraphPath {}, zeroLengthPath, twoHopPath, longPath};
 
@@ -2006,4 +2002,50 @@ TEST(TuringProtoRoundTripTest, RoundTripsGraphPathColumnsAcrossChunkSizes) {
         ASSERT_NE(decodedPaths, nullptr);
         EXPECT_EQ(decodedPaths->getRaw(), paths);
     }
+}
+
+// A node count the encoder could never have written, over the wire size, is rejected before
+// any of its IDs are allocated: 0xFFFFFFFF nodes would otherwise ask for 64 GiB.
+TEST(TuringProtoRoundTripTest, RejectsAGraphPathNodeCountOverTheWireSize) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    db::GraphPath path;
+    path.start(db::NodeID(7));
+
+    auto* column = localMem.alloc<db::ColumnVector<db::GraphPath>>();
+    column->push_back(path);
+    addColumn(&dfMan, &source, "p", column);
+
+    std::vector<FramedPacket> packets = encodeDataframeWithChunkSize(source, 256);
+
+    const net::proto::WireSize encodedNodeCount = 1;
+    const uint64_t encodedNode = 7;
+    std::string encodedRow(sizeof(encodedNodeCount) + sizeof(encodedNode), '\0');
+    std::memcpy(encodedRow.data(), &encodedNodeCount, sizeof(encodedNodeCount));
+    std::memcpy(encodedRow.data() + sizeof(encodedNodeCount), &encodedNode, sizeof(encodedNode));
+
+    const auto isChunk = [](const FramedPacket& packet) {
+        return packet._type == net::proto::MessageTypes::CHUNK;
+    };
+    const auto chunk = std::ranges::find_if(packets, isChunk);
+    ASSERT_NE(chunk, packets.end());
+
+    const size_t rowOffset = chunk->_bytes.find(encodedRow);
+    ASSERT_NE(rowOffset, std::string::npos);
+
+    const net::proto::WireSize corruptNodeCount = std::numeric_limits<net::proto::WireSize>::max();
+    std::memcpy(chunk->_bytes.data() + rowOffset, &corruptNodeCount, sizeof(corruptNodeCount));
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::MapBuffer<> mapBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    const auto decode = [&]() {
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
+    };
+    EXPECT_THROW(decode(), TuringException);
 }

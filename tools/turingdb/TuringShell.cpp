@@ -538,12 +538,17 @@ void asString(std::string& out, const db::GraphPath& path) {
         return;
     }
 
-    const std::span<const db::NodeID> nodes = path.getNodes();
-    const std::span<const db::EdgeID> edges = path.getEdges();
+    const std::span<const uint64_t> ids = path.getIDs();
+    for (size_t position = 0; position < ids.size(); position++) {
+        if (position > 0) {
+            out += ", ";
+        }
 
-    out += fmt::format("({})", nodes.front().getValue());
-    for (size_t hop = 0; hop < edges.size(); hop++) {
-        out += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
+        if (db::GraphPath::isNodeAt(position)) {
+            out += fmt::format("({})", ids[position]);
+        } else {
+            out += fmt::format("[{}]", ids[position]);
+        }
     }
 }
 

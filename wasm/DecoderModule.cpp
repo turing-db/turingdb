@@ -102,16 +102,10 @@ void appendVariableWidthItem(ExportBuffers& out, const T& item) {
         const char* bytes = reinterpret_cast<const char*>(item.data());
         out._values.insert(out._values.end(), bytes, bytes + item.size_bytes());
     } else if constexpr (std::is_same_v<T, db::GraphPath>) {
-        const std::span<const db::NodeID> nodes = item.getNodes();
-        const std::span<const db::EdgeID> edges = item.getEdges();
-        if (nodes.empty()) {
-            return;
-        }
-
-        appendPathEntry(out, db::EntityType::Node, nodes.front().getValue());
-        for (size_t hop = 0; hop < edges.size(); hop++) {
-            appendPathEntry(out, db::EntityType::Edge, edges[hop].getValue());
-            appendPathEntry(out, db::EntityType::Node, nodes[hop + 1].getValue());
+        const std::span<const uint64_t> ids = item.getIDs();
+        for (size_t position = 0; position < ids.size(); position++) {
+            const db::EntityType type = db::GraphPath::isNodeAt(position) ? db::EntityType::Node : db::EntityType::Edge;
+            appendPathEntry(out, type, ids[position]);
         }
     } else {
         static_assert(sizeof(T) == 0, "No export layout for this element type");

@@ -1145,26 +1145,28 @@ private:
     QueryListBuffer* _listBuffer {nullptr};
 };
 
-// One entity of a path being built: the column holding it on each row, and which of the
-// three kinds of entity the column carries
-struct NLPathEntity {
+// One step of a path being built, over the columns that hold it on each row. Start opens
+// the path on a node, Hop adds an edge and the node it lands on, Walk adds the hops of a
+// walk taken with the pattern, and ReversedWalk the hops of one taken against it, closing
+// on the node it seeded from.
+struct NLPathStep {
     enum class Kind : uint8_t {
-        Node,
-        Edge,
-        Path,
+        Start,
+        Hop,
+        Walk,
+        ReversedWalk,
     };
 
-    const Column* _column {nullptr};
-    Kind _kind {Kind::Node};
-    // A Path whose walk ran against the pattern, whose hops read back from its far end
-    bool _reversed {false};
+    Kind _kind {Kind::Start};
+    const ColumnNodeIDs* _nodes {nullptr};
+    const ColumnEdgeIDs* _edges {nullptr};
+    const ColumnVector<PathRef>* _walks {nullptr};
 };
 
-// nl.make_path data: one path per row, appended in operand order. A Path
-// entity contributes the hops its handle stands for, read out of the trie.
+// nl.make_path data: one path per row, built by running its steps in order
 class NLMakePathData : public NLFunctionData {
 public:
-    using PathEntities = std::vector<NLPathEntity>;
+    using PathSteps = std::vector<NLPathStep>;
 
     NLMakePathData(ColumnVector<GraphPath>* output, const PathTrie* trie)
         : _output(output),
@@ -1172,16 +1174,16 @@ public:
     {
     }
 
-    const PathEntities& entities() const { return _entities; }
+    const PathSteps& steps() const { return _steps; }
     ColumnVector<GraphPath>* getOutput() const { return _output; }
     const PathTrie* getTrie() const { return _trie; }
 
-    void addEntity(const NLPathEntity& entity) {
-        _entities.push_back(entity);
+    void addStep(const NLPathStep& step) {
+        _steps.push_back(step);
     }
 
 private:
-    PathEntities _entities;
+    PathSteps _steps;
     ColumnVector<GraphPath>* _output {nullptr};
     const PathTrie* _trie {nullptr};
 };
@@ -2529,6 +2531,9 @@ public:
 
     std::string& getKey() { return _key; }
 
+    void setRowKey(NLKeyAppendFunction appendRowKey) { _appendRowKey = appendRowKey; }
+    void appendRowKey(const Column* input, size_t row) { _appendRowKey(input, row, _key); }
+
     // Record the key built for this row; true when the (group, value) pair is new,
     // so the caller charges the group's tally.
     bool insertIfNew() { return _seen.insert(_key).second; }
@@ -2540,6 +2545,7 @@ public:
 private:
     std::unordered_set<std::string> _seen;
     std::string _key;
+    NLKeyAppendFunction _appendRowKey {nullptr};
 };
 
 // Append the values of the given rows of an input chunk onto the tail of a

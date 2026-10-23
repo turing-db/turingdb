@@ -1299,6 +1299,8 @@ def MakePath : NLOp<"make_path", [Pure, RowAlignedThroughOperands]> {
   let assemblyFormat = [{
     `(` $entities `)` attr-dict `:` functional-type(operands, results)
   }];
+
+  let hasVerifier = 1;
 }
 
 /**

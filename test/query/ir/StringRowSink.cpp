@@ -322,12 +322,19 @@ bool textOfPath(const Column* chunk, size_t rowIndex, std::string& text) {
         return true;
     }
 
-    const std::span<const NodeID> nodes = path.getNodes();
-    const std::span<const EdgeID> edges = path.getEdges();
+    const std::span<const uint64_t> ids = path.getIDs();
 
-    text = fmt::format("({})", nodes.front().getValue());
-    for (size_t hop = 0; hop < edges.size(); hop++) {
-        text += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
+    text.clear();
+    for (size_t position = 0; position < ids.size(); position++) {
+        if (position > 0) {
+            text += ", ";
+        }
+
+        if (GraphPath::isNodeAt(position)) {
+            text += fmt::format("({})", ids[position]);
+        } else {
+            text += fmt::format("[{}]", ids[position]);
+        }
     }
 
     return true;

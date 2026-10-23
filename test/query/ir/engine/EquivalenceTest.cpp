@@ -84,12 +84,19 @@ std::string valueToString(const GraphPath& value) {
         return "null";
     }
 
-    const std::span<const NodeID> nodes = value.getNodes();
-    const std::span<const EdgeID> edges = value.getEdges();
+    const std::span<const uint64_t> ids = value.getIDs();
 
-    std::string result = fmt::format("[({})", nodes.front().getValue());
-    for (size_t hop = 0; hop < edges.size(); hop++) {
-        result += fmt::format(", [{}], ({})", edges[hop].getValue(), nodes[hop + 1].getValue());
+    std::string result = "[";
+    for (size_t position = 0; position < ids.size(); position++) {
+        if (position > 0) {
+            result += ", ";
+        }
+
+        if (GraphPath::isNodeAt(position)) {
+            result += fmt::format("({})", ids[position]);
+        } else {
+            result += fmt::format("[{}]", ids[position]);
+        }
     }
 
     result += "]";

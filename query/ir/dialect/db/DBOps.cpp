@@ -20,6 +20,7 @@
 #include "LabelAlternativesFormat.h"
 #include "StorageAttributes.h"
 #include "MergePatternShape.h"
+#include "MakePathShape.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
 
@@ -817,78 +818,13 @@ LogicalResult PathElements::verify() {
 }
 
 LogicalResult MakePath::verify() {
-    const OperandRange entities = getEntities();
-    if (entities.empty()) {
-        return emitOpError("a path runs through at least one node");
+    llvm::SmallVector<Type> elementTypes;
+    for (const Value entity : getEntities()) {
+        const auto column = dyn_cast<ColumnType>(entity.getType());
+        elementTypes.push_back(column ? column.getType() : Type());
     }
 
-    const auto elementOf = [](Value value) -> Type {
-        const auto column = dyn_cast<ColumnType>(value.getType());
-        return column ? column.getType() : Type();
-    };
-
-    llvm::SmallVector<bool> reversed(entities.size(), false);
-    if (const std::optional<ArrayAttr> reversedPaths = getReversedPaths()) {
-        for (const Attribute entry : *reversedPaths) {
-            const auto index = dyn_cast<IntegerAttr>(entry);
-            if (!index || index.getInt() < 0 || static_cast<size_t>(index.getInt()) >= entities.size()) {
-                return emitOpError("reversed_paths names no operand of this path");
-            }
-
-            const size_t operandIndex = static_cast<size_t>(index.getInt());
-            if (!isa_and_nonnull<storage::PathRefType>(elementOf(entities[operandIndex]))) {
-                return emitOpError("reversed_paths names operand ") << operandIndex << ", which is no path column";
-            }
-
-            reversed[operandIndex] = true;
-        }
-    }
-
-    // A walk taken against the pattern opens on the node it ended at, so it may open the
-    // path itself; one taken with the pattern opens on its first edge and may not
-    const Type openingElement = elementOf(entities.front());
-    const bool opensOnANode = isa_and_nonnull<storage::NodeIDType>(openingElement);
-    const bool opensOnAReversedWalk = isa_and_nonnull<storage::PathRefType>(openingElement) && reversed.front();
-    if (!opensOnANode && !opensOnAReversedWalk) {
-        return emitOpError("a path opens on a node column");
-    }
-
-    size_t entityIndex = opensOnANode ? 1 : 0;
-    while (entityIndex < entities.size()) {
-        const Type element = elementOf(entities[entityIndex]);
-
-        if (isa_and_nonnull<storage::PathRefType>(element)) {
-            // A reversed walk closes on the edge it took first, so the node it seeded from
-            // is written after it; a forward one closes on a node of its own
-            if (!reversed[entityIndex]) {
-                entityIndex++;
-                continue;
-            }
-
-            const bool closesOnANode = entityIndex + 1 < entities.size()
-                                    && isa_and_nonnull<storage::NodeIDType>(elementOf(entities[entityIndex + 1]));
-            if (!closesOnANode) {
-                return emitOpError("the reversed path at operand ") << entityIndex << " closes on no node column";
-            }
-
-            entityIndex += 2;
-            continue;
-        }
-
-        if (!isa_and_nonnull<storage::EdgeIDType>(element)) {
-            return emitOpError("a hop of a path is an edge column or a path column, at operand ") << entityIndex;
-        }
-
-        const bool landsOnANode = entityIndex + 1 < entities.size()
-                               && isa_and_nonnull<storage::NodeIDType>(elementOf(entities[entityIndex + 1]));
-        if (!landsOnANode) {
-            return emitOpError("the edge column at operand ") << entityIndex << " lands on no node column";
-        }
-
-        entityIndex += 2;
-    }
-
-    return success();
+    return verifyMakePath(getOperation(), elementTypes, getReversedPaths());
 }
 
 void GetInEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
