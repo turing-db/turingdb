@@ -58,8 +58,29 @@ diff does.
 
 ### 3. Draft the explanation
 
-Invoke the `pr` skill and follow its template exactly: `## Summary`, `## Evidence`,
-`## Merge Danger`.
+First write the overview. It opens `## Summary` and tells a reviewer, before any diagram or
+detail, what the pull request is for and where to start reading. It has three parts, in this
+order:
+
+```markdown
+**Goal.** What the pull request sets out to do: the bug it fixes or the feature it adds, shown
+with one query or one example. One or two sentences.
+
+**Approach.** How the change reaches the goal: the layer it changes and the mechanism it uses
+there. Name any new op, type, rule or file. Two or three sentences.
+
+**Where to look.** The code a reviewer should read first, in reading order:
+
+- `path/to/file.cpp:123` `functionName` — why this is the place to start
+- `path/to/other.h:45` `TypeName` — what to check there
+```
+
+Keep the overview under 15 lines. Point "Where to look" at the code that carries the
+decision: the new mechanism, the changed rule, the place a mistake would hide. Do not list
+every file the diff touches, and do not list test files unless the test is the point.
+
+Then invoke the `pr` skill and follow its template exactly: `## Summary`, `## Evidence`,
+`## Merge Danger`. Its summary text comes after the overview.
 
 ```
 Skill(pr)
@@ -179,11 +200,18 @@ Open every comment with this callout, before anything else:
 > AI-generated summary.
 ```
 
-Then the diagram, at the top of `## Summary`, above the text it supports. Reference the
-**local** file, because `gh` rewrites that path to the uploaded asset:
+Then `## Summary`, which opens with the overview from step 3. The diagram comes after the
+overview, above the text it supports. Reference the **local** file, because `gh` rewrites
+that path to the uploaded asset:
 
 ```markdown
 ## Summary
+
+**Goal.** ...
+
+**Approach.** ...
+
+**Where to look.** ...
 
 ![<one line that says what the diagram shows>](.pr-lens/<drawing>/<view>-neutral-<hash>.svg)
 
