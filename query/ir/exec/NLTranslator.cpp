@@ -917,6 +917,15 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
             _iteratorConfigs[unwindRange.getResult()] = config;
+        } else if (nl::UnwindComputed unwindComputed = mlir::dyn_cast<nl::UnwindComputed>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::UnwindComputed;
+            config._unwindSource = &unwindComputed.getSource();
+
+            const mlir::OperandRange carriedColumns = unwindComputed.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+
+            _iteratorConfigs[unwindComputed.getResult()] = config;
         } else if (nl::OptionalDrain optionalDrain = mlir::dyn_cast<nl::OptionalDrain>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::OptionalDrain;
@@ -1201,7 +1210,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateProcedure(procedureOp, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
-        } else if (mlir::isa<nl::Yield, nl::ComprehensionYield, nl::ReduceYield, mlir::func::ReturnOp>(operation)) {
+        } else if (mlir::isa<nl::Yield, nl::ComprehensionYield, nl::ReduceYield, nl::UnwindYield, mlir::func::ReturnOp>(operation)) {
             // Structural terminators carry no behavior
         } else if (!_systemTranslator->translate(operation, body)) {
             throw IRException(fmt::format("NLTranslator cannot translate operation '{}'",
@@ -1273,6 +1282,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateUnwindLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::UnwindRange) {
         translateUnwindRangeLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::UnwindComputed) {
+        translateUnwindComputedLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::OptionalDrain) {
         translateOptionalDrainLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::RowDrain) {
@@ -1766,6 +1777,72 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     bindCarriedColumns(config._carriedColumns, loopBody, 1, loopData);
 
     body->emplaceStmt(&NLExecutor::runUnwindLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateUnwindComputedLoop(const IteratorConfig& config,
+                                               mlir::Block& loopBody,
+                                               NLLimitState* limit,
+                                               NLStmtContainer* body) {
+    const llvm::ArrayRef<mlir::Value> carriedValues = config._carriedColumns;
+    NLUnwindComputedLoopData* loopData = _program->allocFunctionData<NLUnwindComputedLoopData>(getColumn(carriedValues.front()));
+    loopData->setLimit(limit);
+
+    const size_t chunkSize = _program->getChunkSize();
+    loopData->getRunRows()->reserve(chunkSize);
+    loopData->getRows()->reserve(chunkSize);
+    loopData->getPositions()->reserve(chunkSize);
+
+    mlir::Block& sourceBlock = config._unwindSource->front();
+    for (size_t carriedIndex = 0; carriedIndex < carriedValues.size(); carriedIndex++) {
+        const mlir::Value argument = sourceBlock.getArgument(static_cast<unsigned>(carriedIndex));
+        if (argument.use_empty()) {
+            continue;
+        }
+
+        const NLCarriedColumn sourceArgument(getColumn(carriedValues[carriedIndex]),
+                                             allocColumn(argument),
+                                             selectGatherForChunkType(argument.getType()));
+        loopData->addSourceArgument(sourceArgument);
+    }
+
+    translateBlock(sourceBlock, loopData->getSourceStmts());
+
+    // The op's verifier guarantees the terminator, so a region without one here means
+    // unverified IR.
+    nl::UnwindYield yield = mlir::dyn_cast<nl::UnwindYield>(sourceBlock.back());
+    if (!yield) {
+        throw IRException("The source region of an nl.unwind_computed does not end with an nl.unwind_yield");
+    }
+
+    const mlir::Value sourceValue = yield.getSource();
+    const Column* source = getColumn(sourceValue);
+    const nl::ChunkType sourceChunk = mlir::cast<nl::ChunkType>(sourceValue.getType());
+
+    const mlir::Value elementValue = loopBody.getArgument(0);
+
+    NLUnwindElementCountFunction elementCount = nullptr;
+    NLUnwindElementEmitFunction elementEmit = nullptr;
+    selectElementDrain(sourceChunk.getElementType(), elementValue.getType(), elementCount, elementEmit);
+
+    const bool readsTheElements = !elementValue.use_empty();
+    if (!readsTheElements) {
+        elementEmit = nullptr;
+    }
+
+    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
+
+    if (readsTheElements && !elementEmit) {
+        const NLCarriedColumn elementCell(source, allocColumn(elementValue), selectGatherForChunkType(sourceChunk));
+        loopData->setSource(source, elementCount, elementEmit, elementOutput, &elementCell);
+    } else {
+        loopData->setSource(source, elementCount, elementEmit, elementOutput, nullptr);
+    }
+
+    bindCarriedColumns(carriedValues, loopBody, 1, loopData);
+
+    body->emplaceStmt(&NLExecutor::runUnwindComputedLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }

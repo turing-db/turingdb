@@ -4463,6 +4463,89 @@ private:
     ColumnVector<size_t> _rows;
 };
 
+// nl.unwind_computed loop data: what an nl.unwind's loop data holds, plus the region
+// computing the source over a run of input rows - its statements, the carried inputs it
+// reads cut to the run, and the rows of the run. The source, and how its cells unwind, are
+// only known once the region is translated. The carried columns are gathered from the
+// whole input chunk, whose rows @param input holds.
+class NLUnwindComputedLoopData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    explicit NLUnwindComputedLoopData(const Column* input)
+        : _input(input)
+    {
+    }
+
+    // @param elementEmit and @param elementOutput are null when the source's cells are
+    // themselves the elements, as on NLUnwindLoopData; they are then gathered through
+    // @param elementCell, which is null where nothing reads them.
+    void setSource(const Column* source,
+                   NLUnwindElementCountFunction elementCount,
+                   NLUnwindElementEmitFunction elementEmit,
+                   Column* elementOutput,
+                   const NLCarriedColumn* elementCell) {
+        _source = source;
+        _elementCount = elementCount;
+        _elementEmit = elementEmit;
+        _elementOutput = elementOutput;
+
+        if (elementCell) {
+            _elementCell.emplace(*elementCell);
+        }
+    }
+
+    size_t getInputRows() const { return _input->size(); }
+    const Column* getSource() const { return _source; }
+    NLUnwindElementCountFunction getElementCountFunc() const { return _elementCount; }
+    NLUnwindElementEmitFunction getElementEmitFunc() const { return _elementEmit; }
+    Column* getElementOutput() const { return _elementOutput; }
+    const NLCarriedColumn* getElementCell() const { return _elementCell ? &*_elementCell : nullptr; }
+
+    const CarriedColumns& sourceArguments() const { return _sourceArguments; }
+
+    void addSourceArgument(const NLCarriedColumn& argument) {
+        _sourceArguments.push_back(argument);
+    }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+    ColumnVector<size_t>* getRunRows() { return &_runRows; }
+    ColumnVector<size_t>* getRows() { return &_rows; }
+    ColumnVector<size_t>* getPositions() { return &_positions; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getSourceStmts() { return &_sourceStmts; }
+    const NLStmtContainer* getSourceStmts() const { return &_sourceStmts; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    const Column* _input {nullptr};
+    const Column* _source {nullptr};
+    NLUnwindElementCountFunction _elementCount {nullptr};
+    NLUnwindElementEmitFunction _elementEmit {nullptr};
+    Column* _elementOutput {nullptr};
+    std::optional<NLCarriedColumn> _elementCell;
+
+    NLLimitState* _limit {nullptr};
+    CarriedColumns _sourceArguments;
+    CarriedColumns _carriedColumns;
+    NLStmtContainer _sourceStmts;
+    NLStmtContainer _stmts;
+
+    ColumnVector<size_t> _runRows;
+    ColumnVector<size_t> _rows;
+    ColumnVector<size_t> _positions;
+};
+
 // What an op computing over the elements of one row's list holds - nl.list_comprehension
 // and nl.list_predicate. The source column with the handler counting the elements each
 // of its cells contributes, the drain filling the element chunk from them and the one

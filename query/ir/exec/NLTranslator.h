@@ -87,6 +87,7 @@ private:
         VectorSearch,
         Unwind,
         UnwindRange,
+        UnwindComputed,
         ProcedureInit,
         OptionalDrain,
         RowDrain,
@@ -210,6 +211,10 @@ private:
         // slice bounds of the run it keeps, null where absent; empty for the other kinds.
         llvm::SmallVector<mlir::Value, 5> _rangeBounds;
         bool _rangeReversed {false};
+
+        // The region an UnwindComputed iterator computes its source in; null for the other
+        // kinds.
+        mlir::Region* _unwindSource {nullptr};
     };
 
     NLProgram* _program {nullptr};
@@ -407,6 +412,14 @@ private:
     // An expansion loop gathers its carried columns by the input row each output row
     // came from, so every one of them must hold the input's rows
     static void throwIfCarriedNotRowAligned(const IteratorConfig& config);
+
+    // Translate the nl.for over an nl.unwind_computed iterator: translate the region
+    // computing the source over a run of rows, bind the run's arguments, the element loop
+    // variable and one per carried column, and record the loop statement.
+    void translateUnwindComputedLoop(const IteratorConfig& config,
+                                     mlir::Block& loopBody,
+                                     NLLimitState* limit,
+                                     NLStmtContainer* body);
 
     // Translate the nl.for over an nl.unwind_range iterator: allocate the element loop
     // variable and one per carried column, bind the reads its bounds are taken through,

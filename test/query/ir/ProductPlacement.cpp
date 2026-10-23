@@ -93,5 +93,9 @@ size_t turing::test::countUnwindsOverAProduct(mlir::ModuleOp module) {
         count += carriesAProductColumn(unwindRange.getColumnsToFilter()) ? 1 : 0;
     });
 
+    module.walk([&count](mlir::db::UnwindComputed unwindComputed) {
+        count += carriesAProductColumn(unwindComputed.getColumnsToFilter()) ? 1 : 0;
+    });
+
     return count;
 }

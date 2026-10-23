@@ -935,6 +935,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::VectorSearch,
                      mlir::db::Unwind,
                      mlir::db::UnwindRange,
+                     mlir::db::UnwindComputed,
                      mlir::db::ScanNodesByLabel,
                      mlir::db::ScanNodesByPropertyValue,
                      mlir::db::ScanEdges,
@@ -1335,6 +1336,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerUnwind(unwind);
     } else if (mlir::db::UnwindRange unwindRange = mlir::dyn_cast<mlir::db::UnwindRange>(operation)) {
         lowerUnwindRange(unwindRange);
+    } else if (mlir::db::UnwindComputed unwindComputed = mlir::dyn_cast<mlir::db::UnwindComputed>(operation)) {
+        lowerUnwindComputed(unwindComputed);
     } else if (mlir::db::MakeList makeList = mlir::dyn_cast<mlir::db::MakeList>(operation)) {
         lowerMakeList(makeList);
     } else if (mlir::db::MakeMap makeMap = mlir::dyn_cast<mlir::db::MakeMap>(operation)) {
@@ -1811,6 +1814,76 @@ void DBLowering::lowerUnwindRange(mlir::db::UnwindRange unwindRange) {
                                                             carriedChunks,
                                                             unwindRange.getReversed());
     buildLoopForSource(rows.getResult(), unwindRange.getOperation());
+}
+
+void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    llvm::SmallVector<mlir::Type, 4> carriedTypes;
+    llvm::SmallVector<mlir::Location, 4> carriedLocations;
+    for (const mlir::Value carriedColumn : unwind.getColumnsToFilter()) {
+        const mlir::Value carriedChunk = mapValue(carriedColumn);
+        carriedChunks.push_back(carriedChunk);
+        carriedTypes.push_back(carriedChunk.getType());
+        carriedLocations.push_back(loc);
+    }
+
+    setInsertionInto(deepestOwnerBlock(carriedChunks, _rootBlock));
+
+    // The element type is the source's to decide, and the source is only known once the
+    // region is lowered, so the iterator is typed after it
+    nl::UnwindComputed rows = _builder.create<nl::UnwindComputed>(loc,
+                                                                  nl::IteratorType::get(context, carriedTypes),
+                                                                  carriedChunks);
+
+    mlir::Block& dbSource = unwind.getSource().front();
+    mlir::Block* const nlSource = &rows.getSource().emplaceBlock();
+    nlSource->addArguments(carriedTypes, carriedLocations);
+
+    for (size_t argumentIndex = 0; argumentIndex < carriedChunks.size(); argumentIndex++) {
+        const unsigned index = static_cast<unsigned>(argumentIndex);
+        _valueMap[dbSource.getArgument(index)] = nlSource->getArgument(index);
+    }
+
+    const mlir::Value runCardinality = nlSource->getArgument(0);
+
+    _builder.setInsertionPointToEnd(nlSource);
+    mlir::Operation* const placeholderYield = _builder.create<nl::UnwindYield>(loc, runCardinality);
+
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostLoopBody = nlSource;
+    _innermostCardinality = runCardinality;
+
+    mlir::Value sourceChunk;
+    for (mlir::Operation& operation : dbSource) {
+        mlir::db::UnwindYield yield = mlir::dyn_cast<mlir::db::UnwindYield>(operation);
+        if (yield) {
+            sourceChunk = rowAlignedChunk(mapValue(yield.getSource()), runCardinality);
+        } else {
+            lowerOperation(operation);
+        }
+    }
+
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    _builder.setInsertionPointToEnd(nlSource);
+    _builder.create<nl::UnwindYield>(loc, sourceChunk);
+    placeholderYield->erase();
+
+    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceChunk.getType()).getElementType();
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    chunkTypes.push_back(nl::ChunkType::get(context, ::db::unwoundElementType(context, sourceElement)));
+    chunkTypes.append(carriedTypes.begin(), carriedTypes.end());
+
+    rows.getResult().setType(nl::IteratorType::get(context, chunkTypes));
+
+    _builder.setInsertionPointAfter(rows);
+    buildLoopForSource(rows.getResult(), unwind.getOperation());
 }
 
 void DBLowering::lowerElementOperands(mlir::Value source, mlir::OperandRange carried, ElementOperands& operands) {

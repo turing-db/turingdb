@@ -432,6 +432,57 @@ def UnwindRange : TuringOp<"unwind_range", [NoMemoryEffect, AttrSizedOperandSegm
 }
 
 /**
+* UnwindComputed
+*/
+def UnwindComputed : TuringOp<"unwind_computed", [Pure]> {
+  let summary = "Produce one row per element of a value its region computes for each input row";
+
+  let description = [{
+    db.unwind whose source is computed inside the op rather than before it, so lowering
+    can compute it over a few input rows at a time and never hold the lists of a whole
+    chunk. sink_unwind_source moves the ops computing a db.unwind's source in here:
+
+      %x, %n = db.unwind_computed({%node}) ({
+        ^bb0(%nodeIn: !db.column<!storage.node_id>):
+          %name = db.get_node_properties(%nodeIn) {property = "name"} : ...
+          %parts = db.split(%name, %comma) : ...
+          db.unwind_yield %parts : !db.column<!storage.list<!storage.string>>
+      }) : (!db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
+
+    The region's entry block takes one argument per carried column and reads the input
+    rows through them; a constant it reads stands for every row and needs no carrying.
+    The yield names the source, whose cells unwind as db.unwind's do. `columns_to_filter`
+    is the carry set, replicated as db.unwind's is, and the element type is resolved the
+    same way.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$element, Variadic<Column>:$carried);
+
+  // Exactly one block, ending in a db.unwind_yield.
+  let regions = (region SizedRegion<1>:$source);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` `{` $columns_to_filter `}` `)` $source attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
+* UnwindYield
+*/
+def UnwindYield : TuringOp<"unwind_yield", [Pure, Terminator, HasParent<"UnwindComputed">]> {
+  let summary = "Name the source a db.unwind_computed's region computes";
+
+  let arguments = (ins Column:$source);
+
+  let assemblyFormat = [{
+    $source attr-dict `:` qualified(type($source))
+  }];
+}
+
+/**
 * MakeList
 */
 def MakeList : TuringOp<"make_list", [Pure, ConstantThroughOperands]> {

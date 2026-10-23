@@ -28,6 +28,11 @@ def FuseUnwindRange : Pass<"fuse_unwind_range"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def SinkUnwindSource : Pass<"sink_unwind_source"> {
+    let summary = "Move the ops computing an unwind's source into a db.unwind_computed, which computes it a few rows at a time";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def UnnestUnwindComprehension : Pass<"unnest_unwind_comprehension"> {
     let summary = "Unwind a list comprehension's source and run its body over the unwound rows, instead of building its lists";
     let dependentDialects = ["mlir::db::DB"];

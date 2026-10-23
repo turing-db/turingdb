@@ -6762,6 +6762,80 @@ void NLExecutor::runUnwindRangeLoop(NLExecutionContext* context, NLFunctionData*
     }
 }
 
+void NLExecutor::runUnwindComputedLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnwindComputedLoopData* loopData = static_cast<NLUnwindComputedLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const NLStmtContainer* sourceStmts = loopData->getSourceStmts();
+    const size_t chunkSize = context->getChunkSize();
+
+    // A null limit leaves the loop unbounded, exactly as in runUnwindLoop.
+    const NLLimitState* limit = loopData->getLimit();
+    const auto withinLimit = [limit]() {
+        return !limit || limit->getRemaining() > 0;
+    };
+
+    const NLUnwindElementCountFunction elementCount = loopData->getElementCountFunc();
+    const NLUnwindElementEmitFunction elementEmit = loopData->getElementEmitFunc();
+    const NLCarriedColumn* elementCell = loopData->getElementCell();
+    const Column* source = loopData->getSource();
+
+    ColumnVector<size_t>* runRows = loopData->getRunRows();
+    ColumnVector<size_t>* rows = loopData->getRows();
+    ColumnVector<size_t>* positions = loopData->getPositions();
+    std::vector<size_t>& runRaw = runRows->getRaw();
+    std::vector<size_t>& rowsRaw = rows->getRaw();
+
+    const size_t inputRows = loopData->getInputRows();
+
+    // A run of input rows holds about one chunk of elements once the first run has shown
+    // how many a row spans, so the source never holds the elements of a whole chunk of rows
+    size_t runStart = 0;
+    size_t runLength = 1;
+
+    while (runStart < inputRows && withinLimit()) {
+        runLength = std::min(runLength, inputRows - runStart);
+
+        runRaw.resize(runLength);
+        std::iota(runRaw.begin(), runRaw.end(), runStart);
+
+        for (const NLCarriedColumn& argument : loopData->sourceArguments()) {
+            const auto gatherFunc = argument.getGatherFunc();
+            gatherFunc(argument.getInput(), runRows, argument.getOutput());
+        }
+
+        runBody(context, sourceStmts);
+
+        NLElementCursor cursor(source, elementCount);
+        size_t elements = 0;
+
+        while (!cursor.exhausted() && withinLimit()) {
+            cursor.fillChunk(chunkSize, rowsRaw, elementEmit ? &positions->getRaw() : nullptr);
+            elements += rowsRaw.size();
+
+            if (elementEmit) {
+                elementEmit(source, rows, positions, loopData->getElementOutput());
+            } else if (elementCell) {
+                const auto gatherFunc = elementCell->getGatherFunc();
+                gatherFunc(elementCell->getInput(), rows, elementCell->getOutput());
+            }
+
+            std::ranges::transform(rowsRaw, rowsRaw.begin(), [runStart](size_t row) {
+                return row + runStart;
+            });
+
+            for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
+                const auto gatherFunc = carriedColumn.getGatherFunc();
+                gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
+            }
+
+            runBody(context, loopBody);
+        }
+
+        runStart += runLength;
+        runLength = elements == 0 ? chunkSize : std::max<size_t>(1, chunkSize * runLength / elements);
+    }
+}
+
 void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesLoopData* loopData = static_cast<NLScanEdgesLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();

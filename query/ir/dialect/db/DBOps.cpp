@@ -1884,6 +1884,34 @@ LogicalResult Unwind::verify() {
     return verifyCarriedResults(getOperation(), getColumnsToFilter(), getCarried());
 }
 
+// The source block takes one argument per carried column, of its type, and ends naming
+// the source.
+LogicalResult UnwindComputed::verify() {
+    Block& sourceBlock = getSource().front();
+
+    if (sourceBlock.empty() || !isa<UnwindYield>(sourceBlock.back())) {
+        return emitOpError("source region must end with a db.unwind_yield");
+    }
+
+    const OperandRange carried = getColumnsToFilter();
+    if (sourceBlock.getNumArguments() != carried.size()) {
+        return emitOpError("source region takes one argument per carried column, ")
+               << "expected " << carried.size() << " but has " << sourceBlock.getNumArguments();
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const Type argumentType = sourceBlock.getArgument(static_cast<unsigned>(carriedIndex)).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return emitOpError("source argument ") << carriedIndex
+                                                   << " must have the type of carried column "
+                                                   << carriedIndex;
+        }
+    }
+
+    return verifyCarriedResults(getOperation(), carried, getCarried());
+}
+
 LogicalResult UnwindRange::verify() {
     const ColumnType elementColumn = dyn_cast<ColumnType>(getElement().getType());
     const Type element = elementColumn ? elementColumn.getType() : Type {};

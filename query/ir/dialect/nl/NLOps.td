@@ -274,6 +274,51 @@ def UnwindRange : NLOp<"unwind_range", [Pure, AttrSizedOperandSegments]> {
 }
 
 /**
+* UnwindComputed
+*/
+def UnwindComputed : NLOp<"unwind_computed", [Pure]> {
+  let summary = "Create a database iterator that computes its source over a few input rows at a time and unwinds it";
+  let description = [{
+    Imperative counterpart of db.unwind_computed. The region's arguments are the carried
+    chunks cut to a run of input rows, and its yield the source cells of that run. Each
+    step of an enclosing nl.for fills one chunk of elements, as nl.unwind does, plus one
+    chunk per carried column gathered from the whole input; once a run's cells are spent
+    the region runs again over the next, sized so it holds about one chunk of elements:
+
+      %rows = nl.unwind_computed({%names}) ({
+        ^bb0(%namesIn: !nl.chunk<!storage.nullable<!storage.string>>):
+          %parts = nl.split %namesIn, %comma : ...
+          nl.unwind_yield %parts : !nl.chunk<!storage.nullable<!storage.list<!storage.string>>>
+      }) : (!nl.chunk<!storage.nullable<!storage.string>>)
+         -> !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>,
+                     !nl.chunk<!storage.nullable<!storage.string>>>
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  // Exactly one block, ending in an nl.unwind_yield.
+  let regions = (region SizedRegion<1>:$source);
+
+  let assemblyFormat = [{
+    `(` `{` $columns_to_filter `}` `)` $source attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
+* UnwindYield
+*/
+def UnwindYield : NLOp<"unwind_yield", [Pure, Terminator, HasParent<"UnwindComputed">]> {
+  let summary = "Name the source cells an nl.unwind_computed's region computes for a run of rows";
+
+  let arguments = (ins NLChunk:$source);
+
+  let assemblyFormat = [{
+    $source attr-dict `:` qualified(type($source))
+  }];
+}
+
+/**
 * FetchNodes
 */
 def FetchNodes : NLOp<"fetch_nodes", [Pure]> {

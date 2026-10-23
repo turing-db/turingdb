@@ -57,3 +57,8 @@ add_call_v3_test(test_query_ir_unwind_range_window UnwindRangeWindowTest.cpp)
 
 add_turing_test(test_query_ir_unwind_list_producer_codegen UnwindListProducerCodegenTest.cpp)
 target_include_directories(test_query_ir_unwind_list_producer_codegen PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_unwind_computed UnwindComputedTest.cpp)
+
+add_turing_test(test_query_ir_unwind_computed_codegen UnwindComputedCodegenTest.cpp)
+target_include_directories(test_query_ir_unwind_computed_codegen PRIVATE ${IR_TEST_DIR})

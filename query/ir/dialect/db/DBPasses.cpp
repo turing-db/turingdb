@@ -44,6 +44,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSEUNWINDRANGE
 #define GEN_PASS_DEF_UNNESTUNWINDCOMPREHENSION
+#define GEN_PASS_DEF_SINKUNWINDSOURCE
 #define GEN_PASS_DEF_PLACEINFACTORS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
@@ -1608,6 +1609,148 @@ struct UnnestUnwindComprehension : public impl::UnnestUnwindComprehensionBase<Un
     void runOnOperation() override {
         runWorklist<Unwind>(getOperation(), [](Operation* op, mlir::RewriterBase& rewriter) {
             return unnestUnwindComprehension(cast<Unwind>(op), rewriter);
+        });
+    }
+};
+
+// The ops computing one value per row out of the row's columns, through a region of their
+// own included, which compute the same values over any run of the rows.
+bool computesAValuePerRow(Operation* op) {
+    if (op->hasTrait<OpTrait::ConstantLike>()) {
+        return false;
+    }
+
+    return op->hasTrait<OpTrait::ConstantThroughOperands>()
+        || computesPerRow(op)
+        || isa<Range, MakeList, MakeMap, ListSlice, CollectSubquery, CountSubquery, ExistsSubquery, PatternComprehension>(op);
+}
+
+// The ops computing an unwind's source that nothing else reads, in block order, and the
+// columns of the rows they read from outside them.
+struct UnwindSourceCone {
+    llvm::SmallVector<Operation*> _ops;
+    llvm::SmallVector<Value> _inputs;
+};
+
+bool collectUnwindSourceCone(Unwind unwind, UnwindSourceCone& cone) {
+    const Value source = unwind.getSource();
+    Operation* const root = source.getDefiningOp();
+    Block* const block = unwind->getBlock();
+
+    // A source read from storage is a view of what the graph holds, so no list is built for it
+    const bool computedHere = root && root->getBlock() == block && computesAValuePerRow(root)
+                           && !isa<GetNodeProperties, GetEdgeProperties>(root);
+    if (!computedHere || !source.hasOneUse() || root->getNumResults() != 1 || ::db::yieldsConstantColumn(source)) {
+        return false;
+    }
+
+    llvm::SmallPtrSet<Operation*, 16> inCone {root};
+    cone._ops.push_back(root);
+
+    // Every reader of an op comes after it, so walking back from the root decides each op
+    // once all of its readers are decided
+    for (Operation* op = root->getPrevNode(); op; op = op->getPrevNode()) {
+        if (!computesAValuePerRow(op)) {
+            continue;
+        }
+
+        bool readInCone = false;
+        bool readOutside = false;
+        for (Operation* const user : op->getUsers()) {
+            Operation* const ancestor = block->findAncestorOpInBlock(*user);
+            if (ancestor && inCone.contains(ancestor)) {
+                readInCone = true;
+            } else {
+                readOutside = true;
+            }
+        }
+
+        if (readInCone && !readOutside) {
+            inCone.insert(op);
+            cone._ops.push_back(op);
+        }
+    }
+
+    std::reverse(cone._ops.begin(), cone._ops.end());
+
+    const auto definedInCone = [block, &inCone](Value value) {
+        Operation* const definer = value.getDefiningOp() ? value.getDefiningOp() : value.getParentBlock()->getParentOp();
+        Operation* const ancestor = definer ? block->findAncestorOpInBlock(*definer) : nullptr;
+        return ancestor && inCone.contains(ancestor);
+    };
+
+    for (Operation* const op : cone._ops) {
+        op->walk([&](Operation* nested) {
+            for (const Value operand : nested->getOperands()) {
+                const bool readFromOutside = !definedInCone(operand) && !::db::yieldsConstantColumn(operand);
+                if (readFromOutside && !llvm::is_contained(cone._inputs, operand)) {
+                    cone._inputs.push_back(operand);
+                }
+            }
+        });
+    }
+
+    return !cone._inputs.empty();
+}
+
+// Moves what an unwind's source is computed from into a db.unwind_computed, so lowering can
+// compute it a few input rows at a time.
+bool sinkUnwindSource(Unwind unwind, mlir::RewriterBase& rewriter) {
+    UnwindSourceCone cone;
+    if (!collectUnwindSourceCone(unwind, cone)) {
+        return false;
+    }
+
+    const OperandRange unwoundColumns = unwind.getColumnsToFilter();
+
+    llvm::SmallVector<Value> carried(unwoundColumns.begin(), unwoundColumns.end());
+    for (const Value input : cone._inputs) {
+        if (!llvm::is_contained(carried, input)) {
+            carried.push_back(input);
+        }
+    }
+
+    llvm::SmallVector<Type> carriedTypes;
+    llvm::SmallVector<Location> carriedLocations;
+    for (const Value column : carried) {
+        carriedTypes.push_back(column.getType());
+        carriedLocations.push_back(column.getLoc());
+    }
+
+    llvm::SmallVector<Type> resultTypes {unwind.getElement().getType()};
+    resultTypes.append(carriedTypes.begin(), carriedTypes.end());
+
+    const Location loc = unwind.getLoc();
+    rewriter.setInsertionPoint(unwind);
+    UnwindComputed computed = rewriter.create<UnwindComputed>(loc, resultTypes, carried);
+
+    Block* const sourceBlock = rewriter.createBlock(&computed.getSource(), {}, carriedTypes, carriedLocations);
+
+    mlir::IRMapping mapping;
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        mapping.map(carried[carriedIndex], sourceBlock->getArgument(static_cast<unsigned>(carriedIndex)));
+    }
+
+    rewriter.setInsertionPointToEnd(sourceBlock);
+    for (Operation* const op : cone._ops) {
+        rewriter.clone(*op, mapping);
+    }
+
+    rewriter.create<UnwindYield>(loc, mapping.lookup(unwind.getSource()));
+
+    rewriter.replaceOp(unwind, computed->getResults().take_front(unwind->getNumResults()));
+
+    for (Operation* const op : llvm::reverse(cone._ops)) {
+        rewriter.eraseOp(op);
+    }
+
+    return true;
+}
+
+struct SinkUnwindSource : public impl::SinkUnwindSourceBase<SinkUnwindSource> {
+    void runOnOperation() override {
+        runWorklist<Unwind>(getOperation(), [](Operation* op, mlir::RewriterBase& rewriter) {
+            return sinkUnwindSource(cast<Unwind>(op), rewriter);
         });
     }
 };
