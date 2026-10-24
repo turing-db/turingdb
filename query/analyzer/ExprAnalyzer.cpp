@@ -1972,8 +1972,8 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     EvaluatedType resultCommonType = EvaluatedType::Null;
     ListShape resultShape;
 
-    for (const CaseExpr::Branch& branch : expr->getBranches()) {
-        for (const CaseExpr::Test& test : branch._tests) {
+    for (CaseExpr::Branch& branch : expr->getBranches()) {
+        for (CaseExpr::Test& test : branch._tests) {
             analyzeCaseTest(branch, subject, test);
 
             if (test._value) {
@@ -2009,7 +2009,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
 
 void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    const Expr* subject,
-                                   const CaseExpr::Test& test) {
+                                   CaseExpr::Test& test) {
     const bool testsNull = test._kind == CaseExpr::TestKind::IsNull
                            || test._kind == CaseExpr::TestKind::IsNotNull;
 
@@ -2033,10 +2033,12 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                        test._value);
         }
 
+        test._resultType = whenType;
         return;
     }
 
     if (testsNull) {
+        test._resultType = EvaluatedType::Bool;
         return;
     }
 
@@ -2053,14 +2055,16 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    || op == BinaryOperator::GreaterThanOrEqual);
 
     if (testsOrdering) {
-        if (orderingResultType(subjectType, valueType) == EvaluatedType::Invalid) {
+        test._resultType = orderingResultType(subjectType, valueType);
+
+        if (test._resultType == EvaluatedType::Invalid) {
             throwError(fmt::format("A CASE cannot order '{}' against '{}'",
                                    EvaluatedTypeName::value(subjectType),
                                    EvaluatedTypeName::value(valueType)),
                        test._value);
         }
     } else {
-        analyzeEquality(subjectType, valueType, test._value);
+        test._resultType = analyzeEquality(subjectType, valueType, test._value);
     }
 }
 
