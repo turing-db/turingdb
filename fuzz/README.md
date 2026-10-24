@@ -74,7 +74,7 @@ Run under valgrind for detailed analysis:
 
 ```bash
 # Build debug harnesses first (one-time)
-cd build_debug && cmake .. && make -j8 fuzz_query_engine fuzz_http_parser
+cd build_debug && cmake -G Ninja .. && ninja -j8 fuzz_query_engine fuzz_http_parser
 
 # Analyze a crash
 valgrind --leak-check=full --track-origins=yes \

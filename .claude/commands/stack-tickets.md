@@ -93,8 +93,8 @@ Scratch files go in <scratch>/<TICKET>/, never in the repository.
 Read CLAUDE.md and .claude/memory/MEMORY.md, with the files MEMORY.md links to, before
 writing any code, unless they are already in your context. They bind you. In particular:
 test first, a new test in its own file and CMake target, SimpleGraph for query behaviour,
-build only the targets you need (never a bare `make -j8`, never `cmake ..`), no
-`make run_regress`, and the C++ style rules, comments included.
+build only the targets you need (never a bare `ninja -j8`, never `cmake ..`), no
+`ninja run_regress`, and the C++ style rules, comments included.
 
 1. Read the ticket: load mcp__linear-server__get_issue and mcp__linear-server__list_comments
    with ToolSearch, then fetch <TICKET> and its comments.

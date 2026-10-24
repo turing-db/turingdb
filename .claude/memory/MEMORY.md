@@ -39,8 +39,8 @@
 - Check `git diff main` before making changes to verify current state
 
 ## Build
-- Always build from `build/` directory: `make -j8`
-- Regression tests: `make run_regress` (classic pipeline only -- proves nothing about v3/MLIR work)
+- Always build from `build/` directory: `ninja -j8`
+- Regression tests: `ninja run_regress` (classic pipeline only -- proves nothing about v3/MLIR work)
 - Unit tests: `ctest` or `ctest --output-on-failure`
 
 ## Code Style Feedback
@@ -86,7 +86,7 @@
 - @feedback_separate_test_file.md — new test → its own .cpp + CMake target, don't append to an existing test file
 - @feedback_explicit_ci_runner_labels.md — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
 - @feedback_no_build_during_iteration.md — don't build after every micro-edit; wait until the user asks
-- @feedback_no_redundant_cmake.md — don't run `cmake ..` before `make`; make reconfigures itself
+- @feedback_no_redundant_cmake.md — don't run `cmake ..` before `ninja`; ninja reconfigures itself
 - @feedback_pr_body_plain_sentence.md — PR body is a bare imperative sentence ("Implement X."), not a one-sentence summary of scope or design
 - @feedback_pr_title_ticket_code.md — PR title starts with the Linear ticket code ("TUR-124: ...") when there is one; commit subjects stay area-prefixed
 

@@ -22,20 +22,20 @@ git clone --recursive https://github.com/turing-db/turingdb.git
 
 # Build
 mkdir -p build && cd build
-cmake ..
-make -j8
-make install
+cmake -G Ninja ..
+ninja -j8
+ninja install
 
 # Setup environment (adds turingdb to PATH)
 source setup.sh
 ```
 
 **Build variants:**
-- Debug build: `DEBUG_BUILD=1 cmake ..`
-- Release with debug info: `RELDEBUG=1 cmake ..`
-- Callgrind profiling: `CALLGRIND_PROFILE=1 cmake ..`
+- Debug build: `DEBUG_BUILD=1 cmake -G Ninja ..`
+- Release with debug info: `RELDEBUG=1 cmake -G Ninja ..`
+- Callgrind profiling: `CALLGRIND_PROFILE=1 cmake -G Ninja ..`
 
-Always use make, do not use ninja.
+Always use ninja, do not use make. CMake compiles through ccache and links with mold when they are installed; `-DTURING_USE_CCACHE=OFF` and `-DTURING_USE_MOLD=OFF` turn them off.
 
 ## Testing
 
@@ -51,7 +51,7 @@ ctest -R test_storage                    # Run tests matching pattern
 **Regression tests:**
 ```bash
 cd build
-make run_regress    # Run all regression tests
+ninja run_regress    # Run all regression tests
 ```
 
 Regression tests are Python-based and located in `regress/`. Each test has a `run.sh` script.
@@ -373,8 +373,8 @@ Key points:
 ## Build/iteration workflow
 
 - During multi-turn iteration on a change (style feedback, API shape, refactors), **don't build after each edit**. Just write the edits and stop. Builds are slow and noisy; running them every micro-revision burns time. Only build when the user explicitly asks ("build" / "compile" / "run it") or signals the design is settled.
-- **Build only the affected target, never the whole tree for a test.** When the change is one unit test — writing it, fixing it, adding a case to it — build and run that test's target alone: `make -j8 test_query_ir_<name>`, then `./test/query/ir/<feature>/test_query_ir_<name>`. Do not run a bare `make -j8`. The same holds for any single binary you are fixing: name its target. A bare `make -j8` rebuilds the whole engine and every test binary for nothing.
-- Don't preface `make` with `cmake ..`. `make` already re-runs cmake when any tracked `CMakeLists.txt` has changed. Only run `cmake ..` after editing `CMakeLists.txt` / `dependencies.sh`, or when resetting the build directory.
+- **Build only the affected target, never the whole tree for a test.** When the change is one unit test — writing it, fixing it, adding a case to it — build and run that test's target alone: `ninja -j8 test_query_ir_<name>`, then `./test/query/ir/<feature>/test_query_ir_<name>`. Do not run a bare `ninja -j8`. The same holds for any single binary you are fixing: name its target. A bare `ninja -j8` rebuilds the whole engine and every test binary for nothing.
+- Don't preface `ninja` with `cmake ..`. `ninja` already re-runs cmake when any tracked `CMakeLists.txt` has changed. Only run `cmake ..` after editing `CMakeLists.txt` / `dependencies.sh`, or when resetting the build directory.
 - **Make minimal, targeted edits — fix exactly what's asked.** When the request is narrow (a comment, a wording, one line), change only that and leave surrounding working code alone. Don't refactor an adjacent loop or rename things just because you're nearby (e.g. asked to fix a confusing comment over a loop, rewrite the comment — don't also convert the loop to `all_of`). It keeps diffs small and reviewable and respects the existing structure. If a larger refactor seems worthwhile, propose it separately and let the user decide rather than bundling it in. This rule is about *unrelated* changes. A refactor that the root-cause fix needs is part of the fix, not scope creep (see "Fix the root cause, in its most general form").
 
 ## Project context

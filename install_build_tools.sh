@@ -35,6 +35,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
     else
         echo "cmake ${CMAKE_PIN_VERSION} is already installed"
     fi
+
+    if ! command -v ninja &> /dev/null; then
+        echo "Installing ninja via Homebrew..."
+        brew install ninja
+    fi
 else
     # Linux - detect package manager
     if command -v apt-get &> /dev/null; then
@@ -47,6 +52,7 @@ else
         # repo setup below to resolve the distro codename.
         # patchelf is required by auditwheel repair (build.sh) to rewrite the
         # wheel's ELF rpaths when bundling the Linux wheel.
+        # ninja-build is the build tool and mold the linker of the main build.
         #
         # Refresh the package index first. The self-hosted runner containers
         # carry a stale apt index; when a security update supersedes a
@@ -55,7 +61,7 @@ else
         # re-syncs it.
         sudo apt-get update
         sudo apt-get purge -y cmake cmake-data 2>/dev/null || true
-        sudo apt-get install -y build-essential m4 lsb-release patchelf
+        sudo apt-get install -y build-essential m4 lsb-release patchelf ninja-build mold
 
         # Apache Arrow requires CMake >= 3.25 and the shared test library
         # (test/testutils/CMakeLists.txt) >= 3.27, but Ubuntu 22.04 (jammy) ships
@@ -96,9 +102,9 @@ else
             sudo apt-get install -y cmake=${CMAKE_PIN_VERSION} cmake-data=${CMAKE_PIN_VERSION}
         fi
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y cmake
+        sudo dnf install -y cmake ninja-build
     elif command -v yum &> /dev/null; then
-        sudo yum install -y cmake
+        sudo yum install -y cmake ninja-build
     else
         echo "No supported package manager found (apt-get, dnf, yum)."
         exit 1

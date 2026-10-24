@@ -10,4 +10,4 @@ if [[ "$(uname)" == "Darwin" ]]; then
     source external/dependencies/macos_setenv.sh
 fi
 
-cd build && make run_regress
+cd build && ninja run_regress

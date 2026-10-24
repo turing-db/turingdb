@@ -380,7 +380,7 @@ def main():
 
     if not os.path.isfile(args.harness):
         print(f"Error: harness binary not found: {args.harness}", file=sys.stderr)
-        print("Build with: cd build_debug && DEBUG_BUILD=1 cmake .. && make -j8 fuzz_query_engine",
+        print("Build with: cd build_debug && DEBUG_BUILD=1 cmake -G Ninja .. && ninja -j8 fuzz_query_engine",
               file=sys.stderr)
         sys.exit(1)
 

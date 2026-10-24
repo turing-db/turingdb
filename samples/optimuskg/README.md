@@ -11,7 +11,7 @@ Phenotype, Anatomy, …) and ~21.8M edges across 26 relation types.
 
 - [`uv`](https://docs.astral.sh/uv/) for managing the Python environment.
 - A built turingdb with `turing-parquet` on `PATH` (run `source setup.sh`
-  from the repo root after `make install`).
+  from the repo root after `ninja install`).
 
 ## Run
 

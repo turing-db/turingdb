@@ -56,7 +56,7 @@ def _ensure_executable_built() -> Path:
         raise RuntimeError(
             "Cannot build turingdb: CMakeLists.txt not found and no pre-built "
             "executable exists. Please build from the source repository:\n"
-            "  cd build && cmake .. && make -j8 && make install\n"
+            "  cd build && cmake -G Ninja .. && ninja -j8 && ninja install\n"
             "Then run the build again."
         )
 
