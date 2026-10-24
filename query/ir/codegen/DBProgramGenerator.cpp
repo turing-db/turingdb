@@ -8833,16 +8833,14 @@ mlir::Value DBProgramGenerator::translateCaseTest(const Expr* subjectExpr,
     const mlir::Value value = _part._exprMap.at(test._value);
     const EvaluatedType valueType = test._value->getType();
 
-    // Null is equal to nothing, itself included, and an ordering between two types with
-    // no order between them is null, so a branch comparing across either is never taken.
+    // A test the analyzer typed Null is null on every row - a comparison with a null, an
+    // ordering across types with no order between them - so its branch is never taken.
     // IS NULL above is how a Cypher CASE tests for a null
-    const bool comparesAgainstNull = subjectIsNull || valueType == EvaluatedType::Null;
+    const bool neverTaken = test._resultType == EvaluatedType::Null;
     const bool comparesDisjointTypes = subjectExpr && comparesAsDisjointTypes(subjectType, valueType);
-    const bool ordersDisjointTypes = subjectExpr && ordersAsDisjointTypes(subjectType, valueType);
 
     const bool testsEquality = test._operator == BinaryOperator::Equal
                                || test._operator == BinaryOperator::NotEqual;
-    const bool neverTaken = comparesAgainstNull || (ordersDisjointTypes && !testsEquality);
 
     if (!subject) {
         return value;

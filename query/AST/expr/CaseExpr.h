@@ -27,11 +27,13 @@ public:
     };
 
     // One WHEN value and how the subject is compared against it. The generic form has no
-    // subject, and carries its predicate as a Value test.
+    // subject, and carries its predicate as a Value test. The analyzer records what the test
+    // answers, as it types a binary comparison: Null when it is null on every row.
     struct Test {
         Expr* _value {nullptr};
         BinaryOperator _operator {BinaryOperator::Equal};
         TestKind _kind {TestKind::Value};
+        EvaluatedType _resultType {EvaluatedType::Invalid};
     };
 
     using Tests = std::vector<Test>;
@@ -47,6 +49,7 @@ public:
     Expr* getElseExpr() const { return _elseExpr; }
 
     const Branches& getBranches() const { return _branches; }
+    Branches& getBranches() { return _branches; }
 
     void setSubject(Expr* subject) { _subject = subject; }
     void setElseExpr(Expr* elseExpr) { _elseExpr = elseExpr; }
