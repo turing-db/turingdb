@@ -10,6 +10,8 @@
 #include <variant>
 #include <vector>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
@@ -130,6 +132,33 @@ void appendPendingKey(NLWrittenValues& written,
     }
 }
 
+// A null equals nothing, so a row asking for one can match no entity, and Cypher rejects
+// the merge rather than create one it could never match again
+void throwIfAnyValueIsNull(const NLMergeProperty& property, const CommitWriteBuffer::UntypedProperties& values) {
+    const auto isNull = [](const CommitWriteBuffer::UntypedProperty& value) {
+        return std::visit([](const auto& held) { return !held.has_value(); }, value.value);
+    };
+
+    if (std::ranges::any_of(values, isNull)) {
+        throw IRException(fmt::format("MERGE cannot match on property '{}', which is null", property._name));
+    }
+}
+
+void extractMergeProperties(const std::vector<NLMergeProperty>& properties,
+                            size_t rowCount,
+                            NLMergeWorkingSet::PropertiesPerRow& extracted) {
+    // The extractor clears each buffer it fills, so a step reuses what the last one
+    // allocated
+    extracted.resize(properties.size());
+
+    for (size_t index = 0; index < properties.size(); index++) {
+        const NLMergeProperty& property = properties[index];
+
+        extractColumnProperties(property._values, rowCount, property._propertyType._id, extracted[index]);
+        throwIfAnyValueIsNull(property, extracted[index]);
+    }
+}
+
 // A row an OPTIONAL MATCH did not match holds an invalid ID, which names no node of the
 // graph and none of the write buffer either: there is nothing to match the pattern against
 // and nothing to hang what it would write off
@@ -214,32 +243,12 @@ void NLMergeExecutor::extractProperties(size_t rowCount) {
 
     _work->_nodeProperties.resize(nodes.size());
     for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
-        const std::vector<NLMergeProperty>& properties = nodes[nodeIndex]._properties;
-        // The extractor clears each buffer it fills, so a step reuses what the last one
-        // allocated
-        NLMergeWorkingSet::PropertiesPerRow& extracted = _work->_nodeProperties[nodeIndex];
-        extracted.resize(properties.size());
-
-        for (size_t index = 0; index < properties.size(); index++) {
-            extractColumnProperties(properties[index]._values,
-                                                rowCount,
-                                                properties[index]._propertyType._id,
-                                                extracted[index]);
-        }
+        extractMergeProperties(nodes[nodeIndex]._properties, rowCount, _work->_nodeProperties[nodeIndex]);
     }
 
     _work->_hopProperties.resize(hops.size());
     for (size_t hopIndex = 0; hopIndex < hops.size(); hopIndex++) {
-        const std::vector<NLMergeProperty>& properties = hops[hopIndex]._properties;
-        NLMergeWorkingSet::PropertiesPerRow& extracted = _work->_hopProperties[hopIndex];
-        extracted.resize(properties.size());
-
-        for (size_t index = 0; index < properties.size(); index++) {
-            extractColumnProperties(properties[index]._values,
-                                                rowCount,
-                                                properties[index]._propertyType._id,
-                                                extracted[index]);
-        }
+        extractMergeProperties(hops[hopIndex]._properties, rowCount, _work->_hopProperties[hopIndex]);
     }
 }
 

@@ -95,6 +95,36 @@ TEST_F(MergeRejectionTest, rejectsAPatternOnANodeAnOptionalMatchMissed) {
         << status.getError();
 }
 
+// A null equals nothing, so a pattern asking for one has nothing to match and nothing Cypher
+// lets it create. The analyzer turns away a property it can type null; these are null on
+// some rows only, which the merge finds as it runs.
+TEST_F(MergeRejectionTest, rejectsANodePropertyNullOnARow) {
+    QueryStatus status;
+    runQuery("UNWIND ['x', null] AS v MERGE (t:Tag {name: v})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'name', which is null"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(MergeRejectionTest, rejectsAnEdgePropertyNullOnARow) {
+    QueryStatus status;
+    runQuery("UNWIND ['x', null] AS v MERGE (a:Tag {name: 'a'})-[:PROBE {w: v}]->(b:Tag {name: 'b'})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'w', which is null"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(MergeRejectionTest, rejectsAPropertyReadOffANodeAnOptionalMatchMissed) {
+    QueryStatus status;
+    runQuery("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) MERGE (:Friend {name: f.name})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'name', which is null"), std::string::npos)
+        << status.getError();
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

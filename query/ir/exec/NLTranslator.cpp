@@ -2959,7 +2959,8 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                           ._values=column,
                           ._keyAppend=selectMergeKeyAppend(propValue.getType(),
                                                            column,
-                                                           writeType._valueType)});
+                                                           writeType._valueType),
+                          ._name=propName.str()});
 
     // The graph's own property, which is what a candidate's value is read back through.
     // Absent means no committed entity carries it, so nothing there can match.

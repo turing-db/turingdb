@@ -3449,6 +3449,7 @@ struct NLMergeProperty {
     PropertyType _propertyType;
     const Column* _values {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
+    std::string _name;
 };
 
 // The graph side of that key: the same property, read out of the graph into a scratch
