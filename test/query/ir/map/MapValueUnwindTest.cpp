@@ -24,9 +24,8 @@
 using namespace db;
 using namespace turing::test;
 
-// UNWIND over a map value. Expanding the list a key holds is not supported, so what this
-// pins is that the value is turned away rather than passed through as a single row - the
-// engine must not answer a query it cannot evaluate.
+// UNWIND over a map value expands the list the key holds, one row per element, rather than
+// passing the value through as a single row
 class MapValueUnwindTest : public TuringTest {
 protected:
     void initialize() override {
@@ -119,14 +118,14 @@ protected:
     QueryConfig _queryConfig;
 };
 
-TEST_F(MapValueUnwindTest, rejectsUnwindingAMapValue) {
+TEST_F(MapValueUnwindTest, unwindsTheListAStoredMapHolds) {
     write("CREATE (n:Lst {name: 'a', attrs: {l: [1, 2]}})");
 
-    expectError("MATCH (n:Lst) UNWIND n.attrs.l AS e RETURN e", "UNWIND requires a list, not 'MapValue'");
+    expectRows("MATCH (n:Lst) UNWIND n.attrs.l AS e RETURN e", {{"1"}, {"2"}});
 }
 
-TEST_F(MapValueUnwindTest, rejectsUnwindingAMapValueOfAMapLiteral) {
-    expectError("WITH {l: [1, 2]} AS m UNWIND m.l AS e RETURN e", "UNWIND requires a list, not 'MapValue'");
+TEST_F(MapValueUnwindTest, unwindsTheListAMapLiteralHolds) {
+    expectRows("WITH {l: [1, 2]} AS m UNWIND m.l AS e RETURN e", {{"1"}, {"2"}});
 }
 
 int main(int argc, char** argv) {

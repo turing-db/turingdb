@@ -419,6 +419,25 @@ def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAli
   let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
 }
 
+def MapEntryValue : NLOp<"map_entry_value", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of the value each map entry holds, as a tagged cell";
+  let description = [{
+    A value read out of a map rides the entry it views in the map buffer. Where it meets an
+    op reading the tagged cells every value of type any rides - a CASE, a list, an
+    aggregate, NOT or a minus - its value is copied into a cell of its own:
+
+      %c = nl.map_entry_value %v : (!nl.chunk<!storage.map_element>) -> !nl.chunk<!storage.any>
+
+    A Null-tagged entry answers a Null-tagged cell.
+  }];
+
+  let arguments = (ins NLMapElementChunk:$entries);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$entries attr-dict `:` functional-type(operands, results)";
+}
+
 /**
 * Range
 */

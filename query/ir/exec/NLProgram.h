@@ -4242,6 +4242,28 @@ using NLKeyedReadFunction = NLKeyedValue (*)(const Column* input, size_t row);
 using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const Column* input,
                                                                         size_t row);
 
+// Row-wise copy of map entries' values into tagged cells (nl.map_entry_value)
+class NLMapEntryValueData : public NLFunctionData {
+public:
+    NLMapEntryValueData(const Column* input, Column* result, NLStepBuffers* stepBuffers)
+        : _input(input),
+        _result(result),
+        _stepBuffers(stepBuffers)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getResult() const { return _result; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+    std::vector<QueryListBuffer::ListItemVariant>& getItems() { return _items; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _result {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
+    std::vector<QueryListBuffer::ListItemVariant> _items;
+};
+
 // Row-wise map key read (nl.static_map_key): row r of the result views the entry row r's map
 // holds under the key, or the null entry where it holds none.
 class NLStaticMapKeyData : public NLFunctionData {

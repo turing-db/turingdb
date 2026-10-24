@@ -41,10 +41,6 @@ void FunctionDecls::initDefault() {
     typeCell->setArguments({EvaluatedType::Any});
     typeCell->setReturnTypes({{EvaluatedType::String}});
 
-    FunctionSignature* typeMapValue = createFunction("type");
-    typeMapValue->setArguments({EvaluatedType::MapValue});
-    typeMapValue->setReturnTypes({{EvaluatedType::String}});
-
     FunctionSignature* labels = createFunction("labels");
     labels->setArguments({EvaluatedType::NodePattern});
     labels->setReturnTypes({{EvaluatedType::List}});
@@ -52,10 +48,6 @@ void FunctionDecls::initDefault() {
     FunctionSignature* labelsCell = createFunction("labels");
     labelsCell->setArguments({EvaluatedType::Any});
     labelsCell->setReturnTypes({{EvaluatedType::List}});
-
-    FunctionSignature* labelsMapValue = createFunction("labels");
-    labelsMapValue->setArguments({EvaluatedType::MapValue});
-    labelsMapValue->setReturnTypes({{EvaluatedType::List}});
 
     // The ends of an edge, in the order the graph stores it: a hop walked backwards or
     // undirected binds the same edge, so its start is the node the edge leaves whichever
@@ -111,11 +103,6 @@ void FunctionDecls::initDefault() {
     keysCell->setReturnTypes({{EvaluatedType::List}});
     keysCell->setReturnedListShape(ListShape(EvaluatedType::String, 1));
 
-    FunctionSignature* keysMapValue = createFunction("keys");
-    keysMapValue->setArguments({EvaluatedType::MapValue});
-    keysMapValue->setReturnTypes({{EvaluatedType::List}});
-    keysMapValue->setReturnedListShape(ListShape(EvaluatedType::String, 1));
-
     FunctionSignature* propertiesNodes = createFunction("properties");
     propertiesNodes->setArguments({EvaluatedType::NodePattern});
     propertiesNodes->setReturnTypes({{EvaluatedType::Map}});
@@ -131,10 +118,6 @@ void FunctionDecls::initDefault() {
     FunctionSignature* propertiesCell = createFunction("properties");
     propertiesCell->setArguments({EvaluatedType::Any});
     propertiesCell->setReturnTypes({{EvaluatedType::Map}});
-
-    FunctionSignature* propertiesMapValue = createFunction("properties");
-    propertiesMapValue->setArguments({EvaluatedType::MapValue});
-    propertiesMapValue->setReturnTypes({{EvaluatedType::Map}});
 
     FunctionArgumentType nodeOrGroup(EvaluatedType::NodePattern);
     nodeOrGroup.setTakesAVariableLengthPath(true);

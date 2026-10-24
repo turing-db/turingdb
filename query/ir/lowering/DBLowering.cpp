@@ -1173,6 +1173,42 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
+    // A value read out of a map is read as a tagged cell by every op but the ones whose
+    // kernels read a map entry where it stands, and the ones carrying it
+    const bool readsEntriesInPlace = mlir::isa<mlir::db::StaticMapKey,
+                                               mlir::db::DynamicMapKey,
+                                               mlir::db::ListIndex,
+                                               mlir::db::EqOp,
+                                               mlir::db::NeqOp,
+                                               mlir::db::GtOp,
+                                               mlir::db::LtOp,
+                                               mlir::db::GteOp,
+                                               mlir::db::LteOp,
+                                               mlir::db::InOp,
+                                               mlir::db::Keys,
+                                               mlir::db::PropertyMap,
+                                               mlir::db::Labels,
+                                               mlir::db::EdgeType,
+                                               mlir::db::Output,
+                                               mlir::db::Yield>(operation);
+
+    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> entryChunks;
+    if (!readsEntriesInPlace) {
+        for (const mlir::Value operand : operation.getOperands()) {
+            const auto slotIt = _valueMap.find(operand);
+            if (slotIt == _valueMap.end()) {
+                continue;
+            }
+
+            const mlir::Value chunk = slotIt->second;
+            const mlir::Value cells = mapEntriesAsCells(chunk);
+            if (cells != chunk) {
+                entryChunks.emplace_back(operand, chunk);
+                _valueMap[operand] = cells;
+            }
+        }
+    }
+
     if (computesOnceOverConstants(operation)) {
         lowerOnceOverConstants(operation);
     } else if (raisesOverConstants(operation)) {
@@ -1180,6 +1216,24 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else {
         lowerOperationByKind(operation);
     }
+
+    for (const auto& [operand, entries] : llvm::reverse(entryChunks)) {
+        _valueMap[operand] = entries;
+    }
+}
+
+mlir::Value DBLowering::mapEntriesAsCells(mlir::Value chunk) {
+    if (!isMapElementChunk(chunk.getType())) {
+        return chunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType cellsType = nl::ChunkType::get(context, storage::AnyType::get(context));
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    setInsertionForUnaryOp(chunk);
+
+    return _builder.create<nl::MapEntryValue>(_builder.getUnknownLoc(), cellsType, chunk).getResult();
 }
 
 bool DBLowering::computesOnceOverConstants(mlir::Operation& operation) {
@@ -1826,7 +1880,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     for (mlir::Operation& operation : dbSource) {
         mlir::db::UnwindYield yield = mlir::dyn_cast<mlir::db::UnwindYield>(operation);
         if (yield) {
-            sourceChunk = rowAlignedChunk(mapValue(yield.getSource()), runCardinality);
+            sourceChunk = rowAlignedChunk(mapEntriesAsCells(mapValue(yield.getSource())), runCardinality);
         } else {
             lowerOperation(operation);
         }
@@ -2377,6 +2431,8 @@ mlir::Value DBLowering::listItemChunk(mlir::Value chunk) {
 
     if (holdsCellsPresentInEveryRow) {
         return chunk;
+    } else if (mlir::isa<storage::MapElementType>(element)) {
+        return mapEntriesAsCells(chunk);
     }
 
     return nullableValueChunk(chunk);
@@ -6163,7 +6219,11 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
             continue;
         }
 
-        const mlir::Type element = chunkValueElement(_builder, chunkType);
+        // A value read out of a map holds a type known only per row
+        const mlir::Type valueElement = chunkValueElement(_builder, chunkType);
+        const mlir::Type element = mlir::isa<storage::MapElementType>(valueElement)
+                                 ? storage::AnyType::get(_builder.getContext())
+                                 : valueElement;
         if (!unified) {
             unified = element;
             continue;

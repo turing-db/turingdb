@@ -9301,8 +9301,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
                                         || entityType == EvaluatedType::Duration
                                         || entityType == EvaluatedType::Map
-                                        || entityType == EvaluatedType::Any
-                                        || entityType == EvaluatedType::MapValue;
+                                        || entityType == EvaluatedType::Any;
 
     if (readsOffTheVariableItself) {
         const auto projectedIt = _part._projectedColumns.find(entityDecl);

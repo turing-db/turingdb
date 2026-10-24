@@ -4923,6 +4923,19 @@ NLKeyedValue readTaggedKeyed(const Column* input, size_t row) {
     return readKeyedCell((*static_cast<const ColumnT*>(input))[row]);
 }
 
+// The value a map entry holds, as the item a list cell is written from
+QueryListBuffer::ListItemVariant entryItem(const MapEntryView entry) {
+    const auto read = []<typename T>(const MapEntryView view) -> QueryListBuffer::ListItemVariant {
+        if constexpr (std::is_same_v<T, PropertyNull>) {
+            return PropertyNull {};
+        } else {
+            return view.getValueAs<T>();
+        }
+    };
+
+    return dispatchMapEntry(read, entry);
+}
+
 // The entry @param keyed holds under @param key: the one its map holds, or its node's or
 // edge's property, written into @param mapBuffer as a map of that one entry. False where
 // it holds no such entry.
@@ -8991,6 +9004,39 @@ void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* da
     for (size_t row = 0; row < rowCount; row++) {
         outputRaw[row] = entryAt(row);
     }
+}
+
+// The values are copied into the step's list buffer as one list, whose elements are the cells
+void NLExecutor::runMapEntryValue(NLExecutionContext*, NLFunctionData* data) {
+    NLMapEntryValueData* entryValue = static_cast<NLMapEntryValueData*>(data);
+
+    const Column* input = entryValue->getInput();
+    Column* result = entryValue->getResult();
+
+    NLStepBuffers* const stepBuffers = entryValue->getStepBuffers();
+    stepBuffers->clear();
+
+    std::vector<QueryListBuffer::ListItemVariant>& items = entryValue->getItems();
+    items.clear();
+
+    if (const auto* constant = dynamic_cast<const ColumnConst<MapEntryView>*>(input)) {
+        items.push_back(entryItem(constant->getRaw()));
+
+        const ListView cells = stepBuffers->listBuffer().insert(items);
+        static_cast<ColumnConst<ListElementView>*>(result)->set(cells.front());
+        return;
+    }
+
+    const std::vector<MapEntryView>& entries = static_cast<const ColumnVector<MapEntryView>*>(input)->getRaw();
+
+    items.resize(entries.size());
+    std::ranges::transform(entries, items.begin(), entryItem);
+
+    const ListView cells = stepBuffers->listBuffer().insert(items);
+    std::vector<ListElementView>& resultRaw = static_cast<ColumnVector<ListElementView>*>(result)->getRaw();
+
+    resultRaw.resize(entries.size());
+    std::ranges::copy(cells.elements(), resultRaw.begin());
 }
 
 // Row r of the result views the entry row r's map already holds under row r's key, so the

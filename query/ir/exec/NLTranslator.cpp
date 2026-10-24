@@ -1016,6 +1016,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakeMap(makeMap, body);
         } else if (nl::StaticMapKey mapKey = mlir::dyn_cast<nl::StaticMapKey>(operation)) {
             translateStaticMapKey(mapKey, body);
+        } else if (nl::MapEntryValue entryValue = mlir::dyn_cast<nl::MapEntryValue>(operation)) {
+            translateMapEntryValue(entryValue, body);
         } else if (nl::DynamicMapKey dynamicMapKey = mlir::dyn_cast<nl::DynamicMapKey>(operation)) {
             translateDynamicMapKey(dynamicMapKey, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
@@ -3577,6 +3579,26 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
                                                                    _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);
+}
+
+void NLTranslator::translateMapEntryValue(nl::MapEntryValue entryValue, NLStmtContainer* body) {
+    const mlir::Value resultValue = entryValue.getResult();
+
+    const Column* input = getColumn(entryValue.getEntries());
+
+    Column* result = nullptr;
+    if (input->getKind() == ColumnConst<MapEntryView>::staticKind()) {
+        result = _memory->alloc<ColumnConst<ListElementView>>();
+    } else {
+        result = _memory->alloc<ColumnVector<ListElementView>>();
+    }
+    _valueSlots[resultValue] = result;
+
+    NLMapEntryValueData* data = _program->allocFunctionData<NLMapEntryValueData>(input,
+                                                                                 result,
+                                                                                 _program->allocStepBuffers());
+
+    body->emplaceStmt(&NLExecutor::runMapEntryValue, data);
 }
 
 void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContainer* body) {

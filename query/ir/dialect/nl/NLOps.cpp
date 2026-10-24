@@ -807,6 +807,15 @@ LogicalResult StaticMapKey::verify() {
     return success();
 }
 
+LogicalResult MapEntryValue::verify() {
+    const Type resultElement = llvm::cast<ChunkType>(getResult().getType()).getElementType();
+    if (!llvm::isa<storage::AnyType>(resultElement)) {
+        return emitOpError("answers a chunk of tagged cells");
+    }
+
+    return success();
+}
+
 LogicalResult DynamicMapKey::verify() {
     if (!holdsAMapPerRow(getMap().getType())) {
         return emitOpError("reads a chunk of maps or of tagged cells, optionally nullable");

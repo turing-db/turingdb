@@ -236,6 +236,10 @@ private:
     // Lowers @param operation with its constants laid out over the rows reaching it
     void lowerOverReachingRows(mlir::Operation& operation);
 
+    // @param chunk with the values of its map entries copied out as tagged cells, or
+    // @param chunk itself where it holds no map entries
+    mlir::Value mapEntriesAsCells(mlir::Value chunk);
+
     // Moves @param computation, and the ops it reads that were placed after the first loop
     // of its block, ahead of that loop, where every loop reading it can see it
     void moveAheadOfLoops(mlir::Operation* computation);

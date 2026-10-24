@@ -821,15 +821,6 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
 
     throwOnNonListLiteral(arg);
 
-    // A map value is no list, and unwinding one passed the column through rather than
-    // expanding it, so the query answered with the list as a single row. Turned away as a
-    // list comprehension turns the same source away.
-    if (arg->getType() == EvaluatedType::MapValue) {
-        throwError(fmt::format("UNWIND requires a list, not '{}'",
-                               EvaluatedTypeName::value(arg->getType())),
-                   arg);
-    }
-
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
 

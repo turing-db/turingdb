@@ -1125,8 +1125,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     }
 
     const bool readsAKeyOfTheVariable = varType == EvaluatedType::Map
-                                     || varType == EvaluatedType::Any
-                                     || varType == EvaluatedType::MapValue;
+                                     || varType == EvaluatedType::Any;
 
     // m.key, where m was bound to a map rather than to an entity, or to a tagged cell whose
     // row may hold one
@@ -1144,10 +1143,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
         expr->setEntityVarDecl(varDecl);
         expr->setMapKey(propName->getName());
-        expr->setType(EvaluatedType::MapValue);
+        expr->setType(EvaluatedType::Any);
         expr->setDynamic();
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Any));
 
         return ValueType::Invalid;
     }
@@ -1244,7 +1243,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         } else if (readsAMap) {
             expr->setMapKey(componentName);
 
-            type = EvaluatedType::MapValue;
+            type = EvaluatedType::Any;
             vt = ValueType::Invalid;
         } else if (readsAsNull) {
             // The property is not one the graph carries, so the third name resolves against
@@ -1302,7 +1301,6 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
     // A map, and a tagged cell the row may have put a map in: both answer a key read
     const bool readsAMapKey = baseType == EvaluatedType::Map
-                           || baseType == EvaluatedType::MapValue
                            || baseType == EvaluatedType::Any;
 
     EvaluatedType type = EvaluatedType::Null;
@@ -1336,7 +1334,7 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
         }
     } else if (readsAMapKey) {
         expr->setReadsAMapKey();
-        type = EvaluatedType::MapValue;
+        type = EvaluatedType::Any;
     } else if (baseType != EvaluatedType::Null) {
         throwError(fmt::format("A value of type '{}' has no property '{}'",
                                EvaluatedTypeName::value(baseType), propName),
@@ -1379,8 +1377,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool indexesAMap = baseType == EvaluatedType::Map;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
-    const bool indexesATaggedCell = baseType == EvaluatedType::Any
-                                 || baseType == EvaluatedType::MapValue;
+    const bool indexesATaggedCell = baseType == EvaluatedType::Any;
 
     const bool indexesANullValue = baseType == EvaluatedType::Null;
 
@@ -1441,9 +1438,9 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         }
 
         expr->setReadsAMapKey();
-        expr->setType(EvaluatedType::MapValue);
+        expr->setType(EvaluatedType::Any);
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Any));
 
         return;
     }
@@ -1971,7 +1968,6 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::Duration;
         case EvaluatedType::Map:
             return vt == ValueType::Map;
-        case EvaluatedType::MapValue:
         case EvaluatedType::Wildcard:
         case EvaluatedType::NormalForm:
         case EvaluatedType::Invalid:

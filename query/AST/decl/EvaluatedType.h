@@ -28,7 +28,6 @@ enum class EvaluatedType : uint8_t {
     List,
     Any,
     Map,
-    MapValue,
     Wildcard,
     Tuple,
     ValueType,
@@ -81,7 +80,6 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::List, "List">,
     EnumStringPair<EvaluatedType::Any, "Any">,
     EnumStringPair<EvaluatedType::Map, "Map">,
-    EnumStringPair<EvaluatedType::MapValue, "MapValue">,
     EnumStringPair<EvaluatedType::Wildcard, "Wildcard">,
     EnumStringPair<EvaluatedType::Tuple, "Tuple">,
     EnumStringPair<EvaluatedType::ValueType, "ValueType">,
@@ -159,7 +157,7 @@ inline bool namesAComparableValue(EvaluatedType e) {
 }
 
 inline bool namesATaggedCell(EvaluatedType e) {
-    return e == EvaluatedType::Any || e == EvaluatedType::MapValue;
+    return e == EvaluatedType::Any;
 }
 
 // The types a WHERE, a WHEN, NOT, AND, OR and XOR read as a truth value. A value of type
