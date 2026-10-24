@@ -140,6 +140,13 @@ TEST_F(IntegerAgainstDoubleTest, unsignedScalarsOrderExactly) {
     expectRows("MATCH (a:Item), (b:Item) WHERE b.double < a.unsigned RETURN a.name", {{"u1"}});
 }
 
+TEST_F(IntegerAgainstDoubleTest, unsignedScalarsEqualExactly) {
+    expectRows("MATCH (a:Item), (b:Item) WHERE a.unsigned = b.double RETURN a.name", {{"u0"}});
+    expectRows("MATCH (a:Item), (b:Item) WHERE a.unsigned <> b.double RETURN a.name", {{"u1"}});
+    expectRows("MATCH (a:Item) WHERE a.unsigned = 1e19 RETURN a.name", {{"u0"}});
+    expectRows("MATCH (a:Item {unsigned: 1e19}) RETURN a.name", {{"u0"}});
+}
+
 TEST_F(IntegerAgainstDoubleTest, listsCompareExactly) {
     expectRows("RETURN [9007199254740993] = [9007199254740992.0]", {{"false"}});
     expectRows("RETURN [9007199254740992] = [9007199254740992.0]", {{"true"}});

@@ -66,9 +66,9 @@ TEST_F(CaseEqualityRuleTest, rejectsTheEqualityOfTwoDoublesAsTheBinaryEqualityDo
                 "not encouraged due to potential rounding");
 }
 
-TEST_F(CaseEqualityRuleTest, rejectsADoubleAgainstAnIntegerAsTheBinaryEqualityDoes) {
-    expectError("UNWIND [1, 2] AS x RETURN CASE x WHEN 1.5 THEN 'y' ELSE 'n' END",
-                "Operands are not valid or compatible types: 'Integer' and 'Double'");
+TEST_F(CaseEqualityRuleTest, comparesADoubleAgainstAnIntegerAsTheBinaryEqualityDoes) {
+    expectRows("UNWIND [1, 2] AS x RETURN x, CASE x WHEN 1.0 THEN 'y' ELSE 'n' END, x = 1.0",
+               {{"1", "y", "true"}, {"2", "n", "false"}});
 }
 
 TEST_F(CaseEqualityRuleTest, rejectsALabelAgainstAnIntegerAsTheBinaryEqualityDoes) {

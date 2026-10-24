@@ -72,8 +72,9 @@ std::string scanProgram(const std::string& literal) {
 }
 
 // The literal kinds db.scan_nodes_by_property_value admits, run end to end against a
-// graph carrying one property of every scannable type. The analyzer turns a double
-// equality away before codegen, so the f64 cases are only reachable from written IR.
+// graph carrying one property of every scannable type. The analyzer turns the equality of
+// two doubles away before codegen, so an f64 literal against the double property is only
+// reachable from written IR.
 class ScanByPropertyValueLoweringTest : public TuringTest {
 protected:
     void initialize() override {
@@ -164,8 +165,16 @@ TEST_F(ScanByPropertyValueLoweringTest, scansADoublePropertyAgainstAnF64Literal)
     expectRows("\"ratio\", 0.000000e+00 : f64", {0});
 }
 
-TEST_F(ScanByPropertyValueLoweringTest, aDoublePropertyDoesNotMatchAnIntegerLiteral) {
-    expectRows("\"ratio\", 1 : i64", {});
+TEST_F(ScanByPropertyValueLoweringTest, aNumberLiteralMatchesANumberPropertyOfAnotherTypeByValue) {
+    expectRows("\"ratio\", 1 : i64", {2});
+    expectRows("\"value\", 2.000000e+00 : f64", {2});
+    expectRows("\"count\", 4.000000e+00 : f64", {4});
+}
+
+TEST_F(ScanByPropertyValueLoweringTest, aNumberLiteralThePropertyTypeCannotHoldMatchesNothing) {
+    expectRows("\"value\", 2.500000e+00 : f64", {});
+    expectRows("\"count\", -1.000000e+00 : f64", {});
+    expectRows("\"ratio\", 9007199254740993 : i64", {});
 }
 
 TEST_F(ScanByPropertyValueLoweringTest, scansAnUnsignedPropertyAgainstANonNegativeLiteral) {

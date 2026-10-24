@@ -1012,6 +1012,7 @@ struct UnwindEqualityCross {
     Region* _relationFactor {nullptr};
     bool _unwindOnTheLeft {false};
     bool _readsTheIDs {false};
+    bool _readsTheIntegers {false};
     Value _unwoundColumn;
     Value _comparedColumn;
     EqOp _equality {nullptr};
@@ -1072,6 +1073,22 @@ bool unwindsIntegers(UnwindConst unwind) {
     const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
 
     return column.getType().isSignlessInteger(64);
+}
+
+bool unwindsFloats(UnwindConst unwind) {
+    const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
+
+    return isa<mlir::Float64Type>(column.getType());
+}
+
+// Whether a column is declared to hold integers. A column typed none is resolved only in
+// lowering, and can turn out to hold floats or tagged cells.
+bool holdsIntegers(Value column) {
+    const Type element = cast<ColumnType>(column.getType()).getType();
+    const storage::NullableType nullable = dyn_cast<storage::NullableType>(element);
+    const Type value = nullable ? nullable.getValueType() : element;
+
+    return value.isInteger(64);
 }
 
 // A count(*) reads how many rows a column has, never what it holds, so any column of the
@@ -1184,26 +1201,39 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     const ResultRange filtered = match._filter.getFilteredColumns();
 
     const bool entityCompared = comparesAnEntity(match._comparedColumn);
+    const bool integersCompared = holdsIntegers(match._comparedColumn);
+    const bool integerElements = unwindsIntegers(match._unwind);
+    const bool floatElements = unwindsFloats(match._unwind);
 
+    // A number can equal another without being it - 32 = 32.0, 0.0 = -0.0 - so integer
+    // elements are read back through toInteger of a column not declared to hold integers,
+    // and float elements are not stood in for.
     size_t survivingColumns = 0;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
 
         if (holdsTheElements) {
             const Value elements = filtered[index];
-            const bool readsTheIDs = entityCompared && !onlyCountsRows(elements);
-            const Type standInType = readsTheIDs ? elements.getType() : match._comparedColumn.getType();
+            const bool readsTheValues = !onlyCountsRows(elements);
+            const bool readsTheIDs = entityCompared && readsTheValues;
+            const bool readsTheIntegers = integerElements && !integersCompared && !entityCompared && readsTheValues;
+            const bool readsTheFloats = floatElements && readsTheValues;
+            const bool convertsTheStandIn = readsTheIDs || readsTheIntegers;
+            const Type standInType = convertsTheStandIn ? elements.getType() : match._comparedColumn.getType();
             const bool changesTheType = elements.getType() != standInType;
 
             if (elements.use_empty()) {
                 continue;
-            } else if (readsTheIDs && !unwindsIntegers(match._unwind)) {
+            } else if (readsTheIDs && !integerElements) {
+                return false;
+            } else if (readsTheFloats) {
                 return false;
             } else if (changesTheType && readThroughABlockArgument(elements)) {
                 return false;
             }
 
             match._readsTheIDs = match._readsTheIDs || readsTheIDs;
+            match._readsTheIntegers = match._readsTheIntegers || readsTheIntegers;
         }
 
         survivingColumns++;
@@ -1279,16 +1309,18 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
     const Operation::operand_range carried = match._filter.getColumnsToFilter();
     const ResultRange filtered = match._filter.getFilteredColumns();
 
+    const bool convertsTheStandIn = match._readsTheIDs || match._readsTheIntegers;
+
     llvm::SmallVector<Value> columns;
     llvm::SmallVector<Type> resultTypes;
     llvm::SmallVector<size_t> keptColumns;
-    llvm::SmallVector<size_t> elementsReadAsIDs;
+    llvm::SmallVector<size_t> elementsReadConverted;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
         if (holdsTheElements && filtered[index].use_empty()) {
             continue;
-        } else if (holdsTheElements && match._readsTheIDs) {
-            elementsReadAsIDs.push_back(index);
+        } else if (holdsTheElements && convertsTheStandIn) {
+            elementsReadConverted.push_back(index);
             continue;
         }
 
@@ -1300,7 +1332,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
     }
 
     const size_t comparedIndex = llvm::find(columns, match._comparedColumn) - columns.begin();
-    if (match._readsTheIDs && comparedIndex == columns.size()) {
+    if (convertsTheStandIn && comparedIndex == columns.size()) {
         columns.push_back(match._comparedColumn);
         resultTypes.push_back(match._comparedColumn.getType());
     }
@@ -1312,12 +1344,17 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         filtered[keptColumns[index]].replaceAllUsesWith(fused.getResult(index));
     }
 
-    if (match._readsTheIDs) {
+    if (convertsTheStandIn) {
         builder.setInsertionPointAfter(fused);
-        ElementID ids = builder.create<ElementID>(match._filter.getLoc(), match._unwoundColumn.getType(), fused.getResult(comparedIndex));
 
-        for (const size_t index : elementsReadAsIDs) {
-            filtered[index].replaceAllUsesWith(ids.getResult());
+        const Location loc = match._filter.getLoc();
+        const Type elementsType = match._unwoundColumn.getType();
+        const Value standIn = fused.getResult(comparedIndex);
+        const Value elements = match._readsTheIDs ? builder.create<ElementID>(loc, elementsType, standIn).getResult()
+                                                  : builder.create<ToInteger>(loc, elementsType, standIn).getResult();
+
+        for (const size_t index : elementsReadConverted) {
+            filtered[index].replaceAllUsesWith(elements);
         }
     }
 

@@ -56,40 +56,28 @@ TEST_F(ScanByPropertyValueV3Test, yieldsInScanOrder) {
 }
 
 // A literal of a kind the property can never hold is answered as false ahead of the scan,
-// so the fused scan never sees another pairing. The numeric pairing is the one still
-// turned away, integer against double being a comparison rather than a disjoint one.
+// so the fused scan never sees another pairing.
 TEST_F(ScanByPropertyValueV3Test, literalOfAnotherKindMatchesNoRow) {
     expectSortedRows("MATCH (n) WHERE n.age = 'thirty-two' RETURN n.name", {});
     expectSortedRows("MATCH (n) WHERE n.name = 32 RETURN n.name", {});
     expectSortedRows("MATCH (n) WHERE n.isFrench = 1 RETURN n.name", {});
-
-    runQueryExpectingError("MATCH (n) WHERE n.age = 32.0 RETURN n.name",
-                           "Operands are not valid or compatible types");
 }
 
 TEST_F(ScanByPropertyValueV3Test, doubleEqualityIsRejectedBeforeTheScan) {
     runWrite("MATCH (n {name: 'Remy'}) SET n.height = 1.8");
 
     runQueryExpectingError("MATCH (n) WHERE n.height = 1.8 RETURN n.name", "Equality of types");
-    runQueryExpectingError("MATCH (n) WHERE n.height = 2 RETURN n.name",
-                           "Operands are not valid or compatible types");
 }
 
 // An inline constraint desugars into the equality it spells, and answers as that equality
-// does: a literal of a kind the property can never hold matches no row, while the numeric
-// pairings stay turned away. So no admitted constraint reaches the fused scan with a
-// literal of another kind.
+// does: a literal of a kind the property can never hold matches no row. So no admitted
+// constraint reaches the fused scan with a literal of another kind.
 TEST_F(ScanByPropertyValueV3Test, inlineConstraintOfAnotherKindMatchesNoRow) {
     runWrite("MATCH (n {name: 'Remy'}) SET n.height = 1.8");
 
-    const std::string_view incompatible = "Operands are not valid or compatible types";
-    const std::string_view unevaluable = "Cannot evaluate node property";
-
     expectSortedRows("MATCH (n {name: 32}) RETURN n.name", {});
 
-    runQueryExpectingError("MATCH (n {height: 2}) RETURN n.name", incompatible);
     runQueryExpectingError("MATCH (n {height: 1.8}) RETURN n.name", "Equality of types");
-    runQueryExpectingError("MATCH (n {age: 32.0}) RETURN n.name", unevaluable);
 
     expectSortedRows("MATCH (n {age: 32}) RETURN n.name", {{"Adam"}, {"Remy"}});
 }

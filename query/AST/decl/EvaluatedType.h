@@ -170,6 +170,14 @@ inline bool namesAnEqualityOperand(EvaluatedType e) {
         || e == EvaluatedType::EdgePattern;
 }
 
+// Whether both types are numbers, which = and <> compare by value: 32 equals 32.0
+inline bool comparesAsNumbers(EvaluatedType a, EvaluatedType b) {
+    const bool aIsANumber = a == EvaluatedType::Integer || a == EvaluatedType::Double;
+    const bool bIsANumber = b == EvaluatedType::Integer || b == EvaluatedType::Double;
+
+    return aIsANumber && bIsANumber;
+}
+
 // Whether two types can never hold equal values, which makes an equality between them
 // false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - nor is a
 // string against a char, which compare as the characters they carry, nor an entity against
@@ -182,7 +190,7 @@ inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
     }
 
     const TypePairBitset pair(a, b);
-    const bool bothNumeric = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double);
+    const bool bothNumeric = comparesAsNumbers(a, b);
     const bool bothTextual = pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char);
     const bool comparesAnID = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::NodePattern)
                            || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::EdgePattern);

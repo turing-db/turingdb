@@ -126,8 +126,3 @@ TEST_F(TaggedCellArithmeticEqualityTest, computesTheElementArithmeticInAnInteger
 TEST_F(TaggedCellArithmeticEqualityTest, stillRejectsTheEqualityOfTwoDoubles) {
     expectRejected("RETURN 1.0 = 1.0", "not encouraged due to potential rounding");
 }
-
-TEST_F(TaggedCellArithmeticEqualityTest, stillRejectsADoubleTypedExpressionAgainstAnInteger) {
-    expectRejected("MATCH (n:Person) RETURN avg(n.age) = 3",
-                   "Operands are not valid or compatible types: 'Double' and 'Integer'");
-}
