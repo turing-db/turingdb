@@ -690,7 +690,7 @@ bool namesAnEntityType(mlir::Type element) {
 }
 
 // The element types an index reads out as a value column rather than as a tagged cell:
-// the scalars a value column holds.
+// the scalars a value column holds, and the lists a list of lists is made of.
 bool namesAnIndexedValueType(mlir::Type element) {
     if (!element) {
         return false;
@@ -700,7 +700,7 @@ bool namesAnIndexedValueType(mlir::Type element) {
         return integerType.getWidth() == 1 || integerType.getWidth() == 64;
     }
 
-    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType>(element);
+    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType, storage::ListType>(element);
 }
 
 // Internal type of listChunk
@@ -6063,7 +6063,14 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
         case BinaryResultKind::Numeric: {
             if (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType)) {
-                return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+                const mlir::Type cell = storage::ListElementType::get(ctx);
+
+                // A cell beside a list joins it, as the list it holds or as one element
+                if (isListChunk(lhsType) || isListChunk(rhsType)) {
+                    return storage::NullableType::get(ctx, storage::ListType::get(ctx, cell));
+                }
+
+                return storage::NullableType::get(ctx, cell);
             }
 
             const mlir::Type lhsElement = chunkValueElement(_builder, lhsType);
@@ -6102,16 +6109,28 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Concat: {
-            const bool concatenatesLists = isListChunk(lhsType) && isListChunk(rhsType);
+            const bool lhsIsAList = isListChunk(lhsType);
+            const bool rhsIsAList = isListChunk(rhsType);
+            const bool lhsIsACell = holdsTaggedCells(lhsType);
+            const bool rhsIsACell = holdsTaggedCells(rhsType);
+            const bool readsACell = lhsIsACell || rhsIsACell;
+
+            // A type-erased cell holds a string or a list only where its row says so, and
+            // a row holding a null concatenates to null
+            const mlir::Type cell = storage::ListElementType::get(ctx);
+
+            if (lhsIsACell && rhsIsACell) {
+                return storage::NullableType::get(ctx, cell);
+            } else if (readsACell && (lhsIsAList || rhsIsAList)) {
+                return storage::NullableType::get(ctx, storage::ListType::get(ctx, cell));
+            }
+
+            const bool concatenatesLists = lhsIsAList && rhsIsAList;
 
             if (!concatenatesLists) {
-                if (isListChunk(lhsType) || isListChunk(rhsType)) {
+                if (lhsIsAList || rhsIsAList) {
                     throw IRException("db.concat joins two lists or two strings, not one of each");
                 }
-
-                // A type-erased cell holds text only where its tag says so, so a row
-                // holding a null or a nested list concatenates to null
-                const bool readsACell = holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType);
 
                 const mlir::Type stringElement = storage::StringType::get(ctx);
                 return operandNullable || readsACell ? storage::NullableType::get(ctx, stringElement)

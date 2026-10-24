@@ -154,23 +154,12 @@ ListShape accumulatedShape(const ListShape& accumulator, const ListShape& value)
     return ListShape(EvaluatedType::Invalid, 1);
 }
 
-// A type-erased cell concatenates as the text it holds, which is how the element of a list
-// joins a string.
-bool concatenatesListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String);
-}
-
-// Two cells join as the texts they hold under '||', which concatenates whatever it is
-// given. '+' computes over them instead, as the other arithmetic operators do.
-bool concatenatesTwoListItems(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem);
-}
-
-// A number joins a string as the text Cypher writes it with: 1 + ' apples' is '1 apples'.
-// A boolean does not: true + 'x' has no meaning in Cypher.
+// A number or a boolean joins a string as the text Cypher writes it with: 1 + ' apples' is
+// '1 apples' and true + 'x' is 'truex'.
 bool concatenatesAsText(TypePairBitset pair) {
     return pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::String)
-        || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::String);
+        || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::String)
+        || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::String);
 }
 
 // Whether an arithmetic operator's operands are a type-erased cell and a number, or two
@@ -185,6 +174,15 @@ bool computesOverListItem(TypePairBitset pair) {
 bool computesTimeOverListItem(TypePairBitset pair) {
     return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
         || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+}
+
+// '+' over a type-erased cell does what the value its row holds calls for: a number
+// computes, a string joins as text and a list joins as a list, so the result is a cell too.
+bool addsOverListItem(TypePairBitset pair) {
+    return computesOverListItem(pair)
+        || computesTimeOverListItem(pair)
+        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
+        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
 }
 
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
@@ -548,10 +546,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            // A cell holding text concatenates with a string, as the string it holds
-            // would: the type it holds is settled row by row, so a cell holding a number
-            // joins as the text Cypher writes that number with
-            if (concatenatesListItem(pair) || concatenatesAsText(pair)) {
+            if (concatenatesAsText(pair)) {
                 type = EvaluatedType::String;
                 break;
             }
@@ -562,7 +557,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             } else if (pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
                 type = EvaluatedType::Duration;
                 break;
-            } else if (computesTimeOverListItem(pair)) {
+            } else if (addsOverListItem(pair)) {
                 type = EvaluatedType::ListItem;
                 break;
             }
@@ -571,11 +566,6 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             // The list cases come first: [1, 2] + null appends the null instead
             if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
                 type = EvaluatedType::Null;
-                break;
-            }
-
-            if (computesOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
                 break;
             }
 
@@ -599,8 +589,17 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (concatenatesListItem(pair) || concatenatesTwoListItems(pair)) {
+            // A type-erased cell joins a string where its row holds a string, a list where
+            // it holds a list, and is a type error where it holds anything else
+            if (pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)) {
                 type = EvaluatedType::String;
+                break;
+            } else if (pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)) {
+                type = EvaluatedType::List;
+                expr->setListShape(ListShape(EvaluatedType::Invalid, 1));
+                break;
+            } else if (pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)) {
+                type = EvaluatedType::ListItem;
                 break;
             }
 

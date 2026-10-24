@@ -8782,7 +8782,14 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         break;
         case BinaryOperator::Add: {
             const EvaluatedType resultType = binExpr->getType();
-            const bool isConcatenation = resultType == EvaluatedType::String || resultType == EvaluatedType::List;
+
+            // A type-erased cell joins a list as the list it holds or as one element of it,
+            // which only its row says, so an add over one is decided row by row
+            const bool addsACell = lhsExpr->getType() == EvaluatedType::ListItem
+                                || rhsExpr->getType() == EvaluatedType::ListItem;
+            const bool joinsAsText = resultType == EvaluatedType::String;
+            const bool joinsAsList = resultType == EvaluatedType::List;
+            const bool isConcatenation = !addsACell && (joinsAsText || joinsAsList);
 
             if (isConcatenation) {
                 // A scalar concatenated with a list joins it as the one-element list it

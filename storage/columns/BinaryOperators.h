@@ -251,8 +251,72 @@ inline bool holdsAString(const T& value) {
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() && holdsAString(*value);
     } else {
-        return std::is_same_v<Decayed, std::string_view>;
+        return std::is_same_v<Decayed, types::String::Primitive>
+            || std::is_same_v<Decayed, types::String::OwningPrimitive>;
     }
+}
+
+/// Whether such an operand holds a list: a cell tagged as one, or a list value.
+template <typename T>
+inline bool holdsAList(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return value.getTag() == ListBufferTypeTag::ListView;
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return value.has_value() && holdsAList(*value);
+    } else {
+        return std::is_same_v<Decayed, ListView>;
+    }
+}
+
+/// Whether such an operand is null: an absent value, or a cell tagged as one.
+template <typename T>
+inline bool holdsNull(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return value.getTag() == ListBufferTypeTag::Null;
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return !value.has_value() || holdsNull(*value);
+    } else {
+        return false;
+    }
+}
+
+/// The string such an operand holds, read where @ref holdsAString answered for it.
+template <typename T>
+inline std::string_view operandString(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return value.template getAs<types::String::Primitive>();
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return operandString(*value);
+    } else {
+        return value;
+    }
+}
+
+/// The list such an operand holds, read where @ref holdsAList answered for it.
+template <typename T>
+inline ListView operandList(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return value.template getAs<ListView>();
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return operandList(*value);
+    } else {
+        return value;
+    }
+}
+
+template <typename T>
+inline ListElementView stagedCell(QueryListBuffer* listBuffer, T value) {
+    const QueryListBuffer::ListItemVariant element {value};
+
+    return listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&element, 1}).front();
 }
 
 template <typename T>
@@ -282,6 +346,8 @@ inline std::optional<ListElementView> visitArithmeticOperand(const T& value, Vis
 
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() ? visitArithmeticOperand(*value, visit) : std::nullopt;
+    } else if constexpr (std::is_same_v<std::decay_t<T>, types::Bool::Primitive>) {
+        return std::nullopt;
     } else {
         return visit(arithmeticOperand(value));
     }
@@ -306,6 +372,15 @@ concept ComputesReals = std::is_same_v<F, Power>;
 template <typename F, typename T, typename U>
 concept ComputesOverTaggedCell = ComputesNumbers<F> && (TaggedCell<T> || TaggedCell<U>);
 
+template <typename T>
+concept ListTyped = std::same_as<TypeUtils::unwrap_optional_t<T>, ListView>;
+
+// A '+' of a list and a cell answers a list, whatever the cell holds
+template <typename F, typename T, typename U>
+concept AddsAListToATaggedCell = ComputesOverTaggedCell<F, T, U>
+                              && std::is_same_v<F, std::plus<>>
+                              && (ListTyped<T> || ListTyped<U>);
+
 template <typename F, typename T, typename U>
 concept ComputesRealOverTaggedCell = ComputesReals<F> && (TaggedCell<T> || TaggedCell<U>);
 
@@ -319,26 +394,100 @@ concept ComputesOverColumnType = !ComputesOverTaggedCell<F, T, U>
 // The concatenation of two lists, as opposed to the two strings the same operator joins.
 // Either side may be nullable, a stored list being read out of a nullable column.
 template <typename A, typename B>
-concept ConcatenatesLists =
-    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<A>>, ListView>
-    && std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<B>>, ListView>;
+concept ConcatenatesLists = ListTyped<A> && ListTyped<B>;
 
-// A concatenation answers null where an operand is null, or where a type-erased cell holds
-// no text of its own. Two plain values always answer the text they make.
 template <typename A, typename B>
-concept ConcatenatesNullableText = TypeUtils::is_optional_v<std::decay_t<A>>
-                                || TypeUtils::is_optional_v<std::decay_t<B>>
-                                || TaggedCell<A>
-                                || TaggedCell<B>;
+concept ConcatenatesACell = TaggedCell<A> || TaggedCell<B>;
+
+// What '||' over a type-erased cell answers: a cell where both sides are cells, since only
+// their rows say whether they hold strings or lists, and otherwise what the other side is
+template <typename A, typename B>
+using CellConcatenation = std::conditional_t<TaggedCell<A> && TaggedCell<B>,
+                                             ListElementView,
+                                             std::conditional_t<ListTyped<A> || ListTyped<B>,
+                                                                ListView,
+                                                                std::string_view>>;
 
 // The operands a '+' can join as text when one of them turns out to hold a string
 template <typename T>
-concept JoinsAsText = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>
-                   || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, std::string_view>
-                   || std::is_arithmetic_v<TypeUtils::unwrap_optional_t<std::decay_t<T>>>;
+concept JoinsAsText = TaggedCell<T>
+                   || std::same_as<TypeUtils::unwrap_optional_t<T>, types::String::Primitive>
+                   || std::same_as<TypeUtils::unwrap_optional_t<T>, types::String::OwningPrimitive>
+                   || std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
+                   || std::is_arithmetic_v<TypeUtils::unwrap_optional_t<T>>;
+
+// The text a type-erased cell joins a string with under '+', false where its tag names a
+// value that has none
+inline bool cellText(const ListElementView cell, std::string_view& text, ValueTextScratch& scratch) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::String:
+            text = cell.getAs<types::String::Primitive>();
+            return true;
+        break;
+
+        case ListBufferTypeTag::Int:
+            text = valueTextInto(cell.getAs<types::Int64::Primitive>(), scratch);
+            return true;
+        break;
+
+        case ListBufferTypeTag::UInt:
+            text = valueTextInto(cell.getAs<types::UInt64::Primitive>(), scratch);
+            return true;
+        break;
+
+        case ListBufferTypeTag::Double:
+            text = valueTextInto(cell.getAs<types::Double::Primitive>(), scratch);
+            return true;
+        break;
+
+        case ListBufferTypeTag::Bool:
+            text = valueTextInto(cell.getAs<types::Bool::Primitive>(), scratch);
+            return true;
+        break;
+
+        default:
+            return false;
+        break;
+    }
+}
+
+// The text one side of a '+' joins a string with: a string's own characters, or the ones
+// Cypher writes a number or a boolean with. False where the side contributes none. Where
+// the text has to be written out, @param scratch holds it.
+template <typename T>
+bool joinedSideText(const T& value, std::string_view& text, ValueTextScratch& scratch) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (TypeUtils::is_optional_v<T>) {
+        if (!value.has_value()) {
+            return false;
+        }
+
+        return joinedSideText(*value, text, scratch);
+    } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return cellText(value, text, scratch);
+    } else if constexpr (std::is_arithmetic_v<Decayed> || std::is_same_v<Decayed, types::Bool::Primitive>) {
+        text = valueTextInto(value, scratch);
+        return true;
+    } else {
+        text = value;
+        return true;
+    }
+}
 
 template <typename T, typename U>
-std::optional<std::string_view> joinedText(StringBuffer* stringBuffer, const T& a, const U& b);
+std::optional<std::string_view> joinedText(StringBuffer* stringBuffer, const T& a, const U& b) {
+    ValueTextScratch leftScratch;
+    ValueTextScratch rightScratch;
+    std::string_view left;
+    std::string_view right;
+
+    if (!joinedSideText(a, left, leftScratch) || !joinedSideText(b, right, rightScratch)) {
+        return std::nullopt;
+    }
+
+    return stringBuffer->concatenate(left, right);
+}
 
 /**
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
@@ -375,11 +524,18 @@ struct BinaryOp {
     // read through the tag each row holds instead of computed in a type the column names,
     // and the result is staged as a cell of its own. Two integers answer an integer there
     // as they do anywhere else, which is what lets the result be written to an integer
-    // property.
+    // property. A '+' joins a list where either side holds one, and text where either
+    // holds a string, before it computes anything.
     template <typename T, typename U>
         requires ComputesOverTaggedCell<F, T, U>
     inline std::optional<ListElementView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
+
+        if constexpr (std::is_same_v<F, std::plus<>>) {
+            if (holdsAList(a) || holdsAList(b)) {
+                return stagedCell(_listBuffer, joinedList(a, b));
+            }
+        }
 
         if constexpr (std::is_same_v<F, std::plus<>> && JoinsAsText<T> && JoinsAsText<U>) {
             if (holdsAString(a) || holdsAString(b)) {
@@ -390,19 +546,34 @@ struct BinaryOp {
                     return std::nullopt;
                 }
 
-                return stagedCell(*text);
+                return stagedCell(_listBuffer, *text);
             }
         }
 
         return visitArithmeticOperand(a, [this, &b](const auto lhs) {
             return visitArithmeticOperand(b, [this, lhs](const auto rhs) -> std::optional<ListElementView> {
                 if constexpr (requires { F {}(lhs, rhs); }) {
-                    return this->stagedCell(F {}(lhs, rhs));
+                    return stagedCell(this->_listBuffer, F {}(lhs, rhs));
                 } else {
                     throw TuringException("Operands are not valid and compatible types");
                 }
             });
         });
+    }
+
+    // A list beside a cell joins the list the cell holds, or takes the cell as one more
+    // element. Only an absent list makes the result null.
+    template <typename T, typename U>
+        requires AddsAListToATaggedCell<F, T, U>
+    inline std::optional<ListView> operator()(T&& a, U&& b) const {
+        bioassert(_listBuffer, "A '+' over a type-erased cell has no list buffer to join its list in");
+
+        const bool joinsAnAbsentList = (ListTyped<T> && !holdsAList(a)) || (ListTyped<U> && !holdsAList(b));
+        if (joinsAnAbsentList) {
+            return std::nullopt;
+        }
+
+        return joinedList(a, b);
     }
 
     template <typename T, typename U>
@@ -418,11 +589,46 @@ struct BinaryOp {
         return F {}(*lhs, *rhs);
     }
 
-    template <typename T>
-    inline ListElementView stagedCell(T value) const {
-        const QueryListBuffer::ListItemVariant element {value};
+    // The list '+' makes of two values one of which holds a list: the two lists joined, or
+    // the other value appended or prepended as one element
+    template <typename T, typename U>
+    ListView joinedList(const T& a, const U& b) const {
+        ListElementView leftElement;
+        ListElementView rightElement;
 
-        return _listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&element, 1}).front();
+        const std::span<const ListElementView> left = joinedElements(a, leftElement);
+        const std::span<const ListElementView> right = joinedElements(b, rightElement);
+
+        return _listBuffer->concatenate(left, right);
+    }
+
+    // The elements one side brings to such a list: those of the list it holds, or the side
+    // itself as one element, staged in @param element. A null joins as a null element.
+    template <typename T>
+    std::span<const ListElementView> joinedElements(const T& value, ListElementView& element) const {
+        using Decayed = std::decay_t<T>;
+
+        if constexpr (TypeUtils::is_optional_v<T>) {
+            if (value.has_value()) {
+                return joinedElements(*value, element);
+            }
+
+            element = stagedCell(_listBuffer, PropertyNull {});
+        } else if constexpr (std::is_same_v<Decayed, ListView>) {
+            return value.elements();
+        } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
+            if (holdsAList(value)) {
+                return operandList(value).elements();
+            }
+
+            element = value;
+        } else if constexpr (std::is_same_v<Decayed, types::String::OwningPrimitive>) {
+            element = stagedCell(_listBuffer, _stringBuffer->insert(value));
+        } else {
+            element = stagedCell(_listBuffer, value);
+        }
+
+        return {&element, 1};
     }
 };
 
@@ -501,26 +707,22 @@ struct Concatenate {
     QueryListBuffer* _listBuffer {nullptr};
 
     // Two values join as the text each is written with: a string as its own characters, a
-    // number as Cypher prints it, a type-erased cell as whatever its tag says it holds. A
-    // cell holding no text - a null, a nested list - makes the concatenation null, as a
-    // null operand does.
+    // number or a boolean as Cypher prints it, which is how '+' joins one to a string
     template <typename A, typename B>
-        requires (!ConcatenatesLists<A, B>)
+        requires (!ConcatenatesLists<A, B>) && (!ConcatenatesACell<A, B>)
     inline auto operator()(const A& a, const B& b) const {
-        ValueTextScratch leftScratch;
-        ValueTextScratch rightScratch;
-
-        if constexpr (ConcatenatesNullableText<A, B>) {
+        if constexpr (TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>) {
+            return joinedText(_stringBuffer, a, b);
+        } else {
+            ValueTextScratch leftScratch;
+            ValueTextScratch rightScratch;
             std::string_view left;
             std::string_view right;
 
-            if (!concatenatedText(a, left, leftScratch) || !concatenatedText(b, right, rightScratch)) {
-                return std::optional<std::string_view> {};
-            }
+            joinedSideText(a, left, leftScratch);
+            joinedSideText(b, right, rightScratch);
 
-            return std::optional<std::string_view> {_stringBuffer->concatenate(left, right)};
-        } else {
-            return _stringBuffer->concatenate(plainText(a, leftScratch), plainText(b, rightScratch));
+            return _stringBuffer->concatenate(left, right);
         }
     }
 
@@ -528,66 +730,43 @@ struct Concatenate {
         return _listBuffer->concatenate(a, b);
     }
 
-    // The text one side of such a concatenation contributes, false where it contributes
-    // none. @param scratch holds it where the value has to be written out.
-    template <typename T>
-    static bool concatenatedText(const T& value, std::string_view& text, ValueTextScratch& scratch) {
-        if constexpr (TypeUtils::is_optional_v<T>) {
-            if (!value.has_value()) {
-                return false;
+    // '||' converts nothing, so a type-erased cell joins as the value its row holds: a
+    // string beside a string, a list beside a list. A row holding any other value is the
+    // type error the two values are.
+    template <typename A, typename B>
+        requires ConcatenatesACell<A, B>
+    inline std::optional<CellConcatenation<A, B>> operator()(const A& a, const B& b) const {
+        using Result = CellConcatenation<A, B>;
+
+        if (holdsNull(a) || holdsNull(b)) {
+            return std::nullopt;
+        }
+
+        if constexpr (!std::is_same_v<Result, ListView>) {
+            if (holdsAString(a) && holdsAString(b)) {
+                const std::string_view text = _stringBuffer->concatenate(operandString(a), operandString(b));
+
+                if constexpr (std::is_same_v<Result, ListElementView>) {
+                    return stagedCell(_listBuffer, text);
+                } else {
+                    return text;
+                }
             }
-
-            return concatenatedText(*value, text, scratch);
-        } else if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
-            return cellText(value, text, scratch);
-        } else {
-            text = plainText(value, scratch);
-            return true;
         }
-    }
 
-    // The text a value always contributes: its own characters, or the ones Cypher writes
-    // the number with
-    template <typename T>
-    static std::string_view plainText(const T& value, ValueTextScratch& scratch) {
-        if constexpr (std::is_arithmetic_v<std::decay_t<T>>) {
-            return valueTextInto(value, scratch);
-        } else {
-            return value;
+        if constexpr (!std::is_same_v<Result, std::string_view>) {
+            if (holdsAList(a) && holdsAList(b)) {
+                const ListView list = _listBuffer->concatenate(operandList(a), operandList(b));
+
+                if constexpr (std::is_same_v<Result, ListElementView>) {
+                    return stagedCell(_listBuffer, list);
+                } else {
+                    return list;
+                }
+            }
         }
-    }
 
-    static bool cellText(const ListElementView cell, std::string_view& text, ValueTextScratch& scratch) {
-        switch (cell.getTag()) {
-            case ListBufferTypeTag::String:
-                text = cell.getAs<types::String::Primitive>();
-                return true;
-            break;
-
-            case ListBufferTypeTag::Int:
-                text = valueTextInto(cell.getAs<types::Int64::Primitive>(), scratch);
-                return true;
-            break;
-
-            case ListBufferTypeTag::UInt:
-                text = valueTextInto(cell.getAs<types::UInt64::Primitive>(), scratch);
-                return true;
-            break;
-
-            case ListBufferTypeTag::Double:
-                text = valueTextInto(cell.getAs<types::Double::Primitive>(), scratch);
-                return true;
-            break;
-
-            case ListBufferTypeTag::Bool:
-                text = valueTextInto(cell.getAs<types::Bool::Primitive>(), scratch);
-                return true;
-            break;
-
-            default:
-                return false;
-            break;
-        }
+        throw TuringException("Operands are not valid and compatible types for '||'");
     }
 
     template <typename A, typename B>
@@ -609,11 +788,6 @@ struct Concatenate {
         return _listBuffer->concatenate(TypeUtils::unwrap(a), TypeUtils::unwrap(b));
     }
 };
-
-template <typename T, typename U>
-std::optional<std::string_view> joinedText(StringBuffer* stringBuffer, const T& a, const U& b) {
-    return Concatenate {stringBuffer}(a, b);
-}
 
 struct ListIndexImpl {
     inline std::optional<ListElementView> operator()(ListView list, int64_t index) const {

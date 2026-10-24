@@ -76,6 +76,11 @@ ListWriteCursor ListBuffer<N>::reserveList(size_t numElements, size_t valueBytes
 
 template <size_t N>
 ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
+    return concatenate(a.elements(), b.elements());
+}
+
+template <size_t N>
+ListView ListBuffer<N>::concatenate(std::span<const ListElementView> a, std::span<const ListElementView> b) {
     const size_t numElements = a.size() + b.size();
 
     size_t valueBytes = 0;
