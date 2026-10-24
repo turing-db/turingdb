@@ -240,6 +240,10 @@ private:
     // @param chunk itself where it holds no map entries
     mlir::Value mapEntriesAsCells(mlir::Value chunk);
 
+    // The chunk a region's terminator hands the op owning it, whose kernels read no map
+    // entry in place
+    mlir::Value yieldedChunk(mlir::Value column);
+
     // Moves @param computation, and the ops it reads that were placed after the first loop
     // of its block, ahead of that loop, where every loop reading it can see it
     void moveAheadOfLoops(mlir::Operation* computation);

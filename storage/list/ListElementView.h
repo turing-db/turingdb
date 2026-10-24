@@ -79,4 +79,9 @@ T ListElementView::getAs() const {
     return out;
 }
 
+// A cell carries its null in its tag. Declared beside the type, so that every translation
+// unit comparing one against PropertyNull reads the tag rather than PropertyNull.h's
+// fallback, which answers false.
+bool operator==(ListElementView element, PropertyNull);
+
 }

@@ -65,24 +65,6 @@ bool operator==(ListElementView element, ListView value);
 bool operator==(ListElementView element, MapView value);
 
 /**
- * @brief Tests an element of a @ref ListByteBuffer for null, as IS (NOT) NULL does.
- *
- * A tagged cell carries its own null rather than riding a nullable column, so the tag is
- * what the test reads. Declared here so the test resolves to it rather than to
- * PropertyNull.h's fallback, which answers false for any type it knows nothing about.
- */
-bool operator==(ListElementView element, PropertyNull);
-
-/**
- * @brief Tests the value of a map entry for null, as IS (NOT) NULL does.
- *
- * A map entry carries its own null in its value tag, the way a list element does, so a key
- * a map does not hold and a key whose stored value is null answer alike. Declared here for
- * the same reason as the element's test: PropertyNull.h's fallback would answer false.
- */
-bool operator==(MapEntryView entry, PropertyNull);
-
-/**
  * @brief Compares the value of a map entry against a value of a known type, and against
  * another entry's value.
  *

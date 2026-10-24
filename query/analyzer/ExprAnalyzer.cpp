@@ -607,8 +607,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             // Arithmetic over an unknown value is unknown, whatever the other side holds.
-            // The list cases come first: [1, 2] + null appends the null instead
-            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+            // A list appends the null instead, typed or held by a cell: [1, 2] + null
+            if (pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Null)) {
+                type = EvaluatedType::Any;
+                break;
+            } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
                 type = EvaluatedType::Null;
                 break;
             }

@@ -2341,9 +2341,18 @@ void caseWriteMaskCell(Column* result, size_t resultRow, const Column* value, si
     results[resultRow] = CustomBool {static_cast<const ColumnMask*>(value)->getRaw()[valueRow]};
 }
 
-// The reset already left the row absent, which is what a branch of null gives it; the
-// write is only what claims the row against the branches behind it
-void caseWriteNullCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+template <typename Primitive>
+void caseWriteNull(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    static_cast<ColumnOptVector<Primitive>*>(result)->getRaw()[resultRow] = std::nullopt;
+}
+
+template <typename ID>
+void caseWriteNullEntity(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    static_cast<ColumnVector<ID>*>(result)->getRaw()[resultRow] = ID {};
+}
+
+void caseWriteNullTaggedCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
+    static_cast<ColumnVector<ListElementView>*>(result)->getRaw()[resultRow] = ListElementView::nullElement();
 }
 
 template <typename ID>
@@ -8861,7 +8870,7 @@ NLCaseResetFn NLExecutor::selectTaggedCellReset() {
 }
 
 NLCaseWriteFn NLExecutor::selectNullCellWrite() {
-    return &caseWriteNullCell;
+    return &caseWriteNullTaggedCell;
 }
 
 NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {
@@ -9019,7 +9028,8 @@ void NLExecutor::runMapEntryValue(NLExecutionContext*, NLFunctionData* data) {
     std::vector<QueryListBuffer::ListItemVariant>& items = entryValue->getItems();
     items.clear();
 
-    if (const auto* constant = dynamic_cast<const ColumnConst<MapEntryView>*>(input)) {
+    if (result->getKind() == ColumnConst<ListElementView>::staticKind()) {
+        const ColumnConst<MapEntryView>* constant = static_cast<const ColumnConst<MapEntryView>*>(input);
         items.push_back(entryItem(constant->getRaw()));
 
         const ListView cells = stepBuffers->listBuffer().insert(items);
@@ -9308,12 +9318,10 @@ NLCaseResetFn NLExecutor::selectEntityCaseReset(NLChunkKind kind) {
 }
 
 NLCaseWriteFn NLExecutor::selectEntityCaseWrite(NLChunkKind kind, bool untypedNull) {
-    if (untypedNull) {
-        return &caseWriteNullCell;
-    } else if (kind == NLChunkKind::NodeID) {
-        return &caseWriteEntityCell<NodeID>;
+    if (kind == NLChunkKind::NodeID) {
+        return untypedNull ? &caseWriteNullEntity<NodeID> : &caseWriteEntityCell<NodeID>;
     } else if (kind == NLChunkKind::EdgeID) {
-        return &caseWriteEntityCell<EdgeID>;
+        return untypedNull ? &caseWriteNullEntity<EdgeID> : &caseWriteEntityCell<EdgeID>;
     }
 
     throw IRException("Only a node or an edge column can hold a selection over entities");
@@ -9323,16 +9331,19 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
                                           const Column* value,
                                           bool nullable,
                                           bool untypedNull) {
-    if (untypedNull) {
-        return &caseWriteNullCell;
-    } else if (value->getContainerKind() == ContainerKind::code<ColumnMask>()) {
+    if (value->getContainerKind() == ContainerKind::code<ColumnMask>()) {
         return &caseWriteMaskCell;
     }
 
     NLCaseWriteFn write = nullptr;
     const auto select = [&]<SupportedType T>() {
-        write = nullable ? &caseWriteOptCell<typename T::Primitive>
-                         : &caseWritePlainCell<typename T::Primitive>;
+        if (untypedNull) {
+            write = &caseWriteNull<typename T::Primitive>;
+        } else if (nullable) {
+            write = &caseWriteOptCell<typename T::Primitive>;
+        } else {
+            write = &caseWritePlainCell<typename T::Primitive>;
+        }
     };
     ValueTypeDispatcher(valueType).execute(select);
 

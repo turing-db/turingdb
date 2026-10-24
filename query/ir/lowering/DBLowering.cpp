@@ -1174,7 +1174,8 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
     // A value read out of a map is read as a tagged cell by every op but the ones whose
-    // kernels read a map entry where it stands, and the ones carrying it
+    // kernels read a map entry where it stands, and the ones carrying it. IN looks its
+    // left side up in place, while its right side is a list or a cell holding one.
     const bool readsEntriesInPlace = mlir::isa<mlir::db::StaticMapKey,
                                                mlir::db::DynamicMapKey,
                                                mlir::db::ListIndex,
@@ -1184,7 +1185,6 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
                                                mlir::db::LtOp,
                                                mlir::db::GteOp,
                                                mlir::db::LteOp,
-                                               mlir::db::InOp,
                                                mlir::db::Keys,
                                                mlir::db::PropertyMap,
                                                mlir::db::Labels,
@@ -1192,9 +1192,16 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
                                                mlir::db::Output,
                                                mlir::db::Yield>(operation);
 
+    const bool looksUpAnEntry = mlir::isa<mlir::db::InOp>(operation);
+
     llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> entryChunks;
     if (!readsEntriesInPlace) {
-        for (const mlir::Value operand : operation.getOperands()) {
+        for (mlir::OpOperand& use : operation.getOpOperands()) {
+            if (looksUpAnEntry && use.getOperandNumber() == 0) {
+                continue;
+            }
+
+            const mlir::Value operand = use.get();
             const auto slotIt = _valueMap.find(operand);
             if (slotIt == _valueMap.end()) {
                 continue;
@@ -1234,6 +1241,10 @@ mlir::Value DBLowering::mapEntriesAsCells(mlir::Value chunk) {
     setInsertionForUnaryOp(chunk);
 
     return _builder.create<nl::MapEntryValue>(_builder.getUnknownLoc(), cellsType, chunk).getResult();
+}
+
+mlir::Value DBLowering::yieldedChunk(mlir::Value column) {
+    return mapEntriesAsCells(mapValue(column));
 }
 
 bool DBLowering::computesOnceOverConstants(mlir::Operation& operation) {
@@ -1880,7 +1891,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     for (mlir::Operation& operation : dbSource) {
         mlir::db::UnwindYield yield = mlir::dyn_cast<mlir::db::UnwindYield>(operation);
         if (yield) {
-            sourceChunk = rowAlignedChunk(mapEntriesAsCells(mapValue(yield.getSource())), runCardinality);
+            sourceChunk = rowAlignedChunk(yieldedChunk(yield.getSource()), runCardinality);
         } else {
             lowerOperation(operation);
         }
@@ -1971,7 +1982,7 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
         }
 
         rowTagChunk = mapValue(yield.getRowTags());
-        valueChunk = mapValue(yield.getValue());
+        valueChunk = yieldedChunk(yield.getValue());
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
@@ -2149,7 +2160,7 @@ mlir::Operation* DBLowering::lowerReduceBody(mlir::Block& dbBody, mlir::Block* n
     for (mlir::Operation& operation : dbBody) {
         mlir::db::ReduceYield yield = mlir::dyn_cast<mlir::db::ReduceYield>(operation);
         if (yield) {
-            valueChunk = mapValue(yield.getValue());
+            valueChunk = yieldedChunk(yield.getValue());
         } else {
             lowerOperation(operation);
         }
@@ -2260,7 +2271,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
             rowTagChunk = mapValue(yield.getRowTags());
         }
 
-        valueChunk = mapValue(yield.getValue());
+        valueChunk = yieldedChunk(yield.getValue());
     }
 
     // PatternComprehension::verify guarantees the yield, so an empty one here means
@@ -2431,8 +2442,6 @@ mlir::Value DBLowering::listItemChunk(mlir::Value chunk) {
 
     if (holdsCellsPresentInEveryRow) {
         return chunk;
-    } else if (mlir::isa<storage::MapElementType>(element)) {
-        return mapEntriesAsCells(chunk);
     }
 
     return nullableValueChunk(chunk);
@@ -3610,7 +3619,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
 
     mlir::Value collectedValue;
     if constexpr (collectsValues) {
-        collectedValue = rowListsValueChunk(mapValue(yield.getValue()), heldTag ? heldTag : heldRows);
+        collectedValue = rowListsValueChunk(yieldedChunk(yield.getValue()), heldTag ? heldTag : heldRows);
         answeredChunks.push_back(collectedValue);
     }
 
@@ -6219,11 +6228,7 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
             continue;
         }
 
-        // A value read out of a map holds a type known only per row
-        const mlir::Type valueElement = chunkValueElement(_builder, chunkType);
-        const mlir::Type element = mlir::isa<storage::MapElementType>(valueElement)
-                                 ? storage::AnyType::get(_builder.getContext())
-                                 : valueElement;
+        const mlir::Type element = chunkValueElement(_builder, chunkType);
         if (!unified) {
             unified = element;
             continue;
@@ -6468,7 +6473,7 @@ mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardi
     mlir::Value value;
     for (mlir::Operation& operation : block) {
         if (operation.hasTrait<mlir::OpTrait::IsTerminator>()) {
-            value = mapValue(operation.getOperand(0));
+            value = yieldedChunk(operation.getOperand(0));
         } else {
             lowerOperation(operation);
         }
@@ -6939,7 +6944,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     mlir::Value mask;
     for (mlir::Operation& operation : dbHop) {
         if (mlir::db::Yield yield = mlir::dyn_cast<mlir::db::Yield>(operation)) {
-            mask = mapValue(yield.getColumns().front());
+            mask = yieldedChunk(yield.getColumns().front());
         } else {
             lowerOperation(operation);
         }

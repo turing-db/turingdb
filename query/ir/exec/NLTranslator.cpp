@@ -3587,7 +3587,7 @@ void NLTranslator::translateMapEntryValue(nl::MapEntryValue entryValue, NLStmtCo
     const Column* input = getColumn(entryValue.getEntries());
 
     Column* result = nullptr;
-    if (input->getKind() == ColumnConst<MapEntryView>::staticKind()) {
+    if (yieldsConstantColumn(resultValue)) {
         result = _memory->alloc<ColumnConst<ListElementView>>();
     } else {
         result = _memory->alloc<ColumnVector<ListElementView>>();

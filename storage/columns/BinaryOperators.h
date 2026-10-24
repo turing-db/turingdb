@@ -328,6 +328,8 @@ inline std::optional<ListElementView> visitArithmeticOperand(const T& value, Vis
 
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() ? visitArithmeticOperand(*value, visit) : std::nullopt;
+    } else if constexpr (std::is_same_v<std::decay_t<T>, PropertyNull>) {
+        return std::nullopt;
     } else {
         return visit(arithmeticOperand(value));
     }

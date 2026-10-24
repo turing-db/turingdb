@@ -94,12 +94,14 @@ struct ListMembershipKindPairs {
     using Pairs = typename OptionalKindPairs<T, ListView>::Pairs;
 };
 
-// The same test with a map value as the needle. Only the list side is ever optional, for the
-// reason MapEntryKindPairs gives.
+// The same test with a map value as the needle, against a list or the list a cell holds. Only
+// the list side is ever optional, for the reason MapEntryKindPairs gives.
 struct MapEntryMembershipKindPairs {
     using Pairs = std::tuple<
         KindPair<MapEntryView, ListView>,
-        KindPair<MapEntryView, std::optional<ListView>>>;
+        KindPair<MapEntryView, std::optional<ListView>>,
+        KindPair<MapEntryView, ListElementView>,
+        KindPair<MapEntryView, std::optional<ListElementView>>>;
 };
 
 // The same test against the list a type-erased cell holds, which is what an index of a
@@ -461,6 +463,22 @@ struct CellTextKindPairs<OP_ADD> {
     >::Type;
 };
 
+// A cell meets the null literal under '+' alone, which appends it to the list the cell holds
+template <ColumnOperator Op>
+struct CellNullKindPairs {
+    using Pairs = std::tuple<>;
+};
+
+template <>
+struct CellNullKindPairs<OP_ADD> {
+    using Pairs = std::tuple<
+        KindPair<ListElementView, PropertyNull>,
+        KindPair<std::optional<ListElementView>, PropertyNull>,
+        KindPair<PropertyNull, ListElementView>,
+        KindPair<PropertyNull, std::optional<ListElementView>>
+    >;
+};
+
 template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
           || (Op == OP_MOD) || (Op == OP_POW)
@@ -485,7 +503,8 @@ struct PairRestrictions<Op> {
         // Temporal arithmetic operations.
         typename TemporalArithmeticKindPairs<Op>::Pairs,
 
-        typename CellTextKindPairs<Op>::Pairs
+        typename CellTextKindPairs<Op>::Pairs,
+        typename CellNullKindPairs<Op>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;

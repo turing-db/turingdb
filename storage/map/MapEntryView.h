@@ -8,6 +8,8 @@
 
 #include "MapBufferTypeTag.h"
 
+#include "metadata/PropertyNull.h"
+
 namespace db {
 
 /**
@@ -77,5 +79,9 @@ T MapEntryView::getValueAs() const {
 
     return out;
 }
+
+// A map entry carries its null in its value tag, declared beside the type for the reason
+// ListElementView.h gives
+bool operator==(MapEntryView entry, PropertyNull);
 
 }
