@@ -1,0 +1,23 @@
+#include "NullLiteralType.h"
+
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Operation.h"
+
+#include "StorageTypes.h"
+
+using namespace mlir;
+
+bool mlir::isNullLiteralType(Type elementType) {
+    const auto nullable = dyn_cast_or_null<storage::NullableType>(elementType);
+
+    return nullable && isa<NoneType>(nullable.getValueType());
+}
+
+LogicalResult mlir::verifyComparesNoNullLiteral(Operation* op, Type lhsElementType, Type rhsElementType) {
+    if (isNullLiteralType(lhsElementType) || isNullLiteralType(rhsElementType)) {
+        return op->emitOpError("compares against the null literal, which is null on every row: "
+                               "is_null tests for null");
+    }
+
+    return success();
+}
