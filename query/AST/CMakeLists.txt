@@ -96,6 +96,7 @@ set(ast_sources
     Parameter.cpp
     Symbol.cpp
     SymbolChain.cpp
+    LabelExpr.cpp
     Literal.cpp
     QualifiedName.cpp
     QuantifiedPath.cpp

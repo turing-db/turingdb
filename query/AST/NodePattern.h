@@ -6,7 +6,7 @@ namespace db {
 
 class CypherAST;
 class Symbol;
-class SymbolChain;
+class LabelExpr;
 class NodePatternData;
 class Expr;
 
@@ -15,15 +15,15 @@ public:
     static NodePattern* create(CypherAST* ast);
     static NodePattern* fromExpr(CypherAST* ast, Expr* expr);
 
-    const SymbolChain* labels() const { return _labels; }
+    LabelExpr* getLabelExpr() const { return _labelExpr; }
 
     NodePatternData* getData() const { return _data; }
 
-    void setLabels(SymbolChain* labels) { _labels = labels; }
+    void setLabelExpr(LabelExpr* labelExpr) { _labelExpr = labelExpr; }
     void setData(NodePatternData* data) { _data = data; }
 
 private:
-    SymbolChain* _labels {nullptr};
+    LabelExpr* _labelExpr {nullptr};
     NodePatternData* _data {nullptr};
 
     NodePattern();

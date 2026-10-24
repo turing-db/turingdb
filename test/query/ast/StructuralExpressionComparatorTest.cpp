@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CypherAST.h"
+#include "LabelExpr.h"
 #include "Literal.h"
 #include "Parameter.h"
 #include "Symbol.h"
@@ -72,7 +73,29 @@ protected:
             chain->addParameter(Parameter::create(&_ast, parameter));
         }
 
-        return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, variable), chain);
+        return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, variable), LabelExpr::createLabels(&_ast, chain));
+    }
+
+    LabelExpr* labels(std::string_view label) {
+        SymbolChain* chain = SymbolChain::create(&_ast);
+        chain->add(Symbol::create(&_ast, label));
+
+        return LabelExpr::createLabels(&_ast, chain);
+    }
+
+    EntityTypeExpr* disjunctionTest(std::string_view lhs, std::string_view rhs) {
+        LabelExpr* disjunction = LabelExpr::createOr(&_ast, labels(lhs), labels(rhs));
+        return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, "n"), disjunction);
+    }
+
+    EntityTypeExpr* conjunctionTest(std::string_view lhs, std::string_view rhs) {
+        LabelExpr* conjunction = LabelExpr::createAnd(&_ast, labels(lhs), labels(rhs));
+        return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, "n"), conjunction);
+    }
+
+    EntityTypeExpr* negatedConjunctionTest(std::string_view lhs, std::string_view rhs) {
+        LabelExpr* conjunction = LabelExpr::createAnd(&_ast, LabelExpr::createNot(&_ast, labels(lhs)), labels(rhs));
+        return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, "n"), conjunction);
     }
 
     // n.attrs.key, as the analyzer leaves it: the property named, the key beside it.
@@ -221,6 +244,20 @@ TEST_F(StructuralExpressionComparatorTest, labelTestsCompareTheirParameters) {
 
     EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person"}, {"label"}),
                                                        typeTest("n", {"Person"})));
+}
+
+TEST_F(StructuralExpressionComparatorTest, labelExpressionsCompareByTheirOperatorsAndLabels) {
+    EXPECT_TRUE(StructuralExpressionComparator::equal(disjunctionTest("Person", "Founder"),
+                                                      disjunctionTest("Person", "Founder")));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(disjunctionTest("Person", "Founder"),
+                                                       disjunctionTest("Person", "Sales")));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(disjunctionTest("Person", "Founder"),
+                                                       conjunctionTest("Person", "Founder")));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(conjunctionTest("Person", "Founder"),
+                                                       negatedConjunctionTest("Person", "Founder")));
 }
 
 // Two keys of one map are two values, exactly as two calendar fields of one instant are, so

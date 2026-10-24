@@ -1573,12 +1573,6 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
     expr->setEntityDecl(decl);
     expr->setDynamic();
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
-
-    if (entityType == EvaluatedType::NodePattern) {
-        expr->collectLabels();
-    } else if (entityType == EvaluatedType::EdgePattern) {
-        expr->collectEdgeTypes();
-    }
 }
 
 void ExprAnalyzer::analyzeTypeTestOfAnExpr(EntityTypeExpr* expr, Expr* operand) {
@@ -1595,12 +1589,6 @@ void ExprAnalyzer::analyzeTypeTestOfAnExpr(EntityTypeExpr* expr, Expr* operand) 
     }
 
     expr->setType(testsAnEntity ? EvaluatedType::Bool : EvaluatedType::Null);
-
-    if (operandType == EvaluatedType::NodePattern) {
-        expr->collectLabels();
-    } else if (operandType == EvaluatedType::EdgePattern) {
-        expr->collectEdgeTypes();
-    }
 
     if (operand->isDynamic()) {
         expr->setDynamic();

@@ -9,6 +9,7 @@
 #include "Parameter.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
+#include "LabelExpr.h"
 #include "Literal.h"
 #include "QualifiedName.h"
 #include "QuantifiedPath.h"
@@ -65,6 +66,10 @@ CypherAST::~CypherAST() {
 
     for (SymbolChain* chain : _symbolChains) {
         delete chain;
+    }
+
+    for (LabelExpr* expr : _labelExprs) {
+        delete expr;
     }
 
     for (QualifiedName* name : _qualifiedNames) {
@@ -185,6 +190,10 @@ void CypherAST::addSymbol(Symbol* symbol) {
 
 void CypherAST::addSymbolChain(SymbolChain* symbol) {
     _symbolChains.push_back(symbol);
+}
+
+void CypherAST::addLabelExpr(LabelExpr* expr) {
+    _labelExprs.push_back(expr);
 }
 
 void CypherAST::addQualifiedName(QualifiedName* name) {

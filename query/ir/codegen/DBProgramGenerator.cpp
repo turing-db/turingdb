@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "EntityPattern.h"
+#include "LabelExpr.h"
 #include "NodePattern.h"
 #include "Parameter.h"
 #include "expr/Operators.h"
@@ -319,13 +320,6 @@ mlir::ArrayAttr schemaNamesAttr(mlir::OpBuilder& builder, std::span<const Schema
     }
 
     return builder.getArrayAttr(refs);
-}
-
-template <SchemaNameKind Kind>
-void collectLiteralNames(std::span<const SchemaNameRef<Kind>> refs, llvm::SmallVectorImpl<std::string_view>& names) {
-    for (const SchemaNameRef<Kind>& ref : refs) {
-        names.push_back(ref._name);
-    }
 }
 
 // The stage a dump of one pass is reported under: "after fuse_scan_edges", or "after
@@ -647,7 +641,9 @@ bool constrainsHop(const NodePattern* node) {
     }
 
     const NodePatternData* data = node->getData();
-    return data && (!data->labelConstraints().empty() || !data->exprConstraints().empty());
+    return data && (!data->labelConstraints().empty()
+                    || !data->labelExprConstraints().empty()
+                    || !data->exprConstraints().empty());
 }
 
 bool hasHopConstraints(const EdgePattern* pattern) {
@@ -1634,17 +1630,13 @@ void DBProgramGenerator::collectHopLabelMask(const NodePattern* node,
     }
 
     const std::span<const LabelRef> labels = data->labelConstraints();
-    if (labels.empty()) {
-        return;
+    if (!labels.empty()) {
+        masks.push_back(checkNodeLabels(column, labels, false));
     }
 
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-    const mlir::db::ColumnType labelSetIDType = allocColumnType(mlir::storage::LabelSetIDType::get(_mlirCtxt));
-    const mlir::Value labelSetIDs = _opBuilder.create<mlir::db::GetNodeLabelSet>(loc, labelSetIDType, column).getResult();
-
-    const mlir::ArrayAttr alternatives = _opBuilder.getArrayAttr({schemaNamesAttr(_opBuilder, labels)});
-    masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, alternatives).getResult());
+    for (const LabelExpr* labelExpr : data->labelExprConstraints()) {
+        masks.push_back(checkNodeLabelExpr(column, labelExpr, false));
+    }
 }
 
 void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration,
@@ -5046,6 +5038,71 @@ mlir::Value DBProgramGenerator::checkEdgeType(mlir::Value edgeTypeColumn,
         nullable).getResult();
 }
 
+mlir::Value DBProgramGenerator::checkNodeLabelExpr(mlir::Value nodeColumn,
+                                                   const LabelExpr* labelExpr,
+                                                   bool nullable) {
+    const auto checkLabelSet = [this, nodeColumn, nullable](const SymbolChain* labels) {
+        std::vector<LabelRef> refs;
+        collectSchemaNames(labels, refs);
+
+        return checkNodeLabels(nodeColumn, refs, nullable);
+    };
+
+    return combineLabelSetChecks(labelExpr, checkLabelSet);
+}
+
+mlir::Value DBProgramGenerator::checkEdgeTypeExpr(mlir::Value edgeTypeColumn,
+                                                  const LabelExpr* labelExpr,
+                                                  bool nullable) {
+    const auto checkTypeSet = [this, edgeTypeColumn, nullable](const SymbolChain* types) {
+        std::vector<EdgeTypeRef> refs;
+        collectSchemaNames(types, refs);
+
+        mlir::Value conjunction;
+        for (const EdgeTypeRef& ref : refs) {
+            const mlir::Value check = checkEdgeType(edgeTypeColumn, std::span<const EdgeTypeRef> {&ref, 1}, nullable);
+            conjunction = conjunction ? translateLogicalOperator(LogicalOperator::And, conjunction, check) : check;
+        }
+
+        return conjunction;
+    };
+
+    return combineLabelSetChecks(labelExpr, checkTypeSet);
+}
+
+mlir::Value DBProgramGenerator::combineLabelSetChecks(const LabelExpr* labelExpr, LabelSetCheck checkLabelSet) {
+    const LabelExpr::Operands& operands = labelExpr->getOperands();
+
+    switch (labelExpr->getKind()) {
+        case LabelExpr::Kind::LABELS:
+            return checkLabelSet(labelExpr->getLabels());
+        break;
+        case LabelExpr::Kind::NOT: {
+            const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+            const mlir::Value operand = combineLabelSetChecks(operands.front(), checkLabelSet);
+
+            return _opBuilder.create<mlir::db::NotOp>(_opBuilder.getUnknownLoc(), boolType, operand).getResult();
+        }
+        break;
+        case LabelExpr::Kind::AND:
+        case LabelExpr::Kind::OR: {
+            const LogicalOperator op = labelExpr->getKind() == LabelExpr::Kind::AND ? LogicalOperator::And
+                                                                                     : LogicalOperator::Or;
+
+            mlir::Value result;
+            for (const LabelExpr* operandExpr : operands) {
+                const mlir::Value operand = combineLabelSetChecks(operandExpr, checkLabelSet);
+                result = result ? translateLogicalOperator(op, result, operand) : operand;
+            }
+
+            return result;
+        }
+        break;
+    }
+
+    throwError("Unknown label expression.");
+}
+
 mlir::Value DBProgramGenerator::resolveEdgeTypeColumn(const VarDecl* decl) const {
     const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
 
@@ -7481,18 +7538,16 @@ void DBProgramGenerator::generateMatchConstraints(const MatchStmt* matchStmt) {
 }
 
 void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
-    const std::optional<VariableDependency::Constraint>& constraints = var->constraints();
-    if (!constraints.has_value()) {
-        return;
-    }
-
-    const auto applyLabelConstraint = [&](const VariableDependency::LabelNames& labels) {
+    const auto registeredNodeColumn = [&]() {
         const auto findIt = _part._varMap.find(var);
         const bool registered = findIt != _part._varMap.end() && !findIt->second.empty();
         bioassert(registered, "Label-constrained node not registered: {}", var->getName());
-        const mlir::Value nodeColumn = findIt->second.back();
 
-        filterAllColumns(checkNodeLabels(nodeColumn, labels, false));
+        return findIt->second.back();
+    };
+
+    const auto applyLabelConstraint = [&](const VariableDependency::LabelNames& labels) {
+        filterAllColumns(checkNodeLabels(registeredNodeColumn(), labels, false));
     };
 
     const auto applyEdgeTypeConstraint = [&](const VariableDependency::EdgeTypeNames& types) {
@@ -7504,19 +7559,26 @@ void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
         filterAllColumns(checkEdgeType(edgeTypeColumn, types, false));
     };
 
-    std::visit([&](auto&& constraint) {
-        using T = std::decay_t<decltype(constraint)>;
-        if constexpr (std::is_same_v<T, VariableDependency::LabelNames>) {
-            applyLabelConstraint(constraint);
-        } else if constexpr (std::is_same_v<T, VariableDependency::EdgeTypeNames>) {
-            applyEdgeTypeConstraint(constraint);
-        } else {
-            // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
-            // fires if this branch is ever instantiated; a bare static_assert(false)
-            // is diagnosed eagerly by pre-P2593 compilers even when discarded.
-            static_assert(sizeof(T) == 0, "Unhandled constraint type.");
-        }
-    }, *constraints);
+    const std::optional<VariableDependency::Constraint>& constraints = var->constraints();
+    if (constraints.has_value()) {
+        std::visit([&](auto&& constraint) {
+            using T = std::decay_t<decltype(constraint)>;
+            if constexpr (std::is_same_v<T, VariableDependency::LabelNames>) {
+                applyLabelConstraint(constraint);
+            } else if constexpr (std::is_same_v<T, VariableDependency::EdgeTypeNames>) {
+                applyEdgeTypeConstraint(constraint);
+            } else {
+                // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
+                // fires if this branch is ever instantiated; a bare static_assert(false)
+                // is diagnosed eagerly by pre-P2593 compilers even when discarded.
+                static_assert(sizeof(T) == 0, "Unhandled constraint type.");
+            }
+        }, *constraints);
+    }
+
+    for (const LabelExpr* labelExpr : var->labelExprConstraints()) {
+        filterAllColumns(checkNodeLabelExpr(registeredNodeColumn(), labelExpr, false));
+    }
 }
 
 void DBProgramGenerator::translateExpr(const Expr* expr) {
@@ -9393,18 +9455,34 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
 }
 
 // A node carries every label its test names, an edge the single type it was written with
-bool DBProgramGenerator::writtenEntityHasTypes(const PartScope::WrittenEntity& written,
-                                               std::span<const std::string_view> typeNames,
-                                               bool isNode) {
-    if (!isNode) {
-        return std::ranges::any_of(typeNames, [&written](std::string_view typeName) {
-            return typeName == written._edgeType;
-        });
+bool DBProgramGenerator::writtenEntityPasses(const PartScope::WrittenEntity& written,
+                                             const LabelExpr* labelExpr,
+                                             bool isNode) {
+    const LabelExpr::Operands& operands = labelExpr->getOperands();
+    const auto passes = [&written, isNode](const LabelExpr* operand) {
+        return writtenEntityPasses(written, operand, isNode);
+    };
+
+    switch (labelExpr->getKind()) {
+        case LabelExpr::Kind::LABELS:
+            return std::ranges::all_of(*labelExpr->getLabels(), [&written, isNode](const Symbol* label) {
+                const std::string_view name = label->getName();
+                return isNode ? std::ranges::find(written._labels, name) != end(written._labels)
+                              : name == written._edgeType;
+            });
+        break;
+        case LabelExpr::Kind::NOT:
+            return !passes(operands.front());
+        break;
+        case LabelExpr::Kind::AND:
+            return std::ranges::all_of(operands, passes);
+        break;
+        case LabelExpr::Kind::OR:
+            return std::ranges::any_of(operands, passes);
+        break;
     }
 
-    return std::ranges::all_of(typeNames, [&written](std::string_view typeName) {
-        return std::ranges::find(written._labels, typeName) != end(written._labels);
-    });
+    return false;
 }
 
 mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* typeExpr) {
@@ -9412,9 +9490,7 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
         return nullConstantColumn();
     }
 
-    const std::span<const LabelRef> labels = typeExpr->labels();
-    const std::span<const EdgeTypeRef> edgeTypes = typeExpr->edgeTypes();
-    bioassert(!labels.empty() || !edgeTypes.empty(), "Type test naming no type.");
+    const LabelExpr* labelExpr = typeExpr->getLabelExpr();
 
     if (const Expr* operand = typeExpr->getOperand()) {
         translateExpr(operand);
@@ -9423,10 +9499,10 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
         const mlir::Value entityColumn = _part._exprMap.at(operand);
 
         if (operand->getType() == EvaluatedType::EdgePattern) {
-            return checkEdgeType(fetchEdgeTypeColumn(entityColumn), edgeTypes, true);
+            return checkEdgeTypeExpr(fetchEdgeTypeColumn(entityColumn), labelExpr, true);
         }
 
-        return checkNodeLabels(entityColumn, labels, true);
+        return checkNodeLabelExpr(entityColumn, labelExpr, true);
     }
 
     const VarDecl* entityDecl = typeExpr->getEntityVarDecl();
@@ -9443,18 +9519,10 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     const PartScope::WrittenEntity* written = findWrittenEntity(entityDecl);
     const bool writtenTypesKnown = written && (isNode ? !written->_labels.empty() : !written->_edgeType.empty());
     const bool writtenTypesUnknown = written && !(isNode ? written->_labelsKnown : written->_edgeTypeKnown);
-    const bool testHoldsParameter = isNode ? holdsParameter(labels) : holdsParameter(edgeTypes);
-    const bool boundAtRuntime = testHoldsParameter || writtenTypesUnknown;
+    const bool boundAtRuntime = labelExpr->holdsParameter() || writtenTypesUnknown;
     if (writtenTypesKnown && !boundAtRuntime) {
-        llvm::SmallVector<std::string_view> typeNames;
-        if (isNode) {
-            collectLiteralNames(labels, typeNames);
-        } else {
-            collectLiteralNames(edgeTypes, typeNames);
-        }
-
         const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-        const mlir::Value answer = constantBool(writtenEntityHasTypes(*written, typeNames, isNode));
+        const mlir::Value answer = constantBool(writtenEntityPasses(*written, labelExpr, isNode));
 
         return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(),
                                                               noneType,
@@ -9463,13 +9531,13 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     }
 
     if (isEdge) {
-        return checkEdgeType(resolveOrFetchEdgeTypeColumn(entityDecl, varName), edgeTypes, true);
+        return checkEdgeTypeExpr(resolveOrFetchEdgeTypeColumn(entityDecl, varName), labelExpr, true);
     }
 
     const mlir::Value nodeColumn = resolveEntityColumn(entityDecl);
     bioassert(nodeColumn, "Label test on unknown variable: {}", varName);
 
-    return checkNodeLabels(nodeColumn, labels, true);
+    return checkNodeLabelExpr(nodeColumn, labelExpr, true);
 }
 
 void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,

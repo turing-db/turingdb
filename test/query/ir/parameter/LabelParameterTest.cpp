@@ -62,6 +62,23 @@ TEST_F(LabelParameterTest, aLabelPredicateReadsTheParameter) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
+TEST_F(LabelParameterTest, aParameterIsOneLabelOfALabelExpression) {
+    ParameterMap parameters;
+    setString(parameters, "label", "Founder");
+
+    StringRowSink disjunction;
+    runQuery("MATCH (n:$label|Sales) RETURN n.name ORDER BY n.name", parameters, disjunction);
+
+    const std::vector<StringRowSink::Row> foundersOrSales {{"Adam"}, {"Doruk"}, {"Remy"}};
+    EXPECT_EQ(disjunction.getRows(), foundersOrSales);
+
+    StringRowSink negation;
+    runQuery("MATCH (n:Person) WHERE n:!$label RETURN n.name ORDER BY n.name", parameters, negation);
+
+    const std::vector<StringRowSink::Row> otherPeople {{"Cyrus"}, {"Doruk"}, {"Luc"}, {"Martina"}, {"Maxime"}, {"Suhas"}};
+    EXPECT_EQ(negation.getRows(), otherPeople);
+}
+
 TEST_F(LabelParameterTest, aNumberedParameter) {
     ParameterMap parameters;
     setString(parameters, "0", "Founder");
@@ -175,6 +192,17 @@ TEST_F(LabelParameterTest, aLabelTestMissesANodeWrittenWithAnotherParameter) {
     runWrite("CREATE (n:$label {name: 'Ceres'}) WITH n WHERE n:Interest RETURN n.name", parameters, sink);
 
     EXPECT_TRUE(sink.getRows().empty());
+}
+
+TEST_F(LabelParameterTest, aLabelExpressionReadsANodeWrittenWithAParameter) {
+    ParameterMap parameters;
+    setString(parameters, "label", "Planet");
+
+    StringRowSink sink;
+    runWrite("CREATE (n:$label {name: 'Pluto'}) WITH n WHERE n:Moon|Planet&!Interest RETURN n.name", parameters, sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Pluto"}};
+    EXPECT_EQ(sink.getRows(), expected);
 }
 
 TEST_F(LabelParameterTest, labelsOfANodeWrittenWithAParameter) {

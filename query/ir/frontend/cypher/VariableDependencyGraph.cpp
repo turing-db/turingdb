@@ -311,6 +311,7 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
         const NodePatternData* data = node->getData();
         if (data) {
             var->addLabelConstraints(data->labelConstraints());
+            var->addLabelExprConstraints(data->labelExprConstraints());
         }
     }
 

@@ -17,6 +17,7 @@ class EntityTypeExpr;
 class ExistsExpr;
 class Expr;
 class FunctionInvocation;
+class LabelExpr;
 class ListLiteral;
 class MapLiteral;
 class NodePattern;
@@ -30,7 +31,6 @@ class SetStmt;
 class SinglePartQuery;
 class StmtContainer;
 class Symbol;
-class SymbolChain;
 class WhereClause;
 
 class ParserUtils {
@@ -73,7 +73,7 @@ public:
 
     static NodePattern* createNodePattern(CypherAST* ast,
                                           Symbol* symbol,
-                                          SymbolChain* labels,
+                                          LabelExpr* labelExpr,
                                           MapLiteral* properties,
                                           WhereClause* where);
 
@@ -115,7 +115,7 @@ public:
                                                            Expr* base,
                                                            Symbol* propertyName);
 
-    static EntityTypeExpr* createLabelTest(CypherAST* ast, Expr* operand, SymbolChain* labels);
+    static EntityTypeExpr* createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr);
 
     // `-1` stays the literal it spells: an embedding list or a procedure's constant argument
     // takes literals only

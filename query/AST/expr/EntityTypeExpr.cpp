@@ -2,15 +2,13 @@
 
 #include "CypherAST.h"
 
-#include "BioAssert.h"
-
 using namespace db;
 
-EntityTypeExpr::EntityTypeExpr(Symbol* symbol, Expr* operand, SymbolChain* types)
+EntityTypeExpr::EntityTypeExpr(Symbol* symbol, Expr* operand, LabelExpr* labelExpr)
     : Expr(Kind::ENTITY_TYPES),
     _symbol(symbol),
     _operand(operand),
-    _types(types)
+    _labelExpr(labelExpr)
 {
 }
 
@@ -19,24 +17,14 @@ EntityTypeExpr::~EntityTypeExpr() {
 
 EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, 
                                        Symbol* symbol,
-                                       SymbolChain* types) {
-    EntityTypeExpr* expr = new EntityTypeExpr(symbol, nullptr, types);
+                                       LabelExpr* labelExpr) {
+    EntityTypeExpr* expr = new EntityTypeExpr(symbol, nullptr, labelExpr);
     ast->addExpr(expr);
     return expr;
 }
 
-EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, Expr* operand, SymbolChain* types) {
-    EntityTypeExpr* expr = new EntityTypeExpr(nullptr, operand, types);
+EntityTypeExpr* EntityTypeExpr::create(CypherAST* ast, Expr* operand, LabelExpr* labelExpr) {
+    EntityTypeExpr* expr = new EntityTypeExpr(nullptr, operand, labelExpr);
     ast->addExpr(expr);
     return expr;
-}
-
-void EntityTypeExpr::collectLabels() {
-    bioassert(_types, "Type test naming no type.");
-    collectSchemaNames(_types, _labels);
-}
-
-void EntityTypeExpr::collectEdgeTypes() {
-    bioassert(_types, "Type test naming no type.");
-    collectSchemaNames(_types, _edgeTypes);
 }
