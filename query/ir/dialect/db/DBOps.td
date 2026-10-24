@@ -2948,8 +2948,9 @@ def Tail : ListFunctionOp<"tail">;
 
 def Abs : NumberFunctionOp<"abs">;
 
-// Unary minus: the number or the duration of the opposite sign
-def Negate : TypedUnaryFunctionOp<"negate", "::mlir::IntegerType, ::mlir::FloatType, ::mlir::storage::DurationType">;
+// Unary minus: the number or the duration of the opposite sign. The opposite of the lowest
+// integer or duration overflows, so it is speculatable over doubles alone.
+def Negate : TypedUnaryFunctionOp<"negate", "::mlir::FloatType">;
 
 // Unary plus: the number or the duration itself, and a type error on any other value
 def UnaryPlus : TypedUnaryFunctionOp<"unary_plus", "::mlir::IntegerType, ::mlir::FloatType, ::mlir::storage::DurationType">;
@@ -3159,22 +3160,22 @@ class PredicateOp<string mnemonic, list<Trait> traits = []>
   let assemblyFormat = "$lhs`,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def AndOp : PredicateOp<"and", [Pure]> {
+def AndOp : PredicateOp<"and", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical AND on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def OrOp : PredicateOp<"or", [Pure]> {
+def OrOp : PredicateOp<"or", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical OR on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def XorOp : PredicateOp<"xor", [Pure]> {
+def XorOp : PredicateOp<"xor", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical XOR on its two input boolean columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def NotOp : TuringOp<"not", [Pure, ConstantThroughOperands]> {
+def NotOp : TuringOp<"not", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands]> {
   let summary = "Row-wise logical NOT of a boolean column";
   let arguments = (ins Column:$operand);
   let results   = (outs ColumnBools:$result);

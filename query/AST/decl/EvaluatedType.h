@@ -162,6 +162,12 @@ inline bool namesATaggedCell(EvaluatedType e) {
     return e == EvaluatedType::Any || e == EvaluatedType::MapValue;
 }
 
+// The types a WHERE, a WHEN, NOT, AND, OR and XOR read as a truth value. A value of type
+// any holds the row's own type, which is checked as each row is read.
+inline bool namesATruthValue(EvaluatedType e) {
+    return e == EvaluatedType::Bool || e == EvaluatedType::Null || e == EvaluatedType::Any;
+}
+
 // The types = and <> take: every value and every entity
 inline bool namesAnEqualityOperand(EvaluatedType e) {
     return namesAComparableValue(e)

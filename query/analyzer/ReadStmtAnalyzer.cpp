@@ -289,7 +289,7 @@ void ReadStmtAnalyzer::analyzeYieldFilter(const YieldItems* yieldItems) {
     }
 
     const EvaluatedType whereType = whereExpr->getType();
-    if (whereType != EvaluatedType::Bool && whereType != EvaluatedType::Null) {
+    if (!namesATruthValue(whereType)) {
         throwError("WHERE expression must be a boolean", where);
     }
 }
@@ -353,7 +353,7 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
         }
 
         const EvaluatedType whereType = whereExpr->getType();
-        if (whereType != EvaluatedType::Bool && whereType != EvaluatedType::Null) {
+        if (!namesATruthValue(whereType)) {
             throwError("WHERE expression must be a boolean", pattern);
         }
     }
@@ -633,7 +633,7 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         }
 
         const EvaluatedType predicateType = predicate->getType();
-        if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
+        if (!namesATruthValue(predicateType)) {
             throwError("WHERE expression must be a boolean", walk);
         }
 

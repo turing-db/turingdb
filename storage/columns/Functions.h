@@ -897,10 +897,10 @@ public:
     using TaggedCounterpart = TaggedNegateFunction;
 
     ResultType operator()(const Value value) const {
-        constexpr int64_t lowest = std::numeric_limits<int64_t>::min();
+        constexpr int64_t LOWEST = std::numeric_limits<int64_t>::min();
 
         if constexpr (std::is_same_v<Value, types::Duration::Primitive>) {
-            if (value.getMicroseconds() == lowest) {
+            if (value.getMicroseconds() == LOWEST) {
                 throwNegationOverflow();
             }
 
@@ -908,17 +908,17 @@ public:
         } else if constexpr (std::is_floating_point_v<Value>) {
             return -value;
         } else if constexpr (std::is_unsigned_v<Value>) {
-            constexpr Value lowestMagnitude = static_cast<Value>(std::numeric_limits<int64_t>::max()) + 1;
+            constexpr Value LOWEST_MAGNITUDE = static_cast<Value>(std::numeric_limits<int64_t>::max()) + 1;
 
-            if (value > lowestMagnitude) {
+            if (value > LOWEST_MAGNITUDE) {
                 throwNegationOverflow();
-            } else if (value == lowestMagnitude) {
-                return lowest;
+            } else if (value == LOWEST_MAGNITUDE) {
+                return LOWEST;
             }
 
             return -static_cast<ResultType>(value);
         } else {
-            if (value == lowest) {
+            if (value == LOWEST) {
                 throwNegationOverflow();
             }
 

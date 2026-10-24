@@ -157,6 +157,15 @@ ListShape accumulatedShape(const ListShape& accumulator, const ListShape& value)
     return ListShape(EvaluatedType::Invalid, 1);
 }
 
+// The shape a branch of a CASE or an argument of a coalesce gives the list they answer. A
+// list whose shape no type names holds tagged cells, while a null holds no list at all.
+ListShape selectedListShape(const Expr* value) {
+    const ListShape& shape = value->getListShape();
+    const bool namesNoShape = value->getType() == EvaluatedType::List && !shape.isList();
+
+    return namesNoShape ? ListShape(EvaluatedType::Invalid, 1) : shape;
+}
+
 // A type-erased cell concatenates as the text it holds, which is how the element of a list
 // joins a string.
 bool concatenatesAny(TypePairBitset pair) {
@@ -796,11 +805,7 @@ void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
         analyzeExpr(operand);
 
         const EvaluatedType operandType = operand->getType();
-        const bool isATruthValue = operandType == EvaluatedType::Bool
-                                   || operandType == EvaluatedType::Null
-                                   || operandType == EvaluatedType::Any;
-
-        if (!isATruthValue) {
+        if (!namesATruthValue(operandType)) {
             const std::string error = fmt::format("{} operand must be a boolean, not '{}'",
                                                   op,
                                                   EvaluatedTypeName::value(operandType));
@@ -834,11 +839,7 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
     switch (expr->getOperator()) {
         case UnaryOperator::Not: {
             const EvaluatedType operandType = operand->getType();
-            const bool negatesATruthValue = operandType == EvaluatedType::Bool
-                                            || operandType == EvaluatedType::Null
-                                            || operandType == EvaluatedType::Any;
-
-            if (!negatesATruthValue) {
+            if (!namesATruthValue(operandType)) {
                 const std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
                                                       EvaluatedTypeName::value(operandType));
                 throwError(error, expr);
@@ -1859,6 +1860,15 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
             expr->setListShape(returnedShape);
         }
 
+        if (unifiesArguments && expr->getType() == EvaluatedType::List) {
+            ListShape unifiedShape;
+            for (const Expr* arg : providedArgs) {
+                unifiedShape = accumulatedShape(unifiedShape, selectedListShape(arg));
+            }
+
+            expr->setListShape(unifiedShape);
+        }
+
         if (signature->isAggregate()) {
             if (isAggregate) {
                 throwError(fmt::format("Aggregate functions may not be nested: the argument of "
@@ -2040,6 +2050,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     }
 
     EvaluatedType resultType = EvaluatedType::Null;
+    ListShape resultShape;
 
     for (const CaseExpr::Branch& branch : expr->getBranches()) {
         for (const CaseExpr::Test& test : branch._tests) {
@@ -2053,6 +2064,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
         analyzeExpr(branch._then);
 
         resultType = unifyCaseBranch(resultType, branch._then);
+        resultShape = accumulatedShape(resultShape, selectedListShape(branch._then));
 
         contaminate(branch._then);
     }
@@ -2061,10 +2073,15 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     if (elseExpr) {
         analyzeExpr(elseExpr);
         resultType = unifyCaseBranch(resultType, elseExpr);
+        resultShape = accumulatedShape(resultShape, selectedListShape(elseExpr));
         contaminate(elseExpr);
     }
 
     expr->setType(resultType);
+
+    if (resultType == EvaluatedType::List) {
+        expr->setListShape(resultShape);
+    }
 }
 
 void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
@@ -2087,7 +2104,7 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
         analyzeExpr(test._value);
 
         const EvaluatedType whenType = test._value->getType();
-        if (whenType != EvaluatedType::Bool && whenType != EvaluatedType::Null) {
+        if (!namesATruthValue(whenType)) {
             throwError(fmt::format("The WHEN condition of a CASE must be a boolean, not '{}'",
                                    EvaluatedTypeName::value(whenType)),
                        test._value);
@@ -2298,11 +2315,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
 
         // A null WHERE holds for no element, as a null WHERE cuts every row. An element of a
         // list naming no type for its elements is read as a truth value row by row
-        const bool predicateIsBoolean = predicateType == EvaluatedType::Bool
-                                     || predicateType == EvaluatedType::Null
-                                     || predicateType == EvaluatedType::Any;
-
-        if (!predicateIsBoolean) {
+        if (!namesATruthValue(predicateType)) {
             throwError("The WHERE of a list comprehension must be a boolean", predicate);
         }
     }

@@ -3983,15 +3983,9 @@ void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
 
     const bool accumulatesTaggedCells = isAnyChunk(resultType);
 
-    if (accumulatesTaggedCells) {
-        data->setReset(NLExecutor::selectTaggedCellReset());
-        data->setWrites(NLCellWrite {._taggedRead = selectListItemRead(initialValue.getType())},
-                        NLCellWrite {._taggedRead = selectListItemRead(yieldedValue.getType())});
-    } else {
-        data->setReset(selectCaseResetForChunkType(resultType));
-        data->setWrites(NLCellWrite {._write = selectCaseWriteForChunkType(resultType, initial, initialValue.getType())},
-                        NLCellWrite {._write = selectCaseWriteForChunkType(resultType, yielded, yieldedValue.getType())});
-    }
+    data->setReset(selectCaseResetForChunkType(resultType));
+    data->setWrites(selectCellWriteForChunkType(resultType, initial, initialValue.getType()),
+                    selectCellWriteForChunkType(resultType, yielded, yieldedValue.getType()));
 
     const NLReownRowsFunction reownRows = accumulatesTaggedCells ? nullptr
                                                                  : NLExecutor::selectReownRowsFunction(result);
@@ -4066,7 +4060,7 @@ NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
 
     if (isEntityIDElement(elementType)) {
         return NLExecutor::selectEntityCaseReset(chunkKindFromElementType(elementType));
-    } else if (mlir::isa<storage::AnyType>(elementType)) {
+    } else if (isAnyChunk(chunkType)) {
         return NLExecutor::selectTaggedCellReset();
     }
 

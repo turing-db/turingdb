@@ -48,6 +48,20 @@ Speculation::Speculatability speculatableOverNumbers(Operation* op) {
     return speculatableWhen(llvm::all_of(op->getOperands(), isNumberColumn));
 }
 
+// A tagged cell, or a column whose type lowering resolves, may hold a value that is no
+// boolean, which a logical operator raises on. The null literal is a nullable none.
+Speculation::Speculatability speculatableOverTruthValues(Operation* op) {
+    const bool mayReadANonBoolean = llvm::any_of(op->getOperands(), [](Value operand) {
+        const ColumnType column = cast<ColumnType>(operand.getType());
+        const Type element = columnElement(operand);
+        const bool unresolved = isa<NoneType>(column.getType()) && isa<NoneType>(element);
+
+        return unresolved || isa<storage::AnyType, storage::MapElementType>(element);
+    });
+
+    return speculatableWhen(!mayReadANonBoolean);
+}
+
 template <typename... ElementTypes>
 Speculation::Speculatability speculatableOverElement(Value input) {
     return speculatableWhen(isa<ElementTypes...>(columnElement(input)));
@@ -139,15 +153,8 @@ bool isStringColumn(Type type) {
 }
 
 bool isIntegerColumn(Value column) {
-    const ColumnType columnType = dyn_cast<ColumnType>(column.getType());
-    if (!columnType) {
-        return false;
-    }
-
-    const storage::NullableType nullable = dyn_cast<storage::NullableType>(columnType.getType());
-    const Type element = nullable ? nullable.getValueType() : columnType.getType();
-
-    return isa<IntegerType, storage::AnyType, NoneType>(element);
+    return isa<ColumnType>(column.getType())
+        && isa<IntegerType, storage::AnyType, NoneType>(::db::declaredColumnElement(column));
 }
 
 LogicalResult verifyStringResult(Operation* op, Value result) {
@@ -2456,6 +2463,22 @@ Speculation::Speculatability Split::getSpeculatability() {
     const bool splitsOnAString = isa<storage::StringType>(columnElement(getDelimiter()));
 
     return speculatableWhen(readsAString && splitsOnAString);
+}
+
+Speculation::Speculatability AndOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
+}
+
+Speculation::Speculatability OrOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
+}
+
+Speculation::Speculatability XorOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
+}
+
+Speculation::Speculatability NotOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
 }
 
 Speculation::Speculatability AddOp::getSpeculatability() {

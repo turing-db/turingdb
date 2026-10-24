@@ -7698,8 +7698,8 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         break;
 
         case UnaryOperator::Minus: {
-            // Negating an unknown value is unknown, and there is no zero to subtract it
-            // from: the null the operand is stands as the negation
+            // Negating an unknown value is unknown: the null the operand is stands as the
+            // negation
             if (expr->getType() == EvaluatedType::Null) {
                 _part._exprMap[expr] = nullConstantColumn();
                 break;
@@ -7711,8 +7711,12 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         break;
 
         case UnaryOperator::Plus: {
-            if (expr->getType() == EvaluatedType::Null) {
+            const EvaluatedType operandType = subExpr->getType();
+            if (operandType == EvaluatedType::Null) {
                 _part._exprMap[expr] = nullConstantColumn();
+                break;
+            } else if (operandType != EvaluatedType::Any) {
+                _part._exprMap[expr] = operandVal;
                 break;
             }
 

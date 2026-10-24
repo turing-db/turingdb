@@ -438,7 +438,7 @@ void CypherAnalyzer::analyze(WithStmt* withSt) {
     }
 
     const EvaluatedType predicateType = predicate->getType();
-    if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
+    if (!namesATruthValue(predicateType)) {
         throwError("WHERE expression must be a boolean", predicate);
     }
 }
@@ -642,7 +642,7 @@ DeclContext* CypherAnalyzer::analyzeSubqueryBranch(CallSubqueryStmt::Branch& bra
         }
 
         const EvaluatedType predicateType = predicate->getType();
-        if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
+        if (!namesATruthValue(predicateType)) {
             throwError("WHEN predicate must be a boolean", predicate);
         }
     }

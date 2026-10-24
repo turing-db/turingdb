@@ -80,7 +80,7 @@ TEST_F(ChainedFunctionSpeculatabilityTest, readsTheIntegerAnInnerFunctionAnswers
     EXPECT_EQ(speculatabilityOf("%a = db.unary_plus(%nine) : (!i64s) -> !unresolved\n"
                                 "  %r = db.unary_plus(%a) : (!unresolved) -> !unresolved"),
               Speculatable);
-    EXPECT_EQ(speculatabilityOf("%a = db.negate(%nine) : (!i64s) -> !unresolved\n"
+    EXPECT_EQ(speculatabilityOf("%a = db.sqrt(%nine) : (!i64s) -> !unresolved\n"
                                 "  %b = db.negate(%a) : (!unresolved) -> !unresolved\n"
                                 "  %r = db.negate(%b) : (!unresolved) -> !unresolved"),
               Speculatable);

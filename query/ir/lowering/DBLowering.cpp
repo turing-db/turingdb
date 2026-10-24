@@ -6128,11 +6128,11 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     }
 
     // AND, OR and XOR read a cell's truth value against a nullable boolean
-    constexpr bool connectsTruthValues = std::is_same_v<NLOp, nl::And>
+    constexpr bool CONNECTS_TRUTH_VALUES = std::is_same_v<NLOp, nl::And>
                                       || std::is_same_v<NLOp, nl::Or>
                                       || std::is_same_v<NLOp, nl::Xor>;
 
-    if constexpr (connectsTruthValues) {
+    if constexpr (CONNECTS_TRUTH_VALUES) {
         const bool lhsHoldsCells = holdsTaggedCells(lhsChunkType);
         const bool rhsHoldsCells = holdsTaggedCells(rhsChunkType);
 
@@ -6182,8 +6182,6 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
 
     // A node or an edge is selected as the entity it is rather than as its ID's integer,
     // so the selection answers a column the rest of the query still reads as an entity.
-    // Mixing one with a scalar, or a node with an edge, was already turned away above:
-    // neither pair unifies.
     const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
     const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
     const bool isAny = mlir::isa<storage::AnyType>(unified);
@@ -6507,7 +6505,8 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
 
     const mlir::Type baseElement = unaryFunctionElement(op, inputValueElement);
     if (!baseElement) {
-        throw IRException(fmt::format("{} reads no column of this element type", op->getName().getStringRef().str()));
+        const mlir::OperationName name = op->getName();
+        throw IRException(fmt::format("{} reads no column of this element type", name.getStringRef().str()));
     }
 
     const bool inputCanBeNull = mayHoldANull(inputChunk.getType());
@@ -7164,10 +7163,11 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
         valueElement = _builder.getIntegerType(64, /*isSigned=*/false);
     }
 
-    const bool isString = mlir::isa<storage::StringType>(valueElement);
-    const bool isDouble = mlir::isa<mlir::Float64Type>(valueElement);
-    const bool isInteger = mlir::isa<mlir::IntegerType>(valueElement);
-    if (!isString && !isDouble && !isInteger) {
+    const ValueType valueType = elementTypeToValueType(valueElement);
+    const bool isScalar = valueType != ValueType::Invalid
+                       && valueType != ValueType::List
+                       && valueType != ValueType::Map;
+    if (!isScalar) {
         throw IRException("Only a scalar value column can be read as a nullable value column");
     }
 

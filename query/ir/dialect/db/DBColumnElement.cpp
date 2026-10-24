@@ -203,19 +203,21 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
 };
 
 ElementRule lookupElementRule(mlir::Operation* function) {
-    const llvm::StringRef name = function->getName().getStringRef();
+    const mlir::OperationName operationName = function->getName();
+    const llvm::StringRef name = operationName.getStringRef();
     const auto it = elementRules.find(std::string_view(name.data(), name.size()));
 
     return it == elementRules.end() ? nullptr : it->second;
 }
 
-mlir::Type declaredElement(mlir::Value column) {
-    const mlir::Type element = mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
+}
+
+mlir::Type db::declaredColumnElement(mlir::Value column) {
+    const mlir::db::ColumnType columnType = mlir::cast<mlir::db::ColumnType>(column.getType());
+    const mlir::Type element = columnType.getType();
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
 
     return nullable ? nullable.getValueType() : element;
-}
-
 }
 
 mlir::Type db::unaryFunctionElement(mlir::Operation* function, mlir::Type inputElement) {
@@ -231,7 +233,7 @@ mlir::Type db::inferredColumnElement(mlir::Value column) {
     llvm::SmallVector<mlir::Operation*> functions;
 
     mlir::Value current = column;
-    mlir::Type element = declaredElement(current);
+    mlir::Type element = declaredColumnElement(current);
 
     while (mlir::isa<mlir::NoneType>(element)) {
         mlir::Operation* const definingOp = current.getDefiningOp();
@@ -242,7 +244,7 @@ mlir::Type db::inferredColumnElement(mlir::Value column) {
 
         functions.push_back(definingOp);
         current = definingOp->getOperand(0);
-        element = declaredElement(current);
+        element = declaredColumnElement(current);
     }
 
     for (mlir::Operation* const function : llvm::reverse(functions)) {

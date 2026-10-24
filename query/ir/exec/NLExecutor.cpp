@@ -1507,7 +1507,7 @@ std::optional<bool> cellTruth(ListElementView cell) {
         break;
 
         default:
-            throw IRException("A WHERE reads a list element that is not a boolean");
+            throw IRException("A condition reads a value that is not a boolean");
         break;
     }
 }
@@ -1678,7 +1678,12 @@ void applyNotOnOptTaggedCells(Column* result, const Column* operand) {
 
 void applyNotOnConstTaggedCell(Column* result, const Column* operand) {
     const ListElementView cell = static_cast<const ColumnConst<ListElementView>*>(operand)->getRaw();
-    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->getRaw() = negatedTruth(cell);
+    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
+}
+
+void applyNotOnOptConstTaggedCell(Column* result, const Column* operand) {
+    const std::optional<ListElementView>& cell = static_cast<const ColumnConst<std::optional<ListElementView>>*>(operand)->getRaw();
+    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
 }
 
 void applyNotOnConst(Column* result, const Column* operand) {
@@ -2135,6 +2140,14 @@ std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
     }
 
     return cellTruth(*cell);
+}
+
+bool caseTestTaggedCell(const Column* condition, size_t row) {
+    return readTaggedCellTruth(condition, row).value_or(false);
+}
+
+bool caseTestOptTaggedCell(const Column* condition, size_t row) {
+    return readOptTaggedCellTruth(condition, row).value_or(false);
 }
 
 EntityID pathEntityAt(const EntityList& path, size_t index) {
@@ -9148,10 +9161,16 @@ NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull,
 }
 
 NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, bool untypedNull) {
+    const ColumnKind::Code kind = condition->getKind();
+
     if (untypedNull) {
         return &caseTestNever;
     } else if (condition->getContainerKind() == ContainerKind::code<ColumnMask>()) {
         return &caseTestMask;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        return &caseTestTaggedCell;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        return &caseTestOptTaggedCell;
     }
 
     return nullable ? &caseTestOptMask : &caseTestBoolColumn;
@@ -9243,6 +9262,9 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
     } else if (kind == ColumnConst<ListElementView>::staticKind()) {
         result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
         return &applyNotOnConstTaggedCell;
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+        return &applyNotOnOptConstTaggedCell;
     }
 
     result = memory->alloc<ColumnMask>();
@@ -9292,6 +9314,18 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
 
         case ValueType::String:
             return selectToNullableOf<types::String::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Embedding:
+            return selectToNullableOf<types::Embedding::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::DateTime:
+            return selectToNullableOf<types::DateTime::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Duration:
+            return selectToNullableOf<types::Duration::Primitive>(operand, memory, result);
         break;
 
         // A cell is a view into the query's list buffer, so the nullable column holds the

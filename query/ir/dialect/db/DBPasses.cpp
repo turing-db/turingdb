@@ -533,7 +533,7 @@ bool isMaskComputeOp(Operation* op) {
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
                StartsWithOp, EndsWithOp, ContainsOp, InOp,
                AndOp, OrOp, XorOp, NotOp,
-               AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp,
+               AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp, Negate, UnaryPlus,
                ConstantOp,
                GetNodeProperties, GetEdgeProperties, ElementID>(op);
 }
