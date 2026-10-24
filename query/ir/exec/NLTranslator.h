@@ -1051,6 +1051,9 @@ private:
 
     void translateIsNotTrue(mlir::nl::IsNotTrue isNotTrue, NLStmtContainer* body);
 
+    template <typename NullTestOp>
+    void translateNullTest(NullTestOp nullTest, NLStmtContainer* body);
+
     // Allocates the list column an nl.make_list writes, and binds the read each element
     // column's cells go into the list buffer through
     void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);

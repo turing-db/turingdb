@@ -608,6 +608,9 @@ private:
     // Propagates nullity from operand to result
     void lowerNot(mlir::db::NotOp notOp);
 
+    template <typename NLOp>
+    void lowerNullTest(mlir::Value operand, mlir::Value result);
+
     // Lower a db.case into its nl sibling: resolve the one value column its branches
     // share, convert the branches that need promoting into it, and place the selection
     // where every condition and value it reads is bound.
@@ -848,7 +851,6 @@ private:
     // The chunk a body's value is staged into its row's list from: laid out over @param rows
     // where it is a constant, and read as nullable where it is a scalar
     mlir::Value rowListsValueChunk(mlir::Value valueChunk, mlir::Value rows);
-    mlir::Value nullTestedChunk(mlir::Value chunk);
     mlir::Value reducedValueChunk(mlir::Value chunk);
 
     void lowerStaticMapKey(mlir::db::StaticMapKey mapKey);

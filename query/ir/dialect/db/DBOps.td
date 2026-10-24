@@ -3039,11 +3039,46 @@ def EqOp : PredicateOp<"eq", [Pure]> {
       Result is always an abstraction over a (possibly nullable) mask (bool vector).
 
       %r = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<bool>
+
+      Neither operand is the null literal: a comparison with it is null on every row, which
+      is the null itself, and a test for a null is db.is_null.
   }];
+
+  let hasVerifier = 1;
 }
 
 def NeqOp : PredicateOp<"neq", [Pure]> {
   let summary = "Row-wise inequality of two value columns";
+
+  let hasVerifier = 1;
+}
+
+def IsNullOp : TuringOp<"is_null", [Pure, ConstantThroughOperands]> {
+  let summary = "Row-wise test of whether a column holds no value";
+  let description = [{
+      `x IS NULL`: true on the rows where the operand holds no value - an absent value, the
+      invalid ID of an entity an OPTIONAL MATCH missed, the null path, a list or map cell
+      holding null - and false on every other row. The result is never null.
+
+      %r = db.is_null %x : (!db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$operand);
+  let results   = (outs ColumnBools:$result);
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
+def IsNotNullOp : TuringOp<"is_not_null", [Pure, ConstantThroughOperands]> {
+  let summary = "Row-wise test of whether a column holds a value";
+  let description = [{
+      `x IS NOT NULL`, the negation of db.is_null. The result is never null.
+
+      %r = db.is_not_null %x : (!db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$operand);
+  let results   = (outs ColumnBools:$result);
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
 def AddOp : BinaryOp<"add", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {

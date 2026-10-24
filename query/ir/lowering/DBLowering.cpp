@@ -734,12 +734,6 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::ListElementType, storage::MapElementType>(chunk.getElementType());
 }
 
-// A tagged cell holds its null in its tag and an ID column in the invalid ID, so a null test
-// reads either as it stands, and always answers
-bool carriesItsOwnNull(mlir::Type chunkType) {
-    return isTaggedCellChunk(chunkType) || isEntityChunk(chunkType);
-}
-
 bool mayHoldANull(mlir::Type chunkType) {
     return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
 }
@@ -1544,6 +1538,10 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerBinaryOp<nl::Xor>(operation, BinaryResultKind::Boolean);
     } else if (mlir::db::NotOp notOp = mlir::dyn_cast<mlir::db::NotOp>(operation)) {
         lowerNot(notOp);
+    } else if (mlir::db::IsNullOp isNull = mlir::dyn_cast<mlir::db::IsNullOp>(operation)) {
+        lowerNullTest<nl::IsNull>(isNull.getOperand(), isNull.getResult());
+    } else if (mlir::db::IsNotNullOp isNotNull = mlir::dyn_cast<mlir::db::IsNotNullOp>(operation)) {
+        lowerNullTest<nl::IsNotNull>(isNotNull.getOperand(), isNotNull.getResult());
     } else if (mlir::db::Case caseOp = mlir::dyn_cast<mlir::db::Case>(operation)) {
         lowerCase(caseOp);
     } else if (mlir::db::LazyCase lazyCase = mlir::dyn_cast<mlir::db::LazyCase>(operation)) {
@@ -5872,14 +5870,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                            mlir::Type rhsType) {
     mlir::MLIRContext* const ctx = _builder.getContext();
 
-    // The mask of a null test on a column carrying its own null holds no null of its own,
-    // unlike the one a nullable value column gives.
-    const bool testsACarriedNull =
-        (carriesItsOwnNull(lhsType) && isUntypedNullChunk(rhsType))
-        || (carriesItsOwnNull(rhsType) && isUntypedNullChunk(lhsType));
-
-    const bool operandNullable = !testsACarriedNull
-                              && (isNullableChunk(lhsType) || isNullableChunk(rhsType));
+    const bool operandNullable = isNullableChunk(lhsType) || isNullableChunk(rhsType);
 
     switch (kind) {
         case BinaryResultKind::Boolean:
@@ -5891,11 +5882,9 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             // A cell may hold a null, or a value of another type than the one it meets
             const bool comparesATaggedCell = kind == BinaryResultKind::Comparison
-                                          && !testsACarriedNull
                                           && (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType));
 
-            const bool comparesAMapValue = !testsACarriedNull
-                                        && (isMapElementChunk(lhsType) || isMapElementChunk(rhsType));
+            const bool comparesAMapValue = isMapElementChunk(lhsType) || isMapElementChunk(rhsType);
 
             // An ID column carries its null in the ID: the invalid one an OPTIONAL MATCH leaves
             const bool lhsIsAnEntity = isEntityChunk(lhsType);
@@ -6034,9 +6023,8 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     const bool readsScalarOperands = kind != BinaryResultKind::Index
                                   && kind != BinaryResultKind::Membership;
 
-    // A column carrying its own null is compared as it stands
-    const bool lhsReadsItsOwnNull = mayHoldANull(lhsChunkType) || carriesItsOwnNull(lhsChunkType);
-    const bool rhsReadsItsOwnNull = mayHoldANull(rhsChunkType) || carriesItsOwnNull(rhsChunkType);
+    const bool lhsReadsItsOwnNull = mayHoldANull(lhsChunkType);
+    const bool rhsReadsItsOwnNull = mayHoldANull(rhsChunkType);
 
     const bool nullAgainstRhs = readsScalarOperands
                              && isUntypedNullChunk(rhsChunkType)
@@ -6046,11 +6034,12 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
                              && isUntypedNullChunk(lhsChunkType)
                              && !rhsReadsItsOwnNull;
 
-    // x IS NULL over a plain scalar column meets kernels reading a nullable value column
+    // The null literal meets kernels reading a nullable column on its other side, as a
+    // logical operator takes it as an unknown truth value
     if (nullAgainstRhs) {
-        lhsChunk = nullTestedChunk(lhsChunk);
+        lhsChunk = nullableValueChunk(lhsChunk);
     } else if (nullAgainstLhs) {
-        rhsChunk = nullTestedChunk(rhsChunk);
+        rhsChunk = nullableValueChunk(rhsChunk);
     }
 
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
@@ -6385,6 +6374,17 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
 
     nl::Not nlNotOp = _builder.create<nl::Not>(_builder.getUnknownLoc(), resultType, operandChunk);
     _valueMap[notOp.getResult()] = nlNotOp.getResult();
+}
+
+template <typename NLOp>
+void DBLowering::lowerNullTest(mlir::Value operand, mlir::Value result) {
+    const mlir::Value operandChunk = mapValue(operand);
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), _builder.getI1Type());
+
+    setInsertionForUnaryOp(operandChunk);
+
+    NLOp test = _builder.create<NLOp>(_builder.getUnknownLoc(), resultType, operandChunk);
+    _valueMap[result] = test.getResult();
 }
 
 void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
@@ -7068,7 +7068,7 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     }
 
     // A node or an edge reads as its ID's integer, absent where an OPTIONAL MATCH left the
-    // ID invalid: that is what makes n IS NULL the ordinary null test over a value column
+    // ID invalid
     if (mlir::isa<storage::NodeIDType, storage::EdgeIDType>(element)) {
         valueElement = _builder.getIntegerType(64, /*isSigned=*/false);
     }
@@ -7096,21 +7096,6 @@ mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
     } else {
         return nullableValueChunk(chunk);
     }
-}
-
-// A path's null is the path with no node, and no value of a path is read here: tested
-// against null it reads as its node count, absent where the path is null. A walk's handle is an ID, absent
-// where it is invalid: the handle of a walk of no hops is valid.
-mlir::Value DBLowering::nullTestedChunk(mlir::Value chunk) {
-    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
-    const mlir::Type element = chunkType.getElementType();
-    if (mlir::isa<storage::PathType, storage::PathRefType>(element)) {
-        return toNullableChunk(chunk, _builder.getIntegerType(64, /*isSigned=*/false));
-    } else if (mlir::isa<storage::ListType>(element)) {
-        return nullableListChunk(chunk);
-    }
-
-    return nullableValueChunk(chunk);
 }
 
 // The nullable column a list rides where a row of it can be absent - the drain padding the

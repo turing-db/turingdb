@@ -231,35 +231,6 @@ struct PairRestrictions<Op> {
             KindPair<LabelSetID, LabelSetID>,
             KindPair<EdgeTypeID, EdgeTypeID>,
 
-            // IS (NOT) NULL
-            KindPair<std::optional<types::Int64::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::UInt64::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::Double::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::String::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::String::OwningPrimitive>, PropertyNull>,
-            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::DateTime::Primitive>, PropertyNull>,
-            KindPair<std::optional<types::Duration::Primitive>, PropertyNull>,
-            KindPair<std::optional<ListElementView>, PropertyNull>,
-            KindPair<std::optional<ListView>, PropertyNull>,
-            KindPair<std::optional<MapView>, PropertyNull>,
-
-            KindPair<std::optional<NodeID>, PropertyNull>,
-            KindPair<std::optional<EdgeID>, PropertyNull>,
-            KindPair<std::optional<EdgeTypeID>, PropertyNull>,
-            KindPair<std::optional<LabelID>, PropertyNull>,
-            KindPair<std::optional<PropertyTypeID>, PropertyNull>,
-            KindPair<std::optional<ValueType>, PropertyNull>,
-
-            // A tagged cell carries its null in the tag rather than in a nullable
-            // column, so it is tested against null as a cell rather than as an optional,
-            // and an entity in the ID
-            KindPair<ListElementView, PropertyNull>,
-            KindPair<MapEntryView, PropertyNull>,
-            KindPair<NodeID, PropertyNull>,
-            KindPair<EdgeID, PropertyNull>,
-
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
             KindPair<NodeID, types::UInt64::Primitive>,               // RETURN n = count(n)

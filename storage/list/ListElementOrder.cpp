@@ -564,14 +564,6 @@ bool db::operator==(const ListElementView element, const MapView value) {
         && element.getAs<MapView>() == value;
 }
 
-bool db::operator==(const ListElementView element, PropertyNull) {
-    return element.getTag() == ListBufferTypeTag::Null;
-}
-
-bool db::operator==(const MapEntryView entry, PropertyNull) {
-    return entry.getValueTag() == MapBufferTypeTag::Null;
-}
-
 bool db::operator==(const MapEntryView lhs, const MapEntryView rhs) {
     return valuesEqual(lhs, rhs);
 }

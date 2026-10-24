@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "GraphPath.h"
 #include "ID.h"
 #include "NumberOrder.h"
 #include "TypeUtils.h"
@@ -115,10 +116,6 @@ template <typename T, typename U>
 concept ComparesAnID = (IDOperand<T> && (IDOperand<U> || IntegerOperand<U>))
                     || (IntegerOperand<T> && IDOperand<U>);
 
-// IS NULL over an entity, which reads the ID: the null is the invalid one
-template <typename T, typename U>
-concept TestsAnIDForNull = TypedInternalID<std::decay_t<T>> && std::same_as<std::decay_t<U>, PropertyNull>;
-
 template <typename T, typename U>
 concept OrdersToANullableBool = ComparesATaggedCell<T, U>
                              || ComparesAMapEntry<T, U>
@@ -130,10 +127,14 @@ inline bool holdsAValue(const T& operand) {
         return operand.has_value() && holdsAValue(*operand);
     } else if constexpr (std::is_same_v<T, ListElementView>) {
         return operand.getTag() != ListBufferTypeTag::Null;
-    } else if constexpr (TypedInternalID<T>) {
+    } else if constexpr (TypedInternalID<T> || std::is_same_v<T, PathRef>) {
         return operand.isValid();
     } else if constexpr (std::is_same_v<T, MapEntryView>) {
         return operand.getValueTag() != MapBufferTypeTag::Null;
+    } else if constexpr (std::is_same_v<T, GraphPath>) {
+        return !operand.isNull();
+    } else if constexpr (std::is_same_v<T, PropertyNull>) {
+        return false;
     } else {
         return true;
     }
@@ -191,11 +192,6 @@ inline std::optional<std::partial_ordering> cellComparisonOrder(const T& a, cons
     }
 }
 
-template <typename F>
-concept TestsEquality =
-    (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
-     || std::is_same_v<F, TuringEqual> || std::is_same_v<F, TuringNotEqual>);
-
 // The built-in comparisons convert one operand of a mixed pair to the other's type, so a
 // count compared with -1 would be compared with 2^64 - 1, and 2^53 + 1 with 2^53.0 would
 // be equal
@@ -244,27 +240,49 @@ struct TuringOrder {
     }
 };
 
+// The truth value a Boolean operand holds, unknown for a null
+template <BooleanOpt T>
+inline std::optional<bool> truthOf(const T& operand) {
+    if constexpr (std::same_as<std::decay_t<T>, PropertyNull>) {
+        return std::nullopt;
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        if (!operand.has_value()) {
+            return std::nullopt;
+        }
+
+        return *operand == sentinelTrue;
+    } else {
+        return operand == sentinelTrue;
+    }
+}
+
 // The following Boolean operators have unique semantics for 3-way logic (i.e.
 // short-circuiting) so are defined explicitly rather than generically
 template <BooleanOpt T, BooleanOpt U>
 inline std::optional<CustomBool> optionalOr(const T& a, const U& b) {
-    if (a == sentinelTrue || b == sentinelTrue) {
+    const std::optional<bool> lhs = truthOf(a);
+    const std::optional<bool> rhs = truthOf(b);
+
+    if (lhs == true || rhs == true) {
         return true;
-    }
-    if (a == sentinelFalse && b == sentinelFalse) {
+    } else if (lhs == false && rhs == false) {
         return false;
     }
+
     return std::nullopt;
 }
 
 template <BooleanOpt T, BooleanOpt U>
 inline std::optional<CustomBool> optionalAnd(const T& a, const U& b) {
-    if (a == sentinelTrue && b == sentinelTrue) {
+    const std::optional<bool> lhs = truthOf(a);
+    const std::optional<bool> rhs = truthOf(b);
+
+    if (lhs == true && rhs == true) {
         return true;
-    }
-    if (a == sentinelFalse || b == sentinelFalse) {
+    } else if (lhs == false || rhs == false) {
         return false;
     }
+
     return std::nullopt;
 }
 
@@ -665,13 +683,6 @@ struct BinaryPredicate {
     inline ColumnMask::Bool_t operator()(T&& a, U&& b) {
         return F{}(std::forward<T>(a), std::forward<U>(b));
     }
-    
-    // Specialisation for IS NOT NULL and IS NULL
-    template <typename T>
-    requires(TypeUtils::is_optional_v<T> && TestsEquality<F>)
-    inline ColumnMask::Bool_t operator()(T&& a, const PropertyNull& null) {
-        return F{}(std::forward<T>(a), null);
-    }
 };
 
 struct TuringEqual {
@@ -792,19 +803,12 @@ struct TuringEqual {
         }
     }
 
-    template <typename T, typename U>
-        requires TestsAnIDForNull<T, U>
-    bool operator()(const T& id, const U& null) {
-        return !id.isValid();
-    }
-
     // Generalist fallback for all other types
     template <typename T, typename U>
         requires (!ListOperand<T> || !ListOperand<U>)
               && (!ComparesATaggedCell<T, U>)
               && (!ComparesAMapEntry<T, U>)
               && (!ComparesAnID<T, U>)
-              && (!TestsAnIDForNull<T, U>)
     bool operator()(const T& a, const U& b) {
         if constexpr (MixedNumbers<T, U>) {
             return numbersEqual(a, b);

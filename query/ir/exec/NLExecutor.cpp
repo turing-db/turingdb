@@ -1887,22 +1887,6 @@ void entityToNullableColumn(Column* result, const Column* operand) {
     }
 }
 
-// Every path but the null one holds at least the node it starts on, so it reads as its
-// node count
-void pathToNullableColumn(Column* result, const Column* operand) {
-    const std::vector<GraphPath>& paths = static_cast<const ColumnVector<GraphPath>*>(operand)->getRaw();
-    auto& nullables = static_cast<ColumnOptVector<types::UInt64::Primitive>*>(result)->getRaw();
-
-    nullables.resize(paths.size());
-    for (size_t row = 0; row < paths.size(); row++) {
-        if (paths[row].isNull()) {
-            nullables[row] = std::nullopt;
-        } else {
-            nullables[row] = paths[row].getNodeCount();
-        }
-    }
-}
-
 template <typename Primitive>
 void toNullableConst(Column* result, const Column* operand) {
     const auto* constant = static_cast<const ColumnConst<Primitive>*>(operand);
@@ -2000,6 +1984,58 @@ void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
 void applyIsNotTrueOnNull(Column* result, const Column* operand) {
     static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), ColumnMask::Bool_t {true});
 }
+
+template <typename ElementType, bool TESTS_NULL>
+void applyNullTestOnVector(Column* result, const Column* operand) {
+    const std::vector<ElementType>& operandRaw = static_cast<const ColumnVector<ElementType>*>(operand)->getRaw();
+    std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const ElementType& value) {
+        return ColumnMask::Bool_t {holdsAValue(value) != TESTS_NULL};
+    });
+}
+
+template <typename ElementType, bool TESTS_NULL>
+void applyNullTestOnConst(Column* result, const Column* operand) {
+    const ElementType& value = static_cast<const ColumnConst<ElementType>*>(operand)->getRaw();
+    static_cast<ColumnConst<CustomBool>*>(result)->set(CustomBool {holdsAValue(value) != TESTS_NULL});
+}
+
+// A mask holds a truth value on every row
+template <bool TESTS_NULL>
+void applyNullTestOnMask(Column* result, const Column* operand) {
+    static_cast<ColumnMask*>(result)->getRaw().assign(operand->size(), ColumnMask::Bool_t {!TESTS_NULL});
+}
+
+template <bool TESTS_NULL>
+struct NullTestSelector {
+    LocalMemory* _memory {nullptr};
+    NLUnaryFn _fn {nullptr};
+    Column* _result {nullptr};
+
+    void operator()(const ColumnMask* operand) {
+        _result = _memory->alloc<ColumnMask>();
+        _fn = &applyNullTestOnMask<TESTS_NULL>;
+    }
+
+    template <typename ElementType>
+    void operator()(const ColumnVector<ElementType>* operand) {
+        _result = _memory->alloc<ColumnMask>();
+        _fn = &applyNullTestOnVector<ElementType, TESTS_NULL>;
+    }
+
+    template <typename ElementType>
+    void operator()(const ColumnConst<ElementType>* operand) {
+        _result = _memory->alloc<ColumnConst<CustomBool>>();
+        _fn = &applyNullTestOnConst<ElementType, TESTS_NULL>;
+    }
+
+    template <typename ElementType>
+    void operator()(const ColumnSet<ElementType>* operand) {
+        throw IRException("A set column holds no rows to test for null");
+    }
+};
 
 std::optional<bool> readMaskTruth(const Column* mask, size_t row) {
     return static_cast<bool>(static_cast<const ColumnMask*>(mask)->getRaw()[row]);
@@ -8860,6 +8896,15 @@ NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, 
     return nullable ? &caseTestOptMask : &caseTestBoolColumn;
 }
 
+template <bool TESTS_NULL>
+NLUnaryFn NLExecutor::selectNullTest(const Column* operand, LocalMemory* memory, Column*& result) {
+    NullTestSelector<TESTS_NULL> selector {._memory = memory};
+    ColumnSingleDispatcher<InternalKind::Types::Tuple, NullTestSelector<TESTS_NULL>>::dispatch(operand, selector);
+
+    result = selector._result;
+    return selector._fn;
+}
+
 NLUnaryFn NLExecutor::selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result) {
     result = memory->alloc<ColumnMask>();
 
@@ -8944,26 +8989,18 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
 }
 
 NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
-    const bool readsIDs = kind == NLChunkKind::NodeID || kind == NLChunkKind::EdgeID || kind == NLChunkKind::PathRef;
+    const bool readsIDs = kind == NLChunkKind::NodeID || kind == NLChunkKind::EdgeID;
     if (!readsIDs) {
-        throw IRException("Only a node, an edge or a walk column can be read as a nullable ID column");
+        throw IRException("Only a node or an edge column can be read as a nullable ID column");
     }
 
     result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
 
     if (kind == NLChunkKind::NodeID) {
         return &entityToNullableColumn<NodeID>;
-    } else if (kind == NLChunkKind::PathRef) {
-        return &entityToNullableColumn<PathRef>;
     }
 
     return &entityToNullableColumn<EdgeID>;
-}
-
-NLUnaryFn NLExecutor::selectPathToNullable(LocalMemory* memory, Column*& result) {
-    result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
-
-    return &pathToNullableColumn;
 }
 
 NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
@@ -12641,6 +12678,9 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
 
 template void NLExecutor::runCheckEdgeTypeConstraint<ColumnMask>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runCheckEdgeTypeConstraint<ColumnOptMask>(NLExecutionContext*, NLFunctionData*);
+
+template NLUnaryFn NLExecutor::selectNullTest<true>(const Column* operand, LocalMemory* memory, Column*& result);
+template NLUnaryFn NLExecutor::selectNullTest<false>(const Column* operand, LocalMemory* memory, Column*& result);
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_CONCAT>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

@@ -6,42 +6,11 @@ namespace db {
 
 /**
  * @brief Default-initialisable wrapper for std::nullopt_t, for use in @ref
- * ColumnConst<PropertyNull>, required for IS NULL or IS NOT NULL operations.
+ * ColumnConst<PropertyNull>, the column of the null literal.
  */
 struct PropertyNull {
     constexpr PropertyNull() noexcept = default;
     constexpr operator std::nullopt_t() const noexcept { return std::nullopt; }
 };
-
-template <typename T>
-constexpr inline bool operator==(const PropertyNull&, const std::optional<T>& o) noexcept {
-    return o == std::nullopt;
-}
-
-template <typename T>
-constexpr inline bool operator==(const std::optional<T>& o, const PropertyNull&) noexcept {
-    return o == std::nullopt;
-}
-
-template <typename T>
-constexpr inline bool operator!=(const PropertyNull&, const std::optional<T>& o) noexcept {
-    return o != std::nullopt;
-}
-
-template <typename T>
-constexpr inline bool operator!=(const std::optional<T>& o, const PropertyNull&) noexcept {
-    return o != std::nullopt;
-}
-
-// Any non-optional is not equal to PropertyNull
-template <typename T>
-constexpr inline bool operator==(const PropertyNull&, const T&) noexcept {
-    return false;
-}
-
-template <typename T>
-constexpr inline bool operator==(const T&, const PropertyNull&) noexcept {
-    return false;
-}
 
 }
