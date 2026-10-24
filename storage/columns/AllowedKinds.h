@@ -441,6 +441,23 @@ struct TemporalArithmeticKindPairs<Op> {
     >::Type;
 };
 
+// A '+' over a type-erased cell joins text or a list where its row holds one, so the cell
+// meets a string, a boolean and a list as well as the numbers it computes with
+template <ColumnOperator Op>
+struct JoiningKindPairs {
+    using Pairs = std::tuple<>;
+};
+
+template <>
+struct JoiningKindPairs<OP_ADD> {
+    using Pairs = TupleFlatten<
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::String::OwningPrimitive>::Pairs,
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        ListElementKindPairs<ListView>::Pairs
+    >::Type;
+};
+
 template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
           || (Op == OP_MOD) || (Op == OP_POW)
@@ -463,7 +480,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
         // Temporal arithmetic operations.
-        typename TemporalArithmeticKindPairs<Op>::Pairs
+        typename TemporalArithmeticKindPairs<Op>::Pairs,
+
+        typename JoiningKindPairs<Op>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
@@ -487,16 +506,18 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
 
-        // A type-erased cell concatenates as the text it holds, which is how the element
-        // of a list joins a string: [x IN xs | x + ' expert']
+        // A type-erased cell joins a string or a list where its row holds one
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::String::OwningPrimitive>::Pairs,
+        ListElementKindPairs<ListView>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
-        // A number joins a string as the text Cypher writes it with: 1 + ' apples'
+        // A number or a boolean joins a string as the text Cypher writes it with:
+        // 1 + ' apples', true + 'x'
         TextKindPairs<types::Int64::Primitive>::Pairs,
         TextKindPairs<types::UInt64::Primitive>::Pairs,
-        TextKindPairs<types::Double::Primitive>::Pairs
+        TextKindPairs<types::Double::Primitive>::Pairs,
+        TextKindPairs<types::Bool::Primitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;

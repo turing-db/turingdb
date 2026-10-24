@@ -74,6 +74,12 @@ public:
     ListView concatenate(ListView a, ListView b);
 
     /**
+     * @brief Stores the elements @param a views followed by those @param b views as one
+     * new list, which is how a single element is appended to a list or prepended to it.
+     */
+    ListView concatenate(std::span<const ListElementView> a, std::span<const ListElementView> b);
+
+    /**
      * @brief Stores the elements of @param list in reverse order as one new list in
      * contiguous storage and returns a @ref ListView over it.
      */

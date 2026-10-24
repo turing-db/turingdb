@@ -150,3 +150,6 @@ add_turing_test(test_query_ir_map_value_against_a_mask MapValueAgainstAMaskTest.
 add_ir_tests(test_query_ir_entity_comparison_lowering EntityComparisonLoweringTest.cpp)
 target_sources(test_query_ir_entity_comparison_lowering PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_entity_comparison_lowering PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_list_element_concatenation ListElementConcatenationTest.cpp)
+target_include_directories(test_query_ir_list_element_concatenation PRIVATE ${IR_TEST_DIR})
