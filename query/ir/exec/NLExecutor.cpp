@@ -4863,40 +4863,92 @@ std::optional<ListView> optConstListRead(const Column* input, size_t) {
 // The map sibling of the list reads above: one cell of a map column, or nothing where the
 // row holds no map.
 template <typename ColumnT>
-std::optional<MapView> mapRead(const Column* input, size_t row) {
-    return (*static_cast<const ColumnT*>(input))[row];
-}
-
-// The map a type-erased cell holds, absent where the cell holds anything else
-std::optional<MapView> readMapFromCell(const ListElementView cell) {
-    if (cell.getTag() != ListBufferTypeTag::MapView) {
-        return std::nullopt;
+NLKeyedValue mapRead(const Column* input, size_t row) {
+    const std::optional<MapView> map = (*static_cast<const ColumnT*>(input))[row];
+    if (!map) {
+        return std::monostate {};
     }
 
-    return cell.getAs<MapView>();
+    return *map;
 }
 
-std::optional<MapView> readMapFromCell(const MapEntryView entry) {
-    if (entry.getValueTag() != MapBufferTypeTag::MapView) {
-        return std::nullopt;
+// The map, the node or the edge a type-erased cell holds, nothing where it holds anything
+// else
+NLKeyedValue readKeyedCell(const ListElementView cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::MapView:
+            return cell.getAs<MapView>();
+        break;
+        case ListBufferTypeTag::NodeID:
+            return cell.getAs<NodeID>();
+        break;
+        case ListBufferTypeTag::EdgeID:
+            return cell.getAs<EdgeID>();
+        break;
+        default:
+            return std::monostate {};
+        break;
     }
-
-    return entry.getValueAs<MapView>();
 }
 
-std::optional<MapView> readMapFromCell(const std::optional<ListElementView>& cell) {
+NLKeyedValue readKeyedCell(const MapEntryView entry) {
+    switch (entry.getValueTag()) {
+        case MapBufferTypeTag::MapView:
+            return entry.getValueAs<MapView>();
+        break;
+        case MapBufferTypeTag::NodeID:
+            return entry.getValueAs<NodeID>();
+        break;
+        case MapBufferTypeTag::EdgeID:
+            return entry.getValueAs<EdgeID>();
+        break;
+        default:
+            return std::monostate {};
+        break;
+    }
+}
+
+NLKeyedValue readKeyedCell(const std::optional<ListElementView>& cell) {
     if (!cell) {
-        return std::nullopt;
+        return std::monostate {};
     }
 
-    return readMapFromCell(*cell);
+    return readKeyedCell(*cell);
 }
 
-// One cell of a column of tagged cells, read as the map its own tag says it holds: a map
-// read out of a list or out of another map arrives as such a column
+// One cell of a column of tagged cells, read as what its own tag says it holds: a map, a
+// node or an edge read out of a list or out of another map arrives as such a column
 template <typename ColumnT>
-std::optional<MapView> readTaggedMap(const Column* input, size_t row) {
-    return readMapFromCell((*static_cast<const ColumnT*>(input))[row]);
+NLKeyedValue readTaggedKeyed(const Column* input, size_t row) {
+    return readKeyedCell((*static_cast<const ColumnT*>(input))[row]);
+}
+
+// The entry @param keyed holds under @param key: the one its map holds, or its node's or
+// edge's property, written into @param mapBuffer as a map of that one entry. False where
+// it holds no such entry.
+bool findKeyedEntry(const NLKeyedValue& keyed,
+                    std::string_view key,
+                    NLEntityProperties& properties,
+                    MapBuffer<>& mapBuffer,
+                    MapEntryView& entry) {
+    MapBuffer<>::MapKeyValuePair property;
+
+    if (const MapView* map = std::get_if<MapView>(&keyed)) {
+        return findMapEntry(*map, key, entry);
+    } else if (const NodeID* node = std::get_if<NodeID>(&keyed)) {
+        if (!properties.readEntry(*node, key, property)) {
+            return false;
+        }
+    } else if (const EdgeID* edge = std::get_if<EdgeID>(&keyed)) {
+        if (!properties.readEntry(*edge, key, property)) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    entry = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&property, 1}).front();
+    return true;
 }
 
 // The key one column of a dynamic map key read holds at @param row, or nothing where the
@@ -8810,7 +8862,7 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
     return selected;
 }
 
-NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
+NLKeyedReadFunction NLExecutor::selectKeyedRead(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
     if (kind == ColumnVector<MapView>::staticKind()) {
@@ -8822,17 +8874,17 @@ NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
     } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
         return &mapRead<ColumnConst<std::optional<MapView>>>;
     } else if (kind == ColumnVector<ListElementView>::staticKind()) {
-        return &readTaggedMap<ColumnVector<ListElementView>>;
+        return &readTaggedKeyed<ColumnVector<ListElementView>>;
     } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
-        return &readTaggedMap<ColumnOptVector<ListElementView>>;
+        return &readTaggedKeyed<ColumnOptVector<ListElementView>>;
     } else if (kind == ColumnConst<ListElementView>::staticKind()) {
-        return &readTaggedMap<ColumnConst<ListElementView>>;
+        return &readTaggedKeyed<ColumnConst<ListElementView>>;
     } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
-        return &readTaggedMap<ColumnConst<std::optional<ListElementView>>>;
+        return &readTaggedKeyed<ColumnConst<std::optional<ListElementView>>>;
     } else if (kind == ColumnVector<MapEntryView>::staticKind()) {
-        return &readTaggedMap<ColumnVector<MapEntryView>>;
+        return &readTaggedKeyed<ColumnVector<MapEntryView>>;
     } else if (kind == ColumnConst<MapEntryView>::staticKind()) {
-        return &readTaggedMap<ColumnConst<MapEntryView>>;
+        return &readTaggedKeyed<ColumnConst<MapEntryView>>;
     }
 
     throw IRException("a map key read reads a map column, or a column of tagged cells");
@@ -8900,21 +8952,25 @@ NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input)
 // read copies nothing. A row holding no map, and a map holding no such key, read back as
 // an entry under the same key whose tag is null: every row of the column names the key
 // the query read it under, so one entry per chunk serves all of them.
-void NLExecutor::runStaticMapKey(NLExecutionContext*, NLFunctionData* data) {
+void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLStaticMapKeyData* mapKey = static_cast<NLStaticMapKeyData*>(data);
 
     const Column* input = mapKey->getInput();
-    const NLMapReadFunction read = mapKey->getMapRead();
+    const NLKeyedReadFunction read = mapKey->getKeyedRead();
     const std::string_view key = mapKey->getKey();
 
     const MapEntryView absent = mapKey->getAbsentEntry();
 
-    const auto entryAt = [input, read, key, absent](size_t row) {
-        const std::optional<MapView> map = read(input, row);
+    NLStepBuffers* const stepBuffers = mapKey->getStepBuffers();
+    stepBuffers->clear();
 
-        MapEntryView entry = absent;
-        if (map) {
-            findMapEntry(*map, key, entry);
+    MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
+    NLEntityProperties properties(context, &stepBuffers->valueStore());
+
+    const auto entryAt = [input, read, key, absent, &properties, &mapBuffer](size_t row) {
+        MapEntryView entry;
+        if (!findKeyedEntry(read(input, row), key, properties, mapBuffer, entry)) {
+            return absent;
         }
 
         return entry;
@@ -8941,13 +8997,13 @@ void NLExecutor::runStaticMapKey(NLExecutionContext*, NLFunctionData* data) {
 // read copies nothing. A map holding no such key is answered by an entry written under that
 // row's key and tagged null, so the reader sees the key it asked for; a row holding no key
 // at all has none to name, and reads the one keyless entry translation wrote.
-void NLExecutor::runDynamicMapKey(NLExecutionContext*, NLFunctionData* data) {
+void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLDynamicMapKeyData* dynamicMapKey = static_cast<NLDynamicMapKeyData*>(data);
 
     const Column* input = dynamicMapKey->getInput();
     const Column* keyColumn = dynamicMapKey->getKey();
 
-    const NLMapReadFunction readMap = dynamicMapKey->getMapRead();
+    const NLKeyedReadFunction readKeyed = dynamicMapKey->getKeyedRead();
     const NLStringReadFunction readKey = dynamicMapKey->getKeyRead();
 
     const MapEntryView keyless = dynamicMapKey->getAbsentEntry();
@@ -8955,17 +9011,16 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext*, NLFunctionData* data) {
     stepBuffers->clear();
 
     MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
+    NLEntityProperties properties(context, &stepBuffers->valueStore());
 
-    const auto entryAt = [input, keyColumn, readMap, readKey, keyless, &mapBuffer](size_t row) {
+    const auto entryAt = [input, keyColumn, readKeyed, readKey, keyless, &properties, &mapBuffer](size_t row) {
         const std::optional<types::String::Primitive> key = readKey(keyColumn, row);
         if (!key) {
             return keyless;
         }
 
-        const std::optional<MapView> map = readMap(input, row);
-
         MapEntryView entry;
-        if (map && findMapEntry(*map, *key, entry)) {
+        if (findKeyedEntry(readKeyed(input, row), *key, properties, mapBuffer, entry)) {
             return entry;
         }
 

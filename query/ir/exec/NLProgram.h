@@ -4228,9 +4228,14 @@ private:
     std::vector<Entry> _entries;
 };
 
-// The map one column of an nl.static_map_key holds at @param row, or nothing where the row holds
-// none. One per map column shape, selected during translation.
-using NLMapReadFunction = std::optional<MapView> (*)(const Column* input, size_t row);
+// What one row of an nl.static_map_key or an nl.dynamic_map_key reads its key in: a map, or
+// the node or the edge whose properties are its keys. Nothing where the row holds none of
+// them.
+using NLKeyedValue = std::variant<std::monostate, MapView, NodeID, EdgeID>;
+
+// The keyed value one column of a map key read holds at @param row. One per column shape,
+// selected during translation.
+using NLKeyedReadFunction = NLKeyedValue (*)(const Column* input, size_t row);
 
 // The key one column of an nl.dynamic_map_key holds at @param row, or nothing where the
 // row holds none. One per string column shape, selected during translation.
@@ -4243,21 +4248,24 @@ class NLStaticMapKeyData : public NLFunctionData {
 public:
     NLStaticMapKeyData(const Column* input,
                  Column* result,
-                 NLMapReadFunction mapRead,
+                 NLKeyedReadFunction keyedRead,
                  std::string_view key,
-                 MapEntryView absent)
+                 MapEntryView absent,
+                 NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
-        _mapRead(mapRead),
+        _keyedRead(keyedRead),
         _key(key),
-        _absent(absent)
+        _absent(absent),
+        _stepBuffers(stepBuffers)
     {
     }
 
     const Column* getInput() const { return _input; }
     Column* getResult() const { return _result; }
-    NLMapReadFunction getMapRead() const { return _mapRead; }
+    NLKeyedReadFunction getKeyedRead() const { return _keyedRead; }
     std::string_view getKey() const { return _key; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     // The entry a row whose map holds no such key reads: the key the statement reads under,
     // tagged null. Fixed by the key, so one serves every row of every chunk.
@@ -4266,9 +4274,10 @@ public:
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
-    NLMapReadFunction _mapRead {nullptr};
+    NLKeyedReadFunction _keyedRead {nullptr};
     std::string_view _key {};
     MapEntryView _absent;
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // Row-wise map key read (nl.dynamic_map_key): row r of the result views the entry row r's
@@ -4277,14 +4286,14 @@ class NLDynamicMapKeyData : public NLFunctionData {
 public:
     NLDynamicMapKeyData(const Column* input,
                         Column* result,
-                        NLMapReadFunction mapRead,
+                        NLKeyedReadFunction keyedRead,
                         const Column* key,
                         NLStringReadFunction keyRead,
                         MapEntryView absent,
                         NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
-        _mapRead(mapRead),
+        _keyedRead(keyedRead),
         _key(key),
         _keyRead(keyRead),
         _absent(absent),
@@ -4294,7 +4303,7 @@ public:
 
     const Column* getInput() const { return _input; }
     Column* getResult() const { return _result; }
-    NLMapReadFunction getMapRead() const { return _mapRead; }
+    NLKeyedReadFunction getKeyedRead() const { return _keyedRead; }
     const Column* getKey() const { return _key; }
     NLStringReadFunction getKeyRead() const { return _keyRead; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
@@ -4307,7 +4316,7 @@ public:
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
-    NLMapReadFunction _mapRead {nullptr};
+    NLKeyedReadFunction _keyedRead {nullptr};
     const Column* _key {nullptr};
     NLStringReadFunction _keyRead {nullptr};
     MapEntryView _absent;

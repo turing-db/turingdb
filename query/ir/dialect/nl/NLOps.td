@@ -404,8 +404,10 @@ def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAli
 
     The operand is nullable where a stored property fetched it and plain where a literal
     built it, so both spellings are accepted. It is a chunk of tagged cells where the map
-    was itself read out of a list or a map, and a cell holding no map answers like a row
-    holding none. The result never is: a map value carries its null in its own tag, so a
+    was itself read out of a list or a map. A cell holding a node or an edge reads that
+    entity's property, written into the step's map buffer as an entry of its own, and a
+    cell holding anything else answers like a row holding none. The result never is a
+    tagged cell: a map value carries its null in its own tag, so a
     missing key and an absent map both read back as a Null-tagged entry rather than as an
     absent optional.
   }];
@@ -2593,7 +2595,8 @@ def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowA
 
     Either operand is nullable where a stored property fetched it and plain where a literal
     built it, so both spellings are accepted on both. The map operand is a chunk of tagged
-    cells where the map was itself read out of a list or a map. The result never is: a map
+    cells where the map was itself read out of a list or a map, and a cell holding a node or
+    an edge reads that entity's property under the key. The result never is: a map
     value carries its null in its own tag, so a map holding no such key, a row holding no
     map and a row holding no key all read back as a Null-tagged entry.
   }];

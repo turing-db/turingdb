@@ -3571,9 +3571,10 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
 
     NLStaticMapKeyData* data = _program->allocFunctionData<NLStaticMapKeyData>(input,
                                                                    result,
-                                                                   NLExecutor::selectMapRead(input),
+                                                                   NLExecutor::selectKeyedRead(input),
                                                                    key,
-                                                                   absent);
+                                                                   absent,
+                                                                   _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);
 }
@@ -3597,7 +3598,7 @@ void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContai
 
     NLDynamicMapKeyData* data = _program->allocFunctionData<NLDynamicMapKeyData>(input,
                                                                                  result,
-                                                                                 NLExecutor::selectMapRead(input),
+                                                                                 NLExecutor::selectKeyedRead(input),
                                                                                  key,
                                                                                  NLExecutor::selectStringRead(key),
                                                                                  keyless,

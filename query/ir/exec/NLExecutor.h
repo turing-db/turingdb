@@ -436,7 +436,7 @@ public:
 
     // Read the list one column holds at a row, for the slice that reads it
     static NLListReadFunction selectListRead(const Column* input);
-    static NLMapReadFunction selectMapRead(const Column* input);
+    static NLKeyedReadFunction selectKeyedRead(const Column* input);
     static NLStringReadFunction selectStringRead(const Column* input);
 
     static NLStringArgumentRead selectStringArgumentRead(const Column* input);

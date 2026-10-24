@@ -165,6 +165,20 @@ void NLEntityProperties::readEntries(IDT entity, std::vector<Entry>& entries) {
 }
 
 template <TypedInternalID IDT>
+bool NLEntityProperties::readEntry(IDT entity, std::string_view key, Entry& entry) {
+    _readsValues = true;
+    collect(entity);
+
+    const auto found = std::ranges::lower_bound(_properties, key, {}, &Property::_name);
+    if (found == _properties.end() || found->_name != key) {
+        return false;
+    }
+
+    entry = Entry {.key = found->_name, .value = found->_value};
+    return true;
+}
+
+template <TypedInternalID IDT>
 void NLEntityProperties::collect(IDT entity) {
     _properties.clear();
 
@@ -308,3 +322,5 @@ template void NLEntityProperties::readKeys<NodeID>(NodeID entity, std::vector<st
 template void NLEntityProperties::readKeys<EdgeID>(EdgeID entity, std::vector<std::string_view>& keys);
 template void NLEntityProperties::readEntries<NodeID>(NodeID entity, std::vector<Entry>& entries);
 template void NLEntityProperties::readEntries<EdgeID>(EdgeID entity, std::vector<Entry>& entries);
+template bool NLEntityProperties::readEntry<NodeID>(NodeID entity, std::string_view key, Entry& entry);
+template bool NLEntityProperties::readEntry<EdgeID>(EdgeID entity, std::string_view key, Entry& entry);

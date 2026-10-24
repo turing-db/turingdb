@@ -37,3 +37,5 @@ add_call_v3_test(test_query_ir_case_any_condition CaseAnyConditionTest.cpp)
 add_call_v3_test(test_query_ir_case_list_branch_element CaseListBranchElementTest.cpp)
 
 add_call_v3_test(test_query_ir_case_unshaped_list_branch CaseUnshapedListBranchTest.cpp)
+
+add_call_v3_test(test_query_ir_any_entity_property_read AnyEntityPropertyReadTest.cpp)

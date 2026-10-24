@@ -34,6 +34,9 @@ public:
     template <TypedInternalID IDT>
     void readEntries(IDT entity, std::vector<Entry>& entries);
 
+    template <TypedInternalID IDT>
+    bool readEntry(IDT entity, std::string_view key, Entry& entry);
+
 private:
     struct Property {
         PropertyTypeID _id;
