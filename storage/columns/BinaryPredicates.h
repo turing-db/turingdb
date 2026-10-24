@@ -64,8 +64,7 @@ concept TaggedListOperand =
 
 // A map value, which carries its own null in the entry's tag rather than in a nullable
 // column. Comparing one is three-valued for that reason, so it needs an overload of its
-// own; a null of unknown type is excluded, since IS NULL tests the tag rather than
-// answering unknown about it.
+// own.
 template <typename T>
 concept MapEntryOperand = std::same_as<std::decay_t<T>, MapEntryView>;
 
@@ -92,7 +91,7 @@ template <typename T>
 concept TaggedCellOperand =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
 
-// Every comparison of a cell but the IS NULL test, which reads the tag and always answers
+// Every comparison of a cell but one against a null of unknown type
 template <typename T, typename U>
 concept ComparesATaggedCell = (TaggedCellOperand<T> || TaggedCellOperand<U>) && !HoldsPropertyNull<T, U>;
 

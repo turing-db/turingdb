@@ -260,8 +260,8 @@ struct VectorColumnDecoder<db::GraphPath, Sink> {
             WireSize nodeCount = 0;
             context->_inBuf->readData(&nodeCount, sizeof(nodeCount));
 
-            const size_t idBytes = db::GraphPath::idCountOf(nodeCount) * sizeof(uint64_t);
-            if (idBytes > MAX_WIRE_SIZE) {
+            constexpr size_t MAX_NODE_COUNT = (MAX_WIRE_SIZE / sizeof(uint64_t) + 1) / 2;
+            if (nodeCount > MAX_NODE_COUNT) {
                 throw TuringException("Invalid path node count " + std::to_string(nodeCount));
             }
 

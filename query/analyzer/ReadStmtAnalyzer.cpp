@@ -53,29 +53,6 @@ using namespace db;
 
 namespace {
 
-// A tagged scalar carries its type per row rather than in the plan, so no property type
-// rules it out: the comparison the constraint becomes settles it row by row, as the same
-// test written as a WHERE does. That comparison also settles two numbers, which compare by
-// value, and two types that can never hold equal values, where it is false on every row.
-bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
-    const bool comparesPerRow = namesATaggedCell(exprType);
-    const bool matchesNothing = exprType == EvaluatedType::Null;
-
-    if (comparesPerRow || matchesNothing) {
-        return true;
-    }
-
-    const std::optional<EvaluatedType> propertyEvaluated = toEvaluatedType(propertyType);
-    const bool comparesNumbers = propertyEvaluated && comparesAsNumbers(*propertyEvaluated, exprType);
-    const bool comparesDisjointTypes = propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType);
-
-    if (comparesNumbers || comparesDisjointTypes) {
-        return true;
-    }
-
-    return ExprAnalyzer::propTypeCompatible(propertyType, exprType);
-}
-
 // The type each row an UNWIND emits carries: one level out of a list's shape - however
 // the list was built - and the type of anything that is not a list, spread to its
 // singleton.
@@ -430,15 +407,6 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-            const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
-            if (incompatibleValue) {
-                throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
-                                       ValueTypeName::value(propType->_valueType),
-                                       EvaluatedTypeName::value(expr->getType())),
-                           nodePattern);
-            }
-
             // Create a dummy Expr that represents the predicate evaluation
             Symbol* varSymbol = Symbol::create(_ast, decl->getName());
             QualifiedName* fullName = QualifiedName::create(_ast);
@@ -534,15 +502,6 @@ void ReadStmtAnalyzer::analyzeEdgeProperties(EdgePattern* edgePattern,
         }
 
         const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
-
-        const bool incompatibleValue = propType
-                                       && !constraintTypeCompatible(propType->_valueType, expr->getType());
-        if (incompatibleValue) {
-            throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
-                                   ValueTypeName::value(propType->_valueType),
-                                   EvaluatedTypeName::value(expr->getType())),
-                       edgePattern);
-        }
 
         // Create a dummy Expr that represents the predicate evaluation
         Symbol* varSymbol = Symbol::create(_ast, decl->getName());

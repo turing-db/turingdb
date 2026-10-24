@@ -21,6 +21,7 @@
 #include "IRRowAlignment.h"
 #include "IRValueTypes.h"
 #include "PathHopArguments.h"
+#include "NullLiteralType.h"
 #include "list/ListBuffer.h"
 #include "map/MapBuffer.h"
 #include "map/MapWriteCursor.h"
@@ -539,13 +540,8 @@ bool isNullableChunk(mlir::Type chunkType) {
 // !nl.chunk<!storage.nullable<none>>
 bool isUntypedNullChunk(mlir::Type chunkType) {
     const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        return false;
-    }
 
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
-
-    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+    return chunk && mlir::isNullLiteralType(chunk.getElementType());
 }
 
 ListPredicateKind listPredicateKind(storage::ListPredicateKind kind) {
