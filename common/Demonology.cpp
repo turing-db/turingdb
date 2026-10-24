@@ -8,11 +8,15 @@
 
 #include <spdlog/spdlog.h>
 
-DemonResult Demonology::demonize() {
+#include "DemonReadiness.h"
+
+DemonResult Demonology::demonize(DemonReadiness* readiness) {
     // We are already a demon
     if (getppid() == 1) {
         return DemonResult::Daemon;
     }
+
+    readiness->open();
 
     // Fork from parent process
     pid_t pid = fork();
@@ -23,6 +27,7 @@ DemonResult Demonology::demonize() {
 
     if (pid > 0) {
         // Original parent: let the caller wait for server readiness
+        readiness->keepReadEnd();
         return DemonResult::Parent;
     }
 
@@ -45,6 +50,8 @@ DemonResult Demonology::demonize() {
         spdlog::info("Spawned process {}", pid);
         return DemonResult::Intermediate;
     }
+
+    readiness->keepWriteEnd();
 
     // Change current directory to filesystem root
     if (chdir("/") < 0) {

@@ -49,8 +49,7 @@ A singleton that runs a dedicated thread (`tdb.com`) responsible for:
    restrictions of async-signal-safe code in the handler itself.
 
 2. **Socket command handling** — listens on the Unix-domain socket at `turingdb.sock`.
-   Should support two commands sent as plain strings:
-   - `PING` → replies `PONG` (liveness probe)
+   Supports one command sent as a plain string:
    - `STOP` → replies `OK`, then calls the registered `_onStop` callback and exits the thread
 
 When either a signal or a `STOP` command is received, the thread should call `_onStop()` and
@@ -62,7 +61,6 @@ SystemEventHandler::initialize(socketPath);  // create instance + start thread
 SystemEventHandler::setOnStop(callback);     // set the shutdown callback
 SystemEventHandler::terminate();             // stop thread + close fds (idempotent)
 SystemEventHandler::requestStop(socketPath); // client side: connect + send "STOP"
-SystemEventHandler::requestPing(socketPath); // client side: connect + send "PING"
 ```
 
 **Note on signal handler constraints:** the signal pipe fds and socket fd must be stored in
@@ -97,7 +95,10 @@ Startup sequence:
 1. Build `TuringConfig` (optionally override turing directory with `-turing-dir`).
 2. Set up logging to `{turing-dir}/logs/turingdb.log` with **append mode** (not truncated),
    so log history is preserved across restarts.
-3. Optionally daemonise.
+3. Optionally daemonise. `Demonology::demonize` opens a `DemonReadiness` socket pair before
+   the first fork. The daemon sends either "ready" or its startup error, and the original
+   process prints it and exits 0 or 1. If the daemon exits without sending either, the
+   original process reads EOF and exits 1.
 4. Construct `TuringDB` and call `turingDB.init()`, which should:
    - Create all required directories (including `logs/`).
    - Acquire `turingdb.lock` (panic if another instance holds it).

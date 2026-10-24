@@ -3,13 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <argparse.hpp>
 
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <limits.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <chrono>
-#include <thread>
 
 #include "LineNoiseHandle.h"
 #include "TuringConfig.h"
@@ -22,8 +16,8 @@
 #include "DBServerConfig.h"
 #include "Authenticator.h"
 #include "Demonology.h"
+#include "DemonReadiness.h"
 #include "LogSetup.h"
-#include "SystemEventHandler.h"
 #include "LockFile.h"
 #include "LockFile.h"
 #include "BannerDisplay.h"
@@ -42,107 +36,6 @@ namespace {
 void printTuringDBCommitInfo() {
     std::cout << "TuringDB - " << TOSTRING(HEAD_COMMIT_HASH)
               << " - " << formatUnixTime(BUILD_TIMESTAMP) << "\n\n";
-}
-
-enum class PingResult {
-    Pong,
-    Init,
-    NoResponse,
-};
-
-PingResult pingServer(const fs::Path& socketPath) {
-    // Socket file not created yet, or does not exist
-    if (!socketPath.exists()) {
-        return PingResult::NoResponse;
-    }
-
-    // Could not create socket
-    const int sockFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sockFd < 0) {
-        return PingResult::NoResponse;
-    }
-
-    // chdir to socket directory to stay within the sun_path length limit
-    char savedCwd[PATH_MAX];
-    if (::getcwd(savedCwd, sizeof(savedCwd)) == nullptr) {
-        ::close(sockFd);
-        return PingResult::NoResponse;
-    }
-
-    if (::chdir(socketPath.parent().c_str()) != 0) {
-        ::close(sockFd);
-        return PingResult::NoResponse;
-    }
-
-    sockaddr_un addr {0};
-    addr.sun_family = AF_UNIX;
-    const std::string sockName {socketPath.filename()};
-    strncpy(addr.sun_path, sockName.c_str(), sizeof(addr.sun_path) - 1);
-
-    const int res = ::connect(sockFd, (sockaddr*)&addr, sizeof(addr));
-
-    [[maybe_unused]] const int cwdRes = ::chdir(savedCwd);
-
-    // Could not connect to the socket
-    if (res < 0) {
-        ::close(sockFd);
-        return PingResult::NoResponse;
-    }
-
-    constexpr std::string_view ping = "PING";
-    if (::write(sockFd, ping.data(), ping.size()) != (ssize_t)ping.size()) {
-        ::close(sockFd);
-        return PingResult::NoResponse;
-    }
-
-    char buf[5] {};
-    const ssize_t nread = ::read(sockFd, buf, sizeof(buf) - 1);
-    ::close(sockFd);
-
-    if (nread <= 0) {
-        return PingResult::NoResponse;
-    }
-
-    const std::string_view response {buf, (size_t)nread};
-
-    if (response == "PONG") {
-        return PingResult::Pong;
-    }
-
-    if (response == "INIT") {
-        return PingResult::Init;
-    }
-
-    return PingResult::NoResponse;
-}
-
-// Waits for the server to signal readiness via PING/INIT/PONG.
-// initTimeoutMs: max time to wait for at least an INIT response.
-// Once INIT is received, waits indefinitely for PONG.
-bool waitForReady(const fs::Path& socketPath, size_t initTimeoutMs) {
-    const auto initDeadline = std::chrono::steady_clock::now()
-                            + std::chrono::milliseconds(initTimeoutMs);
-
-    constexpr size_t intervalMs = 50;
-
-    bool initReceived = false;
-
-    while (true) {
-        const PingResult result = pingServer(socketPath);
-
-        if (result == PingResult::Pong) {
-            return true;
-        }
-        if (result == PingResult::Init) {
-            initReceived = true;
-        }
-
-        if (!initReceived && std::chrono::steady_clock::now() >= initDeadline) {
-            return false;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
-    }
 }
 
 }
@@ -180,47 +73,53 @@ int StartCmd::execute() {
     BannerDisplay::printBanner();
     printTuringDBCommitInfo();
 
-    if (_demonize) {
-        LockFile lockFile;
-        lockFile.setPath(config.getLockFilePath());
+    DemonReadiness readiness;
 
-        const auto pid = lockFile.getOwningProcess();
+    try {
+        if (_demonize) {
+            LockFile lockFile;
+            lockFile.setPath(config.getLockFilePath());
 
-        if (pid) {
-            spdlog::error("TuringDB is already running (PID: {})", *pid);
-            return EXIT_FAILURE;
-        } else if (pid.error().getType() != LockFileErrorType::NOT_LOCKED) {
-            spdlog::error("Could not read PID from lock file: {}", pid.error().fmtMessage());
-            return EXIT_FAILURE;
-        }
+            const auto pid = lockFile.getOwningProcess();
 
-        const DemonResult demonResult = Demonology::demonize();
-
-        // Process was forked, we are now the parent
-        // We need to wait for the server to be ready
-        // before exiting. This ensures that the HTTP server
-        // is ready to accept connections.
-
-        if (demonResult == DemonResult::Intermediate) {
-            return EXIT_SUCCESS;
-        }
-
-        if (demonResult == DemonResult::Parent) {
-            if (!waitForReady(config.getSocketPath(), _startTimeout)) {
-                spdlog::error("TuringDB failed to start");
-                spdlog::error("Check the logs at {}/turingdb.log for more information",
-                              config.getLogsDir().get());
+            if (pid) {
+                spdlog::error("TuringDB is already running (PID: {})", *pid);
+                return EXIT_FAILURE;
+            } else if (pid.error().getType() != LockFileErrorType::NOT_LOCKED) {
+                spdlog::error("Could not read PID from lock file: {}", pid.error().fmtMessage());
                 return EXIT_FAILURE;
             }
 
-            // Server replied "PONG" -> ready
+            const DemonResult demonResult = Demonology::demonize(&readiness);
 
-            spdlog::info("TuringDB is ready");
-            return EXIT_SUCCESS;
+            // Process was forked, we are now the parent
+            // We need to wait for the server to be ready
+            // before exiting. This ensures that the HTTP server
+            // is ready to accept connections.
+
+            if (demonResult == DemonResult::Intermediate) {
+                return EXIT_SUCCESS;
+            }
+
+            if (demonResult == DemonResult::Parent) {
+                std::string error;
+                const DemonStartResult startResult = readiness.waitForDemon(error);
+
+                if (startResult == DemonStartResult::Ready) {
+                    spdlog::info("TuringDB is ready");
+                    return EXIT_SUCCESS;
+                } else if (startResult == DemonStartResult::Failed) {
+                    spdlog::error("{}", error);
+                    spdlog::error("TuringDB failed to start");
+                } else {
+                    spdlog::error("TuringDB failed to start");
+                    spdlog::error("Check the logs at {}/turingdb.log for more information", logsDir.get());
+                }
+
+                return EXIT_FAILURE;
+            }
         }
-    }
 
-    try {
         // Authentication is opt-in via -auth-on. When enabled, the API key is
         // read from the TURINGDB_AUTH_TOKEN environment variable; clients
         // present it directly in the Authorization header. The Authenticator
@@ -242,8 +141,7 @@ int StartCmd::execute() {
         if (_authOn) {
             const char* envKey = getenv("TURINGDB_AUTH_TOKEN");
             if (envKey == nullptr || *envKey == '\0') {
-                spdlog::error("-auth-on requires the TURINGDB_AUTH_TOKEN environment variable to be set");
-                return EXIT_FAILURE;
+                throw TuringException("-auth-on requires the TURINGDB_AUTH_TOKEN environment variable to be set");
             }
 
             authenticator = std::make_unique<Authenticator>(envKey);
@@ -283,8 +181,7 @@ int StartCmd::execute() {
             const QueryState state("", &mem, &compilerContext, &queryConfig, nullptr);
             const QueryStatus res = turingDB.query("load graph " + graphName, state);
             if (!res.isOk()) {
-                spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError());
-                return EXIT_FAILURE;
+                throw TuringException(fmt::format("{}: {}", QueryStatusDescription::value(res.getStatus()), res.getError()));
             }
         }
 
@@ -296,16 +193,16 @@ int StartCmd::execute() {
         spdlog::info("TuringDB started");
         spdlog::info("  - Home directory: {}", turingDir.get());
 
-        server = std::make_unique<TuringServer>(serverConfig, turingDB);
-        server->start();
-
         if (_launchUI) {
             proxy = std::make_unique<VisualizerProxy>(_address, _uiPort, _port);
             proxy->start();
         }
 
+        server = std::make_unique<TuringServer>(serverConfig, turingDB);
+        server->start();
+
         if (_demonize) {
-            SystemEventHandler::setReady();
+            readiness.notifyReady();
             server->wait();
             if (proxy) {
                 proxy->stop();
@@ -333,6 +230,7 @@ int StartCmd::execute() {
 
     } catch (TuringException& e) {
         spdlog::error("{}", e.what());
+        readiness.notifyFailure(e.what());
         return EXIT_FAILURE;
     }
 
@@ -390,8 +288,4 @@ void StartCmd::initialize() {
         .help("Read HNSW vector indexes into memory at startup instead of mapping the "
               "index file; a server that adds vectors reads them in anyway")
         .store_into(_noVectorMmap);
-    _argParser.add_argument("-start-timeout")
-        .metavar("seconds")
-        .help("Milliseconds to wait for the first INIT response when daemonizing (default: 500)")
-        .store_into(_startTimeout);
 }

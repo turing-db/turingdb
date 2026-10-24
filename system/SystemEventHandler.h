@@ -21,7 +21,6 @@ public:
     static void terminate();
 
     static void setOnStop(const std::function<void()>& onStop);
-    static void setReady();
 
     /** @brief Connects to the server's Unix socket and sends a STOP command.
      *
@@ -41,7 +40,6 @@ private:
     fs::Path _socketPath;
     std::function<void()> _onStop;
     std::atomic<bool> _running {false};
-    std::atomic<bool> _ready {false};
     std::thread _thread;
     int _sockFd = -1;
 

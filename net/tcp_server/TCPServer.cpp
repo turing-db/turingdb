@@ -12,6 +12,7 @@
 #include "TCPConnectionStorage.h"
 #include "TCPListener.h"
 #include "SocketUtils.h"
+#include "NetException.h"
 
 #include "BioAssert.h"
 #include "ThreadName.h"
@@ -53,32 +54,27 @@ TCPServer::~TCPServer() {
     }
 }
 
-FlowStatus TCPServer::initialize() {
+void TCPServer::initialize() {
     _serverSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
     if (_serverSocket == -1) {
-        utils::logError("Create socket");
-        return FlowStatus::CREATE_ERROR;
+        throwInitializeError("create the socket");
     }
 
     if (!utils::setNonBlock(_serverSocket)) {
-        utils::logError("SetNonBlock server socket");
-        return FlowStatus::OPT_NONBLOCK_ERR;
+        throwInitializeError("set the socket non-blocking");
     }
 
     if (!utils::setReuseAddress(_serverSocket)) {
-        utils::logError("ReuseAddress");
-        return FlowStatus::OPT_REUSEADDR_ERR;
+        throwInitializeError("set the socket to reuse its address");
     }
 
     if (!utils::bind(_serverSocket, _address, _port)) {
-        utils::logError("Bind");
-        return FlowStatus::BIND_ERROR;
+        throwInitializeError("bind");
     }
 
     if (!utils::listen(_serverSocket)) {
-        utils::logError("Listen");
-        return FlowStatus::LISTEN_ERROR;
+        throwInitializeError("listen");
     }
 
     _epollInstance = utils::createEventInstance();
@@ -92,31 +88,26 @@ FlowStatus TCPServer::initialize() {
     event._data = _serverConnection;
 
     if (!utils::epollAdd(_epollInstance, _serverSocket, event)) {
-        utils::logError("EpollAdd root");
-        return FlowStatus::CTL_ERROR;
+        throwInitializeError("register the socket");
     }
 
     // Create shutdown pipe for reliable worker wakeup on terminate()
     if (::pipe(_shutdownPipe) < 0) {
-        utils::logError("ShutdownPipe");
-        return FlowStatus::CREATE_ERROR;
+        throwInitializeError("create the shutdown pipe");
     }
 
     if (!utils::setNonBlock(_shutdownPipe[0])) {
-        utils::logError("setNonBlock pipe");
-        return FlowStatus::CREATE_ERROR;
+        throwInitializeError("set the shutdown pipe non-blocking");
     }
 
     if (!utils::setNonBlock(_shutdownPipe[1])) {
-        utils::logError("setNonBlock pipe");
-        return FlowStatus::CREATE_ERROR;
+        throwInitializeError("set the shutdown pipe non-blocking");
     }
 
     event._events = utils::EVENT_IN;
     event._data = nullptr;
     if (!utils::epollAdd(_epollInstance, _shutdownPipe[0], event)) {
-        utils::logError("EpollAdd shutdown pipe");
-        return FlowStatus::CTL_ERROR;
+        throwInitializeError("register the shutdown pipe");
     }
 
     // Storing actual address
@@ -125,17 +116,14 @@ FlowStatus TCPServer::initialize() {
     socklen_t actualAddrLen = sizeof(actualAddr);
 
     if (getsockname(_serverSocket, (struct sockaddr*)&actualAddr, &actualAddrLen) == -1) {
-        utils::logError("GetServerAddress");
-        return FlowStatus::CREATE_ERROR;
+        throwInitializeError("read the bound address");
     }
 
     _actualAddress = utils::getStringAddress(actualAddr.sin_addr.s_addr);
-    return FlowStatus::OK;
+    _running.store(true);
 }
 
 FlowStatus TCPServer::start() {
-    _running.store(true);
-
     ServerContext ctxt {
         ._socket = _serverSocket,
         ._instance = _epollInstance,
@@ -185,6 +173,11 @@ void TCPServer::terminate() {
             utils::logError("shutdownPipe write");
         }
     }
+}
+
+void TCPServer::throwInitializeError(const char* step) const {
+    const int error = errno;
+    throw NetException(fmt::format("Could not start the {} on {}:{}: {}: {}", _name, _address, _port, step, strerror(error)));
 }
 
 void TCPServer::runThread(size_t threadID, ServerContext& ctxt) {

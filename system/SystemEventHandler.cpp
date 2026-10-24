@@ -119,14 +119,6 @@ void SystemEventHandler::setOnStop(const std::function<void()>& onStop) {
     _instance->_onStop = onStop;
 }
 
-void SystemEventHandler::setReady() {
-    if (!_instance) {
-        return;
-    }
-
-    _instance->_ready.store(true);
-}
-
 bool SystemEventHandler::requestStop(const fs::Path& socketPath) {
     if (!socketPath.exists()) {
         return false;
@@ -308,16 +300,7 @@ bool SystemEventHandler::initializeImpl() {
 
                 cmd.assign(buf, n);
 
-                if (cmd == "PING") {
-                    // Reply with PONG if the server is ready
-                    // or with INIT if the server is still initializing
-                    // NOTE: The server might be in an INIT state for a
-                    // while if it needs to load a big graph at startup
-                    const bool ready = _ready.load();
-                    const std::string_view reply = ready ? "PONG" : "INIT";
-
-                    [[maybe_unused]] const int res = ::write(client, reply.data(), reply.size());
-                } else if (cmd == "STOP") {
+                if (cmd == "STOP") {
                     // Reply with OK and stop the server
                     [[maybe_unused]] const int res = ::write(client, "OK", 2);
 

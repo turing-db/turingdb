@@ -31,7 +31,7 @@ public:
     TCPServer& operator=(const TCPServer&) = delete;
     TCPServer& operator=(TCPServer&&) = delete;
 
-    FlowStatus initialize();
+    void initialize();
     FlowStatus start();
     void terminate();
 
@@ -61,6 +61,8 @@ private:
     std::atomic<bool> _running = false;
     Functions _functions;
     std::vector<std::thread> _threads;
+
+    [[noreturn]] void throwInitializeError(const char* step) const;
 
     static void runThread(size_t threadID, ServerContext& ctxt);
 };

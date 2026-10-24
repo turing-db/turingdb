@@ -73,6 +73,11 @@ VisualizerProxy::~VisualizerProxy() {
     if (_server) {
         _server->terminate();
     }
+
+    if (_serverThread.joinable()) {
+        _serverThread.join();
+    }
+
     curl_global_cleanup();
 }
 
@@ -185,18 +190,13 @@ void VisualizerProxy::start() {
         };
 
     _server = std::make_unique<net::TCPServer>(std::move(functions));
-    _server->setName("Visualizer");
+    _server->setName("visualizer");
     _server->setAddress(_address.c_str());
     _server->setPort(_proxyPort);
     _server->setWorkerCount(1);
     _server->setMaxConnections(64);
 
-    const auto initRes = _server->initialize();
-    if (initRes != net::FlowStatus::OK) {
-        spdlog::error("Failed to initialize visualizer proxy on port {}", _proxyPort);
-        _server->terminate();
-        return;
-    }
+    _server->initialize();
 
     const auto serverFunc = [this]() {
         const auto startRes = _server->start();

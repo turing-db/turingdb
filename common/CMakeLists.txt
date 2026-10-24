@@ -9,6 +9,7 @@ set(common_sources
         PerfStat.cpp
         FileUtils.cpp
         Demonology.cpp
+        DemonReadiness.cpp
         BannerDisplay.cpp
         ToolInit.cpp
         ToolCommand.cpp

@@ -39,6 +39,10 @@ TuringServer::~TuringServer() {
     if (_server) {
         _server->terminate();
     }
+
+    if (_serverThread.joinable()) {
+        _serverThread.join();
+    }
 }
 
 void TuringServer::start() {
@@ -82,11 +86,7 @@ void TuringServer::start() {
     _server->setWorkerCount(_config.getWorkerCount());
     _server->setMaxConnections(_config.getMaxConnections());
 
-    const auto initRes = _server->initialize();
-    if (initRes != net::FlowStatus::OK) {
-        _server->terminate();
-        return;
-    }
+    _server->initialize();
 
     const auto serverFunc = [&]() {
         ThreadName::set(THREAD_NAME);

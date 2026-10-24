@@ -1,5 +1,7 @@
 #pragma once
 
+class DemonReadiness;
+
 enum class DemonResult {
     Parent,       // Original process: wait for server readiness then exit
     Intermediate, // Session-leader child superseded by second fork: exit immediately
@@ -8,5 +10,5 @@ enum class DemonResult {
 
 class Demonology {
 public:
-    static DemonResult demonize();
+    static DemonResult demonize(DemonReadiness* readiness);
 };
