@@ -320,9 +320,9 @@ cd turingdb
 
 # 3. Build
 mkdir -p build && cd build
-cmake ..
-make -j8
-make install
+cmake -G Ninja ..
+ninja -j8
+ninja install
 
 # 4. Add turingdb binaries to your current shell's $PATH
 source setup.sh

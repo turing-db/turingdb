@@ -180,7 +180,7 @@ assertion holds. The PR body reports it instead.
 ## 6. Build and run
 
 ```bash
-make -j8 test_query_ir_<name>          # from build/, one target at a time. No cmake ..
+ninja -j8 test_query_ir_<name>         # from build/, one target at a time. No cmake ..
 ./build/test/query/ir/<feature>/test_query_ir_<name>
 ```
 
