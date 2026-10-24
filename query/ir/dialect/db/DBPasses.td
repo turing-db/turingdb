@@ -108,6 +108,11 @@ def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def ReuseLabelAndTypeReads : Pass<"reuse_label_and_type_reads"> {
+    let summary = "Reuse the label sets already read of a node column, or the types of an edge column, instead of reading them again for each test";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseFetchNodes : Pass<"fuse_fetch_nodes"> {
     let summary = "Replace a whole node scan bound by an equality to a column of IDs with a fetch of those IDs";
     let dependentDialects = ["mlir::db::DB"];
