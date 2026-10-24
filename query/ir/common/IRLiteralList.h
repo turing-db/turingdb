@@ -18,7 +18,7 @@ inline mlir::Type literalElementType(mlir::Attribute element) {
         mlir::MLIRContext* const context = element.getContext();
         const mlir::Type shared = sharedLiteralElementType(nested);
         const mlir::Type nestedElement = shared ? shared
-                                               : mlir::storage::ListElementType::get(context);
+                                               : mlir::storage::AnyType::get(context);
 
         return mlir::storage::ListType::get(context, nestedElement);
     }

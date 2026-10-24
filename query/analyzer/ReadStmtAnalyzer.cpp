@@ -289,7 +289,7 @@ void ReadStmtAnalyzer::analyzeYieldFilter(const YieldItems* yieldItems) {
     }
 
     const EvaluatedType whereType = whereExpr->getType();
-    if (whereType != EvaluatedType::Bool && whereType != EvaluatedType::Null) {
+    if (!namesATruthValue(whereType)) {
         throwError("WHERE expression must be a boolean", where);
     }
 }
@@ -353,7 +353,7 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
         }
 
         const EvaluatedType whereType = whereExpr->getType();
-        if (whereType != EvaluatedType::Bool && whereType != EvaluatedType::Null) {
+        if (!namesATruthValue(whereType)) {
             throwError("WHERE expression must be a boolean", pattern);
         }
     }
@@ -633,7 +633,7 @@ void ReadStmtAnalyzer::analyzeHops(EdgePattern* walk) {
         }
 
         const EvaluatedType predicateType = predicate->getType();
-        if (predicateType != EvaluatedType::Bool && predicateType != EvaluatedType::Null) {
+        if (!namesATruthValue(predicateType)) {
             throwError("WHERE expression must be a boolean", walk);
         }
 
@@ -820,15 +820,6 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
     }
 
     throwOnNonListLiteral(arg);
-
-    // A map value is no list, and unwinding one passed the column through rather than
-    // expanding it, so the query answered with the list as a single row. Turned away as a
-    // list comprehension turns the same source away.
-    if (arg->getType() == EvaluatedType::MapValue) {
-        throwError(fmt::format("UNWIND requires a list, not '{}'",
-                               EvaluatedTypeName::value(arg->getType())),
-                   arg);
-    }
 
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");

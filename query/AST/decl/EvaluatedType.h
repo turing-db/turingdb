@@ -26,9 +26,8 @@ enum class EvaluatedType : uint8_t {
     Char,
     Bool,
     List,
-    ListItem,
+    Any,
     Map,
-    MapValue,
     Wildcard,
     Tuple,
     ValueType,
@@ -79,9 +78,8 @@ using EvaluatedTypeName = EnumToString<EvaluatedType>::Create<
     EnumStringPair<EvaluatedType::Char, "Char">,
     EnumStringPair<EvaluatedType::Bool, "Bool">,
     EnumStringPair<EvaluatedType::List, "List">,
-    EnumStringPair<EvaluatedType::ListItem, "ListItem">,
+    EnumStringPair<EvaluatedType::Any, "Any">,
     EnumStringPair<EvaluatedType::Map, "Map">,
-    EnumStringPair<EvaluatedType::MapValue, "MapValue">,
     EnumStringPair<EvaluatedType::Wildcard, "Wildcard">,
     EnumStringPair<EvaluatedType::Tuple, "Tuple">,
     EnumStringPair<EvaluatedType::ValueType, "ValueType">,
@@ -159,7 +157,13 @@ inline bool namesAComparableValue(EvaluatedType e) {
 }
 
 inline bool namesATaggedCell(EvaluatedType e) {
-    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+    return e == EvaluatedType::Any;
+}
+
+// The types a WHERE, a WHEN, NOT, AND, OR and XOR read as a truth value. A value of type
+// any holds the row's own type, which is checked as each row is read.
+inline bool namesATruthValue(EvaluatedType e) {
+    return e == EvaluatedType::Bool || e == EvaluatedType::Null || e == EvaluatedType::Any;
 }
 
 // The types = and <> take: every value and every entity

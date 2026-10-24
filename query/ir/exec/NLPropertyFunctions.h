@@ -53,7 +53,7 @@ private:
     std::vector<NLEntityProperties::Entry> _entries;
 };
 
-// The two over a value that carries its own type tag: an element of a list, which is what
+// The four over a value that carries its own type tag: an element of a list, which is what
 // an UNWIND binds, or a value read out of a map. One holding a null answers null, one
 // holding neither an entity nor a map is the row's type error
 template <typename Cell>
@@ -72,6 +72,38 @@ private:
     NLKeysFunction<NodeID> _nodeKeys;
     NLKeysFunction<EdgeID> _edgeKeys;
     MapKeysFunction _mapKeys;
+};
+
+template <typename Cell>
+class NLTaggedLabelsFunction {
+public:
+    using ArgType = Cell;
+    using ResultType = std::optional<ListView>;
+
+    NLTaggedLabelsFunction(NLExecutionContext* context, NLStepBuffers* memory);
+    ~NLTaggedLabelsFunction();
+
+    ResultType operator()(Cell cell);
+    ResultType operator()(const std::optional<Cell>& cell);
+
+private:
+    LabelsFunction _labels;
+};
+
+template <typename Cell>
+class NLTaggedEdgeTypeFunction {
+public:
+    using ArgType = Cell;
+    using ResultType = std::optional<types::String::Primitive>;
+
+    NLTaggedEdgeTypeFunction(NLExecutionContext* context, NLStepBuffers* memory);
+    ~NLTaggedEdgeTypeFunction();
+
+    ResultType operator()(Cell cell);
+    ResultType operator()(const std::optional<Cell>& cell);
+
+private:
+    EdgeTypesFunction _edgeType;
 };
 
 template <typename Cell>

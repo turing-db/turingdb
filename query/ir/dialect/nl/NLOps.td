@@ -118,7 +118,7 @@ def UnwindConst : NLOp<"unwind_const", [Pure]> {
     attribute keeping its own type. A homogeneous list yields a nullable value chunk of
     that type - the shape a property fetch and the unwind_collect drain emit, so the
     unwound column feeds the same consumers, even though such a literal is never null;
-    a heterogeneous or empty list yields a type-erased !storage.list_element chunk (a
+    a heterogeneous or empty list yields a type-erased !storage.any chunk (a
     tagged scalar per row), which is also what a list holding a null or a nested list
     unwinds into. The single chunk element type depends on the elements, so -
     unlike nl.scan_nodes, whose node-ID iterator is fixed and inferred - it is spelled
@@ -209,17 +209,17 @@ def Unwind : NLOp<"unwind", [Pure]> {
 
       %rows = nl.unwind(%names, {%nodes})
                 : (!nl.chunk<!storage.list<!storage.string>>, !nl.chunk<!storage.node_id>)
-                -> !nl.iter<!nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>>
-      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>> {
-        nl.output(%x, %n) : !nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>
+                -> !nl.iter<!nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>>
+      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>> {
+        nl.output(%x, %n) : !nl.chunk<!storage.any>, !nl.chunk<!storage.node_id>
       }
 
     A list cell contributes one row per element, a null cell none, and any other cell
-    the single row it is - a tagged scalar included, so a list_element cell that is
+    the single row it is - a tagged scalar included, so a !storage.any cell that is
     itself a list unwinds one level deeper. Unlike nl.unwind_const it reads an input
     chunk, so it nests in the loop that binds it, the way nl.get_out_edges nests in the
     loop binding its nodes. The element chunk type follows the source's - a list unwinds
-    into the type-erased list_element chunk, a scalar column into its own - and, like
+    into the type-erased !storage.any chunk, a scalar column into its own - and, like
     nl.collect's, is spelled out rather than inferred.
   }];
 
@@ -404,8 +404,10 @@ def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAli
 
     The operand is nullable where a stored property fetched it and plain where a literal
     built it, so both spellings are accepted. It is a chunk of tagged cells where the map
-    was itself read out of a list or a map, and a cell holding no map answers like a row
-    holding none. The result never is: a map value carries its null in its own tag, so a
+    was itself read out of a list or a map. A cell holding a node or an edge reads that
+    entity's property, written into the step's map buffer as an entry of its own, and a
+    cell holding anything else answers like a row holding none. The result never is a
+    tagged cell: a map value carries its null in its own tag, so a
     missing key and an absent map both read back as a Null-tagged entry rather than as an
     absent optional.
   }];
@@ -415,6 +417,25 @@ def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAli
   let hasVerifier = 1;
 
   let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
+}
+
+def MapEntryValue : NLOp<"map_entry_value", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of the value each map entry holds, as a tagged cell";
+  let description = [{
+    A value read out of a map rides the entry it views in the map buffer. Where it meets an
+    op reading the tagged cells every value of type any rides - a CASE, a list, an
+    aggregate, NOT or a minus - its value is copied into a cell of its own:
+
+      %c = nl.map_entry_value %v : (!nl.chunk<!storage.map_element>) -> !nl.chunk<!storage.any>
+
+    A Null-tagged entry answers a Null-tagged cell.
+  }];
+
+  let arguments = (ins NLMapElementChunk:$entries);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$entries attr-dict `:` functional-type(operands, results)";
 }
 
 /**
@@ -2563,7 +2584,7 @@ def Concat : NLOp<"concat", [Pure, ConstantThroughOperands, RowAlignedThroughOpe
 def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise read of one element of a list chunk, by position";
   let description = [{
-      %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.list_element>>
+      %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.any>>
 
       A list of nodes or of edges hands its elements back as the entity chunk they were
       gathered from, an invalid ID standing for a position the list does not hold:
@@ -2592,7 +2613,8 @@ def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowA
 
     Either operand is nullable where a stored property fetched it and plain where a literal
     built it, so both spellings are accepted on both. The map operand is a chunk of tagged
-    cells where the map was itself read out of a list or a map. The result never is: a map
+    cells where the map was itself read out of a list or a map, and a cell holding a node or
+    an edge reads that entity's property under the key. The result never is: a map
     value carries its null in its own tag, so a map holding no such key, a row holding no
     map and a row holding no key all read back as a Null-tagged entry.
   }];
@@ -2957,6 +2979,8 @@ def Last : NLUnaryFunctionOp<"last", [ConstantThroughOperands]>;
 def Tail : NLUnaryFunctionOp<"tail", [ConstantThroughOperands]>;
 
 def Abs : NLUnaryFunctionOp<"abs", [ConstantThroughOperands]>;
+def Negate : NLUnaryFunctionOp<"negate", [ConstantThroughOperands]>;
+def UnaryPlus : NLUnaryFunctionOp<"unary_plus", [ConstantThroughOperands]>;
 def Sign : NLUnaryFunctionOp<"sign", [ConstantThroughOperands]>;
 def Ceil : NLUnaryFunctionOp<"ceil", [ConstantThroughOperands]>;
 def Floor : NLUnaryFunctionOp<"floor", [ConstantThroughOperands]>;

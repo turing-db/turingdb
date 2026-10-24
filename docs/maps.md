@@ -103,10 +103,10 @@ A key read takes a cell column wherever it takes a map column: `holdsAMapPerRow`
 out of the tag. An index takes one the same way: `isIndexableChunk` admits
 `!storage.map_element`, `ListIndexImpl` carries the `MapEntryView` overloads, and
 `MapEntryKindPairs` admits their column pairs in `AllowedKinds.h`. The result is the
-`nullable<list_element>` every index gives.
+`nullable<any>` every index gives.
 
 A map held in a list reads through those same two paths, since `xs[0]` hands back a
-`!storage.list_element` whose `MapView` tag is the map. An `UNWIND` of such a list binds its
+`!storage.any` whose `MapView` tag is the map. An `UNWIND` of such a list binds its
 variable to the same cell, so `UNWIND [{a: 1}] AS m RETURN m.a` reads through one too. The
 dotted form `xs[0].a` needs a parser rule of its own (`propertyLookupExpr`), because a `.`
 after a `]` is otherwise no expression.

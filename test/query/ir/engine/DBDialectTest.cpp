@@ -1238,11 +1238,11 @@ func.func @main() {
 )mlir";
 
 // UNWIND [true, "string", 10] AS x RETURN x: a heterogeneous list, so the elements
-// share no single type and the result is a type-erased list_element column.
+// share no single type and the result is a type-erased !storage.any column.
 const char* const heterogeneousUnwindConstProgram = R"mlir(
 func.func @main() {
-  %x = db.unwind_const([true, "string", 10]) : !db.column<!storage.list_element>
-  db.output(%x) : !db.column<!storage.list_element>
+  %x = db.unwind_const([true, "string", 10]) : !db.column<!storage.any>
+  db.output(%x) : !db.column<!storage.any>
   return
 }
 )mlir";
@@ -1250,8 +1250,8 @@ func.func @main() {
 // UNWIND [] AS x: an empty list is the type-erased form and yields no row - valid.
 const char* const emptyUnwindConstProgram = R"mlir(
 func.func @main() {
-  %x = db.unwind_const([]) : !db.column<!storage.list_element>
-  db.output(%x) : !db.column<!storage.list_element>
+  %x = db.unwind_const([]) : !db.column<!storage.any>
+  db.output(%x) : !db.column<!storage.any>
   return
 }
 )mlir";
@@ -1267,7 +1267,7 @@ func.func @main() {
 )mlir";
 
 // An empty list typed as a homogeneous i64 column: rejected, since there is no element
-// to read that type from. The empty list is the list_element form.
+// to read that type from. The empty list is the !storage.any form.
 const char* const emptyHomogeneousUnwindConstProgram = R"mlir(
 func.func @main() {
   %x = db.unwind_const([]) : !db.column<i64>
@@ -1377,7 +1377,7 @@ func.func @main() {
 const char* const nestedConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.constant([10, true, [1, 2]])
-  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<!storage.any>>
   return
 }
 )mlir";
@@ -1387,7 +1387,7 @@ func.func @main() {
 const char* const emptyConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.constant([])
-  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<!storage.any>>
   return
 }
 )mlir";
@@ -1418,7 +1418,7 @@ func.func @main() {
 const char* const mistypedConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.constant([1, 2, 3])
-  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<!storage.any>>
   return
 }
 )mlir";
@@ -1699,11 +1699,11 @@ TEST_F(DBDialectTest, parsesHeterogeneousUnwindConst) {
     ASSERT_TRUE(unwind);
 
     // A heterogeneous list keeps every element but resolves to a type-erased
-    // list_element column, since the elements share no single type.
+    // !storage.any column, since the elements share no single type.
     const mlir::ArrayAttr elements = unwind.getElements();
     ASSERT_EQ(elements.size(), 3u);
 
-    const mlir::Type listElementColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    const mlir::Type listElementColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::AnyType::get(&_context));
     EXPECT_EQ(unwind.getResult().getType(), listElementColumnType);
 }
 
@@ -1712,7 +1712,7 @@ TEST_F(DBDialectTest, heterogeneousUnwindConstRoundTripsThroughTextualForm) {
     ASSERT_TRUE(module);
 
     // Printing then re-parsing a mixed-type list yields a module that still verifies,
-    // so the printer and parser are inverses through the list_element column too.
+    // so the printer and parser are inverses through the !storage.any column too.
     std::string printed;
     llvm::raw_string_ostream stream(printed);
     module.get().print(stream);
@@ -1723,7 +1723,7 @@ TEST_F(DBDialectTest, heterogeneousUnwindConstRoundTripsThroughTextualForm) {
 }
 
 TEST_F(DBDialectTest, unwindConstWithEmptyListIsValid) {
-    // An empty list is the type-erased list_element form: it simply yields no row, so
+    // An empty list is the type-erased !storage.any form: it simply yields no row, so
     // the module builds and verifies.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyUnwindConstProgram);
     ASSERT_TRUE(module);
@@ -1739,7 +1739,7 @@ TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithMixedElements) {
 
 TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithoutElements) {
     // The typed column claims a type no element carries. Codegen never spells this -
-    // it picks the list_element form for an empty list - so the verifier is what
+    // it picks the !storage.any form for an empty list - so the verifier is what
     // stands between the two forms.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyHomogeneousUnwindConstProgram);
     EXPECT_FALSE(module);
@@ -1956,7 +1956,7 @@ TEST_F(DBDialectTest, infersAnErasedListFromAnEmptyOne) {
     mlir::db::ConstantOp listConstant = findListConstant(module.get());
     ASSERT_TRUE(listConstant);
 
-    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::AnyType::get(&_context));
     EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
 }
 

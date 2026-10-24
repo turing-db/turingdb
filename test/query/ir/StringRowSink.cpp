@@ -12,6 +12,7 @@
 #include "GraphPath.h"
 #include "ID.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBufferTypeTag.h"
@@ -105,47 +106,29 @@ bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
-// A datetime renders as the ISO-8601 instant it names rather than as its count, which is
+// A datetime or a duration renders in its ISO-8601 form rather than as its count, which is
 // what every other reader of one shows
-bool textOfDateTime(const Column* chunk, size_t rowIndex, std::string& text) {
-    if (const auto* column = dynamic_cast<const ColumnVector<DateTime>*>(chunk)) {
-        DateTime::format(text, column->getRaw()[rowIndex]);
-        return true;
-    }
+template <typename Temporal>
+bool textOfTemporal(const Column* chunk, size_t rowIndex, std::string& text) {
+    const std::optional<Temporal>* value = nullptr;
 
-    const auto* optional = dynamic_cast<const ColumnOptVector<DateTime>*>(chunk);
-    if (!optional) {
+    if (const auto* column = dynamic_cast<const ColumnVector<Temporal>*>(chunk)) {
+        Temporal::format(text, column->getRaw()[rowIndex]);
+        return true;
+    } else if (const auto* optional = dynamic_cast<const ColumnOptVector<Temporal>*>(chunk)) {
+        value = &optional->getRaw()[rowIndex];
+    } else if (const auto* constant = dynamic_cast<const ColumnConst<std::optional<Temporal>>*>(chunk)) {
+        value = &constant->getRaw();
+    } else {
         return false;
     }
 
-    const std::optional<DateTime>& value = optional->getRaw()[rowIndex];
-    if (!value) {
+    if (!value->has_value()) {
         text = "null";
         return true;
     }
 
-    DateTime::format(text, *value);
-    return true;
-}
-
-bool textOfDuration(const Column* chunk, size_t rowIndex, std::string& text) {
-    if (const auto* column = dynamic_cast<const ColumnVector<Duration>*>(chunk)) {
-        Duration::format(text, column->getRaw()[rowIndex]);
-        return true;
-    }
-
-    const auto* optional = dynamic_cast<const ColumnOptVector<Duration>*>(chunk);
-    if (!optional) {
-        return false;
-    }
-
-    const std::optional<Duration>& value = optional->getRaw()[rowIndex];
-    if (!value) {
-        text = "null";
-        return true;
-    }
-
-    Duration::format(text, *value);
+    Temporal::format(text, **value);
     return true;
 }
 
@@ -158,6 +141,8 @@ bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
     text = ValueTypeName::value(column->getRaw()[rowIndex]);
     return true;
 }
+
+void appendListText(const ListView& list, std::string& text);
 
 std::string elementText(const ListElementView& element) {
     switch (element.getTag()) {
@@ -209,8 +194,15 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
+        case ListBufferTypeTag::ListView: {
+            std::string elements;
+            appendListText(element.getAs<ListView>(), elements);
+
+            return "[" + elements + "]";
+        }
+        break;
+
         case ListBufferTypeTag::Embedding:
-        case ListBufferTypeTag::ListView:
         case ListBufferTypeTag::MapView:
         case ListBufferTypeTag::INVALID:
             throw std::runtime_error("StringRowSink cannot read this list element as text");
@@ -223,13 +215,15 @@ std::string elementText(const ListElementView& element) {
 // A type-erased column of tagged scalars - the column a heterogeneous UNWIND drives - reads
 // each cell through the tag it carries rather than through the column's type.
 bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<ListElementView>*>(chunk);
-    if (!column) {
-        return false;
+    if (const auto* column = dynamic_cast<const ColumnVector<ListElementView>*>(chunk)) {
+        text = elementText(column->getRaw()[rowIndex]);
+        return true;
+    } else if (const auto* constant = dynamic_cast<const ColumnConst<ListElementView>*>(chunk)) {
+        text = elementText(constant->getRaw());
+        return true;
     }
 
-    text = elementText(column->getRaw()[rowIndex]);
-    return true;
+    return false;
 }
 
 // The nullable sibling of textOfListElement: what an index into a list naming no one type
@@ -340,6 +334,16 @@ std::string boolText(const std::optional<CustomBool>& value) {
     }
 
     return *value ? "true" : "false";
+}
+
+bool textOfMask(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnMask*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = (*column)[rowIndex] ? "true" : "false";
+    return true;
 }
 
 // A nullable boolean, which a three-valued predicate such as IN produces
@@ -473,9 +477,9 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
         return text;
     } else if (textOfValueType(chunk, rowIndex, text)) {
         return text;
-    } else if (textOfDateTime(chunk, rowIndex, text)) {
+    } else if (textOfTemporal<DateTime>(chunk, rowIndex, text)) {
         return text;
-    } else if (textOfDuration(chunk, rowIndex, text)) {
+    } else if (textOfTemporal<Duration>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPlain<uint64_t>(chunk, rowIndex, text)) {
         return text;
@@ -512,6 +516,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptionalID<NodeID>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalID<EdgeID>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfMask(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalBool(chunk, rowIndex, text)) {
         return text;

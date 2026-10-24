@@ -3962,6 +3962,22 @@ using NLCaseWriteFn = void (*)(Column* result, size_t resultRow, const Column* v
 // every branch of a defaultless CASE holds
 using NLCaseResetFn = void (*)(Column* result, size_t rowCount);
 
+// Read the cell one element column holds at @param row as the value the list buffer
+// stores for it, tagged with the type it is. One per column kind, selected during
+// translation the way the case write families are. The memory is what a column owning its
+// characters copies them into, as the concatenation kernel copies its result.
+using NLListItemReadFunction = ListBuffer<>::ListItemVariant (*)(const Column* input,
+                                                                 size_t row,
+                                                                 NLStepBuffers* stepBuffers);
+
+// How a value is written into one row of a CASE result or an nl.reduce accumulator:
+// through a CASE write where the result is a typed column, or read as a list item and
+// stored as a tagged cell where it is a !storage.any column
+struct NLCellWrite {
+    NLCaseWriteFn _write {nullptr};
+    NLListItemReadFunction _taggedRead {nullptr};
+};
+
 // One CASE, as the rows are walked: per branch the condition to read, the value to take
 // when it holds, and the kernels that read each. The default is what a row matching no
 // branch takes; with none, the reset already left it absent.
@@ -3971,7 +3987,7 @@ public:
         const Column* _condition {nullptr};
         const Column* _value {nullptr};
         NLCaseTestFn _test {nullptr};
-        NLCaseWriteFn _write {nullptr};
+        NLCellWrite _write;
     };
 
     struct BranchCursor {
@@ -3979,19 +3995,21 @@ public:
         size_t _valueRow {0};
     };
 
-    NLCaseData(const Column* cardinality, Column* result, NLCaseResetFn reset)
+    NLCaseData(const Column* cardinality, Column* result, NLCaseResetFn reset, NLStepBuffers* stepBuffers)
         : _cardinality(cardinality),
         _result(result),
-        _reset(reset)
+        _reset(reset),
+        _stepBuffers(stepBuffers)
     {
     }
 
     const Column* getCardinality() const { return _cardinality; }
     Column* getResult() const { return _result; }
     NLCaseResetFn getReset() const { return _reset; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const Column* getDefaultValue() const { return _defaultValue; }
-    NLCaseWriteFn getWriteDefault() const { return _writeDefault; }
+    const NLCellWrite& getWriteDefault() const { return _writeDefault; }
 
     const std::vector<Branch>& branches() const { return _branches; }
     std::vector<BranchCursor>& cursors() { return _cursors; }
@@ -4001,7 +4019,7 @@ public:
         _cursors.emplace_back();
     }
 
-    void setDefault(const Column* defaultValue, NLCaseWriteFn writeDefault) {
+    void setDefault(const Column* defaultValue, const NLCellWrite& writeDefault) {
         _defaultValue = defaultValue;
         _writeDefault = writeDefault;
     }
@@ -4010,19 +4028,12 @@ private:
     const Column* _cardinality {nullptr};
     Column* _result {nullptr};
     NLCaseResetFn _reset {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
     std::vector<Branch> _branches;
     std::vector<BranchCursor> _cursors;
     const Column* _defaultValue {nullptr};
-    NLCaseWriteFn _writeDefault {nullptr};
+    NLCellWrite _writeDefault;
 };
-
-// Read the cell one element column holds at @param row as the value the list buffer
-// stores for it, tagged with the type it is. One per column kind, selected during
-// translation the way the case write families are. The memory is what a column owning its
-// characters copies them into, as the concatenation kernel copies its result.
-using NLListItemReadFunction = ListBuffer<>::ListItemVariant (*)(const Column* input,
-                                                                 size_t row,
-                                                                 NLStepBuffers* stepBuffers);
 
 // Row-wise list build (nl.make_list): row r of the result is the list of row r of every
 // element column, written into the query's list buffer as one contiguous run. Every
@@ -4217,14 +4228,41 @@ private:
     std::vector<Entry> _entries;
 };
 
-// The map one column of an nl.static_map_key holds at @param row, or nothing where the row holds
-// none. One per map column shape, selected during translation.
-using NLMapReadFunction = std::optional<MapView> (*)(const Column* input, size_t row);
+// What one row of an nl.static_map_key or an nl.dynamic_map_key reads its key in: a map, or
+// the node or the edge whose properties are its keys. Nothing where the row holds none of
+// them.
+using NLKeyedValue = std::variant<std::monostate, MapView, NodeID, EdgeID>;
+
+// The keyed value one column of a map key read holds at @param row. One per column shape,
+// selected during translation.
+using NLKeyedReadFunction = NLKeyedValue (*)(const Column* input, size_t row);
 
 // The key one column of an nl.dynamic_map_key holds at @param row, or nothing where the
 // row holds none. One per string column shape, selected during translation.
 using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const Column* input,
                                                                         size_t row);
+
+// Row-wise copy of map entries' values into tagged cells (nl.map_entry_value)
+class NLMapEntryValueData : public NLFunctionData {
+public:
+    NLMapEntryValueData(const Column* input, Column* result, NLStepBuffers* stepBuffers)
+        : _input(input),
+        _result(result),
+        _stepBuffers(stepBuffers)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getResult() const { return _result; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+    std::vector<QueryListBuffer::ListItemVariant>& getItems() { return _items; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _result {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
+    std::vector<QueryListBuffer::ListItemVariant> _items;
+};
 
 // Row-wise map key read (nl.static_map_key): row r of the result views the entry row r's map
 // holds under the key, or the null entry where it holds none.
@@ -4232,21 +4270,24 @@ class NLStaticMapKeyData : public NLFunctionData {
 public:
     NLStaticMapKeyData(const Column* input,
                  Column* result,
-                 NLMapReadFunction mapRead,
+                 NLKeyedReadFunction keyedRead,
                  std::string_view key,
-                 MapEntryView absent)
+                 MapEntryView absent,
+                 NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
-        _mapRead(mapRead),
+        _keyedRead(keyedRead),
         _key(key),
-        _absent(absent)
+        _absent(absent),
+        _stepBuffers(stepBuffers)
     {
     }
 
     const Column* getInput() const { return _input; }
     Column* getResult() const { return _result; }
-    NLMapReadFunction getMapRead() const { return _mapRead; }
+    NLKeyedReadFunction getKeyedRead() const { return _keyedRead; }
     std::string_view getKey() const { return _key; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     // The entry a row whose map holds no such key reads: the key the statement reads under,
     // tagged null. Fixed by the key, so one serves every row of every chunk.
@@ -4255,9 +4296,10 @@ public:
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
-    NLMapReadFunction _mapRead {nullptr};
+    NLKeyedReadFunction _keyedRead {nullptr};
     std::string_view _key {};
     MapEntryView _absent;
+    NLStepBuffers* _stepBuffers {nullptr};
 };
 
 // Row-wise map key read (nl.dynamic_map_key): row r of the result views the entry row r's
@@ -4266,14 +4308,14 @@ class NLDynamicMapKeyData : public NLFunctionData {
 public:
     NLDynamicMapKeyData(const Column* input,
                         Column* result,
-                        NLMapReadFunction mapRead,
+                        NLKeyedReadFunction keyedRead,
                         const Column* key,
                         NLStringReadFunction keyRead,
                         MapEntryView absent,
                         NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
-        _mapRead(mapRead),
+        _keyedRead(keyedRead),
         _key(key),
         _keyRead(keyRead),
         _absent(absent),
@@ -4283,7 +4325,7 @@ public:
 
     const Column* getInput() const { return _input; }
     Column* getResult() const { return _result; }
-    NLMapReadFunction getMapRead() const { return _mapRead; }
+    NLKeyedReadFunction getKeyedRead() const { return _keyedRead; }
     const Column* getKey() const { return _key; }
     NLStringReadFunction getKeyRead() const { return _keyRead; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
@@ -4296,7 +4338,7 @@ public:
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
-    NLMapReadFunction _mapRead {nullptr};
+    NLKeyedReadFunction _keyedRead {nullptr};
     const Column* _key {nullptr};
     NLStringReadFunction _keyRead {nullptr};
     MapEntryView _absent;
@@ -4738,14 +4780,6 @@ private:
     std::vector<size_t> _nullCounts;
 };
 
-// How a value is written into one row of an nl.reduce accumulator: through a CASE write
-// where the accumulator is a typed column, or read as a list item and stored as a tagged
-// cell where it is type-erased
-struct NLReduceWrite {
-    NLCaseWriteFn _write {nullptr};
-    NLListItemReadFunction _taggedRead {nullptr};
-};
-
 // nl.reduce data: the per-row fold of `reduce(acc = init, x IN xs | f(acc, x))`. The
 // result column is the accumulator: it is reset, takes the initial value of each row whose
 // source cell holds a list, then the body's value once per element. The body runs once
@@ -4796,10 +4830,10 @@ public:
     NLCaseResetFn getReset() const { return _reset; }
     void setReset(NLCaseResetFn reset) { _reset = reset; }
 
-    const NLReduceWrite& getInitialWrite() const { return _initialWrite; }
-    const NLReduceWrite& getValueWrite() const { return _valueWrite; }
+    const NLCellWrite& getInitialWrite() const { return _initialWrite; }
+    const NLCellWrite& getValueWrite() const { return _valueWrite; }
 
-    void setWrites(const NLReduceWrite& initialWrite, const NLReduceWrite& valueWrite) {
+    void setWrites(const NLCellWrite& initialWrite, const NLCellWrite& valueWrite) {
         _initialWrite = initialWrite;
         _valueWrite = valueWrite;
     }
@@ -4836,8 +4870,8 @@ private:
     NLStepBuffers* _stepBuffers {nullptr};
     const Column* _value {nullptr};
     NLCaseResetFn _reset {nullptr};
-    NLReduceWrite _initialWrite;
-    NLReduceWrite _valueWrite;
+    NLCellWrite _initialWrite;
+    NLCellWrite _valueWrite;
     NLCompactingValueStore _accumulatorValues;
     NLReownFunction _reown {nullptr};
     NLReownRowsFunction _reownRows {nullptr};

@@ -251,8 +251,54 @@ inline bool holdsAString(const T& value) {
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() && holdsAString(*value);
     } else {
-        return std::is_same_v<Decayed, std::string_view>;
+        return std::is_same_v<Decayed, types::String::Primitive>
+            || std::is_same_v<Decayed, types::String::OwningPrimitive>;
     }
+}
+
+/// Whether such an operand holds a list: a cell tagged as one.
+template <typename T>
+inline bool holdsAList(const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        return value.getTag() == ListBufferTypeTag::ListView;
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        return value.has_value() && holdsAList(*value);
+    } else {
+        return false;
+    }
+}
+
+// The list an operand of a '+' that joins a list stands for: the list a cell holds, or the
+// one-element list of any other value, a null among them
+template <typename T>
+inline ListView joinedListOperand(QueryListBuffer* listBuffer, const T& value) {
+    using Decayed = std::decay_t<T>;
+
+    QueryListBuffer::ListItemVariant item {PropertyNull {}};
+
+    if constexpr (std::is_same_v<Decayed, ListView>) {
+        return value;
+    } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
+        if (value.getTag() == ListBufferTypeTag::ListView) {
+            return value.template getAs<ListView>();
+        }
+
+        const auto read = []<typename E>(const ListElementView cell) -> QueryListBuffer::ListItemVariant {
+            return cell.getAs<E>();
+        };
+
+        item = ListTagDispatcher {value.getTag()}.execute(read, value);
+    } else if constexpr (TypeUtils::is_optional_v<Decayed>) {
+        if (value.has_value()) {
+            return joinedListOperand(listBuffer, *value);
+        }
+    } else {
+        item = arithmeticOperand(value);
+    }
+
+    return listBuffer->insert(std::span<const QueryListBuffer::ListItemVariant> {&item, 1});
 }
 
 template <typename T>
@@ -323,6 +369,12 @@ concept ConcatenatesLists =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<A>>, ListView>
     && std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<B>>, ListView>;
 
+// A list meeting a type-erased cell, which joins it as the list it holds or as one element
+template <typename A, typename B>
+concept JoinsACellToAList =
+    (std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<A>>, ListView> && TaggedCell<B>)
+    || (TaggedCell<A> && std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<B>>, ListView>);
+
 // A concatenation answers null where an operand is null, or where a type-erased cell holds
 // no text of its own. Two plain values always answer the text they make.
 template <typename A, typename B>
@@ -334,7 +386,8 @@ concept ConcatenatesNullableText = TypeUtils::is_optional_v<std::decay_t<A>>
 // The operands a '+' can join as text when one of them turns out to hold a string
 template <typename T>
 concept JoinsAsText = std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>
-                   || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, std::string_view>
+                   || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, types::String::Primitive>
+                   || std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, types::String::OwningPrimitive>
                    || std::is_arithmetic_v<TypeUtils::unwrap_optional_t<std::decay_t<T>>>;
 
 template <typename T, typename U>
@@ -380,6 +433,13 @@ struct BinaryOp {
         requires ComputesOverTaggedCell<F, T, U>
     inline std::optional<ListElementView> operator()(T&& a, U&& b) const {
         bioassert(_listBuffer, "Arithmetic over a type-erased cell has no list buffer to stage its result in");
+
+        if constexpr (std::is_same_v<F, std::plus<>>) {
+            if (holdsAList(a) || holdsAList(b)) {
+                return stagedCell(_listBuffer->concatenate(joinedListOperand(_listBuffer, a),
+                                                           joinedListOperand(_listBuffer, b)));
+            }
+        }
 
         if constexpr (std::is_same_v<F, std::plus<>> && JoinsAsText<T> && JoinsAsText<U>) {
             if (holdsAString(a) || holdsAString(b)) {
@@ -505,7 +565,7 @@ struct Concatenate {
     // cell holding no text - a null, a nested list - makes the concatenation null, as a
     // null operand does.
     template <typename A, typename B>
-        requires (!ConcatenatesLists<A, B>)
+        requires (!ConcatenatesLists<A, B>) && (!JoinsACellToAList<A, B>)
     inline auto operator()(const A& a, const B& b) const {
         ValueTextScratch leftScratch;
         ValueTextScratch rightScratch;
@@ -526,6 +586,36 @@ struct Concatenate {
 
     inline ListView operator()(ListView a, ListView b) const {
         return _listBuffer->concatenate(a, b);
+    }
+
+    // A null list joins nothing, while a null cell joins the list as a null element, as
+    // a null scalar does
+    template <typename A, typename B>
+        requires JoinsACellToAList<A, B>
+    inline auto operator()(const A& a, const B& b) const {
+        if constexpr (TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>) {
+            if (isAbsentList(a) || isAbsentList(b)) {
+                return std::optional<ListView> {};
+            }
+
+            return std::optional<ListView> {joinedLists(a, b)};
+        } else {
+            return joinedLists(a, b);
+        }
+    }
+
+    template <typename A, typename B>
+    ListView joinedLists(const A& a, const B& b) const {
+        return _listBuffer->concatenate(joinedListOperand(_listBuffer, a), joinedListOperand(_listBuffer, b));
+    }
+
+    template <typename T>
+    static bool isAbsentList(const T& value) {
+        if constexpr (std::same_as<std::decay_t<T>, std::optional<ListView>>) {
+            return !value.has_value();
+        } else {
+            return false;
+        }
     }
 
     // The text one side of such a concatenation contributes, false where it contributes

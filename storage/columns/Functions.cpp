@@ -489,6 +489,63 @@ TaggedAbsFunction::ResultType TaggedAbsFunction::operator()(const std::optional<
     return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
+TaggedNegateFunction::TaggedNegateFunction(QueryListBuffer* listBuffer)
+    : _listBuffer(listBuffer)
+{
+}
+
+TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const ArgType cell) const {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    } else if (tag == ListBufferTypeTag::Int) {
+        return stageCell(_listBuffer, NegateFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>()));
+    } else if (tag == ListBufferTypeTag::UInt) {
+        return stageCell(_listBuffer, NegateFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>()));
+    } else if (tag == ListBufferTypeTag::Double) {
+        return stageCell(_listBuffer, NegateFunction<types::Double::Primitive> {}(cell.getAs<types::Double::Primitive>()));
+    } else if (tag == ListBufferTypeTag::Duration) {
+        return stageCell(_listBuffer, NegateFunction<types::Duration::Primitive> {}(cell.getAs<types::Duration::Primitive>()));
+    }
+
+    throwSignOperandType("minus");
+}
+
+TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const ArgType cell) const {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    const bool holdsASignedValue = tag == ListBufferTypeTag::Int
+                                || tag == ListBufferTypeTag::UInt
+                                || tag == ListBufferTypeTag::Double
+                                || tag == ListBufferTypeTag::Duration;
+
+    if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    } else if (holdsASignedValue) {
+        return cell;
+    }
+
+    throwSignOperandType("plus");
+}
+
+TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+void db::throwSignOperandType(std::string_view operatorName) {
+    throw TuringException(fmt::format("The operand of a unary {} must be an integer, a double or a duration",
+                                      operatorName));
+}
+
+void db::throwNegationOverflow() {
+    throw TuringException("Integer overflow: the negation is out of the range of a 64-bit integer");
+}
+
 TaggedSignFunction::ResultType TaggedSignFunction::operator()(const ArgType cell) const {
     return visitNumberCell<ResultType>(cell, "sign", []<typename Number>(const Number number) -> ResultType {
         return SignFunction<Number> {}(number);

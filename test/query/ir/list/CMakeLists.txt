@@ -140,3 +140,7 @@ add_turing_test(test_query_ir_list_reverse ListReverseTest.cpp)
 add_turing_test(test_query_ir_list_predicate_early_exit ListPredicateEarlyExitTest.cpp)
 target_sources(test_query_ir_list_predicate_early_exit PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp ${IR_TEST_DIR}/CallV3Test.cpp)
 target_include_directories(test_query_ir_list_predicate_early_exit PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_constant_list_element_truth ConstantListElementTruthTest.cpp)
+
+add_call_v3_test(test_query_ir_logical_operator_over_unreached_cell LogicalOperatorOverUnreachedCellTest.cpp)

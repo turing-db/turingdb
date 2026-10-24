@@ -828,7 +828,7 @@ mlir::Type sharedColumnElement(mlir::MLIRContext* context, llvm::ArrayRef<mlir::
         if (!shared) {
             shared = element;
         } else if (shared != element) {
-            return mlir::storage::ListElementType::get(context);
+            return mlir::storage::AnyType::get(context);
         }
     }
 
@@ -1126,7 +1126,7 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
 
     const mlir::Type sharedType = sharedLiteralElementType(elementsAttr);
     const mlir::Type elementType = sharedType ? sharedType
-                                              : mlir::storage::ListElementType::get(_mlirCtxt);
+                                              : mlir::storage::AnyType::get(_mlirCtxt);
 
     const mlir::db::ColumnType resultType = allocColumnType(elementType);
 
@@ -7715,31 +7715,31 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         break;
 
         case UnaryOperator::Minus: {
-            // Negating an unknown value is unknown, and there is no zero to subtract it
-            // from: the null the operand is stands as the negation
+            // Negating an unknown value is unknown: the null the operand is stands as the
+            // negation
             if (expr->getType() == EvaluatedType::Null) {
                 _part._exprMap[expr] = nullConstantColumn();
                 break;
             }
 
-            // -x is 0 - x, the subtraction the engine already lowers: the promotion of the
-            // zero against the operand is what gives the negation its type
             const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-            const mlir::TypedAttr zeroAttr = _opBuilder.getI64IntegerAttr(0);
-            const mlir::db::ColumnType zeroType = allocColumnType(zeroAttr.getType());
-            const mlir::Value zero = _opBuilder.create<mlir::db::ConstantOp>(loc, zeroType, zeroAttr).getResult();
-
-            const bool negatesADuration = expr->getType() == EvaluatedType::Duration;
-            const mlir::Value origin = negatesADuration
-                                         ? _opBuilder.create<mlir::db::ToDuration>(loc, noneType, zero).getResult()
-                                         : zero;
-
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, origin, operandVal).getResult();
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::Negate>(loc, noneType, operandVal).getResult();
         }
         break;
 
-        case UnaryOperator::Plus:
-            _part._exprMap[expr] = operandVal;
+        case UnaryOperator::Plus: {
+            const EvaluatedType operandType = subExpr->getType();
+            if (operandType == EvaluatedType::Null) {
+                _part._exprMap[expr] = nullConstantColumn();
+                break;
+            } else if (operandType != EvaluatedType::Any) {
+                _part._exprMap[expr] = operandVal;
+                break;
+            }
+
+            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::UnaryPlus>(loc, noneType, operandVal).getResult();
+        }
         break;
 
         case UnaryOperator::_SIZE:
@@ -8786,10 +8786,16 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 
             if (isConcatenation) {
                 // A scalar concatenated with a list joins it as the one-element list it
-                // stands for, so both sides of the concatenation are lists
+                // stands for, so both sides of the concatenation are lists. A cell may hold
+                // a list itself, so the concatenation reads it row by row instead.
                 const bool concatenatesLists = resultType == EvaluatedType::List;
-                const bool lhsJoinsAList = concatenatesLists && lhsExpr->getType() != EvaluatedType::List;
-                const bool rhsJoinsAList = concatenatesLists && rhsExpr->getType() != EvaluatedType::List;
+                const auto joinsAsAList = [](const Expr* operand) {
+                    const EvaluatedType operandType = operand->getType();
+                    return operandType != EvaluatedType::List && operandType != EvaluatedType::Any;
+                };
+
+                const bool lhsJoinsAList = concatenatesLists && joinsAsAList(lhsExpr);
+                const bool rhsJoinsAList = concatenatesLists && joinsAsAList(rhsExpr);
 
                 const mlir::Value lhsColumn = lhsJoinsAList ? singletonList(lhs) : lhs;
                 const mlir::Value rhsColumn = rhsJoinsAList ? singletonList(rhs) : rhs;
@@ -9307,8 +9313,7 @@ mlir::Value DBProgramGenerator::translatePropertyRead(const PropertyExpr* propEx
     const bool readsOffTheVariableItself = entityType == EvaluatedType::DateTime
                                         || entityType == EvaluatedType::Duration
                                         || entityType == EvaluatedType::Map
-                                        || entityType == EvaluatedType::ListItem
-                                        || entityType == EvaluatedType::MapValue;
+                                        || entityType == EvaluatedType::Any;
 
     if (readsOffTheVariableItself) {
         const auto projectedIt = _part._projectedColumns.find(entityDecl);

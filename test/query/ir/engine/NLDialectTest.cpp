@@ -620,7 +620,7 @@ TEST_F(NLDialectTest, loadCSVRoundTripsThroughTextualForm) {
 }
 
 // nl.unwind spells its iterator type too: the element chunk follows the source's element
-// type - a list drains into the type-erased list_element chunk - and each carried chunk
+// type - a list drains into the type-erased !storage.any chunk - and each carried chunk
 // comes back after it, keeping the type it had.
 TEST_F(NLDialectTest, unwindBuildsElementAndCarriedChunkIterator) {
     mlir::OpBuilder builder(&_context);
@@ -636,7 +636,7 @@ TEST_F(NLDialectTest, unwindBuildsElementAndCarriedChunkIterator) {
     mlir::nl::Constant source = builder.create<mlir::nl::Constant>(loc, elements);
     mlir::nl::Constant carried = builder.create<mlir::nl::Constant>(loc, builder.getI64IntegerAttr(7));
 
-    const mlir::Type elementChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    const mlir::Type elementChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::AnyType::get(&_context));
     const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context,
                                                                 {elementChunkType, carried.getResult().getType()});
 
@@ -764,7 +764,7 @@ TEST_F(NLDialectTest, constListRoundTripsThroughTextualForm) {
     auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
     builder.setInsertionPointToStart(function.addEntryBlock());
 
-    const mlir::Type listElementType = mlir::storage::ListElementType::get(&_context);
+    const mlir::Type listElementType = mlir::storage::AnyType::get(&_context);
     const mlir::Type listType = mlir::storage::ListType::get(&_context, listElementType);
     const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, listType);
 

@@ -846,6 +846,87 @@ public:
     }
 };
 
+// A unary minus over a cell keeps the type the cell holds, so its answer is a cell of its own
+class TaggedNegateFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<ListElementView>;
+
+    explicit TaggedNegateFunction(QueryListBuffer* listBuffer);
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+
+private:
+    QueryListBuffer* _listBuffer {nullptr};
+};
+
+[[noreturn]] void throwNegationOverflow();
+
+[[noreturn]] void throwSignOperandType(std::string_view operatorName);
+
+// A unary plus over a cell answers the cell itself where it holds a number or a duration
+class TaggedUnaryPlusFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<ListElementView>;
+
+    ResultType operator()(const ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+template <typename Value>
+class UnaryPlusFunction {
+public:
+    using ArgType = Value;
+    using ResultType = Value;
+    using TaggedCounterpart = TaggedUnaryPlusFunction;
+
+    ResultType operator()(const Value value) const {
+        return value;
+    }
+};
+
+// A unary minus. An unsigned count negates into the signed integer Cypher has, and a value
+// whose opposite an int64 cannot hold is an overflow rather than a wrap.
+template <typename Value>
+class NegateFunction {
+public:
+    using ArgType = Value;
+    using ResultType = std::conditional_t<std::is_unsigned_v<Value>, types::Int64::Primitive, Value>;
+    using TaggedCounterpart = TaggedNegateFunction;
+
+    ResultType operator()(const Value value) const {
+        constexpr int64_t LOWEST = std::numeric_limits<int64_t>::min();
+
+        if constexpr (std::is_same_v<Value, types::Duration::Primitive>) {
+            if (value.getMicroseconds() == LOWEST) {
+                throwNegationOverflow();
+            }
+
+            return Value {-value.getMicroseconds()};
+        } else if constexpr (std::is_floating_point_v<Value>) {
+            return -value;
+        } else if constexpr (std::is_unsigned_v<Value>) {
+            constexpr Value LOWEST_MAGNITUDE = static_cast<Value>(std::numeric_limits<int64_t>::max()) + 1;
+
+            if (value > LOWEST_MAGNITUDE) {
+                throwNegationOverflow();
+            } else if (value == LOWEST_MAGNITUDE) {
+                return LOWEST;
+            }
+
+            return -static_cast<ResultType>(value);
+        } else {
+            if (value == LOWEST) {
+                throwNegationOverflow();
+            }
+
+            return -value;
+        }
+    }
+};
+
 class TaggedSignFunction {
 public:
     using ArgType = ListElementView;

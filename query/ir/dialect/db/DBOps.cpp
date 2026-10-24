@@ -9,6 +9,7 @@
 
 #include "columns/CharacterArgument.h"
 
+#include "DBColumnElement.h"
 #include "IRLiteralList.h"
 #include "IRRange.h"
 #include "StorageEnums.h"
@@ -30,10 +31,7 @@ namespace storage = mlir::storage;
 namespace {
 
 Type columnElement(Value column) {
-    const Type element = cast<ColumnType>(column.getType()).getType();
-    const storage::NullableType nullable = dyn_cast<storage::NullableType>(element);
-
-    return nullable ? nullable.getValueType() : element;
+    return ::db::inferredColumnElement(column);
 }
 
 bool isNumberColumn(Value column) {
@@ -48,6 +46,20 @@ Speculation::Speculatability speculatableWhen(bool cannotRaise) {
 // type may hold either
 Speculation::Speculatability speculatableOverNumbers(Operation* op) {
     return speculatableWhen(llvm::all_of(op->getOperands(), isNumberColumn));
+}
+
+// A tagged cell, or a column whose type lowering resolves, may hold a value that is no
+// boolean, which a logical operator raises on. The null literal is a nullable none.
+Speculation::Speculatability speculatableOverTruthValues(Operation* op) {
+    const bool mayReadANonBoolean = llvm::any_of(op->getOperands(), [](Value operand) {
+        const ColumnType column = cast<ColumnType>(operand.getType());
+        const Type element = columnElement(operand);
+        const bool unresolved = isa<NoneType>(column.getType()) && isa<NoneType>(element);
+
+        return unresolved || isa<storage::AnyType, storage::MapElementType>(element);
+    });
+
+    return speculatableWhen(!mayReadANonBoolean);
 }
 
 template <typename... ElementTypes>
@@ -137,11 +149,12 @@ bool isStringColumn(Type type) {
     const auto nullable = dyn_cast<storage::NullableType>(element);
     const Type value = nullable ? nullable.getValueType() : element;
 
-    return isa<storage::StringType, storage::ListElementType, NoneType>(value);
+    return isa<storage::StringType, storage::AnyType, NoneType>(value);
 }
 
 bool isIntegerColumn(Value column) {
-    return isa<ColumnType>(column.getType()) && isa<IntegerType, storage::ListElementType, NoneType>(columnElement(column));
+    return isa<ColumnType>(column.getType())
+        && isa<IntegerType, storage::AnyType, NoneType>(::db::declaredColumnElement(column));
 }
 
 LogicalResult verifyStringResult(Operation* op, Value result) {
@@ -385,7 +398,7 @@ LogicalResult verifyFactorResults(Operation* op, Region& leftFactor, Region& rig
 LogicalResult verifyHomogeneousElements(Operation* op, ArrayAttr elements) {
     if (elements.empty()) {
         return op->emitOpError("a homogeneous literal list must carry at least one element; "
-                               "an empty list is the list_element form");
+                               "an empty list is the !storage.any form");
     }
 
     mlir::Type payloadType;
@@ -408,7 +421,7 @@ LogicalResult verifyHomogeneousElements(Operation* op, ArrayAttr elements) {
 
     if (!payloadType) {
         return op->emitOpError("a homogeneous literal list must carry an element naming its type; "
-                               "a list of nulls alone is the list_element form");
+                               "a list of nulls alone is the !storage.any form");
     }
 
     return success();
@@ -1684,7 +1697,7 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
     // so the element type is the homogeneity verdict over the elements.
     if (const auto elements = llvm::dyn_cast<ArrayAttr>(adaptor.getValue())) {
         const mlir::Type shared = ::db::sharedLiteralElementType(elements);
-        const mlir::Type listElement = shared ? shared : storage::ListElementType::get(context);
+        const mlir::Type listElement = shared ? shared : storage::AnyType::get(context);
         const mlir::Type listType = storage::ListType::get(context, listElement);
 
         inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, listType));
@@ -2137,7 +2150,7 @@ LogicalResult Split::verify() {
 }
 
 // The unwound column's element type is the homogeneity verdict: a type-erased
-// list_element column accepts any elements, a typed one requires them to share that one
+// A !storage.any column accepts any elements, a typed one requires them to share that one
 // type - the shared check the const_list verifier runs too.
 LogicalResult UnwindConst::verify() {
     const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
@@ -2146,7 +2159,7 @@ LogicalResult UnwindConst::verify() {
     }
 
     const mlir::Type elementType = resultColumn.getType();
-    if (llvm::isa<storage::ListElementType>(elementType)) {
+    if (llvm::isa<storage::AnyType>(elementType)) {
         return success();
     }
 
@@ -2450,6 +2463,22 @@ Speculation::Speculatability Split::getSpeculatability() {
     const bool splitsOnAString = isa<storage::StringType>(columnElement(getDelimiter()));
 
     return speculatableWhen(readsAString && splitsOnAString);
+}
+
+Speculation::Speculatability AndOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
+}
+
+Speculation::Speculatability OrOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
+}
+
+Speculation::Speculatability XorOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
+}
+
+Speculation::Speculatability NotOp::getSpeculatability() {
+    return speculatableOverTruthValues(getOperation());
 }
 
 Speculation::Speculatability AddOp::getSpeculatability() {

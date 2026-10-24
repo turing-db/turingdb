@@ -200,13 +200,13 @@ def UnwindConst : TuringOp<"unwind_const", [Pure]> {
     nested array attribute for a nested list. When they share one type the list is
     homogeneous and the result is that typed column; when they differ - or the list
     is empty, or holds a null or a nested list, neither of which has a type - it is
-    heterogeneous and the result is a type-erased !storage.list_element column, a
+    heterogeneous and the result is a type-erased !storage.any column, a
     tagged scalar per row, matching Cypher's LIST OF ANY:
 
-      %row = db.unwind_const([true, "s", 10]) : !db.column<!storage.list_element>
+      %row = db.unwind_const([true, "s", 10]) : !db.column<!storage.any>
 
     So the result element type is the homogeneity verdict: a downstream op sees a
-    concrete typed column for a homogeneous list, and a list_element column - which
+    concrete typed column for a homogeneous list, and a !storage.any column - which
     only pass-through ops (a cross_product broadcast, the output) accept - for a
     heterogeneous one. An empty list yields no row, matching UNWIND of an empty list.
     Producing a fixed list is deterministic, so the op is Pure. With incoming rows
@@ -365,7 +365,7 @@ def Unwind : TuringOp<"unwind", [Pure]> {
 
     The element column's type is the source's to decide and is resolved during
     lowering, as a property fetch's value column is: unwinding a list yields a
-    type-erased !storage.list_element column of tagged scalars, matching Cypher's LIST
+    type-erased !storage.any column of tagged scalars, matching Cypher's LIST
     OF ANY, while a source that is already a scalar column keeps its own type - the
     singleton is the value it already holds.
   }];
@@ -569,7 +569,8 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
     Row r of the result is the entry row r's map holds under the key. A row whose map holds
     no such key - and a row holding no map at all - reads back as a null entry, since a map
     value carries its null in its own tag. The map column is a column of tagged cells where
-    the map was itself read out of a list or a map.
+    the map was itself read out of a list or a map. A cell holding a node or an edge reads
+    that entity's property under the key, as `n.name` does.
   }];
 
   let arguments = (ins Column:$map, StrAttr:$key);
@@ -2860,8 +2861,8 @@ class NumberFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir
 class TextFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::StringType">;
 class ListFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::ListType">;
 
-def Labels : UnaryFunctionOp<"labels">;
-def EdgeType : UnaryFunctionOp<"edge_type">;
+def Labels : TypedUnaryFunctionOp<"labels", "::mlir::storage::NodeIDType">;
+def EdgeType : TypedUnaryFunctionOp<"edge_type", "::mlir::storage::EdgeIDType">;
 def Keys : TypedUnaryFunctionOp<"keys", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 
@@ -2936,7 +2937,7 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 // element count as an integer, db.tail the same list one element shorter - a subspan of
 // the cell, so the row still costs O(1) - and db.head and db.last the list's first and
 // final element. A stored list may mix types, so those two answer with the type-erased
-// !storage.list_element every element of a heterogeneous list rides, and an empty list
+// !storage.any every element of a heterogeneous list rides, and an empty list
 // reads as the null such a cell carries itself rather than as a nullable column of its own.
 // The ID of a node, an edge, or the entity a type-erased cell holds, as an integer.
 def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType">;
@@ -2948,6 +2949,13 @@ def Last : ListFunctionOp<"last">;
 def Tail : ListFunctionOp<"tail">;
 
 def Abs : NumberFunctionOp<"abs">;
+
+// Unary minus: the number or the duration of the opposite sign. The opposite of the lowest
+// integer or duration overflows, so it is speculatable over doubles alone.
+def Negate : TypedUnaryFunctionOp<"negate", "::mlir::FloatType">;
+
+// Unary plus: the number or the duration itself, and a type error on any other value
+def UnaryPlus : TypedUnaryFunctionOp<"unary_plus", "::mlir::IntegerType, ::mlir::FloatType, ::mlir::storage::DurationType">;
 def Sign : NumberFunctionOp<"sign">;
 def Ceil : NumberFunctionOp<"ceil">;
 def Floor : NumberFunctionOp<"floor">;
@@ -3154,22 +3162,22 @@ class PredicateOp<string mnemonic, list<Trait> traits = []>
   let assemblyFormat = "$lhs`,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def AndOp : PredicateOp<"and", [Pure]> {
+def AndOp : PredicateOp<"and", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical AND on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def OrOp : PredicateOp<"or", [Pure]> {
+def OrOp : PredicateOp<"or", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical OR on its two input columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def XorOp : PredicateOp<"xor", [Pure]> {
+def XorOp : PredicateOp<"xor", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>]> {
   let summary = "Performs row-wise logical XOR on its two input boolean columns";
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def NotOp : TuringOp<"not", [Pure, ConstantThroughOperands]> {
+def NotOp : TuringOp<"not", [NoMemoryEffect, DeclareOpInterfaceMethods<ConditionallySpeculatable>, ConstantThroughOperands]> {
   let summary = "Row-wise logical NOT of a boolean column";
   let arguments = (ins Column:$operand);
   let results   = (outs ColumnBools:$result);
@@ -3234,7 +3242,8 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
     Row r of the result is the entry row r's map holds under row r's key. A row whose map
     holds no such key - and a row holding no map at all - reads back as a null entry, as
     db.static_map_key's does. The map column is a column of tagged cells where the map was
-    itself read out of a list or a map.
+    itself read out of a list or a map, and a cell holding a node or an edge reads that
+    entity's property under the key.
   }];
 
   let arguments = (ins Column:$map, Column:$key);

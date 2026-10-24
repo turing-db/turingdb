@@ -295,13 +295,6 @@ TEST_F(CaseExpressionTest, leavesAnUnmatchedEntityRowNull) {
                {{"Martina", "Cooking"}, {"Doruk", "null"}});
 }
 
-// A CASE returns one column, so branches no column type can hold together are reported
-// rather than silently taking one of the two
-TEST_F(CaseExpressionTest, rejectsBranchesOfUnrelatedTypes) {
-    expectError("MATCH (n:Person) RETURN CASE WHEN n.hasPhD THEN 1 ELSE 'none' END",
-                "must share a type");
-}
-
 // The generic form tests predicates, so a branch condition that is not one is reported
 TEST_F(CaseExpressionTest, rejectsANonBooleanCondition) {
     expectError("MATCH (n:Person) RETURN CASE WHEN n.name THEN 1 ELSE 0 END",

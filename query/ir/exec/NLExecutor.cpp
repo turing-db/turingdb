@@ -1507,7 +1507,7 @@ std::optional<bool> cellTruth(ListElementView cell) {
         break;
 
         default:
-            throw IRException("A WHERE reads a list element that is not a boolean");
+            throw IRException("A condition reads a value that is not a boolean");
         break;
     }
 }
@@ -1644,6 +1644,46 @@ void applyNotOnOptMask(Column* result, const Column* operand) {
     using OptBool = std::optional<CustomBool>;
     UnaryPredicateExecutor<Not, OptBool>::apply(static_cast<ColumnOptMask*>(result),
                                                static_cast<const ColumnOptMask*>(operand));
+}
+
+std::optional<CustomBool> negatedTruth(const auto& cell) {
+    const std::optional<CustomBool> truth = truthValue(cell);
+    if (!truth.has_value()) {
+        return std::nullopt;
+    }
+
+    return CustomBool {!truth->_boolean};
+}
+
+void applyNotOnTaggedCells(Column* result, const Column* operand) {
+    const std::vector<ListElementView>& operandRaw = static_cast<const ColumnVector<ListElementView>*>(operand)->getRaw();
+    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ListElementView cell) {
+        return negatedTruth(cell);
+    });
+}
+
+void applyNotOnOptTaggedCells(Column* result, const Column* operand) {
+    const std::vector<std::optional<ListElementView>>& operandRaw =
+        static_cast<const ColumnOptVector<ListElementView>*>(operand)->getRaw();
+    std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
+
+    resultRaw.resize(operandRaw.size());
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const std::optional<ListElementView>& cell) {
+        return negatedTruth(cell);
+    });
+}
+
+void applyNotOnConstTaggedCell(Column* result, const Column* operand) {
+    const ListElementView cell = static_cast<const ColumnConst<ListElementView>*>(operand)->getRaw();
+    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
+}
+
+void applyNotOnOptConstTaggedCell(Column* result, const Column* operand) {
+    const std::optional<ListElementView>& cell = static_cast<const ColumnConst<std::optional<ListElementView>>*>(operand)->getRaw();
+    static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
 }
 
 void applyNotOnConst(Column* result, const Column* operand) {
@@ -2102,6 +2142,14 @@ std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
     return cellTruth(*cell);
 }
 
+bool caseTestTaggedCell(const Column* condition, size_t row) {
+    return readTaggedCellTruth(condition, row).value_or(false);
+}
+
+bool caseTestOptTaggedCell(const Column* condition, size_t row) {
+    return readOptTaggedCellTruth(condition, row).value_or(false);
+}
+
 EntityID pathEntityAt(const EntityList& path, size_t index) {
     return path.getEntries()[index]._id;
 }
@@ -2302,6 +2350,22 @@ template <typename ID>
 void caseWriteEntityCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
     std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
     results[resultRow] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[valueRow];
+}
+
+void writeCell(Column* result,
+               size_t resultRow,
+               const NLCellWrite& write,
+               const Column* value,
+               size_t valueRow,
+               NLStepBuffers* stepBuffers,
+               NLValueStore& values) {
+    if (write._write) {
+        write._write(result, resultRow, value, valueRow);
+        return;
+    }
+
+    ListBuffer<>::ListItemVariant item = write._taggedRead(value, valueRow, stepBuffers);
+    static_cast<ColumnVector<ListElementView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
 }
 
 void resetTaggedCells(Column* result, size_t rowCount) {
@@ -4799,40 +4863,105 @@ std::optional<ListView> optConstListRead(const Column* input, size_t) {
 // The map sibling of the list reads above: one cell of a map column, or nothing where the
 // row holds no map.
 template <typename ColumnT>
-std::optional<MapView> mapRead(const Column* input, size_t row) {
-    return (*static_cast<const ColumnT*>(input))[row];
-}
-
-// The map a type-erased cell holds, absent where the cell holds anything else
-std::optional<MapView> readMapFromCell(const ListElementView cell) {
-    if (cell.getTag() != ListBufferTypeTag::MapView) {
-        return std::nullopt;
+NLKeyedValue mapRead(const Column* input, size_t row) {
+    const std::optional<MapView> map = (*static_cast<const ColumnT*>(input))[row];
+    if (!map) {
+        return std::monostate {};
     }
 
-    return cell.getAs<MapView>();
+    return *map;
 }
 
-std::optional<MapView> readMapFromCell(const MapEntryView entry) {
-    if (entry.getValueTag() != MapBufferTypeTag::MapView) {
-        return std::nullopt;
+// The map, the node or the edge a type-erased cell holds, nothing where it holds anything
+// else
+NLKeyedValue readKeyedCell(const ListElementView cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::MapView:
+            return cell.getAs<MapView>();
+        break;
+        case ListBufferTypeTag::NodeID:
+            return cell.getAs<NodeID>();
+        break;
+        case ListBufferTypeTag::EdgeID:
+            return cell.getAs<EdgeID>();
+        break;
+        default:
+            return std::monostate {};
+        break;
     }
-
-    return entry.getValueAs<MapView>();
 }
 
-std::optional<MapView> readMapFromCell(const std::optional<ListElementView>& cell) {
+NLKeyedValue readKeyedCell(const MapEntryView entry) {
+    switch (entry.getValueTag()) {
+        case MapBufferTypeTag::MapView:
+            return entry.getValueAs<MapView>();
+        break;
+        case MapBufferTypeTag::NodeID:
+            return entry.getValueAs<NodeID>();
+        break;
+        case MapBufferTypeTag::EdgeID:
+            return entry.getValueAs<EdgeID>();
+        break;
+        default:
+            return std::monostate {};
+        break;
+    }
+}
+
+NLKeyedValue readKeyedCell(const std::optional<ListElementView>& cell) {
     if (!cell) {
-        return std::nullopt;
+        return std::monostate {};
     }
 
-    return readMapFromCell(*cell);
+    return readKeyedCell(*cell);
 }
 
-// One cell of a column of tagged cells, read as the map its own tag says it holds: a map
-// read out of a list or out of another map arrives as such a column
+// One cell of a column of tagged cells, read as what its own tag says it holds: a map, a
+// node or an edge read out of a list or out of another map arrives as such a column
 template <typename ColumnT>
-std::optional<MapView> readTaggedMap(const Column* input, size_t row) {
-    return readMapFromCell((*static_cast<const ColumnT*>(input))[row]);
+NLKeyedValue readTaggedKeyed(const Column* input, size_t row) {
+    return readKeyedCell((*static_cast<const ColumnT*>(input))[row]);
+}
+
+// The value a map entry holds, as the item a list cell is written from
+QueryListBuffer::ListItemVariant entryItem(const MapEntryView entry) {
+    const auto read = []<typename T>(const MapEntryView view) -> QueryListBuffer::ListItemVariant {
+        if constexpr (std::is_same_v<T, PropertyNull>) {
+            return PropertyNull {};
+        } else {
+            return view.getValueAs<T>();
+        }
+    };
+
+    return dispatchMapEntry(read, entry);
+}
+
+// The entry @param keyed holds under @param key: the one its map holds, or its node's or
+// edge's property, written into @param mapBuffer as a map of that one entry. False where
+// it holds no such entry.
+bool findKeyedEntry(const NLKeyedValue& keyed,
+                    std::string_view key,
+                    NLEntityProperties& properties,
+                    MapBuffer<>& mapBuffer,
+                    MapEntryView& entry) {
+    MapBuffer<>::MapKeyValuePair property;
+
+    if (const MapView* map = std::get_if<MapView>(&keyed)) {
+        return findMapEntry(*map, key, entry);
+    } else if (const NodeID* node = std::get_if<NodeID>(&keyed)) {
+        if (!properties.readEntry(*node, key, property)) {
+            return false;
+        }
+    } else if (const EdgeID* edge = std::get_if<EdgeID>(&keyed)) {
+        if (!properties.readEntry(*edge, key, property)) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    entry = mapBuffer.insert(std::span<const MapBuffer<>::MapKeyValuePair> {&property, 1}).front();
+    return true;
 }
 
 // The key one column of a dynamic map key read holds at @param row, or nothing where the
@@ -8031,11 +8160,15 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
     Column* const result = caseData->getResult();
     const size_t rowCount = caseData->getCardinality()->size();
 
+    NLStepBuffers* const stepBuffers = caseData->getStepBuffers();
+    stepBuffers->clear();
+    NLValueStore& values = stepBuffers->valueStore();
+
     caseData->getReset()(result, rowCount);
 
     const std::vector<NLCaseData::Branch>& branches = caseData->branches();
     const Column* const defaultValue = caseData->getDefaultValue();
-    const NLCaseWriteFn writeDefault = caseData->getWriteDefault();
+    const NLCellWrite& writeDefault = caseData->getWriteDefault();
 
     // A row takes the first branch whose condition holds, so the branches are walked per
     // row rather than the rows per branch: the first match ends the row
@@ -8047,13 +8180,13 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
                 continue;
             }
 
-            branch._write(result, row, branch._value, row);
+            writeCell(result, row, branch._write, branch._value, row, stepBuffers, values);
             matched = true;
             break;
         }
 
-        if (!matched && writeDefault) {
-            writeDefault(result, row, defaultValue, row);
+        if (!matched && defaultValue) {
+            writeCell(result, row, writeDefault, defaultValue, row, stepBuffers, values);
         }
     }
 }
@@ -8064,11 +8197,15 @@ void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
     Column* const result = caseData->getResult();
     const size_t rowCount = caseData->getCardinality()->size();
 
+    NLStepBuffers* const stepBuffers = caseData->getStepBuffers();
+    stepBuffers->clear();
+    NLValueStore& values = stepBuffers->valueStore();
+
     caseData->getReset()(result, rowCount);
 
     const std::vector<NLCaseData::Branch>& branches = caseData->branches();
     const Column* const defaultValue = caseData->getDefaultValue();
-    const NLCaseWriteFn writeDefault = caseData->getWriteDefault();
+    const NLCellWrite& writeDefault = caseData->getWriteDefault();
 
     std::vector<NLCaseData::BranchCursor>& cursors = caseData->cursors();
     std::fill(cursors.begin(), cursors.end(), NLCaseData::BranchCursor {});
@@ -8089,14 +8226,14 @@ void NLExecutor::runCaseMerge(NLExecutionContext*, NLFunctionData* data) {
                 continue;
             }
 
-            branch._write(result, row, branch._value, cursor._valueRow);
+            writeCell(result, row, branch._write, branch._value, cursor._valueRow, stepBuffers, values);
             cursor._valueRow++;
             matched = true;
             break;
         }
 
-        if (!matched && writeDefault) {
-            writeDefault(result, row, defaultValue, defaultRow);
+        if (!matched && defaultValue) {
+            writeCell(result, row, writeDefault, defaultValue, defaultRow, stepBuffers, values);
             defaultRow++;
         }
     }
@@ -8651,14 +8788,8 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
     const size_t sourceRows = source->size();
     const size_t chunkSize = context->getChunkSize();
 
-    const auto write = [&](const NLReduceWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
-        if (rowWrite._write) {
-            rowWrite._write(accumulator, row, written, writtenRow);
-            return;
-        }
-
-        ListBuffer<>::ListItemVariant item = rowWrite._taggedRead(written, writtenRow, memory);
-        static_cast<ColumnVector<ListElementView>*>(accumulator)->getRaw()[row] = accumulatorValues.getActive().ownCell(item);
+    const auto write = [&](const NLCellWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
+        writeCell(accumulator, row, rowWrite, written, writtenRow, memory, accumulatorValues.getActive());
     };
 
     accumulatorValues.clear();
@@ -8725,8 +8856,12 @@ void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
     }
 }
 
-NLCaseResetFn NLExecutor::selectTaggedReduceReset() {
+NLCaseResetFn NLExecutor::selectTaggedCellReset() {
     return &resetTaggedCells;
+}
+
+NLCaseWriteFn NLExecutor::selectNullCellWrite() {
+    return &caseWriteNullCell;
 }
 
 NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {
@@ -8740,7 +8875,7 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
     return selected;
 }
 
-NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
+NLKeyedReadFunction NLExecutor::selectKeyedRead(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
     if (kind == ColumnVector<MapView>::staticKind()) {
@@ -8752,17 +8887,17 @@ NLMapReadFunction NLExecutor::selectMapRead(const Column* input) {
     } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
         return &mapRead<ColumnConst<std::optional<MapView>>>;
     } else if (kind == ColumnVector<ListElementView>::staticKind()) {
-        return &readTaggedMap<ColumnVector<ListElementView>>;
+        return &readTaggedKeyed<ColumnVector<ListElementView>>;
     } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
-        return &readTaggedMap<ColumnOptVector<ListElementView>>;
+        return &readTaggedKeyed<ColumnOptVector<ListElementView>>;
     } else if (kind == ColumnConst<ListElementView>::staticKind()) {
-        return &readTaggedMap<ColumnConst<ListElementView>>;
+        return &readTaggedKeyed<ColumnConst<ListElementView>>;
     } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
-        return &readTaggedMap<ColumnConst<std::optional<ListElementView>>>;
+        return &readTaggedKeyed<ColumnConst<std::optional<ListElementView>>>;
     } else if (kind == ColumnVector<MapEntryView>::staticKind()) {
-        return &readTaggedMap<ColumnVector<MapEntryView>>;
+        return &readTaggedKeyed<ColumnVector<MapEntryView>>;
     } else if (kind == ColumnConst<MapEntryView>::staticKind()) {
-        return &readTaggedMap<ColumnConst<MapEntryView>>;
+        return &readTaggedKeyed<ColumnConst<MapEntryView>>;
     }
 
     throw IRException("a map key read reads a map column, or a column of tagged cells");
@@ -8830,21 +8965,25 @@ NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input)
 // read copies nothing. A row holding no map, and a map holding no such key, read back as
 // an entry under the same key whose tag is null: every row of the column names the key
 // the query read it under, so one entry per chunk serves all of them.
-void NLExecutor::runStaticMapKey(NLExecutionContext*, NLFunctionData* data) {
+void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLStaticMapKeyData* mapKey = static_cast<NLStaticMapKeyData*>(data);
 
     const Column* input = mapKey->getInput();
-    const NLMapReadFunction read = mapKey->getMapRead();
+    const NLKeyedReadFunction read = mapKey->getKeyedRead();
     const std::string_view key = mapKey->getKey();
 
     const MapEntryView absent = mapKey->getAbsentEntry();
 
-    const auto entryAt = [input, read, key, absent](size_t row) {
-        const std::optional<MapView> map = read(input, row);
+    NLStepBuffers* const stepBuffers = mapKey->getStepBuffers();
+    stepBuffers->clear();
 
-        MapEntryView entry = absent;
-        if (map) {
-            findMapEntry(*map, key, entry);
+    MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
+    NLEntityProperties properties(context, &stepBuffers->valueStore());
+
+    const auto entryAt = [input, read, key, absent, &properties, &mapBuffer](size_t row) {
+        MapEntryView entry;
+        if (!findKeyedEntry(read(input, row), key, properties, mapBuffer, entry)) {
+            return absent;
         }
 
         return entry;
@@ -8867,17 +9006,50 @@ void NLExecutor::runStaticMapKey(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+// The values are copied into the step's list buffer as one list, whose elements are the cells
+void NLExecutor::runMapEntryValue(NLExecutionContext*, NLFunctionData* data) {
+    NLMapEntryValueData* entryValue = static_cast<NLMapEntryValueData*>(data);
+
+    const Column* input = entryValue->getInput();
+    Column* result = entryValue->getResult();
+
+    NLStepBuffers* const stepBuffers = entryValue->getStepBuffers();
+    stepBuffers->clear();
+
+    std::vector<QueryListBuffer::ListItemVariant>& items = entryValue->getItems();
+    items.clear();
+
+    if (const auto* constant = dynamic_cast<const ColumnConst<MapEntryView>*>(input)) {
+        items.push_back(entryItem(constant->getRaw()));
+
+        const ListView cells = stepBuffers->listBuffer().insert(items);
+        static_cast<ColumnConst<ListElementView>*>(result)->set(cells.front());
+        return;
+    }
+
+    const std::vector<MapEntryView>& entries = static_cast<const ColumnVector<MapEntryView>*>(input)->getRaw();
+
+    items.resize(entries.size());
+    std::ranges::transform(entries, items.begin(), entryItem);
+
+    const ListView cells = stepBuffers->listBuffer().insert(items);
+    std::vector<ListElementView>& resultRaw = static_cast<ColumnVector<ListElementView>*>(result)->getRaw();
+
+    resultRaw.resize(entries.size());
+    std::ranges::copy(cells.elements(), resultRaw.begin());
+}
+
 // Row r of the result views the entry row r's map already holds under row r's key, so the
 // read copies nothing. A map holding no such key is answered by an entry written under that
 // row's key and tagged null, so the reader sees the key it asked for; a row holding no key
 // at all has none to name, and reads the one keyless entry translation wrote.
-void NLExecutor::runDynamicMapKey(NLExecutionContext*, NLFunctionData* data) {
+void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLDynamicMapKeyData* dynamicMapKey = static_cast<NLDynamicMapKeyData*>(data);
 
     const Column* input = dynamicMapKey->getInput();
     const Column* keyColumn = dynamicMapKey->getKey();
 
-    const NLMapReadFunction readMap = dynamicMapKey->getMapRead();
+    const NLKeyedReadFunction readKeyed = dynamicMapKey->getKeyedRead();
     const NLStringReadFunction readKey = dynamicMapKey->getKeyRead();
 
     const MapEntryView keyless = dynamicMapKey->getAbsentEntry();
@@ -8885,17 +9057,16 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext*, NLFunctionData* data) {
     stepBuffers->clear();
 
     MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
+    NLEntityProperties properties(context, &stepBuffers->valueStore());
 
-    const auto entryAt = [input, keyColumn, readMap, readKey, keyless, &mapBuffer](size_t row) {
+    const auto entryAt = [input, keyColumn, readKeyed, readKey, keyless, &properties, &mapBuffer](size_t row) {
         const std::optional<types::String::Primitive> key = readKey(keyColumn, row);
         if (!key) {
             return keyless;
         }
 
-        const std::optional<MapView> map = readMap(input, row);
-
         MapEntryView entry;
-        if (map && findMapEntry(*map, *key, entry)) {
+        if (findKeyedEntry(readKeyed(input, row), *key, properties, mapBuffer, entry)) {
             return entry;
         }
 
@@ -9091,10 +9262,16 @@ NLTruthReadFunction NLExecutor::selectTruthRead(bool nullable, bool untypedNull,
 }
 
 NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, bool untypedNull) {
+    const ColumnKind::Code kind = condition->getKind();
+
     if (untypedNull) {
         return &caseTestNever;
     } else if (condition->getContainerKind() == ContainerKind::code<ColumnMask>()) {
         return &caseTestMask;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        return &caseTestTaggedCell;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        return &caseTestOptTaggedCell;
     }
 
     return nullable ? &caseTestOptMask : &caseTestBoolColumn;
@@ -9177,6 +9354,18 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
     } else if (kind == ColumnOptMask::staticKind()) {
         result = memory->alloc<ColumnOptMask>();
         return &applyNotOnOptMask;
+    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+        result = memory->alloc<ColumnOptMask>();
+        return &applyNotOnTaggedCells;
+    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+        result = memory->alloc<ColumnOptMask>();
+        return &applyNotOnOptTaggedCells;
+    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+        return &applyNotOnConstTaggedCell;
+    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+        result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
+        return &applyNotOnOptConstTaggedCell;
     }
 
     result = memory->alloc<ColumnMask>();
@@ -9226,6 +9415,18 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
 
         case ValueType::String:
             return selectToNullableOf<types::String::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Embedding:
+            return selectToNullableOf<types::Embedding::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::DateTime:
+            return selectToNullableOf<types::DateTime::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Duration:
+            return selectToNullableOf<types::Duration::Primitive>(operand, memory, result);
         break;
 
         // A cell is a view into the query's list buffer, so the nullable column holds the
@@ -9493,6 +9694,30 @@ NLUnaryFunctionKernel NLExecutor::selectKeys(const Column* input, bool inputNull
     throw IRException("keys() reads a node, a relationship or a map column");
 }
 
+NLUnaryFunctionKernel NLExecutor::selectLabels(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<NodeID>(input)) {
+        return selectFunction<LabelsFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<NLTaggedLabelsFunction<ListElementView>>(input, inputNullable, memory, result);
+    } else if (readsMapValues(input)) {
+        return selectMapValueFunction<NLTaggedLabelsFunction<MapEntryView>>(input, memory, result);
+    }
+
+    throw IRException("labels() reads a node column");
+}
+
+NLUnaryFunctionKernel NLExecutor::selectEdgeType(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<EdgeID>(input)) {
+        return selectFunction<EdgeTypesFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<NLTaggedEdgeTypeFunction<ListElementView>>(input, inputNullable, memory, result);
+    } else if (readsMapValues(input)) {
+        return selectMapValueFunction<NLTaggedEdgeTypeFunction<MapEntryView>>(input, memory, result);
+    }
+
+    throw IRException("type() reads a relationship column");
+}
+
 NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<NodeID>(input)) {
         return selectFunction<NLPropertiesFunction<NodeID>>(input, inputNullable, memory, result);
@@ -9520,6 +9745,38 @@ NLUnaryFunctionKernel NLExecutor::selectNumberFunction(const Column* input, bool
     }
 
     throw IRException("A numeric function reads an integer or a double column");
+}
+
+NLUnaryFunctionKernel NLExecutor::selectNegateFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Duration::Primitive>(input)) {
+        return selectFunction<NegateFunction<types::Duration::Primitive>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedNegateFunction>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("A unary minus reads an integer, a double or a duration column");
+}
+
+NLUnaryFunctionKernel NLExecutor::selectUnaryPlusFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::Int64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::UInt64::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::Double::Primitive>>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Duration::Primitive>(input)) {
+        return selectFunction<UnaryPlusFunction<types::Duration::Primitive>>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<TaggedUnaryPlusFunction>(input, inputNullable, memory, result);
+    }
+
+    throw IRException("A unary plus reads an integer, a double or a duration column");
 }
 
 template <FloatFunctionKind Kind>
@@ -11173,7 +11430,7 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     return read;
 }
 
-// A list_element chunk is a ColumnVector<ListElementView> of fixed-width tagged
+// A !storage.any chunk is a ColumnVector<ListElementView> of fixed-width tagged
 // scalars, so the same broadcast templates carry the tag along with the value.
 NLBroadcastFunction NLExecutor::selectListElementBlockRepeatFunction() {
     return &blockRepeatColumn<ListElementView>;

@@ -235,6 +235,10 @@ private:
     // Lowers @param operation with its constants laid out over the rows reaching it
     void lowerOverReachingRows(mlir::Operation& operation);
 
+    // @param chunk with the values of its map entries copied out as tagged cells, or
+    // @param chunk itself where it holds no map entries
+    mlir::Value mapEntriesAsCells(mlir::Value chunk);
+
     // Moves @param computation, and the ops it reads that were placed after the first loop
     // of its block, ahead of that loop, where every loop reading it can see it
     void moveAheadOfLoops(mlir::Operation* computation);
@@ -637,13 +641,15 @@ private:
     mlir::nl::ChunkType caseResultChunkType(mlir::Type resultElement);
 
     // The value element type a CASE's branches share: the one they all carry, the
-    // promotion of their numbers when they carry two, and an i64 when every branch is
-    // null. A branch no value column can hold is rejected here.
+    // promotion of their numbers when they carry two, a list of tagged cells when they
+    // carry lists of different elements, !storage.any when they share no type, and an i64
+    // when every branch is null. A branch no value column can hold is rejected here.
     mlir::Type caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks);
 
     // @param chunk as a column of @param resultElement: itself when it already carries
-    // that element, and an nl.to_float / nl.to_integer of it otherwise. An untyped null
-    // is left untyped.
+    // that element or is a list, whose cells are list views whatever their elements, its
+    // list-item chunk when the result is a !storage.any the cells are tagged into, and an
+    // nl.to_float / nl.to_integer of it otherwise. An untyped null is left untyped.
     mlir::Value chunkAsElement(mlir::Value chunk, mlir::Type resultElement);
 
     mlir::Value propertyWriteChunk(llvm::StringRef propertyName, mlir::Value chunk);
@@ -861,6 +867,10 @@ private:
     // same rows, and a scalar value read as nullable
     void containerCellChunks(mlir::ValueRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
 
+    // @param chunk as a list-item read takes it: a scalar value read as nullable, any other
+    // chunk as it stands
+    mlir::Value listItemChunk(mlir::Value chunk);
+
     mlir::Value unionColumnChunk(mlir::Value chunk);
 
     // The shape @param chunk must take for a drain to pad a missed row of it with null,
@@ -874,7 +884,7 @@ private:
     mlir::Value toNullableChunk(mlir::Value chunk, mlir::Type valueElement);
 
     // The element type of the lists @param chunks build: the one type every chunk carries,
-    // falling back to the type-erased list_element when they carry no single one - the
+    // falling back to the type-erased !storage.any when they carry no single one - the
     // homogeneity verdict taken over the resolved chunks rather than over the db columns
     static mlir::Type listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks);
 

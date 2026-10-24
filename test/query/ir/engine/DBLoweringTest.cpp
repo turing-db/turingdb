@@ -731,7 +731,7 @@ constexpr const char* heterogeneousConstListOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %xs = db.constant([10, true, [1, 2]])
-  db.output(%n, %xs) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.list_element>>
+  db.output(%n, %xs) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.any>>
   return
 }
 )mlir";
@@ -1213,11 +1213,11 @@ func.func @main() {
 )mlir";
 
 // UNWIND [true, "hello", 10] AS x RETURN x: a heterogeneous list, so the unwound column
-// is a type-erased list_element column of tagged scalars.
+// is a type-erased !storage.any column of tagged scalars.
 constexpr const char* unwindConstHeteroProgram = R"mlir(
 func.func @main() {
-  %x = db.unwind_const([true, "hello", 10]) : !db.column<!storage.list_element>
-  db.output(%x) : !db.column<!storage.list_element>
+  %x = db.unwind_const([true, "hello", 10]) : !db.column<!storage.any>
+  db.output(%x) : !db.column<!storage.any>
   return
 }
 )mlir";
@@ -1225,8 +1225,8 @@ func.func @main() {
 // UNWIND [] AS x RETURN x: an empty list yields no row.
 constexpr const char* unwindConstEmptyProgram = R"mlir(
 func.func @main() {
-  %x = db.unwind_const([]) : !db.column<!storage.list_element>
-  db.output(%x) : !db.column<!storage.list_element>
+  %x = db.unwind_const([]) : !db.column<!storage.any>
+  db.output(%x) : !db.column<!storage.any>
   return
 }
 )mlir";
@@ -1251,7 +1251,7 @@ func.func @main() {
 )mlir";
 
 // MATCH (a) UNWIND [true, "hello", 10] AS x RETURN a, x: the heterogeneous sibling of
-// unwindConstCrossProductProgram. The unwound column is a type-erased list_element
+// unwindConstCrossProductProgram. The unwound column is a type-erased !storage.any
 // chunk, so the cross product broadcasts tagged scalars rather than a value type.
 constexpr const char* unwindConstHeteroCrossProductProgram = R"mlir(
 func.func @main() {
@@ -1259,15 +1259,15 @@ func.func @main() {
     %a = db.scan_nodes() : !db.column<!storage.node_id>
     db.yield %a : !db.column<!storage.node_id>
   } factor {
-    %x = db.unwind_const([true, "hello", 10]) : !db.column<!storage.list_element>
-    db.yield %x : !db.column<!storage.list_element>
+    %x = db.unwind_const([true, "hello", 10]) : !db.column<!storage.any>
+    db.yield %x : !db.column<!storage.any>
   }
-  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.list_element>
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.any>
   return
 }
 )mlir";
 
-// MATCH (a) UNWIND [] AS x RETURN a, x: an empty list is the list_element form too, and
+// MATCH (a) UNWIND [] AS x RETURN a, x: an empty list is the !storage.any form too, and
 // it pairs with nothing, so the cross product emits no row rather than failing.
 constexpr const char* unwindConstEmptyCrossProductProgram = R"mlir(
 func.func @main() {
@@ -1275,10 +1275,10 @@ func.func @main() {
     %a = db.scan_nodes() : !db.column<!storage.node_id>
     db.yield %a : !db.column<!storage.node_id>
   } factor {
-    %x = db.unwind_const([]) : !db.column<!storage.list_element>
-    db.yield %x : !db.column<!storage.list_element>
+    %x = db.unwind_const([]) : !db.column<!storage.any>
+    db.yield %x : !db.column<!storage.any>
   }
-  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.list_element>
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.any>
   return
 }
 )mlir";
@@ -4250,7 +4250,7 @@ TEST_F(DBLoweringTest, keepsTheErasedElementTypeOfAConstList) {
     });
     ASSERT_TRUE(constListOp);
 
-    const mlir::Type elementType = mlir::storage::ListElementType::get(&context);
+    const mlir::Type elementType = mlir::storage::AnyType::get(&context);
     const mlir::Type erasedListType = mlir::storage::ListType::get(&context, elementType);
     EXPECT_EQ(constListOp.getResult().getType(), mlir::nl::ChunkType::get(&context, erasedListType));
 }

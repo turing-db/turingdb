@@ -132,13 +132,13 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
 // The type a reduce's accumulator takes once it has held @param accumulator and then
 // @param value: what a CASE unifies, and a tagged cell when the two share no column type
 EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
-    if (accumulator == EvaluatedType::ListItem) {
+    if (accumulator == EvaluatedType::Any) {
         return accumulator;
     }
 
     const EvaluatedType unified = unifiedBranchType(accumulator, value);
     if (unified == EvaluatedType::Invalid) {
-        return EvaluatedType::ListItem;
+        return EvaluatedType::Any;
     }
 
     return unified;
@@ -157,16 +157,25 @@ ListShape accumulatedShape(const ListShape& accumulator, const ListShape& value)
     return ListShape(EvaluatedType::Invalid, 1);
 }
 
+// The shape a branch of a CASE or an argument of a coalesce gives the list they answer. A
+// list whose shape no type names holds tagged cells, while a null holds no list at all.
+ListShape selectedListShape(const Expr* value) {
+    const ListShape& shape = value->getListShape();
+    const bool namesNoShape = value->getType() == EvaluatedType::List && !shape.isList();
+
+    return namesNoShape ? ListShape(EvaluatedType::Invalid, 1) : shape;
+}
+
 // A type-erased cell concatenates as the text it holds, which is how the element of a list
 // joins a string.
-bool concatenatesListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String);
+bool concatenatesAny(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String);
 }
 
 // Two cells join as the texts they hold under '||', which concatenates whatever it is
 // given. '+' computes over them instead, as the other arithmetic operators do.
-bool concatenatesTwoListItems(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem);
+bool concatenatesTwoAnyValues(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any);
 }
 
 // A number joins a string as the text Cypher writes it with: 1 + ' apples' is '1 apples'.
@@ -179,15 +188,15 @@ bool concatenatesAsText(TypePairBitset pair) {
 // Whether an arithmetic operator's operands are a type-erased cell and a number, or two
 // cells. A cell is numeric only once read, and its tag names a type per row rather than
 // one for the column, so the answer is the double a reduction over cells lands on too.
-bool computesOverListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double);
+bool computesOverAny(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Any)
+        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Integer)
+        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Double);
 }
 
-bool computesTimeOverListItem(TypePairBitset pair) {
-    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::DateTime)
-        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+bool computesTimeOverAny(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::DateTime)
+        || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
 }
 
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
@@ -292,7 +301,7 @@ bool joinsAList(EvaluatedType type) {
     return namesAListElementType(type)
         || type == EvaluatedType::Char
         || type == EvaluatedType::Null
-        || type == EvaluatedType::ListItem;
+        || type == EvaluatedType::Any;
 }
 
 // The shape of the list appending a scalar makes: the list's own where the scalar is the
@@ -324,6 +333,27 @@ ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
 
 bool isEntity(EvaluatedType type) {
     return type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern;
+}
+
+bool holdsAsAny(EvaluatedType type) {
+    return type == EvaluatedType::Any
+        || type == EvaluatedType::Char
+        || isEntity(type)
+        || convertibleToValueType(type);
+}
+
+// The type one column holding values of @param carried and of @param value takes: the type
+// the two unify to, Any when they share none but each rides a tagged cell, Invalid otherwise
+EvaluatedType selectedType(EvaluatedType carried, EvaluatedType value) {
+    const EvaluatedType unified = unifiedBranchType(carried, value);
+
+    if (unified != EvaluatedType::Invalid) {
+        return unified;
+    } else if (holdsAsAny(carried) && holdsAsAny(value)) {
+        return EvaluatedType::Any;
+    }
+
+    return EvaluatedType::Invalid;
 }
 
 }
@@ -551,11 +581,17 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            // A cell holding text concatenates with a string, as the string it holds
-            // would: the type it holds is settled row by row, so a cell holding a number
-            // joins as the text Cypher writes that number with
-            if (concatenatesListItem(pair) || concatenatesAsText(pair)) {
+            if (concatenatesAsText(pair)) {
                 type = EvaluatedType::String;
+                break;
+            }
+
+            // A cell meets a string row by row: holding text or a number it joins it as
+            // text, holding a list it takes it as an element
+            const bool addsATextToAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::String)
+                                     || pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Char);
+            if (addsATextToAny) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -565,8 +601,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             } else if (pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Duration)) {
                 type = EvaluatedType::Duration;
                 break;
-            } else if (computesTimeOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
+            } else if (computesTimeOverAny(pair)) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -577,8 +613,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (computesOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
+            if (computesOverAny(pair)) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -602,7 +638,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (concatenatesListItem(pair) || concatenatesTwoListItems(pair)) {
+            if (concatenatesAny(pair) || concatenatesTwoAnyValues(pair)) {
                 type = EvaluatedType::String;
                 break;
             }
@@ -643,21 +679,21 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 } else if (subtractsADuration) {
                     type = EvaluatedType::DateTime;
                     break;
-                } else if (computesTimeOverListItem(pair)) {
-                    type = EvaluatedType::ListItem;
+                } else if (computesTimeOverAny(pair)) {
+                    type = EvaluatedType::Any;
                     break;
                 }
             } else if (isMultiplication || isDivision) {
                 const bool scalesByANumber = pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Integer)
                                           || pair == TypePairBitset(EvaluatedType::Duration, EvaluatedType::Double);
-                const bool scalesAListItem = pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Duration);
+                const bool scalesAnAny = pair == TypePairBitset(EvaluatedType::Any, EvaluatedType::Duration);
                 const bool scalesTheDuration = isMultiplication || a == EvaluatedType::Duration;
 
                 if (scalesByANumber && scalesTheDuration) {
                     type = EvaluatedType::Duration;
                     break;
-                } else if (scalesAListItem) {
-                    type = EvaluatedType::ListItem;
+                } else if (scalesAnAny) {
+                    type = EvaluatedType::Any;
                     break;
                 }
             }
@@ -673,8 +709,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (computesOverListItem(pair)) {
-                type = EvaluatedType::ListItem;
+            if (computesOverAny(pair)) {
+                type = EvaluatedType::Any;
                 break;
             }
 
@@ -702,7 +738,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (computesOverListItem(pair)) {
+            if (computesOverAny(pair)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -723,7 +759,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::In: {
             // A type-erased cell holds whatever its row put there, so the test reads the
             // list out of its tag and answers null for a row holding something else
-            const bool searchesACell = b == EvaluatedType::ListItem;
+            const bool searchesACell = b == EvaluatedType::Any;
             const bool searchesNull = b == EvaluatedType::Null;
 
             type = searchesNull ? EvaluatedType::Null : EvaluatedType::Bool;
@@ -769,10 +805,7 @@ void ExprAnalyzer::analyzeLogicalExpr(LogicalExpr* expr) {
         analyzeExpr(operand);
 
         const EvaluatedType operandType = operand->getType();
-        const bool isATruthValue = operandType == EvaluatedType::Bool
-                                   || operandType == EvaluatedType::Null;
-
-        if (!isATruthValue) {
+        if (!namesATruthValue(operandType)) {
             const std::string error = fmt::format("{} operand must be a boolean, not '{}'",
                                                   op,
                                                   EvaluatedTypeName::value(operandType));
@@ -806,10 +839,7 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
     switch (expr->getOperator()) {
         case UnaryOperator::Not: {
             const EvaluatedType operandType = operand->getType();
-            const bool negatesATruthValue = operandType == EvaluatedType::Bool
-                                            || operandType == EvaluatedType::Null;
-
-            if (!negatesATruthValue) {
+            if (!namesATruthValue(operandType)) {
                 const std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
                                                       EvaluatedTypeName::value(operandType));
                 throwError(error, expr);
@@ -829,6 +859,8 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
                 type = EvaluatedType::Duration;
             } else if (operandType == EvaluatedType::Null) {
                 type = EvaluatedType::Null;
+            } else if (operandType == EvaluatedType::Any) {
+                type = EvaluatedType::Any;
             } else {
                 const std::string error = fmt::format("Operand must be an integer, a double or a duration, not '{}'",
                                                       EvaluatedTypeName::value(operandType));
@@ -1100,8 +1132,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     }
 
     const bool readsAKeyOfTheVariable = varType == EvaluatedType::Map
-                                     || varType == EvaluatedType::ListItem
-                                     || varType == EvaluatedType::MapValue;
+                                     || varType == EvaluatedType::Any;
 
     // m.key, where m was bound to a map rather than to an entity, or to a tagged cell whose
     // row may hold one
@@ -1119,10 +1150,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
         expr->setEntityVarDecl(varDecl);
         expr->setMapKey(propName->getName());
-        expr->setType(EvaluatedType::MapValue);
+        expr->setType(EvaluatedType::Any);
         expr->setDynamic();
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Any));
 
         return ValueType::Invalid;
     }
@@ -1198,7 +1229,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         } else if (readsAMap) {
             expr->setMapKey(componentName);
 
-            type = EvaluatedType::MapValue;
+            type = EvaluatedType::Any;
             vt = ValueType::Invalid;
         } else if (readsAsNull) {
             // The property is not one the graph carries, so the third name resolves against
@@ -1256,8 +1287,7 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
 
     // A map, and a tagged cell the row may have put a map in: both answer a key read
     const bool readsAMapKey = baseType == EvaluatedType::Map
-                           || baseType == EvaluatedType::MapValue
-                           || baseType == EvaluatedType::ListItem;
+                           || baseType == EvaluatedType::Any;
 
     EvaluatedType type = EvaluatedType::Null;
 
@@ -1291,7 +1321,7 @@ void ExprAnalyzer::analyzePropertyLookupExpr(PropertyLookupExpr* expr) {
         }
     } else if (readsAMapKey) {
         expr->setReadsAMapKey();
-        type = EvaluatedType::MapValue;
+        type = EvaluatedType::Any;
     } else if (baseType != EvaluatedType::Null) {
         throwError(fmt::format("A value of type '{}' has no property '{}'",
                                EvaluatedTypeName::value(baseType), propName),
@@ -1334,8 +1364,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool indexesAMap = baseType == EvaluatedType::Map;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
-    const bool indexesATaggedCell = baseType == EvaluatedType::ListItem
-                                 || baseType == EvaluatedType::MapValue;
+    const bool indexesATaggedCell = baseType == EvaluatedType::Any;
 
     const bool indexesANullValue = baseType == EvaluatedType::Null;
 
@@ -1396,9 +1425,9 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
         }
 
         expr->setReadsAMapKey();
-        expr->setType(EvaluatedType::MapValue);
+        expr->setType(EvaluatedType::Any);
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::MapValue));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Any));
 
         return;
     }
@@ -1409,7 +1438,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const bool readsAnEntity = elementType == EvaluatedType::NodePattern
                             || elementType == EvaluatedType::EdgePattern;
     const bool readsTheElementType = readsAValue || readsAnEntity;
-    const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
+    const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::Any;
 
     expr->setType(indexedType);
 
@@ -1512,9 +1541,9 @@ void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
     // A type-erased cell carries its own type, so the characters it holds are read row by
     // row, exactly as an equality against one is.
     const bool lhsReadsAsString = lhsType == EvaluatedType::String
-                               || lhsType == EvaluatedType::ListItem;
+                               || lhsType == EvaluatedType::Any;
     const bool rhsReadsAsString = rhsType == EvaluatedType::String
-                               || rhsType == EvaluatedType::ListItem;
+                               || rhsType == EvaluatedType::Any;
 
     if (!lhsReadsAsString || !rhsReadsAsString) {
         const std::string error = fmt::format(
@@ -1815,6 +1844,15 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
             expr->setListShape(returnedShape);
         }
 
+        if (unifiesArguments && expr->getType() == EvaluatedType::List) {
+            ListShape unifiedShape;
+            for (const Expr* arg : providedArgs) {
+                unifiedShape = accumulatedShape(unifiedShape, selectedListShape(arg));
+            }
+
+            expr->setListShape(unifiedShape);
+        }
+
         if (signature->isAggregate()) {
             if (isAggregate) {
                 throwError(fmt::format("Aggregate functions may not be nested: the argument of "
@@ -1853,11 +1891,10 @@ EvaluatedType ExprAnalyzer::unifiedArgumentType(std::string_view name,
 
     for (const Expr* arg : args) {
         const EvaluatedType argType = arg->getType();
-        const EvaluatedType folded = unifiedBranchType(unified, argType);
+        const EvaluatedType folded = selectedType(unified, argType);
 
         if (folded == EvaluatedType::Invalid) {
-            throwError(fmt::format("'{}' answers one column, so its arguments must share a "
-                                   "type: '{}' and '{}' cannot be mixed",
+            throwError(fmt::format("'{}' cannot mix '{}' and '{}' arguments",
                                    name,
                                    EvaluatedTypeName::value(unified),
                                    EvaluatedTypeName::value(argType)),
@@ -1918,7 +1955,6 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
             return vt == ValueType::Duration;
         case EvaluatedType::Map:
             return vt == ValueType::Map;
-        case EvaluatedType::MapValue:
         case EvaluatedType::Wildcard:
         case EvaluatedType::NormalForm:
         case EvaluatedType::Invalid:
@@ -1930,7 +1966,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::PropertyType:
         case EvaluatedType::EdgeType:
         case EvaluatedType::_SIZE:
-        case EvaluatedType::ListItem:
+        case EvaluatedType::Any:
             return false;
         break;
     }
@@ -1997,6 +2033,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     }
 
     EvaluatedType resultType = EvaluatedType::Null;
+    ListShape resultShape;
 
     for (const CaseExpr::Branch& branch : expr->getBranches()) {
         for (const CaseExpr::Test& test : branch._tests) {
@@ -2010,6 +2047,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
         analyzeExpr(branch._then);
 
         resultType = unifyCaseBranch(resultType, branch._then);
+        resultShape = accumulatedShape(resultShape, selectedListShape(branch._then));
 
         contaminate(branch._then);
     }
@@ -2018,10 +2056,15 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     if (elseExpr) {
         analyzeExpr(elseExpr);
         resultType = unifyCaseBranch(resultType, elseExpr);
+        resultShape = accumulatedShape(resultShape, selectedListShape(elseExpr));
         contaminate(elseExpr);
     }
 
     expr->setType(resultType);
+
+    if (resultType == EvaluatedType::List) {
+        expr->setListShape(resultShape);
+    }
 }
 
 void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
@@ -2044,7 +2087,7 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
         analyzeExpr(test._value);
 
         const EvaluatedType whenType = test._value->getType();
-        if (whenType != EvaluatedType::Bool && whenType != EvaluatedType::Null) {
+        if (!namesATruthValue(whenType)) {
             throwError(fmt::format("The WHEN condition of a CASE must be a boolean, not '{}'",
                                    EvaluatedTypeName::value(whenType)),
                        test._value);
@@ -2083,11 +2126,10 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
 
 EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
     const EvaluatedType branchType = branch->getType();
-    const EvaluatedType unified = unifiedBranchType(carried, branchType);
+    const EvaluatedType unified = selectedType(carried, branchType);
 
     if (unified == EvaluatedType::Invalid) {
-        throwError(fmt::format("A CASE returns one column, so its branches must share a "
-                               "type: '{}' and '{}' cannot be mixed",
+        throwError(fmt::format("A CASE cannot mix '{}' and '{}' branches",
                                EvaluatedTypeName::value(carried),
                                EvaluatedTypeName::value(branchType)),
                    branch);
@@ -2142,7 +2184,7 @@ void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
 
     // A tagged cell names no type until a row is in hand, and a null slices into a null
     const bool slicesAList = baseType == EvaluatedType::List
-                          || baseType == EvaluatedType::ListItem
+                          || baseType == EvaluatedType::Any
                           || baseType == EvaluatedType::Null;
 
     if (!slicesAList) {
@@ -2162,7 +2204,7 @@ void ExprAnalyzer::analyzeListSliceExpr(ListSliceExpr* expr) {
 
         const EvaluatedType boundType = bound->getType();
         const bool countsPositions = boundType == EvaluatedType::Integer
-                                  || boundType == EvaluatedType::ListItem
+                                  || boundType == EvaluatedType::Any
                                   || boundType == EvaluatedType::Null;
 
         if (!countsPositions) {
@@ -2210,7 +2252,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     // rather than into a type error - as an UNWIND of one emits no row
     const bool iteratesAList = iteratesAPath
                             || sourceType == EvaluatedType::List
-                            || sourceType == EvaluatedType::ListItem
+                            || sourceType == EvaluatedType::Any
                             || sourceType == EvaluatedType::Null;
 
     if (!iteratesAList) {
@@ -2256,11 +2298,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
 
         // A null WHERE holds for no element, as a null WHERE cuts every row. An element of a
         // list naming no type for its elements is read as a truth value row by row
-        const bool predicateIsBoolean = predicateType == EvaluatedType::Bool
-                                     || predicateType == EvaluatedType::Null
-                                     || predicateType == EvaluatedType::ListItem;
-
-        if (!predicateIsBoolean) {
+        if (!namesATruthValue(predicateType)) {
             throwError("The WHERE of a list comprehension must be a boolean", predicate);
         }
     }
@@ -2325,7 +2363,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
     const EvaluatedType sourceType = source->getType();
 
     const bool iteratesAList = sourceType == EvaluatedType::List
-                            || sourceType == EvaluatedType::ListItem
+                            || sourceType == EvaluatedType::Any
                             || sourceType == EvaluatedType::Null;
 
     if (!iteratesAList) {

@@ -534,7 +534,7 @@ bool isMaskComputeOp(Operation* op) {
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
                StartsWithOp, EndsWithOp, ContainsOp, InOp,
                AndOp, OrOp, XorOp, NotOp,
-               AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp,
+               AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp, Negate, UnaryPlus,
                ConstantOp,
                GetNodeProperties, GetEdgeProperties, ElementID>(op);
 }
@@ -1041,7 +1041,7 @@ UnwindConst matchUnwindFactor(Region& factor) {
 // the rows it matches once per copy, which a membership test does not express.
 bool elementsCompareDistinctly(UnwindConst unwind) {
     const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
-    if (isa<storage::ListElementType>(column.getType())) {
+    if (isa<storage::AnyType>(column.getType())) {
         return false;
     }
 

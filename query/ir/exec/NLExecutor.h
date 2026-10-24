@@ -416,6 +416,7 @@ public:
     // value column holds at r, as one contiguous run of the query's map buffer.
     static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
     static void runStaticMapKey(NLExecutionContext* context, NLFunctionData* data);
+    static void runMapEntryValue(NLExecutionContext* context, NLFunctionData* data);
     static void runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one list per row (nl.range): row r counts from its start bound to its end
@@ -436,7 +437,7 @@ public:
 
     // Read the list one column holds at a row, for the slice that reads it
     static NLListReadFunction selectListRead(const Column* input);
-    static NLMapReadFunction selectMapRead(const Column* input);
+    static NLKeyedReadFunction selectKeyedRead(const Column* input);
     static NLStringReadFunction selectStringRead(const Column* input);
 
     static NLStringArgumentRead selectStringArgumentRead(const Column* input);
@@ -456,7 +457,8 @@ public:
     static void runReduce(NLExecutionContext* context, NLFunctionData* data);
 
     // Size a type-erased accumulator to the step's rows, every cell a tagged null
-    static NLCaseResetFn selectTaggedReduceReset();
+    static NLCaseResetFn selectTaggedCellReset();
+    static NLCaseWriteFn selectNullCellWrite();
 
     // Read one element's predicate: a mask, a nullable mask - where a null row is unknown
     // -, a type-erased cell holding a boolean or a null, or the null literal, which is
@@ -524,10 +526,15 @@ public:
     static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectKeys(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectLabels(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectEdgeType(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
     static NLUnaryFunctionKernel selectProperties(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     template <template <typename> typename NumberFunctor>
     static NLUnaryFunctionKernel selectNumberFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+    static NLUnaryFunctionKernel selectNegateFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectUnaryPlusFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     template <FloatFunctionKind Kind>
     static NLUnaryFunctionKernel selectFloatFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
@@ -668,12 +675,12 @@ public:
     // no value type to dispatch on
     static NLBroadcastConstantFunction selectOptListElementBroadcast(const Column* value);
 
-    // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
+    // Block-repeat (outer column) and tile (inner column) for a !storage.any chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
     static NLBroadcastFunction selectListElementBlockRepeatFunction();
     static NLBroadcastFunction selectListElementTileFunction();
 
-    // Sort-accumulator append, emit-phase gather and 3-way compare for a list_element
+    // Sort-accumulator append, emit-phase gather and 3-way compare for a !storage.any
     // chunk, so a heterogeneous unwind can be sorted and its rows re-emitted.
     static NLAppendFunction selectListElementAppendFunction();
     static NLGatherFunction selectListElementGatherFunction();
@@ -682,12 +689,12 @@ public:
     static NLGatherFunction selectOptListElementGatherFunction();
     static NLCompareFunction selectListElementCompareFunction();
 
-    // Distinct row key and non-null tally for a list_element chunk, so a heterogeneous
+    // Distinct row key and non-null tally for a !storage.any chunk, so a heterogeneous
     // unwind can be deduped and counted.
     static NLKeyAppendFunction selectListElementKeyAppendFunction();
     static NLCountFunction selectListElementCountFunction();
 
-    // Key-buffer gather-append and emit-phase range copy for a list_element chunk, so a
+    // Key-buffer gather-append and emit-phase range copy for a !storage.any chunk, so a
     // heterogeneous unwind's cells can be a grouping key rather than only a counted column.
     static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
     static NLCopyFunction selectListElementCopyFunction();

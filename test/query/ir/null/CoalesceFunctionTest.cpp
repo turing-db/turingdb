@@ -249,24 +249,12 @@ TEST_F(CoalesceFunctionTest, answersANullEntityWhenNoArgumentHasOne) {
                {{"null"}});
 }
 
-// A node and an edge are no more one column than a node and a number, so neither pair is
-// held together
-TEST_F(CoalesceFunctionTest, rejectsANodeBesideAnEdge) {
-    expectError("MATCH (n:Person)-[e]->() RETURN coalesce(n, e)", "must share a type");
-    expectError("MATCH (n:Person) RETURN coalesce(n, 1)", "must share a type");
-}
-
 // A reduction answers one row, and the fallback stands in when that row is null. None of
 // the four people without a PhD carries an age, so their extremum reduces nothing
 TEST_F(CoalesceFunctionTest, coalescesAReduction) {
     expectRows("MATCH (n:Person) RETURN coalesce(max(n.age), 0)", {{"32"}});
     expectRows("MATCH (n:Person) WHERE NOT n.hasPhD RETURN coalesce(max(n.age), 0)", {{"0"}});
     expectRows("MATCH (n:Person) RETURN coalesce(max(n.shoeSize), 0)", {{"0"}});
-}
-
-// coalesce answers one column, so arguments no column type can hold together are reported
-TEST_F(CoalesceFunctionTest, rejectsArgumentsOfUnrelatedTypes) {
-    expectError("MATCH (n:Person) RETURN coalesce(n.age, 'none')", "must share a type");
 }
 
 // There is no first non-null argument to answer with when there is no argument at all

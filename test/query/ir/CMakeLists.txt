@@ -58,6 +58,7 @@ function(add_call_v3_test exe_name cpp_file)
 endfunction()
 
 add_subdirectory(aggregate)
+add_subdirectory(any)
 add_subdirectory(call)
 add_subdirectory(case)
 add_subdirectory(conditional)

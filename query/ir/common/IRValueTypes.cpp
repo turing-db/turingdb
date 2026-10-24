@@ -13,7 +13,7 @@ namespace {
 // The list element types an unwind can drain into a column of that very type: the entity
 // IDs, the value types a nullable value chunk is laid out for, and a nested list, which
 // drains into a list column one level shallower. An unresolved element, an embedding, or
-// the list_element a heterogeneous list holds drains as tagged scalars instead - none of
+// the !storage.any a heterogeneous list holds drains as tagged scalars instead - none of
 // them names a column shape the drain could fill.
 bool drainsToItsOwnElementType(mlir::Type listElement) {
     if (mlir::isa<mlir::storage::NodeIDType, mlir::storage::EdgeIDType, mlir::storage::StringType, mlir::storage::ListType>(listElement)) {
@@ -80,12 +80,41 @@ mlir::Type db::valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueT
     throw IRException("Unhandled property value type");
 }
 
+ValueType db::elementTypeToValueType(mlir::Type elementType) {
+    if (mlir::isa<mlir::storage::StringType>(elementType)) {
+        return ValueType::String;
+    } else if (mlir::isa<mlir::storage::EmbeddingType>(elementType)) {
+        return ValueType::Embedding;
+    } else if (mlir::isa<mlir::storage::ListType>(elementType)) {
+        return ValueType::List;
+    } else if (mlir::isa<mlir::storage::DateTimeType>(elementType)) {
+        return ValueType::DateTime;
+    } else if (mlir::isa<mlir::storage::DurationType>(elementType)) {
+        return ValueType::Duration;
+    } else if (mlir::isa<mlir::storage::MapType>(elementType)) {
+        return ValueType::Map;
+    } else if (mlir::isa<mlir::Float64Type>(elementType)) {
+        return ValueType::Double;
+    }
+
+    const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
+    if (!intType) {
+        return ValueType::Invalid;
+    } else if (intType.getWidth() == 1) {
+        return ValueType::Bool;
+    } else if (intType.isUnsigned()) {
+        return ValueType::UInt64;
+    }
+
+    return ValueType::Int64;
+}
+
 mlir::Type db::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
     // A cell that may be absent - what an index into a list hands back - contributes no
     // row where it is absent, so what the drain hands on is the tagged scalar itself.
     const auto nullableSource = mlir::dyn_cast<mlir::storage::NullableType>(sourceElement);
     const bool drainsATaggedCell = nullableSource
-                                && mlir::isa<mlir::storage::ListElementType>(nullableSource.getValueType());
+                                && mlir::isa<mlir::storage::AnyType>(nullableSource.getValueType());
 
     if (drainsATaggedCell) {
         return nullableSource.getValueType();
@@ -109,7 +138,7 @@ mlir::Type db::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceE
     // column of tagged scalars.
     const mlir::Type listElement = listType.getElementType();
     if (!drainsToItsOwnElementType(listElement)) {
-        return mlir::storage::ListElementType::get(context);
+        return mlir::storage::AnyType::get(context);
     }
 
     // An entity ID column spells a null entity as an invalid ID, so an entity rides a

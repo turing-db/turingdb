@@ -20,6 +20,7 @@
 
 #include "NLOps.h"
 
+#include "DBColumnElement.h"
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
 #include "MergePatternShape.h"
@@ -93,7 +94,6 @@ using NLUnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                                nl::ChunkType resultType,
                                                mlir::Value input,
                                                mlir::Operation* source);
-using UnaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder, mlir::Type inputElement);
 
 template <typename NLOp>
 mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
@@ -115,94 +115,20 @@ mlir::Value emitNLNormalFormFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, input, normalFormOp.getForm()).getResult();
 }
 
-mlir::Type stringFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::StringType::get(builder.getContext());
-}
+bool holdsTaggedCells(mlir::Type chunkType);
 
-mlir::Type nodeIDFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::NodeIDType::get(builder.getContext());
-}
-
-mlir::Type labelListFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    mlir::MLIRContext* const context = builder.getContext();
-    return storage::ListType::get(context, storage::StringType::get(context));
-}
-
-mlir::Type mapFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::MapType::get(builder.getContext());
-}
-
-mlir::Type integerFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return builder.getI64Type();
-}
-
-mlir::Type floatFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return builder.getF64Type();
-}
-
-mlir::Type absFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return inputElement;
-}
-
-mlir::Type booleanFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return builder.getI1Type();
-}
-
-mlir::Type dateTimeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::DateTimeType::get(builder.getContext());
-}
-
-mlir::Type durationFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    return storage::DurationType::get(builder.getContext());
-}
-
-// A list function reads a list cell, or the type-erased cell an unwind of a list of lists
-// hands its nested lists on as. Anything else is IR no query produces.
-void throwIfNotAListInput(mlir::Type inputElement) {
-    if (!llvm::isa<storage::ListType, storage::ListElementType>(inputElement)) {
-        throw IRException("a list function reads a list column");
-    }
-}
-
-mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    const bool readsAList = llvm::isa<storage::ListType, storage::ListElementType>(inputElement);
-    const bool readsAString = mlir::isa<storage::StringType>(inputElement);
-
-    if (!readsAList && !readsAString) {
-        throw IRException("size() and length() read a list column or a string column");
+// A number or a duration is its own unary plus, which the analyzer already checked. Only a
+// cell, whose type is the row's, is checked when the program runs.
+mlir::Value emitUnaryPlus(mlir::OpBuilder& builder,
+                          mlir::Location loc,
+                          nl::ChunkType resultType,
+                          mlir::Value input,
+                          mlir::Operation* source) {
+    if (!holdsTaggedCells(input.getType())) {
+        return input;
     }
 
-    return builder.getI64Type();
-}
-
-// A stored list may mix the types of its elements, so one read out of a cell is the
-// type-erased tagged scalar a heterogeneous list's elements ride, whatever element type
-// the cell's own column resolved to.
-mlir::Type listElementFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    throwIfNotAListInput(inputElement);
-
-    return storage::ListElementType::get(builder.getContext());
-}
-
-// The list a tail leaves is over the elements the list it came from held, so it keeps that
-// list's own element type. A list read out of a tagged cell names no element type of its
-// own, so what is left of it is a list of tagged cells.
-mlir::Type listTailFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    throwIfNotAListInput(inputElement);
-
-    if (llvm::isa<storage::ListElementType>(inputElement)) {
-        return storage::ListType::get(builder.getContext(), inputElement);
-    }
-
-    return inputElement;
-}
-
-mlir::Type reverseFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    if (mlir::isa<storage::ListType, storage::ListElementType>(inputElement)) {
-        return inputElement;
-    }
-
-    return storage::StringType::get(builder.getContext());
+    return builder.create<nl::UnaryPlus>(loc, resultType, input).getResult();
 }
 
 // The nl sibling of each db system command. They are copied across one for one -
@@ -242,7 +168,6 @@ enum class ResultNullability {
 
 struct UnaryFunctionLowering {
     NLUnaryFunctionEmitter emit {nullptr};
-    UnaryFunctionElement element {nullptr};
     ResultNullability nullability {ResultNullability::FollowsInput};
 };
 
@@ -250,91 +175,93 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     // Both read an entity column, which carries its null in the ID an OPTIONAL MATCH left
     // invalid rather than in an optional, so their result is nullable whatever the input
     // chunk's own type says
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,      ResultNullability::AlwaysNullable}},
-    {"db.keys",       {&emitNLUnaryFunction<nl::Keys>,      &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.properties", {&emitNLUnaryFunction<nl::PropertyMap>, &mapFunctionElement,       ResultNullability::AlwaysNullable}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>, ResultNullability::AlwaysNullable}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>, ResultNullability::AlwaysNullable}},
+    {"db.keys",       {&emitNLUnaryFunction<nl::Keys>, ResultNullability::AlwaysNullable}},
+    {"db.properties", {&emitNLUnaryFunction<nl::PropertyMap>, ResultNullability::AlwaysNullable}},
 
     // An end of an edge is a node, and a node column spells its null as an invalid ID, so
     // the result stays a plain node chunk where labels() and type() need a nullable one
-    {"db.start_node", {&emitNLUnaryFunction<nl::StartNode>,  &nodeIDFunctionElement,      ResultNullability::NeverNullable}},
-    {"db.end_node",   {&emitNLUnaryFunction<nl::EndNode>,    &nodeIDFunctionElement,      ResultNullability::NeverNullable}},
+    {"db.start_node", {&emitNLUnaryFunction<nl::StartNode>, ResultNullability::NeverNullable}},
+    {"db.end_node",   {&emitNLUnaryFunction<nl::EndNode>, ResultNullability::NeverNullable}},
 
-    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
-    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
-    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
-    {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, &dateTimeFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.to_duration", {&emitNLUnaryFunction<nl::ToDuration>, &durationFunctionElement,   ResultNullability::AlwaysNullable}},
+    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, ResultNullability::AlwaysNullable}},
+    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>, ResultNullability::AlwaysNullable}},
+    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, ResultNullability::AlwaysNullable}},
+    {"db.to_datetime", {&emitNLUnaryFunction<nl::ToDateTime>, ResultNullability::AlwaysNullable}},
+    {"db.to_duration", {&emitNLUnaryFunction<nl::ToDuration>, ResultNullability::AlwaysNullable}},
 
     // A calendar field of an instant is always readable, so the field is null exactly
     // where the instant it was read off is
-    {"db.datetime_year",        {&emitNLUnaryFunction<nl::DateTimeYear>,        &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_month",       {&emitNLUnaryFunction<nl::DateTimeMonth>,       &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_day",         {&emitNLUnaryFunction<nl::DateTimeDay>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_hour",        {&emitNLUnaryFunction<nl::DateTimeHour>,        &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_minute",      {&emitNLUnaryFunction<nl::DateTimeMinute>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_second",      {&emitNLUnaryFunction<nl::DateTimeSecond>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_millisecond", {&emitNLUnaryFunction<nl::DateTimeMillisecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.datetime_microsecond", {&emitNLUnaryFunction<nl::DateTimeMicrosecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
+    {"db.datetime_year",        {&emitNLUnaryFunction<nl::DateTimeYear>, ResultNullability::FollowsInput}},
+    {"db.datetime_month",       {&emitNLUnaryFunction<nl::DateTimeMonth>, ResultNullability::FollowsInput}},
+    {"db.datetime_day",         {&emitNLUnaryFunction<nl::DateTimeDay>, ResultNullability::FollowsInput}},
+    {"db.datetime_hour",        {&emitNLUnaryFunction<nl::DateTimeHour>, ResultNullability::FollowsInput}},
+    {"db.datetime_minute",      {&emitNLUnaryFunction<nl::DateTimeMinute>, ResultNullability::FollowsInput}},
+    {"db.datetime_second",      {&emitNLUnaryFunction<nl::DateTimeSecond>, ResultNullability::FollowsInput}},
+    {"db.datetime_millisecond", {&emitNLUnaryFunction<nl::DateTimeMillisecond>, ResultNullability::FollowsInput}},
+    {"db.datetime_microsecond", {&emitNLUnaryFunction<nl::DateTimeMicrosecond>, ResultNullability::FollowsInput}},
 
-    {"db.duration_years",                  {&emitNLUnaryFunction<nl::DurationYears>,                &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_quarters",               {&emitNLUnaryFunction<nl::DurationQuarters>,             &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_months",                 {&emitNLUnaryFunction<nl::DurationMonths>,               &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_weeks",                  {&emitNLUnaryFunction<nl::DurationWeeks>,                &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_days",                   {&emitNLUnaryFunction<nl::DurationDays>,                 &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_hours",                  {&emitNLUnaryFunction<nl::DurationHours>,                &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_minutes",                {&emitNLUnaryFunction<nl::DurationMinutes>,              &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_seconds",                {&emitNLUnaryFunction<nl::DurationSeconds>,              &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_milliseconds",           {&emitNLUnaryFunction<nl::DurationMilliseconds>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_microseconds",           {&emitNLUnaryFunction<nl::DurationMicroseconds>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_quarters_of_year",       {&emitNLUnaryFunction<nl::DurationQuartersOfYear>,       &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_months_of_year",         {&emitNLUnaryFunction<nl::DurationMonthsOfYear>,         &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_months_of_quarter",      {&emitNLUnaryFunction<nl::DurationMonthsOfQuarter>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_days_of_week",           {&emitNLUnaryFunction<nl::DurationDaysOfWeek>,           &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_minutes_of_hour",        {&emitNLUnaryFunction<nl::DurationMinutesOfHour>,        &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_seconds_of_minute",      {&emitNLUnaryFunction<nl::DurationSecondsOfMinute>,      &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_milliseconds_of_second", {&emitNLUnaryFunction<nl::DurationMillisecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.duration_microseconds_of_second", {&emitNLUnaryFunction<nl::DurationMicrosecondsOfSecond>, &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>,  &stringFunctionElement,      ResultNullability::FollowsInput}},
-    {"db.to_integer_or_null", {&emitNLUnaryFunction<nl::ToIntegerOrNull>, &integerFunctionElement, ResultNullability::AlwaysNullable}},
-    {"db.to_float_or_null",   {&emitNLUnaryFunction<nl::ToFloatOrNull>,   &floatFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.to_boolean_or_null", {&emitNLUnaryFunction<nl::ToBooleanOrNull>, &booleanFunctionElement, ResultNullability::AlwaysNullable}},
-    {"db.to_string_or_null",  {&emitNLUnaryFunction<nl::ToStringOrNull>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::AlwaysNullable}},
-    {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
-    {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, &integerFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
-    {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
-    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
+    {"db.duration_years",                  {&emitNLUnaryFunction<nl::DurationYears>, ResultNullability::FollowsInput}},
+    {"db.duration_quarters",               {&emitNLUnaryFunction<nl::DurationQuarters>, ResultNullability::FollowsInput}},
+    {"db.duration_months",                 {&emitNLUnaryFunction<nl::DurationMonths>, ResultNullability::FollowsInput}},
+    {"db.duration_weeks",                  {&emitNLUnaryFunction<nl::DurationWeeks>, ResultNullability::FollowsInput}},
+    {"db.duration_days",                   {&emitNLUnaryFunction<nl::DurationDays>, ResultNullability::FollowsInput}},
+    {"db.duration_hours",                  {&emitNLUnaryFunction<nl::DurationHours>, ResultNullability::FollowsInput}},
+    {"db.duration_minutes",                {&emitNLUnaryFunction<nl::DurationMinutes>, ResultNullability::FollowsInput}},
+    {"db.duration_seconds",                {&emitNLUnaryFunction<nl::DurationSeconds>, ResultNullability::FollowsInput}},
+    {"db.duration_milliseconds",           {&emitNLUnaryFunction<nl::DurationMilliseconds>, ResultNullability::FollowsInput}},
+    {"db.duration_microseconds",           {&emitNLUnaryFunction<nl::DurationMicroseconds>, ResultNullability::FollowsInput}},
+    {"db.duration_quarters_of_year",       {&emitNLUnaryFunction<nl::DurationQuartersOfYear>, ResultNullability::FollowsInput}},
+    {"db.duration_months_of_year",         {&emitNLUnaryFunction<nl::DurationMonthsOfYear>, ResultNullability::FollowsInput}},
+    {"db.duration_months_of_quarter",      {&emitNLUnaryFunction<nl::DurationMonthsOfQuarter>, ResultNullability::FollowsInput}},
+    {"db.duration_days_of_week",           {&emitNLUnaryFunction<nl::DurationDaysOfWeek>, ResultNullability::FollowsInput}},
+    {"db.duration_minutes_of_hour",        {&emitNLUnaryFunction<nl::DurationMinutesOfHour>, ResultNullability::FollowsInput}},
+    {"db.duration_seconds_of_minute",      {&emitNLUnaryFunction<nl::DurationSecondsOfMinute>, ResultNullability::FollowsInput}},
+    {"db.duration_milliseconds_of_second", {&emitNLUnaryFunction<nl::DurationMillisecondsOfSecond>, ResultNullability::FollowsInput}},
+    {"db.duration_microseconds_of_second", {&emitNLUnaryFunction<nl::DurationMicrosecondsOfSecond>, ResultNullability::FollowsInput}},
+    {"db.to_string",  {&emitNLUnaryFunction<nl::ToString>, ResultNullability::FollowsInput}},
+    {"db.to_integer_or_null", {&emitNLUnaryFunction<nl::ToIntegerOrNull>, ResultNullability::AlwaysNullable}},
+    {"db.to_float_or_null",   {&emitNLUnaryFunction<nl::ToFloatOrNull>, ResultNullability::AlwaysNullable}},
+    {"db.to_boolean_or_null", {&emitNLUnaryFunction<nl::ToBooleanOrNull>, ResultNullability::AlwaysNullable}},
+    {"db.to_string_or_null",  {&emitNLUnaryFunction<nl::ToStringOrNull>, ResultNullability::FollowsInput}},
+    {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>, ResultNullability::AlwaysNullable}},
+    {"db.size",       {&emitNLUnaryFunction<nl::Size>, ResultNullability::FollowsInput}},
+    {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, ResultNullability::FollowsInput}},
+    {"db.head",       {&emitNLUnaryFunction<nl::Head>, ResultNullability::NeverNullable}},
+    {"db.last",       {&emitNLUnaryFunction<nl::Last>, ResultNullability::NeverNullable}},
+    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>, ResultNullability::FollowsInput}},
 
-    {"db.abs",      {&emitNLUnaryFunction<nl::Abs>,      &absFunctionElement,     ResultNullability::FollowsInput}},
-    {"db.sign",     {&emitNLUnaryFunction<nl::Sign>,     &integerFunctionElement, ResultNullability::FollowsInput}},
-    {"db.ceil",     {&emitNLUnaryFunction<nl::Ceil>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.floor",    {&emitNLUnaryFunction<nl::Floor>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.round",    {&emitNLUnaryFunction<nl::Round>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.sqrt",     {&emitNLUnaryFunction<nl::Sqrt>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.exp",      {&emitNLUnaryFunction<nl::Exp>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.log",      {&emitNLUnaryFunction<nl::Log>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.log10",    {&emitNLUnaryFunction<nl::Log10>,    &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.sin",      {&emitNLUnaryFunction<nl::Sin>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.cos",      {&emitNLUnaryFunction<nl::Cos>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.tan",      {&emitNLUnaryFunction<nl::Tan>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.cot",      {&emitNLUnaryFunction<nl::Cot>,      &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.asin",     {&emitNLUnaryFunction<nl::Asin>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.acos",     {&emitNLUnaryFunction<nl::Acos>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.atan",     {&emitNLUnaryFunction<nl::Atan>,     &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.degrees",  {&emitNLUnaryFunction<nl::Degrees>,  &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.radians",  {&emitNLUnaryFunction<nl::Radians>,  &floatFunctionElement,   ResultNullability::FollowsInput}},
-    {"db.haversin", {&emitNLUnaryFunction<nl::Haversin>, &floatFunctionElement,   ResultNullability::FollowsInput}},
+    {"db.abs",      {&emitNLUnaryFunction<nl::Abs>, ResultNullability::FollowsInput}},
+    {"db.negate",   {&emitNLUnaryFunction<nl::Negate>, ResultNullability::FollowsInput}},
+    {"db.unary_plus", {&emitUnaryPlus, ResultNullability::FollowsInput}},
+    {"db.sign",     {&emitNLUnaryFunction<nl::Sign>, ResultNullability::FollowsInput}},
+    {"db.ceil",     {&emitNLUnaryFunction<nl::Ceil>, ResultNullability::FollowsInput}},
+    {"db.floor",    {&emitNLUnaryFunction<nl::Floor>, ResultNullability::FollowsInput}},
+    {"db.round",    {&emitNLUnaryFunction<nl::Round>, ResultNullability::FollowsInput}},
+    {"db.sqrt",     {&emitNLUnaryFunction<nl::Sqrt>, ResultNullability::FollowsInput}},
+    {"db.exp",      {&emitNLUnaryFunction<nl::Exp>, ResultNullability::FollowsInput}},
+    {"db.log",      {&emitNLUnaryFunction<nl::Log>, ResultNullability::FollowsInput}},
+    {"db.log10",    {&emitNLUnaryFunction<nl::Log10>, ResultNullability::FollowsInput}},
+    {"db.sin",      {&emitNLUnaryFunction<nl::Sin>, ResultNullability::FollowsInput}},
+    {"db.cos",      {&emitNLUnaryFunction<nl::Cos>, ResultNullability::FollowsInput}},
+    {"db.tan",      {&emitNLUnaryFunction<nl::Tan>, ResultNullability::FollowsInput}},
+    {"db.cot",      {&emitNLUnaryFunction<nl::Cot>, ResultNullability::FollowsInput}},
+    {"db.asin",     {&emitNLUnaryFunction<nl::Asin>, ResultNullability::FollowsInput}},
+    {"db.acos",     {&emitNLUnaryFunction<nl::Acos>, ResultNullability::FollowsInput}},
+    {"db.atan",     {&emitNLUnaryFunction<nl::Atan>, ResultNullability::FollowsInput}},
+    {"db.degrees",  {&emitNLUnaryFunction<nl::Degrees>, ResultNullability::FollowsInput}},
+    {"db.radians",  {&emitNLUnaryFunction<nl::Radians>, ResultNullability::FollowsInput}},
+    {"db.haversin", {&emitNLUnaryFunction<nl::Haversin>, ResultNullability::FollowsInput}},
 
-    {"db.to_upper", {&emitNLUnaryFunction<nl::ToUpper>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.to_lower", {&emitNLUnaryFunction<nl::ToLower>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.trim",     {&emitNLUnaryFunction<nl::Trim>,     &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.ltrim",    {&emitNLUnaryFunction<nl::LTrim>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.rtrim",    {&emitNLUnaryFunction<nl::RTrim>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.reverse",  {&emitNLUnaryFunction<nl::Reverse>,  &reverseFunctionElement, ResultNullability::FollowsInput}},
-    {"db.normalize", {&emitNLNormalFormFunction<mlir::db::Normalize, nl::Normalize>, &stringFunctionElement, ResultNullability::FollowsInput}},
-    {"db.is_normalized", {&emitNLNormalFormFunction<mlir::db::IsNormalized, nl::IsNormalized>, &booleanFunctionElement, ResultNullability::FollowsInput}}
+    {"db.to_upper", {&emitNLUnaryFunction<nl::ToUpper>, ResultNullability::FollowsInput}},
+    {"db.to_lower", {&emitNLUnaryFunction<nl::ToLower>, ResultNullability::FollowsInput}},
+    {"db.trim",     {&emitNLUnaryFunction<nl::Trim>, ResultNullability::FollowsInput}},
+    {"db.ltrim",    {&emitNLUnaryFunction<nl::LTrim>, ResultNullability::FollowsInput}},
+    {"db.rtrim",    {&emitNLUnaryFunction<nl::RTrim>, ResultNullability::FollowsInput}},
+    {"db.reverse",  {&emitNLUnaryFunction<nl::Reverse>, ResultNullability::FollowsInput}},
+    {"db.normalize", {&emitNLNormalFormFunction<mlir::db::Normalize, nl::Normalize>, ResultNullability::FollowsInput}},
+    {"db.is_normalized", {&emitNLNormalFormFunction<mlir::db::IsNormalized, nl::IsNormalized>, ResultNullability::FollowsInput}}
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
@@ -358,9 +285,15 @@ mlir::Value emitNLBinaryFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, lhs, rhs).getResult();
 }
 
+using BinaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder, mlir::Type lhsElement);
+
+mlir::Type floatFunctionElement(mlir::OpBuilder& builder, mlir::Type lhsElement) {
+    return builder.getF64Type();
+}
+
 struct BinaryFunctionLowering {
     NLBinaryFunctionEmitter emit {nullptr};
-    UnaryFunctionElement element {nullptr};
+    BinaryFunctionElement element {nullptr};
 };
 
 const std::unordered_map<std::string_view, BinaryFunctionLowering> binaryFunctionLowerings = {
@@ -473,7 +406,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isString = mlir::isa<storage::StringType>(inputElement);
     const bool isDateTime = mlir::isa<storage::DateTimeType>(inputElement);
     const bool isDuration = mlir::isa<storage::DurationType>(inputElement);
-    const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
+    const bool isTaggedCell = mlir::isa<storage::AnyType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
     // or the null literal - so every reduction over it sees nothing: min, max and avg
@@ -555,7 +488,7 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     // A type-erased cell is numeric only once read. '^' answers a double whatever it
     // reads, so a cell reaching here computes in f64 and answers null on a row holding no
     // number; every other operator keeps the cell and never asks.
-    if (mlir::isa<storage::ListElementType>(element)) {
+    if (mlir::isa<storage::AnyType>(element)) {
         return {.numeric = mlir::Float64Type::get(chunkType.getContext()), .nullable = true};
     }
 
@@ -645,7 +578,7 @@ bool isIndexableChunk(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type indexed = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::ListType, storage::ListElementType, storage::MapElementType>(indexed);
+    return mlir::isa<storage::ListType, storage::AnyType, storage::MapElementType>(indexed);
 }
 
 // The chunk shapes a key read accepts: a column of maps, and a tagged cell the row may
@@ -660,7 +593,7 @@ bool holdsAMapPerRow(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type read = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::MapType, storage::ListElementType, storage::MapElementType>(read);
+    return mlir::isa<storage::MapType, storage::AnyType, storage::MapElementType>(read);
 }
 
 // The element type an indexed list hands out, read through the nullable an optional list
@@ -731,7 +664,7 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
 
 bool isTaggedCellChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    return chunk && mlir::isa<storage::ListElementType, storage::MapElementType>(chunk.getElementType());
+    return chunk && mlir::isa<storage::AnyType, storage::MapElementType>(chunk.getElementType());
 }
 
 // A tagged cell holds its null in its tag and an ID column in the invalid ID, so a null test
@@ -744,7 +677,7 @@ bool mayHoldANull(mlir::Type chunkType) {
     return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
 }
 
-// A list element's null rides the column's optional, so a plain list_element column holds
+// A list element's null rides the column's optional, so a plain !storage.any column holds
 // none. A map value's null rides the entry's own tag, so even a plain column can answer
 // one - which is what makes comparing it three-valued whatever the column's shape.
 bool isMapElementChunk(mlir::Type chunkType) {
@@ -764,7 +697,7 @@ bool holdsTaggedCells(mlir::Type chunkType) {
     const mlir::Type element = chunk.getElementType();
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
 
-    return mlir::isa<storage::ListElementType>(nullable ? nullable.getValueType() : element);
+    return mlir::isa<storage::AnyType>(nullable ? nullable.getValueType() : element);
 }
 
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
@@ -777,6 +710,21 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
     // never be negative - but arithmetic over it can be, so a count entering an expression
     // is promoted like any other integer instead of wrapping around zero
     return builder.getIntegerType(64);
+}
+
+// The element of one column holding both @param lhs and @param rhs, or a null type when
+// no column type holds the two
+mlir::Type unifiedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
+    if (lhs == rhs) {
+        return lhs;
+    } else if (isNumericElement(lhs) && isNumericElement(rhs)) {
+        return promoteNumeric(builder, lhs, rhs);
+    } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
+        mlir::MLIRContext* const context = builder.getContext();
+        return storage::ListType::get(context, storage::AnyType::get(context));
+    }
+
+    return mlir::Type {};
 }
 
 // The value-reduction AggregateKind matching a grouped aggregate's kind, so the
@@ -891,7 +839,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const mlir::Type inputElement = inputChunkType.getElementType();
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputElement);
-            const bool taggedCells = mlir::isa<storage::ListElementType>(inputElement);
+            const bool taggedCells = mlir::isa<storage::AnyType>(inputElement);
             if (!inputNullable && !taggedCells) {
                 throw IRException("db.group_aggregate sum/min/max/avg/stdev/first requires a property value column");
             }
@@ -1227,6 +1175,42 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
+    // A value read out of a map is read as a tagged cell by every op but the ones whose
+    // kernels read a map entry where it stands, and the ones carrying it
+    const bool readsEntriesInPlace = mlir::isa<mlir::db::StaticMapKey,
+                                               mlir::db::DynamicMapKey,
+                                               mlir::db::ListIndex,
+                                               mlir::db::EqOp,
+                                               mlir::db::NeqOp,
+                                               mlir::db::GtOp,
+                                               mlir::db::LtOp,
+                                               mlir::db::GteOp,
+                                               mlir::db::LteOp,
+                                               mlir::db::InOp,
+                                               mlir::db::Keys,
+                                               mlir::db::PropertyMap,
+                                               mlir::db::Labels,
+                                               mlir::db::EdgeType,
+                                               mlir::db::Output,
+                                               mlir::db::Yield>(operation);
+
+    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> entryChunks;
+    if (!readsEntriesInPlace) {
+        for (const mlir::Value operand : operation.getOperands()) {
+            const auto slotIt = _valueMap.find(operand);
+            if (slotIt == _valueMap.end()) {
+                continue;
+            }
+
+            const mlir::Value chunk = slotIt->second;
+            const mlir::Value cells = mapEntriesAsCells(chunk);
+            if (cells != chunk) {
+                entryChunks.emplace_back(operand, chunk);
+                _valueMap[operand] = cells;
+            }
+        }
+    }
+
     if (computesOnceOverConstants(operation)) {
         lowerOnceOverConstants(operation);
     } else if (raisesOverConstants(operation)) {
@@ -1234,6 +1218,24 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else {
         lowerOperationByKind(operation);
     }
+
+    for (const auto& [operand, entries] : llvm::reverse(entryChunks)) {
+        _valueMap[operand] = entries;
+    }
+}
+
+mlir::Value DBLowering::mapEntriesAsCells(mlir::Value chunk) {
+    if (!isMapElementChunk(chunk.getType())) {
+        return chunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType cellsType = nl::ChunkType::get(context, storage::AnyType::get(context));
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    setInsertionForUnaryOp(chunk);
+
+    return _builder.create<nl::MapEntryValue>(_builder.getUnknownLoc(), cellsType, chunk).getResult();
 }
 
 bool DBLowering::computesOnceOverConstants(mlir::Operation& operation) {
@@ -1669,7 +1671,7 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
     // its loop sits at the top of the current root block. The literals are the rows to
     // emit, forwarded as-is; translation materializes them into a ListView. Unlike a
     // node-ID scan the chunk element type varies with the list (a homogeneous value
-    // type, or list_element for a heterogeneous one), so - like nl.collect - the
+    // type, or !storage.any for a heterogeneous one), so - like nl.collect - the
     // iterator type is spelled here from the db column's element type rather than
     // inferred.
     setInsertionInto(_rootBlock);
@@ -1682,9 +1684,9 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
     // unwind_collect drain do: the elements are never null, but every value-chunk
     // consumer (a cross product broadcast, a filter, a skip, an aggregate) dispatches
     // on nullable<T>, so the uniform shape is what makes the unwound column composable.
-    // A heterogeneous list keeps its type-erased list_element chunk, which only
+    // A heterogeneous list keeps its type-erased !storage.any chunk, which only
     // pass-through consumers accept.
-    const bool heterogeneous = mlir::isa<storage::ListElementType>(elementType);
+    const bool heterogeneous = mlir::isa<storage::AnyType>(elementType);
     const mlir::Type chunkElementType = heterogeneous ? elementType
                                                       : storage::NullableType::get(context, elementType);
 
@@ -1880,7 +1882,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     for (mlir::Operation& operation : dbSource) {
         mlir::db::UnwindYield yield = mlir::dyn_cast<mlir::db::UnwindYield>(operation);
         if (yield) {
-            sourceChunk = rowAlignedChunk(mapValue(yield.getSource()), runCardinality);
+            sourceChunk = rowAlignedChunk(mapEntriesAsCells(mapValue(yield.getSource())), runCardinality);
         } else {
             lowerOperation(operation);
         }
@@ -2023,7 +2025,7 @@ void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehensio
                                                        storage::EdgeIDType,
                                                        storage::ListType,
                                                        storage::MapType,
-                                                       storage::ListElementType>(valueElement);
+                                                       storage::AnyType>(valueElement);
 
     if (!holdsCellsPresentInEveryRow) {
         valueChunk = nullableValueChunk(valueChunk);
@@ -2168,18 +2170,17 @@ mlir::Type DBLowering::accumulatedElement(mlir::Type accumulated, mlir::Type chu
         return accumulated;
     }
 
-    mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type element = chunkValueElement(_builder, chunkType);
-
-    if (!accumulated || accumulated == element) {
+    if (!accumulated) {
         return element;
-    } else if (isNumericElement(accumulated) && isNumericElement(element)) {
-        return promoteNumeric(_builder, accumulated, element);
-    } else if (mlir::isa<storage::ListType>(accumulated) && mlir::isa<storage::ListType>(element)) {
-        return storage::ListType::get(context, storage::ListElementType::get(context));
     }
 
-    return storage::ListElementType::get(context);
+    const mlir::Type unified = unifiedValueElement(_builder, accumulated, element);
+    if (!unified) {
+        return storage::AnyType::get(_builder.getContext());
+    }
+
+    return unified;
 }
 
 nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
@@ -2189,8 +2190,6 @@ nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
     // branch or a null test reads as the null it is rather than as a value of some type
     if (!accumulated) {
         return nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getNoneType()));
-    } else if (mlir::isa<storage::ListElementType>(accumulated)) {
-        return nl::ChunkType::get(context, accumulated);
     }
 
     return caseResultChunkType(accumulated);
@@ -2311,7 +2310,7 @@ mlir::Value DBLowering::rowListsValueChunk(mlir::Value valueChunk, mlir::Value r
     const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                        storage::EdgeIDType,
                                                        storage::ListType,
-                                                       storage::ListElementType>(valueElement);
+                                                       storage::AnyType>(valueElement);
 
     if (holdsCellsPresentInEveryRow) {
         return aligned;
@@ -2339,7 +2338,7 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
         if (!shared) {
             shared = element;
         } else if (shared != element) {
-            return storage::ListElementType::get(context);
+            return storage::AnyType::get(context);
         }
     }
 
@@ -2417,22 +2416,28 @@ void DBLowering::containerCellChunks(mlir::ValueRange columns, llvm::SmallVector
     const mlir::Value cardinality = cardinalityDriver(chunks);
 
     for (mlir::Value& chunk : chunks) {
-        chunk = rowAlignedChunk(chunk, cardinality);
-
-        // An entity ID, a list, a map and a tagged cell are present in every row and go
-        // into the container as they stand; only a scalar value column is read as nullable,
-        // the way lowerCollect reads the column it gathers.
-        const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
-        const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
-                                                           storage::EdgeIDType,
-                                                           storage::ListType,
-                                                           storage::MapType,
-                                                           storage::ListElementType>(element);
-
-        if (!holdsCellsPresentInEveryRow) {
-            chunk = nullableValueChunk(chunk);
-        }
+        chunk = listItemChunk(rowAlignedChunk(chunk, cardinality));
     }
+}
+
+mlir::Value DBLowering::listItemChunk(mlir::Value chunk) {
+    // An entity ID, a list, a map and a tagged cell are present in every row and are read
+    // as they stand; only a scalar value column is read as nullable, the way lowerCollect
+    // reads the column it gathers.
+    const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
+    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
+                                                       storage::EdgeIDType,
+                                                       storage::ListType,
+                                                       storage::MapType,
+                                                       storage::AnyType>(element);
+
+    if (holdsCellsPresentInEveryRow) {
+        return chunk;
+    } else if (mlir::isa<storage::MapElementType>(element)) {
+        return mapEntriesAsCells(chunk);
+    }
+
+    return nullableValueChunk(chunk);
 }
 
 void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
@@ -2496,8 +2501,8 @@ void DBLowering::lowerListSlice(mlir::db::ListSlice slice) {
     const mlir::Type value = nullable ? nullable.getValueType() : listElement;
 
     const mlir::Type sliced =
-        mlir::isa<storage::ListElementType>(value)
-            ? storage::ListType::get(context, storage::ListElementType::get(context))
+        mlir::isa<storage::AnyType>(value)
+            ? storage::ListType::get(context, storage::AnyType::get(context))
             : value;
 
     const nl::ChunkType resultType = nl::ChunkType::get(context,
@@ -2547,7 +2552,7 @@ void DBLowering::lowerPercentile(mlir::Operation* operation) {
     const bool interpolates = mlir::isa<mlir::db::PercentileCont>(operation);
     const bool listsNumbers = listsIntegers || listsDoubles;
 
-    mlir::Type resultElement = storage::ListElementType::get(context);
+    mlir::Type resultElement = storage::AnyType::get(context);
     if (interpolates) {
         resultElement = storage::NullableType::get(context, _builder.getF64Type());
     } else if (listsNumbers) {
@@ -4710,7 +4715,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // A type-erased column is read as the tagged cell it holds; every other input is a
     // nullable value chunk, and the reduction is resolved from the value type it wraps.
     const mlir::Type inputChunkElement = mlir::cast<nl::ChunkType>(inputChunk.getType()).getElementType();
-    const bool taggedCells = mlir::isa<storage::ListElementType>(inputChunkElement);
+    const bool taggedCells = mlir::isa<storage::AnyType>(inputChunkElement);
     const mlir::Type inputElement = taggedCells
         ? inputChunkElement
         : mlir::cast<storage::NullableType>(inputChunkElement).getValueType();
@@ -4910,7 +4915,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                               storage::EdgeIDType,
                                                               storage::ListType,
-                                                              storage::ListElementType>(collectedElement);
+                                                              storage::AnyType>(collectedElement);
 
         if (!collectsCellsPresentInEveryRow) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
@@ -6036,8 +6041,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
 
             // A cell may hold a null, or a value of another type than the one it meets
-            const bool comparesATaggedCell = kind == BinaryResultKind::Comparison
-                                          && !testsACarriedNull
+            const bool comparesATaggedCell = !testsACarriedNull
                                           && (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType));
 
             const bool comparesAMapValue = !testsACarriedNull
@@ -6063,7 +6067,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
         case BinaryResultKind::Numeric: {
             if (holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType)) {
-                return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+                return storage::NullableType::get(ctx, storage::AnyType::get(ctx));
             }
 
             const mlir::Type lhsElement = chunkValueElement(_builder, lhsType);
@@ -6102,7 +6106,19 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Concat: {
-            const bool concatenatesLists = isListChunk(lhsType) && isListChunk(rhsType);
+            const bool lhsIsAList = isListChunk(lhsType);
+            const bool rhsIsAList = isListChunk(rhsType);
+            const bool concatenatesLists = lhsIsAList && rhsIsAList;
+            const bool joinsACellToAList = (lhsIsAList && holdsTaggedCells(rhsType))
+                                        || (rhsIsAList && holdsTaggedCells(lhsType));
+
+            // The cell joins the list as the list it holds or as one element, whose type
+            // is the row's
+            if (joinsACellToAList) {
+                const mlir::Type joined = storage::ListType::get(ctx, storage::AnyType::get(ctx));
+
+                return operandNullable ? storage::NullableType::get(ctx, joined) : joined;
+            }
 
             if (!concatenatesLists) {
                 if (isListChunk(lhsType) || isListChunk(rhsType)) {
@@ -6124,7 +6140,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const bool sharedType = lhsInnerType == rhsInnerType;
             const mlir::Type resultInnerType =
-                sharedType ? lhsInnerType : storage::ListElementType::get(ctx);
+                sharedType ? lhsInnerType : storage::AnyType::get(ctx);
             const mlir::Type concatenated = storage::ListType::get(ctx, resultInnerType);
 
             return operandNullable ? storage::NullableType::get(ctx, concatenated)
@@ -6148,7 +6164,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const mlir::Type indexed = namesAnIndexedValueType(element)
                                            ? element
-                                           : storage::ListElementType::get(ctx);
+                                           : storage::AnyType::get(ctx);
 
             return storage::NullableType::get(ctx, indexed);
         }
@@ -6199,6 +6215,22 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
         rhsChunk = nullTestedChunk(rhsChunk);
     }
 
+    // AND, OR and XOR read a cell's truth value against a nullable boolean
+    constexpr bool CONNECTS_TRUTH_VALUES = std::is_same_v<NLOp, nl::And>
+                                      || std::is_same_v<NLOp, nl::Or>
+                                      || std::is_same_v<NLOp, nl::Xor>;
+
+    if constexpr (CONNECTS_TRUTH_VALUES) {
+        const bool lhsHoldsCells = holdsTaggedCells(lhsChunkType);
+        const bool rhsHoldsCells = holdsTaggedCells(rhsChunkType);
+
+        if (lhsHoldsCells && !rhsHoldsCells && !isUntypedNullChunk(rhsChunkType)) {
+            rhsChunk = nullableValueChunk(rhsChunk);
+        } else if (rhsHoldsCells && !lhsHoldsCells && !isUntypedNullChunk(lhsChunkType)) {
+            lhsChunk = nullableValueChunk(lhsChunk);
+        }
+    }
+
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
@@ -6219,20 +6251,18 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
             continue;
         }
 
-        const mlir::Type element = chunkValueElement(_builder, chunkType);
-
-        if (!unified || unified == element) {
+        // A value read out of a map holds a type known only per row
+        const mlir::Type valueElement = chunkValueElement(_builder, chunkType);
+        const mlir::Type element = mlir::isa<storage::MapElementType>(valueElement)
+                                 ? storage::AnyType::get(_builder.getContext())
+                                 : valueElement;
+        if (!unified) {
             unified = element;
             continue;
         }
 
-        const bool bothNumeric = isNumericElement(unified) && isNumericElement(element);
-        if (!bothNumeric) {
-            throw IRException("db.case requires branches of one type, or of numeric types "
-                              "that promote against each other");
-        }
-
-        unified = promoteNumeric(_builder, unified, element);
+        const mlir::Type shared = unifiedValueElement(_builder, unified, element);
+        unified = shared ? shared : storage::AnyType::get(_builder.getContext());
     }
 
     // Every branch is the null literal, so no branch says what the column holds. The rows
@@ -6242,19 +6272,14 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
         return _builder.getIntegerType(64);
     }
 
-    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(unified);
-    const bool isBool = integerType && integerType.getWidth() == 1;
-    const bool isString = mlir::isa<storage::StringType>(unified);
-
     // A node or an edge is selected as the entity it is rather than as its ID's integer,
     // so the selection answers a column the rest of the query still reads as an entity.
-    // Mixing one with a scalar, or a node with an edge, was already turned away above:
-    // neither pair promotes.
     const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
+    const bool isValue = elementTypeToValueType(unified) != ValueType::Invalid;
+    const bool isAny = mlir::isa<storage::AnyType>(unified);
 
-    if (!isNumericElement(unified) && !isBool && !isString && !isEntity) {
-        throw IRException("db.case requires scalar or entity branches: a list or an "
-                          "embedding is not a value a branch can select");
+    if (!isEntity && !isValue && !isAny) {
+        throw IRException("db.case requires value or entity branches");
     }
 
     return unified;
@@ -6269,6 +6294,10 @@ mlir::Value DBLowering::chunkAsElement(mlir::Value chunk, mlir::Type resultEleme
         return chunk;
     } else if (chunkValueElement(_builder, chunkType) == resultElement) {
         return chunk;
+    } else if (mlir::isa<storage::ListType>(resultElement)) {
+        return chunk;
+    } else if (mlir::isa<storage::AnyType>(resultElement)) {
+        return listItemChunk(chunk);
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
@@ -6361,10 +6390,11 @@ nl::ChunkType DBLowering::caseResultChunkType(mlir::Type resultElement) {
     // A row matching no branch of a defaultless CASE is absent, and so is one taking a
     // null branch, so the selection always lands in a column that can hold an absent row.
     // An entity column already can - it carries its null in the ID an OPTIONAL MATCH left
-    // invalid - so entities land in a plain ID chunk and every scalar in a nullable one.
+    // invalid - and so can a !storage.any column, in the tag; every scalar lands in a
+    // nullable one.
     mlir::MLIRContext* const context = _builder.getContext();
-    const bool selectsEntities = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
-    const mlir::Type resultChunkElement = selectsEntities
+    const bool holdsItsNull = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::AnyType>(resultElement);
+    const mlir::Type resultChunkElement = holdsItsNull
         ? resultElement
         : storage::NullableType::get(context, resultElement);
 
@@ -6504,7 +6534,9 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
     const mlir::Value operandChunk = mapValue(notOp.getOperand());
 
     const mlir::Type operandType = operandChunk.getType();
-    const bool resultNull = isNullableChunk(operandType);
+
+    // A cell may hold a null, so its negation may be one
+    const bool resultNull = isNullableChunk(operandType) || holdsTaggedCells(operandType);
 
     mlir::MLIRContext* bldCtxt = _builder.getContext();
 
@@ -6563,7 +6595,11 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
     const auto inputNullableElement = mlir::dyn_cast<storage::NullableType>(inputElement);
     const mlir::Type inputValueElement = inputNullableElement ? inputNullableElement.getValueType() : inputElement;
 
-    const mlir::Type baseElement = spec->element(_builder, inputValueElement);
+    const mlir::Type baseElement = unaryFunctionElement(op, inputValueElement);
+    if (!baseElement) {
+        const mlir::OperationName name = op->getName();
+        throw IRException(fmt::format("{} reads no column of this element type", name.getStringRef().str()));
+    }
 
     const bool inputCanBeNull = mayHoldANull(inputChunk.getType());
 
@@ -6588,7 +6624,7 @@ void DBLowering::lowerHeadOrLast(mlir::Operation& operation) {
     const mlir::Type listChunkType = listChunk.getType();
 
     const bool listsTypedElements = isListChunk(listChunkType)
-                                 && !mlir::isa<storage::ListElementType, mlir::NoneType>(indexedListElementType(listChunkType));
+                                 && !mlir::isa<storage::AnyType, mlir::NoneType>(indexedListElementType(listChunkType));
     if (!listsTypedElements) {
         lowerUnaryFunction(&operation);
         return;
@@ -7202,10 +7238,11 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
         valueElement = _builder.getIntegerType(64, /*isSigned=*/false);
     }
 
-    const bool isString = mlir::isa<storage::StringType>(valueElement);
-    const bool isDouble = mlir::isa<mlir::Float64Type>(valueElement);
-    const bool isInteger = mlir::isa<mlir::IntegerType>(valueElement);
-    if (!isString && !isDouble && !isInteger) {
+    const ValueType valueType = elementTypeToValueType(valueElement);
+    const bool isScalar = valueType != ValueType::Invalid
+                       && valueType != ValueType::List
+                       && valueType != ValueType::Map;
+    if (!isScalar) {
         throw IRException("Only a scalar value column can be read as a nullable value column");
     }
 
@@ -7218,7 +7255,7 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
 mlir::Value DBLowering::reducedValueChunk(mlir::Value chunk) {
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
 
-    if (mlir::isa<storage::ListElementType>(element)) {
+    if (mlir::isa<storage::AnyType>(element)) {
         return chunk;
     } else if (mlir::isa<storage::ListType, storage::MapType>(element)) {
         return toNullableChunk(chunk, element);

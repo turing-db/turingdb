@@ -201,7 +201,7 @@ TEST_F(ListConcatTest, homogeneousListsStayHomogeneous) {
 
 TEST_F(ListConcatTest, mixedElementListsAreTypeErased) {
     const std::string resultType = concatResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 2] + ['a', 'b']");
-    EXPECT_NE(resultType.find("list_element"), std::string::npos) << "concat result type: " << resultType;
+    EXPECT_NE(resultType.find("!storage.any"), std::string::npos) << "concat result type: " << resultType;
 }
 
 TEST_F(ListConcatTest, subtractionOfListsRejected) {
