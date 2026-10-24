@@ -75,3 +75,5 @@ target_include_directories(test_query_ir_component_name_resolution PRIVATE ${IR_
 add_call_v3_test(test_query_ir_double_dash DoubleDashTest.cpp)
 
 add_call_v3_test(test_query_ir_both_arrow_heads BothArrowHeadsTest.cpp)
+
+add_call_v3_test(test_query_ir_property_constraint_on_an_entity PropertyConstraintOnAnEntityTest.cpp)

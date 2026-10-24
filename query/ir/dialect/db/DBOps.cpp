@@ -20,6 +20,7 @@
 #include "StorageAttributes.h"
 #include "MergePatternShape.h"
 #include "MakePathShape.h"
+#include "NullLiteralType.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
 
@@ -143,23 +144,6 @@ bool isStringColumn(Type type) {
 
 bool isIntegerColumn(Value column) {
     return isa<ColumnType>(column.getType()) && isa<IntegerType, storage::ListElementType, NoneType>(columnElement(column));
-}
-
-// A plain none column is one whose type lowering resolves; the null literal is a nullable none
-bool isUntypedNullColumn(Value column) {
-    const auto columnType = dyn_cast<ColumnType>(column.getType());
-    const auto nullable = columnType ? dyn_cast<storage::NullableType>(columnType.getType()) : storage::NullableType();
-
-    return nullable && isa<NoneType>(nullable.getValueType());
-}
-
-LogicalResult verifyComparesNoNullLiteral(Operation* op, Value lhs, Value rhs) {
-    if (isUntypedNullColumn(lhs) || isUntypedNullColumn(rhs)) {
-        return op->emitOpError("compares against the null literal, which is null on every row: "
-                               "db.is_null tests a column for null");
-    }
-
-    return success();
 }
 
 LogicalResult verifyStringResult(Operation* op, Value result) {
@@ -1470,11 +1454,17 @@ LogicalResult LazyCase::verify() {
 }
 
 LogicalResult EqOp::verify() {
-    return verifyComparesNoNullLiteral(getOperation(), getLhs(), getRhs());
+    const Type lhsElement = cast<ColumnType>(getLhs().getType()).getType();
+    const Type rhsElement = cast<ColumnType>(getRhs().getType()).getType();
+
+    return verifyComparesNoNullLiteral(getOperation(), lhsElement, rhsElement);
 }
 
 LogicalResult NeqOp::verify() {
-    return verifyComparesNoNullLiteral(getOperation(), getLhs(), getRhs());
+    const Type lhsElement = cast<ColumnType>(getLhs().getType()).getType();
+    const Type rhsElement = cast<ColumnType>(getRhs().getType()).getType();
+
+    return verifyComparesNoNullLiteral(getOperation(), lhsElement, rhsElement);
 }
 
 LogicalResult ToNullable::verify() {

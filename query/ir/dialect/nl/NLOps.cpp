@@ -17,6 +17,7 @@
 #include "StorageAttributes.h"
 #include "MergePatternShape.h"
 #include "MakePathShape.h"
+#include "NullLiteralType.h"
 #include "GroupAggregateKindsFormat.h"
 #include "PropertyScanLiteral.h"
 
@@ -51,22 +52,6 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
 
 Type getNullableChunkType(MLIRContext* context, Type valueType) {
     return ChunkType::get(context, storage::NullableType::get(context, valueType));
-}
-
-bool isUntypedNullChunk(Value chunk) {
-    const auto chunkType = dyn_cast<ChunkType>(chunk.getType());
-    const auto nullable = chunkType ? dyn_cast<storage::NullableType>(chunkType.getElementType()) : storage::NullableType();
-
-    return nullable && isa<NoneType>(nullable.getValueType());
-}
-
-LogicalResult verifyComparesNoNullLiteral(Operation* op, Value lhs, Value rhs) {
-    if (isUntypedNullChunk(lhs) || isUntypedNullChunk(rhs)) {
-        return op->emitOpError("compares against the null literal, which is null on every row: "
-                               "nl.is_null tests a chunk for null");
-    }
-
-    return success();
 }
 
 // Whether a key read can be answered over this chunk: a chunk of maps, or one of tagged
@@ -635,11 +620,17 @@ LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
 }
 
 LogicalResult Eq::verify() {
-    return verifyComparesNoNullLiteral(getOperation(), getLhs(), getRhs());
+    const Type lhsElement = cast<ChunkType>(getLhs().getType()).getElementType();
+    const Type rhsElement = cast<ChunkType>(getRhs().getType()).getElementType();
+
+    return verifyComparesNoNullLiteral(getOperation(), lhsElement, rhsElement);
 }
 
 LogicalResult Neq::verify() {
-    return verifyComparesNoNullLiteral(getOperation(), getLhs(), getRhs());
+    const Type lhsElement = cast<ChunkType>(getLhs().getType()).getElementType();
+    const Type rhsElement = cast<ChunkType>(getRhs().getType()).getElementType();
+
+    return verifyComparesNoNullLiteral(getOperation(), lhsElement, rhsElement);
 }
 
 LogicalResult MakePath::verify() {

@@ -23,6 +23,7 @@
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
 #include "MergePatternShape.h"
+#include "NullLiteralType.h"
 #include "PathHopArguments.h"
 #include "Procedure.h"
 #include "ProcedureManager.h"
@@ -726,12 +727,8 @@ mlir::Type listInternalType(mlir::Type chunkType) {
 // The null literal's chunk: nullable with no value type of its own.
 bool isUntypedNullChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        return false;
-    }
 
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
-    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+    return chunk && mlir::isNullLiteralType(chunk.getElementType());
 }
 
 bool isTaggedCellChunk(mlir::Type chunkType) {

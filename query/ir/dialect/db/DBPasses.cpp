@@ -33,6 +33,7 @@
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
 #include "PathHopArguments.h"
+#include "NullLiteralType.h"
 #include "DBOps.h"
 
 #include "BioAssert.h"
@@ -6516,12 +6517,8 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
 
 bool isUntypedNullMask(Value mask) {
     const auto columnType = dyn_cast<ColumnType>(mask.getType());
-    if (!columnType) {
-        return false;
-    }
 
-    const auto nullableType = dyn_cast<storage::NullableType>(columnType.getType());
-    return nullableType && isa<mlir::NoneType>(nullableType.getValueType());
+    return columnType && isNullLiteralType(columnType.getType());
 }
 
 // Rebuilds the conjuncts the fused scan does not carry over its rows, as the mask of the

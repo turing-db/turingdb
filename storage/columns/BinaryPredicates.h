@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "BinaryOperators.h"
 #include "GraphPath.h"
 #include "ID.h"
 #include "NumberOrder.h"
@@ -64,8 +65,7 @@ concept TaggedListOperand =
 
 // A map value, which carries its own null in the entry's tag rather than in a nullable
 // column. Comparing one is three-valued for that reason, so it needs an overload of its
-// own; a null of unknown type is excluded, since IS NULL tests the tag rather than
-// answering unknown about it.
+// own.
 template <typename T>
 concept MapEntryOperand = std::same_as<std::decay_t<T>, MapEntryView>;
 
@@ -92,7 +92,7 @@ template <typename T>
 concept TaggedCellOperand =
     std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
 
-// Every comparison of a cell but the IS NULL test, which reads the tag and always answers
+// Every comparison of a cell but one against a null of unknown type
 template <typename T, typename U>
 concept ComparesATaggedCell = (TaggedCellOperand<T> || TaggedCellOperand<U>) && !HoldsPropertyNull<T, U>;
 
@@ -140,30 +140,14 @@ inline bool holdsAValue(const T& operand) {
     }
 }
 
-template <TypedInternalID IDT>
-inline bool elementIsID(const ListElementView element, const IDT id) {
-    const ListBufferTypeTag tag = element.getTag();
-    const bool holdsAnInteger = tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
-
-    if (holdsAnInteger) {
+template <typename Cell, TypedInternalID IDT>
+inline bool cellIsID(const Cell cell, const IDT id) {
+    if (cellHoldsAnInteger(cell)) {
         const types::UInt64::Primitive value = id.getValue();
-        return element == value;
+        return cell == value;
     }
 
-    return element == id;
-}
-
-template <TypedInternalID IDT>
-inline bool entryIsID(const MapEntryView entry, const IDT id) {
-    const MapBufferTypeTag tag = entry.getValueTag();
-    const bool holdsAnInteger = tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt;
-
-    if (holdsAnInteger) {
-        const types::UInt64::Primitive value = id.getValue();
-        return entry == value;
-    }
-
-    return entry == id;
+    return cell == id;
 }
 
 // The list a map entry holds, absent where it holds anything else, as taggedList answers
@@ -764,9 +748,9 @@ struct TuringEqual {
         using Rhs = std::decay_t<decltype(rhs)>;
 
         if constexpr (TypedInternalID<Lhs>) {
-            return CustomBool {elementIsID(rhs, lhs)};
+            return CustomBool {cellIsID(rhs, lhs)};
         } else if constexpr (TypedInternalID<Rhs>) {
-            return CustomBool {elementIsID(lhs, rhs)};
+            return CustomBool {cellIsID(lhs, rhs)};
         } else {
             return CustomBool {lhs == rhs};
         }
@@ -792,9 +776,9 @@ struct TuringEqual {
         using Rhs = std::decay_t<decltype(rhs)>;
 
         if constexpr (TypedInternalID<Lhs>) {
-            return CustomBool {entryIsID(rhs, lhs)};
+            return CustomBool {cellIsID(rhs, lhs)};
         } else if constexpr (TypedInternalID<Rhs>) {
-            return CustomBool {entryIsID(lhs, rhs)};
+            return CustomBool {cellIsID(lhs, rhs)};
         } else {
             return CustomBool {lhs == rhs};
         }
@@ -1038,7 +1022,7 @@ struct TuringIn {
                     return CustomBool {true};
                 }
             } else if constexpr (TypedInternalID<Scalar>) {
-                if (elementIsID(element, scalar)) {
+                if (cellIsID(element, scalar)) {
                     return CustomBool {true};
                 }
             } else if (element == scalar) {

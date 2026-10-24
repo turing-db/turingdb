@@ -47,6 +47,7 @@
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 #include "PathHopArguments.h"
+#include "NullLiteralType.h"
 #include "IRConstantColumn.h"
 #include "IRLiteralList.h"
 #include "IRValueTypes.h"
@@ -240,12 +241,8 @@ const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
 // its own, so nothing about it says which column would carry a value
 bool isUntypedNullColumn(mlir::Value column) {
     const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    if (!columnType) {
-        return false;
-    }
 
-    const auto nullableType = mlir::dyn_cast<mlir::storage::NullableType>(columnType.getType());
-    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+    return columnType && mlir::isNullLiteralType(columnType.getType());
 }
 
 mlir::Type pathElementsType(mlir::MLIRContext* context, mlir::storage::PathElementsKind kind) {

@@ -215,6 +215,12 @@ inline bool cellHoldsAnInteger(const ListElementView cell) {
     return tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
 }
 
+inline bool cellHoldsAnInteger(const MapEntryView cell) {
+    const MapBufferTypeTag tag = cell.getValueTag();
+
+    return tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt;
+}
+
 /// The integer a cell holds, read where @ref cellHoldsAnInteger answered for it.
 inline int64_t cellInteger(const ListElementView cell) {
     if (cell.getTag() == ListBufferTypeTag::UInt) {

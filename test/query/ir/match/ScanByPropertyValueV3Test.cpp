@@ -83,13 +83,12 @@ TEST_F(ScanByPropertyValueV3Test, inlineConstraintOfAnotherKindMatchesNoRow) {
     runWrite("MATCH (n {name: 'Remy'}) SET n.height = 1.8");
 
     const std::string_view incompatible = "Operands are not valid or compatible types";
-    const std::string_view unevaluable = "Cannot evaluate node property";
 
     expectSortedRows("MATCH (n {name: 32}) RETURN n.name", {});
 
     runQueryExpectingError("MATCH (n {height: 2}) RETURN n.name", incompatible);
     runQueryExpectingError("MATCH (n {height: 1.8}) RETURN n.name", "Equality of types");
-    runQueryExpectingError("MATCH (n {age: 32.0}) RETURN n.name", unevaluable);
+    runQueryExpectingError("MATCH (n {age: 32.0}) RETURN n.name", incompatible);
 
     expectSortedRows("MATCH (n {age: 32}) RETURN n.name", {{"Adam"}, {"Remy"}});
 }
