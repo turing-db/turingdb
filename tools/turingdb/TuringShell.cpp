@@ -1,8 +1,11 @@
 #include "TuringShell.h"
 
-#include <signal.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <stdio.h>
 #include <regex>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -402,6 +405,14 @@ TuringShell::TuringShell(TuringDB& turingDB,
     _mem(mem),
     _lineNoiseHandle(lineNoiseHandle)
 {
+    if (::pipe(_stopPipe) != 0) {
+        panic("Could not create the shell stop pipe: {}", strerror(errno));
+    }
+
+    ::fcntl(_stopPipe[0], F_SETFD, FD_CLOEXEC);
+    ::fcntl(_stopPipe[1], F_SETFD, FD_CLOEXEC);
+    ::fcntl(_stopPipe[1], F_SETFL, O_NONBLOCK);
+
     _localCommands.emplace("q", Command {quitCommand});
     _localCommands.emplace("quit", Command {quitCommand});
     _localCommands.emplace("exit", Command {quitCommand});
@@ -427,19 +438,14 @@ TuringShell::TuringShell(TuringDB& turingDB,
 }
 
 TuringShell::~TuringShell() {
+    ::close(_stopPipe[0]);
+    ::close(_stopPipe[1]);
 }
 
 void TuringShell::startLoop() {
-    _threadID = ::pthread_self();
-
-    // Setup SIGUSR1 signal
-    // Doesn't do anything by default, it only
-    // interrupts ::read() (default unix behaviour)
-    struct sigaction sa {};
-    sa.sa_handler = [](int) {};
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGUSR1, &sa, nullptr);
+    // Without a terminal linenoise reads lines through stdio, and poll() on stdin
+    // cannot see the lines stdio has already buffered
+    setvbuf(stdin, nullptr, _IONBF, 0);
 
     // Prepare prompt
     char* line = nullptr;
@@ -462,17 +468,20 @@ void TuringShell::startLoop() {
     }
 
     while (_running.load()) {
-        errno = 0;
-
         // Async Lineoise API
         _lineNoiseHandle->startEditing(shellPrompt.c_str());
 
         line = linenoiseEditMore;
-        while ((line = linenoiseEditFeed(_lineNoiseHandle->getState())) == linenoiseEditMore) { }
+        while (line == linenoiseEditMore && waitForInput()) {
+            errno = 0;
+            line = linenoiseEditFeed(_lineNoiseHandle->getState());
+        }
 
         _lineNoiseHandle->stopEditing();
 
-        if (line == nullptr) {
+        if (line == linenoiseEditMore) {
+            break;
+        } else if (line == nullptr) {
             if (errno == EAGAIN) {
                 // Ctrl+C -> Just redisplay the prompt
                 fmt::println("If you meant to exit the shell, use 'Ctrl+D' instead.");
@@ -1196,7 +1205,24 @@ void TuringShell::printHelp() const {
 
 void TuringShell::stop() {
     _running.store(false);
-    ::pthread_kill(_threadID, SIGUSR1);
+
+    const char byte = 0;
+    [[maybe_unused]] const ssize_t written = ::write(_stopPipe[1], &byte, 1);
+}
+
+bool TuringShell::waitForInput() {
+    pollfd fds[2] {
+        {STDIN_FILENO, POLLIN, 0},
+        {_stopPipe[0], POLLIN, 0},
+    };
+
+    int ready = ::poll(fds, 2, -1);
+    while (ready < 0 && errno == EINTR) {
+        ready = ::poll(fds, 2, -1);
+    }
+
+    const bool stopRequested = (fds[1].revents & POLLIN) != 0;
+    return !stopRequested;
 }
 
 void TuringShell::connectRemote(const std::string& address, const std::string& port) {

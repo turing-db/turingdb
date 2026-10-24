@@ -7,3 +7,13 @@ target_sources(test_tools_line_noise_handle PRIVATE
     ${CMAKE_SOURCE_DIR}/tools/turingdb/LineNoiseHandle.cpp
     ${CMAKE_SOURCE_DIR}/tools/turingdb/ProtectedLineNoiseSink.cpp)
 target_include_directories(test_tools_line_noise_handle PRIVATE ${CMAKE_SOURCE_DIR}/tools/turingdb)
+
+add_turing_test(test_tools_turing_shell_stop TuringShellStopTest.cpp)
+target_sources(test_tools_turing_shell_stop PRIVATE
+    ${CMAKE_SOURCE_DIR}/tools/turingdb/TuringShell.cpp
+    ${CMAKE_SOURCE_DIR}/tools/turingdb/ShellTable.cpp
+    ${CMAKE_SOURCE_DIR}/tools/turingdb/ShellCompletion.cpp
+    ${CMAKE_SOURCE_DIR}/tools/turingdb/LineNoiseHandle.cpp
+    ${CMAKE_SOURCE_DIR}/tools/turingdb/ProtectedLineNoiseSink.cpp)
+target_include_directories(test_tools_turing_shell_stop PRIVATE ${CMAKE_SOURCE_DIR}/tools/turingdb)
+target_link_libraries(test_tools_turing_shell_stop PRIVATE termcolor)

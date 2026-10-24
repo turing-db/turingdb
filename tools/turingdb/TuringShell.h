@@ -63,13 +63,14 @@ private:
     std::string _remotePort;
     bool _remoteConnected {false};
     bool _quiet {false};
-    pthread_t _threadID {};
+    int _stopPipe[2] {-1, -1};
     std::atomic<bool> _running {true};
     LineNoiseHandle* _lineNoiseHandle {nullptr};
     std::unordered_map<std::string_view, Command> _localCommands;
     ShellCompletion _completion;
     ParameterMap _parameters;
 
+    bool waitForInput();
     void processLine(std::string& line);
     bool processParameterCommand(const std::string& line);
     void setParameter(std::string_view arguments);
