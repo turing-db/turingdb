@@ -82,9 +82,9 @@ TEST_F(EntityComparisonLoweringTest, comparesTwoEdgesWithoutACopy) {
 }
 
 TEST_F(EntityComparisonLoweringTest, testsAMissedNodeForNullWithoutACopy) {
-    expectComparesTheIDColumnAsItStands("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) RETURN f IS NULL", "nl.eq");
+    expectComparesTheIDColumnAsItStands("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) RETURN f IS NULL", "nl.is_null");
 }
 
 TEST_F(EntityComparisonLoweringTest, testsAMissedEdgeForNullWithoutACopy) {
-    expectComparesTheIDColumnAsItStands("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->() RETURN r IS NOT NULL", "nl.neq");
+    expectComparesTheIDColumnAsItStands("MATCH (p:Person) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->() RETURN r IS NOT NULL", "nl.is_not_null");
 }

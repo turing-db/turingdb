@@ -378,16 +378,17 @@ public:
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
 
+    // Whether each row of a column holds no value (nl.is_null) or one (nl.is_not_null), as a
+    // mask; a constant column gives a constant answer
+    template <bool TESTS_NULL>
+    static NLUnaryFn selectNullTest(const Column* operand, LocalMemory* memory, Column*& result);
+
     // Whether each row of a CASE condition is false or null (nl.is_not_true), as a mask
     static NLUnaryFn selectIsNotTrue(const Column* operand, bool untypedNull, LocalMemory* memory, Column*& result);
-    // Read a node, edge or walk handle column as a nullable column of its IDs' integers, an invalid ID
-    // - what an OPTIONAL MATCH leaves - reading as the null. The entity sibling of
+    // Read a node or edge column as a nullable column of its IDs' integers, an invalid ID -
+    // what an OPTIONAL MATCH leaves - reading as the null. The entity sibling of
     // selectToNullable, which reads a scalar value column.
     static NLUnaryFn selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
-
-    // Read a path column as a nullable column of its entry counts, the empty path an
-    // OPTIONAL MATCH leaves reading as the null
-    static NLUnaryFn selectPathToNullable(LocalMemory* memory, Column*& result);
 
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 

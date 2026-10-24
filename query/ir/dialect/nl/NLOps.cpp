@@ -53,6 +53,22 @@ Type getNullableChunkType(MLIRContext* context, Type valueType) {
     return ChunkType::get(context, storage::NullableType::get(context, valueType));
 }
 
+bool isUntypedNullChunk(Value chunk) {
+    const auto chunkType = dyn_cast<ChunkType>(chunk.getType());
+    const auto nullable = chunkType ? dyn_cast<storage::NullableType>(chunkType.getElementType()) : storage::NullableType();
+
+    return nullable && isa<NoneType>(nullable.getValueType());
+}
+
+LogicalResult verifyComparesNoNullLiteral(Operation* op, Value lhs, Value rhs) {
+    if (isUntypedNullChunk(lhs) || isUntypedNullChunk(rhs)) {
+        return op->emitOpError("compares against the null literal, which is null on every row: "
+                               "nl.is_null tests a chunk for null");
+    }
+
+    return success();
+}
+
 // Whether a key read can be answered over this chunk: a chunk of maps, or one of tagged
 // cells, which a read of a nested container hands back and whose row says what it holds
 bool holdsAMapPerRow(Type chunkType) {
@@ -632,6 +648,14 @@ LogicalResult SkipTruncate::inferReturnTypes(MLIRContext* context,
     }
 
     return success();
+}
+
+LogicalResult Eq::verify() {
+    return verifyComparesNoNullLiteral(getOperation(), getLhs(), getRhs());
+}
+
+LogicalResult Neq::verify() {
+    return verifyComparesNoNullLiteral(getOperation(), getLhs(), getRhs());
 }
 
 LogicalResult MakePath::verify() {

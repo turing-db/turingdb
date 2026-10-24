@@ -10,7 +10,6 @@
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 
-#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 namespace db {

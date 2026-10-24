@@ -381,6 +381,26 @@ bool textOfConstOptionalBool(const Column* chunk, size_t rowIndex, std::string& 
     return true;
 }
 
+bool textOfPlainBool(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnVector<CustomBool>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = column->getRaw()[rowIndex] ? "true" : "false";
+    return true;
+}
+
+bool textOfConstBool(const Column* chunk, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<CustomBool>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = column->getRaw() ? "true" : "false";
+    return true;
+}
+
 template <typename Primitive>
 bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<Primitive>*>(chunk);
@@ -506,6 +526,10 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
         return text;
     } else if (textOfConstOptionalBool(chunk, rowIndex, text)) {
         return text;
+    } else if (textOfPlainBool(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstBool(chunk, text)) {
+        return text;
     } else if (textOfConst<int64_t>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfConst<uint64_t>(chunk, rowIndex, text)) {
@@ -538,5 +562,5 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
         return text;
     }
 
-    throw std::runtime_error("StringRowSink cannot read this column kind as text");
+    throw std::runtime_error(fmt::format("StringRowSink cannot read this column kind as text: {}", chunk->getTypeName()));
 }

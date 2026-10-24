@@ -2704,12 +2704,16 @@ def Eq : NLOp<"eq", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> 
   let summary = "Row-wise equality of two value chunks";
   let description = [{
       %r = nl.eq %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+
+      Neither operand is the null literal; a test for a null is nl.is_null.
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+
+  let hasVerifier = 1;
 }
 
 def Neq : NLOp<"neq", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
@@ -2722,6 +2726,37 @@ def Neq : NLOp<"neq", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+
+  let hasVerifier = 1;
+}
+
+def IsNull : NLOp<"is_null", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether a chunk holds no value";
+  let description = [{
+      Imperative counterpart of db.is_null, over any chunk as it stands: an absent value, an
+      invalid ID, the null path and a cell holding null are null, and the result never is.
+
+      %r = nl.is_null %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<i1>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
+def IsNotNull : NLOp<"is_not_null", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether a chunk holds a value";
+  let description = [{
+      Imperative counterpart of db.is_not_null, the negation of nl.is_null.
+
+      %r = nl.is_not_null %x : (!nl.chunk<!storage.node_id>) -> !nl.chunk<i1>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
 def Gt : NLOp<"gt", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
