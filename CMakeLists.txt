@@ -194,6 +194,27 @@ if(APPLE AND NOT NIX_BUILD)
     endif()
 endif()
 
+# Compile through ccache and link with mold when they are available
+option(TURING_USE_CCACHE "Compile through ccache when it is installed" ON)
+if(TURING_USE_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+        set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+        message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
+    endif()
+endif()
+
+option(TURING_USE_MOLD "Link with mold when the compiler supports it" ON)
+if(TURING_USE_MOLD AND NOT APPLE)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=mold" TURING_LINKER_SUPPORTS_MOLD)
+    if(TURING_LINKER_SUPPORTS_MOLD)
+        add_link_options(-fuse-ld=mold)
+        message(STATUS "Using mold linker")
+    endif()
+endif()
+
 # Create compilation database and symlink in the src folder
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 execute_process(

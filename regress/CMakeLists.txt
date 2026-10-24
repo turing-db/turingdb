@@ -121,4 +121,5 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/run_regress.sh
         DESTINATION regress)
 
 add_custom_target(run_regress bash ${CMAKE_INSTALL_PREFIX}/regress/run_regress.sh
-                  WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/regress)
+                  WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/regress
+                  USES_TERMINAL)

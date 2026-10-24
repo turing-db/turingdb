@@ -59,7 +59,7 @@ jobs:
     # heavy LLVM/MLIR compiles trips the OOM killer ("Killed signal terminated
     # program cc1plus"). BUILD_JOBS feeds dependencies.sh; CTEST_PARALLEL_LEVEL
     # caps the test run. The wheel build ignores CMAKE_BUILD_PARALLEL_LEVEL and
-    # runs make -j nproc.
+    # runs ninja -j nproc.
     env:
       BUILD_JOBS: 4
       CMAKE_BUILD_PARALLEL_LEVEL: 4
@@ -249,7 +249,7 @@ jobs:
     - name: Run unit tests
       run: |
         cd build
-        make test ARGS="--output-on-failure"
+        ctest --output-on-failure
 
     # Every unit test binary links the engine and MLIR statically, about 130 MB each:
     # the 631 of them take 63 GB, and no later step runs them. Keeping them through

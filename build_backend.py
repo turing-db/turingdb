@@ -83,8 +83,7 @@ def _run_cmake_build():
 
     cmake_args = [
         "cmake",
-        "-G", "Unix Makefiles",
-        "-DCMAKE_MAKE_PROGRAM=/usr/bin/make",
+        "-G", "Ninja",
         "-DCMAKE_BUILD_TYPE=Release",
         # Pin CMake's FindPython to the interpreter building the wheel, so the
         # nanobind modules get the same ABI tag as the wheel itself.
@@ -99,8 +98,8 @@ def _run_cmake_build():
     cmake_args.append(str(source_dir))
 
     subprocess.check_call(cmake_args, cwd=str(build_dir))
-    subprocess.check_call(["make", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
-    subprocess.check_call(["make", "install"], cwd=str(build_dir))
+    subprocess.check_call(["ninja", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
+    subprocess.check_call(["ninja", "install"], cwd=str(build_dir))
 
 
 def _check_native_modules_abi(*module_dirs: Path) -> None:
@@ -116,7 +115,7 @@ def _check_native_modules_abi(*module_dirs: Path) -> None:
         raise RuntimeError(
             f"Native module(s) built for a different Python ABI: {names}. "
             f"This interpreter expects '*{expected_suffix}'. Rebuild against it:\n"
-            f"  cd build && cmake -DPython_EXECUTABLE={sys.executable} .. && make && make install\n"
+            f"  cd build && cmake -G Ninja -DPython_EXECUTABLE={sys.executable} .. && ninja && ninja install\n"
             "then delete the stale module file(s) and run the wheel build again."
         )
 
@@ -141,7 +140,7 @@ def _ensure_executables_built() -> dict[str, Path]:
         raise RuntimeError(
             f"Cannot build turingdb: CMakeLists.txt not found and pre-built "
             f"executable(s) missing ({missing}). Please build from the source repository:\n"
-            "  cd build && cmake .. && make -j8 && make install\n"
+            "  cd build && cmake -G Ninja .. && ninja && ninja install\n"
             "Then run the wheel build again."
         )
 

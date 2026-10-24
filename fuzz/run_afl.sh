@@ -198,11 +198,14 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
     #            would otherwise confuse find_package() checks (e.g. OpenMP).
     # AFL_BUILD: tells CMakeLists.txt to skip -fcf-protection=none, which afl-cc
     #            misinterprets as CFI sanitizer (adds -flto, breaking PCGUARD).
+    # TURING_USE_CCACHE: afl-cc's output depends on AFL_* variables, which
+    #                    ccache does not hash.
     export AFL_PATH="$AFL_SRC"
     AFL_QUIET=1 cmake "$SCRIPT_DIR" \
         -DCMAKE_C_COMPILER="$AFL_CC_BIN" \
         -DCMAKE_CXX_COMPILER="$AFL_CXX_BIN" \
         -DAFL_BUILD=ON \
+        -DTURING_USE_CCACHE=OFF \
         2>&1 | tail -5
     make -j$(nproc) "${HARNESSES[@]}" 2>&1 | tail -10
     if [[ $? -ne 0 ]]; then
