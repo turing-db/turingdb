@@ -39,6 +39,22 @@ TEST_F(ConversionArgumentTypesTest, toStringOfADuration) {
     expectRows("RETURN toString(duration(90000000)), toStringOrNull(duration(3600000000))", {{"PT1M30S", "PT1H"}});
 }
 
+TEST_F(ConversionArgumentTypesTest, toStringOfABoundTemporal) {
+    expectRows("WITH datetime(0) AS d, duration(90000000) AS e RETURN toString(d), toStringOrNull(d), toString(e), toStringOrNull(e)",
+               {{"1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z", "PT1M30S", "PT1M30S"}});
+}
+
+TEST_F(ConversionArgumentTypesTest, toStringOfATemporalProperty) {
+    applyWrite("CREATE (:Event {at: datetime(0), lasts: duration(90000000)}), (:Event)");
+    expectRows("MATCH (e:Event) RETURN toString(e.at), toStringOrNull(e.lasts)",
+               {{"1970-01-01T00:00:00Z", "PT1M30S"}, {"null", "null"}});
+}
+
+TEST_F(ConversionArgumentTypesTest, toStringOfAnUnwoundTemporal) {
+    expectRows("UNWIND [datetime(0), duration(90000000)] AS v RETURN toString(v), toStringOrNull(v)",
+               {{"1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z"}, {"PT1M30S", "PT1M30S"}});
+}
+
 TEST_F(ConversionArgumentTypesTest, typedArgumentsConvertAsTaggedCellsDo) {
     expectRows("UNWIND [true, 0] AS v RETURN toIntegerOrNull(v), toBooleanOrNull(v)", {{"1", "true"}, {"0", "false"}});
     expectRows("RETURN toIntegerOrNull(true), toBooleanOrNull(true), toIntegerOrNull(0), toBooleanOrNull(0)",
