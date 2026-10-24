@@ -4,6 +4,7 @@
 #include <argparse.hpp>
 
 #include <stdlib.h>
+#include <stop_token>
 
 #include "LineNoiseHandle.h"
 #include "TuringConfig.h"
@@ -124,14 +125,10 @@ int StartCmd::execute() {
         // read from the TURINGDB_AUTH_TOKEN environment variable; clients
         // present it directly in the Authorization header. The Authenticator
         // must outlive the server, so it is declared before it: locals are
-        // destroyed in reverse declaration order, so on any path (including an
-        // exception that skips the explicit server->reset() below) the server
+        // destroyed in reverse declaration order, so on any path the server
         // is torn down before the Authenticator it dereferences.
         std::unique_ptr<Authenticator> authenticator;
-
-        std::unique_ptr<TuringServer> server;
-        std::unique_ptr<TuringShell> shell;
-        std::unique_ptr<VisualizerProxy> proxy;
+        std::stop_source stopSource;
 
         // Run TuringDB
         LocalMemory mem;
@@ -149,12 +146,8 @@ int StartCmd::execute() {
             spdlog::info("Authentication enabled (API key from TURINGDB_AUTH_TOKEN)");
         }
 
-        config.setOnStopRequest([&] {
-            if (shell) {
-                shell->stop();
-            } else if (server) {
-                server->stop();
-            }
+        config.setOnStopRequest([&stopSource] {
+            stopSource.request_stop();
         });
 
         // Delete existing `default` graph if requested
@@ -193,39 +186,34 @@ int StartCmd::execute() {
         spdlog::info("TuringDB started");
         spdlog::info("  - Home directory: {}", turingDir.get());
 
+        std::unique_ptr<VisualizerProxy> proxy;
         if (_launchUI) {
             proxy = std::make_unique<VisualizerProxy>(_address, _uiPort, _port);
             proxy->start();
         }
 
-        server = std::make_unique<TuringServer>(serverConfig, turingDB);
-        server->start();
+        TuringServer server(serverConfig, turingDB);
+        server.start();
+
+        if (stopSource.stop_requested()) {
+            throw TuringException("TuringDB was stopped before it was ready");
+        }
 
         if (_demonize) {
+            const std::stop_callback stopServer(stopSource.get_token(), [&server] { server.stop(); });
             readiness.notifyReady();
-            server->wait();
-            if (proxy) {
-                proxy->stop();
-            }
-            server.reset();
+            server.wait();
         } else {
             LineNoiseHandle lineNoiseHandle;
             lineNoiseHandle.initProtectedLogger(consoleSink);
-            shell = std::make_unique<TuringShell>(turingDB, &mem, &lineNoiseHandle);
+            TuringShell shell(turingDB, &mem, &lineNoiseHandle);
 
             if (!_graphsToLoad.empty()) {
-                shell->setGraphName(_graphsToLoad.front());
+                shell.setGraphName(_graphsToLoad.front());
             }
 
-            shell->startLoop();
-            shell.reset();
-
-            if (proxy) {
-                proxy->stop();
-            }
-            server->stop();
-            server->wait();
-            server.reset();
+            const std::stop_callback stopShell(stopSource.get_token(), [&shell] { shell.stop(); });
+            shell.startLoop();
         }
 
     } catch (TuringException& e) {
