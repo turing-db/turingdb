@@ -277,10 +277,6 @@ ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
     return left;
 }
 
-bool isEntity(EvaluatedType type) {
-    return type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern;
-}
-
 }
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
@@ -2085,15 +2081,11 @@ EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* b
 void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
     const EvaluatedType type = subject->getType();
 
-    const bool isScalar = type == EvaluatedType::Null
-                          || namesATaggedCell(type)
-                          || convertibleToValueType(type);
-
-    if (isScalar || isEntity(type)) {
+    if (type == EvaluatedType::Null || namesAnEqualityOperand(type)) {
         return;
     }
 
-    throwError(fmt::format("The subject of a CASE must be a scalar, a node or an edge, not '{}'",
+    throwError(fmt::format("The subject of a CASE must be a value, not '{}'",
                            EvaluatedTypeName::value(type)),
                subject);
 }

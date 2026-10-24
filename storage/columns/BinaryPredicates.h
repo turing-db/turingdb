@@ -825,6 +825,16 @@ struct TuringEqual {
         }
     }
 
+    // Two paths are equal when they run through the same nodes and edges. The null path an
+    // OPTIONAL MATCH leaves compares as a null.
+    std::optional<CustomBool> operator()(const GraphPath& a, const GraphPath& b) {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
+            return std::nullopt;
+        }
+
+        return CustomBool {a == b};
+    }
+
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
         const bool equal =
             (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());

@@ -166,12 +166,13 @@ inline bool namesATruthValue(EvaluatedType e) {
     return e == EvaluatedType::Bool || e == EvaluatedType::Null || e == EvaluatedType::Any;
 }
 
-// The types = and <> take: every value and every entity
+// The types = and <> take: every value, every entity and every path
 inline bool namesAnEqualityOperand(EvaluatedType e) {
     return namesAComparableValue(e)
         || namesATaggedCell(e)
         || e == EvaluatedType::NodePattern
-        || e == EvaluatedType::EdgePattern;
+        || e == EvaluatedType::EdgePattern
+        || e == EvaluatedType::GraphPath;
 }
 
 // Whether both types are numbers, which = and <> compare by value: 32 equals 32.0
@@ -185,12 +186,16 @@ inline bool comparesAsNumbers(EvaluatedType a, EvaluatedType b) {
 // Whether two types can never hold equal values, which makes an equality between them
 // false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - nor is a
 // string against a char, which compare as the characters they carry, nor an entity against
-// the integer its id is. A tagged cell holds the row's type, so it is disjoint from none.
+// the integer its id is. A tagged cell holds the row's type, so the one type it is disjoint
+// from is a path, which no cell holds.
 inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
     const bool comparesACell = namesATaggedCell(a) || namesATaggedCell(b);
+    const bool comparesAPath = a == EvaluatedType::GraphPath || b == EvaluatedType::GraphPath;
 
-    if (!namesAnEqualityOperand(a) || !namesAnEqualityOperand(b) || a == b || comparesACell) {
+    if (!namesAnEqualityOperand(a) || !namesAnEqualityOperand(b) || a == b) {
         return false;
+    } else if (comparesACell) {
+        return comparesAPath;
     }
 
     const TypePairBitset pair(a, b);
@@ -255,7 +260,7 @@ inline EvaluatedType commonType(EvaluatedType carried, EvaluatedType value) {
 // The types <, <=, > and >= take: every value, entities and paths included, though only
 // numbers, strings, booleans, datetimes, durations and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {
-    return namesAnEqualityOperand(e) || e == EvaluatedType::GraphPath;
+    return namesAnEqualityOperand(e);
 }
 
 // The class a type is ordered in, or nullopt for a type with no order: a map, an
