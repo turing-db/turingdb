@@ -9648,6 +9648,30 @@ NLUnaryFunctionKernel NLExecutor::selectKeys(const Column* input, bool inputNull
     throw IRException("keys() reads a node, a relationship or a map column");
 }
 
+NLUnaryFunctionKernel NLExecutor::selectLabels(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<NodeID>(input)) {
+        return selectFunction<LabelsFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<NLTaggedLabelsFunction<ListElementView>>(input, inputNullable, memory, result);
+    } else if (readsMapValues(input)) {
+        return selectMapValueFunction<NLTaggedLabelsFunction<MapEntryView>>(input, memory, result);
+    }
+
+    throw IRException("labels() reads a node column");
+}
+
+NLUnaryFunctionKernel NLExecutor::selectEdgeType(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<EdgeID>(input)) {
+        return selectFunction<EdgeTypesFunction>(input, inputNullable, memory, result);
+    } else if (readsTaggedCells(input)) {
+        return selectTaggedCellFunction<NLTaggedEdgeTypeFunction<ListElementView>>(input, inputNullable, memory, result);
+    } else if (readsMapValues(input)) {
+        return selectMapValueFunction<NLTaggedEdgeTypeFunction<MapEntryView>>(input, memory, result);
+    }
+
+    throw IRException("type() reads a relationship column");
+}
+
 NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<NodeID>(input)) {
         return selectFunction<NLPropertiesFunction<NodeID>>(input, inputNullable, memory, result);

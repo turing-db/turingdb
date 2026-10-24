@@ -3,6 +3,7 @@
 #include "list/ListBufferTypeTag.h"
 #include "map/MapBufferTypeTag.h"
 
+#include "NLExecutionContext.h"
 #include "NLStepBuffers.h"
 
 using namespace db;
@@ -106,6 +107,64 @@ std::optional<ListView> NLTaggedKeysFunction<Cell>::operator()(const std::option
 }
 
 template <typename Cell>
+NLTaggedLabelsFunction<Cell>::NLTaggedLabelsFunction(NLExecutionContext* context, NLStepBuffers* memory)
+    : _labels(*context->getView(), &memory->listBuffer(), context->getWriteBuffer())
+{
+}
+
+template <typename Cell>
+NLTaggedLabelsFunction<Cell>::~NLTaggedLabelsFunction() {
+}
+
+template <typename Cell>
+std::optional<ListView> NLTaggedLabelsFunction<Cell>::operator()(const Cell cell) {
+    using Tag = decltype(cellTag(cell));
+    const Tag tag = cellTag(cell);
+
+    if (tag == Tag::NodeID) {
+        return _labels(cellValue<NodeID>(cell));
+    } else if (tag == Tag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError("labels", "a node");
+}
+
+template <typename Cell>
+std::optional<ListView> NLTaggedLabelsFunction<Cell>::operator()(const std::optional<Cell>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+template <typename Cell>
+NLTaggedEdgeTypeFunction<Cell>::NLTaggedEdgeTypeFunction(NLExecutionContext* context, NLStepBuffers* memory)
+    : _edgeType(*context->getView(), &memory->stringBuffer(), context->getWriteBuffer())
+{
+}
+
+template <typename Cell>
+NLTaggedEdgeTypeFunction<Cell>::~NLTaggedEdgeTypeFunction() {
+}
+
+template <typename Cell>
+std::optional<types::String::Primitive> NLTaggedEdgeTypeFunction<Cell>::operator()(const Cell cell) {
+    using Tag = decltype(cellTag(cell));
+    const Tag tag = cellTag(cell);
+
+    if (tag == Tag::EdgeID) {
+        return _edgeType(cellValue<EdgeID>(cell));
+    } else if (tag == Tag::Null) {
+        return std::nullopt;
+    }
+
+    throwCellTypeError("type", "a relationship");
+}
+
+template <typename Cell>
+std::optional<types::String::Primitive> NLTaggedEdgeTypeFunction<Cell>::operator()(const std::optional<Cell>& cell) {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+template <typename Cell>
 NLTaggedPropertiesFunction<Cell>::NLTaggedPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory)
     : _nodeProperties(context, memory),
     _edgeProperties(context, memory)
@@ -147,6 +206,10 @@ template class NLPropertiesFunction<NodeID>;
 template class NLPropertiesFunction<EdgeID>;
 template class NLTaggedKeysFunction<ListElementView>;
 template class NLTaggedKeysFunction<MapEntryView>;
+template class NLTaggedLabelsFunction<ListElementView>;
+template class NLTaggedLabelsFunction<MapEntryView>;
+template class NLTaggedEdgeTypeFunction<ListElementView>;
+template class NLTaggedEdgeTypeFunction<MapEntryView>;
 template class NLTaggedPropertiesFunction<ListElementView>;
 template class NLTaggedPropertiesFunction<MapEntryView>;
 

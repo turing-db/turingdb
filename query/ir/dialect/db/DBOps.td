@@ -2860,8 +2860,8 @@ class NumberFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir
 class TextFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::StringType">;
 class ListFunctionOp<string mnemonic> : TypedUnaryFunctionOp<mnemonic, "::mlir::storage::ListType">;
 
-def Labels : UnaryFunctionOp<"labels">;
-def EdgeType : UnaryFunctionOp<"edge_type">;
+def Labels : TypedUnaryFunctionOp<"labels", "::mlir::storage::NodeIDType">;
+def EdgeType : TypedUnaryFunctionOp<"edge_type", "::mlir::storage::EdgeIDType">;
 def Keys : TypedUnaryFunctionOp<"keys", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 def PropertyMap : TypedUnaryFunctionOp<"properties", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType, ::mlir::storage::MapType">;
 

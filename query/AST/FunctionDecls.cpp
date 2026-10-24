@@ -37,9 +37,25 @@ void FunctionDecls::initDefault() {
     type->setArguments({EvaluatedType::EdgePattern});
     type->setReturnTypes({{EvaluatedType::String}});
 
+    FunctionSignature* typeCell = createFunction("type");
+    typeCell->setArguments({EvaluatedType::Any});
+    typeCell->setReturnTypes({{EvaluatedType::String}});
+
+    FunctionSignature* typeMapValue = createFunction("type");
+    typeMapValue->setArguments({EvaluatedType::MapValue});
+    typeMapValue->setReturnTypes({{EvaluatedType::String}});
+
     FunctionSignature* labels = createFunction("labels");
     labels->setArguments({EvaluatedType::NodePattern});
     labels->setReturnTypes({{EvaluatedType::List}});
+
+    FunctionSignature* labelsCell = createFunction("labels");
+    labelsCell->setArguments({EvaluatedType::Any});
+    labelsCell->setReturnTypes({{EvaluatedType::List}});
+
+    FunctionSignature* labelsMapValue = createFunction("labels");
+    labelsMapValue->setArguments({EvaluatedType::MapValue});
+    labelsMapValue->setReturnTypes({{EvaluatedType::List}});
 
     // The ends of an edge, in the order the graph stores it: a hop walked backwards or
     // undirected binds the same edge, so its start is the node the edge leaves whichever

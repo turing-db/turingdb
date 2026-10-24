@@ -525,6 +525,8 @@ public:
     static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectKeys(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectLabels(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectEdgeType(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
     static NLUnaryFunctionKernel selectProperties(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     template <template <typename> typename NumberFunctor>

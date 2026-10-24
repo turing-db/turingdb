@@ -126,8 +126,8 @@ bool yieldsReducedRowChunk(mlir::Value column) {
 using NLUnaryFunctionSelector = NLUnaryFunctionKernel (*)(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctionSelectors = {
-    {"nl.labels",     &NLExecutor::selectFunction<LabelsFunction>},
-    {"nl.edge_type",  &NLExecutor::selectFunction<EdgeTypesFunction>},
+    {"nl.labels",     &NLExecutor::selectLabels},
+    {"nl.edge_type",  &NLExecutor::selectEdgeType},
     {"nl.keys",       &NLExecutor::selectKeys},
     {"nl.properties", &NLExecutor::selectProperties},
     {"nl.start_node", &NLExecutor::selectFunction<StartNodeFunction>},
