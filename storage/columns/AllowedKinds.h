@@ -193,6 +193,7 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
         ListElementKindPairs<types::DateTime::Primitive>::Pairs,
         ListElementKindPairs<types::Duration::Primitive>::Pairs,
+        ListElementKindPairs<types::Embedding::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, ListElementView>::Pairs,
         ListElementKindPairs<ListView>::Pairs,
         ListElementKindPairs<MapView>::Pairs,
@@ -207,9 +208,12 @@ struct PairRestrictions<Op> {
         MapEntryKindPairs<types::Bool::Primitive>::Pairs,
         MapEntryKindPairs<types::DateTime::Primitive>::Pairs,
         MapEntryKindPairs<types::Duration::Primitive>::Pairs,
+        MapEntryKindPairs<types::Embedding::Primitive>::Pairs,
         MapEntryKindPairs<ListView>::Pairs,
         MapEntryKindPairs<MapView>::Pairs,
         MapEntryKindPairs<ListElementView>::Pairs,
+        MapEntryKindPairs<NodeID>::Pairs,
+        MapEntryKindPairs<EdgeID>::Pairs,
         std::tuple<KindPair<MapEntryView, MapEntryView>>,
 
         // A loaded CSV field owns its characters, so a comparison against a string
@@ -227,6 +231,8 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<EdgeID, EdgeID>::Pairs,
 
         std::tuple<
+            KindPair<GraphPath, GraphPath>,
+
             // Filtering by ID or labels/edge type
             KindPair<LabelSetID, LabelSetID>,
             KindPair<EdgeTypeID, EdgeTypeID>,

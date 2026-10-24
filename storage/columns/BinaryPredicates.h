@@ -153,6 +153,19 @@ inline bool elementIsID(const ListElementView element, const IDT id) {
     return element == id;
 }
 
+template <TypedInternalID IDT>
+inline bool entryIsID(const MapEntryView entry, const IDT id) {
+    const MapBufferTypeTag tag = entry.getValueTag();
+    const bool holdsAnInteger = tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt;
+
+    if (holdsAnInteger) {
+        const types::UInt64::Primitive value = id.getValue();
+        return entry == value;
+    }
+
+    return entry == id;
+}
+
 // The list a map entry holds, absent where it holds anything else, as taggedList answers
 // for a list element
 inline std::optional<ListView> entryList(const MapEntryView entry) {
@@ -775,7 +788,26 @@ struct TuringEqual {
             return (*this)(*lhsList, *rhsList);
         }
 
-        return CustomBool {lhs == rhs};
+        using Lhs = std::decay_t<decltype(lhs)>;
+        using Rhs = std::decay_t<decltype(rhs)>;
+
+        if constexpr (TypedInternalID<Lhs>) {
+            return CustomBool {entryIsID(rhs, lhs)};
+        } else if constexpr (TypedInternalID<Rhs>) {
+            return CustomBool {entryIsID(lhs, rhs)};
+        } else {
+            return CustomBool {lhs == rhs};
+        }
+    }
+
+    // Two paths are equal when they run through the same nodes and edges. The null path an
+    // OPTIONAL MATCH leaves compares as a null.
+    std::optional<CustomBool> operator()(const GraphPath& a, const GraphPath& b) {
+        if (!holdsAValue(a) || !holdsAValue(b)) {
+            return std::nullopt;
+        }
+
+        return CustomBool {a == b};
     }
 
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {

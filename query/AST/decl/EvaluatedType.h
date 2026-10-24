@@ -158,33 +158,41 @@ inline bool namesAComparableValue(EvaluatedType e) {
         || e == EvaluatedType::Map;
 }
 
-// Whether two types can never hold equal values, which makes an equality between them
-// false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - and
-// neither is a string against a char, which compare as the characters they carry.
+inline bool namesATaggedCell(EvaluatedType e) {
+    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
+}
+
+// Every value a query can hold, entities and paths included: what =, <> and the orderings
+// take, though only numbers, strings, booleans, datetimes, durations and lists have an order
+inline bool namesAValue(EvaluatedType e) {
+    return namesAComparableValue(e)
+        || namesATaggedCell(e)
+        || e == EvaluatedType::NodePattern
+        || e == EvaluatedType::EdgePattern
+        || e == EvaluatedType::GraphPath;
+}
+
+// Whether two types can never hold equal values, making an equality between them false on
+// every row. 32 equals 32.0, a string a char, and a node or an edge the integer its ID is; a
+// list or map cell may hold any value but a path, so the row says whether it equals one.
 inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
-    if (!namesAComparableValue(a) || !namesAComparableValue(b) || a == b) {
+    if (!namesAValue(a) || !namesAValue(b) || a == b) {
         return false;
     }
 
     const TypePairBitset pair(a, b);
     const bool bothNumeric = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double);
     const bool bothTextual = pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char);
+    const bool entityAgainstID = pair == TypePairBitset(EvaluatedType::NodePattern, EvaluatedType::Integer)
+                              || pair == TypePairBitset(EvaluatedType::EdgePattern, EvaluatedType::Integer);
+    const bool readsACell = namesATaggedCell(a) || namesATaggedCell(b);
+    const bool readsAPath = a == EvaluatedType::GraphPath || b == EvaluatedType::GraphPath;
 
-    return !bothNumeric && !bothTextual;
-}
+    if (readsACell) {
+        return readsAPath;
+    }
 
-inline bool namesATaggedCell(EvaluatedType e) {
-    return e == EvaluatedType::ListItem || e == EvaluatedType::MapValue;
-}
-
-// The types <, <=, > and >= take: every value, entities and paths included, though only
-// numbers, strings, booleans, datetimes, durations and lists have an order
-inline bool namesAnOrderingOperand(EvaluatedType e) {
-    return namesAComparableValue(e)
-        || namesATaggedCell(e)
-        || e == EvaluatedType::NodePattern
-        || e == EvaluatedType::EdgePattern
-        || e == EvaluatedType::GraphPath;
+    return !bothNumeric && !bothTextual && !entityAgainstID;
 }
 
 // The class a type is ordered in, or nullopt for a type with no order: a map, an
@@ -215,7 +223,7 @@ inline std::optional<EvaluatedType> orderClassOf(EvaluatedType e) {
 // values of one class only. A tagged cell holds the row's type, so it can order against
 // another cell or any type that has an order.
 inline bool ordersAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
-    if (!namesAnOrderingOperand(a) || !namesAnOrderingOperand(b)) {
+    if (!namesAValue(a) || !namesAValue(b)) {
         return false;
     }
 

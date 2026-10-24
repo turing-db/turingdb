@@ -604,6 +604,21 @@ bool db::operator==(const MapEntryView entry, const types::Duration::Primitive v
         && entry.getValueAs<types::Duration::Primitive>() == value;
 }
 
+bool db::operator==(const MapEntryView entry, const types::Embedding::Primitive value) {
+    return entry.getValueTag() == MapBufferTypeTag::Embedding
+        && EmbeddingEqual {}(entry.getValueAs<types::Embedding::Primitive>(), value);
+}
+
+bool db::operator==(const MapEntryView entry, const NodeID value) {
+    return entry.getValueTag() == MapBufferTypeTag::NodeID
+        && entry.getValueAs<NodeID>() == value;
+}
+
+bool db::operator==(const MapEntryView entry, const EdgeID value) {
+    return entry.getValueTag() == MapBufferTypeTag::EdgeID
+        && entry.getValueAs<EdgeID>() == value;
+}
+
 bool db::operator==(const MapEntryView entry, const ListView value) {
     return entry.getValueTag() == MapBufferTypeTag::ListView
         && entry.getValueAs<ListView>() == value;

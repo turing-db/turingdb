@@ -157,16 +157,8 @@ private:
     // already share, reporting a pair no column type can hold
     EvaluatedType unifyCaseBranch(EvaluatedType carried, const Expr* branch);
 
-    // Rejects a CASE subject no column holds. A node and an edge are subjects of their
-    // own: the MLIR engine binds one, and an OPTIONAL MATCH can leave it null
+    // Rejects a CASE subject that is not a value
     void requireCaseSubject(const Expr* subject) const;
-
-    // Rejects a value a CASE compares its scalar subject against that no column holds
-    void requireCaseValue(const Expr* value) const;
-
-    // Rejects a @param test the entity @param subject does not compare against: an
-    // ordering branch, or a value that is neither an entity of its kind nor an id
-    void requireComparableToEntity(const Expr* subject, const CaseExpr::Test& test) const;
 
     // One WHEN value of @param branch, read as a predicate when the CASE has no subject
     // and as something to compare that subject against when it has one
