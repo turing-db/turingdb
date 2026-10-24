@@ -1022,6 +1022,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCase(caseMerge, &NLExecutor::runCaseMerge, body);
         } else if (nl::IsNotTrue isNotTrue = mlir::dyn_cast<nl::IsNotTrue>(operation)) {
             translateIsNotTrue(isNotTrue, body);
+        } else if (nl::IsNull isNull = mlir::dyn_cast<nl::IsNull>(operation)) {
+            translateNullTest(isNull, body);
+        } else if (nl::IsNotNull isNotNull = mlir::dyn_cast<nl::IsNotNull>(operation)) {
+            translateNullTest(isNotNull, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
             translateMakeList(makeList, body);
         } else if (nl::ListSlice listSlice = mlir::dyn_cast<nl::ListSlice>(operation)) {
@@ -3467,16 +3471,13 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     // read row by row for validity instead of copied straight across
     const auto operandChunk = mlir::cast<nl::ChunkType>(operandValue.getType());
     const mlir::Type operandElement = operandChunk.getElementType();
-    const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathRefType>(operandElement);
-    const bool readsAPath = mlir::isa<storage::PathType>(operandElement);
+    const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(operandElement);
     const bool readsAMask = isMaskElementType(operandElement);
 
     Column* result = nullptr;
     NLUnaryFn fn = nullptr;
     if (readsAnEntity) {
         fn = NLExecutor::selectEntityToNullable(chunkKindFromElementType(operandElement), _memory, result);
-    } else if (readsAPath) {
-        fn = NLExecutor::selectPathToNullable(_memory, result);
     } else if (readsAMask) {
         fn = NLExecutor::selectMaskToNullable(_memory, result);
     } else {
@@ -4133,6 +4134,19 @@ void NLTranslator::translateToAny(nl::ToAny toAny, NLStmtContainer* body) {
                                                                  selectListItemRead(operandValue.getType()),
                                                                  _program->allocStepBuffers());
     body->emplaceStmt(&NLExecutor::runToAny, data);
+}
+
+template <typename NullTestOp>
+void NLTranslator::translateNullTest(NullTestOp nullTest, NLStmtContainer* body) {
+    constexpr bool TESTS_NULL = std::is_same_v<NullTestOp, nl::IsNull>;
+    const Column* operand = getColumn(nullTest.getOperand());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectNullTest<TESTS_NULL>(operand, _memory, result);
+    bindKernelResult(nullTest.getResult(), result);
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
 NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
