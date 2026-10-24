@@ -167,6 +167,7 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(xLiteral, BinaryOperator::Equal, xLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(aLiteral, BinaryOperator::NotEqual, aLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'z'), BinaryOperator::Equal, CharLiteral::create(&_ast, 'z'), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, fiveLiteral, EvaluatedType::Bool);
     /// Valid: two types that can never hold equal values compare false rather than being rejected
     EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::NotEqual, fiveLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::Equal, trueLiteral, EvaluatedType::Bool);
@@ -175,7 +176,6 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::NotEqual, fiveLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(fourtyTwoLiteral, BinaryOperator::Equal, CharLiteral::create(&_ast, '4'), EvaluatedType::Bool);
     /// Invalid
-    EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, fiveLiteral);
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::NotEqual, DoubleLiteral::create(&_ast, 5.7));
 
     // LessThan - GreaterThan - LessThanOrEqual - GreaterThanOrEqual (Numeric comparisons)

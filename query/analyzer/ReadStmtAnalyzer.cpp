@@ -56,8 +56,8 @@ namespace {
 
 // A tagged scalar carries its type per row rather than in the plan, so no property type
 // rules it out: the comparison the constraint becomes settles it row by row, as the same
-// test written as a WHERE does. Two types that can never hold equal values settle it too -
-// the constraint is false wherever the property is there.
+// test written as a WHERE does. That comparison also settles two numbers, which compare by
+// value, and two types that can never hold equal values, where it is false on every row.
 bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
     const bool comparesPerRow = namesATaggedCell(exprType);
     const bool matchesNothing = exprType == EvaluatedType::Null;
@@ -67,7 +67,10 @@ bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
     }
 
     const std::optional<EvaluatedType> propertyEvaluated = toEvaluatedType(propertyType);
-    if (propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType)) {
+    const bool comparesNumbers = propertyEvaluated && comparesAsNumbers(*propertyEvaluated, exprType);
+    const bool comparesDisjointTypes = propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType);
+
+    if (comparesNumbers || comparesDisjointTypes) {
         return true;
     }
 

@@ -57,14 +57,11 @@ EvaluatedType orderingResultType(EvaluatedType a, EvaluatedType b) {
 }
 
 // What = and <> answer over two types: null against a null, a boolean between two operands
-// an equality takes, and Invalid for any other pair. A double is not tested for equality
-// with a number, which rounding makes unreliable, and a label, an edge type or a property
-// type is the id of one, equal only to an id of its kind.
+// an equality takes, and Invalid for any other pair. Two doubles are not tested for
+// equality, which rounding makes unreliable, and a label, an edge type or a property type
+// is the id of one, equal only to an id of its kind.
 EvaluatedType equalityResultType(EvaluatedType a, EvaluatedType b) {
-    const TypePairBitset pair(a, b);
-
-    const bool equatesADouble = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
-                             || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer);
+    const bool equatesTwoDoubles = a == EvaluatedType::Double && b == EvaluatedType::Double;
     const bool equatesMetadataIDs = a == b
                                  && (a == EvaluatedType::Label
                                      || a == EvaluatedType::EdgeType
@@ -74,7 +71,7 @@ EvaluatedType equalityResultType(EvaluatedType a, EvaluatedType b) {
 
     if (equatesMetadataIDs) {
         return EvaluatedType::Bool;
-    } else if (!takesA || !takesB || equatesADouble) {
+    } else if (!takesA || !takesB || equatesTwoDoubles) {
         return EvaluatedType::Invalid;
     } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
         return EvaluatedType::Null;

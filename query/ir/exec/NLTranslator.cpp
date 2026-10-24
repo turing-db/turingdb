@@ -47,6 +47,7 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
+#include "NumberOrder.h"
 #include "TypeUtils.h"
 #include "views/GraphView.h"
 #include "writers/MetadataBuilder.h"
@@ -384,10 +385,25 @@ typename T::Primitive constantValueAs(mlir::Attribute value) {
     }
 }
 
-// Resolves a property-value scan's literal to the property's stored type: each type
-// matches its own literal kind, UInt64 taking the non-negative integers since there is no
-// unsigned literal. Any other pairing - a negative integer against UInt64, or a mix the
-// op admits but no stored value can equal - leaves the scan unmatchable.
+template <Number Target>
+bool resolveNumberLiteral(mlir::IntegerAttr integer,
+                          mlir::FloatAttr floating,
+                          NLScanByPropertyValueLoopData::Literal& value) {
+    Target number {};
+    const bool converts = floating ? convertNumberExactly(floating.getValueAsDouble(), number)
+                                   : convertNumberExactly(integer.getInt(), number);
+
+    if (converts) {
+        value = number;
+    }
+
+    return converts;
+}
+
+// Resolves a property-value scan's literal to the property's stored type. A number equals
+// a number of another type by value, so 32.0 finds an age of 32. Any other pairing - a
+// negative integer against UInt64, 32.5 against Int64, a string against a number - leaves
+// the scan unmatchable.
 bool resolvePropertyScanLiteral(ValueType valueType,
                                 mlir::TypedAttr literal,
                                 NLScanByPropertyValueLoopData::Literal& value) {
@@ -396,16 +412,14 @@ bool resolvePropertyScanLiteral(ValueType valueType,
     const mlir::StringAttr string = mlir::dyn_cast<mlir::StringAttr>(literal);
     const bool isBoolLiteral = integer && integer.getType().isSignlessInteger(1);
     const bool isIntegerLiteral = integer && !isBoolLiteral;
+    const bool isNumberLiteral = isIntegerLiteral || floating;
 
-    if (valueType == ValueType::Int64 && isIntegerLiteral) {
-        value = integer.getInt();
-        return true;
-    } else if (valueType == ValueType::UInt64 && isIntegerLiteral && integer.getInt() >= 0) {
-        value = static_cast<uint64_t>(integer.getInt());
-        return true;
-    } else if (valueType == ValueType::Double && floating) {
-        value = floating.getValueAsDouble();
-        return true;
+    if (valueType == ValueType::Int64 && isNumberLiteral) {
+        return resolveNumberLiteral<types::Int64::Primitive>(integer, floating, value);
+    } else if (valueType == ValueType::UInt64 && isNumberLiteral) {
+        return resolveNumberLiteral<types::UInt64::Primitive>(integer, floating, value);
+    } else if (valueType == ValueType::Double && isNumberLiteral) {
+        return resolveNumberLiteral<types::Double::Primitive>(integer, floating, value);
     } else if (valueType == ValueType::Bool && isBoolLiteral) {
         value = CustomBool(integer.getInt() != 0);
         return true;

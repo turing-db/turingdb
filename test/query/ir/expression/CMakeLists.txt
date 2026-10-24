@@ -123,6 +123,8 @@ target_include_directories(test_query_ir_computed_once_over_constants PRIVATE ${
 add_turing_test(test_query_ir_integer_against_double IntegerAgainstDoubleTest.cpp)
 target_include_directories(test_query_ir_integer_against_double PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_integer_double_equality IntegerDoubleEqualityTest.cpp)
+
 add_turing_test(test_query_ir_normalize_function NormalizeFunctionTest.cpp)
 
 add_turing_test(test_query_ir_is_normalized_predicate IsNormalizedPredicateTest.cpp)
