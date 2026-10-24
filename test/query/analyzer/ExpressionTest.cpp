@@ -263,6 +263,41 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, DoubleLiteral::create(&_ast, 5.3));
 }
 
+// A WHEN of a simple CASE answers what the binary comparison it spells answers: null on
+// every row against a null or across types with no order between them, a boolean otherwise
+TEST_F(ExpressionTest, CaseTestTypeTest) {
+    const auto literal = [this](Literal* value) {
+        return LiteralExpr::create(&_ast, value);
+    };
+
+    const CaseExpr::Tests tests {
+        {._value = literal(IntegerLiteral::create(&_ast, 10)), ._operator = BinaryOperator::Equal, ._kind = CaseExpr::TestKind::Value},
+        {._value = literal(NullLiteral::create(&_ast)), ._operator = BinaryOperator::Equal, ._kind = CaseExpr::TestKind::Value},
+        {._value = literal(StringLiteral::create(&_ast, "a")), ._operator = BinaryOperator::NotEqual, ._kind = CaseExpr::TestKind::Comparison},
+        {._value = literal(IntegerLiteral::create(&_ast, 10)), ._operator = BinaryOperator::LessThan, ._kind = CaseExpr::TestKind::Comparison},
+        {._value = literal(StringLiteral::create(&_ast, "a")), ._operator = BinaryOperator::LessThan, ._kind = CaseExpr::TestKind::Comparison},
+        {._value = literal(NullLiteral::create(&_ast)), ._operator = BinaryOperator::GreaterThanOrEqual, ._kind = CaseExpr::TestKind::Comparison},
+        {._value = nullptr, ._operator = BinaryOperator::Equal, ._kind = CaseExpr::TestKind::IsNull},
+    };
+
+    CaseExpr* caseExpr = CaseExpr::create(&_ast);
+    caseExpr->setSubject(literal(IntegerLiteral::create(&_ast, 5)));
+    caseExpr->addBranch(tests, literal(IntegerLiteral::create(&_ast, 1)));
+
+    _analyzer->analyzeRootExpr(caseExpr);
+
+    const CaseExpr::Tests& analyzed = caseExpr->getBranches().front()._tests;
+    ASSERT_EQ(analyzed.size(), 7u);
+
+    EXPECT_EQ(analyzed[0]._resultType, EvaluatedType::Bool);
+    EXPECT_EQ(analyzed[1]._resultType, EvaluatedType::Null);
+    EXPECT_EQ(analyzed[2]._resultType, EvaluatedType::Bool);
+    EXPECT_EQ(analyzed[3]._resultType, EvaluatedType::Bool);
+    EXPECT_EQ(analyzed[4]._resultType, EvaluatedType::Null);
+    EXPECT_EQ(analyzed[5]._resultType, EvaluatedType::Null);
+    EXPECT_EQ(analyzed[6]._resultType, EvaluatedType::Bool);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

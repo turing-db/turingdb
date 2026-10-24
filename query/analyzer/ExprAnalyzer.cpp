@@ -42,6 +42,15 @@ using namespace db;
 
 namespace {
 
+// What = and <> answer over two types they compare: null against a null, a boolean otherwise
+EvaluatedType equalityResultType(EvaluatedType a, EvaluatedType b) {
+    if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+        return EvaluatedType::Null;
+    }
+
+    return EvaluatedType::Bool;
+}
+
 // What <, <=, > and >= answer over two types: null against a null or across order classes,
 // a boolean within one, and Invalid for a type no ordering takes
 EvaluatedType orderingResultType(EvaluatedType a, EvaluatedType b) {
@@ -453,7 +462,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
     switch (expr->getOperator()) {
         case BinaryOperator::NotEqual:
         case BinaryOperator::Equal: {
-            type = (a == EvaluatedType::Null || b == EvaluatedType::Null) ? EvaluatedType::Null : EvaluatedType::Bool;
+            type = equalityResultType(a, b);
 
             if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)) {
                 const std::string error = fmt::format(
@@ -2110,8 +2119,8 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
 
     EvaluatedType resultType = EvaluatedType::Null;
 
-    for (const CaseExpr::Branch& branch : expr->getBranches()) {
-        for (const CaseExpr::Test& test : branch._tests) {
+    for (CaseExpr::Branch& branch : expr->getBranches()) {
+        for (CaseExpr::Test& test : branch._tests) {
             analyzeCaseTest(branch, subject, test);
 
             if (test._value) {
@@ -2138,7 +2147,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
 
 void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    const Expr* subject,
-                                   const CaseExpr::Test& test) {
+                                   CaseExpr::Test& test) {
     const bool testsNull = test._kind == CaseExpr::TestKind::IsNull
                            || test._kind == CaseExpr::TestKind::IsNotNull;
 
@@ -2162,10 +2171,12 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                        test._value);
         }
 
+        test._resultType = whenType;
         return;
     }
 
     if (testsNull) {
+        test._resultType = EvaluatedType::Bool;
         return;
     }
 
@@ -2182,17 +2193,23 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
                                    || op == BinaryOperator::GreaterThanOrEqual);
 
     if (testsOrdering) {
-        if (orderingResultType(subjectType, valueType) == EvaluatedType::Invalid) {
+        test._resultType = orderingResultType(subjectType, valueType);
+
+        if (test._resultType == EvaluatedType::Invalid) {
             throwError(fmt::format("A CASE cannot order '{}' against '{}'",
                                    EvaluatedTypeName::value(subjectType),
                                    EvaluatedTypeName::value(valueType)),
                        test._value);
         }
+
+        return;
     } else if (isEntity(subjectType)) {
         requireComparableToEntity(subject, test);
     } else {
         requireCaseValue(test._value);
     }
+
+    test._resultType = equalityResultType(subjectType, valueType);
 }
 
 EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
