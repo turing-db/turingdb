@@ -5,6 +5,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <tuple>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -61,6 +62,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
+#define GEN_PASS_DEF_REUSELABELANDTYPEREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEFETCHNODES
 #define GEN_PASS_DEF_REROOTPATTERNATSEED
@@ -7414,6 +7416,30 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
 
             read->getResult(0).replaceAllUsesWith(reused);
             read->erase();
+        }
+    }
+};
+
+// Codegen reads the label sets of a node column, or the types of an edge column, once per
+// test over it, and a predicate no check fusion folds keeps every one of those reads.
+struct ReuseLabelAndTypeReads : public impl::ReuseLabelAndTypeReadsBase<ReuseLabelAndTypeReads> {
+    void runOnOperation() override {
+        llvm::SmallVector<Operation*> reads;
+        getOperation()->walk([&reads](Operation* op) {
+            if (isa<GetNodeLabelSet, GetEdgeTypes>(op)) {
+                reads.push_back(op);
+            }
+        });
+
+        mlir::IRRewriter rewriter(&getContext());
+        llvm::DenseMap<std::tuple<Block*, Value, OperationName>, Operation*> firstReads;
+        for (Operation* const read : reads) {
+            const std::tuple<Block*, Value, OperationName> key {read->getBlock(), read->getOperand(0), read->getName()};
+            const auto [entry, isFirst] = firstReads.try_emplace(key, read);
+            if (!isFirst) {
+                Operation* const firstRead = entry->second;
+                rewriter.replaceOp(read, firstRead->getResults());
+            }
         }
     }
 };
