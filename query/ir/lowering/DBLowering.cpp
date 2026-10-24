@@ -553,6 +553,11 @@ bool isEntityChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NodeIDType, storage::EdgeIDType>(chunk.getElementType());
 }
 
+bool isPathChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    return chunk && mlir::isa<storage::PathType>(chunk.getElementType());
+}
+
 // A list column, read through the nullable a stored list wears: a property fetch produces
 // its values nullable, since a node carrying no list reads as absent there.
 bool isListChunk(mlir::Type chunkType) {
@@ -6176,11 +6181,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                        && ((lhsIsAnEntity && (rhsIsAnEntity || isIntegerChunk(_builder, rhsType)))
                                            || (rhsIsAnEntity && isIntegerChunk(_builder, lhsType)));
 
+            // A path carries its null as the path with no node
+            const bool comparesTwoPaths = kind == BinaryResultKind::Comparison && isPathChunk(lhsType) && isPathChunk(rhsType);
+
             const bool alwaysNullable = operandNullable
                                      || comparesTwoLists
                                      || comparesATaggedCell
                                      || comparesAMapValue
-                                     || comparesAnEntity;
+                                     || comparesAnEntity
+                                     || comparesTwoPaths;
 
             return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
                                   : boolElement;

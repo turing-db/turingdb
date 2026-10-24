@@ -233,6 +233,8 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<EdgeID, EdgeID>::Pairs,
 
         std::tuple<
+            KindPair<GraphPath, GraphPath>,
+
             // Filtering by ID or labels/edge type
             KindPair<LabelSetID, LabelSetID>,
             KindPair<EdgeTypeID, EdgeTypeID>,

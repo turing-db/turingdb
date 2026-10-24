@@ -161,8 +161,7 @@ private:
     // already share, reporting a pair no column type can hold
     EvaluatedType unifyCaseBranch(EvaluatedType carried, const Expr* branch);
 
-    // Rejects a CASE subject no column holds. A node and an edge are subjects of their
-    // own: the MLIR engine binds one, and an OPTIONAL MATCH can leave it null
+    // Rejects a CASE subject that is not a value
     void requireCaseSubject(const Expr* subject) const;
 
     // The type = and <> give over @param a and @param b, for a binary equality and for a
