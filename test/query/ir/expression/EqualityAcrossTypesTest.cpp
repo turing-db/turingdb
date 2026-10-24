@@ -100,3 +100,18 @@ TEST_F(EqualityAcrossTypesTest, comparesTwoWalks) {
 
     EXPECT_EQ(sink.getRows(), (Rows {{"true", "false"}}));
 }
+
+TEST_F(EqualityAcrossTypesTest, comparesACellWithAnEmbedding) {
+    StringRowSink sink;
+    runQuery("WITH {k: (1.0, 2.0), j: 'x'} AS m "
+             "RETURN m.k = (1.0, 2.0), m.k = (1.0, 3.0), m.j = (1.0, 2.0), "
+             "CASE m.k WHEN (1.0, 2.0) THEN 'same' ELSE 'other' END",
+             sink);
+
+    EXPECT_EQ(sink.getRows(), (Rows {{"true", "false", "false", "same"}}));
+
+    StringRowSink listSink;
+    runQuery("UNWIND [(1.0, 2.0), 'a'] AS x RETURN x = (1.0, 2.0)", listSink);
+
+    EXPECT_EQ(listSink.getRows(), (Rows {{"true"}, {"false"}}));
+}
