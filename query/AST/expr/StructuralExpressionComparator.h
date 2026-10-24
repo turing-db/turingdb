@@ -6,6 +6,7 @@ namespace db {
 
 class Expr;
 class FunctionInvocation;
+class LabelExpr;
 class Literal;
 class PropertyExpr;
 class SymbolChain;
@@ -23,6 +24,7 @@ private:
     static bool equalInvocations(const FunctionInvocation* lhs, const FunctionInvocation* rhs);
     static bool equalExprLists(std::span<Expr* const> lhs, std::span<Expr* const> rhs);
     static bool equalSymbolChains(const SymbolChain* lhs, const SymbolChain* rhs);
+    static bool equalLabelExprs(const LabelExpr* lhs, const LabelExpr* rhs);
 };
 
 }

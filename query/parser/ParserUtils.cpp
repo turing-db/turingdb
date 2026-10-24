@@ -255,12 +255,12 @@ void ParserUtils::foldEntityWheres(CypherAST* ast, Pattern* pattern) {
 
 NodePattern* ParserUtils::createNodePattern(CypherAST* ast,
                                             Symbol* symbol,
-                                            SymbolChain* labels,
+                                            LabelExpr* labelExpr,
                                             MapLiteral* properties,
                                             WhereClause* where) {
     NodePattern* node = NodePattern::create(ast);
     node->setSymbol(symbol);
-    node->setLabels(labels);
+    node->setLabelExpr(labelExpr);
     node->setProperties(properties);
     node->setWhere(where);
 
@@ -517,13 +517,13 @@ PropertyExpr* ParserUtils::createParenthesizedPropertyAccess(CypherAST* ast, Exp
     return PropertyExpr::create(ast, fullName);
 }
 
-EntityTypeExpr* ParserUtils::createLabelTest(CypherAST* ast, Expr* operand, SymbolChain* labels) {
+EntityTypeExpr* ParserUtils::createLabelTest(CypherAST* ast, Expr* operand, LabelExpr* labelExpr) {
     if (operand->getKind() == Expr::Kind::SYMBOL) {
         const SymbolExpr* variable = static_cast<const SymbolExpr*>(operand);
-        return EntityTypeExpr::create(ast, variable->getSymbol(), labels);
+        return EntityTypeExpr::create(ast, variable->getSymbol(), labelExpr);
     }
 
-    return EntityTypeExpr::create(ast, operand, labels);
+    return EntityTypeExpr::create(ast, operand, labelExpr);
 }
 
 Expr* ParserUtils::createNegation(CypherAST* ast, Expr* operand) {

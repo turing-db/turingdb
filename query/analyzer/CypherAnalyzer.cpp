@@ -2050,9 +2050,8 @@ void CypherAnalyzer::analyze(const CreateNodePropertyIndexQuery* query) {
     const NodePattern* node = query->nodePattern();
     bioassert(node, "Failed to get node pattern.");
 
-    const SymbolChain* labels = node->labels();
     const MapLiteral* properties = node->getProperties();
-    const bool haveLabelConstraints = labels && !labels->empty();
+    const bool haveLabelConstraints = node->getLabelExpr() != nullptr;
     const bool havePropertyConstraints = properties && !properties->empty();
     const bool havePredicate = node->getWhere() != nullptr;
     if (haveLabelConstraints || havePropertyConstraints || havePredicate) {

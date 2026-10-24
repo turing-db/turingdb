@@ -12,6 +12,7 @@ namespace db {
 
 class CypherAST;
 class Expr;
+class LabelExpr;
 class SymbolChain;
 
 struct EntityPropertyConstraint {
@@ -43,10 +44,16 @@ public:
 
     std::span<const LabelRef> labelConstraints() const { return _labelConstraints; }
 
+    // What the node's label expression asks beyond the labels it must carry
+    std::span<const LabelExpr* const> labelExprConstraints() const { return _labelExprConstraints; }
+
     void addLabelConstraints(const SymbolChain* labels);
+
+    void addLabelExpr(const LabelExpr* labelExpr);
 
 private:
     std::vector<LabelRef> _labelConstraints;
+    std::vector<const LabelExpr*> _labelExprConstraints;
 
     NodePatternData();
     ~NodePatternData() override;

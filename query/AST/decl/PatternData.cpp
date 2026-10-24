@@ -1,6 +1,7 @@
 #include "PatternData.h"
 
 #include "CypherAST.h"
+#include "LabelExpr.h"
 
 using namespace db;
 
@@ -32,6 +33,20 @@ NodePatternData* NodePatternData::create(CypherAST* ast) {
 
 void NodePatternData::addLabelConstraints(const SymbolChain* labels) {
     collectSchemaNames(labels, _labelConstraints);
+}
+
+void NodePatternData::addLabelExpr(const LabelExpr* labelExpr) {
+    const LabelExpr::Kind kind = labelExpr->getKind();
+
+    if (kind == LabelExpr::Kind::LABELS) {
+        addLabelConstraints(labelExpr->getLabels());
+    } else if (kind == LabelExpr::Kind::AND) {
+        for (const LabelExpr* conjunct : labelExpr->getOperands()) {
+            addLabelExpr(conjunct);
+        }
+    } else {
+        _labelExprConstraints.push_back(labelExpr);
+    }
 }
 
 // EdgePatternData

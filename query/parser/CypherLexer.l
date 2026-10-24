@@ -53,6 +53,8 @@ using Token = db::YCypherParser::token;
 ":"  { return Token::COLON; }
 "^"  { return Token::CARET; }
 "|"  { return Token::PIPE; }
+"&"  { return Token::AMPERSAND; }
+"!"  { return Token::EXCLAMATION; }
 "+"  { return Token::PLUS; }
 "||" { return Token::CONCAT; }
 "*"  { return Token::MULT; }

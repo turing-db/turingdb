@@ -414,9 +414,8 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     NodePatternData* data = NodePatternData::create(_ast);
     nodePattern->setData(data);
 
-    const auto& labels = nodePattern->labels();
-    if (labels && !labels->empty()) {
-        data->addLabelConstraints(labels);
+    if (const LabelExpr* labelExpr = nodePattern->getLabelExpr()) {
+        data->addLabelExpr(labelExpr);
     }
 
     const MapLiteral* properties = nodePattern->getProperties();

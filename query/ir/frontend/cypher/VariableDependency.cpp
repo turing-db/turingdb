@@ -49,6 +49,10 @@ void VariableDependency::addLabelConstraints(std::span<const LabelRef> labels) {
     appendUnique(labels, labelNames);
 }
 
+void VariableDependency::addLabelExprConstraints(std::span<const LabelExpr* const> labelExprs) {
+    appendUnique(labelExprs, _labelExprConstraints);
+}
+
 void VariableDependency::setEdgeTypeConstraint(std::span<const EdgeTypeRef> types) {
     if (types.empty()) {
         return;

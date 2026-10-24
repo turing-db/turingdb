@@ -1,8 +1,11 @@
 #include "StructuralExpressionComparator.h"
 
 #include <algorithm>
+#include <utility>
+#include <vector>
 
 #include "FunctionInvocation.h"
+#include "LabelExpr.h"
 #include "Literal.h"
 #include "QualifiedName.h"
 #include "Parameter.h"
@@ -222,7 +225,7 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const bool sameEntity = lhsTypes->getEntityVarDecl() == rhsTypes->getEntityVarDecl()
                                  && equal(lhsTypes->getOperand(), rhsTypes->getOperand());
 
-            return sameEntity && equalSymbolChains(lhsTypes->getTypes(), rhsTypes->getTypes());
+            return sameEntity && equalLabelExprs(lhsTypes->getLabelExpr(), rhsTypes->getLabelExpr());
         }
         break;
 
@@ -253,6 +256,31 @@ bool StructuralExpressionComparator::equalSymbolChains(const SymbolChain* lhs, c
 
     return std::ranges::equal(*lhs, *rhs, sameName)
         && std::ranges::equal(lhs->getParameters(), rhs->getParameters(), sameParameter);
+}
+
+bool StructuralExpressionComparator::equalLabelExprs(const LabelExpr* lhs, const LabelExpr* rhs) {
+    std::vector<std::pair<const LabelExpr*, const LabelExpr*>> worklist {{lhs, rhs}};
+
+    while (!worklist.empty()) {
+        const auto [left, right] = worklist.back();
+        worklist.pop_back();
+
+        const LabelExpr::Operands& leftOperands = left->getOperands();
+        const LabelExpr::Operands& rightOperands = right->getOperands();
+
+        const LabelExpr::Kind kind = left->getKind();
+        const bool sameShape = kind == right->getKind() && leftOperands.size() == rightOperands.size();
+        const bool sameLabels = kind != LabelExpr::Kind::LABELS || equalSymbolChains(left->getLabels(), right->getLabels());
+        if (!sameShape || !sameLabels) {
+            return false;
+        }
+
+        for (size_t operand = 0; operand < leftOperands.size(); operand++) {
+            worklist.emplace_back(leftOperands[operand], rightOperands[operand]);
+        }
+    }
+
+    return true;
 }
 
 bool StructuralExpressionComparator::readsThePropertyOfComponent(const Expr* candidate, const PropertyExpr* component) {

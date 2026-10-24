@@ -1,5 +1,7 @@
 #include "CypherASTDumper.h"
 
+#include <vector>
+
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
 #include "UnionQuery.h"
@@ -10,6 +12,7 @@
 #include "MergeDataPartsQuery.h"
 #include "Parameter.h"
 #include "SymbolChain.h"
+#include "LabelExpr.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
@@ -68,6 +71,41 @@ std::string sanitizeString(std::string_view str) {
     });
 
     return result;
+}
+
+void dumpLabelExpr(std::ostream& out, const LabelExpr* labelExpr) {
+    std::vector<const LabelExpr*> worklist {labelExpr};
+
+    while (!worklist.empty()) {
+        const LabelExpr* expr = worklist.back();
+        worklist.pop_back();
+
+        const LabelExpr::Operands& operands = expr->getOperands();
+        worklist.insert(worklist.end(), operands.rbegin(), operands.rend());
+
+        switch (expr->getKind()) {
+            case LabelExpr::Kind::LABELS: {
+                const SymbolChain* labels = expr->getLabels();
+                for (const Symbol* label : *labels) {
+                    out << "        Label " << label->getName() << "\n";
+                }
+
+                for (const Parameter* parameter : labels->getParameters()) {
+                    out << "        LabelParameter $" << parameter->getName() << "\n";
+                }
+            }
+            break;
+            case LabelExpr::Kind::NOT:
+                out << "        LabelNot " << std::dec << operands.size() << "\n";
+            break;
+            case LabelExpr::Kind::AND:
+                out << "        LabelAnd " << std::dec << operands.size() << "\n";
+            break;
+            case LabelExpr::Kind::OR:
+                out << "        LabelOr " << std::dec << operands.size() << "\n";
+            break;
+        }
+    }
 }
 
 void dumpQualifiedName(std::ostream& out, const QualifiedName* name) {
@@ -843,15 +881,8 @@ void CypherASTDumper::dump(std::ostream& out, const NodePattern* node) {
         out << "        Symbol " << symbol->getName() << "\n";
     }
 
-    const auto* labels = node->labels();
-    if (labels) {
-        for (const Symbol* type : *labels) {
-            out << "        Label " << type->getName() << "\n";
-        }
-
-        for (const Parameter* parameter : labels->getParameters()) {
-            out << "        LabelParameter $" << parameter->getName() << "\n";
-        }
+    if (const LabelExpr* labelExpr = node->getLabelExpr()) {
+        dumpLabelExpr(out, labelExpr);
     }
 
     if (const MapLiteral* properties = node->getProperties()) {
@@ -1217,16 +1248,7 @@ void CypherASTDumper::dump(std::ostream& out, const EntityTypeExpr* expr) {
     out << "        ASTType EntityTypeExpr\n";
     out << "        ValueType " << EvaluatedTypeName::value(EvaluatedType::Bool) << "\n";
 
-    const auto& labels = expr->getTypes();
-    if (labels) {
-        for (const auto& label : *labels) {
-            out << "        Label " << label->getName() << "\n";
-        }
-
-        for (const Parameter* parameter : labels->getParameters()) {
-            out << "        LabelParameter $" << parameter->getName() << "\n";
-        }
-    }
+    dumpLabelExpr(out, expr->getLabelExpr());
 
     out << "    }\n";
 

@@ -5,6 +5,7 @@
 %define api.value.type variant
 %define parse.assert
 %define parse.error detailed
+%define lr.type ielr
 %define api.namespace { db }
 %parse-param {db::YCypherScanner& scanner}
 %parse-param {db::CypherAST* ast}
@@ -46,6 +47,7 @@
     #include "Parameter.h"
     #include "Symbol.h"
     #include "SymbolChain.h"
+    #include "LabelExpr.h"
     #include "QuantifiedPath.h"
     #include "FunctionInvocation.h"
     #include "WhereClause.h"
@@ -157,6 +159,8 @@
 %token COLON
 %token CARET
 %token PIPE
+%token AMPERSAND
+%token EXCLAMATION
 %token PLUS
 %token CONCAT
 %token MULT
@@ -315,12 +319,16 @@
 %type<db::UnicodeNormalForm> optionalNormalForm
 
 %type<db::Parameter*> parameter
-%type<db::SymbolChain*> nodeLabels
+%type<db::LabelExpr*> labelExpression
+%type<db::LabelExpr*> labelDisjunction
+%type<db::LabelExpr*> labelConjunction
+%type<db::LabelExpr*> labelNegation
+%type<db::LabelExpr*> labelAtom
 %type<db::SymbolChain*> edgeTypes
 %type<db::MapLiteral*> properties
 
 %type<db::Symbol*> opt_symbol
-%type<db::SymbolChain*> opt_nodeLabels
+%type<db::LabelExpr*> opt_labelExpression
 %type<db::MapLiteral*> opt_properties
 %type<db::SymbolChain*> opt_edgeTypes
 
@@ -485,6 +493,9 @@
 %type<db::JsonlImportSpecs> jsonlOption
 %type<DateTimeSpec> dateTimeSpecs
 %type<DurationSpec> durationSpecs
+
+%precedence PIPE
+%precedence LABEL_EXPRESSION
 
 %expect 0
 
@@ -1418,11 +1429,42 @@ setItem
     | entityTypeExpr { $$ = SetItem::create(ast, static_cast<EntityTypeExpr*>($1)); LOC($$, @$); }
     ;
 
-nodeLabels
-    : COLON name { $$ = SymbolChain::create(ast); $$->add($2); }
-    | COLON parameter { $$ = SymbolChain::create(ast); $$->addParameter($2); }
-    | nodeLabels COLON name { $$ = $1; $$->add($3); }
-    | nodeLabels COLON parameter { $$ = $1; $$->addParameter($3); }
+// A | after a label test in a comprehension, a reduce or a FOREACH ends the expression,
+// as it did before label expressions, so a disjunction there takes parentheses. Elsewhere
+// the | continues the disjunction: IELR keeps the two contexts apart, LALR merges them.
+labelExpression
+    : COLON labelDisjunction %prec LABEL_EXPRESSION { $$ = $2; }
+    ;
+
+labelDisjunction
+    : labelConjunction { $$ = $1; }
+    | labelDisjunction PIPE labelConjunction { $$ = LabelExpr::createOr(ast, $1, $3); }
+    | labelDisjunction PIPE COLON labelConjunction { $$ = LabelExpr::createOr(ast, $1, $4); }
+    ;
+
+labelConjunction
+    : labelNegation { $$ = $1; }
+    | labelConjunction AMPERSAND labelNegation { $$ = LabelExpr::createAnd(ast, $1, $3); }
+    | labelConjunction COLON labelNegation { $$ = LabelExpr::createAnd(ast, $1, $3); }
+    ;
+
+labelNegation
+    : labelAtom { $$ = $1; }
+    | EXCLAMATION labelNegation { $$ = LabelExpr::createNot(ast, $2); }
+    ;
+
+labelAtom
+    : name {
+        SymbolChain* labels = SymbolChain::create(ast);
+        labels->add($1);
+        $$ = LabelExpr::createLabels(ast, labels);
+      }
+    | parameter {
+        SymbolChain* labels = SymbolChain::create(ast);
+        labels->addParameter($1);
+        $$ = LabelExpr::createLabels(ast, labels);
+      }
+    | OPAREN labelDisjunction CPAREN { $$ = $2; }
     ;
 
 createSt
@@ -1571,7 +1613,7 @@ atomicExpr
     : symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
     | entityTypeExpr { $$ = $1; }
     | labelTestOperand { $$ = $1; }
-    | labelTestOperand nodeLabels { $$ = ParserUtils::createLabelTest(ast, $1, $2); LOC($$, @$); }
+    | labelTestOperand labelExpression { $$ = ParserUtils::createLabelTest(ast, $1, $2); LOC($$, @$); }
     ;
 
 labelTestOperand
@@ -1596,7 +1638,7 @@ labelTestOperand
     ;
 
 entityTypeExpr
-    : symbol nodeLabels { $$ = EntityTypeExpr::create(ast, $1, $2); LOC($$, @$); }
+    : symbol labelExpression { $$ = EntityTypeExpr::create(ast, $1, $2); LOC($$, @$); }
     ;
 
 propertyExpr
@@ -1772,10 +1814,10 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_nodeLabels opt_properties opt_whereClause CPAREN {
+    : OPAREN opt_symbol opt_labelExpression opt_properties opt_whereClause CPAREN {
         $$ = NodePattern::create(ast);
         $$->setSymbol($2);
-        $$->setLabels($3);
+        $$->setLabelExpr($3);
         $$->setProperties($4);
         $$->setWhere($5);
         LOC($$, @$);
@@ -1787,8 +1829,8 @@ opt_symbol
     | { $$ = nullptr; }
     ;
 
-opt_nodeLabels
-    : nodeLabels { $$ = $1; }
+opt_labelExpression
+    : labelExpression { $$ = $1; }
     | { $$ = nullptr; }
     ;
 
@@ -1953,9 +1995,9 @@ predicateRoot
     | whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, $1); LOC($$, @$); }
     | symbol whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, nullptr, $2); LOC($$, @$); }
     | symbol properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, nullptr, $2, $3); LOC($$, @$); }
-    | symbol nodeLabels whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, nullptr, $3); LOC($$, @$); }
-    | symbol nodeLabels properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, $3, $4); LOC($$, @$); }
-    | nodeLabels opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, $1, $2, $3); LOC($$, @$); }
+    | symbol labelExpression whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, nullptr, $3); LOC($$, @$); }
+    | symbol labelExpression properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, $3, $4); LOC($$, @$); }
+    | labelExpression opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, $1, $2, $3); LOC($$, @$); }
     | properties whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, $1, $2); LOC($$, @$); }
     ;
 
