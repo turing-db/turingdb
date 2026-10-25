@@ -190,10 +190,10 @@ jobs:
         --clean-key ${{ matrix.os }}-dependencies-
         --key ${{ matrix.os }}-dependencies-v5-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}-${{ steps.submodules.outputs.hash }}
 
-    - name: Cache dependencies (GitHub-hosted)
+    - name: Restore dependencies (GitHub-hosted)
       id: cache-dependencies-github-hosted
       if: ${{ !(runner.os == 'Linux' && contains(matrix.os, 'turing')) }}
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: external/dependencies
         key: ${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}-${{ steps.submodules.outputs.hash }}
@@ -213,6 +213,14 @@ jobs:
         --base /opt/actions-local-cache
         --path external/dependencies
         --key ${{ steps.cache-dependencies-self-hosted.outputs.key }}
+
+    # actions/cache only saves in its post step, and only when the whole job succeeds.
+    - name: Save dependencies (GitHub-hosted)
+      if: steps.cache-dependencies-github-hosted.outcome == 'success' && steps.cache-dependencies-github-hosted.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: external/dependencies
+        key: ${{ steps.cache-dependencies-github-hosted.outputs.cache-primary-key }}
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
