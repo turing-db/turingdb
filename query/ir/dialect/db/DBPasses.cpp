@@ -5,6 +5,8 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
+#include <vector>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -28,8 +30,10 @@
 #include "CardinalityEstimation.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
+#include "metadata/SchemaGraph.h"
 #include "views/GraphView.h"
 
+#include "ExplainReport.h"
 #include "IRConstantColumn.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
@@ -40,6 +44,7 @@
 
 namespace mlir::db {
 
+#define GEN_PASS_DEF_PROVEDISTINCTEDGES
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
@@ -60,6 +65,8 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REMOVEREDUNDANTLABELCHECKS
+#define GEN_PASS_DEF_FUSEDISTINCTEDGES
+#define GEN_PASS_DEF_FUSEPRODUCTDISTINCTEDGES
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEFETCHNODES
@@ -1353,6 +1360,12 @@ void eraseIfUnused(Operation* op, mlir::RewriterBase& rewriter);
 Value appendCarriedColumn(Operation* op, Value column, mlir::RewriterBase& rewriter);
 Value seedColumnOf(ExplorePaths exploration, Value column);
 
+// The pairs a crossing leaves out, as pairs of its result indices, which a rewrite rebuilding
+// the crossing renumbers into the results of the op built in its place and places back
+using ResultPair = std::pair<size_t, size_t>;
+void collectDistinctPairs(Operation* crossing, llvm::SmallVectorImpl<ResultPair>& pairs);
+void placeDistinctPairs(Operation* crossing, llvm::ArrayRef<ResultPair> pairs);
+
 // What an unwound list is when it is a run of a range: the range, the one slice taken of it
 // in its own order - db.tail being the slice from 1 - and whether the run is reversed. The
 // chain holds the ops above the range, from the unwind down.
@@ -2220,6 +2233,9 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
     const size_t leftWidth = leftFactorWidth(product);
     const size_t firstResult = placement._sinksLeft ? 0 : leftWidth;
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(product, pairs);
+
     Yield yield = cast<Yield>(factor.front().getTerminator());
     const llvm::SmallVector<Value> yielded(yield.getColumns().begin(), yield.getColumns().end());
 
@@ -2255,12 +2271,22 @@ void sinkUnwindIntoFactor(UnwindPlacement& placement, ConeCache& cache, mlir::Re
 
     // The element follows the factor's columns, so a right factor sitting after a widened
     // left one starts a column further along
-    for (const Value result : product.getResults()) {
-        const size_t resultIndex = cast<OpResult>(result).getResultNumber();
+    const auto widenedIndex = [&placement, leftWidth](size_t resultIndex) {
         const bool shifts = placement._sinksLeft && resultIndex >= leftWidth;
 
-        rewriter.replaceAllUsesWith(result, widened.getResult(shifts ? resultIndex + 1 : resultIndex));
+        return shifts ? resultIndex + 1 : resultIndex;
+    };
+
+    for (const Value result : product.getResults()) {
+        const size_t resultIndex = cast<OpResult>(result).getResultNumber();
+        rewriter.replaceAllUsesWith(result, widened.getResult(widenedIndex(resultIndex)));
     }
+
+    for (auto& [first, second] : pairs) {
+        first = widenedIndex(first);
+        second = widenedIndex(second);
+    }
+    placeDistinctPairs(widened, pairs);
 
     Value element = widened.getResult(firstResult + yielded.size());
     for (FilterOp filter : llvm::reverse(placement._filters)) {
@@ -2606,6 +2632,11 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
     const size_t keptWidth = factorYieldColumns(keptFactor).size();
     const size_t otherWidth = factorYieldColumns(otherFactor).size();
 
+    llvm::SmallVector<ResultPair, 2> productPairs;
+    llvm::SmallVector<ResultPair, 2> nestedPairs;
+    collectDistinctPairs(product, productPairs);
+    collectDistinctPairs(nested, nestedPairs);
+
     // The other factor keeps its side, so an outer factor is not re-run once per chunk of the
     // nested side it is crossed with
     Region& innerLeft = rotation._nestedOnTheLeft ? keptFactor : otherFactor;
@@ -2632,17 +2663,7 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
 
     // The rotated product holds the inner product's columns, then the rest of the nested
     // product's
-    const auto rotatedIndex = [&](size_t resultIndex) {
-        const bool fromTheNested = (resultIndex < productLeftWidth) == rotation._nestedOnTheLeft;
-        if (!fromTheNested) {
-            const size_t otherFirst = rotation._nestedOnTheLeft ? productLeftWidth : 0;
-            return otherFirstInInner + (resultIndex - otherFirst);
-        }
-
-        const size_t nestedFirst = rotation._nestedOnTheLeft ? 0 : productLeftWidth;
-        const Value column = nestedYield[resultIndex - nestedFirst];
-        const size_t nestedIndex = cast<OpResult>(column).getResultNumber();
-
+    const auto rotatedNestedIndex = [&](size_t nestedIndex) {
         const bool fromTheLeft = nestedIndex < nestedLeftWidth;
         const size_t sidePosition = fromTheLeft ? nestedIndex : nestedIndex - nestedLeftWidth;
         if (fromTheLeft == rotation._keepsTheNestedLeft) {
@@ -2652,10 +2673,34 @@ CrossProduct rotateProduct(CrossProduct product, const ProductRotation& rotation
         return keptWidth + otherWidth + sidePosition;
     };
 
+    const auto rotatedIndex = [&](size_t resultIndex) {
+        const bool fromTheNested = (resultIndex < productLeftWidth) == rotation._nestedOnTheLeft;
+        if (!fromTheNested) {
+            const size_t otherFirst = rotation._nestedOnTheLeft ? productLeftWidth : 0;
+            return otherFirstInInner + (resultIndex - otherFirst);
+        }
+
+        const size_t nestedFirst = rotation._nestedOnTheLeft ? 0 : productLeftWidth;
+        const Value column = nestedYield[resultIndex - nestedFirst];
+
+        return rotatedNestedIndex(cast<OpResult>(column).getResultNumber());
+    };
+
     for (const Value result : product.getResults()) {
         const size_t resultIndex = cast<OpResult>(result).getResultNumber();
         rewriter.replaceAllUsesWith(result, rotated.getResult(rotatedIndex(resultIndex)));
     }
+
+    for (auto& [first, second] : productPairs) {
+        first = rotatedIndex(first);
+        second = rotatedIndex(second);
+    }
+    for (auto& [first, second] : nestedPairs) {
+        first = rotatedNestedIndex(first);
+        second = rotatedNestedIndex(second);
+    }
+    placeDistinctPairs(rotated, productPairs);
+    placeDistinctPairs(rotated, nestedPairs);
 
     rewriter.eraseOp(product);
 
@@ -3042,7 +3087,8 @@ Operation* createByTypeHop(Operation* hop, ArrayAttr edgeTypes, mlir::OpBuilder&
                                                   results.drop_front(hopFixedResultCount).getTypes(),
                                                   hop->getOperand(0),
                                                   edgeTypes,
-                                                  hop->getOperands().drop_front());
+                                                  hop->getOperands().drop_front(),
+                                                  DenseI64ArrayAttr());
 
     return byTypeHop.getOperation();
 }
@@ -4285,7 +4331,8 @@ Operation* createByLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& b
                                                      results.drop_front(hopFixedResultCount).getTypes(),
                                                      hop->getOperand(0),
                                                      labels,
-                                                     hop->getOperands().drop_front());
+                                                     hop->getOperands().drop_front(),
+                                                     DenseI64ArrayAttr());
 
     return byLabelHop.getOperation();
 }
@@ -4304,7 +4351,8 @@ Operation* createByTypeAndLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBui
                                                                           hop->getOperand(0),
                                                                           edgeTypes,
                                                                           labels,
-                                                                          hop->getOperands().drop_front());
+                                                                          hop->getOperands().drop_front(),
+                                                                          DenseI64ArrayAttr());
 
     return byTypeAndLabelHop.getOperation();
 }
@@ -4338,13 +4386,13 @@ Operation* createHop(Location loc,
     const bool asksLabels = labels && !labels.empty();
 
     if (edgeTypes && asksLabels) {
-        return builder.create<ByTypeAndLabelOp>(loc, types, from, edgeTypes, labels, carried).getOperation();
+        return builder.create<ByTypeAndLabelOp>(loc, types, from, edgeTypes, labels, carried, DenseI64ArrayAttr()).getOperation();
     } else if (edgeTypes) {
-        return builder.create<ByTypeOp>(loc, types, from, edgeTypes, carried).getOperation();
+        return builder.create<ByTypeOp>(loc, types, from, edgeTypes, carried, DenseI64ArrayAttr()).getOperation();
     } else if (asksLabels) {
-        return builder.create<ByLabelOp>(loc, types, from, labels, carried).getOperation();
+        return builder.create<ByLabelOp>(loc, types, from, labels, carried, DenseI64ArrayAttr()).getOperation();
     } else {
-        return builder.create<HopOp>(loc, types, from, carried).getOperation();
+        return builder.create<HopOp>(loc, types, from, carried, DenseI64ArrayAttr()).getOperation();
     }
 }
 
@@ -4360,7 +4408,7 @@ Operation* createReversedHop(Operation* hop, Value from, ArrayAttr labels, Value
     llvm::append_range(types, carried.getTypes());
 
     if (isa<GetEdges>(hop)) {
-        return builder.create<GetEdges>(loc, types, from, carried).getOperation();
+        return builder.create<GetEdges>(loc, types, from, carried, DenseI64ArrayAttr()).getOperation();
     } else if (isReverseHop(hop)) {
         return createHop<GetOutEdges, GetOutEdgesByType, GetOutEdgesByLabel, GetOutEdgesByTypeAndLabel>(loc,
                                                                                                          types,
@@ -4680,6 +4728,294 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
         runFilterPass<EndConstrainedExploration>(getOperation(), matchEndConstrainedExploration, fuseExploreEndConstraint, builder);
+    }
+};
+
+// A hop, or a path exploration, whose rows are then cut down to those whose new edge, or
+// path, shares no edge with columns the clause bound before it: the exclusion spelled the
+// long way, since the writer can skip those edges and never build the rows the filter goes
+// on to drop
+struct ExcludedHop {
+    FilterOp _filter;
+    Operation* _op {nullptr};
+    CheckEdgeDistinct _check;
+    llvm::SmallVector<size_t, 2> _excludedColumns;
+};
+
+constexpr llvm::StringLiteral DISTINCT_FROM_ATTRIBUTE_NAME = "distinct_from";
+
+bool matchExcludedHop(FilterOp filter, ExcludedHop& excluded) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check) {
+        return false;
+    }
+
+    const OpResult subject = dyn_cast<OpResult>(check.getSubject());
+    if (!subject) {
+        return false;
+    }
+
+    // The subject is the hop's own edge column or the walk's own path column
+    Operation* const op = subject.getOwner();
+    size_t fixedResultCount = 0;
+    unsigned subjectResult = 0;
+    if (isEdgeHop(op)) {
+        fixedResultCount = hopFixedResultCount;
+        subjectResult = 1;
+    } else if (isa<ExplorePaths>(op)) {
+        fixedResultCount = pathFixedResultCount;
+        subjectResult = 2;
+    } else {
+        return false;
+    }
+
+    if (subject.getResultNumber() != subjectResult) {
+        return false;
+    }
+
+    // Every column it is checked against is a carried copy the op handed back, whose input
+    // is row-aligned with the op's own input
+    llvm::SmallVector<size_t, 2> excludedColumns;
+    for (const Value other : check.getOthers()) {
+        const OpResult result = dyn_cast<OpResult>(other);
+        const bool carriedBack = result && result.getOwner() == op && result.getResultNumber() >= fixedResultCount;
+        if (!carriedBack) {
+            return false;
+        }
+
+        excludedColumns.push_back(result.getResultNumber() - fixedResultCount);
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != op) {
+            return false;
+        }
+    }
+
+    for (const Value result : op->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    excluded = ExcludedHop {._filter = filter, ._op = op, ._check = check, ._excludedColumns = excludedColumns};
+
+    return true;
+}
+
+void fuseDistinctEdges(ExcludedHop& excluded, mlir::RewriterBase& rewriter) {
+    FilterOp filter = excluded._filter;
+    Operation* const op = excluded._op;
+    CheckEdgeDistinct check = excluded._check;
+
+    llvm::SmallVector<int64_t, 4> columns;
+    if (const DenseI64ArrayAttr held = op->getAttrOfType<DenseI64ArrayAttr>(DISTINCT_FROM_ATTRIBUTE_NAME)) {
+        llvm::append_range(columns, held.asArrayRef());
+    }
+    for (const size_t column : excluded._excludedColumns) {
+        columns.push_back(static_cast<int64_t>(column));
+    }
+    llvm::sort(columns);
+    columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
+
+    op->setAttr(DISTINCT_FROM_ATTRIBUTE_NAME, rewriter.getDenseI64ArrayAttr(columns));
+
+    bypassFilter(filter);
+    rewriter.eraseOp(filter);
+    if (check->use_empty()) {
+        rewriter.eraseOp(check);
+    }
+}
+
+struct FuseDistinctEdges : public impl::FuseDistinctEdgesBase<FuseDistinctEdges> {
+    void runOnOperation() override {
+        runFilterWorklist<ExcludedHop>(getOperation(), matchExcludedHop, fuseDistinctEdges);
+    }
+};
+
+// A cross product or a hash join whose rows are then cut down to those where an edge one
+// factor bound differs from an edge the other did: the exclusion spelled the long way,
+// since the op can skip the pairs holding one edge twice and never lay out the rows
+struct CrossedEdgePair {
+    Operation* _crossing {nullptr};
+    int64_t _left {0};
+    int64_t _right {0};
+};
+
+struct CrossedEdgePairs {
+    FilterOp _filter;
+    CheckEdgeDistinct _check;
+    llvm::SmallVector<CrossedEdgePair, 2> _pairs;
+};
+
+bool holdsEdges(Value column) {
+    const ColumnType type = cast<ColumnType>(column.getType());
+
+    return isa<storage::EdgeIDType>(type.getType());
+}
+
+// The crossing that pairs two of @p crossing's results: @p crossing itself when they come
+// from opposite factors, else a crossing whose results the factor holding both yields
+// unchanged, so that leaving its pairs out leaves out the same rows
+bool findCrossedEdgePair(Operation* crossing, size_t first, size_t second, CrossedEdgePair& found) {
+    for (;;) {
+        Region& leftFactor = crossing->getRegion(0);
+        const size_t leftCount = factorYieldColumns(leftFactor).size();
+        const bool firstOnTheLeft = first < leftCount;
+        const bool secondOnTheLeft = second < leftCount;
+
+        if (firstOnTheLeft != secondOnTheLeft) {
+            const size_t leftIndex = firstOnTheLeft ? first : second;
+            const size_t rightIndex = firstOnTheLeft ? second : first;
+            found = CrossedEdgePair {._crossing = crossing,
+                                     ._left = static_cast<int64_t>(leftIndex),
+                                     ._right = static_cast<int64_t>(rightIndex - leftCount)};
+            return true;
+        }
+
+        Region& factor = firstOnTheLeft ? leftFactor : crossing->getRegion(1);
+        const size_t offset = firstOnTheLeft ? 0 : leftCount;
+        const Operation::operand_range yielded = factorYieldColumns(factor);
+        const Value firstColumn = yielded[first - offset];
+        const Value secondColumn = yielded[second - offset];
+
+        Operation* const nested = firstColumn.getDefiningOp();
+        if (!isa_and_nonnull<CrossProduct, HashJoin>(nested) || secondColumn.getDefiningOp() != nested) {
+            return false;
+        }
+
+        Operation* const yield = factor.front().getTerminator();
+        for (Operation* const user : nested->getUsers()) {
+            if (user != yield) {
+                return false;
+            }
+        }
+
+        crossing = nested;
+        first = cast<OpResult>(firstColumn).getResultNumber();
+        second = cast<OpResult>(secondColumn).getResultNumber();
+    }
+}
+
+
+DenseI64ArrayAttr distinctPairsOf(Operation* crossing) {
+    if (CrossProduct product = dyn_cast<CrossProduct>(crossing)) {
+        return product.getDistinctPairsAttr();
+    } else if (HashJoin join = dyn_cast<HashJoin>(crossing)) {
+        return join.getDistinctPairsAttr();
+    } else {
+        return {};
+    }
+}
+
+void appendDistinctPair(Operation* crossing, int64_t left, int64_t right) {
+    llvm::SmallVector<int64_t, 4> pairs;
+    if (const DenseI64ArrayAttr held = distinctPairsOf(crossing)) {
+        llvm::append_range(pairs, held.asArrayRef());
+    }
+    pairs.push_back(left);
+    pairs.push_back(right);
+
+    const DenseI64ArrayAttr appended = DenseI64ArrayAttr::get(crossing->getContext(), pairs);
+    if (CrossProduct product = dyn_cast<CrossProduct>(crossing)) {
+        product.setDistinctPairsAttr(appended);
+    } else {
+        cast<HashJoin>(crossing).setDistinctPairsAttr(appended);
+    }
+}
+
+void collectDistinctPairs(Operation* crossing, llvm::SmallVectorImpl<ResultPair>& pairs) {
+    const DenseI64ArrayAttr held = distinctPairsOf(crossing);
+    if (!held) {
+        return;
+    }
+
+    const size_t leftCount = factorYieldColumns(crossing->getRegion(0)).size();
+    const llvm::ArrayRef<int64_t> indices = held.asArrayRef();
+    for (size_t position = 0; position + 1 < indices.size(); position += 2) {
+        pairs.emplace_back(static_cast<size_t>(indices[position]), leftCount + static_cast<size_t>(indices[position + 1]));
+    }
+}
+
+void placeDistinctPairs(Operation* crossing, llvm::ArrayRef<ResultPair> pairs) {
+    for (const auto& [first, second] : pairs) {
+        CrossedEdgePair pair;
+        const bool placed = findCrossedEdgePair(crossing, first, second, pair);
+        bioassert(placed, "No crossing pairs the results {} and {} of a rebuilt crossing", first, second);
+
+        appendDistinctPair(pair._crossing, pair._left, pair._right);
+    }
+}
+
+bool matchCrossedEdgePairs(FilterOp filter, CrossedEdgePairs& crossed) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check || !holdsEdges(check.getSubject())) {
+        return false;
+    }
+
+    Operation* const crossing = check.getSubject().getDefiningOp();
+    if (!isa_and_nonnull<CrossProduct, HashJoin>(crossing)) {
+        return false;
+    }
+
+    const size_t subjectIndex = cast<OpResult>(check.getSubject()).getResultNumber();
+
+    llvm::SmallVector<CrossedEdgePair, 2> pairs;
+    for (const Value other : check.getOthers()) {
+        const OpResult result = dyn_cast<OpResult>(other);
+        if (!result || result.getOwner() != crossing || !holdsEdges(other)) {
+            return false;
+        }
+
+        CrossedEdgePair pair;
+        if (!findCrossedEdgePair(crossing, subjectIndex, result.getResultNumber(), pair)) {
+            return false;
+        }
+
+        pairs.push_back(pair);
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != crossing) {
+            return false;
+        }
+    }
+
+    for (const Value result : crossing->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    crossed = CrossedEdgePairs {._filter = filter, ._check = check, ._pairs = pairs};
+
+    return true;
+}
+
+void fuseProductDistinctEdges(CrossedEdgePairs& crossed, mlir::RewriterBase& rewriter) {
+    FilterOp filter = crossed._filter;
+    CheckEdgeDistinct check = crossed._check;
+
+    for (const CrossedEdgePair& pair : crossed._pairs) {
+        appendDistinctPair(pair._crossing, pair._left, pair._right);
+    }
+
+    bypassFilter(filter);
+    rewriter.eraseOp(filter);
+    if (check->use_empty()) {
+        rewriter.eraseOp(check);
+    }
+}
+
+struct FuseProductDistinctEdges : public impl::FuseProductDistinctEdgesBase<FuseProductDistinctEdges> {
+    void runOnOperation() override {
+        runFilterWorklist<CrossedEdgePairs>(getOperation(), matchCrossedEdgePairs, fuseProductDistinctEdges);
     }
 };
 
@@ -5266,6 +5602,14 @@ void narrowFactorColumn(const FactorColumnLevel& level, Value hoisted, mlir::OpB
     const FactorColumn& column = level._column;
     const size_t resultIndex = level._resultIndex;
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(product, pairs);
+    for (auto& [first, second] : pairs) {
+        bioassert(first != resultIndex && second != resultIndex, "A narrowed product drops a column of a left-out edge pair");
+        first -= first > resultIndex ? 1 : 0;
+        second -= second > resultIndex ? 1 : 0;
+    }
+
     Yield yield = cast<Yield>(column._factor->front().getTerminator());
     yield.getColumnsMutable().erase(static_cast<unsigned>(column._position));
 
@@ -5291,6 +5635,7 @@ void narrowFactorColumn(const FactorColumnLevel& level, Value hoisted, mlir::OpB
         }
     }
 
+    placeDistinctPairs(narrowed, pairs);
     product.erase();
 }
 
@@ -5370,8 +5715,19 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     IntegerAttr(),
                                                     UnitAttr(),
                                                     exploration.getDistinctAttr(),
+                                                    DenseI64ArrayAttr(),
                                                     exploration.getStepCount());
     takeHopRegions(exploration, set);
+
+    if (const std::optional<llvm::ArrayRef<int64_t>> excluded = exploration.getDistinctFrom()) {
+        llvm::SmallVector<int64_t, 2> renumbered;
+        for (const int64_t column : *excluded) {
+            bioassert(static_cast<size_t>(column) != endColumn, "The end column holds nodes, not the edges the walk leaves out");
+            renumbered.push_back(static_cast<size_t>(column) < endColumn ? column : column - 1);
+        }
+
+        set.setDistinctFromAttr(builder.getDenseI64ArrayAttr(renumbered));
+    }
 
     exploration.getSrcids().replaceAllUsesWith(set.getSrcids());
     exploration.getTgtids().replaceAllUsesWith(set.getTgtids());
@@ -6381,8 +6737,15 @@ void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {
 }
 
 // A sort orders by its keys and a grouping op groups by them whether or not anything reads
-// them; a group aggregate still has to reduce something and a collect to gather something.
+// them; a group aggregate still has to reduce something and a collect to gather something;
+// a hop or a walk reads the columns it leaves the edges of out.
 void keepRequiredColumns(Operation* op, llvm::SmallBitVector& keep) {
+    if (const DenseI64ArrayAttr excluded = op->getAttrOfType<DenseI64ArrayAttr>(DISTINCT_FROM_ATTRIBUTE_NAME)) {
+        for (const int64_t column : excluded.asArrayRef()) {
+            keep.set(static_cast<unsigned>(column));
+        }
+    }
+
     if (Sort sort = dyn_cast<Sort>(op)) {
         for (const int64_t keyColumn : sort.getKeyColumns()) {
             keep.set(static_cast<unsigned>(keyColumn));
@@ -6524,6 +6887,23 @@ void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, Op
     state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
 }
 
+void renumberDistinctFrom(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const DenseI64ArrayAttr excluded = op->getAttrOfType<DenseI64ArrayAttr>(DISTINCT_FROM_ATTRIBUTE_NAME);
+    if (!excluded) {
+        return;
+    }
+
+    llvm::SmallVector<int64_t, 2> renumbered;
+    for (const int64_t column : excluded.asArrayRef()) {
+        const auto keptIt = llvm::find(kept, static_cast<size_t>(column));
+        bioassert(keptIt != kept.end(), "Excluded column {} is not in the trimmed carry set", column);
+
+        renumbered.push_back(static_cast<int64_t>(keptIt - kept.begin()));
+    }
+
+    state.attributes.set(DISTINCT_FROM_ATTRIBUTE_NAME, builder.getDenseI64ArrayAttr(renumbered));
+}
+
 // The carry set is an exploration's second operand segment, so a trim of it rewrites the
 // segment sizes as a trimmed procedure call's are rewritten
 void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
@@ -6536,6 +6916,8 @@ void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, 
 }
 
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    renumberDistinctFrom(op, kept, state, builder);
+
     if (Sort sort = dyn_cast<Sort>(op)) {
         renumberSortKeys(sort, kept, state, builder);
     } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
@@ -6632,10 +7014,18 @@ bool selectKeptFactorColumns(Operation* op, llvm::SmallBitVector& keep) {
     }
 
     // A join reads its two key columns to match on whether or not anything downstream
-    // reads them, the way a sort orders by its keys.
+    // reads them, the way a sort orders by its keys, and a crossing the edge columns of the
+    // pairs it leaves out.
     if (HashJoin join = dyn_cast<HashJoin>(op)) {
         keep.set(join.getLeftKey());
         keep.set(leftCount + join.getRightKey());
+    }
+
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(op, pairs);
+    for (const auto& [first, second] : pairs) {
+        keep.set(first);
+        keep.set(second);
     }
 
     keepRowCarryingColumn(leftYield.getColumns(), 0, keep);
@@ -6677,6 +7067,9 @@ void replaceWithTrimmedFactors(Operation* op,
     Yield leftYield = factorYield(op, 0);
     Yield rightYield = factorYield(op, 1);
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(op, pairs);
+
     trimmed->getRegion(0).takeBody(op->getRegion(0));
     trimmed->getRegion(1).takeBody(op->getRegion(1));
 
@@ -6684,12 +7077,21 @@ void replaceWithTrimmedFactors(Operation* op,
     eraseUnkeptYields(rightYield, keep, leftCount);
 
     const Operation::result_range results = op->getResults();
+    llvm::SmallVector<size_t> trimmedIndices(results.size(), results.size());
     size_t trimmedIndex = 0;
     for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
         if (keep[resultIndex]) {
+            trimmedIndices[resultIndex] = trimmedIndex;
             results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
         }
     }
+
+    for (auto& [first, second] : pairs) {
+        bioassert(keep[first] && keep[second], "A trim drops a column of a left-out edge pair");
+        first = trimmedIndices[first];
+        second = trimmedIndices[second];
+    }
+    placeDistinctPairs(trimmed, pairs);
 }
 
 // A product's results are the columns its two factors yield; a result nobody reads leaves
@@ -7884,6 +8286,9 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     const size_t leftCount = leftYield.getNumOperands();
     const size_t rightCount = rightYield.getNumOperands();
 
+    llvm::SmallVector<ResultPair, 2> pairs;
+    collectDistinctPairs(product, pairs);
+
     const size_t leftKey = sinkKeyIntoFactor(match._left, 0, builder);
     const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, builder);
 
@@ -7920,6 +8325,12 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     for (size_t columnIndex = 0; columnIndex < rightCount; columnIndex++) {
         joinColumns.push_back(join.getResult(rightFirstResult + columnIndex));
     }
+
+    for (auto& [first, second] : pairs) {
+        first = cast<OpResult>(joinColumns[first]).getResultNumber();
+        second = cast<OpResult>(joinColumns[second]).getResultNumber();
+    }
+    placeDistinctPairs(join, pairs);
 
     // A sunk key sits past the columns its factor already yielded, so it is none of those.
     const Value leftKeyColumn = join.getResult(leftFirstResult + leftKey);
@@ -8359,7 +8770,7 @@ struct FuseFetchNodes : public impl::FuseFetchNodesBase<FuseFetchNodes> {
 
 // A row-wise op a re-rooted pattern recomputes over its new rows rather than carrying
 bool computesPerRow(Operation* op) {
-    return isRowWiseOp(op) || isa<ListIndex, ToNullable, GetEdgeTypes>(op);
+    return isRowWiseOp(op) || isa<ListIndex, ToNullable, GetEdgeTypes, CheckEdgeDistinct>(op);
 }
 
 bool isHop(Operation* op) {
@@ -8509,6 +8920,8 @@ bool analyzePattern(SeedPattern& pattern, llvm::ArrayRef<Operation*> orderedOps)
     for (Operation* const op : orderedOps) {
         if (op == pattern._root || computesPerRow(op)) {
             continue;
+        } else if (op->hasAttr(DISTINCT_FROM_ATTRIBUTE_NAME)) {
+            return false;
         } else if (FilterOp filter = dyn_cast<FilterOp>(op)) {
             pattern._filters.push_back(filter);
         } else if (isHop(op)) {
@@ -9102,6 +9515,7 @@ private:
                                                             IntegerAttr(),
                                                             UnitAttr(),
                                                             exploration.getDistinctAttr(),
+                                                            DenseI64ArrayAttr(),
                                                             exploration.getStepCount());
         takeHopRegions(exploration, walked);
 
@@ -9442,6 +9856,1060 @@ bool writesTheGraph(Operation* root) {
     return walked.wasInterrupted();
 }
 
+// Which way a hop reads its edges, which says which of its two ends is the edge's stored
+// source: the end it left for an out-hop, the end it reached for an in-hop, either for
+// an undirected one
+enum class HopDirection {
+    Out,
+    In,
+    Both,
+};
+
+// What the clause says of one edge column a check_edge_distinct reads: the op that bound
+// it, the types the pattern allows it, and the node it left and the node it reached, each
+// with the labels on it. A path's edges have no ends the pattern names.
+struct PatternEdge {
+    Operation* _op {nullptr};
+    bool _isPath {false};
+    HopDirection _direction {HopDirection::Out};
+    bool _anyType {true};
+    llvm::SmallVector<llvm::StringRef, 2> _edgeTypes;
+    Value _near;
+    Value _far;
+    llvm::SmallVector<llvm::StringRef, 2> _nearLabels;
+    llvm::SmallVector<llvm::StringRef, 2> _farLabels;
+};
+
+// What the rows reaching a check went through: the filters that cut them, the fixed hops
+// that bound the clause's edges, and the node columns the filters hold equal
+struct RowFlow {
+    llvm::SmallPtrSet<Operation*, 16> _filters;
+    llvm::SmallVector<PatternEdge, 8> _hops;
+    llvm::DenseMap<Operation*, size_t> _hopIndices;
+    llvm::SmallVector<std::pair<Value, Value>, 4> _joinedNodes;
+};
+
+// The filters every row an op produces passed and the fixed hops that bound the edges those
+// rows hold
+struct RowSources {
+    llvm::SmallVector<Operation*, 8> _filters;
+    llvm::SmallVector<Operation*, 8> _hops;
+};
+
+// The row sources of each op, gathered once for the pass from those of the ops its rows come
+// from: a filter's carried columns, a hop's or a walk's input and carry set, a product's
+// factors. A filter cuts every column of its rows, so an op's rows passed every filter any
+// of its inputs' rows passed.
+class RowSourcesIndex {
+public:
+    const RowSources& of(Operation* op) {
+        llvm::SmallVector<Operation*, 8> worklist {op};
+        llvm::SmallVector<Operation*, 8> inputs;
+
+        while (!worklist.empty()) {
+            Operation* const current = worklist.back();
+            if (_sources.contains(current)) {
+                worklist.pop_back();
+                continue;
+            }
+
+            inputs.clear();
+            collectInputs(current, inputs);
+
+            bool inputsKnown = true;
+            for (Operation* const input : inputs) {
+                if (!_sources.contains(input)) {
+                    worklist.push_back(input);
+                    inputsKnown = false;
+                }
+            }
+
+            if (inputsKnown) {
+                gather(current, inputs);
+                worklist.pop_back();
+            }
+        }
+
+        return *_sources.at(op);
+    }
+
+private:
+    llvm::DenseMap<Operation*, std::unique_ptr<RowSources>> _sources;
+
+    static void addDefiningOps(ValueRange columns, llvm::SmallVectorImpl<Operation*>& inputs) {
+        for (const Value column : columns) {
+            Operation* const def = column.getDefiningOp();
+            if (def && !llvm::is_contained(inputs, def)) {
+                inputs.push_back(def);
+            }
+        }
+    }
+
+    static void collectInputs(Operation* op, llvm::SmallVectorImpl<Operation*>& inputs) {
+        if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+            addDefiningOps(filter.getColumnsToFilter(), inputs);
+        } else if (isEdgeHop(op)) {
+            addDefiningOps(op->getOperands(), inputs);
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+            addDefiningOps(exploration.getInputNodes(), inputs);
+            addDefiningOps(exploration.getColumnsToFilter(), inputs);
+        } else if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+            addDefiningOps(factorYieldColumns(product.getLeftFactor()), inputs);
+            addDefiningOps(factorYieldColumns(product.getRightFactor()), inputs);
+        }
+    }
+
+    void gather(Operation* op, llvm::ArrayRef<Operation*> inputs) {
+        std::unique_ptr<RowSources> sources = std::make_unique<RowSources>();
+        llvm::SmallPtrSet<Operation*, 16> seen;
+
+        const auto add = [&seen](Operation* source, llvm::SmallVectorImpl<Operation*>& into) {
+            if (seen.insert(source).second) {
+                into.push_back(source);
+            }
+        };
+
+        for (Operation* const input : inputs) {
+            const RowSources& inputSources = *_sources.at(input);
+            for (Operation* const filter : inputSources._filters) {
+                add(filter, sources->_filters);
+            }
+            for (Operation* const hop : inputSources._hops) {
+                add(hop, sources->_hops);
+            }
+        }
+
+        if (isa<FilterOp>(op)) {
+            add(op, sources->_filters);
+        } else if (isEdgeHop(op)) {
+            add(op, sources->_hops);
+        }
+
+        _sources.try_emplace(op, std::move(sources));
+    }
+};
+
+// The type and label checks of a flow's filters under the column each reads: a type check
+// under the edge types column it tests, a label check under the node column it reads the
+// labels of
+using AnchoredChecks = llvm::DenseMap<Value, llvm::SmallVector<Operation*, 2>>;
+
+// The names of @param refs, false when one is a query parameter, whose value the pass
+// cannot read
+bool appendNames(ArrayAttr refs, llvm::SmallVectorImpl<llvm::StringRef>& into) {
+    const bool namesAll = llvm::all_of(refs, [](Attribute ref) { return isa<StringAttr>(ref); });
+    if (!namesAll) {
+        return false;
+    }
+
+    for (const Attribute name : refs) {
+        into.push_back(cast<StringAttr>(name).getValue());
+    }
+
+    return true;
+}
+
+// Narrows the edge's type set by one more check the clause put on it
+void intersectEdgeTypes(ArrayAttr checked, PatternEdge& edge) {
+    llvm::SmallVector<llvm::StringRef, 2> types;
+    if (!appendNames(checked, types)) {
+        return;
+    }
+
+    if (edge._anyType) {
+        edge._anyType = false;
+        edge._edgeTypes = types;
+        return;
+    }
+
+    llvm::SmallVector<llvm::StringRef, 2> both;
+    for (const llvm::StringRef type : types) {
+        if (llvm::is_contained(edge._edgeTypes, type)) {
+            both.push_back(type);
+        }
+    }
+
+    edge._edgeTypes = both;
+}
+
+// The labels a check requires of every node it keeps, false when it allows several
+// conjunctions or names a parameter
+bool requiredLabels(CheckLabelConstraint check, llvm::SmallVectorImpl<llvm::StringRef>& labels) {
+    const ArrayAttr conjunction = check.getConjunction();
+
+    return conjunction && appendNames(conjunction, labels);
+}
+
+// The types any edge of the walk can carry, false when a step takes any type
+bool walkEdgeTypes(ExplorePaths exploration, llvm::SmallVectorImpl<llvm::StringRef>& types) {
+    for (size_t step = 0; step < exploration.getStepCount(); step++) {
+        const ArrayAttr stepTypes = exploration.getStepEdgeTypes(step);
+        if (!stepTypes || !appendNames(stepTypes, types)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void anchorChecks(const llvm::SmallPtrSetImpl<Operation*>& filters, LineageClimbs& climbs, AnchoredChecks& checks) {
+    for (Operation* const filterOp : filters) {
+        const Value mask = cast<FilterOp>(filterOp).getMask();
+
+        Value anchor;
+        if (CheckEdgeTypeConstraint check = mask.getDefiningOp<CheckEdgeTypeConstraint>()) {
+            anchor = climbs.anchorOf(check.getEdgeTypeIds());
+        } else if (CheckLabelConstraint check = mask.getDefiningOp<CheckLabelConstraint>()) {
+            GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+            anchor = labelSet ? climbs.anchorOf(labelSet.getInputNodes()) : Value();
+        }
+
+        if (anchor) {
+            checks[anchor].push_back(mask.getDefiningOp());
+        }
+    }
+}
+
+void appendCheckedLabels(const AnchoredChecks& checks, Value node, llvm::SmallVectorImpl<llvm::StringRef>& labels) {
+    const auto anchored = checks.find(node);
+    if (anchored == checks.end()) {
+        return;
+    }
+
+    for (Operation* const checkOp : anchored->second) {
+        if (CheckLabelConstraint check = dyn_cast<CheckLabelConstraint>(checkOp)) {
+            llvm::SmallVector<llvm::StringRef, 2> required;
+            if (requiredLabels(check, required)) {
+                llvm::append_range(labels, required);
+            }
+        }
+    }
+}
+
+// Reads the type and label checks of the row flow that constrain the hop: a type check
+// over its own edge types column, a label check over a node column born where one of its ends
+// was
+void describeHop(const AnchoredChecks& checks, LineageClimbs& climbs, PatternEdge& edge) {
+    Operation* const hop = edge._op;
+    constexpr size_t SOURCE_RESULT_INDEX = 0;
+    constexpr size_t EDGE_TYPES_RESULT_INDEX = 2;
+    constexpr size_t TARGET_RESULT_INDEX = 3;
+
+    if (isReverseHop(hop)) {
+        edge._direction = HopDirection::In;
+    } else if (isa<GetEdges>(hop)) {
+        edge._direction = HopDirection::Both;
+    } else {
+        edge._direction = HopDirection::Out;
+    }
+
+    const Value edgeTypes = hop->getResult(EDGE_TYPES_RESULT_INDEX);
+    edge._near = climbs.anchorOf(hop->getOperand(0));
+    edge._far = hop->getResult(edge._direction == HopDirection::In ? SOURCE_RESULT_INDEX : TARGET_RESULT_INDEX);
+
+    const auto typeChecks = checks.find(edgeTypes);
+    if (typeChecks != checks.end()) {
+        for (Operation* const checkOp : typeChecks->second) {
+            if (CheckEdgeTypeConstraint check = dyn_cast<CheckEdgeTypeConstraint>(checkOp)) {
+                intersectEdgeTypes(check.getEdgeTypes(), edge);
+            }
+        }
+    }
+
+    if (edge._near) {
+        appendCheckedLabels(checks, edge._near, edge._nearLabels);
+    }
+    appendCheckedLabels(checks, edge._far, edge._farLabels);
+}
+
+// The filters and hops of the rows a column is read from, each hop described by the checks
+// those filters put on it
+void collectRowFlow(Value column, RowSourcesIndex& index, LineageClimbs& climbs, RowFlow& flow) {
+    Operation* const source = column.getDefiningOp();
+    if (!source) {
+        return;
+    }
+
+    const RowSources& sources = index.of(source);
+    flow._filters.insert(sources._filters.begin(), sources._filters.end());
+
+    AnchoredChecks checks;
+    anchorChecks(flow._filters, climbs, checks);
+
+    for (Operation* const hop : sources._hops) {
+        PatternEdge edge;
+        edge._op = hop;
+        describeHop(checks, climbs, edge);
+
+        flow._hopIndices.try_emplace(hop, flow._hops.size());
+        flow._hops.push_back(edge);
+    }
+}
+
+// The op every row leaving this one reaches next, when one filter or hop consumes its
+// results alone, beside the ops computing that filter's mask
+Operation* nextRowOp(Operation* op) {
+    Operation* next = nullptr;
+    llvm::SmallVector<Operation*, 4> others;
+    for (const Value result : op->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool carriesRows = isa<FilterOp>(user) || isEdgeHop(user);
+            if (!carriesRows) {
+                others.push_back(user);
+            } else if (next && next != user) {
+                return nullptr;
+            } else {
+                next = user;
+            }
+        }
+    }
+
+    if (!next || others.empty()) {
+        return next;
+    }
+
+    FilterOp filter = dyn_cast<FilterOp>(next);
+    if (!filter) {
+        return nullptr;
+    }
+
+    const MaskCone cone = collectMaskCone(filter.getMask());
+    const bool othersComputeTheMask = llvm::all_of(others, [&cone](Operation* other) {
+        return llvm::is_contained(cone._ops, other);
+    });
+
+    return othersComputeTheMask ? next : nullptr;
+}
+
+// The filters every row leaving the check's own filter goes on to pass, with nothing
+// reading the rows in between: the equality closing a cycle onto a bound node is one,
+// emitted after the check of the hop that lands on it
+void collectDownstreamFilters(FilterOp start, RowFlow& flow) {
+    for (Operation* op = nextRowOp(start); op; op = nextRowOp(op)) {
+        if (isa<FilterOp>(op)) {
+            flow._filters.insert(op);
+        }
+    }
+}
+
+// Two node columns a filter of the flow holds equal are one node in every row that reaches
+// the check: the end a hop lands on and the variable it closes a cycle onto
+void collectJoinedNodes(LineageClimbs& climbs, RowFlow& flow) {
+    for (Operation* const filterOp : flow._filters) {
+        EqOp equality = cast<FilterOp>(filterOp).getMask().getDefiningOp<EqOp>();
+        if (!equality || !isNodeColumn(equality.getLhs()) || !isNodeColumn(equality.getRhs())) {
+            continue;
+        }
+
+        const Value left = climbs.anchorOf(equality.getLhs());
+        const Value right = climbs.anchorOf(equality.getRhs());
+        if (left && right) {
+            flow._joinedNodes.emplace_back(left, right);
+        }
+    }
+}
+
+// The op that bound an edge or path column: the hop whose eids or the exploration whose paths
+// the column's lineage climbs to
+bool bindingOpOf(Value column, LineageClimbs& climbs, Operation*& op) {
+    constexpr unsigned EDGE_IDS_RESULT_INDEX = 1;
+    constexpr unsigned PATHS_RESULT_INDEX = 2;
+
+    const OpResult anchor = dyn_cast_or_null<OpResult>(climbs.anchorOf(column));
+    if (!anchor) {
+        return false;
+    }
+
+    Operation* const def = anchor.getOwner();
+    const unsigned resultIndex = anchor.getResultNumber();
+    const bool bindsEdges = isEdgeHop(def) && resultIndex == EDGE_IDS_RESULT_INDEX;
+    const bool bindsPaths = isa<ExplorePaths>(def) && resultIndex == PATHS_RESULT_INDEX;
+    if (!bindsEdges && !bindsPaths) {
+        return false;
+    }
+
+    op = def;
+
+    return true;
+}
+
+// The query's name for an edge or path column, which codegen leaves on the location of the
+// op binding it
+llvm::StringRef edgeName(Value column, LineageClimbs& climbs) {
+    Operation* op = nullptr;
+    if (!bindingOpOf(column, climbs, op)) {
+        return "?";
+    }
+
+    const NameLoc name = dyn_cast<NameLoc>(op->getLoc());
+
+    return name ? name.getName().getValue() : llvm::StringRef("?");
+}
+
+bool describeEdge(Value column, const RowFlow& flow, LineageClimbs& climbs, PatternEdge& edge) {
+    Operation* op = nullptr;
+    if (!bindingOpOf(column, climbs, op)) {
+        return false;
+    }
+
+    if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        edge._op = op;
+        edge._isPath = true;
+
+        llvm::SmallVector<llvm::StringRef, 2> types;
+        if (walkEdgeTypes(exploration, types)) {
+            edge._anyType = false;
+            edge._edgeTypes = types;
+        }
+
+        return true;
+    }
+
+    const auto hopIt = flow._hopIndices.find(op);
+    if (hopIt == flow._hopIndices.end()) {
+        return false;
+    }
+
+    edge = flow._hops[hopIt->second];
+
+    return true;
+}
+
+// P1: an edge carries one type, so two edges the pattern types apart are two edges
+bool provenByTypes(const PatternEdge& subject, const PatternEdge& other) {
+    if (subject._anyType || other._anyType) {
+        return false;
+    }
+
+    return llvm::none_of(subject._edgeTypes, [&other](llvm::StringRef type) {
+        return llvm::is_contained(other._edgeTypes, type);
+    });
+}
+
+// Whether one stored node can carry both label sets: some label set of the graph holds
+// every label of the two. A label the graph never gave out leaves the node impossible.
+bool canCoincide(const ::db::GraphView& view, llvm::ArrayRef<llvm::StringRef> first, llvm::ArrayRef<llvm::StringRef> second) {
+    if (first.empty() && second.empty()) {
+        return true;
+    }
+
+    const ::db::GraphMetadata& metadata = view.metadata();
+    const ::db::LabelMap& labels = metadata.labels();
+
+    ::db::LabelSet wanted;
+    for (const llvm::ArrayRef<llvm::StringRef> names : {first, second}) {
+        for (const llvm::StringRef name : names) {
+            const std::optional<::db::LabelID> label = labels.get(name);
+            if (!label) {
+                return false;
+            }
+
+            wanted.set(*label);
+        }
+    }
+
+    for (const ::db::LabelSetMap::Pair& pair : metadata.labelsets()) {
+        if (pair._value->hasAtLeastLabels(wanted)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// An edge's stored source and target, one pair per way the hop can read it
+struct EdgeEnds {
+    Value _source;
+    Value _target;
+    llvm::ArrayRef<llvm::StringRef> _sourceLabels;
+    llvm::ArrayRef<llvm::StringRef> _targetLabels;
+};
+
+void collectEdgeEnds(const PatternEdge& edge, llvm::SmallVectorImpl<EdgeEnds>& ends) {
+    if (edge._direction != HopDirection::In) {
+        ends.push_back(EdgeEnds {._source = edge._near,
+                                 ._target = edge._far,
+                                 ._sourceLabels = edge._nearLabels,
+                                 ._targetLabels = edge._farLabels});
+    }
+
+    if (edge._direction != HopDirection::Out) {
+        ends.push_back(EdgeEnds {._source = edge._far,
+                                 ._target = edge._near,
+                                 ._sourceLabels = edge._farLabels,
+                                 ._targetLabels = edge._nearLabels});
+    }
+}
+
+// P2: two edge variables bind one stored edge only if their sources are one node and their
+// targets are one node, in some orientation the directions allow; no label set carrying
+// both nodes' labels rules the orientation out, and every orientation ruled out proves
+// the pair. A path's edges have no labelled ends, so a path is never proven this way.
+bool provenByLabels(const ::db::GraphView& view, const PatternEdge& subject, const PatternEdge& other) {
+    if (subject._isPath || other._isPath) {
+        return false;
+    }
+
+    llvm::SmallVector<EdgeEnds, 2> subjectEnds;
+    llvm::SmallVector<EdgeEnds, 2> otherEnds;
+    collectEdgeEnds(subject, subjectEnds);
+    collectEdgeEnds(other, otherEnds);
+
+    for (const EdgeEnds& first : subjectEnds) {
+        for (const EdgeEnds& second : otherEnds) {
+            const bool sourcesCoincide = canCoincide(view, first._sourceLabels, second._sourceLabels);
+            const bool targetsCoincide = canCoincide(view, first._targetLabels, second._targetLabels);
+            if (sourcesCoincide && targetsCoincide) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// The nodes of the pattern once the pair's ends are identified: the anchors of the flow's
+// hops, joined where a source meets a source and a target a target
+class MergedNodes {
+public:
+    size_t indexOf(Value anchor) {
+        const auto [entry, inserted] = _indices.try_emplace(anchor, _parents.size());
+        if (inserted) {
+            _parents.push_back(entry->second);
+        }
+
+        return entry->second;
+    }
+
+    size_t classOf(Value anchor) {
+        size_t node = indexOf(anchor);
+        while (_parents[node] != node) {
+            node = _parents[node];
+        }
+
+        return node;
+    }
+
+    void merge(Value first, Value second) {
+        _parents[classOf(first)] = classOf(second);
+    }
+
+    size_t size() const { return _parents.size(); }
+
+private:
+    llvm::DenseMap<Value, size_t> _indices;
+    std::vector<size_t> _parents;
+};
+
+bool resolveLabels(const ::db::LabelMap& labels, llvm::ArrayRef<llvm::StringRef> names, ::db::LabelSet& into) {
+    for (const llvm::StringRef name : names) {
+        const std::optional<::db::LabelID> label = labels.get(name);
+        if (!label) {
+            return false;
+        }
+
+        into.set(*label);
+    }
+
+    return true;
+}
+
+// The types a hop may bind among those the graph holds, false when it names none of them
+bool resolveEdgeTypes(const ::db::EdgeTypeMap& types, llvm::ArrayRef<llvm::StringRef> names, std::vector<::db::EdgeTypeID>& into) {
+    for (const llvm::StringRef name : names) {
+        const std::optional<::db::EdgeTypeID> type = types.get(name);
+        if (type) {
+            into.push_back(*type);
+        }
+    }
+
+    return !into.empty();
+}
+
+// The types the pair's one edge may carry once both hops bind it: the names both allow
+bool resolveSharedEdgeTypes(const ::db::EdgeTypeMap& types,
+                            const PatternEdge& subject,
+                            const PatternEdge& other,
+                            std::vector<::db::EdgeTypeID>& into) {
+    if (subject._anyType && other._anyType) {
+        return true;
+    } else if (subject._anyType) {
+        return resolveEdgeTypes(types, other._edgeTypes, into);
+    } else if (other._anyType) {
+        return resolveEdgeTypes(types, subject._edgeTypes, into);
+    }
+
+    llvm::SmallVector<llvm::StringRef, 2> shared;
+    for (const llvm::StringRef type : subject._edgeTypes) {
+        if (llvm::is_contained(other._edgeTypes, type)) {
+            shared.push_back(type);
+        }
+    }
+
+    return resolveEdgeTypes(types, shared, into);
+}
+
+
+// The pattern the clause becomes when the pair binds one edge, in the given orientation:
+// the pair's edge first, then every other hop of the flow between the nodes the merge
+// leaves. False when a label or a type set the pattern names holds nothing.
+bool buildMergedPattern(const ::db::GraphMetadata& metadata,
+                        const RowFlow& flow,
+                        const PatternEdge& subject,
+                        const PatternEdge& other,
+                        const EdgeEnds& subjectEnds,
+                        const EdgeEnds& otherEnds,
+                        ::db::SchemaPattern& pattern) {
+    MergedNodes nodes;
+    for (const PatternEdge& hop : flow._hops) {
+        if (hop._near) {
+            nodes.indexOf(hop._near);
+            nodes.indexOf(hop._far);
+        }
+    }
+
+    for (const auto& [left, right] : flow._joinedNodes) {
+        nodes.merge(left, right);
+    }
+    nodes.merge(subjectEnds._source, otherEnds._source);
+    nodes.merge(subjectEnds._target, otherEnds._target);
+
+    // A pattern node per class, numbered as the classes are met
+    std::vector<size_t> nodeOfClass(nodes.size(), nodes.size());
+    const auto nodeOf = [&nodes, &nodeOfClass, &pattern](Value anchor) {
+        const size_t classIndex = nodes.classOf(anchor);
+        if (nodeOfClass[classIndex] == nodeOfClass.size()) {
+            nodeOfClass[classIndex] = pattern._nodes.size();
+            pattern._nodes.emplace_back();
+        }
+
+        return nodeOfClass[classIndex];
+    };
+
+    const ::db::LabelMap& labels = metadata.labels();
+    for (const PatternEdge& hop : flow._hops) {
+        if (!hop._near) {
+            continue;
+        }
+
+        const bool resolved = resolveLabels(labels, hop._nearLabels, pattern._nodes[nodeOf(hop._near)]._labels)
+                              && resolveLabels(labels, hop._farLabels, pattern._nodes[nodeOf(hop._far)]._labels);
+        if (!resolved) {
+            return false;
+        }
+    }
+
+    const ::db::EdgeTypeMap& types = metadata.edgeTypes();
+
+    ::db::SchemaPattern::Edge merged;
+    merged._source = nodeOf(subjectEnds._source);
+    merged._target = nodeOf(subjectEnds._target);
+    if (!resolveSharedEdgeTypes(types, subject, other, merged._types)) {
+        return false;
+    }
+    pattern._edges.push_back(merged);
+
+    for (const PatternEdge& hop : flow._hops) {
+        const bool isThePair = hop._op == subject._op || hop._op == other._op;
+        if (isThePair || !hop._near) {
+            continue;
+        }
+
+        ::db::SchemaPattern::Edge edge;
+        const bool reversed = hop._direction == HopDirection::In;
+        edge._source = nodeOf(reversed ? hop._far : hop._near);
+        edge._target = nodeOf(reversed ? hop._near : hop._far);
+        edge._undirected = hop._direction == HopDirection::Both;
+        if (!hop._anyType && !resolveEdgeTypes(types, hop._edgeTypes, edge._types)) {
+            return false;
+        }
+
+        pattern._edges.push_back(edge);
+    }
+
+    return true;
+}
+
+// Whether every orientation the pair's directions allow merges the clause into a pattern
+// the data cannot hold, by the test given; an orientation naming a label or a type the
+// graph lacks holds nothing either. Once the pass has spent @param steps nothing is proven.
+template <typename Impossible>
+bool everyOrientationImpossible(const ::db::GraphView& view,
+                                const RowFlow& flow,
+                                const PatternEdge& subject,
+                                const PatternEdge& other,
+                                const size_t& steps,
+                                Impossible impossible) {
+    const bool bothFixedHops = !subject._isPath && !other._isPath && subject._near && other._near;
+    if (!bothFixedHops) {
+        return false;
+    }
+
+    const ::db::GraphMetadata& metadata = view.metadata();
+
+    llvm::SmallVector<EdgeEnds, 2> subjectEnds;
+    llvm::SmallVector<EdgeEnds, 2> otherEnds;
+    collectEdgeEnds(subject, subjectEnds);
+    collectEdgeEnds(other, otherEnds);
+
+    for (const EdgeEnds& first : subjectEnds) {
+        for (const EdgeEnds& second : otherEnds) {
+            if (steps == 0) {
+                return false;
+            }
+
+            ::db::SchemaPattern pattern;
+            const bool satisfiable = buildMergedPattern(metadata, flow, subject, other, first, second, pattern);
+            if (satisfiable && !impossible(pattern)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// The directed cycles of a merged pattern, by a depth-first search from each node over the
+// nodes after it, carrying the types the way's edges may hold. An undirected edge runs
+// either way and is left out; an edge of any type widens the set to every type of the
+// graph. Each edge tried takes one of the pass's steps, and a search left without steps
+// finds nothing.
+class PatternCycleSearch {
+public:
+    PatternCycleSearch(const ::db::GraphView& view, const ::db::SchemaPattern& pattern, size_t& steps)
+        : _view(view),
+        _pattern(pattern),
+        _steps(steps)
+    {
+        _onWay.resize(pattern._nodes.size(), false);
+    }
+
+    // Whether some cycle runs over types the view's parts hold no cycle of
+    bool findsOneTheDataLacks() {
+        for (size_t start = 0; start < _pattern._nodes.size(); start++) {
+            if (closesACycleFrom(start)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+private:
+    static constexpr size_t NO_EDGE = SIZE_MAX;
+
+    // A node on the way, the next of its edges to try, and the edge the way left it by
+    struct WayStep {
+        size_t _node {0};
+        size_t _nextEdge {0};
+        size_t _takenEdge {NO_EDGE};
+    };
+
+    const ::db::GraphView& _view;
+    const ::db::SchemaPattern& _pattern;
+    size_t& _steps;
+    std::vector<bool> _onWay;
+    std::vector<::db::EdgeTypeID> _wayTypes;
+    size_t _anyTypeEdgesOnWay {0};
+
+    void take(const ::db::SchemaPattern::Edge& edge) {
+        if (edge._types.empty()) {
+            _anyTypeEdgesOnWay++;
+        }
+
+        _wayTypes.insert(_wayTypes.end(), edge._types.begin(), edge._types.end());
+    }
+
+    void drop(const ::db::SchemaPattern::Edge& edge) {
+        if (edge._types.empty()) {
+            _anyTypeEdgesOnWay--;
+        }
+
+        _wayTypes.resize(_wayTypes.size() - edge._types.size());
+    }
+
+    bool closesOverAcyclicTypes() const {
+        if (_anyTypeEdgesOnWay == 0) {
+            return _view.isAcyclicOver(_wayTypes);
+        }
+
+        std::vector<::db::EdgeTypeID> everyType;
+        for (const ::db::EdgeTypeMap::Pair& pair : _view.metadata().edgeTypes()) {
+            everyType.push_back(pair._id);
+        }
+
+        return _view.isAcyclicOver(everyType);
+    }
+
+    bool closesACycleFrom(size_t start) {
+        const std::vector<::db::SchemaPattern::Edge>& edges = _pattern._edges;
+
+        std::vector<WayStep> way {WayStep {._node = start}};
+        _onWay.assign(_onWay.size(), false);
+        _onWay[start] = true;
+        _wayTypes.clear();
+        _anyTypeEdgesOnWay = 0;
+
+        while (!way.empty()) {
+            WayStep& step = way.back();
+            if (step._takenEdge != NO_EDGE) {
+                drop(edges[step._takenEdge]);
+                step._takenEdge = NO_EDGE;
+            }
+
+            size_t edgeIndex = step._nextEdge;
+            while (edgeIndex < edges.size() && (edges[edgeIndex]._undirected || edges[edgeIndex]._source != step._node)) {
+                edgeIndex++;
+            }
+
+            if (edgeIndex == edges.size()) {
+                _onWay[step._node] = false;
+                way.pop_back();
+                continue;
+            } else if (_steps == 0) {
+                return false;
+            }
+
+            _steps--;
+            step._nextEdge = edgeIndex + 1;
+
+            const ::db::SchemaPattern::Edge& edge = edges[edgeIndex];
+            take(edge);
+            if (edge._target == start) {
+                if (closesOverAcyclicTypes()) {
+                    return true;
+                }
+                drop(edge);
+            } else if (edge._target > start && !_onWay[edge._target]) {
+                step._takenEdge = edgeIndex;
+                _onWay[edge._target] = true;
+                way.push_back(WayStep {._node = edge._target});
+            } else {
+                drop(edge);
+            }
+        }
+
+        return false;
+    }
+};
+
+enum class DistinctEdgesVerdict {
+    Kept,
+    ProvenByTypes,
+    ProvenByLabels,
+    ProvenBySchema,
+    ProvenByAcyclicity,
+};
+
+llvm::StringRef verdictName(DistinctEdgesVerdict verdict) {
+    switch (verdict) {
+        case DistinctEdgesVerdict::Kept:
+            return "kept";
+        break;
+        case DistinctEdgesVerdict::ProvenByTypes:
+            return "proven by types";
+        break;
+        case DistinctEdgesVerdict::ProvenByLabels:
+            return "proven by labels";
+        break;
+        case DistinctEdgesVerdict::ProvenBySchema:
+            return "proven by schema";
+        break;
+        case DistinctEdgesVerdict::ProvenByAcyclicity:
+            return "proven by acyclicity";
+        break;
+    }
+
+    return "kept";
+}
+
+// P3: the pair binding one edge merges the clause's pattern into a smaller one with a cycle
+// in it, which has to embed into the graph's summary for the data to hold a row of it. P4: an
+// orientation that embeds is still impossible when it closes a directed cycle over types the
+// parts hold no cycle of. Every orientation ruled out by one or the other proves the pair.
+DistinctEdgesVerdict proveByParts(const ::db::GraphView& view, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other, size_t& steps) {
+    const ::db::SchemaGraph& schema = view.schemaGraph();
+    const ::db::LabelSetMap& labelSets = view.metadata().labelsets();
+
+    bool searchedCycles = false;
+    const bool proven = everyOrientationImpossible(view, flow, subject, other, steps, [&view, &schema, &labelSets, &searchedCycles, &steps](const ::db::SchemaPattern& pattern) {
+        if (!schema.embeds(pattern, labelSets, steps)) {
+            return true;
+        }
+
+        searchedCycles = true;
+        PatternCycleSearch cycles(view, pattern, steps);
+
+        return cycles.findsOneTheDataLacks();
+    });
+
+    if (!proven) {
+        return DistinctEdgesVerdict::Kept;
+    } else if (searchedCycles) {
+        return DistinctEdgesVerdict::ProvenByAcyclicity;
+    } else {
+        return DistinctEdgesVerdict::ProvenBySchema;
+    }
+}
+
+// The check and the filter cutting the rows on it, the shape codegen leaves after a hop
+struct DistinctnessFilter {
+    CheckEdgeDistinct _check;
+    FilterOp _filter;
+};
+
+bool matchDistinctnessFilter(FilterOp filter, DistinctnessFilter& matched) {
+    CheckEdgeDistinct check = filter.getMask().getDefiningOp<CheckEdgeDistinct>();
+    if (!check || !check.getResult().hasOneUse()) {
+        return false;
+    }
+
+    matched = DistinctnessFilter {._check = check, ._filter = filter};
+
+    return true;
+}
+
+// What the proofs may read of the graph: its label sets, and its parts' edges through the
+// summary and the sort by type, when every edge the query will see is in the parts
+struct ProofSources {
+    const ::db::GraphView* _labels {nullptr};
+    const ::db::GraphView* _parts {nullptr};
+};
+
+DistinctEdgesVerdict proveDistinct(const ProofSources& sources, const RowFlow& flow, const PatternEdge& subject, const PatternEdge& other, size_t& steps) {
+    if (provenByTypes(subject, other)) {
+        return DistinctEdgesVerdict::ProvenByTypes;
+    } else if (sources._labels && provenByLabels(*sources._labels, subject, other)) {
+        return DistinctEdgesVerdict::ProvenByLabels;
+    } else if (sources._parts) {
+        return proveByParts(*sources._parts, flow, subject, other, steps);
+    }
+
+    return DistinctEdgesVerdict::Kept;
+}
+
+// The steps the schema proofs of one query may take between them, so that a clause of n
+// edges, whose n(n-1)/2 pairs each run a search, costs a bounded total
+constexpr size_t SCHEMA_PROOF_STEP_BUDGET = 1000000;
+
+// A check and the positions among its others of those the proofs left standing
+struct ProvenPairs {
+    DistinctnessFilter _matched;
+    llvm::SmallVector<size_t, 4> _kept;
+};
+
+// Settles what the proofs can of one check's pairs, one line per pair to the report
+void provePairs(const ProofSources& sources,
+                RowSourcesIndex& index,
+                LineageClimbs& climbs,
+                size_t& steps,
+                std::string& report,
+                ProvenPairs& proven) {
+    CheckEdgeDistinct check = proven._matched._check;
+    RowFlow flow;
+    collectRowFlow(check.getSubject(), index, climbs, flow);
+    collectDownstreamFilters(proven._matched._filter, flow);
+    collectJoinedNodes(climbs, flow);
+
+    PatternEdge subject;
+    const bool subjectKnown = describeEdge(check.getSubject(), flow, climbs, subject);
+    const llvm::StringRef subjectName = edgeName(check.getSubject(), climbs);
+
+    const Operation::operand_range others = check.getOthers();
+    for (size_t index = 0; index < others.size(); index++) {
+        PatternEdge edge;
+        const bool known = subjectKnown && describeEdge(others[index], flow, climbs, edge);
+
+        const DistinctEdgesVerdict verdict = known ? proveDistinct(sources, flow, subject, edge, steps) : DistinctEdgesVerdict::Kept;
+        if (verdict == DistinctEdgesVerdict::Kept) {
+            proven._kept.push_back(index);
+        }
+
+        report += subjectName;
+        report += " <> ";
+        report += edgeName(others[index], climbs);
+        report += ": ";
+        report += verdictName(verdict);
+        report += '\n';
+    }
+}
+
+// Drops the operands the pair proofs settled: the check goes with its filter when none is
+// left, and narrows to the kept ones otherwise
+void narrowCheck(const ProvenPairs& proven, mlir::RewriterBase& rewriter) {
+    CheckEdgeDistinct check = proven._matched._check;
+    FilterOp filter = proven._matched._filter;
+    const Operation::operand_range others = check.getOthers();
+
+    if (proven._kept.size() == others.size()) {
+        return;
+    } else if (proven._kept.empty()) {
+        bypassFilter(filter);
+        rewriter.eraseOp(filter);
+        rewriter.eraseOp(check);
+        return;
+    }
+
+    llvm::SmallVector<Value, 4> kept;
+    for (const size_t index : proven._kept) {
+        kept.push_back(others[index]);
+    }
+
+    rewriter.modifyOpInPlace(check, [&check, &kept]() {
+        check.getOthersMutable().assign(kept);
+    });
+}
+
+struct ProveDistinctEdges : public impl::ProveDistinctEdgesBase<ProveDistinctEdges> {
+    ProveDistinctEdges() {}
+
+    ProveDistinctEdges(const DBPassContext* context)
+        : _context(context)
+    {
+    }
+
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // The label sets a query's own writes add are not in the graph's map yet, and the
+        // edges a change has not committed are in no part, so neither proves anything then
+        const DBPassContext& context = *_context;
+        ProofSources sources;
+        sources._labels = writesTheGraph(root) ? nullptr : context._view;
+        sources._parts = context._hasPendingWrites ? nullptr : sources._labels;
+
+        llvm::SmallVector<ProvenPairs> checks;
+        root->walk([&checks](FilterOp filter) {
+            DistinctnessFilter match;
+            if (matchDistinctnessFilter(filter, match)) {
+                checks.push_back(ProvenPairs {._matched = match});
+            }
+        });
+
+        RowSourcesIndex index;
+        LineageClimbs climbs;
+        size_t steps = SCHEMA_PROOF_STEP_BUDGET;
+        std::string report;
+        for (ProvenPairs& proven : checks) {
+            provePairs(sources, index, climbs, steps, report, proven);
+        }
+
+        mlir::IRRewriter rewriter(&getContext());
+        for (const ProvenPairs& proven : checks) {
+            narrowCheck(proven, rewriter);
+        }
+
+        ::db::ExplainReport* const explain = context._explain;
+        const bool reports = explain && explain->isRequested(::db::ExplainStage::EDGES) && !report.empty();
+        if (reports) {
+            explain->addText(::db::ExplainRequest::getStageName(::db::ExplainStage::EDGES), report);
+        }
+    }
+
+private:
+    const DBPassContext* _context {&defaultPassContext};
+};
+
 struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
     CountFromMetadata() {}
 
@@ -9480,6 +10948,10 @@ private:
 
 std::unique_ptr<Pass> createFuseScanEdgesByEndpointLabel(const DBPassContext* context) {
     return std::make_unique<FuseScanEdgesByEndpointLabel>(context);
+}
+
+std::unique_ptr<Pass> createProveDistinctEdges(const DBPassContext* context) {
+    return std::make_unique<ProveDistinctEdges>(context);
 }
 
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GetInEdgesIterator.h"
+#include "ExcludedEdges.h"
 
 #include "metadata/LabelSetHandle.h"
 
@@ -21,6 +22,8 @@ public:
     void setSrcIDs(ColumnNodeIDs* srcs) { _srcs = srcs; }
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
+    void setExcludedEdges(const ExcludedEdges& excluded) { _excluded = excluded; }
+
 private:
     LabelSetHandle _labelset;
 
@@ -30,6 +33,8 @@ private:
     ColumnEdgeTypes* _types {nullptr};
 
     TombstoneFilter _filter;
+    ExcludedEdges _excluded;
+    size_t _heldInRun {0};
 
     void filterTombstones();
 };

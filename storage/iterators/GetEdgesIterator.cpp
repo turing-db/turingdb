@@ -5,6 +5,7 @@
 #include "columns/ColumnIDs.h"
 #include "indexers/EdgeIndexer.h"
 #include "datapart/DataPart.h"
+#include "datapart/EdgeContainer.h"
 #include "IteratorUtils.h"
 
 #include "BioAssert.h"
@@ -38,6 +39,7 @@ void GetEdgesIterator::init() {
         for (; _nodeIt != _inputNodeIDs->cend(); _nodeIt++) {
             const NodeID nodeID = *_nodeIt;
             _edges = indexer.getNodeOutEdges(nodeID);
+            _nodeOutEdges = _edges;
 
             if (!_edges.empty()) {
                 _edgeIt = _edges.begin();
@@ -81,6 +83,7 @@ void GetEdgesIterator::advancePartIterator(size_t n) {
         const EdgeIndexer& indexer = part->edgeIndexer();
 
         _edges = indexer.getNodeOutEdges(nodeID);
+        _nodeOutEdges = _edges;
         _edgeIt = _edges.begin();
         _direction = Direction::Outgoing;
 
@@ -127,6 +130,7 @@ void GetEdgesIterator::nextValid() {
         const EdgeIndexer* indexer = &_partIt.get()->edgeIndexer();
 
         _edges = indexer->getNodeOutEdges(nodeID);
+        _nodeOutEdges = _edges;
         _edgeIt = _edges.begin();
     }
 }
@@ -136,6 +140,44 @@ GetEdgesChunkWriter::GetEdgesChunkWriter(const GraphView& view,
     : GetEdgesIterator(view, inputNodeIDs),
     _filter(view)
 {
+}
+
+void GetEdgesChunkWriter::classifyRow(std::span<const EdgeID> excluded) {
+    const DataPart* part = _partIt.get();
+    if (part != _boundPart) {
+        const EdgeContainer& edges = part->edges();
+        _boundPart = part;
+        _partOutEdges = edges.getOuts();
+        _partFirstEdgeID = edges.getFirstEdgeID();
+        _partSelfLoopOffsets = edges.getSelfLoopOffsets();
+    }
+
+    _heldInOutRun = 0;
+    _heldInInRun = 0;
+
+    const size_t nodeFirst = _nodeOutEdges.empty() ? 0 : _nodeOutEdges.data() - _partOutEdges.data();
+    const size_t nodeCount = _nodeOutEdges.size();
+
+    for (size_t position = 0; position < excluded.size(); position++) {
+        const EdgeID edge = excluded[position];
+        const size_t offset = (edge - _partFirstEdgeID).getValue();
+        const bool repeated = ExcludedEdges::repeatsEarlier(excluded, position);
+
+        if (repeated || offset >= _partOutEdges.size()) {
+            continue;
+        }
+
+        if (offset >= nodeFirst && offset < nodeFirst + nodeCount) {
+            _heldInOutRun++;
+
+            // An edge leaving the node enters it only as a self-loop
+            if (std::binary_search(_partSelfLoopOffsets.begin(), _partSelfLoopOffsets.end(), offset)) {
+                _heldInInRun++;
+            }
+        } else if (_partOutEdges[offset]._otherID == *_nodeIt) {
+            _heldInInRun++;
+        }
+    }
 }
 
 void GetEdgesChunkWriter::filterTombstones() {
@@ -179,46 +221,82 @@ void GetEdgesChunkWriter::fill(size_t maxCount) {
     }
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+        constexpr bool INDICES_ONLY = !conditions[0] && !conditions[1] && !conditions[2];
+
         while (isValid() && remainingToMax > 0) {
             const size_t avail = std::distance(_edgeIt, _edges.end());
             const size_t rangeSize = std::min(remainingToMax, avail);
             const size_t prevSize = _indices->size();
-            const size_t newSize = prevSize + rangeSize;
-            _indices->resize(newSize);
-
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
-            std::fill(_indices->begin() + prevSize, _indices->end(), index);
-            remainingToMax -= rangeSize;
 
-            if constexpr (conditions[0]) {
-                _edgeIDs->resize(newSize);
-                std::generate((_edgeIDs)->begin() + prevSize,
-                              (_edgeIDs)->end(),
-                              [edgeIt = this->_edgeIt]() mutable {
-                                  const EdgeID id = edgeIt->_edgeID;
-                                  ++edgeIt;
-                                  return id;
-                              });
+            std::span<const EdgeID> excluded;
+            if (_excluded.isSet() && _edgeIt == _edges.begin()) {
+                excluded = _excluded.rowEdges(index);
+                if (_direction == Direction::Outgoing || _nodeOutEdges.empty()) {
+                    classifyRow(excluded);
+                }
+
+                _heldInRun = _direction == Direction::Outgoing ? _heldInOutRun : _heldInInRun;
+            } else if (_heldInRun > 0) {
+                excluded = _excluded.rowEdges(index);
             }
-            if constexpr (conditions[1]) {
-                _others->resize(newSize);
-                std::generate((_others)->begin() + prevSize,
-                              (_others)->end(),
-                              [edgeIt = this->_edgeIt]() mutable {
-                                  const NodeID id = edgeIt->_otherID;
-                                  ++edgeIt;
-                                  return id;
-                              });
+
+            size_t dropped = 0;
+            if constexpr (INDICES_ONLY) {
+                dropped = ExcludedEdges::dropHeld(rangeSize, _heldInRun);
             }
-            if constexpr (conditions[2]) {
-                _types->resize(newSize);
-                std::generate((_types)->begin() + prevSize,
-                              (_types)->end(),
-                              [edgeIt = this->_edgeIt]() mutable {
-                                  const EdgeTypeID id = edgeIt->_edgeTypeID;
-                                  ++edgeIt;
-                                  return id;
-                              });
+
+            const size_t newSize = prevSize + rangeSize - dropped;
+            _indices->resize(newSize);
+            std::fill(_indices->begin() + prevSize, _indices->end(), index);
+            remainingToMax -= rangeSize - dropped;
+
+            if constexpr (!INDICES_ONLY) {
+                if (_heldInRun > 0) {
+                    const std::span<const EdgeRecord> run(&*_edgeIt, rangeSize);
+                    const EdgeContainer* outPart = _direction == Direction::Outgoing ? &_boundPart->edges() : nullptr;
+                    const size_t leftOut = ExcludedEdges::copyRunLeavingOut(excluded,
+                                                                            _heldInRun,
+                                                                            run,
+                                                                            prevSize,
+                                                                            outPart,
+                                                                            _indices,
+                                                                            _edgeIDs,
+                                                                            _others,
+                                                                            _types);
+                    remainingToMax += leftOut;
+                } else {
+                    if constexpr (conditions[0]) {
+                        _edgeIDs->resize(newSize);
+                        std::generate((_edgeIDs)->begin() + prevSize,
+                                      (_edgeIDs)->end(),
+                                      [edgeIt = this->_edgeIt]() mutable {
+                                          const EdgeID id = edgeIt->_edgeID;
+                                          ++edgeIt;
+                                          return id;
+                                      });
+                    }
+                    if constexpr (conditions[1]) {
+                        _others->resize(newSize);
+                        std::generate((_others)->begin() + prevSize,
+                                      (_others)->end(),
+                                      [edgeIt = this->_edgeIt]() mutable {
+                                          const NodeID id = edgeIt->_otherID;
+                                          ++edgeIt;
+                                          return id;
+                                      });
+                    }
+                    if constexpr (conditions[2]) {
+                        _types->resize(newSize);
+                        std::generate((_types)->begin() + prevSize,
+                                      (_types)->end(),
+                                      [edgeIt = this->_edgeIt]() mutable {
+                                          const EdgeTypeID id = edgeIt->_edgeTypeID;
+                                          ++edgeIt;
+                                          return id;
+                                      });
+                    }
+                }
             }
 
             _edgeIt += rangeSize;

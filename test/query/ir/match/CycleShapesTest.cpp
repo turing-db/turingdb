@@ -11,8 +11,9 @@ using namespace turing::test;
 
 // Each pattern closing a cycle is checked against the same pattern with the repeated node
 // spelled as a fresh variable and tied back with an id() equality, which the dependency
-// graph sees as no cycle at all. The T graph holds the triangle a->b->c->a, the 2-cycle
-// c->d->c and the self-loop d->d.
+// graph sees as no cycle at all. The T graph holds the triangle a->b->c->a, the 2-cycles
+// c->d->c, b->d->b and a->d->a, a second d->c edge and the self-loop d->d: no edge is taken
+// twice, so every shape below needs that many distinct edges to close.
 class CycleShapesTest : public CallV3Test {
 protected:
     void initialize() override {
@@ -20,7 +21,14 @@ protected:
 
         runWrite("CREATE (a:T {name: 'a'}), (b:T {name: 'b'}), (c:T {name: 'c'}), (d:T {name: 'd'}), "
                  "(a)-[:R]->(b), (b)-[:R]->(c), (c)-[:R]->(a), "
-                 "(c)-[:R]->(d), (d)-[:R]->(c), (d)-[:R]->(d)");
+                 "(c)-[:R]->(d), (d)-[:R]->(c), (d)-[:R]->(d), "
+                 "(b)-[:R]->(d), (d)-[:R]->(b), (a)-[:R]->(d), (d)-[:R]->(a), (d)-[:R]->(c)");
+    }
+
+    void expectNoRows(std::string_view query) {
+        std::vector<StringRowSink::Row> rows;
+        collectRows(query, rows);
+        EXPECT_TRUE(rows.empty()) << query;
     }
 
     void expectSameRows(std::string_view cycle, std::string_view reference) {
@@ -77,9 +85,10 @@ TEST_F(CycleShapesTest, reachesTheMiddleOfATriangleFromAnotherPattern) {
                    "MATCH (x:T)-->(y:T)-->(z:T)-->(w:T), (s:T)-->(y) WHERE id(w) = id(x) RETURN s.name, x.name, y.name, z.name");
 }
 
+// The one self-loop cannot be both hops, so neither spelling matches
 TEST_F(CycleShapesTest, chainsASelfLoop) {
-    expectSameRows("MATCH (x:T)-->(x)-->(x) RETURN x.name",
-                   "MATCH (x:T)-->(y:T)-->(z:T) WHERE id(y) = id(x) AND id(z) = id(x) RETURN x.name");
+    expectNoRows("MATCH (x:T)-->(x)-->(x) RETURN x.name");
+    expectNoRows("MATCH (x:T)-->(y:T)-->(z:T) WHERE id(y) = id(x) AND id(z) = id(x) RETURN x.name");
 }
 
 TEST_F(CycleShapesTest, passesThroughASelfLoop) {

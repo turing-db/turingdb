@@ -1655,11 +1655,12 @@ TEST_F(GroupAggregateCypherTest, groupedCountByTwoEdgeVariables) {
     GroupTwoEdgeCountSink sink;
     match("MATCH (a)-[e]->(b), (c)-[f]->(d), (x:Node) RETURN e, f, count(*)", sink);
 
-    // Two edges crossed with themselves and with the four nodes: four pairs of four rows
-    // each, so a key read before the grouping would answer with sixteen rows instead.
+    // Two edges crossed with each other and with the four nodes: two pairs of four rows
+    // each, an edge never pairing with itself, so a key read before the grouping would
+    // answer with eight rows instead.
     std::vector<GroupTwoEdgeCountSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<GroupTwoEdgeCountSink::Row> expected {{0, 0, 4}, {0, 1, 4}, {1, 0, 4}, {1, 1, 4}};
+    const std::vector<GroupTwoEdgeCountSink::Row> expected {{0, 1, 4}, {1, 0, 4}};
     EXPECT_EQ(rows, expected);
 }
 

@@ -237,7 +237,7 @@ TEST_F(WithMultiPartTest, joinsTwoBoundVariablesUndirected) {
 // spelling of the query is what the barrier has to agree with
 TEST_F(WithMultiPartTest, closesACycleThroughTwoBoundVariables) {
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b), (a)-[e1]->(b), (b)-[e2]->(a) RETURN count(*)",
-               {{"3"}});
+               {{"0"}});
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b) WITH a, b "
                "MATCH (a)-[e1]->(b), (b)-[e2]->(a) "
                "RETURN count(*)",
@@ -249,7 +249,7 @@ TEST_F(WithMultiPartTest, closesTwoParallelHopsBetweenBoundVariables) {
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b) WITH a, b "
                "MATCH (a)-[e1]->(b), (a)-[e2]->(b) "
                "RETURN count(*)",
-               {{"3"}});
+               {{"0"}});
 }
 
 // Remy and Adam each know the other well; nobody else knows a Person well both ways

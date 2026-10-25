@@ -804,7 +804,8 @@ TEST_F(NLDialectTest, getOutEdgesByTypeInfersEdgeIterator) {
     mlir::nl::GetOutEdgesByType edges = builder.create<mlir::nl::GetOutEdgesByType>(loc,
                                                                                    nodes,
                                                                                    handle.getResult(),
-                                                                                   mlir::ValueRange {});
+                                                                                   mlir::ValueRange {},
+                                                                                   mlir::DenseI64ArrayAttr());
     builder.create<mlir::func::ReturnOp>(loc);
 
     const mlir::Type nodeChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));

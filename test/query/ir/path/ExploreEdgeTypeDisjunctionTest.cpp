@@ -85,8 +85,15 @@ TEST_F(ExploreEdgeTypeDisjunctionTest, walksAfterAByTypeHop) {
 }
 
 TEST_F(ExploreEdgeTypeDisjunctionTest, sharesTheTypeSetWithAHopThatNamesIt) {
-    expectSameRows("MATCH (n:Person)-[:KNOWS_WELL]->(b)-[e:KNOWS_WELL*1..2]->(m) RETURN n.name, m.name",
-                   "MATCH (n:Person)-[:KNOWS_WELL]->(b) MATCH (b)-[e:KNOWS_WELL*1..2]->(m) RETURN n.name, m.name");
+    // The walk leaves the hop's own edge out, so it only comes back over the reciprocal
+    // one; a second MATCH is a clause of its own and takes the hop's edge again
+    Rows joined;
+    rowsOf("MATCH (n:Person)-[:KNOWS_WELL]->(b)-[e:KNOWS_WELL*1..2]->(m) RETURN n.name, m.name", joined);
+    EXPECT_EQ(joined, sorted(Rows {{"Adam", "Adam"}, {"Remy", "Remy"}}));
+
+    Rows clauses;
+    rowsOf("MATCH (n:Person)-[:KNOWS_WELL]->(b) MATCH (b)-[e:KNOWS_WELL*1..2]->(m) RETURN n.name, m.name", clauses);
+    EXPECT_EQ(clauses, sorted(Rows {{"Adam", "Adam"}, {"Adam", "Remy"}, {"Remy", "Adam"}, {"Remy", "Remy"}}));
 }
 
 TEST_F(ExploreEdgeTypeDisjunctionTest, walksBackwardOverEveryTypeItNames) {

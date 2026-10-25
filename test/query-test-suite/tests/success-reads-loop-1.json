@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (a)-->(x), (b { name: a.name})-->(x), (c {name: b.name})-->(x) RETURN a",
   "expect": {
-    "result": "a\n0\n0\n0\n0\n1\n1\n1\n6\n8\n8\n9\n9\n11\n15\n15\n12\n12\n17",
-    "resultJson": "{\"header\":{\"column_names\":[\"a\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,0,0,0,1,1,1,6,8,8,9,9,11,15,15,12,12,17]]]}"
+    "result": "a",
+    "resultJson": "{\"header\":{\"column_names\":[\"a\"],\"column_types\":[\"UInt64\"]},\"data\":[[[]]]}"
   },
   "tags": [
     "success",

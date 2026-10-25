@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (a)-->(b),(c)-->(d)-->(e),(a)-->(f)-->(g),(c)-->(g),(h),(i),(e),(h),(c)-->(j) RETURN a,c,e,g LIMIT 10",
   "expect": {
-    "result": "a,c,e,g\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0\n0,1,1,0",
-    "resultJson": "{\"header\":{\"column_names\":[\"a\",\"c\",\"e\",\"g\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\",\"UInt64\"]},\"data\":[[[0,0,0,0,0,0,0,0,0,0],[1,1,1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1,1,1],[0,0,0,0,0,0,0,0,0,0]]]}"
+    "result": "a,c,e,g",
+    "resultJson": "{\"header\":{\"column_names\":[\"a\",\"c\",\"e\",\"g\"],\"column_types\":[\"UInt64\",\"UInt64\",\"UInt64\",\"UInt64\"]},\"data\":[]}"
   },
   "tags": [
     "cartprod",

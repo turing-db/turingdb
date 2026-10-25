@@ -31,8 +31,8 @@ protected:
 };
 
 TEST_F(WalkListEqualityTest, comparesTheRelationshipsOfTwoWalks) {
-    expectSortedRows("MATCH (a:Person {name: 'Remy'})-[e:KNOWS_WELL*1..1]->(b), "
-                     "(c:Person {name: 'Remy'})-[f:KNOWS_WELL*1..1]->(d) RETURN e = f",
+    expectSortedRows("MATCH (a:Person {name: 'Remy'})-[e:KNOWS_WELL*1..1]->(b) "
+                     "MATCH (c:Person {name: 'Remy'})-[f:KNOWS_WELL*1..1]->(d) RETURN e = f",
                      {{"true"}});
 }
 
