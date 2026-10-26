@@ -3002,6 +3002,7 @@ def CurrentDateTime : TuringOp<"current_datetime", [Pure, ConstantThroughOperand
 def ElementID : TypedUnaryFunctionOp<"element_id", "::mlir::storage::NodeIDType, ::mlir::storage::EdgeIDType">;
 
 def Size : TypedUnaryFunctionOp<"size", "::mlir::storage::StringType, ::mlir::storage::ListType">;
+def IsEmpty : TypedUnaryFunctionOp<"is_empty", "::mlir::storage::StringType, ::mlir::storage::ListType, ::mlir::storage::MapType">;
 def CharLength : TextFunctionOp<"char_length">;
 def Head : ListFunctionOp<"head">;
 def Last : ListFunctionOp<"last">;

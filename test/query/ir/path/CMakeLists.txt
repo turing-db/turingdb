@@ -169,6 +169,8 @@ add_call_v3_test(test_query_ir_match_order_by_group MatchOrderByGroupTest.cpp)
 
 add_call_v3_test(test_query_ir_walk_list_equality WalkListEqualityTest.cpp)
 
+add_call_v3_test(test_query_ir_group_list_operators GroupListOperatorsTest.cpp)
+
 add_call_v3_test(test_query_ir_quantified_group_key QuantifiedGroupKeyTest.cpp)
 
 add_ir_tests(test_query_ir_hoist_hop_conjuncts HoistHopConjunctsTest.cpp)

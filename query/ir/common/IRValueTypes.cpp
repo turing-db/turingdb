@@ -56,7 +56,7 @@ mlir::Type db::valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueT
         break;
 
         case ValueType::List:
-            return mlir::storage::ListType::get(builder.getContext(), builder.getNoneType());
+            return builder.getType<mlir::storage::ListType>(builder.getType<mlir::storage::AnyType>());
         break;
 
         case ValueType::DateTime:

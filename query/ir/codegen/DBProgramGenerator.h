@@ -1507,7 +1507,7 @@ private:
     void expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected);
 
     // The column size() reads over a path column: the hop count of each path
-    mlir::Value pathLengthColumn(const Expr* argExpr, mlir::Value column);
+    mlir::Value pathLengthColumn(mlir::Value column);
 
     // The column nodes(), relationships() or length() reads over a named path
     mlir::Value pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind);

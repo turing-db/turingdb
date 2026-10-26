@@ -164,10 +164,11 @@ def List : StorageType<"List", "list"> {
         The element type of a chunk holding one list per row - storage's
         ColumnVector<ListView>, per docs/lists.md. Each cell is a ListView: a span
         over the list's elements in the query-scoped ListBuffer, so a row copies in
-        O(1) regardless of list length. The wrapped type is the (homogeneous) element
-        type - `!storage.list<none>` until the element primitive is resolved. It is
-        produced by a collect and drained element-by-element by an unwind, and by a
-        CALL of a procedure yielding a LIST return value.
+        O(1) regardless of list length. The wrapped type is the type every element is
+        read under: `!storage.any` where the elements share none, as in a stored list,
+        and `none` where no element names one, as in `[]`. It is produced by a collect
+        and drained element-by-element by an unwind, and by a CALL of a procedure
+        yielding a LIST return value.
     }];
     let parameters = (ins "::mlir::Type":$elementType);
     let assemblyFormat = "`<` $elementType `>`";

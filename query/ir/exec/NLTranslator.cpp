@@ -175,6 +175,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
 
     {"nl.element_id", &NLExecutor::selectId},
     {"nl.size",       &NLExecutor::selectSize},
+    {"nl.is_empty",   &NLExecutor::selectIsEmpty},
     {"nl.char_length", &NLExecutor::selectFunction<CharLengthFunction>},
     {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
     {"nl.last",       &NLExecutor::selectFunction<ListLastFunction>},

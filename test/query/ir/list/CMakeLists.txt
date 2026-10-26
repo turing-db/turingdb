@@ -150,3 +150,5 @@ add_call_v3_test(test_query_ir_logical_operator_over_unreached_cell LogicalOpera
 
 # reduce and allReduce over a list of collected paths.
 add_call_v3_test(test_query_ir_reduce_over_paths ReduceOverPathsTest.cpp)
+
+add_call_v3_test(test_query_ir_empty_list_unification EmptyListUnificationTest.cpp)

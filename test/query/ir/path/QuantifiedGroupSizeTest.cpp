@@ -81,7 +81,7 @@ TEST_F(QuantifiedGroupSizeTest, sizesAGroupPastAWith) {
 }
 
 TEST_F(QuantifiedGroupSizeTest, rejectsSizeOfANode) {
-    expectError("MATCH (n) RETURN size(n)", "its argument is a single entity");
+    expectError("MATCH (n) RETURN size(n)", "Invalid arguments for function 'size'");
 }
 
 int main(int argc, char** argv) {

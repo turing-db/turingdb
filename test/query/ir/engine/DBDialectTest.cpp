@@ -1382,12 +1382,22 @@ func.func @main() {
 }
 )mlir";
 
-// RETURN []: an empty list is the type-erased form and holds no element - a value all the
-// same, unlike UNWIND of it, which yields no row.
+// RETURN []: no element of an empty list names a type, so it is a list of none, and holds
+// no element - a value all the same, unlike UNWIND of it, which yields no row.
 const char* const emptyConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.constant([])
-  db.output(%xs) : !db.column<!storage.list<!storage.any>>
+  db.output(%xs) : !db.column<!storage.list<none>>
+  return
+}
+)mlir";
+
+// RETURN [[], [1]]: the empty list names no element type, so it joins the list of
+// integers beside it and the verdict is a list of lists of integers.
+const char* const emptyBesideTypedConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.constant([[], [1]])
+  db.output(%xs) : !db.column<!storage.list<!storage.list<i64>>>
   return
 }
 )mlir";
@@ -1949,15 +1959,27 @@ TEST_F(DBDialectTest, infersATypedListFromAgreeingElements) {
     EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, int64ListType));
 }
 
-TEST_F(DBDialectTest, infersAnErasedListFromAnEmptyOne) {
+TEST_F(DBDialectTest, infersAListOfNoneFromAnEmptyOne) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstListProgram);
     ASSERT_TRUE(module);
 
     mlir::db::ConstantOp listConstant = findListConstant(module.get());
     ASSERT_TRUE(listConstant);
 
-    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::AnyType::get(&_context));
-    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
+    const mlir::Type noneListType = mlir::storage::ListType::get(&_context, mlir::NoneType::get(&_context));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, noneListType));
+}
+
+TEST_F(DBDialectTest, infersAListOfListsFromAnEmptyListBesideATypedOne) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyBesideTypedConstListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
+
+    const mlir::Type integerListType = mlir::storage::ListType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    const mlir::Type nestedListType = mlir::storage::ListType::get(&_context, integerListType);
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, nestedListType));
 }
 
 TEST_F(DBDialectTest, infersATypedListFromANullElementBesideAnInteger) {

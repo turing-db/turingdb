@@ -2984,12 +2984,15 @@ def ToAny : NLOp<"to_any", [Pure, ConstantThroughOperands, RowAlignedThroughOper
   let description = [{
       The chunk a column takes where its rows hold values of different types, each row
       keeping the type it has: a scalar, an entity, a list or a map becomes a tagged cell,
-      and a null an absent one. A list chunk read as lists of tagged cells keeps the views
+      and a null an absent one. A list chunk read as lists of the type its elements join
+      into - tagged cells, or the one type an empty list's none joins to - keeps the views
       it holds, whose elements are tagged cells already.
 
       %r = nl.to_any %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<!storage.any>
       %l = nl.to_any %y : (!nl.chunk<!storage.list<!storage.string>>)
                           -> !nl.chunk<!storage.list<!storage.any>>
+      %e = nl.to_any %z : (!nl.chunk<!storage.list<none>>)
+                          -> !nl.chunk<!storage.list<!storage.node_id>>
   }];
 
   let arguments = (ins NLChunk:$operand);
@@ -3085,6 +3088,7 @@ def CurrentDateTime : NLOp<"current_datetime", [Pure, ConstantThroughOperands, R
 def ElementID : NLUnaryFunctionOp<"element_id", [ConstantThroughOperands]>;
 
 def Size : NLUnaryFunctionOp<"size", [ConstantThroughOperands]>;
+def IsEmpty : NLUnaryFunctionOp<"is_empty", [ConstantThroughOperands]>;
 def CharLength : NLUnaryFunctionOp<"char_length", [ConstantThroughOperands]>;
 def Head : NLUnaryFunctionOp<"head", [ConstantThroughOperands]>;
 def Last : NLUnaryFunctionOp<"last", [ConstantThroughOperands]>;

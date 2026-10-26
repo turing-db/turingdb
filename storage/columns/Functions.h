@@ -1388,6 +1388,43 @@ public:
     ResultType operator()(const ArgType string) const;
 };
 
+// isEmpty() of a tagged cell: one holding a null answers null, and one holding no list,
+// string or map is the type error its row raises
+class TaggedIsEmptyFunction {
+public:
+    using ArgType = CellView;
+    using ResultType = std::optional<types::Bool::Primitive>;
+
+    ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+class ListIsEmptyFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = types::Bool::Primitive;
+    using TaggedCounterpart = TaggedIsEmptyFunction;
+
+    ResultType operator()(const ArgType list) const;
+};
+
+class StringIsEmptyFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::Bool::Primitive;
+    using TaggedCounterpart = TaggedIsEmptyFunction;
+
+    ResultType operator()(const ArgType string) const;
+};
+
+class MapIsEmptyFunction {
+public:
+    using ArgType = MapView;
+    using ResultType = types::Bool::Primitive;
+
+    ResultType operator()(const ArgType map) const;
+};
+
 class TaggedCharLengthFunction {
 public:
     using ArgType = CellView;

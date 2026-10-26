@@ -170,9 +170,9 @@ TEST_F(ListLiteralElementTypeTest, typesAListOpeningOnNullAsIntegers) {
     expectListElementType("RETURN [null, 1]", mlir::IntegerType::get(&_context, 64));
 }
 
-TEST_F(ListLiteralElementTypeTest, typesASingletonNullListAsTaggedScalars) {
-    // Nothing but the null, so the only element is the untyped one.
-    expectListElementType("RETURN [null]", listElementType());
+TEST_F(ListLiteralElementTypeTest, typesASingletonNullListAsAListOfNone) {
+    // Nothing but the null, so no element names a type.
+    expectListElementType("RETURN [null]", mlir::NoneType::get(&_context));
 }
 
 TEST_F(ListLiteralElementTypeTest, typesAMixedNumericListAsTaggedScalars) {
@@ -181,10 +181,10 @@ TEST_F(ListLiteralElementTypeTest, typesAMixedNumericListAsTaggedScalars) {
     expectListElementType("RETURN [1, 2.5]", listElementType());
 }
 
-TEST_F(ListLiteralElementTypeTest, typesAnEmptyListAsTaggedScalars) {
-    // There is no element to read a type from, so the empty list takes the type-erased
-    // form rather than an arbitrary one.
-    expectListElementType("RETURN []", listElementType());
+TEST_F(ListLiteralElementTypeTest, typesAnEmptyListAsAListOfNone) {
+    // There is no element to read a type from, so the empty list names none, which joins
+    // whatever type a list it meets names.
+    expectListElementType("RETURN []", mlir::NoneType::get(&_context));
 }
 
 TEST_F(ListLiteralElementTypeTest, typesAListHoldingAListAsTaggedScalars) {
@@ -200,10 +200,14 @@ TEST_F(ListLiteralElementTypeTest, typesAListOfListsAsAListOfTheirSharedElement)
     expectListElementType("RETURN [[1, 2], [3]]", listOfType(mlir::IntegerType::get(&_context, 64)));
 }
 
-TEST_F(ListLiteralElementTypeTest, typesListsOfDisagreeingElementsAsTaggedScalars) {
-    // The nested lists carry a type of their own, so they disagree like any other pair of
-    // elements: a list of integers and a list of strings share none.
-    expectListElementType("RETURN [[1, 2], ['a']]", listElementType());
+TEST_F(ListLiteralElementTypeTest, typesListsOfDisagreeingElementsAsAListOfTaggedScalars) {
+    // The nested lists join element by element: a list of integers and a list of strings
+    // are both lists, of elements that share no type.
+    expectListElementType("RETURN [[1, 2], ['a']]", listOfType(listElementType()));
+}
+
+TEST_F(ListLiteralElementTypeTest, typesAnEmptyListBesideAListOfIntegersAsAListOfIntegers) {
+    expectListElementType("RETURN [[], [1, 2]]", listOfType(mlir::IntegerType::get(&_context, 64)));
 }
 
 TEST_F(ListLiteralElementTypeTest, typesListsOfMixedElementsAsAListOfTaggedScalars) {

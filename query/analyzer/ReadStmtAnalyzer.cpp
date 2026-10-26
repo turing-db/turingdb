@@ -375,12 +375,13 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
-        decl = _ctxt->getOrCreateNodePatternVariable(_ast, symbol->getName());
-        if (decl->isQuantifiedPath()) {
+        const VarDecl* declared = _ctxt->getDecl(symbol->getName());
+        if (declared && declared->isQuantifiedPath()) {
             throwError(fmt::format("Variable '{}' is already bound to the nodes a quantified pattern grouped", symbol->getName()),
                        nodePattern);
         }
 
+        decl = _ctxt->getOrCreateNodePatternVariable(_ast, symbol->getName());
         nodePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
@@ -430,14 +431,15 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = edgePattern->getSymbol()) {
-        decl = _ctxt->getOrCreateNamedVariable(_ast,
-                                               EvaluatedType::EdgePattern,
-                                               symbol->getName());
-        if (decl->isQuantifiedPath()) {
+        const VarDecl* declared = _ctxt->getDecl(symbol->getName());
+        if (declared && declared->isQuantifiedPath()) {
             throwError(fmt::format("Variable '{}' is already bound to the relationships a quantified pattern grouped", symbol->getName()),
                        edgePattern);
         }
 
+        decl = _ctxt->getOrCreateNamedVariable(_ast,
+                                               EvaluatedType::EdgePattern,
+                                               symbol->getName());
         edgePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
@@ -640,8 +642,9 @@ void ReadStmtAnalyzer::throwIfGroupNameIsBound(const DeclContext* outer, const S
                walk);
 }
 
-VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, EvaluatedType type, std::string_view name) {
-    VarDecl* group = outer->getOrCreateNamedVariable(_ast, type, name);
+VarDecl* ReadStmtAnalyzer::declareGroupVariable(DeclContext* outer, EvaluatedType entityType, std::string_view name) {
+    VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::List, name);
+    group->setListShape(ListShape(entityType, 1));
     group->setIsQuantifiedPath(true);
 
     return group;

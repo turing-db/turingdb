@@ -526,6 +526,8 @@ public:
     // its functor from the argument column as a conversion does.
     static NLUnaryFunctionKernel selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    static NLUnaryFunctionKernel selectIsEmpty(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
     static NLUnaryFunctionKernel selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLUnaryFunctionKernel selectReverse(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

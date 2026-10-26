@@ -763,7 +763,7 @@ TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementPerGroup) {
 }
 
 TEST_F(CypherUnwindExprTest, sumsNoHeterogeneousCellToZero) {
-    expectRows("UNWIND [] AS v RETURN sum(v)", {{"0.000000"}});
+    expectRows("UNWIND [1, 'a'] AS v WITH v WHERE v IS NULL RETURN sum(v)", {{"0.000000"}});
 }
 
 TEST_F(CypherUnwindExprTest, collectsEachTagOfAHeterogeneousElement) {

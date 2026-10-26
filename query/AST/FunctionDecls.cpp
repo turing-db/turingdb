@@ -119,20 +119,14 @@ void FunctionDecls::initDefault() {
     propertiesCell->setArguments({EvaluatedType::Any});
     propertiesCell->setReturnTypes({{EvaluatedType::Map}});
 
-    FunctionArgumentType nodeOrGroup(EvaluatedType::NodePattern);
-    nodeOrGroup.setTakesAVariableLengthPath(true);
-
-    FunctionArgumentType edgeOrPath(EvaluatedType::EdgePattern);
-    edgeOrPath.setTakesAVariableLengthPath(true);
-
     // Aggregate functions
     FunctionSignature* countNodes = createFunction("count");
-    countNodes->setArguments({nodeOrGroup});
+    countNodes->setArguments({EvaluatedType::NodePattern});
     countNodes->setReturnTypes({{EvaluatedType::Integer}});
     countNodes->setIsAggregate(true);
 
     FunctionSignature* countEdges = createFunction("count");
-    countEdges->setArguments({edgeOrPath});
+    countEdges->setArguments({EvaluatedType::EdgePattern});
     countEdges->setReturnTypes({{EvaluatedType::Integer}});
     countEdges->setIsAggregate(true);
 
@@ -215,13 +209,13 @@ void FunctionDecls::initDefault() {
     collectDurations->setCollectsItsArgument(true);
 
     FunctionSignature* collectNodes = createFunction("collect");
-    collectNodes->setArguments({nodeOrGroup});
+    collectNodes->setArguments({EvaluatedType::NodePattern});
     collectNodes->setReturnTypes({{EvaluatedType::List}});
     collectNodes->setIsAggregate(true);
     collectNodes->setCollectsItsArgument(true);
 
     FunctionSignature* collectEdges = createFunction("collect");
-    collectEdges->setArguments({edgeOrPath});
+    collectEdges->setArguments({EvaluatedType::EdgePattern});
     collectEdges->setReturnTypes({{EvaluatedType::List}});
     collectEdges->setIsAggregate(true);
     collectEdges->setCollectsItsArgument(true);
@@ -581,6 +575,14 @@ void FunctionDecls::initDefault() {
     lengthCell->setArguments({EvaluatedType::Any});
     lengthCell->setReturnTypes({{EvaluatedType::Integer}});
 
+    // Whether a list, a string or a map holds nothing. A type-erased cell is read per row, as
+    // size() reads one.
+    for (const EvaluatedType argumentType : {EvaluatedType::List, EvaluatedType::String, EvaluatedType::Map, EvaluatedType::Any}) {
+        FunctionSignature* isEmpty = createFunction("isEmpty");
+        isEmpty->setArguments({argumentType});
+        isEmpty->setReturnTypes({{EvaluatedType::Bool}});
+    }
+
     // range counts from its first bound to its second, both included, by the stride the
     // third gives - 1 where it is left out, and a negative one counting down. The list
     // holds integers whatever the bounds were, so the shape is the signature's to name.
@@ -589,15 +591,6 @@ void FunctionDecls::initDefault() {
     range->setRequiredArgCount(2);
     range->setReturnTypes({{EvaluatedType::List}});
     range->setReturnedListShape(ListShape(EvaluatedType::Integer, 1));
-
-    // The hop count of a variable-length path
-    FunctionSignature* sizePath = createFunction("size");
-    sizePath->setArguments({edgeOrPath});
-    sizePath->setReturnTypes({{EvaluatedType::Integer}});
-
-    FunctionSignature* sizeGroup = createFunction("size");
-    sizeGroup->setArguments({nodeOrGroup});
-    sizeGroup->setReturnTypes({{EvaluatedType::Integer}});
 
     // The three reads of a named path: its hop count, the nodes it runs through and its
     // relationships, the two lists typed so that a comprehension over them binds an entity
@@ -623,7 +616,7 @@ void FunctionDecls::initDefault() {
         std::string_view _orNullName;
         EvaluatedType _result {EvaluatedType::Invalid};
         std::vector<EvaluatedType> _converted;
-        std::vector<FunctionArgumentType> _unconvertible;
+        std::vector<EvaluatedType> _unconvertible;
     };
 
     const std::vector<Conversion> conversions = {
@@ -632,7 +625,7 @@ void FunctionDecls::initDefault() {
             "toIntegerOrNull",
             EvaluatedType::Integer,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool},
-            {EvaluatedType::List, EvaluatedType::Map, nodeOrGroup, edgeOrPath,
+            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
              EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
         },
         {
@@ -640,7 +633,7 @@ void FunctionDecls::initDefault() {
             "toFloatOrNull",
             EvaluatedType::Double,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double},
-            {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, nodeOrGroup, edgeOrPath,
+            {EvaluatedType::Bool, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
              EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
         },
         {
@@ -648,7 +641,7 @@ void FunctionDecls::initDefault() {
             "toBooleanOrNull",
             EvaluatedType::Bool,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Bool},
-            {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, nodeOrGroup, edgeOrPath,
+            {EvaluatedType::Double, EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
              EvaluatedType::GraphPath, EvaluatedType::DateTime, EvaluatedType::Duration, EvaluatedType::Embedding},
         },
         {
@@ -657,7 +650,7 @@ void FunctionDecls::initDefault() {
             EvaluatedType::String,
             {EvaluatedType::String, EvaluatedType::Integer, EvaluatedType::Double, EvaluatedType::Bool,
              EvaluatedType::DateTime, EvaluatedType::Duration},
-            {EvaluatedType::List, EvaluatedType::Map, nodeOrGroup, edgeOrPath,
+            {EvaluatedType::List, EvaluatedType::Map, EvaluatedType::NodePattern, EvaluatedType::EdgePattern,
              EvaluatedType::GraphPath, EvaluatedType::Embedding},
         },
     };
@@ -679,7 +672,7 @@ void FunctionDecls::initDefault() {
             ofACell->setReturnTypes({{conversion._result}});
         }
 
-        for (const FunctionArgumentType& unconvertible : conversion._unconvertible) {
+        for (const EvaluatedType unconvertible : conversion._unconvertible) {
             FunctionSignature* unconverted = createFunction(conversion._orNullName);
             unconverted->setArguments({unconvertible});
             unconverted->setReturnTypes({{EvaluatedType::Null}});

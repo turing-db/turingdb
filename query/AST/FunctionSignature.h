@@ -41,15 +41,11 @@ public:
 
     bool isConstant() const { return _constant; }
 
-    bool takesAVariableLengthPath() const { return _takesAVariableLengthPath; }
-
     bool rejectsNull() const { return _rejectsNull; }
 
     void setName(std::string_view name) { _name = name; }
 
     void setConstant(bool constant) { _constant = constant; }
-
-    void setTakesAVariableLengthPath(bool takesPath) { _takesAVariableLengthPath = takesPath; }
 
     void setRejectsNull(bool rejects) { _rejectsNull = rejects; }
 
@@ -57,7 +53,6 @@ private:
     EvaluatedType _type {EvaluatedType::Invalid};
     std::string_view _name;
     bool _constant {false};
-    bool _takesAVariableLengthPath {false};
     bool _rejectsNull {false};
 };
 

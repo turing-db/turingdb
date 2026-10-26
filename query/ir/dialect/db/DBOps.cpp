@@ -427,39 +427,20 @@ LogicalResult verifyFactorResults(Operation* op, Region& leftFactor, Region& rig
 }
 
 // A literal list typed as homogeneous - db.unwind_const's typed column, db.const_list's
-// typed list - must carry at least one element and every element must carry one shared
-// type, or be a null, which rides a unit attr and shares whatever type the others carry.
+// typed list - must carry an element naming a type, and its elements' types must join to
+// one element type; a null rides a unit attr and joins whatever the others carry.
 // The elements are checked against each other and not against the spelled element type: a
 // hand-written "s" parses as an untyped StringAttr, so comparing it to a !storage.string
 // would reject valid IR. A homogeneous result paired with literals of another type is
 // therefore not an op-level error; the runtime fill catches that on the element's type tag.
 LogicalResult verifyHomogeneousElements(Operation* op, ArrayAttr elements) {
-    if (elements.empty()) {
-        return op->emitOpError("a homogeneous literal list must carry at least one element; "
-                               "an empty list is the !storage.any form");
-    }
+    const mlir::Type sharedType = ::db::sharedLiteralElementType(elements);
 
-    mlir::Type payloadType;
-    for (const Attribute element : elements) {
-        if (llvm::isa<UnitAttr>(element)) {
-            continue;
-        }
-
-        const mlir::Type elementType = ::db::literalElementType(element);
-        if (!elementType) {
-            return op->emitOpError("literal list element is not a typed attribute");
-        }
-
-        if (!payloadType) {
-            payloadType = elementType;
-        } else if (elementType != payloadType) {
-            return op->emitOpError("a homogeneous literal list requires every element to share one type");
-        }
-    }
-
-    if (!payloadType) {
+    if (isa<NoneType>(sharedType)) {
         return op->emitOpError("a homogeneous literal list must carry an element naming its type; "
-                               "a list of nulls alone is the !storage.any form");
+                               "an empty list or a list of nulls alone is the !storage.any form");
+    } else if (isa<storage::AnyType>(sharedType)) {
+        return op->emitOpError("a homogeneous literal list requires every element to share one type");
     }
 
     return success();
@@ -1717,9 +1698,7 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
     // An array of per-element attributes is a list literal; it carries no type of its own,
     // so the element type is the homogeneity verdict over the elements.
     if (const auto elements = llvm::dyn_cast<ArrayAttr>(adaptor.getValue())) {
-        const mlir::Type shared = ::db::sharedLiteralElementType(elements);
-        const mlir::Type listElement = shared ? shared : storage::AnyType::get(context);
-        const mlir::Type listType = storage::ListType::get(context, listElement);
+        const mlir::Type listType = storage::ListType::get(context, ::db::sharedLiteralElementType(elements));
 
         inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, listType));
         return success();

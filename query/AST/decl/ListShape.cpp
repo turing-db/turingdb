@@ -48,14 +48,35 @@ ListShape ListShape::selected(EvaluatedType type, const ListShape& shape) {
 }
 
 ListShape ListShape::unified(const ListShape& carried, const ListShape& value) {
-    const bool sameShape = carried.getLeafType() == value.getLeafType()
-                        && carried.getDepth() == value.getDepth();
-
-    if (sameShape || !value.isList()) {
+    if (!value.isList()) {
         return carried;
     } else if (!carried.isList()) {
         return value;
     }
 
+    return joined(carried, value);
+}
+
+ListShape ListShape::joined(const ListShape& left, const ListShape& right) {
+    const bool sameDepth = left._depth == right._depth;
+    const bool leftNamesNoType = left._leafType == EvaluatedType::Null && left._depth <= right._depth;
+    const bool rightNamesNoType = right._leafType == EvaluatedType::Null && right._depth <= left._depth;
+
+    if (rightNamesNoType || (sameDepth && left._leafType == right._leafType)) {
+        return left;
+    } else if (leftNamesNoType) {
+        return right;
+    } else if (sameDepth) {
+        return ListShape(EvaluatedType::Invalid, left._depth);
+    }
+
     return ListShape(EvaluatedType::Invalid, 1);
+}
+
+ListShape ListShape::singleton(EvaluatedType type, const ListShape& shape) {
+    if (type != EvaluatedType::Null && !namesAListElementType(type)) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    return collecting(type, shape);
 }

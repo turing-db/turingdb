@@ -103,67 +103,21 @@ ListShape selectedListShape(const Expr* value) {
     return ListShape::selected(value->getType(), value->getListShape());
 }
 
-// The shape of the list these elements make: depth 1 over the one type they share, or
-// one level deeper than the lists they are. Elements that share no type - an empty list,
-// a mix of types, lists of differing shape - leave the leaf Invalid, which is what makes
-// the list hand out tagged scalars. A null names no type of its own, so it agrees with
-// every element: [1, null, 3] is a list of integers with a null in it, and [null, null]
-// is a list of nulls rather than a list that mixes types.
+// The shape of the list these elements make, joined from the one-element list each makes:
+// [1, null, 3] is a list of integers with a null in it, [1, 'a'] a list of tagged scalars,
+// and [] is a list of no type, as [null, null] is.
 ListShape sharedListShape(std::span<Expr* const> elements) {
-    const Expr* first = nullptr;
-    for (Expr* const element : elements) {
-        if (element->getType() != EvaluatedType::Null) {
-            first = element;
-            break;
-        }
+    ListShape shared(EvaluatedType::Null, 1);
+
+    for (const Expr* element : elements) {
+        shared = ListShape::joined(shared, ListShape::singleton(element->getType(), element->getListShape()));
     }
 
-    if (!first) {
-        if (elements.empty()) {
-            return {EvaluatedType::Invalid, 1};
-        }
-
-        return {EvaluatedType::Null, 1};
-    }
-
-    const EvaluatedType shared = first->getType();
-
-    const auto agreesWithShared = [shared](const Expr* element) {
-        const EvaluatedType type = element->getType();
-        return type == EvaluatedType::Null || type == shared;
-    };
-
-    if (!std::ranges::all_of(elements, agreesWithShared)) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    const ListShape& firstShape = first->getListShape();
-
-    if (shared == EvaluatedType::List) {
-        const auto agreesWithFirstShape = [&firstShape](const Expr* element) {
-            if (element->getType() == EvaluatedType::Null) {
-                return true;
-            }
-
-            const ListShape& shape = element->getListShape();
-            return shape.getDepth() == firstShape.getDepth() && shape.getLeafType() == firstShape.getLeafType();
-        };
-
-        if (!std::ranges::all_of(elements, agreesWithFirstShape)) {
-            return ListShape(EvaluatedType::Invalid, 1);
-        }
-    }
-
-    if (!namesAListElementType(shared)) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    return ListShape::collecting(shared, firstShape);
+    return shared;
 }
 
 // The shape of the list a COLLECT gathers its one column into, which every branch of a
-// UNION contributes to: the one each branch would gather where they all agree, and a list
-// of tagged scalars where they do not
+// UNION contributes to: what the lists each branch would gather join to
 ListShape collectedListShape(const RegularQuery* body) {
     std::vector<const SinglePartQuery*> queries;
     RegularQuery::collectSingleQueries(body, queries);
@@ -177,16 +131,7 @@ ListShape collectedListShape(const RegularQuery* body) {
             return ListShape::collecting(item->getType(), item->getListShape());
         }, projection->items().front());
 
-        if (!shared) {
-            shared = collected;
-            continue;
-        }
-
-        const bool agrees = collected.getDepth() == shared->getDepth()
-                         && collected.getLeafType() == shared->getLeafType();
-        if (!agrees) {
-            return ListShape(EvaluatedType::Invalid, 1);
-        }
+        shared = shared ? ListShape::joined(*shared, collected) : collected;
     }
 
     return *shared;
@@ -760,19 +705,19 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         return ValueType::Invalid;
     }
 
+    if (varDecl->isQuantifiedPath()) {
+        throwError(fmt::format("Variable '{}' binds the list of a variable-length path, "
+                               "not a single entity: it has no property '{}'",
+                               varName->getName(), propName->getName()),
+                   expr);
+    }
+
     if (varType != EvaluatedType::NodePattern && varType != EvaluatedType::EdgePattern) {
         const std::string error = fmt::format(
             "Variable '{}' is '{}' it must be a node or edge",
             varName->getName(), EvaluatedTypeName::value(varType));
 
         throwError(error, expr);
-    }
-
-    if (varDecl->isQuantifiedPath()) {
-        throwError(fmt::format("Variable '{}' binds the list of a variable-length path, "
-                               "not a single entity: it has no property '{}'",
-                               varName->getName(), propName->getName()),
-                   expr);
     }
 
     const std::string_view name = propName->getName();
@@ -976,9 +921,6 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     const EvaluatedType baseType = base->getType();
-    const VarDecl* baseDecl = base->getExprVarDecl();
-
-    const bool indexesAPath = baseDecl && baseDecl->isQuantifiedPath();
     const bool indexesAList = baseType == EvaluatedType::List;
     const bool indexesAMap = baseType == EvaluatedType::Map;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
@@ -987,7 +929,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
 
     const bool indexesANullValue = baseType == EvaluatedType::Null;
 
-    if (!indexesAPath && !indexesAList && !indexesAMap && !indexesATaggedCell && !indexesACSVRow
+    if (!indexesAList && !indexesAMap && !indexesATaggedCell && !indexesACSVRow
         && !indexesANullValue) {
         throwError(fmt::format("Index operator [] can only be applied to a list, a map or a CSV row, not '{}'",
                                EvaluatedTypeName::value(baseType)), expr);
@@ -1020,12 +962,10 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     // A tagged cell takes either kind, since only its row says which it holds
-    const bool readsByPositionOnly = indexesAPath || indexesAList;
-
     if (indexesAMap && !indexesByKey) {
         throwError(fmt::format("A map is indexed by a string key, not by '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
-    } else if (readsByPositionOnly && !indexesByPosition) {
+    } else if (indexesAList && !indexesByPosition) {
         throwError(fmt::format("A list index expression must be an integer, not '{}'",
                                EvaluatedTypeName::value(indexType)), expr);
     }
@@ -1052,7 +992,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     // The case where we are reading from a list or path
-    const EvaluatedType elementType = indexesAPath ? baseType : base->getListShape().unwoundType();
+    const EvaluatedType elementType = base->getListShape().unwoundType();
     const bool readsAValue = convertibleToValueType(elementType);
     const bool readsAnEntity = elementType == EvaluatedType::NodePattern
                             || elementType == EvaluatedType::EdgePattern;
@@ -1060,6 +1000,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::Any;
 
     expr->setType(indexedType);
+    expr->setListShape(base->getListShape().unwound());
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, indexedType));
 }
@@ -1202,6 +1143,13 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
         throwError(fmt::format("Variable '{}' not found", expr->getSymbol()->getName()), expr);
     }
 
+    if (decl->isQuantifiedPath()) {
+        throwError(fmt::format("Variable '{}' binds the list of a variable-length path, "
+                               "not a single entity: it has no label or type",
+                               decl->getName()),
+                   expr);
+    }
+
     const EvaluatedType entityType = decl->getType();
     const bool isEntity = entityType == EvaluatedType::NodePattern || entityType == EvaluatedType::EdgePattern;
     if (!isEntity && entityType != EvaluatedType::Null) {
@@ -1209,13 +1157,6 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
                                               decl->getName(), EvaluatedTypeName::value(entityType));
 
         throwError(error, expr);
-    }
-
-    if (decl->isQuantifiedPath()) {
-        throwError(fmt::format("Variable '{}' binds the list of a variable-length path, "
-                               "not a single entity: it has no label or type",
-                               decl->getName()),
-                   expr);
     }
 
     if (entityType == EvaluatedType::Null) {
@@ -1343,12 +1284,8 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
                 expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
                 providedArgs.begin(), [answersNullOverNull](const FunctionArgumentType& expected, const Expr* arg) {
                     const EvaluatedType argType = arg->getType();
-                    const VarDecl* decl = arg->getExprVarDecl();
 
-                    const bool bindsAPath = decl && decl->isQuantifiedPath();
-                    const bool typeMatches = argType == expected.getType() || (answersNullOverNull && argType == EvaluatedType::Null);
-
-                    return typeMatches && (!bindsAPath || expected.takesAVariableLengthPath());
+                    return argType == expected.getType() || (answersNullOverNull && argType == EvaluatedType::Null);
                 });
 
             if (!matchingArgs) {
@@ -1904,13 +1841,10 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
     analyzeExpr(source);
 
     const EvaluatedType sourceType = source->getType();
-    const VarDecl* const sourceDecl = source->getExprVarDecl();
-    const bool iteratesAPath = sourceDecl && sourceDecl->isQuantifiedPath();
 
     // A tagged cell names no type until a row is in hand, and a null iterates into a null
     // rather than into a type error - as an UNWIND of one emits no row
-    const bool iteratesAList = iteratesAPath
-                            || sourceType == EvaluatedType::List
+    const bool iteratesAList = sourceType == EvaluatedType::List
                             || sourceType == EvaluatedType::Any
                             || sourceType == EvaluatedType::Null;
 
@@ -1928,7 +1862,7 @@ void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
         throwError(fmt::format("Variable '{}' is already declared", itemName), expr);
     }
 
-    const ListShape sourceShape = iteratesAPath ? ListShape(sourceType, 1) : source->getListShape();
+    const ListShape& sourceShape = source->getListShape();
 
     // A null list holds no element, so the variable never reads as anything but null
     const EvaluatedType itemType = sourceType == EvaluatedType::Null ? EvaluatedType::Null

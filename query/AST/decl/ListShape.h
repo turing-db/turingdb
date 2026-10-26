@@ -13,7 +13,8 @@ namespace db {
  * A list is homogeneous or it is nothing: either every element carries the same type -
  * at every level - or the list hands out tagged scalars and the leaf type is Invalid.
  * That makes a nested list type two numbers rather than a tree: `[[1, 2], [3]]` is depth
- * 2 over Integer, and it is the shape an UNWIND reads to know what it binds.
+ * 2 over Integer, and it is the shape an UNWIND reads to know what it binds. A leaf of
+ * Null names no type at all: `[null]` and the empty list `[]` are depth 1 over Null.
  */
 class ListShape {
 public:
@@ -39,9 +40,18 @@ public:
     // list whose shape no type names holds tagged cells, while a null holds no list at all.
     static ListShape selected(EvaluatedType type, const ListShape& shape);
 
-    // The shape of one column holding lists of @param carried and of @param value: theirs
-    // when they agree, the one list when the other is none, and tagged cells otherwise
+    // The shape of one column holding lists of @param carried and of @param value: the one
+    // list when the other is none, and the two joined otherwise
     static ListShape unified(const ListShape& carried, const ListShape& value);
+
+    // The shape of a list holding the elements of lists of both shapes. A leaf of Null
+    // constrains nothing, so it takes the other shape wherever that one nests as deep,
+    // and lists nesting as deep over two leaves keep their depth over tagged scalars.
+    static ListShape joined(const ListShape& left, const ListShape& right);
+
+    // The shape of the one-element list a value makes: a null names no type of its own, and a
+    // value no list is homogeneous in makes a list of tagged scalars
+    static ListShape singleton(EvaluatedType type, const ListShape& shape);
 
 private:
     EvaluatedType _leafType {EvaluatedType::Invalid};

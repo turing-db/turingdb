@@ -228,6 +228,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_string_or_null",  {&emitNLUnaryFunction<nl::ToStringOrNull>, ResultNullability::FollowsInput}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>, ResultNullability::AlwaysNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>, ResultNullability::FollowsInput}},
+    {"db.is_empty",   {&emitNLUnaryFunction<nl::IsEmpty>, ResultNullability::FollowsInput}},
     {"db.char_length", {&emitNLUnaryFunction<nl::CharLength>, ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>, ResultNullability::NeverNullable}},
     {"db.last",       {&emitNLUnaryFunction<nl::Last>, ResultNullability::NeverNullable}},
@@ -357,7 +358,7 @@ mlir::Type procedureElementType(mlir::OpBuilder& builder, ProcedureType procedur
         break;
 
         case ProcedureType::LIST:
-            return storage::ListType::get(context, mlir::NoneType::get(context));
+            return storage::ListType::get(context, storage::AnyType::get(context));
         break;
 
         case ProcedureType::MAP:
@@ -714,25 +715,23 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
     return builder.getIntegerType(64);
 }
 
-// The element of one column holding both @param lhs and @param rhs, or a null type when
-// no column type holds the two
+// The element of one column holding both @param lhs and @param rhs. A value of the column
+// is converted where it is chosen, so a number is promoted, which an element of a list
+// never is.
 mlir::Type unifiedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     if (lhs == rhs) {
         return lhs;
     } else if (isNumericElement(lhs) && isNumericElement(rhs)) {
         return promoteNumeric(builder, lhs, rhs);
-    } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
-        mlir::MLIRContext* const context = builder.getContext();
-        return storage::ListType::get(context, storage::AnyType::get(context));
     }
 
-    return mlir::Type {};
+    return storage::joinedElementType(lhs, rhs);
 }
 
 // The element of one column the branches of a selection fill with values of @param lhs and
 // of @param rhs, each value keeping its type: theirs when they agree, the one integer type
-// Cypher has for two integers, a list of tagged cells for two lists, and a null type when
-// the column holds each row's value as a tagged cell
+// Cypher has for two integers, the list two lists join to, and a null type when the column
+// holds each row's value as a tagged cell
 mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     const auto lhsInteger = mlir::dyn_cast<mlir::IntegerType>(lhs);
     const auto rhsInteger = mlir::dyn_cast<mlir::IntegerType>(rhs);
@@ -743,8 +742,7 @@ mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::
     } else if (bothIntegers) {
         return builder.getIntegerType(64);
     } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
-        mlir::MLIRContext* const context = builder.getContext();
-        return storage::ListType::get(context, storage::AnyType::get(context));
+        return storage::joinedElementType(lhs, rhs);
     }
 
     return mlir::Type {};
@@ -2281,12 +2279,7 @@ mlir::Type DBLowering::accumulatedElement(mlir::Type accumulated, mlir::Type chu
         return element;
     }
 
-    const mlir::Type unified = unifiedValueElement(_builder, accumulated, element);
-    if (!unified) {
-        return storage::AnyType::get(_builder.getContext());
-    }
-
-    return unified;
+    return unifiedValueElement(_builder, accumulated, element);
 }
 
 nl::ChunkType DBLowering::accumulatorChunkType(mlir::Type accumulated) {
@@ -2426,7 +2419,7 @@ mlir::Value DBLowering::rowListsValueChunk(mlir::Value valueChunk, mlir::Value r
 }
 
 mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks) {
-    mlir::Type shared;
+    mlir::Type shared = mlir::NoneType::get(context);
 
     for (const mlir::Value chunk : chunks) {
         mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
@@ -2437,19 +2430,7 @@ mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::Array
             element = nullable.getValueType();
         }
 
-        if (mlir::isa<mlir::NoneType>(element)) {
-            continue;
-        }
-
-        if (!shared) {
-            shared = element;
-        } else if (shared != element) {
-            return storage::AnyType::get(context);
-        }
-    }
-
-    if (!shared) {
-        return mlir::NoneType::get(context);
+        shared = storage::joinedElementType(shared, element);
     }
 
     return shared;
@@ -4584,7 +4565,7 @@ mlir::Value DBLowering::branchChunkAs(mlir::Value chunk, mlir::Type chunkType) {
     const auto nullableResult = mlir::dyn_cast<storage::NullableType>(resultElement);
     const mlir::Type resultValue = nullableResult ? nullableResult.getValueType() : resultElement;
 
-    // Two lists of different elements are lists of tagged cells, and two integers the one
+    // Two lists of different elements are the list they join to, and two integers the one
     // integer Cypher has
     mlir::Value converted = chunk;
     const bool convertsElement = chunkValueElement(_builder, converted.getType()) != resultValue;
@@ -6271,11 +6252,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             // list concat
             const mlir::Type lhsInnerType = listInternalType(lhsType);
             const mlir::Type rhsInnerType = listInternalType(rhsType);
-
-            const bool sharedType = lhsInnerType == rhsInnerType;
-            const mlir::Type resultInnerType =
-                sharedType ? lhsInnerType : storage::AnyType::get(ctx);
-            const mlir::Type concatenated = storage::ListType::get(ctx, resultInnerType);
+            const mlir::Type concatenated = storage::ListType::get(ctx, storage::joinedElementType(lhsInnerType, rhsInnerType));
 
             return operandNullable ? storage::NullableType::get(ctx, concatenated)
                                    : concatenated;

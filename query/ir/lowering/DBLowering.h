@@ -916,9 +916,9 @@ private:
     // nullable column, which the value and the container siblings above share
     mlir::Value toNullableChunk(mlir::Value chunk, mlir::Type valueElement);
 
-    // The element type of the lists @param chunks build: the one type every chunk carries,
-    // falling back to the type-erased !storage.any when they carry no single one - the
-    // homogeneity verdict taken over the resolved chunks rather than over the db columns
+    // The element type of the lists @param chunks build: the type the chunks' own types
+    // join to - the homogeneity verdict taken over the resolved chunks rather than over the
+    // db columns
     static mlir::Type listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks);
 
     // The nl chunk a db value lowered to, and the block that holds a chunk

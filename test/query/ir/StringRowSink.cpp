@@ -3,440 +3,213 @@
 #include <math.h>
 #include <algorithm>
 #include <concepts>
+#include <iterator>
 #include <optional>
-#include <stdexcept>
+#include <type_traits>
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "CellUtils.h"
+#include "CellView.h"
 #include "GraphPath.h"
 #include "ID.h"
+#include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
-#include "columns/ColumnOptVector.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
-#include "CellTag.h"
-#include "CellView.h"
 #include "list/ListView.h"
-#include "metadata/PropertyNull.h"
+#include "map/MapEntryView.h"
+#include "map/MapView.h"
 #include "metadata/DateTime.h"
 #include "metadata/Duration.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
+#include "versioning/CommitHash.h"
 
 using namespace db;
 using namespace turing::test;
 
 namespace {
 
+void appendValueText(CellView cell, std::string& text);
+void appendValueText(const ListView& list, std::string& text);
+void appendValueText(const MapView& map, std::string& text);
+void appendValueText(types::Embedding::Primitive embedding, std::string& text);
+
 // x86 and ARM give the NaN of sqrt(-1) opposite sign bits and fmt prints the sign, so
 // every NaN reads as NaN, as the JSON encoder writes it
-template <typename Primitive>
-std::string scalarText(const Primitive& value) {
-    if constexpr (std::floating_point<Primitive>) {
+template <typename Number>
+    requires std::integral<Number> || std::floating_point<Number>
+void appendValueText(Number value, std::string& text) {
+    if constexpr (std::floating_point<Number>) {
         if (std::isnan(value)) {
-            return "NaN";
+            text += "NaN";
+            return;
         }
     }
 
-    return fmt::format("{}", value);
+    fmt::format_to(std::back_inserter(text), "{}", value);
 }
 
 // An entity an OPTIONAL MATCH did not match is an invalid ID, which reads as null
 template <typename IDType>
-bool textOfID(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<IDType>*>(chunk);
-    if (!column) {
-        return false;
+    requires IsID<IDType>::value
+void appendValueText(IDType id, std::string& text) {
+    if (!id.isValid()) {
+        text += "null";
+        return;
     }
 
-    const IDType id = column->getRaw()[rowIndex];
-    text = id.isValid() ? fmt::format("{}", id.getValue()) : "null";
-
-    return true;
+    appendValueText(id.getValue(), text);
 }
 
-// A nullable entity column, which is what a procedure declaring a nullable NODE return
-// value writes: an absent row reads as null, as an invalid ID does
-template <typename IDType>
-bool textOfOptionalID(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnOptVector<IDType>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const std::optional<IDType>& id = column->getRaw()[rowIndex];
-    const bool present = id.has_value() && id->isValid();
-    text = present ? fmt::format("{}", id->getValue()) : "null";
-
-    return true;
+template <int Tag, int Radix>
+void appendValueText(const TemplateCommitHash<Tag, Radix>& hash, std::string& text) {
+    hash.appendString(text);
 }
 
-// A constant column holds the one value every row of the relation reads, so the row index
-// says nothing about which value to read
-template <typename ElementType>
-bool textOfConstant(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<ElementType>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text = scalarText(column->at(rowIndex));
-    return true;
+void appendValueText(CustomBool value, std::string& text) {
+    text += value ? "true" : "false";
 }
 
-// The untyped null constant, which the null literal and a read of a name no property
-// carries both compile to: every row is an absent value of no type at all
-bool textOfNullConstant(const Column* chunk, std::string& text) {
-    if (!dynamic_cast<const ColumnConst<PropertyNull>*>(chunk)) {
-        return false;
-    }
-
-    text = "null";
-    return true;
+void appendValueText(std::string_view value, std::string& text) {
+    text += value;
 }
 
-template <typename ElementType>
-bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<ElementType>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text = scalarText(column->getRaw()[rowIndex]);
-    return true;
+void appendValueText(ValueType value, std::string& text) {
+    text += ValueTypeName::value(value);
 }
 
 // A datetime or a duration renders in its ISO-8601 form rather than as its count, which is
 // what every other reader of one shows
-template <typename Temporal>
-bool textOfTemporal(const Column* chunk, size_t rowIndex, std::string& text) {
-    const std::optional<Temporal>* value = nullptr;
-
-    if (const auto* column = dynamic_cast<const ColumnVector<Temporal>*>(chunk)) {
-        Temporal::format(text, column->getRaw()[rowIndex]);
-        return true;
-    } else if (const auto* optional = dynamic_cast<const ColumnOptVector<Temporal>*>(chunk)) {
-        value = &optional->getRaw()[rowIndex];
-    } else if (const auto* constant = dynamic_cast<const ColumnConst<std::optional<Temporal>>*>(chunk)) {
-        value = &constant->getRaw();
-    } else {
-        return false;
-    }
-
-    if (!value->has_value()) {
-        text = "null";
-        return true;
-    }
-
-    Temporal::format(text, **value);
-    return true;
+void appendValueText(DateTime value, std::string& text) {
+    DateTime::format(text, value);
 }
 
-bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<ValueType>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text = ValueTypeName::value(column->getRaw()[rowIndex]);
-    return true;
+void appendValueText(Duration value, std::string& text) {
+    Duration::format(text, value);
 }
 
-void appendListText(const ListView& list, std::string& text);
-
-std::string elementText(const CellView& element) {
-    switch (element.getTag()) {
-        case CellTag::Int:
-            return fmt::format("{}", element.getAs<int64_t>());
-        break;
-
-        case CellTag::UInt:
-            return fmt::format("{}", element.getAs<uint64_t>());
-        break;
-
-        case CellTag::Double:
-            return scalarText(element.getAs<double>());
-        break;
-
-        case CellTag::Bool:
-            return element.getAs<bool>() ? "true" : "false";
-        break;
-
-        case CellTag::String:
-            return std::string(element.getAs<std::string_view>());
-        break;
-
-        case CellTag::Null:
-            return "null";
-        break;
-
-        case CellTag::NodeID:
-            return fmt::format("{}", element.getAs<NodeID>().getValue());
-        break;
-
-        case CellTag::EdgeID:
-            return fmt::format("{}", element.getAs<EdgeID>().getValue());
-        break;
-
-        case CellTag::DateTime: {
-            std::string formatted;
-            DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
-
-            return formatted;
-        }
-        break;
-
-        case CellTag::Duration: {
-            std::string formatted;
-            Duration::format(formatted, element.getAs<types::Duration::Primitive>());
-
-            return formatted;
-        }
-        break;
-
-        case CellTag::ListView: {
-            std::string elements;
-            appendListText(element.getAs<ListView>(), elements);
-
-            return "[" + elements + "]";
-        }
-        break;
-
-        case CellTag::Embedding:
-        case CellTag::MapView:
-        case CellTag::INVALID:
-            throw std::runtime_error("StringRowSink cannot read this list element as text");
-        break;
-    }
-
-    throw std::runtime_error("StringRowSink met an unknown list element tag");
+void appendValueText(PropertyNull value, std::string& text) {
+    text += "null";
 }
 
-// A type-erased column of tagged scalars - the column a heterogeneous UNWIND drives - reads
-// each cell through the tag it carries rather than through the column's type.
-bool textOfCellView(const Column* chunk, size_t rowIndex, std::string& text) {
-    if (const auto* column = dynamic_cast<const ColumnVector<CellView>*>(chunk)) {
-        text = elementText(column->getRaw()[rowIndex]);
-        return true;
-    } else if (const auto* constant = dynamic_cast<const ColumnConst<CellView>*>(chunk)) {
-        text = elementText(constant->getRaw());
-        return true;
-    }
-
-    return false;
-}
-
-// The nullable sibling of textOfCellView: what an index into a list naming no one type
-// produces, absent where the position held no element.
-bool textOfOptionalCellView(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnOptVector<CellView>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const std::optional<CellView>& element = column->getRaw()[rowIndex];
-    text = element ? elementText(*element) : "null";
-
-    return true;
-}
-
-// The same index over literal operands alone, which stays a constant.
-bool textOfConstOptionalCellView(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<std::optional<CellView>>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const std::optional<CellView>& element = (*column)[rowIndex];
-    text = element ? elementText(*element) : "null";
-
-    return true;
-}
-
-// A list cell reads as its elements joined by ", ", in the order the list holds them.
-void appendListText(const ListView& list, std::string& text) {
-    for (const CellView& element : list) {
-        if (!text.empty()) {
+template <typename Sequence>
+void appendElementsText(const Sequence& elements, std::string& text) {
+    bool first = true;
+    for (const auto& element : elements) {
+        if (!first) {
             text += ", ";
         }
 
-        text += elementText(element);
+        first = false;
+        appendValueText(element, text);
     }
-}
-
-bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<ListView>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text.clear();
-    appendListText(column->getRaw()[rowIndex], text);
-
-    return true;
-}
-
-// The labels of a node the query created fold to a constant, which holds the one list
-// every row of the projection reads
-bool textOfConstList(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<ListView>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text.clear();
-    appendListText(column->at(0), text);
-
-    return true;
-}
-
-bool textOfOptionalList(const Column* chunk, size_t rowIndex, std::string& text) {
-    const std::optional<ListView>* list = nullptr;
-    if (const auto* column = dynamic_cast<const ColumnOptVector<ListView>*>(chunk)) {
-        list = &column->getRaw()[rowIndex];
-    } else if (const auto* constant = dynamic_cast<const ColumnConst<std::optional<ListView>>*>(chunk)) {
-        list = &constant->getRaw();
-    } else {
-        return false;
-    }
-
-    text.clear();
-    if (list->has_value()) {
-        appendListText(**list, text);
-    } else {
-        text = "null";
-    }
-
-    return true;
 }
 
 // A path, read as its nodes and edges in order: a node as (id), an edge as [id]
-bool textOfPath(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<GraphPath>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const GraphPath& path = column->getRaw()[rowIndex];
+void appendValueText(const GraphPath& path, std::string& text) {
     if (path.isNull()) {
-        text = "null";
-        return true;
+        text += "null";
+        return;
     }
 
     const std::span<const uint64_t> ids = path.getIDs();
 
-    text.clear();
     for (size_t position = 0; position < ids.size(); position++) {
         if (position > 0) {
             text += ", ";
         }
 
         if (GraphPath::isNodeAt(position)) {
-            text += fmt::format("({})", ids[position]);
+            fmt::format_to(std::back_inserter(text), "({})", ids[position]);
         } else {
-            text += fmt::format("[{}]", ids[position]);
+            fmt::format_to(std::back_inserter(text), "[{}]", ids[position]);
         }
     }
-
-    return true;
 }
 
-std::string boolText(const std::optional<CustomBool>& value) {
+void appendValueText(types::Embedding::Primitive embedding, std::string& text) {
+    text += '[';
+    appendElementsText(embedding, text);
+    text += ']';
+}
+
+void appendValueText(const ListView& list, std::string& text) {
+    text += '[';
+    appendElementsText(list, text);
+    text += ']';
+}
+
+void appendValueText(const MapView& map, std::string& text) {
+    text += '{';
+
+    bool first = true;
+    for (const MapEntryView entry : map) {
+        if (!first) {
+            text += ", ";
+        }
+
+        first = false;
+
+        text += entry.getKey();
+        text += ": ";
+        appendValueText(entry.getValue(), text);
+    }
+
+    text += '}';
+}
+
+void appendValueText(CellView cell, std::string& text) {
+    const auto appendTyped = [&text]<typename T>(CellView typed) {
+        appendValueText(typed.getAs<T>(), text);
+    };
+
+    const CellTagDispatcher dispatcher {._tag = cell.getTag()};
+    dispatcher.execute(appendTyped, cell);
+}
+
+// A cell is read as the value it holds, except that a list or an embedding filling a whole
+// cell reads as its elements alone, without the brackets it is nested in
+template <typename T>
+void appendCellText(const T& value, std::string& text) {
+    if constexpr (std::is_same_v<T, ListView> || std::is_same_v<T, types::Embedding::Primitive>) {
+        appendElementsText(value, text);
+    } else {
+        appendValueText(value, text);
+    }
+}
+
+template <typename T>
+void appendCellText(const std::optional<T>& value, std::string& text) {
     if (!value) {
-        return "null";
+        text += "null";
+        return;
     }
 
-    return *value ? "true" : "false";
+    appendCellText(*value, text);
 }
 
-bool textOfMask(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnMask*>(chunk);
-    if (!column) {
-        return false;
+struct CellTextWriter {
+    std::string& _text;
+    size_t _rowIndex {0};
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* column) {
+        appendCellText(column->getRaw()[_rowIndex], _text);
     }
 
-    text = (*column)[rowIndex] ? "true" : "false";
-    return true;
-}
-
-// A nullable boolean, which a three-valued predicate such as IN produces
-bool textOfOptionalBool(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunk);
-    if (!column) {
-        return false;
+    // A constant column holds the one value every row of the relation reads
+    template <typename T>
+    void operator()(const ColumnConst<T>* column) {
+        appendCellText(column->getRaw(), _text);
     }
 
-    text = boolText(column->getRaw()[rowIndex]);
-    return true;
-}
-
-// The same predicate over constant operands alone, which stays a constant: it holds the
-// one value every row of the projection reads.
-bool textOfConstOptionalBool(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<std::optional<CustomBool>>*>(chunk);
-    if (!column) {
-        return false;
+    void operator()(const ColumnMask* column) {
+        _text += (*column)[_rowIndex] ? "true" : "false";
     }
-
-    text = boolText(column->at(rowIndex));
-    return true;
-}
-
-bool textOfPlainBool(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnVector<CustomBool>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text = column->getRaw()[rowIndex] ? "true" : "false";
-    return true;
-}
-
-bool textOfConstBool(const Column* chunk, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<CustomBool>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text = column->getRaw() ? "true" : "false";
-    return true;
-}
-
-template <typename Primitive>
-bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnOptVector<Primitive>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const std::optional<Primitive>& value = column->getRaw()[rowIndex];
-    text = value ? scalarText(*value) : "null";
-    return true;
-}
-
-// An expression over constants alone is computed once and reaches the sink as the single
-// value it stands for, in a ColumnConst rather than in a column of rows.
-template <typename ElementType>
-bool textOfConst(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<ElementType>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    text = scalarText((*column)[rowIndex]);
-    return true;
-}
-
-template <typename Primitive>
-bool textOfOptionalConst(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<std::optional<Primitive>>*>(chunk);
-    if (!column) {
-        return false;
-    }
-
-    const std::optional<Primitive>& value = (*column)[rowIndex];
-    text = value ? scalarText(*value) : "null";
-    return true;
-}
+};
 
 }
 
@@ -467,100 +240,10 @@ void StringRowSink::sortedRows(std::vector<Row>& rows) const {
 
 std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     std::string text;
+    CellTextWriter writer {text, rowIndex};
 
-    if (textOfID<NodeID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfID<EdgeID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfID<LabelID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfID<PropertyTypeID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfID<EdgeTypeID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfValueType(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfTemporal<DateTime>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfTemporal<Duration>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPlain<uint64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPlain<int64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPlain<double>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPlain<std::string_view>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPlain<std::string>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstant<int64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstant<uint64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstant<double>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstant<std::string_view>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstant<std::string>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfNullConstant(chunk, text)) {
-        return text;
-    } else if (textOfOptional<int64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptional<uint64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptional<double>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptional<std::string_view>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptional<std::string>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalID<NodeID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalID<EdgeID>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfMask(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalBool(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstOptionalBool(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPlainBool(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstBool(chunk, text)) {
-        return text;
-    } else if (textOfConst<int64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConst<uint64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConst<double>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConst<std::string_view>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalConst<int64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalConst<uint64_t>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalConst<double>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalConst<std::string_view>(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfCellView(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalCellView(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstOptionalCellView(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfList(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfConstList(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfOptionalList(chunk, rowIndex, text)) {
-        return text;
-    } else if (textOfPath(chunk, rowIndex, text)) {
-        return text;
-    }
+    using Dispatcher = ColumnSingleDispatcher<OutputtedTypes::Allowed, CellTextWriter, OutputtedTypes::Excluded>;
+    Dispatcher::dispatch(chunk, writer);
 
-    throw std::runtime_error(fmt::format("StringRowSink cannot read this column kind as text: {}", chunk->getTypeName()));
+    return text;
 }

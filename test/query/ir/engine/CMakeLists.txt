@@ -5,6 +5,8 @@ add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
 
 add_call_v3_test(test_query_ir_empty_result_column_names EmptyResultColumnNamesTest.cpp)
 
+add_call_v3_test(test_query_ir_string_row_sink StringRowSinkTest.cpp)
+
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)

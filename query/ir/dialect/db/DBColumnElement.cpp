@@ -84,6 +84,17 @@ mlir::Type sizeElement(mlir::MLIRContext* context, mlir::Type inputElement) {
     return mlir::IntegerType::get(context, 64);
 }
 
+mlir::Type isEmptyElement(mlir::MLIRContext* context, mlir::Type inputElement) {
+    const bool readsAValue = readsAList(inputElement)
+                          || mlir::isa<storage::StringType, storage::MapType>(inputElement);
+
+    if (!readsAValue) {
+        return mlir::Type {};
+    }
+
+    return booleanElement(context, inputElement);
+}
+
 // A stored list may mix the types of its elements, so one read out of a cell is the
 // type-erased tagged scalar a heterogeneous list's elements ride, whatever element type
 // the cell's own column resolved to.
@@ -165,6 +176,7 @@ const std::unordered_map<std::string_view, ElementRule> elementRules = {
     {"db.to_string_or_null",  &stringElement},
     {"db.element_id",         &integerElement},
     {"db.size",               &sizeElement},
+    {"db.is_empty",           &isEmptyElement},
     {"db.char_length",        &integerElement},
     {"db.head",               &listItemElement},
     {"db.last",               &listItemElement},

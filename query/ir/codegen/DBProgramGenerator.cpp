@@ -510,6 +510,7 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"duration", &emitUnaryFunction<mlir::db::ToDuration>},
     {"size", &emitUnaryFunction<mlir::db::Size>},
     {"length", &emitUnaryFunction<mlir::db::Size>},
+    {"isEmpty", &emitUnaryFunction<mlir::db::IsEmpty>},
     {"char_length", &emitUnaryFunction<mlir::db::CharLength>},
     {"character_length", &emitUnaryFunction<mlir::db::CharLength>},
     {"head", &emitUnaryFunction<mlir::db::Head>},
@@ -731,11 +732,6 @@ mlir::storage::PathDirection walkDirectionOf(EdgePattern::Direction direction, b
 bool isPathColumn(mlir::Value column) {
     const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
     return columnType && mlir::isa<mlir::storage::PathRefType>(columnType.getType());
-}
-
-bool isListColumn(mlir::Value column) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
-    return columnType && mlir::isa<mlir::storage::ListType>(columnType.getType());
 }
 
 const VarDecl* declOfReturnItem(const Projection::ReturnItem& item) {
@@ -1158,8 +1154,8 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
     const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
 
     const mlir::Type sharedType = sharedLiteralElementType(elementsAttr);
-    const mlir::Type elementType = sharedType ? sharedType
-                                              : mlir::storage::AnyType::get(_mlirCtxt);
+    const mlir::Type elementType = mlir::isa<mlir::NoneType>(sharedType) ? mlir::storage::AnyType::get(_mlirCtxt)
+                                                                         : sharedType;
 
     const mlir::db::ColumnType resultType = allocColumnType(elementType);
 
@@ -1885,11 +1881,7 @@ void DBProgramGenerator::buildNamedPathItems(const Projection* projection, llvm:
     }
 }
 
-mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Value column) {
-    if (!isPathColumn(column)) {
-        throw TuringException("size() reads the length of a variable-length path: its argument is a single entity");
-    }
-
+mlir::Value DBProgramGenerator::pathLengthColumn(mlir::Value column) {
     const mlir::IntegerType countType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
     const mlir::db::ColumnType resultType = allocColumnType(countType);
 
@@ -5262,7 +5254,12 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
     const bool isEntity = argType == EvaluatedType::NodePattern || argType == EvaluatedType::EdgePattern;
 
-    if (isEntity) {
+    // A group of a walk is bound to the walk's handle, which a count reads its rows off
+    // without expanding each one into its entities
+    const bool namesAGroup = argExpr->getKind() == Expr::Kind::SYMBOL
+                          && _part._pathBindings.contains(argExpr->getExprVarDecl());
+
+    if (isEntity || namesAGroup) {
         if (variableColumns) {
             return getOrTranslateBoundColumn(*variableColumns, argExpr);
         }
@@ -9996,9 +9993,8 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         }
 
         const Expr* argExpr = args->front();
-        const EvaluatedType argType = argExpr->getType();
 
-        if (argType == EvaluatedType::EdgePattern || argType == EvaluatedType::NodePattern) {
+        if (argExpr->getKind() == Expr::Kind::SYMBOL) {
             const mlir::Value column = getOrTranslateBoundColumn(argExpr);
 
             // An OPTIONAL MATCH hands a walk on as the list of its edges, which size() reads
@@ -10006,8 +10002,8 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
             // its body is one hop.
             const auto bindingIt = _part._pathBindings.find(argExpr->getExprVarDecl());
             const bool countsEveryHop = bindingIt == end(_part._pathBindings) || bindingIt->second._steps == 1;
-            if (!isListColumn(column) && countsEveryHop) {
-                _part._exprMap[expr] = pathLengthColumn(argExpr, column);
+            if (isPathColumn(column) && countsEveryHop) {
+                _part._exprMap[expr] = pathLengthColumn(column);
                 return;
             }
         }

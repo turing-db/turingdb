@@ -44,31 +44,9 @@ bool joinsAList(EvaluatedType type) {
         || type == EvaluatedType::Any;
 }
 
-// The shape of the list appending a scalar makes: the list's own where the scalar is the
-// type its elements carry, and a list of tagged scalars where it is not, as a mixed list
-// literal is. A null carries no type, so it leaves the shape as it found it.
+// A scalar joins a list as the one-element list it stands for
 ListShape appendedListShape(const ListShape& list, EvaluatedType scalar) {
-    const bool joinsTheLeaf = list.getDepth() == 1
-                              && (scalar == EvaluatedType::Null || list.getLeafType() == scalar);
-
-    if (!joinsTheLeaf) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    return list;
-}
-
-// The shape of the list a concatenation makes: the one both sides carry, or a list of
-// tagged scalars when they carry different ones, as a mixed list literal is.
-ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
-    const bool sameDepth = left.getDepth() == right.getDepth();
-    const bool sameLeafType = left.getLeafType() == right.getLeafType();
-
-    if (!sameDepth || !sameLeafType) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    return left;
+    return ListShape::joined(list, ListShape::singleton(scalar, ListShape()));
 }
 
 enum class TypingReason : uint8_t {
@@ -438,7 +416,7 @@ void writeListShape(const ExprType& lhs, const ExprType& rhs, BinaryTyping& out)
     if (readsAParameter) {
         out._result._shape = ListShape(EvaluatedType::Invalid, 1);
     } else if (bothLists) {
-        out._result._shape = concatenatedListShape(lhs._shape, rhs._shape);
+        out._result._shape = ListShape::joined(lhs._shape, rhs._shape);
     } else {
         const ListShape& listShape = leftIsAList ? lhs._shape : rhs._shape;
         const EvaluatedType scalar = leftIsAList ? b : a;

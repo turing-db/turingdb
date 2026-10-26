@@ -9666,6 +9666,16 @@ NLUnaryFunctionKernel NLExecutor::selectSize(const Column* input, bool inputNull
     return selectFunction<ListSizeFunction>(input, inputNullable, memory, result);
 }
 
+NLUnaryFunctionKernel NLExecutor::selectIsEmpty(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::String::Primitive>(input)) {
+        return selectFunction<StringIsEmptyFunction>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<MapView>(input)) {
+        return selectFunction<MapIsEmptyFunction>(input, inputNullable, memory, result);
+    }
+
+    return selectFunction<ListIsEmptyFunction>(input, inputNullable, memory, result);
+}
+
 NLUnaryFunctionKernel NLExecutor::selectId(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     if (columnHoldsElement<NodeID>(input)) {
         return selectFunction<IdFunction<NodeID>>(input, inputNullable, memory, result);

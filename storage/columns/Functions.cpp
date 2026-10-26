@@ -214,6 +214,38 @@ StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType stri
     return characterCount(string);
 }
 
+TaggedIsEmptyFunction::ResultType TaggedIsEmptyFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
+}
+
+TaggedIsEmptyFunction::ResultType TaggedIsEmptyFunction::operator()(const ArgType cell) const {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::ListView) {
+        return cell.getAs<ListView>().empty();
+    } else if (tag == CellTag::String) {
+        return cell.getAs<types::String::Primitive>().empty();
+    } else if (tag == CellTag::MapView) {
+        return cell.getAs<MapView>().empty();
+    } else if (tag == CellTag::Null) {
+        return std::nullopt;
+    }
+
+    throw TuringException("isEmpty() reads a list, a string or a map, and this row holds a value that is none of them");
+}
+
+ListIsEmptyFunction::ResultType ListIsEmptyFunction::operator()(const ArgType list) const {
+    return list.empty();
+}
+
+StringIsEmptyFunction::ResultType StringIsEmptyFunction::operator()(const ArgType string) const {
+    return string.empty();
+}
+
+MapIsEmptyFunction::ResultType MapIsEmptyFunction::operator()(const ArgType map) const {
+    return map.empty();
+}
+
 TaggedCharLengthFunction::ResultType TaggedCharLengthFunction::operator()(const std::optional<ArgType>& cell) const {
     return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }

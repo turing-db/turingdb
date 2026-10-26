@@ -617,9 +617,7 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
     // An array of per-element attributes is a list literal; it carries no type of its own,
     // so the element type is the homogeneity verdict over the elements.
     if (const auto elements = dyn_cast<ArrayAttr>(adaptor.getValue())) {
-        const Type shared = ::db::sharedLiteralElementType(elements);
-        const Type listElement = shared ? shared : storage::AnyType::get(context);
-        const Type listType = storage::ListType::get(context, listElement);
+        const Type listType = storage::ListType::get(context, ::db::sharedLiteralElementType(elements));
 
         inferredReturnTypes.push_back(ChunkType::get(context, listType));
         return success();
@@ -762,8 +760,8 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
-// An nl.to_any answers tagged cells, or lists of tagged cells out of lists, nullable when
-// the lists it reads are
+// An nl.to_any answers tagged cells, or out of lists the lists their elements join into,
+// nullable when the lists it reads are
 LogicalResult ToAny::verify() {
     const Type operandElement = cast<ChunkType>(getOperand().getType()).getElementType();
     const Type resultElement = cast<ChunkType>(getResult().getType()).getElementType();
@@ -781,9 +779,9 @@ LogicalResult ToAny::verify() {
     const Type resultList = nullableResult ? nullableResult.getValueType() : resultElement;
     const Type operandList = nullableOperand ? nullableOperand.getValueType() : operandElement;
 
-    const auto listOfCells = dyn_cast<storage::ListType>(resultList);
-    if (!listOfCells || !isa<storage::AnyType>(listOfCells.getElementType()) || !isa<storage::ListType>(operandList)) {
-        return emitOpError("answers tagged cells, or lists of them for a list operand");
+    const bool readsAList = isa<storage::ListType>(resultList) && isa<storage::ListType>(operandList);
+    if (!readsAList || storage::joinedElementType(operandList, resultList) != resultList) {
+        return emitOpError("answers tagged cells, or for a list operand a list its elements join into");
     }
 
     return success();

@@ -90,7 +90,7 @@ private:
     // The name a quantified pattern's inner node or edge groups, rejected when the query has
     // already bound it and declared as the list of that name otherwise
     void throwIfGroupNameIsBound(const DeclContext* outer, const Symbol* symbol, const EdgePattern* walk) const;
-    VarDecl* declareGroupVariable(DeclContext* outer, EvaluatedType type, std::string_view name);
+    VarDecl* declareGroupVariable(DeclContext* outer, EvaluatedType entityType, std::string_view name);
 
     // Declares the variable a `MATCH p = ...` names the whole element with, once its
     // entities are bound

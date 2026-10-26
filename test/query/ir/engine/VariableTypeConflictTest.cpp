@@ -119,7 +119,7 @@ TEST_F(VariableTypeConflictTest, rejectsAHeterogeneousListUnwoundIntoANodePatter
 
 TEST_F(VariableTypeConflictTest, rejectsAnEmptyListUnwoundIntoANodePattern) {
     expectTypeConflictRejection("UNWIND [] AS x MATCH (x) RETURN x;",
-                                "Variable 'x' is already declared with type 'Any'");
+                                "Variable 'x' is already declared with type 'Null'");
 }
 
 // The seed must be in scope before the pattern names it: an UNWIND naming a variable the
