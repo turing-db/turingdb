@@ -39,7 +39,7 @@ def UnnestUnwindComprehension : Pass<"unnest_unwind_comprehension"> {
 }
 
 def FuseScanByNodeIDs : Pass<"fuse_scan_by_node_ids"> {
-    let summary = "Fuse a node scan and its node-ID disjunction filter into a const_scan_nodes";
+    let summary = "Fuse a node scan and its filter on node IDs, an OR of equalities to an ID and IN tests over a list of IDs, into a const_scan_nodes";
     let dependentDialects = ["mlir::db::DB"];
 }
 

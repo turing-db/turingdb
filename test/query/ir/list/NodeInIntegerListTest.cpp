@@ -78,3 +78,31 @@ TEST_F(NodeInIntegerListTest, ReturnNodeInList) {
 TEST_F(NodeInIntegerListTest, WhereEdgeInList) {
     expectRows("MATCH ()-[e]->() WHERE e IN [0, 1] RETURN count(e)", {{"2"}});
 }
+
+TEST_F(NodeInIntegerListTest, WhereIDInList) {
+    expectRows("MATCH (n) WHERE id(n) IN [0, 2] RETURN n.name", {{"Computers"}, {"Remy"}});
+}
+
+TEST_F(NodeInIntegerListTest, WhereNodeInEmptyList) {
+    expectRows("MATCH (n) WHERE n IN [] RETURN count(n)", {{"0"}});
+}
+
+TEST_F(NodeInIntegerListTest, WhereNodeInListWithAMissingID) {
+    expectRows("MATCH (n) WHERE n IN [1, 1000] RETURN n.name", {{"Adam"}});
+}
+
+TEST_F(NodeInIntegerListTest, WhereLabelledNodeInList) {
+    expectRows("MATCH (n:Person) WHERE n IN [0, 1, 2] RETURN n.name", {{"Adam"}, {"Remy"}});
+}
+
+TEST_F(NodeInIntegerListTest, WhereNodeInListOrEqual) {
+    expectRows("MATCH (n) WHERE n IN [0] OR n = 2 RETURN n.name", {{"Computers"}, {"Remy"}});
+}
+
+TEST_F(NodeInIntegerListTest, WhereExpandedNodeInList) {
+    expectRows("MATCH (n)-->(m) WHERE n IN [1] RETURN m.name", {{"Bio"}, {"Cooking"}, {"Remy"}});
+}
+
+TEST_F(NodeInIntegerListTest, WhereNodeInListWithAString) {
+    expectRows("MATCH (n) WHERE n IN [1, 'Remy'] RETURN n.name", {{"Adam"}});
+}
