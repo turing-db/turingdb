@@ -834,6 +834,17 @@ LogicalResult ExpandPath::verify() {
     return success();
 }
 
+LogicalResult PathLength::verify() {
+    const std::optional<uint64_t> steps = getSteps();
+    if (steps && *steps == 0) {
+        return emitOpError("steps counts the steps of a body, so it is at least 1");
+    } else if (steps && getNodes()) {
+        return emitOpError("nodes counts every node of the walk, which reads no step of a body");
+    }
+
+    return success();
+}
+
 LogicalResult PathElements::verify() {
     const auto column = dyn_cast<ColumnType>(getResult().getType());
     const auto nullable = column ? dyn_cast<storage::NullableType>(column.getType()) : storage::NullableType();
@@ -2260,14 +2271,20 @@ LogicalResult OptionalMatch::verify() {
     for (size_t columnIndex = inputCount; columnIndex < yieldedColumns.size(); columnIndex++) {
         const auto column = llvm::dyn_cast<ColumnType>(yieldedColumns[columnIndex].getType());
         const mlir::Type elementType = column ? column.getType() : mlir::Type();
+
+        // A function the pattern computes is typed during lowering, which pads the value it
+        // resolves to
         const bool isPaddable = llvm::isa_and_present<storage::NodeIDType,
                                                       storage::EdgeIDType,
                                                       storage::ListType,
-                                                      storage::PathType>(elementType);
+                                                      storage::PathType,
+                                                      storage::NullableType,
+                                                      mlir::NoneType>(elementType);
 
         if (!isPaddable) {
             return emitOpError("pattern variable column ")
-                   << columnIndex << " must be a node or edge ID, list or path column, so a missed match can be null";
+                   << columnIndex << " must be a node or edge ID, list, path, nullable or function result column, "
+                   << "so a missed match can be null";
         }
     }
 

@@ -1089,23 +1089,34 @@ private:
     QueryListBuffer* _listBuffer {nullptr};
 };
 
-// nl.path_length data: the depth of each handle's entry, read without expanding the path
+// nl.path_length data: the depth of each handle's entry divided by the steps of the walk's body,
+// plus the seed when it counts the nodes, read without expanding the path
 class NLPathLengthData : public NLFunctionData {
 public:
-    NLPathLengthData(const ColumnVector<PathRef>* paths, ColumnVector<uint64_t>* output, const PathTrie* trie)
+    NLPathLengthData(const ColumnVector<PathRef>* paths,
+                     ColumnVector<uint64_t>* output,
+                     size_t steps,
+                     bool countsNodes,
+                     const PathTrie* trie)
         : _paths(paths),
         _output(output),
+        _steps(steps),
+        _countsNodes(countsNodes),
         _trie(trie)
     {
     }
 
     const ColumnVector<PathRef>* getPaths() const { return _paths; }
     ColumnVector<uint64_t>* getOutput() const { return _output; }
+    size_t getSteps() const { return _steps; }
+    bool countsNodes() const { return _countsNodes; }
     const PathTrie* getTrie() const { return _trie; }
 
 private:
     const ColumnVector<PathRef>* _paths {nullptr};
     ColumnVector<uint64_t>* _output {nullptr};
+    size_t _steps {1};
+    bool _countsNodes {false};
     const PathTrie* _trie {nullptr};
 };
 

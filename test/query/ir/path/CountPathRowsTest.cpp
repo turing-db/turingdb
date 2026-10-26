@@ -100,6 +100,56 @@ TEST_F(CountPathRowsTest, buildsThePathAQueryReturnsBesideTheCount) {
     EXPECT_TRUE(contains(dump, "db.make_path")) << dump;
 }
 
+TEST_F(CountPathRowsTest, doesNotBuildANamedPathToCountItPerKey) {
+    std::string dump;
+    optimisedDump("EXPLAIN (db) MATCH p = (n:Person)-[e]->+(m:Person) RETURN n, count(p)", dump);
+
+    EXPECT_FALSE(contains(dump, "db.make_path")) << dump;
+    EXPECT_TRUE(contains(dump, "db.group_aggregate(%1, %1) keys 1 aggregates [count]")) << dump;
+}
+
+TEST_F(CountPathRowsTest, doesNotBuildANamedPathToCountItBesideACollect) {
+    std::string dump;
+    optimisedDump("EXPLAIN (db) MATCH p = (n:Person)-[e]->+(m:Person) RETURN n.name, count(p), collect(m.name)", dump);
+
+    EXPECT_FALSE(contains(dump, "db.make_path")) << dump;
+    EXPECT_TRUE(contains(dump, "db.collect")) << dump;
+}
+
+TEST_F(CountPathRowsTest, countsEveryTrailTheWalkFoundPerKey) {
+    StringRowSink sink;
+    run("MATCH p = (n:Person)-[e]->+(m:Person) RETURN n.name, count(p)", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, (std::vector<StringRowSink::Row> {{"Adam", "4"}, {"Remy", "6"}}));
+}
+
+TEST_F(CountPathRowsTest, countsEveryTrailTheWalkFoundBesideACollect) {
+    StringRowSink sink;
+    run("MATCH p = (n:Person)-[e]->+(m:Person) RETURN n.name, count(p), size(collect(m.name))", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, (std::vector<StringRowSink::Row> {{"Adam", "4", "4"}, {"Remy", "6", "6"}}));
+}
+
+TEST_F(CountPathRowsTest, countsAnOptionalPathPerKeyWhereItMatched) {
+    StringRowSink sink;
+    run("MATCH (n:Person) OPTIONAL MATCH p = (n)-[:KNOWS_WELL*1..2]->(c) RETURN n.name, count(p), count(*)", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, (std::vector<StringRowSink::Row> {{"Adam", "2", "2"},
+                                                      {"Cyrus", "0", "1"},
+                                                      {"Doruk", "0", "1"},
+                                                      {"Luc", "0", "1"},
+                                                      {"Martina", "0", "1"},
+                                                      {"Maxime", "0", "1"},
+                                                      {"Remy", "2", "2"},
+                                                      {"Suhas", "0", "1"}}));
+}
+
 TEST_F(CountPathRowsTest, countsEveryTrailTheWalkFound) {
     StringRowSink counted;
     run("MATCH p = (n:Person)-[e]->+(m:Person) RETURN count(p)", counted);

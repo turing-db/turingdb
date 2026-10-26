@@ -158,8 +158,18 @@ def SinkMakePath : Pass<"sink_make_path"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def SinkIntoOptionalMatch : Pass<"sink_into_optional_match"> {
+    let summary = "Take the size of a list, or nodes(), relationships() or length() of a path, an optional match binds inside its pattern, and pad the result instead";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FusePathElements : Pass<"fuse_path_elements"> {
     let summary = "Read the nodes, the relationships or the length of a named path over one walk off the walk's handles instead of the path it builds";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def FusePathLength : Pass<"fuse_path_length"> {
+    let summary = "Read the size of the list a walk's handles expand to off the handles instead of expanding them";
     let dependentDialects = ["mlir::db::DB"];
 }
 
@@ -189,11 +199,11 @@ def FuseExploreDistinctEnds : Pass<"fuse_explore_distinct_ends"> {
 }
 
 def CountPathRows : Pass<"count_path_rows"> {
-    let summary = "Count the rows a path was built over instead of building the path to count it";
+    let summary = "Count the rows a path was built over, or the handles a walk's list was expanded from, instead of building the path or the list";
 }
 
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
-    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs and the ops over the elements of a list";
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops, calls, CASEs, optional matches and the ops over the elements of a list";
     let dependentDialects = ["mlir::db::DB"];
 }
 

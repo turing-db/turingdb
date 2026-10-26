@@ -7116,7 +7116,11 @@ void DBLowering::lowerPathLength(mlir::db::PathLength pathLength) {
     mlir::MLIRContext* context = _builder.getContext();
     const nl::ChunkType resultType = nl::ChunkType::get(context, mlir::IntegerType::get(context, 64, mlir::IntegerType::Unsigned));
 
-    nl::PathLength length = _builder.create<nl::PathLength>(_builder.getUnknownLoc(), resultType, pathsChunk);
+    nl::PathLength length = _builder.create<nl::PathLength>(_builder.getUnknownLoc(),
+                                                            resultType,
+                                                            pathsChunk,
+                                                            pathLength.getStepsAttr(),
+                                                            pathLength.getNodesAttr());
     _valueMap[pathLength.getResult()] = length.getResult();
 }
 

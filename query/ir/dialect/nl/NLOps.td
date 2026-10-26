@@ -1306,18 +1306,22 @@ def ExpandPath : NLOp<"expand_path", [Pure, RowAlignedThroughOperands]> {
 * PathLength
 */
 def PathLength : NLOp<"path_length", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Read the number of edges of each path of a chunk";
+  let summary = "Read the number of edges, or of nodes, of each path of a chunk";
   let description = [{
-    Imperative counterpart of db.path_length: one unsigned count per row.
+    Imperative counterpart of db.path_length: one unsigned count per row, the
+    repetitions of a body of `steps` steps when it is set, and the nodes of the path,
+    one more than its edges, under `nodes`.
 
       %n = nl.path_length(%p) : (!nl.chunk<!storage.path_ref>) -> !nl.chunk<ui64>
+      %n = nl.path_length(%p) steps 2 : (!nl.chunk<!storage.path_ref>) -> !nl.chunk<ui64>
+      %n = nl.path_length(%p) nodes : (!nl.chunk<!storage.path_ref>) -> !nl.chunk<ui64>
   }];
 
-  let arguments = (ins NLChunk:$paths);
+  let arguments = (ins NLChunk:$paths, OptionalAttr<UI64Attr>:$steps, UnitAttr:$nodes);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $paths `)` attr-dict `:` functional-type(operands, results)
+    `(` $paths `)` (`steps` $steps^)? (`nodes` $nodes^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 

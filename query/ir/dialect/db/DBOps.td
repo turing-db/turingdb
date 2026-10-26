@@ -1812,21 +1812,34 @@ def ExpandPath : TuringOp<"expand_path", [Pure]> {
 * PathLength
 */
 def PathLength : TuringOp<"path_length", [Pure]> {
-  let summary = "Read the number of edges of each path";
+  let summary = "Read the number of edges, or of nodes, of each path";
 
   let description = [{
     The `size(e)` of a path variable: one unsigned count per row, read off the handle
-    without expanding the path.
+    without expanding the path. The fuse_path_length pass rewrites the db.size of a
+    db.expand_path into one.
 
       %n = db.path_length(%p) : (!db.column<!storage.path_ref>) -> !db.column<ui64>
+
+    `steps n` reads a walk repeating a body of `n` steps, the way db.expand_path's
+    `step k of n` does: the count is the repetitions, one per entity a group variable binds.
+
+      %n = db.path_length(%p) steps 2 : (!db.column<!storage.path_ref>) -> !db.column<ui64>
+
+    `nodes` counts the entries of db.expand_path's `kind nodes` list instead: the seed and
+    the end of each hop, one more than the hops.
+
+      %n = db.path_length(%p) nodes : (!db.column<!storage.path_ref>) -> !db.column<ui64>
   }];
 
-  let arguments = (ins ColumnPathRefs:$paths);
+  let arguments = (ins ColumnPathRefs:$paths, OptionalAttr<UI64Attr>:$steps, UnitAttr:$nodes);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $paths `)` attr-dict `:` functional-type(operands, results)
+    `(` $paths `)` (`steps` $steps^)? (`nodes` $nodes^)? attr-dict `:` functional-type(operands, results)
   }];
+
+  let hasVerifier = 1;
 }
 
 /**
@@ -4028,6 +4041,11 @@ def OptionalMatch : TuringOp<"optional_match", [Pure]> {
     those are the ones a row the pattern missed comes back with null. A null node
     or edge is an invalid ID (`ID::isValid()`), which reads as null through a
     property fetch and renders as null, so no column type changes here.
+
+    sink_into_optional_match moves the size of a variable's list, and nodes(),
+    relationships() or length() of its path, into the pattern: each is null when the
+    variable is, so the padding carries its result rather than the list or path.
+    trim_unread_columns drops a variable nothing past the op reads.
 
     Reading the graph is deterministic and the op writes nothing, so it is Pure -
     which says nothing about the row count, and this op changes it.

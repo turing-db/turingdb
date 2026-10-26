@@ -2530,7 +2530,12 @@ void NLTranslator::translatePathLength(nl::PathLength length, NLStmtContainer* b
     ColumnVector<uint64_t>* output = allocCountColumn();
     _valueSlots[length.getResult()] = output;
 
-    NLPathLengthData* data = _program->allocFunctionData<NLPathLengthData>(paths, output, &_memory->pathTrie());
+    const size_t steps = length.getSteps().value_or(1);
+    NLPathLengthData* data = _program->allocFunctionData<NLPathLengthData>(paths,
+                                                                           output,
+                                                                           steps,
+                                                                           length.getNodes(),
+                                                                           &_memory->pathTrie());
     body->emplaceStmt(&NLExecutor::runPathLength, data);
 }
 

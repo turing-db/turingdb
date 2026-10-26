@@ -868,3 +868,39 @@ TEST_F(TrimUnreadColumnsTest, dropsTheUnreadListOfAnUngroupedCollect) {
     ASSERT_EQ(outputs.size(), 1u);
     EXPECT_EQ(outputs.front().getColumns().front(), collectOp.getResults().front());
 }
+
+// MATCH (n) OPTIONAL MATCH (n)-[e*1..2]->(c) RETURN n
+const char* const optionalUnreadWalk = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %on, %oc, %oe = db.optional_match(%n) {
+  ^bb0(%in: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
+    %s, %t, %p, %tagc = db.explore_paths(%in, {%tag}) forward hops 1 to 2 : (!db.column<!storage.node_id>, !db.column<ui64>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<ui64>)
+    %e = db.expand_path(%p, %s) kind edges : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
+    db.optional_yield %tagc, {%s, %t, %e} : {!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.list<!storage.edge_id>>}
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.list<!storage.edge_id>>)
+  db.output(%on) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The pattern pads its variables for what reads them past the match, so one nothing reads
+// leaves the yield, and the ops computing it go with it. The column it joins onto stays.
+TEST_F(TrimUnreadColumnsTest, dropsTheVariablesOfAnOptionalMatchNothingReads) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(optionalUnreadWalk);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runTrim(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::OptionalMatch> optionals = collect<mlir::db::OptionalMatch>(*module);
+    ASSERT_EQ(optionals.size(), 1u);
+    mlir::db::OptionalMatch optional = optionals.front();
+
+    EXPECT_EQ(optional->getNumResults(), 1u);
+    EXPECT_EQ(optional.getInputColumns().size(), 1u);
+    EXPECT_TRUE(collect<mlir::db::ExpandPath>(*module).empty());
+
+    llvm::SmallVector<mlir::db::Output> outputs = collect<mlir::db::Output>(*module);
+    ASSERT_EQ(outputs.size(), 1u);
+    EXPECT_EQ(outputs.front().getColumns().front(), optional->getResult(0));
+}

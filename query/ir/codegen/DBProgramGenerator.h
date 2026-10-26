@@ -894,8 +894,8 @@ private:
     mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
     mlir::Value makePathColumn(llvm::ArrayRef<mlir::Value> entities, llvm::ArrayRef<int64_t> reversedPaths = {});
 
-    // The entities a walk stands for, for an aggregate that reads its input's values rather
-    // than counting the rows the handles are
+    // The entities a walk stands for, which an expression or an aggregate reading a variable
+    // bound to the walk's handles takes rather than the handles
     mlir::Value readWalkEntities(const Expr* argExpr, mlir::Value column);
 
     // Builds the path of every named-path item a projection publishes or outputs. A handle
@@ -1498,16 +1498,19 @@ private:
     // @param decl
     mlir::Value listColumnOf(const VarDecl* decl, mlir::Value column);
 
-    // The column a variable leaves its scope as: a path column goes out as its list unless
-    // it reads as its edges, the one reading a path column keeps once its binding is gone
+    // The variables the query names that are read off a walk's handles in flight, each with
+    // the list or the path it stands for, which is what an op keeping rows across chunks
+    // carries in place of the handles
+    void collectWalkReads(llvm::SmallVectorImpl<PublishedColumn>& walkReads);
+
+    // The column a variable leaves its scope as: a path column goes out as its list, or as
+    // the path a named path builds off it, unless it reads as its edges, the one reading a
+    // path column keeps once its binding is gone
     mlir::Value columnLeavingScope(const VarDecl* decl, mlir::Value column);
 
     // Expands every projected path column into its list, for the consumers that key on
     // the projection's rows
     void expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected);
-
-    // The column size() reads over a path column: the hop count of each path
-    mlir::Value pathLengthColumn(mlir::Value column);
 
     // The column nodes(), relationships() or length() reads over a named path
     mlir::Value pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind);

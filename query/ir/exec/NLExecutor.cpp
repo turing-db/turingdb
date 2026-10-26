@@ -7932,10 +7932,12 @@ void NLExecutor::runPathLength(NLExecutionContext* context, NLFunctionData* data
     const std::vector<PathRef>& paths = length->getPaths()->getRaw();
     std::vector<uint64_t>& lengths = length->getOutput()->getRaw();
     const PathTrie& trie = *length->getTrie();
+    const size_t steps = length->getSteps();
+    const uint64_t seed = length->countsNodes() ? 1 : 0;
 
     lengths.resize(paths.size());
     for (size_t row = 0; row < paths.size(); row++) {
-        lengths[row] = trie.getDepth(paths[row]);
+        lengths[row] = trie.getDepth(paths[row]) / steps + seed;
     }
 }
 

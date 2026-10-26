@@ -33,6 +33,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -1840,8 +1841,9 @@ mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value co
 mlir::Value DBProgramGenerator::columnLeavingScope(const VarDecl* decl, mlir::Value column) {
     const auto bindingIt = _part._pathBindings.find(decl);
     const bool readsOtherThanItsEdges = bindingIt != end(_part._pathBindings) && !bindingIt->second.readsAsItsEdges();
+    const bool namesAWalk = _part._namedPathWalks.contains(decl);
 
-    return readsOtherThanItsEdges ? listColumnOf(decl, column) : column;
+    return readsOtherThanItsEdges || namesAWalk ? listColumnOf(decl, column) : column;
 }
 
 void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
@@ -1879,13 +1881,6 @@ void DBProgramGenerator::buildNamedPathItems(const Projection* projection, llvm:
 
         itemIndex++;
     }
-}
-
-mlir::Value DBProgramGenerator::pathLengthColumn(mlir::Value column) {
-    const mlir::IntegerType countType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
-    const mlir::db::ColumnType resultType = allocColumnType(countType);
-
-    return _opBuilder.create<mlir::db::PathLength>(_opBuilder.getUnknownLoc(), resultType, column).getResult();
 }
 
 mlir::Value DBProgramGenerator::pathElementsColumn(mlir::Value column, mlir::storage::PathElementsKind kind) {
@@ -3823,6 +3818,16 @@ void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
         return;
     }
 
+    // The sort keeps rows across chunks, and a walk's handles hold for the chunk that
+    // emitted them
+    llvm::SmallVector<PublishedColumn> walkReads;
+    collectWalkReads(walkReads);
+
+    const size_t firstWalkRead = sorted.size();
+    for (const PublishedColumn& walkRead : walkReads) {
+        sorted.push_back(walkRead._column);
+    }
+
     llvm::SmallVector<mlir::Type> sortResultTypes;
     for (const mlir::Value column : sorted) {
         sortResultTypes.push_back(column.getType());
@@ -3835,7 +3840,33 @@ void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
                                                     keyColumns,
                                                     keyAscending);
 
-    rebindInFlightColumns(sortOp.getResults(), /*firstResult=*/0, inFlight);
+    const mlir::ResultRange results = sortOp.getResults();
+    rebindInFlightColumns(results, /*firstResult=*/0, inFlight);
+
+    for (size_t readIndex = 0; readIndex < walkReads.size(); readIndex++) {
+        const VarDecl* decl = walkReads[readIndex]._decl;
+        const mlir::Value column = results[firstWalkRead + readIndex];
+
+        rebindNamedPath(decl, column);
+        rebindVariableColumn(decl, column);
+    }
+}
+
+void DBProgramGenerator::collectWalkReads(llvm::SmallVectorImpl<PublishedColumn>& walkReads) {
+    forEachVariableColumn([this, &walkReads](const VarDecl* decl, std::string_view name, mlir::Value column) {
+        const bool readsAWalk = decl && !decl->isUnnamed() && isPathColumn(column) && holdsTheRowsInFlight(column);
+        const bool alreadyRead = std::ranges::any_of(walkReads, [decl](const PublishedColumn& walkRead) {
+            return walkRead._decl == decl;
+        });
+
+        if (readsAWalk && !alreadyRead) {
+            walkReads.push_back({decl, std::string(name), column});
+        }
+    });
+
+    for (PublishedColumn& walkRead : walkReads) {
+        walkRead._column = listColumnOf(walkRead._decl, walkRead._column);
+    }
 }
 
 void DBProgramGenerator::generateMatchWindow(const MatchStmt* matchStmt) {
@@ -5254,17 +5285,16 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
     const bool isEntity = argType == EvaluatedType::NodePattern || argType == EvaluatedType::EdgePattern;
 
-    // A group of a walk is bound to the walk's handle, which a count reads its rows off
-    // without expanding each one into its entities
+    // A group of a walk is a variable, which reads as the list its walk's handle expands to
     const bool namesAGroup = argExpr->getKind() == Expr::Kind::SYMBOL
                           && _part._pathBindings.contains(argExpr->getExprVarDecl());
 
     if (isEntity || namesAGroup) {
         if (variableColumns) {
-            return getOrTranslateBoundColumn(*variableColumns, argExpr);
+            return getOrTranslateExprColumn(*variableColumns, argExpr);
         }
 
-        return getOrTranslateBoundColumn(argExpr);
+        return getOrTranslateExprColumn(argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
         translateExprOverRows(argExpr);
 
@@ -7245,7 +7275,34 @@ void DBProgramGenerator::publishInFlightColumns() {
 }
 
 void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind) const {
+    const auto namesTheWalk = [](const VarDecl* groupDecl, const PartScope::PathBinding& binding) {
+        return !binding._path || binding._path->getDecl() == groupDecl;
+    };
+
+    // An occurrence of a named edge, and the walk a group variable or a named path stands
+    // for, holds a column the query names below, and is bound under that name alone
+    llvm::SmallPtrSet<const VariableDependency*, 8> namedBelow;
+    for (const auto& [decl, vars] : _vdg.edgeIdentities()) {
+        if (!vars.empty() && holdsColumn(vars.front())) {
+            namedBelow.insert(vars.begin(), vars.end());
+        }
+    }
+
+    for (const auto& [pathDecl, walk] : _part._namedPathWalks) {
+        namedBelow.insert(walk._path);
+    }
+
+    for (const auto& [groupDecl, binding] : _part._pathBindings) {
+        if (!namesTheWalk(groupDecl, binding)) {
+            namedBelow.insert(binding._path);
+        }
+    }
+
     for (const auto& [cypherVar, mlirCol] : _part._varMap) {
+        if (namedBelow.contains(cypherVar)) {
+            continue;
+        }
+
         const std::string_view varName = cypherVar->getName();
 
         bioassert(not mlirCol.empty(), "No definitions for {}", varName);
@@ -7277,8 +7334,7 @@ void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind
     // So is each group variable of a quantified pattern, another name for the handle column
     // of its walk
     for (const auto& [groupDecl, binding] : _part._pathBindings) {
-        const bool namesTheWalk = !binding._path || binding._path->getDecl() == groupDecl;
-        if (namesTheWalk) {
+        if (namesTheWalk(groupDecl, binding)) {
             continue;
         }
 
@@ -7893,7 +7949,7 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             } else {
                 const mlir::Value entityColumn = resolveEntityColumn(decl);
                 if (entityColumn) {
-                    _part._exprMap[expr] = entityColumn;
+                    _part._exprMap[expr] = readWalkEntities(expr, entityColumn);
                 }
             }
 
@@ -9856,14 +9912,7 @@ void DBProgramGenerator::translateAggregateArguments(const FunctionInvocation* i
     bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
     const Expr* argExpr = args->front();
-    const mlir::Value translated = translateAggregateInput(argExpr, variableColumns);
-
-    // A quantified pattern binds the handle of the walk. A count reads its rows off the
-    // handles unless it counts distinct walks, and every other aggregate the entities
-    // each one stands for
-    const std::string_view funcName = invocation->getSignature()->getFullName();
-    const bool countsHandles = funcName == "count" && !invocation->isDistinct();
-    arguments._values = countsHandles ? translated : readWalkEntities(argExpr, translated);
+    arguments._values = readWalkEntities(argExpr, translateAggregateInput(argExpr, variableColumns));
 
     arguments._rowPercentile = translateRowPercentile(invocation, arguments._values, variableColumns);
 }
@@ -9987,29 +10036,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     if (funcName == "coalesce") {
         translateCoalesce(expr, args);
         return;
-    } else if (funcName == "size") {
-        if (!args || args->size() != 1) {
-            throw TuringException("size() expects 1 argument.");
-        }
-
-        const Expr* argExpr = args->front();
-
-        if (argExpr->getKind() == Expr::Kind::SYMBOL) {
-            const mlir::Value column = getOrTranslateBoundColumn(argExpr);
-
-            // An OPTIONAL MATCH hands a walk on as the list of its edges, which size() reads
-            // as it reads any other list. A walk's length counts a group's entities only when
-            // its body is one hop.
-            const auto bindingIt = _part._pathBindings.find(argExpr->getExprVarDecl());
-            const bool countsEveryHop = bindingIt == end(_part._pathBindings) || bindingIt->second._steps == 1;
-            if (isPathColumn(column) && countsEveryHop) {
-                _part._exprMap[expr] = pathLengthColumn(column);
-                return;
-            }
-        }
-    }
-
-    if (funcName == "range") {
+    } else if (funcName == "range") {
         translateRange(expr, args);
         return;
     } else if (funcName == "substring") {
@@ -10696,9 +10723,8 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
 
         const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);
-        const bool countsHandles = funcName == "count" && !invocation->isDistinct();
 
-        aggInputColumns.push_back(countsHandles ? inputColumn : readWalkEntities(argExpr, inputColumn));
+        aggInputColumns.push_back(readWalkEntities(argExpr, inputColumn));
         aggKinds.push_back(*kind);
         aggFuncExprs.push_back(funcExpr);
     }

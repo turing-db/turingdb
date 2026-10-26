@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <tuple>
 
@@ -73,7 +74,9 @@ namespace mlir::db {
 #define GEN_PASS_DEF_HOISTHOPCONJUNCTS
 #define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
 #define GEN_PASS_DEF_SINKMAKEPATH
+#define GEN_PASS_DEF_SINKINTOOPTIONALMATCH
 #define GEN_PASS_DEF_FUSEPATHELEMENTS
+#define GEN_PASS_DEF_FUSEPATHLENGTH
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
 #define GEN_PASS_DEF_FUSEEXPLOREENDFACTOR
 #define GEN_PASS_DEF_FUSEEXPLOREENDSET
@@ -5042,6 +5045,101 @@ struct SinkMakePath : public impl::SinkMakePathBase<SinkMakePath> {
     }
 };
 
+OptionalYield patternYield(OptionalMatch optional) {
+    return cast<OptionalYield>(optional.getPattern().front().getTerminator());
+}
+
+// Rebuilds an optional match over the columns its yield names, which a pass has just added
+// to or dropped some of. The old results keptResults lists stand, in order, for the first
+// new ones.
+OptionalMatch rebuildOptionalMatch(OptionalMatch optional, llvm::ArrayRef<size_t> keptResults, mlir::OpBuilder& builder) {
+    OptionalYield yield = patternYield(optional);
+
+    llvm::SmallVector<Type> resultTypes;
+    for (const Value column : yield.getColumns()) {
+        resultTypes.push_back(column.getType());
+    }
+
+    builder.setInsertionPoint(optional);
+    OptionalMatch rebuilt = builder.create<OptionalMatch>(optional.getLoc(), resultTypes, optional.getInputColumns());
+    rebuilt->setAttrs(optional->getAttrDictionary());
+    rebuilt.getPattern().takeBody(optional.getPattern());
+
+    const ResultRange results = optional->getResults();
+    for (size_t index = 0; index < keptResults.size(); index++) {
+        results[keptResults[index]].replaceAllUsesWith(rebuilt->getResult(index));
+    }
+
+    optional.erase();
+
+    return rebuilt;
+}
+
+// A missed row pads a pattern variable with null, and size(), nodes(), relationships() and
+// length() of a null are null too. So the pattern computes them before the padding, which
+// then carries their result instead of the list or path.
+bool matchOptionalVariableRead(Operation* read, OptionalMatch& optional, size_t& resultIndex) {
+    if (!isa<Size, PathElements>(read)) {
+        return false;
+    }
+
+    const OpResult padded = dyn_cast<OpResult>(read->getOperand(0));
+    if (!padded) {
+        return false;
+    }
+
+    optional = dyn_cast<OptionalMatch>(padded.getOwner());
+    resultIndex = padded.getResultNumber();
+
+    return optional && resultIndex >= optional.getInputColumns().size();
+}
+
+void sinkIntoOptionalMatch(Operation* read, OptionalMatch optional, size_t resultIndex, mlir::OpBuilder& builder) {
+    OptionalYield yield = patternYield(optional);
+
+    builder.setInsertionPoint(yield);
+    Operation* const sunk = builder.clone(*read);
+    sunk->setOperand(0, yield.getColumns()[resultIndex]);
+
+    yield.getColumnsMutable().append(sunk->getResult(0));
+
+    llvm::SmallVector<size_t> keptResults(optional->getNumResults());
+    std::iota(keptResults.begin(), keptResults.end(), size_t {0});
+
+    OptionalMatch rebuilt = rebuildOptionalMatch(optional, keptResults, builder);
+
+    read->getResult(0).replaceAllUsesWith(rebuilt->getResults().back());
+    read->erase();
+}
+
+struct SinkIntoOptionalMatch : public impl::SinkIntoOptionalMatchBase<SinkIntoOptionalMatch> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        llvm::SetVector<Operation*> reads;
+        getOperation()->walk([&reads](Operation* op) {
+            if (isa<Size, PathElements>(op)) {
+                reads.insert(op);
+            }
+        });
+
+        while (!reads.empty()) {
+            Operation* const read = reads.pop_back_val();
+
+            OptionalMatch optional;
+            size_t resultIndex = 0;
+            if (!matchOptionalVariableRead(read, optional, resultIndex)) {
+                continue;
+            }
+
+            const Operation::user_range users = read->getUsers();
+            const llvm::SmallVector<Operation*> readers(users.begin(), users.end());
+            sinkIntoOptionalMatch(read, optional, resultIndex, builder);
+            reads.insert(readers.begin(), readers.end());
+        }
+    }
+};
+
 // A named path over one walk is the node the walk seeds from and its handle column, so
 // what nodes(), relationships() and length() read off it is what the handles already
 // answer: the seed then each hop's end, the edges, and the depth
@@ -5144,6 +5242,51 @@ struct FusePathElements : public impl::FusePathElementsBase<FusePathElements> {
             result.replaceAllUsesWith(widened.getResult());
             elements.erase();
             eraseIfUnused(walk._build);
+        }
+    }
+};
+
+// A to_nullable column holds a value in every row, so the size of one is the size of the
+// column it widens
+void readSizeOfTheWidenedColumn(Size size) {
+    while (ToNullable widened = size.getInput().getDefiningOp<ToNullable>()) {
+        size->setOperand(0, widened.getOperand());
+        eraseIfUnused(widened);
+    }
+}
+
+// The list a walk's handles expand to holds one entry per hop, or per repetition of a body
+// of several steps, which the depth of the handle answers, and its list of nodes one more
+struct FusePathLength : public impl::FusePathLengthBase<FusePathLength> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        llvm::SmallVector<Size> sizes;
+        getOperation()->walk([&sizes](Size size) {
+            sizes.push_back(size);
+        });
+
+        for (Size size : sizes) {
+            readSizeOfTheWidenedColumn(size);
+
+            ExpandPath expansion = size.getInput().getDefiningOp<ExpandPath>();
+            if (!expansion) {
+                continue;
+            }
+
+            Value result = size.getResult();
+            const bool countsNodes = expansion.getKind() == storage::PathExpansionKind::Nodes;
+
+            builder.setInsertionPoint(size);
+            PathLength length = builder.create<PathLength>(size.getLoc(),
+                                                           result.getType(),
+                                                           expansion.getPaths(),
+                                                           expansion.getStepsAttr(),
+                                                           countsNodes ? builder.getUnitAttr() : UnitAttr());
+
+            result.replaceAllUsesWith(length.getResult());
+            size.erase();
+            eraseIfUnused(expansion);
         }
     }
 };
@@ -6416,28 +6559,76 @@ bool matchBuiltPath(Count count, Value& rows) {
     return true;
 }
 
+// The list a walk's handles expand to is never null either, so a count of a path or of
+// that list tallies the rows of a column its build read: the node the path opens on, or
+// the handles themselves
+void countBuiltRows(OpOperand& counted) {
+    Operation* const build = counted.get().getDefiningOp();
+
+    if (MakePath path = dyn_cast_or_null<MakePath>(build)) {
+        counted.set(path.getEntities().front());
+    } else if (ExpandPath expansion = dyn_cast_or_null<ExpandPath>(build)) {
+        counted.set(expansion.getPaths());
+    } else {
+        return;
+    }
+
+    eraseIfUnused(build);
+}
+
+// The aggregate inputs of a grouping op are its trailing operands, one per kind
+void countGroupedBuiltRows(Operation* grouping, ArrayRef<int64_t> kinds) {
+    const size_t firstInput = grouping->getNumOperands() - kinds.size();
+    const int64_t countKind = static_cast<int64_t>(storage::GroupAggregateKind::Count);
+
+    for (size_t index = 0; index < kinds.size(); index++) {
+        if (kinds[index] == countKind) {
+            countBuiltRows(grouping->getOpOperand(firstInput + index));
+        }
+    }
+}
+
 struct CountPathRows : public impl::CountPathRowsBase<CountPathRows> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
 
         llvm::SmallVector<Count> counts;
-        getOperation()->walk([&counts](Count count) {
-            counts.push_back(count);
+        llvm::SmallVector<GroupAggregate> groupAggregates;
+        llvm::SmallVector<Collect> collects;
+        getOperation()->walk([&counts, &groupAggregates, &collects](Operation* op) {
+            if (Count count = dyn_cast<Count>(op)) {
+                counts.push_back(count);
+            } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
+                groupAggregates.push_back(groupAggregate);
+            } else if (Collect collect = dyn_cast<Collect>(op)) {
+                collects.push_back(collect);
+            }
         });
 
         for (Count count : counts) {
             Value rows;
-            if (!matchBuiltPath(count, rows)) {
-                continue;
+            if (matchBuiltPath(count, rows)) {
+                Operation* build = count.getInput().getDefiningOp();
+
+                count->setOperand(0, rows);
+                count.setRowsAttr(builder.getUnitAttr());
+
+                if (build->use_empty()) {
+                    build->erase();
+                }
+            } else if (!count.getDistinct()) {
+                countBuiltRows(count->getOpOperand(0));
             }
+        }
 
-            Operation* build = count.getInput().getDefiningOp();
+        for (GroupAggregate groupAggregate : groupAggregates) {
+            countGroupedBuiltRows(groupAggregate, groupAggregate.getKinds());
+        }
 
-            count->setOperand(0, rows);
-            count.setRowsAttr(builder.getUnitAttr());
-
-            if (build->use_empty()) {
-                build->erase();
+        for (Collect collect : collects) {
+            const std::optional<ArrayRef<int64_t>> kinds = collect.getKinds();
+            if (kinds) {
+                countGroupedBuiltRows(collect, *kinds);
             }
         }
     }
@@ -6484,7 +6675,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
 bool trimsColumns(Operation* op) {
     CarrySetLayout layout;
 
-    return matchCarrySetLayout(op, layout) || isa<CrossProduct, HashJoin>(op);
+    return matchCarrySetLayout(op, layout) || isa<CrossProduct, HashJoin, OptionalMatch>(op);
 }
 
 size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
@@ -7027,7 +7218,76 @@ void trimCarriedColumns(Operation* op, mlir::OpBuilder& builder) {
     op->erase();
 }
 
-void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder) {
+// Lowering runs every op it is handed, so the ops a dropped column leaves unread in the
+// pattern go too. Every op there that shapes the rows hands the yield the row tag or a
+// column it keeps, so the ones left unread only computed dropped values.
+void eraseUnreadInPattern(llvm::ArrayRef<Value> dropped, Region& pattern, llvm::SmallPtrSetImpl<Operation*>& erased) {
+    llvm::SmallVector<Operation*> producers;
+    for (const Value column : dropped) {
+        producers.push_back(column.getDefiningOp());
+    }
+
+    while (!producers.empty()) {
+        Operation* const producer = producers.pop_back_val();
+
+        const bool inPattern = producer && pattern.isAncestor(producer->getParentRegion());
+        if (!inPattern || erased.contains(producer) || !mlir::isOpTriviallyDead(producer)) {
+            continue;
+        }
+
+        for (const Value operand : producer->getOperands()) {
+            producers.push_back(operand.getDefiningOp());
+        }
+
+        producer->walk([&erased](Operation* nested) {
+            erased.insert(nested);
+        });
+
+        producer->erase();
+    }
+}
+
+// An optional match pads and carries the variables its pattern binds for what reads them
+// past it, so one nothing reads leaves its yield. The columns it joins onto stay: the
+// pattern walks them, and a row it missed is rebuilt from them.
+void trimOptionalMatch(OptionalMatch optional, mlir::OpBuilder& builder, llvm::SmallPtrSetImpl<Operation*>& erased) {
+    OptionalYield yield = patternYield(optional);
+    const OperandRange columns = yield.getColumns();
+    const size_t inputCount = optional.getInputColumns().size();
+
+    llvm::SmallBitVector keep(columns.size());
+    keep.set(0, inputCount);
+    for (size_t columnIndex = inputCount; columnIndex < columns.size(); columnIndex++) {
+        if (!optional->getResult(columnIndex).use_empty()) {
+            keep.set(columnIndex);
+        }
+    }
+
+    keepRowCarryingColumn(columns, 0, keep);
+
+    if (keep.all()) {
+        return;
+    }
+
+    llvm::SmallVector<Value> keptColumns;
+    llvm::SmallVector<Value> droppedColumns;
+    llvm::SmallVector<size_t> keptResults;
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (keep[columnIndex]) {
+            keptColumns.push_back(columns[columnIndex]);
+            keptResults.push_back(columnIndex);
+        } else {
+            droppedColumns.push_back(columns[columnIndex]);
+        }
+    }
+
+    yield.getColumnsMutable().assign(keptColumns);
+
+    OptionalMatch trimmed = rebuildOptionalMatch(optional, keptResults, builder);
+    eraseUnreadInPattern(droppedColumns, trimmed.getPattern(), erased);
+}
+
+void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder, llvm::SmallPtrSetImpl<Operation*>& erased) {
     if (LazyCase caseOp = dyn_cast<LazyCase>(op)) {
         trimLazyCase(caseOp);
     } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
@@ -7042,6 +7302,8 @@ void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder) {
         trimCrossProduct(product, builder);
     } else if (HashJoin join = dyn_cast<HashJoin>(op)) {
         trimHashJoin(join, builder);
+    } else if (OptionalMatch optional = dyn_cast<OptionalMatch>(op)) {
+        trimOptionalMatch(optional, builder, erased);
     } else {
         trimCarriedColumns(op, builder);
     }
@@ -7053,8 +7315,11 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
         collectTrimOrder(getOperation(), order);
 
         mlir::OpBuilder builder(&getContext());
+        llvm::SmallPtrSet<Operation*, 16> erased;
         for (Operation* const op : order) {
-            trimUnreadColumnsOf(op, builder);
+            if (!erased.contains(op)) {
+                trimUnreadColumnsOf(op, builder, erased);
+            }
         }
     }
 };

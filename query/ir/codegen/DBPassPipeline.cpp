@@ -10,7 +10,7 @@ namespace {
 
 using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassContext*);
 
-constexpr size_t DB_PASS_COUNT = 43;
+constexpr size_t DB_PASS_COUNT = 45;
 
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
@@ -22,6 +22,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createUnnestUnwindComprehension(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createHoistHopConjuncts(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createSinkMakePath(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createSinkIntoOptionalMatch(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseLabelPredicates(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createPlaceInFactors(); },
@@ -45,6 +46,7 @@ const std::array<DBPassFactory, DB_PASS_COUNT> dbPassPipeline = {
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreEndConstraint(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreHopLabels(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFusePathElements(); },
+    [](const mlir::db::DBPassContext*) { return mlir::db::createFusePathLength(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreEndNodes(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreEndFactor(); },
     [](const mlir::db::DBPassContext*) { return mlir::db::createFuseExploreEndSet(); },
