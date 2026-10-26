@@ -748,12 +748,18 @@ mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::
     return mlir::Type {};
 }
 
+// Whether a column of @param element spells a null as a value of its own: the invalid ID of
+// an entity, the tag of a cell, or the empty path
+bool holdsItsOwnNull(mlir::Type element) {
+    return mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType, storage::EntityListType>(element);
+}
+
 // Whether a column can hold the null literal beside its values: in the optional a nullable
-// chunk wraps them in, in the invalid ID of an entity, or in the tag of a cell
+// chunk wraps them in, or in a value of its own
 bool holdsItsNull(mlir::Type chunkType) {
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
-    return mlir::isa<storage::NullableType, storage::AnyType, storage::NodeIDType, storage::EdgeIDType>(element);
+    return mlir::isa<storage::NullableType>(element) || holdsItsOwnNull(element);
 }
 
 // Whether a value of @param element can be held as a tagged cell
@@ -4505,6 +4511,7 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
     const unsigned operandIndex = static_cast<unsigned>(columnIndex);
 
     mlir::Type sharedType;
+    mlir::Type nullType;
     mlir::Type element;
     bool branchesAgree = true;
     bool holdsANull = false;
@@ -4512,11 +4519,13 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
     for (const mlir::MutableOperandRange& columns : branchColumns) {
         const mlir::Type branchType = columns[operandIndex].get().getType();
         if (isUntypedNullChunk(branchType)) {
+            nullType = branchType;
             holdsANull = true;
             continue;
         }
 
         const mlir::Type branchElement = chunkValueElement(_builder, branchType);
+        holdsANull = holdsANull || isNullableChunk(branchType);
 
         if (!sharedType) {
             sharedType = branchType;
@@ -4544,20 +4553,16 @@ mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange>
 
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
-    const bool holdsItsOwnNull = mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType>(element);
 
-    if (holdsItsOwnNull || (isContainer && !holdsANull)) {
+    if (holdsItsOwnNull(element) || (isContainer && !holdsANull)) {
         return nl::ChunkType::get(context, element);
     } else if (isContainer || elementTypeToValueType(element) != ValueType::Invalid) {
         return nl::ChunkType::get(context, storage::NullableType::get(context, element));
     }
 
-    // A path, or anything else no tagged cell nor optional holds, has no row a branch
+    // A value no tagged cell, no optional and no null of its own holds has no row a branch
     // spelling the value null could fill
-    throwOnDisagreeingBranchTypes(branchColumns.front()[operandIndex].get().getType(),
-                                  sharedType,
-                                  columnNames,
-                                  columnIndex);
+    throwOnDisagreeingBranchTypes(nullType, sharedType, columnNames, columnIndex);
 }
 
 // A branch that dedups keys its rows on the chunks it is handed, so its column is converted
@@ -6524,8 +6529,7 @@ nl::ChunkType DBLowering::caseResultChunkType(mlir::Type resultElement) {
     // invalid - and so can a !storage.any column, in the tag; every scalar lands in a
     // nullable one.
     mlir::MLIRContext* const context = _builder.getContext();
-    const bool holdsItsNull = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::AnyType>(resultElement);
-    const mlir::Type resultChunkElement = holdsItsNull
+    const mlir::Type resultChunkElement = holdsItsOwnNull(resultElement)
         ? resultElement
         : storage::NullableType::get(context, resultElement);
 

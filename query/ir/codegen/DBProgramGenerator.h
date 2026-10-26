@@ -655,7 +655,7 @@ private:
                                 const BodyScopes& scopes,
                                 bool answersRows,
                                 mlir::Block* block,
-                                mlir::Block* bodyBlock,
+                                mlir::Block* rowBlock,
                                 SubqueryBranchResults& branchResults);
 
     // The block whose rows a branch generated into @param block starts from
