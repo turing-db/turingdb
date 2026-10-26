@@ -344,15 +344,6 @@ export class NestedReader {
     }
 }
 
-// A path's entries are [u8 type][u64 id], 9 bytes each, in the order the path runs.
-function readGraphPath(bytes, view, start, end) {
-    const entries = [];
-    for (let offset = start; offset < end; offset += 9) {
-        entries.push({ type: bytes[offset], id: view.getBigUint64(offset + 1, true) });
-    }
-    return entries;
-}
-
 // Builds the item reader for a column's buffers: { read: (itemIndex) => JS value,
 // values: the typed array over fixed-width values or null, direct: whether values[i]
 // already is the JS value }.
@@ -377,10 +368,8 @@ function makeItemReader(buffers, nestedReader) {
             return variable(makeStringReader(buffers.values, offsets, new Uint32Array(buffers.utf16Offsets.buffer)));
         case ColumnType.EMBEDDING:
             return variable((index) => new Float32Array(buffers.values.buffer, offsets[index], (offsets[index + 1] - offsets[index]) / 4));
-        case ColumnType.GRAPH_PATH: {
-            const view = new DataView(buffers.values.buffer);
-            return variable((index) => readGraphPath(buffers.values, view, offsets[index], offsets[index + 1]));
-        }
+        case ColumnType.GRAPH_PATH:
+            return variable((index) => Array.from(new BigUint64Array(buffers.values.buffer, offsets[index], (offsets[index + 1] - offsets[index]) / 8)));
         case ColumnType.LIST_VIEW:
             return variable((index) => nestedReader.readListAt(offsets[index]));
         case ColumnType.LIST_ELEMENT_VIEW:
@@ -394,17 +383,15 @@ function makeItemReader(buffers, nestedReader) {
     }
 }
 
-// Only a nested column's plain objects are maps: a path's entries are plain objects
-// too, and keep their BigInt ids.
-function bigIntToNumberDeep(value, convertsMaps) {
+function bigIntToNumberDeep(value) {
     if (typeof value === "bigint") {
         return Number(value);
     }
     if (Array.isArray(value)) {
-        return value.map((item) => bigIntToNumberDeep(item, convertsMaps));
+        return value.map((item) => bigIntToNumberDeep(item));
     }
-    if (convertsMaps && typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
-        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, bigIntToNumberDeep(entry, true)]));
+    if (typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, bigIntToNumberDeep(entry)]));
     }
     return value;
 }
@@ -472,8 +459,7 @@ export class Column {
     toNumberArray() {
         const fixed = FIXED_WIDTH_KINDS[this.typeCode];
         if (fixed === undefined) {
-            const convertsMaps = NESTED_COLUMN_TYPES.includes(this.typeCode);
-            return this.toArray().map((value) => bigIntToNumberDeep(value, convertsMaps));
+            return this.toArray().map((value) => bigIntToNumberDeep(value));
         }
         if (fixed.size !== 8 || this.typeCode === ColumnType.DOUBLE) {
             return this.toArray();

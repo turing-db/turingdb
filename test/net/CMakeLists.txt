@@ -29,6 +29,8 @@ add_turing_test(test_net_turing_proto_empty_result TuringProtoEmptyResultTest.cp
 
 add_turing_test(test_net_json_encoder_double JsonEncoderDoubleTest.cpp)
 
+add_turing_test(test_net_json_encoder_path JsonEncoderPathTest.cpp)
+
 add_turing_test(test_net_request_too_large RequestTooLargeTest.cpp)
 
 add_turing_test(test_net_version_param VersionParamTest.cpp)

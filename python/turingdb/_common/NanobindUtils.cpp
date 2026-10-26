@@ -169,13 +169,6 @@ nb::object embeddingToNdarray(std::span<const float> s) {
 
 namespace {
 
-nb::dict pathEntityDict(const char* type, uint64_t id) {
-    nb::dict entity;
-    entity["type"] = nb::cast(type);
-    entity["id"] = nb::cast(id);
-    return entity;
-}
-
 // Converts a list or map value (or a single list element / map entry) to plain Python
 // objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
 // Deliberately plain objects, not ndarrays, so the result compares equal to the JSON-parsed
@@ -422,11 +415,9 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                         continue;
                     }
 
-                    const std::span<const uint64_t> ids = path.getIDs();
-
                     nb::list rowList;
-                    for (size_t position = 0; position < ids.size(); position++) {
-                        rowList.append(pathEntityDict(db::GraphPath::isNodeAt(position) ? "node" : "edge", ids[position]));
+                    for (const uint64_t id : path.getIDs()) {
+                        rowList.append(nb::cast(id));
                     }
                     lst.append(rowList);
                 }
