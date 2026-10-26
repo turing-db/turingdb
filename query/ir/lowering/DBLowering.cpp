@@ -3211,7 +3211,7 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         }
 
         for (const mlir::Value column : yield.getColumns()) {
-            matchedChunks.push_back(mapValue(column));
+            matchedChunks.push_back(yieldedChunk(column));
         }
 
         if (yield.getTag()) {
@@ -3336,7 +3336,7 @@ void DBLowering::lowerSubqueryBody(mlir::db::CallSubquery call,
         }
 
         for (const mlir::Value column : yield.getColumns()) {
-            yieldedChunks.push_back(mapValue(column));
+            yieldedChunks.push_back(yieldedChunk(column));
         }
 
         if (yield.getTag()) {
