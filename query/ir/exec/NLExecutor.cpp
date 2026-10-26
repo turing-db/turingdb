@@ -8282,6 +8282,26 @@ void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runToAny(NLExecutionContext*, NLFunctionData* data) {
+    const NLToAnyData* toAny = static_cast<NLToAnyData*>(data);
+
+    NLStepBuffers* const stepBuffers = toAny->getStepBuffers();
+    stepBuffers->clear();
+    NLValueStore& values = stepBuffers->valueStore();
+
+    const Column* const operand = toAny->getOperand();
+    const NLListItemReadFunction read = toAny->getRead();
+    const size_t rowCount = operand->size();
+
+    std::vector<ListElementView>& results = static_cast<ColumnVector<ListElementView>*>(toAny->getResult())->getRaw();
+    results.resize(rowCount);
+
+    for (size_t row = 0; row < rowCount; row++) {
+        ListBuffer<>::ListItemVariant item = read(operand, row, stepBuffers);
+        results[row] = values.ownCell(item);
+    }
+}
+
 void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
     const NLListSliceData* slice = static_cast<NLListSliceData*>(data);
 
@@ -11252,7 +11272,7 @@ NLFillNullFunction NLExecutor::selectOptListElementFillNull() {
 }
 
 NLFillNullFunction NLExecutor::selectListElementFillNull() {
-    return &fillNullColumn<ListElementView>;
+    return &resetTaggedCells;
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

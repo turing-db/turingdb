@@ -202,6 +202,45 @@ inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
     return !bothNumeric && !bothTextual && !comparesAnID;
 }
 
+// The type one column takes when one branch fills it with @param carried and another with
+// @param branch, each value keeping its own type: a null branch constrains nothing and a
+// one-character string literal reads as the string it is. Invalid when the two differ.
+inline EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
+    if (carried == branch) {
+        return carried;
+    } else if (carried == EvaluatedType::Null) {
+        return branch;
+    } else if (branch == EvaluatedType::Null) {
+        return carried;
+    } else if (TypePairBitset(carried, branch) == TypePairBitset(EvaluatedType::Char, EvaluatedType::String)) {
+        return EvaluatedType::String;
+    }
+
+    return EvaluatedType::Invalid;
+}
+
+inline bool holdsAsAny(EvaluatedType e) {
+    return e == EvaluatedType::Any
+        || e == EvaluatedType::Char
+        || e == EvaluatedType::NodePattern
+        || e == EvaluatedType::EdgePattern
+        || convertibleToValueType(e);
+}
+
+// The type of one column the branches of a CASE, a coalesce, a UNION or a WHEN fill: the
+// type the two unify to, Any when they differ but each rides a tagged cell, Invalid otherwise
+inline EvaluatedType selectedType(EvaluatedType carried, EvaluatedType value) {
+    const EvaluatedType unified = unifiedBranchType(carried, value);
+
+    if (unified != EvaluatedType::Invalid) {
+        return unified;
+    } else if (holdsAsAny(carried) && holdsAsAny(value)) {
+        return EvaluatedType::Any;
+    }
+
+    return EvaluatedType::Invalid;
+}
+
 // The types <, <=, > and >= take: every value, entities and paths included, though only
 // numbers, strings, booleans, datetimes, durations and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {

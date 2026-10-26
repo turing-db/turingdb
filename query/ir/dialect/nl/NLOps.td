@@ -2887,6 +2887,26 @@ def ToNullable : NLOp<"to_nullable", [Pure, ConstantThroughOperands, RowAlignedT
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
+def ToAny : NLOp<"to_any", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Read a chunk as values of type any";
+  let description = [{
+      The chunk a column takes where its rows hold values of different types, each row
+      keeping the type it has: a scalar, an entity, a list or a map becomes a tagged cell,
+      and a null an absent one. A list chunk read as lists of tagged cells keeps the views
+      it holds, whose elements are tagged cells already.
+
+      %r = nl.to_any %x : (!nl.chunk<!storage.nullable<i64>>) -> !nl.chunk<!storage.any>
+      %l = nl.to_any %y : (!nl.chunk<!storage.list<!storage.string>>)
+                          -> !nl.chunk<!storage.list<!storage.any>>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
     : NLOp<mnemonic, !listconcat([Pure, RowAlignedThroughOperands], extraTraits)> {
   let summary = "Apply a unary scalar function row-wise to a value chunk";

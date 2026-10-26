@@ -1068,6 +1068,7 @@ private:
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
+    void translateToAny(mlir::nl::ToAny toAny, NLStmtContainer* body);
 
     // The selection of an nl.case or an nl.case_merge, run by @param run: the two are read
     // alike and differ only in the rows their kernels read each branch at

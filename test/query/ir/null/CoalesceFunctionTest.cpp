@@ -149,12 +149,12 @@ TEST_F(CoalesceFunctionTest, skipsANullLiteral) {
     expectRows("RETURN coalesce(null, 42)", {{"42"}});
 }
 
-// An integer argument beside a double one widens the column, exactly as a CASE's branches
-// promote against each other
-TEST_F(CoalesceFunctionTest, promotesNumericArgumentsAgainstEachOther) {
+// An integer argument beside a double one keeps each row's value the type it is, as a
+// CASE's branches do
+TEST_F(CoalesceFunctionTest, keepsEachArgumentsNumberType) {
     expectRows("MATCH (n:Person) WHERE n.hasPhD RETURN n.name, coalesce(n.age, 0.5)",
                {
-                   {"Remy", "32.000000"}, {"Adam", "32.000000"},
+                   {"Remy", "32"}, {"Adam", "32"},
                    {"Luc", "0.500000"}, {"Martina", "0.500000"},
                });
 }

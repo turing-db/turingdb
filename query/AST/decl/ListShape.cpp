@@ -40,3 +40,22 @@ ListShape ListShape::collecting(EvaluatedType type, const ListShape& shape) {
 
     return ListShape(type, 1);
 }
+
+ListShape ListShape::selected(EvaluatedType type, const ListShape& shape) {
+    const bool namesNoShape = type == EvaluatedType::List && !shape.isList();
+
+    return namesNoShape ? ListShape(EvaluatedType::Invalid, 1) : shape;
+}
+
+ListShape ListShape::unified(const ListShape& carried, const ListShape& value) {
+    const bool sameShape = carried.getLeafType() == value.getLeafType()
+                        && carried.getDepth() == value.getDepth();
+
+    if (sameShape || !value.isList()) {
+        return carried;
+    } else if (!carried.isList()) {
+        return value;
+    }
+
+    return ListShape(EvaluatedType::Invalid, 1);
+}

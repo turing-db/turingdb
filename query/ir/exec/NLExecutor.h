@@ -402,6 +402,7 @@ public:
     // Build one list per row (nl.make_list): row r takes the cell each element column
     // holds at r, in operand order, as one contiguous run of the query's list buffer.
     static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
+    static void runToAny(NLExecutionContext* context, NLFunctionData* data);
 
     template <typename Result>
     static void runSubstring(NLExecutionContext* context, NLFunctionData* data);

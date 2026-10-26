@@ -674,6 +674,33 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
+// An nl.to_any answers tagged cells, or lists of tagged cells out of lists, nullable when
+// the lists it reads are
+LogicalResult ToAny::verify() {
+    const Type operandElement = cast<ChunkType>(getOperand().getType()).getElementType();
+    const Type resultElement = cast<ChunkType>(getResult().getType()).getElementType();
+
+    if (isa<storage::AnyType>(resultElement)) {
+        return success();
+    }
+
+    const auto nullableResult = dyn_cast<storage::NullableType>(resultElement);
+    const auto nullableOperand = dyn_cast<storage::NullableType>(operandElement);
+    if (static_cast<bool>(nullableResult) != static_cast<bool>(nullableOperand)) {
+        return emitOpError("keeps a list column nullable exactly when its operand is");
+    }
+
+    const Type resultList = nullableResult ? nullableResult.getValueType() : resultElement;
+    const Type operandList = nullableOperand ? nullableOperand.getValueType() : operandElement;
+
+    const auto listOfCells = dyn_cast<storage::ListType>(resultList);
+    if (!listOfCells || !isa<storage::AnyType>(listOfCells.getElementType()) || !isa<storage::ListType>(operandList)) {
+        return emitOpError("answers tagged cells, or lists of them for a list operand");
+    }
+
+    return success();
+}
+
 // An nl.row_collect must append at least one column: the buffers' row count is read
 // from the first of them.
 LogicalResult RowCollect::verify() {

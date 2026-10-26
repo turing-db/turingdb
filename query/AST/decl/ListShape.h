@@ -35,6 +35,14 @@ public:
     // one level deeper than what it collects.
     static ListShape collecting(EvaluatedType type, const ListShape& shape);
 
+    // The shape a value of @param type and @param shape gives a column of lists it fills. A
+    // list whose shape no type names holds tagged cells, while a null holds no list at all.
+    static ListShape selected(EvaluatedType type, const ListShape& shape);
+
+    // The shape of one column holding lists of @param carried and of @param value: theirs
+    // when they agree, the one list when the other is none, and tagged cells otherwise
+    static ListShape unified(const ListShape& carried, const ListShape& value);
+
 private:
     EvaluatedType _leafType {EvaluatedType::Invalid};
     size_t _depth {0};

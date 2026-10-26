@@ -411,6 +411,15 @@ with results inside the body, each branch ending in a `db.yield`; the lowering c
 every branch into one `nl.union_buffer` and the rest of the body lowers into the loop over
 `nl.union_drain`.
 
+The branches of a UNION or a WHEN may return different types in one column. Each row then
+keeps the type its branch returned, as Neo4j answers it: `RETURN 1 AS x UNION ALL RETURN
+2.5 AS x` returns the integer 1 and the float 2.5. The column holds the type the branches
+agree on, a list of tagged cells for lists of different elements, and `!storage.any`
+otherwise. A null takes the type of the other branches, a node or an edge included. The
+lowering picks the type once every branch is lowered (`DBLowering::unionResultType`) and
+converts each branch before the dedup the branches share, a scalar through `nl.to_any`.
+CASE and coalesce follow the same rule (`selectedValueElement`).
+
 A body can be a WHEN: `CALL (p) { WHEN p.age > 60 THEN { ... } WHEN ... ELSE { ... } }`.
 For each input row the first branch whose predicate is true runs, a null predicate counting
 as false, and the ELSE branch runs when none is. With no ELSE and no predicate true the row

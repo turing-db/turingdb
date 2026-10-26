@@ -342,20 +342,6 @@ TEST_F(UnionTest, rejectsBranchesNamingTheirItemsDifferently) {
                           "Ghosts", "Padel", "Animals", "Gym", "Travel", "JiuJitsu"}));
 }
 
-// A result column carries one value type for the whole table, so branches resolving a
-// column to different types are rejected rather than emitted under a header naming one
-// of them. The types are only known once the property names are resolved, so the
-// rejection comes from lowering and not from the analyzer.
-TEST_F(UnionTest, rejectsBranchesWhoseColumnTypesDisagree) {
-    expectError("MATCH (a:Person) RETURN a.name AS v UNION ALL MATCH (b:Person) RETURN b.age AS v",
-                QueryStatus::Status::EXEC_ERROR,
-                "'v' is Int64 in this sub-query and String in another");
-
-    expectError("MATCH (a:Person) RETURN a AS v UNION ALL MATCH (b:Person) RETURN b.name AS v",
-                QueryStatus::Status::EXEC_ERROR,
-                "'v' is String in this sub-query and Node in another");
-}
-
 // A literal and a stored property of the same type do agree: the literal is laid out over
 // the branch's rows, which gives it the shape a property read has
 TEST_F(UnionTest, unionsALiteralWithAStoredProperty) {
