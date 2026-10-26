@@ -70,6 +70,7 @@ private:
     void throwOnNullProperty(const Pattern* pattern) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
+    [[noreturn]] void throwPropertyTypedPerRow(std::string_view propName, const void* obj) const;
 
     static ValueType evaluatedToValueType(EvaluatedType type);
 };

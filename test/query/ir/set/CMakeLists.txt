@@ -41,3 +41,6 @@ add_call_v3_test(test_query_ir_set_property_widening SetPropertyWideningTest.cpp
 
 # SET in the same query part as a CREATE.
 add_turing_test(test_query_ir_set_after_create SetAfterCreateTest.cpp)
+
+# A value whose type varies per row creates a property of the type its values share.
+add_turing_test(test_query_ir_set_property_common_type PropertyCommonTypeTest.cpp)

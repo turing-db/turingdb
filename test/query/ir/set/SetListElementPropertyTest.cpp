@@ -130,22 +130,22 @@ TEST_F(SetListElementPropertyTest, widensAComputedIntegerElementWrittenToADouble
 
 TEST_F(SetListElementPropertyTest, rejectsAComputedElementWhoseTypeThePropertyDoesNotHold) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.age = pair[1] + 0.5",
-                           "Cannot set a property of type 'Int64' to a list element of another type");
+                           "Cannot set a property of type 'Int64' to a value of type 'Double'");
 }
 
 TEST_F(SetListElementPropertyTest, rejectsAnElementWhoseTypeThePropertyDoesNotHold) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.age = pair[0]",
-                           "Cannot set a property of type 'Int64' to a list element of another type");
+                           "Cannot set a property of type 'Int64' to a value of type 'String'");
 }
 
 TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAnElement) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1]",
-                           "Cannot create property 'score' from a list.");
+                           "Cannot create property 'score' from a value whose type is only known per row");
 }
 
 TEST_F(SetListElementPropertyTest, rejectsAPropertyCreatedFromAComputedElement) {
     runWriteExpectingError("WITH ['Remy', 5] AS pair MATCH (p:Person {name: pair[0]}) SET p.score = pair[1] + 1",
-                           "Cannot create property 'score' from a list.");
+                           "Cannot create property 'score' from a value whose type is only known per row");
 }
 
 int main(int argc, char** argv) {

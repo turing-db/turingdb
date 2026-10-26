@@ -800,6 +800,8 @@ private:
                                mlir::Value valueColumn,
                                mlir::Value rows);
 
+    mlir::Value assignedColumn(const Expr* value, ValueType propertyType);
+
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
 
     void generateRemoveProperties(const RemoveStmt* removeStmt);

@@ -241,6 +241,17 @@ inline EvaluatedType selectedType(EvaluatedType carried, EvaluatedType value) {
     return EvaluatedType::Invalid;
 }
 
+// The type values of @param carried and of @param value both convert to without loss, which
+// a property written from them takes: the type they select into, and Double for an integer
+// beside a double where they select into Any
+inline EvaluatedType commonType(EvaluatedType carried, EvaluatedType value) {
+    if (TypePairBitset(carried, value) == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
+        return EvaluatedType::Double;
+    }
+
+    return selectedType(carried, value);
+}
+
 // The types <, <=, > and >= take: every value, entities and paths included, though only
 // numbers, strings, booleans, datetimes, durations and lists have an order
 inline bool namesAnOrderingOperand(EvaluatedType e) {

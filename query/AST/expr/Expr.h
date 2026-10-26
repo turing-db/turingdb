@@ -57,6 +57,10 @@ public:
     // What an UNWIND of this expression binds its variable to.
     const ListShape& getListShape() const { return _listShape; }
 
+    // The type every value converts to without loss, which a property written from them
+    // takes: the type itself, or for Any the one a selection's branches share, Any if none
+    EvaluatedType getCommonType() const { return getType() == EvaluatedType::Any ? _commonType : getType(); }
+
     const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
 
     std::string_view getName() const {
@@ -66,6 +70,8 @@ public:
     void setType(EvaluatedType type) { _type = type; }
 
     void setListShape(const ListShape& shape) { _listShape = shape; }
+
+    void setCommonType(EvaluatedType type) { _commonType = type; }
 
     void setExprVarDecl(const VarDecl* decl) { _exprVarDecl = decl; }
 
@@ -114,6 +120,7 @@ private:
     const VarDecl* _exprVarDecl {nullptr};
     Kind _exprKind {Kind::BINARY};
     EvaluatedType _type {EvaluatedType::Invalid};
+    EvaluatedType _commonType {EvaluatedType::Any};
     ListShape _listShape;
     Flags _flags {Flags::NONE};
     std::string_view _name;

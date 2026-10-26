@@ -101,21 +101,19 @@ constexpr std::string_view mapKeyNotAProperty =
     "Only a property can be set, removed or indexed.";
 
 // The type a reduce's accumulator takes once it has held @param accumulator and then
-// @param value: what a CASE unifies, an integer beside a double widening as the arithmetic
+// @param value: their common type, an integer beside a double widening as the arithmetic
 // updating it does, and a tagged cell when the two share no column type
 EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
     if (accumulator == EvaluatedType::Any) {
         return accumulator;
-    } else if (TypePairBitset(accumulator, value) == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
-        return EvaluatedType::Double;
     }
 
-    const EvaluatedType unified = unifiedBranchType(accumulator, value);
-    if (unified == EvaluatedType::Invalid) {
+    const EvaluatedType common = commonType(accumulator, value);
+    if (common == EvaluatedType::Invalid) {
         return EvaluatedType::Any;
     }
 
-    return unified;
+    return common;
 }
 
 ListShape selectedListShape(const Expr* value) {
@@ -861,6 +859,7 @@ void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
     expr->setDecl(varDecl);
     expr->setType(varDecl->getType());
     expr->setListShape(varDecl->getListShape());
+    expr->setCommonType(varDecl->getCommonType());
     expr->setExprVarDecl(varDecl);
 
     // For now, variable expressions cannot be evaluated at compile time
@@ -1781,6 +1780,15 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
             expr->setListShape(unifiedShape);
         }
 
+        if (unifiesArguments) {
+            EvaluatedType argumentsCommonType = EvaluatedType::Null;
+            for (const Expr* arg : providedArgs) {
+                argumentsCommonType = commonType(argumentsCommonType, arg->getCommonType());
+            }
+
+            expr->setCommonType(argumentsCommonType);
+        }
+
         if (signature->isAggregate()) {
             if (isAggregate) {
                 throwError(fmt::format("Aggregate functions may not be nested: the argument of "
@@ -1961,6 +1969,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     }
 
     EvaluatedType resultType = EvaluatedType::Null;
+    EvaluatedType resultCommonType = EvaluatedType::Null;
     ListShape resultShape;
 
     for (const CaseExpr::Branch& branch : expr->getBranches()) {
@@ -1975,6 +1984,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
         analyzeExpr(branch._then);
 
         resultType = unifyCaseBranch(resultType, branch._then);
+        resultCommonType = commonType(resultCommonType, branch._then->getCommonType());
         resultShape = ListShape::unified(resultShape, selectedListShape(branch._then));
 
         contaminate(branch._then);
@@ -1984,11 +1994,13 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     if (elseExpr) {
         analyzeExpr(elseExpr);
         resultType = unifyCaseBranch(resultType, elseExpr);
+        resultCommonType = commonType(resultCommonType, elseExpr->getCommonType());
         resultShape = ListShape::unified(resultShape, selectedListShape(elseExpr));
         contaminate(elseExpr);
     }
 
     expr->setType(resultType);
+    expr->setCommonType(resultCommonType);
 
     if (resultType == EvaluatedType::List) {
         expr->setListShape(resultShape);
@@ -2322,6 +2334,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
 
     VarDecl* const accumulatorDecl = _ctxt->getOrCreateNamedVariable(_ast, initialValue->getType(), accumulatorName);
     accumulatorDecl->setListShape(initialValue->getListShape());
+    accumulatorDecl->setCommonType(initialValue->getCommonType());
 
     expr->setItemDecl(itemDecl);
     expr->setAccumulatorDecl(accumulatorDecl);
@@ -2335,12 +2348,15 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
         analyzeExpr(expression);
 
         const EvaluatedType accumulatorType = accumulatorDecl->getType();
+        const EvaluatedType accumulatorCommonType = accumulatorDecl->getCommonType();
         const ListShape& accumulatorShape = accumulatorDecl->getListShape();
 
         const EvaluatedType widenedType = accumulatedType(accumulatorType, expression->getType());
+        const EvaluatedType widenedCommonType = commonType(accumulatorCommonType, expression->getCommonType());
         const ListShape widenedShape = ListShape::unified(accumulatorShape, expression->getListShape());
 
         const bool settled = widenedType == accumulatorType
+                          && widenedCommonType == accumulatorCommonType
                           && widenedShape.getLeafType() == accumulatorShape.getLeafType()
                           && widenedShape.getDepth() == accumulatorShape.getDepth();
 
@@ -2349,6 +2365,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
         }
 
         accumulatorDecl->setType(widenedType);
+        accumulatorDecl->setCommonType(widenedCommonType);
         accumulatorDecl->setListShape(widenedShape);
         forgetAnalysis(expression);
     }
@@ -2366,6 +2383,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
     const EvaluatedType reducedType = accumulatorDecl->getType();
 
     expr->setType(reducedType);
+    expr->setCommonType(accumulatorDecl->getCommonType());
     expr->setListShape(accumulatorDecl->getListShape());
     expr->setDynamic();
 
