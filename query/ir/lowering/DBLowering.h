@@ -451,7 +451,13 @@ private:
                                size_t columnIndex,
                                mlir::ArrayAttr columnNames);
 
-    void throwOnDisagreeingBranchTypes(mlir::Type branchType,
+    void retypeBranchColumn(mlir::OpOperand& operand, mlir::Type chunkType);
+    mlir::Value branchChunkAs(mlir::Value chunk, mlir::Type chunkType);
+
+    // An nl.to_any of @param chunk answering @param chunkType, placed right after it
+    mlir::Value toAnyChunk(mlir::Value chunk, mlir::Type chunkType);
+
+    [[noreturn]] void throwOnDisagreeingBranchTypes(mlir::Type branchType,
                                        mlir::Type resultType,
                                        mlir::ArrayAttr columnNames,
                                        size_t columnIndex);
@@ -644,10 +650,10 @@ private:
     // edges, which holds the null of an unmatched row in its ID, and a nullable one otherwise
     mlir::nl::ChunkType caseResultChunkType(mlir::Type resultElement);
 
-    // The value element type a CASE's branches share: the one they all carry, the
-    // promotion of their numbers when they carry two, a list of tagged cells when they
-    // carry lists of different elements, !storage.any when they share no type, and an i64
-    // when every branch is null. A branch no value column can hold is rejected here.
+    // The value element type a CASE's branches share: the one they all carry, one integer
+    // for integers, a list of tagged cells when they carry lists of different elements,
+    // !storage.any when they share no type, and an i64 when every branch is null. A branch
+    // no value column can hold is rejected here.
     mlir::Type caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks);
 
     // @param chunk as a column of @param resultElement: itself when it already carries

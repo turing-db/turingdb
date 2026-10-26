@@ -6,3 +6,6 @@ add_ir_tests(test_query_ir_union_op UnionOpTest.cpp)
 add_turing_test(test_query_ir_union_null_column UnionNullColumnTest.cpp)
 target_sources(test_query_ir_union_null_column PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_union_null_column PRIVATE ${IR_TEST_DIR})
+
+# UNION and WHEN branches returning different types: each row keeps the type its branch returned.
+add_turing_test(test_query_ir_union_branch_value_type UnionBranchValueTypeTest.cpp)

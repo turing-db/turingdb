@@ -100,37 +100,14 @@ constexpr std::string_view mapKeyNotAProperty =
     "A map key is a value inside a property, not a property of its own. "
     "Only a property can be set, removed or indexed.";
 
-// The type a CASE takes when one branch gives @param carried and another gives
-// @param branch: a null branch constrains nothing, an integer beside a double widens,
-// and a one-character string literal reads as the string it is. Invalid when the two
-// share no column type, which is what the caller reports.
-EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
-    if (carried == branch) {
-        return carried;
-    }
-
-    if (carried == EvaluatedType::Null) {
-        return branch;
-    } else if (branch == EvaluatedType::Null) {
-        return carried;
-    }
-
-    const TypePairBitset pair(carried, branch);
-
-    if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
-        return EvaluatedType::Double;
-    } else if (pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::String)) {
-        return EvaluatedType::String;
-    }
-
-    return EvaluatedType::Invalid;
-}
-
 // The type a reduce's accumulator takes once it has held @param accumulator and then
-// @param value: what a CASE unifies, and a tagged cell when the two share no column type
+// @param value: what a CASE unifies, an integer beside a double widening as the arithmetic
+// updating it does, and a tagged cell when the two share no column type
 EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
     if (accumulator == EvaluatedType::Any) {
         return accumulator;
+    } else if (TypePairBitset(accumulator, value) == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
+        return EvaluatedType::Double;
     }
 
     const EvaluatedType unified = unifiedBranchType(accumulator, value);
@@ -141,26 +118,8 @@ EvaluatedType accumulatedType(EvaluatedType accumulator, EvaluatedType value) {
     return unified;
 }
 
-ListShape accumulatedShape(const ListShape& accumulator, const ListShape& value) {
-    const bool sameShape = accumulator.getLeafType() == value.getLeafType()
-                        && accumulator.getDepth() == value.getDepth();
-
-    if (sameShape || !value.isList()) {
-        return accumulator;
-    } else if (!accumulator.isList()) {
-        return value;
-    }
-
-    return ListShape(EvaluatedType::Invalid, 1);
-}
-
-// The shape a branch of a CASE or an argument of a coalesce gives the list they answer. A
-// list whose shape no type names holds tagged cells, while a null holds no list at all.
 ListShape selectedListShape(const Expr* value) {
-    const ListShape& shape = value->getListShape();
-    const bool namesNoShape = value->getType() == EvaluatedType::List && !shape.isList();
-
-    return namesNoShape ? ListShape(EvaluatedType::Invalid, 1) : shape;
+    return ListShape::selected(value->getType(), value->getListShape());
 }
 
 // A number or a boolean joins a string as the text Cypher writes it with: 1 + ' apples' is
@@ -322,27 +281,6 @@ ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
 
 bool isEntity(EvaluatedType type) {
     return type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern;
-}
-
-bool holdsAsAny(EvaluatedType type) {
-    return type == EvaluatedType::Any
-        || type == EvaluatedType::Char
-        || isEntity(type)
-        || convertibleToValueType(type);
-}
-
-// The type one column holding values of @param carried and of @param value takes: the type
-// the two unify to, Any when they share none but each rides a tagged cell, Invalid otherwise
-EvaluatedType selectedType(EvaluatedType carried, EvaluatedType value) {
-    const EvaluatedType unified = unifiedBranchType(carried, value);
-
-    if (unified != EvaluatedType::Invalid) {
-        return unified;
-    } else if (holdsAsAny(carried) && holdsAsAny(value)) {
-        return EvaluatedType::Any;
-    }
-
-    return EvaluatedType::Invalid;
 }
 
 }
@@ -1837,7 +1775,7 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, const Func
         if (unifiesArguments && expr->getType() == EvaluatedType::List) {
             ListShape unifiedShape;
             for (const Expr* arg : providedArgs) {
-                unifiedShape = accumulatedShape(unifiedShape, selectedListShape(arg));
+                unifiedShape = ListShape::unified(unifiedShape, selectedListShape(arg));
             }
 
             expr->setListShape(unifiedShape);
@@ -2037,7 +1975,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
         analyzeExpr(branch._then);
 
         resultType = unifyCaseBranch(resultType, branch._then);
-        resultShape = accumulatedShape(resultShape, selectedListShape(branch._then));
+        resultShape = ListShape::unified(resultShape, selectedListShape(branch._then));
 
         contaminate(branch._then);
     }
@@ -2046,7 +1984,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     if (elseExpr) {
         analyzeExpr(elseExpr);
         resultType = unifyCaseBranch(resultType, elseExpr);
-        resultShape = accumulatedShape(resultShape, selectedListShape(elseExpr));
+        resultShape = ListShape::unified(resultShape, selectedListShape(elseExpr));
         contaminate(elseExpr);
     }
 
@@ -2400,7 +2338,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
         const ListShape& accumulatorShape = accumulatorDecl->getListShape();
 
         const EvaluatedType widenedType = accumulatedType(accumulatorType, expression->getType());
-        const ListShape widenedShape = accumulatedShape(accumulatorShape, expression->getListShape());
+        const ListShape widenedShape = ListShape::unified(accumulatorShape, expression->getListShape());
 
         const bool settled = widenedType == accumulatorType
                           && widenedShape.getLeafType() == accumulatorShape.getLeafType()

@@ -1130,8 +1130,8 @@ void CypherAnalyzer::publishBranchReturns(RegularQuery* body, DeclContext* scope
 }
 
 // Every branch of a union publishes its columns under the declarations the first one
-// made. A branch returning null says nothing about what the column holds, so the first
-// branch returning something else types the declaration.
+// made, typed by every branch: a null says nothing about what the column holds, and
+// branches of different types leave each row its own, as the branches of a CASE do.
 void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, const Projection* firstProjection) {
     const Projection::PublishedDecls& published = firstProjection->publishedDecls();
 
@@ -1151,11 +1151,22 @@ void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, cons
             itemShape = &item->getListShape();
         }
 
-        const bool typesTheColumn = decl->getType() == EvaluatedType::Null && itemType != EvaluatedType::Null;
-        if (typesTheColumn) {
-            decl->setType(itemType);
-            decl->setListShape(*itemShape);
+        const EvaluatedType columnType = decl->getType();
+        const EvaluatedType selected = selectedType(columnType, itemType);
+
+        if (selected == EvaluatedType::Invalid) {
+            throwError(fmt::format("Column '{}' cannot hold both '{}' and '{}' values",
+                                   decl->getName(),
+                                   EvaluatedTypeName::value(columnType),
+                                   EvaluatedTypeName::value(itemType)),
+                       branchProjection);
         }
+
+        const ListShape columnShape = ListShape::selected(columnType, decl->getListShape());
+        const ListShape itemListShape = ListShape::selected(itemType, *itemShape);
+
+        decl->setType(selected);
+        decl->setListShape(selected == EvaluatedType::List ? ListShape::unified(columnShape, itemListShape) : ListShape());
 
         branchProjection->addPublishedDecl(decl);
         index++;

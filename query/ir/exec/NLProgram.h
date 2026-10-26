@@ -4067,6 +4067,30 @@ private:
     std::vector<Element> _elements;
 };
 
+// One nl.to_any: the cells of the operand read as list items, and stored as tagged cells
+// in the values of the run that read them
+class NLToAnyData : public NLFunctionData {
+public:
+    NLToAnyData(const Column* operand, Column* result, NLListItemReadFunction read, NLStepBuffers* stepBuffers)
+        : _operand(operand),
+        _result(result),
+        _read(read),
+        _stepBuffers(stepBuffers)
+    {
+    }
+
+    const Column* getOperand() const { return _operand; }
+    Column* getResult() const { return _result; }
+    NLListItemReadFunction getRead() const { return _read; }
+    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
+
+private:
+    const Column* _operand {nullptr};
+    Column* _result {nullptr};
+    NLListItemReadFunction _read {nullptr};
+    NLStepBuffers* _stepBuffers {nullptr};
+};
+
 using NLStringArgumentRead = std::optional<types::String::Primitive> (*)(const Column* input,
                                                                         size_t row,
                                                                         std::string_view functionName);

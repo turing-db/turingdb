@@ -727,6 +727,43 @@ mlir::Type unifiedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::T
     return mlir::Type {};
 }
 
+// The element of one column the branches of a selection fill with values of @param lhs and
+// of @param rhs, each value keeping its type: theirs when they agree, the one integer type
+// Cypher has for two integers, a list of tagged cells for two lists, and a null type when
+// the column holds each row's value as a tagged cell
+mlir::Type selectedValueElement(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
+    const auto lhsInteger = mlir::dyn_cast<mlir::IntegerType>(lhs);
+    const auto rhsInteger = mlir::dyn_cast<mlir::IntegerType>(rhs);
+    const bool bothIntegers = lhsInteger && rhsInteger && lhsInteger.getWidth() == 64 && rhsInteger.getWidth() == 64;
+
+    if (lhs == rhs) {
+        return lhs;
+    } else if (bothIntegers) {
+        return builder.getIntegerType(64);
+    } else if (mlir::isa<storage::ListType>(lhs) && mlir::isa<storage::ListType>(rhs)) {
+        mlir::MLIRContext* const context = builder.getContext();
+        return storage::ListType::get(context, storage::AnyType::get(context));
+    }
+
+    return mlir::Type {};
+}
+
+// Whether a column can hold the null literal beside its values: in the optional a nullable
+// chunk wraps them in, in the invalid ID of an entity, or in the tag of a cell
+bool holdsItsNull(mlir::Type chunkType) {
+    const mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    return mlir::isa<storage::NullableType, storage::AnyType, storage::NodeIDType, storage::EdgeIDType>(element);
+}
+
+// Whether a value of @param element can be held as a tagged cell
+bool holdsAsTaggedCell(mlir::Type element) {
+    const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
+    const bool isEntityOrCell = mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::AnyType>(element);
+
+    return isContainer || isEntityOrCell || elementTypeToValueType(element) != ValueType::Invalid;
+}
+
 // The value-reduction AggregateKind matching a grouped aggregate's kind, so the
 // grouped result-type resolution reuses aggregateResultElementType. count and
 // count_distinct tally rows rather than reducing values, so they have no
@@ -4438,10 +4475,10 @@ void DBLowering::convertUnionResultChunks(mlir::Operation& operation,
     }
 }
 
-// A result column carries one value type for the whole result, so the branches have to
-// resolve their columns to the same types. The types are only known here: a property fetch
-// is typed none until its name is resolved against the schema, so a union of columns that
-// turn out to disagree is a program the db level cannot tell from a valid one.
+// A result column carries one type for the whole result, which is only known here: a
+// property fetch is typed none until its name is resolved against the schema. A branch not
+// holding that type is converted to it before the dedup the branches share, so that every
+// branch spells a row's key the one way.
 void DBLowering::reconcileBranchResultTypes(llvm::ArrayRef<mlir::MutableOperandRange> branchColumns,
                                             mlir::ArrayAttr columnNames) {
     const size_t columnCount = branchColumns.front().size();
@@ -4451,62 +4488,142 @@ void DBLowering::reconcileBranchResultTypes(llvm::ArrayRef<mlir::MutableOperandR
 
         for (const mlir::MutableOperandRange& columns : branchColumns) {
             mlir::OpOperand& operand = columns[static_cast<unsigned>(columnIndex)];
-            const mlir::Value chunk = operand.get();
-            if (chunk.getType() == columnType) {
-                continue;
+            if (operand.get().getType() != columnType) {
+                retypeBranchColumn(operand, columnType);
             }
-
-            operand.set(typedNullChunk(chunk, columnType));
         }
     }
 }
 
-// The one type a result column carries: the type the branches saying what the column holds
-// agree on. A branch spelling the value null names no type of its own, so it is laid out as
-// that column - and where every branch spells it null, the first branch's untyped null is
-// the column, there being nothing else it could hold.
+// The type the branches of a result column agree on, when every one holds it and it holds
+// a branch's null. Where they disagree, each row keeps the type of its value, as the rows a
+// CASE selects do: the column holds the element their values select into. Where every
+// branch is the null literal, the first branch's untyped null is the column.
 mlir::Type DBLowering::unionResultType(llvm::ArrayRef<mlir::MutableOperandRange> branchColumns,
                                        size_t columnIndex,
                                        mlir::ArrayAttr columnNames) {
     const unsigned operandIndex = static_cast<unsigned>(columnIndex);
 
-    mlir::Type resultType;
+    mlir::Type sharedType;
+    mlir::Type element;
+    bool branchesAgree = true;
+    bool holdsANull = false;
 
     for (const mlir::MutableOperandRange& columns : branchColumns) {
         const mlir::Type branchType = columns[operandIndex].get().getType();
         if (isUntypedNullChunk(branchType)) {
+            holdsANull = true;
             continue;
         }
 
-        if (!resultType) {
-            resultType = branchType;
+        const mlir::Type branchElement = chunkValueElement(_builder, branchType);
+
+        if (!sharedType) {
+            sharedType = branchType;
+            element = branchElement;
             continue;
         }
 
-        if (branchType != resultType) {
-            throwOnDisagreeingBranchTypes(branchType, resultType, columnNames, columnIndex);
+        const bool holdsCells = holdsAsTaggedCell(branchElement)
+                             && holdsAsTaggedCell(chunkValueElement(_builder, sharedType));
+        if (branchType != sharedType && !holdsCells) {
+            throwOnDisagreeingBranchTypes(branchType, sharedType, columnNames, columnIndex);
         }
+
+        branchesAgree = branchesAgree && branchType == sharedType;
+
+        const mlir::Type selected = selectedValueElement(_builder, element, branchElement);
+        element = selected ? selected : storage::AnyType::get(_builder.getContext());
     }
 
-    if (!resultType) {
+    if (!sharedType) {
         return branchColumns.front()[operandIndex].get().getType();
+    } else if (branchesAgree && (!holdsANull || holdsItsNull(sharedType))) {
+        return sharedType;
     }
 
-    // A null rides a nullable value column, so a column of anything else - an entity, a
-    // path, an embedding - has no row a branch spelling the value null could fill
-    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
-    if (mlir::isa<storage::NullableType>(resultElement)) {
-        return resultType;
+    mlir::MLIRContext* const context = _builder.getContext();
+    const bool isContainer = mlir::isa<storage::ListType, storage::MapType>(element);
+    const bool holdsItsOwnNull = mlir::isa<storage::AnyType, storage::NodeIDType, storage::EdgeIDType>(element);
+
+    if (holdsItsOwnNull || (isContainer && !holdsANull)) {
+        return nl::ChunkType::get(context, element);
+    } else if (isContainer || elementTypeToValueType(element) != ValueType::Invalid) {
+        return nl::ChunkType::get(context, storage::NullableType::get(context, element));
     }
 
-    for (const mlir::MutableOperandRange& columns : branchColumns) {
-        const mlir::Type branchType = columns[operandIndex].get().getType();
-        if (isUntypedNullChunk(branchType)) {
-            throwOnDisagreeingBranchTypes(branchType, resultType, columnNames, columnIndex);
-        }
+    // A path, or anything else no tagged cell nor optional holds, has no row a branch
+    // spelling the value null could fill
+    throwOnDisagreeingBranchTypes(branchColumns.front()[operandIndex].get().getType(),
+                                  sharedType,
+                                  columnNames,
+                                  columnIndex);
+}
+
+// A branch that dedups keys its rows on the chunks it is handed, so its column is converted
+// ahead of its filter, and the filter's survivors take the converted type
+void DBLowering::retypeBranchColumn(mlir::OpOperand& operand, mlir::Type chunkType) {
+    const mlir::Value chunk = operand.get();
+
+    nl::DistinctFilter filter = chunk.getDefiningOp<nl::DistinctFilter>();
+    if (!filter) {
+        operand.set(branchChunkAs(chunk, chunkType));
+        return;
     }
 
-    return resultType;
+    mlir::OpResult survivors = mlir::cast<mlir::OpResult>(chunk);
+    mlir::OpOperand& key = filter.getColumnsMutable()[survivors.getResultNumber()];
+
+    key.set(branchChunkAs(key.get(), chunkType));
+    survivors.setType(chunkType);
+}
+
+// @param chunk as a column of @param chunkType, one unionResultType answers: a column of
+// tagged cells, or the branch's own values in the shape that holds the null of another
+mlir::Value DBLowering::branchChunkAs(mlir::Value chunk, mlir::Type chunkType) {
+    if (chunk.getType() == chunkType) {
+        return chunk;
+    } else if (isUntypedNullChunk(chunk.getType())) {
+        return typedNullChunk(chunk, chunkType);
+    }
+
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+    if (mlir::isa<storage::AnyType>(resultElement)) {
+        return toAnyChunk(chunk, chunkType);
+    }
+
+    const auto nullableResult = mlir::dyn_cast<storage::NullableType>(resultElement);
+    const mlir::Type resultValue = nullableResult ? nullableResult.getValueType() : resultElement;
+
+    // Two lists of different elements are lists of tagged cells, and two integers the one
+    // integer Cypher has
+    mlir::Value converted = chunk;
+    const bool convertsElement = chunkValueElement(_builder, converted.getType()) != resultValue;
+
+    if (convertsElement && mlir::isa<storage::ListType>(resultValue)) {
+        mlir::MLIRContext* const context = _builder.getContext();
+        const bool nullableList = isNullableChunk(converted.getType());
+        const mlir::Type listElement = nullableList ? mlir::Type(storage::NullableType::get(context, resultValue)) : resultValue;
+
+        converted = toAnyChunk(converted, nl::ChunkType::get(context, listElement));
+    } else if (convertsElement) {
+        converted = chunkAsElement(converted, resultValue);
+    }
+
+    if (!nullableResult) {
+        return converted;
+    } else if (mlir::isa<storage::ListType, storage::MapType>(resultValue)) {
+        return nullableContainerChunk(converted);
+    }
+
+    return nullableValueChunk(converted);
+}
+
+mlir::Value DBLowering::toAnyChunk(mlir::Value chunk, mlir::Type chunkType) {
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    _builder.setInsertionPointAfterValue(chunk);
+
+    return _builder.create<nl::ToAny>(_builder.getUnknownLoc(), chunkType, chunk).getResult();
 }
 
 void DBLowering::throwOnDisagreeingBranchTypes(mlir::Type branchType,
@@ -4519,12 +4636,14 @@ void DBLowering::throwOnDisagreeingBranchTypes(mlir::Type branchType,
     std::string resultName;
     describeColumnType(resultType, resultName);
 
-    const llvm::StringRef columnName = columnNames ? mlir::cast<mlir::StringAttr>(columnNames[columnIndex]).getValue()
-                                                   : llvm::StringRef();
+    std::string column = "A column";
+    if (columnNames) {
+        const llvm::StringRef columnName = mlir::cast<mlir::StringAttr>(columnNames[columnIndex]).getValue();
+        column = fmt::format("Column '{}'", std::string_view {columnName.data(), columnName.size()});
+    }
 
-    throw IRException(fmt::format("A UNION column holds one value type for the whole result: "
-                                  "'{}' is {} in this sub-query and {} in another",
-                                  std::string_view {columnName.data(), columnName.size()},
+    throw IRException(fmt::format("{} of a UNION or a WHEN cannot hold both {} and {} values",
+                                  column,
                                   branchName,
                                   resultName));
 }
@@ -6273,7 +6392,7 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
             continue;
         }
 
-        const mlir::Type shared = unifiedValueElement(_builder, unified, element);
+        const mlir::Type shared = selectedValueElement(_builder, unified, element);
         unified = shared ? shared : storage::AnyType::get(_builder.getContext());
     }
 

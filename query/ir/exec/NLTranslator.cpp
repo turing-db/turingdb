@@ -1014,6 +1014,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateNot(notOp, body);
         } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
             translateToNullable(toNullable, body);
+        } else if (nl::ToAny toAny = mlir::dyn_cast<nl::ToAny>(operation)) {
+            translateToAny(toAny, body);
         } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
             translateCase(caseOp, &NLExecutor::runCase, body);
         } else if (nl::CaseMerge caseMerge = mlir::dyn_cast<nl::CaseMerge>(operation)) {
@@ -3430,11 +3432,11 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     const Column* operand = getColumn(operandValue);
 
     const auto resultChunk = mlir::cast<nl::ChunkType>(toNullable.getResult().getType());
-    const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
 
     // The null literal's chunk names no value type of its own, so there is no value to read
     // through: the result is one absent value per row, in the type it does name - what a
-    // UNION branch spelling a column's value null hands the sink.
+    // UNION branch spelling a column's value null hands the sink. An entity or a tagged
+    // cell column holds its own null, in the invalid ID or in the tag.
     if (isUntypedNullChunk(operandValue.getType())) {
         Column* const nulls = allocColumnForChunkType(resultChunk);
         _valueSlots[toNullable.getResult()] = nulls;
@@ -3446,6 +3448,7 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
         return;
     }
 
+    const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
     const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
 
     // An entity column carries its null in the ID rather than in an optional, so it is
@@ -4089,6 +4092,35 @@ void NLTranslator::translateIsNotTrue(nl::IsNotTrue isNotTrue, NLStmtContainer* 
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateToAny(nl::ToAny toAny, NLStmtContainer* body) {
+    const mlir::Value operandValue = toAny.getOperand();
+    const mlir::Value resultValue = toAny.getResult();
+    Column* const operand = getColumn(operandValue);
+
+    // A list's elements are tagged cells already, so its column is the result as it stands
+    if (!isAnyChunk(resultValue.getType())) {
+        _valueSlots[resultValue] = operand;
+        return;
+    }
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    if (isUntypedNullChunk(operandValue.getType())) {
+        NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
+                                                                               result,
+                                                                               NLExecutor::selectListElementFillNull());
+        body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+        return;
+    }
+
+    NLToAnyData* data = _program->allocFunctionData<NLToAnyData>(operand,
+                                                                 result,
+                                                                 selectListItemRead(operandValue.getType()),
+                                                                 _program->allocStepBuffers());
+    body->emplaceStmt(&NLExecutor::runToAny, data);
 }
 
 NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {

@@ -165,13 +165,13 @@ TEST_F(CaseExpressionTest, treatsANullConditionAsNotTaken) {
                });
 }
 
-// An integer branch beside a double one widens the column the CASE returns, exactly as
-// the arithmetic operators promote
-TEST_F(CaseExpressionTest, promotesNumericBranchesAgainstEachOther) {
+// An integer branch beside a double one keeps each row's value the type it is, as Neo4j
+// answers it
+TEST_F(CaseExpressionTest, keepsEachBranchsNumberType) {
     expectRows("MATCH (n:Person) WHERE n.hasPhD RETURN n.name, CASE WHEN n.isFrench THEN 1 ELSE 0.5 END",
                {
-                   {"Remy", "1.000000"}, {"Adam", "1.000000"},
-                   {"Luc", "1.000000"}, {"Martina", "0.500000"},
+                   {"Remy", "1"}, {"Adam", "1"},
+                   {"Luc", "1"}, {"Martina", "0.500000"},
                });
 }
 
