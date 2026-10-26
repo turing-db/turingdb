@@ -19,7 +19,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -50,7 +50,7 @@ namespace {
 // produces homogeneous lists, so every element is read as its string_view.
 void readStringList(const ListView& view, std::vector<std::string>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(std::string(element.getAs<std::string_view>()));
     }
 }
@@ -58,7 +58,7 @@ void readStringList(const ListView& view, std::vector<std::string>& out) {
 // Reads one list cell as a vector of int64s.
 void readInt64List(const ListView& view, std::vector<int64_t>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(element.getAs<int64_t>());
     }
 }

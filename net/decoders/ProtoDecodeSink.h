@@ -62,19 +62,18 @@ concept ProtoDecodeSink = VectorColumn<typename Sink::template ColumnVector<uint
     { sink.getEmbeddingView(floats, count) } -> std::same_as<std::span<const float>>;
 
     { sink.beginList(count, count) } -> std::same_as<typename Sink::ListView>;
-    { sink.beginNestedList(count, count) } -> std::same_as<typename Sink::ListElementView>;
-    { sink.writeListValue(stringValue) } -> std::same_as<typename Sink::ListElementView>;
-    { sink.writeListValue(embeddingValue) } -> std::same_as<typename Sink::ListElementView>;
-    { sink.writeListElementBytes(bytes, count) } -> std::same_as<typename Sink::ListElementView>;
+    { sink.beginNestedList(count, count) } -> std::same_as<typename Sink::CellView>;
+    { sink.writeListValue(stringValue) } -> std::same_as<typename Sink::CellView>;
+    { sink.writeListValue(embeddingValue) } -> std::same_as<typename Sink::CellView>;
+    { sink.writeCellBytes(bytes, count) } -> std::same_as<typename Sink::CellView>;
 
     { sink.beginMap(count, count) } -> std::same_as<typename Sink::MapView>;
-    { sink.beginNestedMap(count, count) } -> std::same_as<typename Sink::ListElementView>;
+    { sink.beginNestedMap(count, count) } -> std::same_as<typename Sink::CellView>;
     { sink.writeMapKey(stringValue) };
     { sink.writeMapValue(scalarValue) };
     { sink.writeMapValue(stringValue) };
     { sink.writeMapValue(embeddingValue) };
     { sink.writeMapValueBytes(bytes, count) };
-    { sink.lastMapEntry() } -> std::same_as<typename Sink::MapEntryView>;
     { sink.topMapExpectsValue() } -> std::convertible_to<bool>;
 
     // The open-container stack: one stack for both kinds, since a map can hold a list and
@@ -116,13 +115,10 @@ template <ProtoDecodeSink Sink>
 using SinkListView = typename Sink::ListView;
 
 template <ProtoDecodeSink Sink>
-using SinkListElementView = typename Sink::ListElementView;
+using SinkCellView = typename Sink::CellView;
 
 template <ProtoDecodeSink Sink>
 using SinkMapView = typename Sink::MapView;
-
-template <ProtoDecodeSink Sink>
-using SinkMapEntryView = typename Sink::MapEntryView;
 
 // Satisfied when Column is one of the sink's const column families for element type T.
 // Sink is unconstrained here because a concept's own parameters cannot carry constraints;

@@ -14,8 +14,8 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/DateTime.h"
@@ -143,41 +143,41 @@ bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
 
 void appendListText(const ListView& list, std::string& text);
 
-std::string elementText(const ListElementView& element) {
+std::string elementText(const CellView& element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return fmt::format("{}", element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return fmt::format("{}", element.getAs<uint64_t>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return scalarText(element.getAs<double>());
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return element.getAs<bool>() ? "true" : "false";
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return std::string(element.getAs<std::string_view>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return fmt::format("{}", element.getAs<NodeID>().getValue());
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return fmt::format("{}", element.getAs<EdgeID>().getValue());
         break;
 
-        case ListBufferTypeTag::DateTime: {
+        case CellTag::DateTime: {
             std::string formatted;
             DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
 
@@ -185,7 +185,7 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
-        case ListBufferTypeTag::Duration: {
+        case CellTag::Duration: {
             std::string formatted;
             Duration::format(formatted, element.getAs<types::Duration::Primitive>());
 
@@ -193,7 +193,7 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
-        case ListBufferTypeTag::ListView: {
+        case CellTag::ListView: {
             std::string elements;
             appendListText(element.getAs<ListView>(), elements);
 
@@ -201,9 +201,9 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
-        case ListBufferTypeTag::Embedding:
-        case ListBufferTypeTag::MapView:
-        case ListBufferTypeTag::INVALID:
+        case CellTag::Embedding:
+        case CellTag::MapView:
+        case CellTag::INVALID:
             throw std::runtime_error("StringRowSink cannot read this list element as text");
         break;
     }
@@ -213,11 +213,11 @@ std::string elementText(const ListElementView& element) {
 
 // A type-erased column of tagged scalars - the column a heterogeneous UNWIND drives - reads
 // each cell through the tag it carries rather than through the column's type.
-bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) {
-    if (const auto* column = dynamic_cast<const ColumnVector<ListElementView>*>(chunk)) {
+bool textOfCellView(const Column* chunk, size_t rowIndex, std::string& text) {
+    if (const auto* column = dynamic_cast<const ColumnVector<CellView>*>(chunk)) {
         text = elementText(column->getRaw()[rowIndex]);
         return true;
-    } else if (const auto* constant = dynamic_cast<const ColumnConst<ListElementView>*>(chunk)) {
+    } else if (const auto* constant = dynamic_cast<const ColumnConst<CellView>*>(chunk)) {
         text = elementText(constant->getRaw());
         return true;
     }
@@ -225,28 +225,28 @@ bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) 
     return false;
 }
 
-// The nullable sibling of textOfListElement: what an index into a list naming no one type
+// The nullable sibling of textOfCellView: what an index into a list naming no one type
 // produces, absent where the position held no element.
-bool textOfOptionalListElement(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnOptVector<ListElementView>*>(chunk);
+bool textOfOptionalCellView(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnOptVector<CellView>*>(chunk);
     if (!column) {
         return false;
     }
 
-    const std::optional<ListElementView>& element = column->getRaw()[rowIndex];
+    const std::optional<CellView>& element = column->getRaw()[rowIndex];
     text = element ? elementText(*element) : "null";
 
     return true;
 }
 
 // The same index over literal operands alone, which stays a constant.
-bool textOfConstOptionalListElement(const Column* chunk, size_t rowIndex, std::string& text) {
-    const auto* column = dynamic_cast<const ColumnConst<std::optional<ListElementView>>*>(chunk);
+bool textOfConstOptionalCellView(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<std::optional<CellView>>*>(chunk);
     if (!column) {
         return false;
     }
 
-    const std::optional<ListElementView>& element = (*column)[rowIndex];
+    const std::optional<CellView>& element = (*column)[rowIndex];
     text = element ? elementText(*element) : "null";
 
     return true;
@@ -254,7 +254,7 @@ bool textOfConstOptionalListElement(const Column* chunk, size_t rowIndex, std::s
 
 // A list cell reads as its elements joined by ", ", in the order the list holds them.
 void appendListText(const ListView& list, std::string& text) {
-    for (const ListElementView& element : list) {
+    for (const CellView& element : list) {
         if (!text.empty()) {
             text += ", ";
         }
@@ -546,11 +546,11 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
         return text;
     } else if (textOfOptionalConst<std::string_view>(chunk, rowIndex, text)) {
         return text;
-    } else if (textOfListElement(chunk, rowIndex, text)) {
+    } else if (textOfCellView(chunk, rowIndex, text)) {
         return text;
-    } else if (textOfOptionalListElement(chunk, rowIndex, text)) {
+    } else if (textOfOptionalCellView(chunk, rowIndex, text)) {
         return text;
-    } else if (textOfConstOptionalListElement(chunk, rowIndex, text)) {
+    } else if (textOfConstOptionalCellView(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
         return text;

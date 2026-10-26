@@ -1,7 +1,7 @@
 #include "TuringSink.h"
 
 #include "FatalException.h"
-#include "list/ListUtils.h"
+#include "CellUtils.h"
 
 using namespace net::proto;
 
@@ -26,16 +26,16 @@ db::ListView TuringSink::beginList(size_t elementCount, size_t byteSize) {
     return listCursor().getView();
 }
 
-db::ListElementView TuringSink::beginNestedList(size_t elementCount, size_t byteSize) {
+db::CellView TuringSink::beginNestedList(size_t elementCount, size_t byteSize) {
     const db::ListWriteCursor childCursor = _listBuffer->reserveList(elementCount, byteSize);
     const db::ListView childView = childCursor.getView();
 
-    db::ListElementView elementView;
+    db::CellView elementView;
 
     if (topContainerIsMap()) {
-        _lastMapEntry = mapCursor().writeValue<db::ListView>(db::TypeToMapBufferTag<db::ListView>::Tag, childView);
+        mapCursor().writeValue<db::ListView>(db::TypeToCellTag<db::ListView>::Tag, childView);
     } else {
-        elementView = listCursor().writeValue<db::ListView>(db::TypeToListBufferTag<db::ListView>::Tag, childView);
+        elementView = listCursor().writeValue<db::ListView>(db::TypeToCellTag<db::ListView>::Tag, childView);
     }
 
     _containerStack.push_back(NestedContainerCursor::list(childCursor));
@@ -49,15 +49,15 @@ db::MapView TuringSink::beginMap(size_t entryCount, size_t byteSize) {
     return mapCursor().getView();
 }
 
-db::ListElementView TuringSink::beginNestedMap(size_t entryCount, size_t byteSize) {
+db::CellView TuringSink::beginNestedMap(size_t entryCount, size_t byteSize) {
     const db::MapWriteCursor childCursor = _mapBuffer->reserveMap(entryCount, byteSize);
     const db::MapView childView = childCursor.getView();
 
-    db::ListElementView elementView;
+    db::CellView elementView;
     if (topContainerIsMap()) {
-        _lastMapEntry = mapCursor().writeValue<db::MapView>(db::TypeToMapBufferTag<db::MapView>::Tag, childView);
+        mapCursor().writeValue<db::MapView>(db::TypeToCellTag<db::MapView>::Tag, childView);
     } else {
-        elementView = listCursor().writeValue<db::MapView>(db::TypeToListBufferTag<db::MapView>::Tag, childView);
+        elementView = listCursor().writeValue<db::MapView>(db::TypeToCellTag<db::MapView>::Tag, childView);
     }
 
     _containerStack.push_back(NestedContainerCursor::map(childCursor));
@@ -71,5 +71,4 @@ bool TuringSink::topContainerComplete() const {
 
 void TuringSink::reset() {
     _containerStack.clear();
-    _lastMapEntry = db::MapEntryView {};
 }

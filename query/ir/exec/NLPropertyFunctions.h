@@ -6,9 +6,8 @@
 
 #include "columns/Functions.h"
 #include "list/ListBuffer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "map/MapBuffer.h"
-#include "map/MapEntryView.h"
 #include "map/MapView.h"
 
 #include "NLEntityProperties.h"
@@ -56,17 +55,16 @@ private:
 // The four over a value that carries its own type tag: an element of a list, which is what
 // an UNWIND binds, or a value read out of a map. One holding a null answers null, one
 // holding neither an entity nor a map is the row's type error
-template <typename Cell>
 class NLTaggedKeysFunction {
 public:
-    using ArgType = Cell;
+    using ArgType = CellView;
     using ResultType = std::optional<ListView>;
 
     NLTaggedKeysFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLTaggedKeysFunction();
 
-    ResultType operator()(Cell cell);
-    ResultType operator()(const std::optional<Cell>& cell);
+    ResultType operator()(CellView cell);
+    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     NLKeysFunction<NodeID> _nodeKeys;
@@ -74,49 +72,46 @@ private:
     MapKeysFunction _mapKeys;
 };
 
-template <typename Cell>
 class NLTaggedLabelsFunction {
 public:
-    using ArgType = Cell;
+    using ArgType = CellView;
     using ResultType = std::optional<ListView>;
 
     NLTaggedLabelsFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLTaggedLabelsFunction();
 
-    ResultType operator()(Cell cell);
-    ResultType operator()(const std::optional<Cell>& cell);
+    ResultType operator()(CellView cell);
+    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     LabelsFunction _labels;
 };
 
-template <typename Cell>
 class NLTaggedEdgeTypeFunction {
 public:
-    using ArgType = Cell;
+    using ArgType = CellView;
     using ResultType = std::optional<types::String::Primitive>;
 
     NLTaggedEdgeTypeFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLTaggedEdgeTypeFunction();
 
-    ResultType operator()(Cell cell);
-    ResultType operator()(const std::optional<Cell>& cell);
+    ResultType operator()(CellView cell);
+    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     EdgeTypesFunction _edgeType;
 };
 
-template <typename Cell>
 class NLTaggedPropertiesFunction {
 public:
-    using ArgType = Cell;
+    using ArgType = CellView;
     using ResultType = std::optional<MapView>;
 
     NLTaggedPropertiesFunction(NLExecutionContext* context, NLStepBuffers* memory);
     ~NLTaggedPropertiesFunction();
 
-    ResultType operator()(Cell cell);
-    ResultType operator()(const std::optional<Cell>& cell);
+    ResultType operator()(CellView cell);
+    ResultType operator()(const std::optional<CellView>& cell);
 
 private:
     NLPropertiesFunction<NodeID> _nodeProperties;

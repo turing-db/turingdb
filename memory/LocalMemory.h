@@ -125,20 +125,18 @@ public:
         MakeMemoryPool<ColumnVector<ListView>>::type,
         MakeMemoryPool<ColumnOptVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<ListView>>::type,
-        MakeMemoryPool<ColumnVector<ListElementView>>::type,
-        MakeMemoryPool<ColumnOptVector<ListElementView>>::type,
-        MakeMemoryPool<ColumnConst<ListElementView>>::type,
-        MakeMemoryPool<ColumnConst<std::optional<ListElementView>>>::type,
+        MakeMemoryPool<ColumnVector<CellView>>::type,
+        MakeMemoryPool<ColumnOptVector<CellView>>::type,
+        MakeMemoryPool<ColumnConst<CellView>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<CellView>>>::type,
         MakeMemoryPool<ColumnOptVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type,
 
         MakeMemoryPool<ColumnVector<MapView>>::type,
         MakeMemoryPool<ColumnOptVector<MapView>>::type,
         MakeMemoryPool<ColumnConst<MapView>>::type,
-        MakeMemoryPool<ColumnConst<std::optional<MapView>>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<MapView>>>::type
 
-        MakeMemoryPool<ColumnVector<MapEntryView>>::type,
-        MakeMemoryPool<ColumnConst<MapEntryView>>::type
     >;
 
     template <typename KeyT, typename ValueT>

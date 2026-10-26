@@ -5,7 +5,7 @@
 
 #include "BioAssert.h"
 #include "NestedContainerKind.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "map/MapEntryView.h"
 
 namespace net::proto {
@@ -24,7 +24,7 @@ class NestedContainerIterator {
 public:
     using Stack = std::stack<NestedContainerIterator>;
 
-    static NestedContainerIterator list(std::span<const db::ListElementView> elements) { return NestedContainerIterator {elements}; }
+    static NestedContainerIterator list(std::span<const db::CellView> elements) { return NestedContainerIterator {elements}; }
     static NestedContainerIterator map(std::span<const db::MapEntryView> entries) { return NestedContainerIterator {entries}; }
 
     bool isMap() const { return _kind == NestedContainerKind::Map; }
@@ -38,7 +38,7 @@ public:
         }
     }
 
-    db::ListElementView getElement() const {
+    db::CellView getElement() const {
         bioassert(_kind == NestedContainerKind::List, "Nested container is a map, not a list");
         return *_listIt;
     }
@@ -50,12 +50,12 @@ public:
 
 private:
     NestedContainerKind _kind {NestedContainerKind::List};
-    std::span<const db::ListElementView>::iterator _listIt {};
-    std::span<const db::ListElementView>::iterator _listEnd {};
+    std::span<const db::CellView>::iterator _listIt {};
+    std::span<const db::CellView>::iterator _listEnd {};
     std::span<const db::MapEntryView>::iterator _mapIt {};
     std::span<const db::MapEntryView>::iterator _mapEnd {};
 
-    explicit NestedContainerIterator(std::span<const db::ListElementView> elements);
+    explicit NestedContainerIterator(std::span<const db::CellView> elements);
     explicit NestedContainerIterator(std::span<const db::MapEntryView> entries);
 };
 

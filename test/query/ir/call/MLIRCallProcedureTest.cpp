@@ -27,8 +27,8 @@
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
@@ -837,7 +837,7 @@ public:
         const auto& listRaw = lists->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::vector<int64_t> values;
-            for (const ListElementView& element : listRaw[rowIndex]) {
+            for (const CellView& element : listRaw[rowIndex]) {
                 values.push_back(element.getAs<int64_t>());
             }
 
@@ -878,16 +878,16 @@ public:
         const auto& coordRaw = coordLists->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::vector<std::string> tags;
-            for (const ListElementView& element : tagRaw[rowIndex]) {
-                ASSERT_EQ(element.getTag(), ListBufferTypeTag::String);
+            for (const CellView& element : tagRaw[rowIndex]) {
+                ASSERT_EQ(element.getTag(), CellTag::String);
                 tags.push_back(std::string(element.getAs<std::string_view>()));
             }
 
             // The embedding rides as the single element of its own list, so the row's
             // floats are that element's span.
             std::vector<float> coords;
-            for (const ListElementView& element : coordRaw[rowIndex]) {
-                ASSERT_EQ(element.getTag(), ListBufferTypeTag::Embedding);
+            for (const CellView& element : coordRaw[rowIndex]) {
+                ASSERT_EQ(element.getTag(), CellTag::Embedding);
                 const std::span<const float> embedding = element.getAs<std::span<const float>>();
                 coords.assign(embedding.begin(), embedding.end());
             }

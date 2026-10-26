@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "MapEntryView.h"
 
 namespace db {
@@ -61,7 +61,7 @@ public:
      * @warn Does not perform bounds checking.
      */
     template <typename T>
-    MapEntryView write(std::string_view key, MapBufferTypeTag tag, const T& val);
+    MapEntryView write(std::string_view key, CellTag tag, const T& val);
 
     void clear();
 
@@ -75,7 +75,7 @@ private:
     /// Allocates a new chunk, updating @ref _last, with @param capacity bytes
     ByteChunk* allocateNextChunk(size_t capacity);
 
-    static constexpr size_t _tagSize = sizeof(MapBufferTypeTag);
+    static constexpr size_t _tagSize = sizeof(CellTag);
 
     static_assert(_tagSize == 1, "Tag size changed");
     static_assert(N != 0);

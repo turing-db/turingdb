@@ -18,7 +18,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
@@ -63,7 +63,7 @@ public:
             }
 
             std::vector<std::string> names;
-            for (const ListElementView& element : listRaw[row]) {
+            for (const CellView& element : listRaw[row]) {
                 names.push_back(std::string(element.getAs<std::string_view>()));
             }
 

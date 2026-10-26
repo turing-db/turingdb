@@ -6,7 +6,7 @@
 
 #include "LocalMemory.h"
 #include "list/ListBuffer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "map/MapBuffer.h"
 #include "map/MapEntryView.h"
@@ -33,7 +33,7 @@ const float* insertOneEmbedding(LocalMemory& memory) {
     return memory.embeddingBuffer().insert(floats).data();
 }
 
-const ListElementView* insertOneList(LocalMemory& memory) {
+const CellView* insertOneList(LocalMemory& memory) {
     const std::array<ListBuffer<>::ListItemVariant, 1> items {
         ListBuffer<>::ListItemVariant {int64_t {1}},
     };
@@ -64,8 +64,8 @@ TEST(LocalMemoryClearTest, theMapBufferStartsOverAfterAClear) {
 TEST(LocalMemoryClearTest, theListBufferStartsOverAfterAClear) {
     LocalMemory memory;
 
-    const ListElementView* const first = insertOneList(memory);
-    const ListElementView* const second = insertOneList(memory);
+    const CellView* const first = insertOneList(memory);
+    const CellView* const second = insertOneList(memory);
     ASSERT_EQ(second, first + 1) << "two inserts in a row share a chunk";
 
     memory.clear();

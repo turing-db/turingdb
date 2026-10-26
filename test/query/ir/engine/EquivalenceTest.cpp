@@ -44,11 +44,10 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/NamedColumn.h"
-#include "list/ListElementView.h"
-#include "list/ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -167,7 +166,7 @@ std::string valueToString(const T& value) {
     return fmt::format("{}", value);
 }
 
-std::string valueToString(const ListElementView element);
+std::string valueToString(const CellView element);
 std::string valueToString(ListView view);
 std::string valueToString(MapView view);
 
@@ -180,13 +179,13 @@ std::string valueToString(const std::optional<T>& value) {
     return valueToString(*value);
 }
 
-std::string valueToString(const ListElementView element) {
-    const auto writeTyped = []<typename T>(const ListElementView element) -> std::string {
+std::string valueToString(const CellView element) {
+    const auto writeTyped = []<typename T>(const CellView element) -> std::string {
         return valueToString(element.getAs<T>());
     };
 
-    const ListBufferTypeTag tag = element.getTag();
-    ListTagDispatcher writer {._tag = tag};
+    const CellTag tag = element.getTag();
+    CellTagDispatcher writer {._tag = tag};
 
     return writer.execute(writeTyped, element);
 }
@@ -199,7 +198,7 @@ std::string valueToString(const ListView view) {
     std::string result = "[";
     size_t index = 0;
 
-    for (const ListElementView element : view.elements()) {
+    for (const CellView element : view.elements()) {
         if (index++ > 0) {
             result += ", ";
         }
@@ -211,13 +210,9 @@ std::string valueToString(const ListView view) {
 }
 
 std::string valueToString(const MapEntryView entry) {
-    const auto writeTyped = []<typename T>(const MapEntryView entry) -> std::string {
-        return valueToString(entry.getValueAs<T>());
-    };
-
     std::string result {entry.getKey()};
     result += ": ";
-    result += dispatchMapEntry(writeTyped, entry);
+    result += valueToString(entry.getValue());
 
     return result;
 }

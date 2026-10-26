@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <type_traits>
 
-#include "ListElementView.h"
+#include "CellView.h"
 #include "ListView.h"
 #include "map/MapView.h"
 
@@ -66,7 +66,7 @@ std::byte* ListByteBuffer<N>::reserveAndCommit(size_t numBytes) {
 
 template <size_t N>
 template <typename T>
-ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
+CellView ListByteBuffer<N>::write(CellTag tag, const T& val) {
     static_assert(std::is_trivially_copyable_v<T>);
 
     const size_t startingIndex = _last->_size;
@@ -93,7 +93,7 @@ ListElementView ListByteBuffer<N>::write(ListBufferTypeTag tag, const T& val) {
         _last->_size += valSize;
     }
 
-    return ListElementView {startPtr};
+    return CellView {startPtr};
 }
 
 template <size_t N>
@@ -112,17 +112,17 @@ void ListByteBuffer<N>::clear() {
 
 namespace db {
 template class ListByteBuffer<>;
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Int64::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::UInt64::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Double::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Bool::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::String::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Embedding::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const ListView&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const PropertyNull&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const NodeID&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const EdgeID&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::DateTime::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Duration::Primitive&);
-template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const MapView&);
+template CellView ListByteBuffer<>::write(CellTag, const types::Int64::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const types::UInt64::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const types::Double::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const types::Bool::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const types::String::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const types::Embedding::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const ListView&);
+template CellView ListByteBuffer<>::write(CellTag, const PropertyNull&);
+template CellView ListByteBuffer<>::write(CellTag, const NodeID&);
+template CellView ListByteBuffer<>::write(CellTag, const EdgeID&);
+template CellView ListByteBuffer<>::write(CellTag, const types::DateTime::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const types::Duration::Primitive&);
+template CellView ListByteBuffer<>::write(CellTag, const MapView&);
 }

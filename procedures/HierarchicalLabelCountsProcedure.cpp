@@ -14,8 +14,8 @@
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
 #include "list/ListView.h"
-#include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellView.h"
+#include "CellTag.h"
 
 using namespace db;
 
@@ -29,8 +29,8 @@ struct Data : public TypedProcedureData<HierarchicalLabelCountsProcedure> {};
 // labels. The caller supplies the list view via `ProcUtils::constArg<ListView>`,
 // which enforces the constant-list rule.
 void readSelectedLabels(const ListView* view, const LabelMap& labels, LabelSet& selected) {
-    for (const ListElementView& el : *view) {
-        if (el.getTag() != ListBufferTypeTag::String) {
+    for (const CellView& el : *view) {
+        if (el.getTag() != CellTag::String) {
             continue;
         }
         const std::string_view name = el.getAs<std::string_view>();

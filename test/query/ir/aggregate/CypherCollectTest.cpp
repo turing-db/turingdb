@@ -11,7 +11,7 @@
 
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 
 #include "LocalMemory.h"
@@ -35,7 +35,7 @@ namespace {
 // Reads one list cell (a ColumnVector<ListView> row) as a vector of strings.
 void readStringList(const ListView& view, std::vector<std::string>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(std::string(element.getAs<std::string_view>()));
     }
 }
@@ -43,7 +43,7 @@ void readStringList(const ListView& view, std::vector<std::string>& out) {
 // Reads one list cell as a vector of int64s.
 void readInt64List(const ListView& view, std::vector<int64_t>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(element.getAs<int64_t>());
     }
 }
@@ -52,8 +52,8 @@ void readInt64List(const ListView& view, std::vector<int64_t>& out) {
 // tag rather than a bare integer.
 void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::NodeID);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::NodeID);
         out.push_back(element.getAs<NodeID>().getValue());
     }
 }
@@ -61,8 +61,8 @@ void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
 // Reads one list cell as a vector of edge ids, asserting the edge tag.
 void readEdgeIDList(const ListView& view, std::vector<uint64_t>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::EdgeID);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::EdgeID);
         out.push_back(element.getAs<EdgeID>().getValue());
     }
 }

@@ -60,10 +60,6 @@ public:
     /// storing that view as a value of its own
     MapView copy(MapView map);
 
-    /// Copies @param entry into this container, as a map of its own, and returns a view
-    /// of the copy
-    MapEntryView copy(MapEntryView entry);
-
     /// The store the list values of this container's maps live in
     ListContainer& getLists() { return _lists; }
 

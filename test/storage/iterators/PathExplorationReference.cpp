@@ -17,7 +17,7 @@
 #include "iterators/PathExplorator.h"
 #include "iterators/PathTargetIndex.h"
 #include "list/ListBuffer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/PathTrie.h"
 #include "metadata/LabelSetHandle.h"
 #include "reader/GraphReader.h"
@@ -214,7 +214,7 @@ size_t turing::test::collectPaths(const GraphView& view,
 
             if (collectPaths) {
                 const ListView edges = trie.expandEdges(paths[row], buffer, false);
-                for (const ListElementView& element : edges) {
+                for (const CellView& element : edges) {
                     emitted._edges.push_back(element.getAs<EdgeID>().getValue());
                 }
 

@@ -46,7 +46,7 @@ public:
 
     // The literal-list sibling of runConstScanNodesLoop: stream the loop data's
     // ListView one chunk at a time into its value column - a nullable value column
-    // for a homogeneous list, a ColumnVector<ListElementView> for a heterogeneous one -
+    // for a homogeneous list, a ColumnVector<CellView> for a heterogeneous one -
     // running the body over each slice. A null limit leaves it unbounded.
     static void runUnwindConstLoop(NLExecutionContext* context, NLFunctionData* data);
 
@@ -418,7 +418,6 @@ public:
     // value column holds at r, as one contiguous run of the query's map buffer.
     static void runMakeMap(NLExecutionContext* context, NLFunctionData* data);
     static void runStaticMapKey(NLExecutionContext* context, NLFunctionData* data);
-    static void runMapEntryValue(NLExecutionContext* context, NLFunctionData* data);
     static void runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data);
 
     // Build one list per row (nl.range): row r counts from its start bound to its end
@@ -568,8 +567,8 @@ public:
     static NLFillNullFunction selectPlainFillNullFunction(ValueType valueType);
     static NLFillNullFunction selectMaskFillNull();
     static NLFillNullFunction selectOptListFillNull();
-    static NLFillNullFunction selectOptListElementFillNull();
-    static NLFillNullFunction selectListElementFillNull();
+    static NLFillNullFunction selectOptCellFillNull();
+    static NLFillNullFunction selectCellFillNull();
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);
@@ -671,49 +670,44 @@ public:
     // The list, map and map entry siblings: the constant lays its one view out over the step's rows
     static NLBroadcastConstantFunction selectConstantListBroadcast();
     static NLBroadcastConstantFunction selectConstantMapBroadcast();
-    static NLBroadcastConstantFunction selectConstantMapEntryBroadcast();
+    static NLBroadcastConstantFunction selectConstantCellBroadcast();
 
     // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
     // no value type to dispatch on
-    static NLBroadcastConstantFunction selectOptListElementBroadcast(const Column* value);
+    static NLBroadcastConstantFunction selectOptCellBroadcast(const Column* value);
 
     // Block-repeat (outer column) and tile (inner column) for a !storage.any chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
-    static NLBroadcastFunction selectListElementBlockRepeatFunction();
-    static NLBroadcastFunction selectListElementTileFunction();
+    static NLBroadcastFunction selectCellBlockRepeatFunction();
+    static NLBroadcastFunction selectCellTileFunction();
 
     // Sort-accumulator append, emit-phase gather and 3-way compare for a !storage.any
     // chunk, so a heterogeneous unwind can be sorted and its rows re-emitted.
-    static NLAppendFunction selectListElementAppendFunction();
-    static NLGatherFunction selectListElementGatherFunction();
+    static NLAppendFunction selectCellAppendFunction();
+    static NLGatherFunction selectCellGatherFunction();
 
-    static NLAppendFunction selectOptListElementAppendFunction();
-    static NLGatherFunction selectOptListElementGatherFunction();
-    static NLCompareFunction selectListElementCompareFunction();
+    static NLAppendFunction selectOptCellAppendFunction();
+    static NLGatherFunction selectOptCellGatherFunction();
+    static NLCompareFunction selectCellCompareFunction();
 
     // Distinct row key and non-null tally for a !storage.any chunk, so a heterogeneous
     // unwind can be deduped and counted.
-    static NLKeyAppendFunction selectListElementKeyAppendFunction();
-    static NLCountFunction selectListElementCountFunction();
+    static NLKeyAppendFunction selectCellKeyAppendFunction();
+    static NLCountFunction selectCellCountFunction();
 
     // Key-buffer gather-append and emit-phase range copy for a !storage.any chunk, so a
     // heterogeneous unwind's cells can be a grouping key rather than only a counted column.
-    static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
-    static NLCopyFunction selectListElementCopyFunction();
+    static NLGroupKeyGatherFunction selectCellGroupKeyGatherFunction();
+    static NLCopyFunction selectCellCopyFunction();
 
-    static NLBroadcastFunction selectMapEntryBlockRepeatFunction();
-    static NLBroadcastFunction selectMapEntryTileFunction();
-    static NLAppendFunction selectMapEntryAppendFunction();
-    static NLGatherFunction selectMapEntryGatherFunction();
-    static NLCopyFunction selectMapEntryCopyFunction();
 
-    static NLBroadcastFunction selectOptListElementBlockRepeatFunction();
-    static NLBroadcastFunction selectOptListElementTileFunction();
-    static NLCompareFunction selectOptListElementCompareFunction();
-    static NLKeyAppendFunction selectOptListElementKeyAppendFunction();
-    static NLCountFunction selectOptListElementCountFunction();
-    static NLGroupKeyGatherFunction selectOptListElementGroupKeyGatherFunction();
-    static NLCopyFunction selectOptListElementCopyFunction();
+    static NLBroadcastFunction selectOptCellBlockRepeatFunction();
+    static NLBroadcastFunction selectOptCellTileFunction();
+    static NLCompareFunction selectOptCellCompareFunction();
+    static NLKeyAppendFunction selectOptCellKeyAppendFunction();
+    static NLCountFunction selectOptCellCountFunction();
+    static NLGroupKeyGatherFunction selectOptCellGroupKeyGatherFunction();
+    static NLCopyFunction selectOptCellCopyFunction();
 
     static NLBroadcastFunction selectOptListBlockRepeatFunction();
     static NLBroadcastFunction selectOptListTileFunction();
@@ -768,7 +762,7 @@ public:
     static NLJoinKeyFunctions selectJoinKeyFunctions(NLChunkKind kind);
     static NLJoinKeyFunctions selectOptJoinKeyFunctions(ValueType valueType);
     static NLJoinKeyFunctions selectPlainJoinKeyFunctions(ValueType valueType);
-    static NLJoinKeyFunctions selectListElementJoinKeyFunctions();
+    static NLJoinKeyFunctions selectCellJoinKeyFunctions();
 
     // Per-row test of whether a join key can match. An ID chunk holds neither a null nor
     // a NaN, so every row of it matches; a nullable value chunk reads its present flag, a
@@ -778,7 +772,7 @@ public:
     static NLKeyIsMatchableFunction everyKeyMatchable();
     static NLKeyIsMatchableFunction selectOptKeyMatchableFunction(ValueType valueType);
     static NLKeyIsMatchableFunction selectPlainKeyMatchableFunction(ValueType valueType);
-    static NLKeyIsMatchableFunction selectListElementKeyMatchableFunction();
+    static NLKeyIsMatchableFunction selectCellKeyMatchableFunction();
 
     // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows
     // is its handle (the row count); a nullable value chunk of this value type
@@ -838,10 +832,10 @@ public:
 
     // The grouped count / count(DISTINCT) folds of a type-erased column of tagged
     // scalars, the column a heterogeneous UNWIND produces
-    static NLGroupAggregateFoldFunction selectGroupCountListElementFold();
-    static NLGroupAggregateFoldFunction selectGroupCountOptListElementFold();
-    static NLGroupAggregateFoldFunction selectGroupCountDistinctListElementFold();
-    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListElementFold();
+    static NLGroupAggregateFoldFunction selectGroupCountCellFold();
+    static NLGroupAggregateFoldFunction selectGroupCountOptCellFold();
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctCellFold();
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptCellFold();
     static NLGroupAggregateFoldFunction selectGroupCountOptListFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListFold();
     static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);

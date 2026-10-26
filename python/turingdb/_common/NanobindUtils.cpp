@@ -19,11 +19,10 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "columns/ContainerKind.h"
-#include "list/ListElementView.h"
-#include "list/ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -197,14 +196,14 @@ struct ValueToPyObject {
 
     nb::object view(const db::ListView& listView) const {
         nb::list out;
-        for (const db::ListElementView element : listView.elements()) {
+        for (const db::CellView element : listView.elements()) {
             out.append(this->element(element));
         }
         return out;
     }
 
-    nb::object element(const db::ListElementView element) const {
-        return db::ListTagDispatcher {element.getTag()}.execute(*this, element);
+    nb::object element(const db::CellView element) const {
+        return db::CellTagDispatcher {element.getTag()}.execute(*this, element);
     }
 
     nb::object view(const db::MapView& mapView) const {
@@ -216,11 +215,11 @@ struct ValueToPyObject {
     }
 
     nb::object entry(const db::MapEntryView entry) const {
-        return db::dispatchMapEntry(*this, entry);
+        return element(entry.getValue());
     }
 
     template <typename T>
-    nb::object operator()(const db::ListElementView element) const {
+    nb::object operator()(const db::CellView element) const {
         if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
             nb::list floats;
             for (const float value : element.getAs<T>()) {
@@ -242,28 +241,6 @@ struct ValueToPyObject {
         }
     }
 
-    template <typename T>
-    nb::object operator()(const db::MapEntryView entry) const {
-        if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
-            nb::list floats;
-            for (const float value : entry.getValueAs<T>()) {
-                floats.append(nb::cast(value));
-            }
-            return floats;
-        } else if constexpr (std::is_same_v<T, db::ListView>) {
-            return view(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::MapView>) {
-            return view(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
-            return nb::none();
-        } else if constexpr (std::is_same_v<T, db::types::Duration::Primitive>) {
-            return duration(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
-            return dateTime(entry.getValueAs<T>());
-        } else {
-            return toPy(entry.getValueAs<T>());
-        }
-    }
 };
 
 }
@@ -437,25 +414,15 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "Map";
                 break;
             }
-            case db::ColumnVector<db::MapEntryView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::MapEntryView>*>(col)->getRaw();
-                nb::list lst;
-                for (const db::MapEntryView entry : src) {
-                    lst.append(listVisitor.entry(entry));
-                }
-                value = lst;
-                dtypeName = "MapValue";
-                break;
-            }
 
-            case db::ColumnVector<db::ListElementView>::staticKind(): {
-                const auto& src = static_cast<const db::ColumnVector<db::ListElementView>*>(col)->getRaw();
+            case db::ColumnVector<db::CellView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnVector<db::CellView>*>(col)->getRaw();
                 nb::list lst;
-                for (const db::ListElementView element : src) {
+                for (const db::CellView element : src) {
                     lst.append(listVisitor.element(element));
                 }
                 value = lst;
-                dtypeName = "ListElement";
+                dtypeName = "Cell";
                 break;
             }
 
@@ -676,26 +643,15 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "List";
                 break;
             }
-            case db::ColumnConst<db::ListElementView>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::ListElementView>*>(col)->getRaw();
+            case db::ColumnConst<db::CellView>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::CellView>*>(col)->getRaw();
                 const nb::object elementObj = listVisitor.element(v);
                 nb::list lst;
                 for (size_t i = 0; i < rowCount; ++i) {
                     lst.append(elementObj);
                 }
                 value = lst;
-                dtypeName = "ListElement";
-                break;
-            }
-            case db::ColumnConst<db::MapEntryView>::staticKind(): {
-                const auto& v = static_cast<const db::ColumnConst<db::MapEntryView>*>(col)->getRaw();
-                const nb::object entryObj = listVisitor.entry(v);
-                nb::list lst;
-                for (size_t i = 0; i < rowCount; ++i) {
-                    lst.append(entryObj);
-                }
-                value = lst;
-                dtypeName = "MapValue";
+                dtypeName = "Cell";
                 break;
             }
 

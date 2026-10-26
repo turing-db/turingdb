@@ -6,7 +6,7 @@
 #include <string_view>
 #include <type_traits>
 
-#include "MapBufferTypeTag.h"
+#include "CellView.h"
 
 namespace db {
 
@@ -34,48 +34,12 @@ public:
         return out;
     }
 
-    /// Returns the type tag of the value of this entry.
-    MapBufferTypeTag getValueTag() const {
-        static_assert(sizeof(MapBufferTypeTag) == 1,
-                      "MapBufferTypeTag changed size: function may need modifying.");
-
-        const std::byte* tagPtr = _start + sizeof(std::string_view);
-        return MapBufferTypeTag {std::to_integer<uint8_t>(*tagPtr)};
-    }
-
-    /**
-     * @brief Attempts to read the value of this entry as a @param T.
-     * @warn Does not verify that the value is in fact a @param T.
-     * @warn No bounds checking is performed on the read.
-     */
-    template <typename T>
-    T getValueAs() const;
+    /// Returns the value of this entry: its tag and its bytes, laid out as a list element's.
+    CellView getValue() const { return CellView {_start + sizeof(std::string_view)}; }
 
 private:
     /// Pointer to the start of this entry (key bytes) in a MapByteBuffer
     const std::byte* _start {nullptr};
 };
-
-template <typename T>
-T MapEntryView::getValueAs() const {
-    static_assert(std::is_trivially_copyable_v<T>);
-
-    constexpr size_t keySize = sizeof(std::string_view);
-    constexpr size_t tagSize = sizeof(MapBufferTypeTag);
-    static_assert(tagSize == 1, "Tag size changed: function may need modifying.");
-
-    // Key is at _start, tag follows the key, value follows the tag
-    const std::byte* dataPtr = _start + keySize + tagSize;
-
-    T out {};
-
-    {
-        T* outAddr = &out;
-        constexpr size_t sizeOfT = sizeof(T);
-        std::memcpy(outAddr, dataPtr, sizeOfT);
-    }
-
-    return out;
-}
 
 }

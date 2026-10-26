@@ -20,7 +20,7 @@
 #include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -241,7 +241,7 @@ private:
     std::vector<Row> _rows;
 
     static void readList(const ListView& list, std::vector<int64_t>& values) {
-        for (const ListElementView& element : list) {
+        for (const CellView& element : list) {
             values.push_back(element.getAs<int64_t>());
         }
     }
@@ -271,7 +271,7 @@ public:
         const auto& nodeRaw = nodes->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::vector<int64_t> values;
-            for (const ListElementView& element : listRaw[rowIndex]) {
+            for (const CellView& element : listRaw[rowIndex]) {
                 values.push_back(element.getAs<int64_t>());
             }
 

@@ -6,7 +6,7 @@
 
 #include "MapByteBuffer.h"
 #include "MapEntryViewBuffer.h"
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "MapView.h"
 #include "MapWriteCursor.h"
 
@@ -81,6 +81,6 @@ private:
 
 // Ensure we have a type tag for each mappable type
 static_assert(std::tuple_size_v<MappableTypesImpl>
-              == std::to_underlying(MapBufferTypeTag::INVALID));
+              == std::to_underlying(CellTag::INVALID));
 
 }

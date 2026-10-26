@@ -56,8 +56,8 @@
 #include "columns/AllowedKinds.h"
 #include "columns/Functions.h"
 #include "columns/UnaryPredicates.h"
-#include "list/ListElementOrder.h"
-#include "list/ListUtils.h"
+#include "CellOrder.h"
+#include "CellUtils.h"
 #include "map/MapHash.h"
 #include "map/MapUtils.h"
 #include "list/PathTrie.h"
@@ -396,12 +396,12 @@ private:
 };
 
 // Copy a slice of a ListView's tagged scalars straight into a
-// ColumnVector<ListElementView> - the heterogeneous unwind's type-erased column.
+// ColumnVector<CellView> - the heterogeneous unwind's type-erased column.
 void fillListElementChunk(Column* output, const ListView list, size_t offset, size_t rows) {
-    ColumnVector<ListElementView>* typed = static_cast<ColumnVector<ListElementView>*>(output);
-    const std::span<const ListElementView> elements = list.elements();
+    ColumnVector<CellView>* typed = static_cast<ColumnVector<CellView>*>(output);
+    const std::span<const CellView> elements = list.elements();
 
-    std::vector<ListElementView>& raw = typed->getRaw();
+    std::vector<CellView>& raw = typed->getRaw();
     raw.assign(elements.begin() + offset, elements.begin() + offset + rows);
 }
 
@@ -411,7 +411,7 @@ void fillListElementChunk(Column* output, const ListView list, size_t offset, si
 // consumer reads; a null element names no type of its own and rides the column as an
 // absent cell.
 void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView list, size_t offset, size_t rows) {
-    const std::span<const ListElementView> elements = list.elements();
+    const std::span<const CellView> elements = list.elements();
 
     const auto fill = [&]<SupportedType T>() {
         using Primitive = typename T::Primitive;
@@ -421,17 +421,17 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
         std::vector<std::optional<Primitive>>& raw = typed->getRaw();
         raw.resize(rows);
 
-        // ListElementView::getAs reinterprets the element's bytes as the primitive
+        // CellView::getAs reinterprets the element's bytes as the primitive
         // without consulting its type tag, so check the tag against the one the
         // primitive is stored under: a homogeneous unwind whose column type disagrees
         // with its literals would otherwise read a value of the wrong type.
-        constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+        constexpr CellTag expectedTag = TypeToCellTag<Primitive>::Tag;
 
         for (size_t index = 0; index < rows; index++) {
-            const ListElementView element = elements[offset + index];
-            const ListBufferTypeTag tag = element.getTag();
+            const CellView element = elements[offset + index];
+            const CellTag tag = element.getTag();
 
-            if (tag == ListBufferTypeTag::Null) {
+            if (tag == CellTag::Null) {
                 raw[index] = std::nullopt;
                 continue;
             }
@@ -495,7 +495,7 @@ void unwindListElementEmit(const Column* source,
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
-    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
@@ -520,13 +520,13 @@ void unwindListValueEmit(const Column* source,
     std::vector<std::optional<Primitive>>& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
-    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+    constexpr CellTag expectedTag = TypeToCellTag<Primitive>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
-        const ListBufferTypeTag tag = element.getTag();
+        const CellView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
+        const CellTag tag = element.getTag();
 
-        if (tag == ListBufferTypeTag::Null) {
+        if (tag == CellTag::Null) {
             outputRaw[index] = std::nullopt;
             continue;
         }
@@ -552,13 +552,13 @@ void unwindListValidIDEmit(const Column* source,
     std::vector<IDType>& outputRaw = static_cast<ColumnVector<IDType>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
-    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<IDType>::Tag;
+    constexpr CellTag expectedTag = TypeToCellTag<IDType>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
-        const ListBufferTypeTag tag = element.getTag();
+        const CellView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
+        const CellTag tag = element.getTag();
 
-        if (tag == ListBufferTypeTag::Null) {
+        if (tag == CellTag::Null) {
             outputRaw[index] = IDType {};
             continue;
         }
@@ -571,20 +571,20 @@ void unwindListValidIDEmit(const Column* source,
 
 // The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
 // and any other tagged scalar the single row it is.
-size_t taggedCellRowCount(const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
+size_t taggedCellRowCount(const CellView element) {
+    const CellTag tag = element.getTag();
 
-    if (tag == ListBufferTypeTag::ListView) {
+    if (tag == CellTag::ListView) {
         return element.getAs<ListView>().size();
     }
 
-    return tag == ListBufferTypeTag::Null ? 0 : 1;
+    return tag == CellTag::Null ? 0 : 1;
 }
 
 // The element one tagged cell gives up at @param position: that of the list it holds, or
 // the cell itself where it holds anything else.
-ListElementView taggedCellElement(const ListElementView element, size_t position) {
-    if (element.getTag() != ListBufferTypeTag::ListView) {
+CellView taggedCellElement(const CellView element, size_t position) {
+    if (element.getTag() != CellTag::ListView) {
         return element;
     }
 
@@ -592,7 +592,7 @@ ListElementView taggedCellElement(const ListElementView element, size_t position
 }
 
 size_t unwindTaggedElementCount(const Column* source, size_t row) {
-    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
+    const auto* elements = static_cast<const ColumnVector<CellView>*>(source);
 
     return taggedCellRowCount((*elements)[row]);
 }
@@ -600,8 +600,8 @@ size_t unwindTaggedElementCount(const Column* source, size_t row) {
 // The nullable sibling: an absent cell contributes no row, as the tagged null it stands
 // for does.
 size_t unwindOptTaggedElementCount(const Column* source, size_t row) {
-    const auto* elements = static_cast<const ColumnOptVector<ListElementView>*>(source);
-    const std::optional<ListElementView>& element = (*elements)[row];
+    const auto* elements = static_cast<const ColumnOptVector<CellView>*>(source);
+    const std::optional<CellView>& element = (*elements)[row];
 
     if (!element.has_value()) {
         return 0;
@@ -616,11 +616,11 @@ void unwindTaggedElementEmit(const Column* source,
                              const ColumnVector<size_t>* rows,
                              const ColumnVector<size_t>* positions,
                              Column* output) {
-    const std::vector<ListElementView>& elements = static_cast<const ColumnVector<ListElementView>*>(source)->getRaw();
+    const std::vector<CellView>& elements = static_cast<const ColumnVector<CellView>*>(source)->getRaw();
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
-    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
@@ -634,12 +634,12 @@ void unwindOptTaggedElementEmit(const Column* source,
                                 const ColumnVector<size_t>* rows,
                                 const ColumnVector<size_t>* positions,
                                 Column* output) {
-    const std::vector<std::optional<ListElementView>>& elements =
-        static_cast<const ColumnOptVector<ListElementView>*>(source)->getRaw();
+    const std::vector<std::optional<CellView>>& elements =
+        static_cast<const ColumnOptVector<CellView>*>(source)->getRaw();
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
-    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
@@ -762,10 +762,10 @@ void applyFunctionOverVector(Functor& functor,
 bool readsTaggedCells(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
-    return kind == ColumnVector<ListElementView>::staticKind()
-        || kind == ColumnConst<ListElementView>::staticKind()
-        || kind == ColumnOptVector<ListElementView>::staticKind()
-        || kind == ColumnConst<std::optional<ListElementView>>::staticKind();
+    return kind == ColumnVector<CellView>::staticKind()
+        || kind == ColumnConst<CellView>::staticKind()
+        || kind == ColumnOptVector<CellView>::staticKind()
+        || kind == ColumnConst<std::optional<CellView>>::staticKind();
 }
 
 template <typename Functor>
@@ -847,28 +847,6 @@ NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNu
     if (inputNullable) {
         result = memory->alloc<ColumnVector<Res>>();
         return &functionNullReadingKernel<Functor>;
-    }
-
-    result = memory->alloc<ColumnVector<Res>>();
-    return &functionVectorKernel<Functor>;
-}
-
-// A value read out of a map carries its null in its own tag, so its column is never a
-// nullable one: a row per entry, or the single entry a constant is
-bool readsMapValues(const Column* input) {
-    const ColumnKind::Code kind = input->getKind();
-
-    return kind == ColumnVector<MapEntryView>::staticKind()
-        || kind == ColumnConst<MapEntryView>::staticKind();
-}
-
-template <typename Functor>
-NLUnaryFunctionKernel selectMapValueFunction(const Column* input, LocalMemory* memory, Column*& result) {
-    using Res = typename Functor::ResultType;
-
-    if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
-        result = memory->alloc<ColumnConst<Res>>();
-        return &functionConstKernel<Functor>;
     }
 
     result = memory->alloc<ColumnVector<Res>>();
@@ -1496,13 +1474,13 @@ void collectNoSurvivors(const Column*, ColumnVector<size_t>*) {
 }
 
 // The truth value a type-erased cell holds: its boolean, or null where it holds a null
-std::optional<bool> cellTruth(ListElementView cell) {
+std::optional<bool> cellTruth(CellView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(cell.getAs<types::Bool::Primitive>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return std::nullopt;
         break;
 
@@ -1513,7 +1491,7 @@ std::optional<bool> cellTruth(ListElementView cell) {
 }
 
 void collectTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const std::vector<ListElementView>& cells = static_cast<const ColumnVector<ListElementView>*>(mask)->getRaw();
+    const std::vector<CellView>& cells = static_cast<const ColumnVector<CellView>*>(mask)->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
     for (size_t row = 0; row < cells.size(); row++) {
@@ -1524,8 +1502,8 @@ void collectTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indice
 }
 
 void collectOptTaggedCellSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
-    const std::vector<std::optional<ListElementView>>& cells =
-        static_cast<const ColumnOptVector<ListElementView>*>(mask)->getRaw();
+    const std::vector<std::optional<CellView>>& cells =
+        static_cast<const ColumnOptVector<CellView>*>(mask)->getRaw();
     std::vector<size_t>& survivingRaw = indices->getRaw();
 
     for (size_t row = 0; row < cells.size(); row++) {
@@ -1551,17 +1529,17 @@ std::optional<NodeID> namedNode(types::UInt64::Primitive id) {
     return NodeID(id);
 }
 
-std::optional<NodeID> namedNode(ListElementView cell) {
+std::optional<NodeID> namedNode(CellView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return namedNode(cell.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return namedNode(cell.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return cell.getAs<NodeID>();
         break;
 
@@ -1656,33 +1634,33 @@ std::optional<CustomBool> negatedTruth(const auto& cell) {
 }
 
 void applyNotOnTaggedCells(Column* result, const Column* operand) {
-    const std::vector<ListElementView>& operandRaw = static_cast<const ColumnVector<ListElementView>*>(operand)->getRaw();
+    const std::vector<CellView>& operandRaw = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
     std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ListElementView cell) {
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
         return negatedTruth(cell);
     });
 }
 
 void applyNotOnOptTaggedCells(Column* result, const Column* operand) {
-    const std::vector<std::optional<ListElementView>>& operandRaw =
-        static_cast<const ColumnOptVector<ListElementView>*>(operand)->getRaw();
+    const std::vector<std::optional<CellView>>& operandRaw =
+        static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
     std::vector<std::optional<CustomBool>>& resultRaw = static_cast<ColumnOptMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const std::optional<ListElementView>& cell) {
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](const std::optional<CellView>& cell) {
         return negatedTruth(cell);
     });
 }
 
 void applyNotOnConstTaggedCell(Column* result, const Column* operand) {
-    const ListElementView cell = static_cast<const ColumnConst<ListElementView>*>(operand)->getRaw();
+    const CellView cell = static_cast<const ColumnConst<CellView>*>(operand)->getRaw();
     static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
 }
 
 void applyNotOnOptConstTaggedCell(Column* result, const Column* operand) {
-    const std::optional<ListElementView>& cell = static_cast<const ColumnConst<std::optional<ListElementView>>*>(operand)->getRaw();
+    const std::optional<CellView>& cell = static_cast<const ColumnConst<std::optional<CellView>>*>(operand)->getRaw();
     static_cast<ColumnConst<std::optional<CustomBool>>*>(result)->set(negatedTruth(cell));
 }
 
@@ -2072,22 +2050,22 @@ void applyIsNotTrueOnBoolColumn(Column* result, const Column* operand) {
 }
 
 void applyIsNotTrueOnTaggedCells(Column* result, const Column* operand) {
-    const std::vector<ListElementView>& operandRaw = static_cast<const ColumnVector<ListElementView>*>(operand)->getRaw();
+    const std::vector<CellView>& operandRaw = static_cast<const ColumnVector<CellView>*>(operand)->getRaw();
     std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](ListElementView cell) {
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](CellView cell) {
         return ColumnMask::Bool_t {!cellTruth(cell).value_or(false)};
     });
 }
 
 void applyIsNotTrueOnOptTaggedCells(Column* result, const Column* operand) {
-    const std::vector<std::optional<ListElementView>>& operandRaw =
-        static_cast<const ColumnOptVector<ListElementView>*>(operand)->getRaw();
+    const std::vector<std::optional<CellView>>& operandRaw =
+        static_cast<const ColumnOptVector<CellView>*>(operand)->getRaw();
     std::vector<ColumnMask::Bool_t>& resultRaw = static_cast<ColumnMask*>(result)->getRaw();
 
     resultRaw.resize(operandRaw.size());
-    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<ListElementView> cell) {
+    std::transform(operandRaw.begin(), operandRaw.end(), resultRaw.begin(), [](std::optional<CellView> cell) {
         return ColumnMask::Bool_t {!(cell.has_value() && cellTruth(*cell).value_or(false))};
     });
 }
@@ -2166,11 +2144,11 @@ std::optional<bool> readNullTruth(const Column* mask, size_t row) {
 }
 
 std::optional<bool> readTaggedCellTruth(const Column* cells, size_t row) {
-    return cellTruth(static_cast<const ColumnVector<ListElementView>*>(cells)->getRaw()[row]);
+    return cellTruth(static_cast<const ColumnVector<CellView>*>(cells)->getRaw()[row]);
 }
 
 std::optional<bool> readOptTaggedCellTruth(const Column* cells, size_t row) {
-    const std::optional<ListElementView>& cell = static_cast<const ColumnOptVector<ListElementView>*>(cells)->getRaw()[row];
+    const std::optional<CellView>& cell = static_cast<const ColumnOptVector<CellView>*>(cells)->getRaw()[row];
     if (!cell.has_value()) {
         return std::nullopt;
     }
@@ -2190,7 +2168,7 @@ template <typename IDType>
 ListView listPathEntities(const GraphPath& path,
                           size_t count,
                           IDType (GraphPath::*readEntity)(size_t) const,
-                          ListBufferTypeTag tag,
+                          CellTag tag,
                           QueryListBuffer& buffer) {
     ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
 
@@ -2229,9 +2207,9 @@ void readPathElements(const std::vector<GraphPath>& paths,
         if (path.isNull()) {
             lists[row] = std::nullopt;
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities(path, path.getNodeCount(), &GraphPath::getNode, ListBufferTypeTag::NodeID, listBuffer);
+            lists[row] = listPathEntities(path, path.getNodeCount(), &GraphPath::getNode, CellTag::NodeID, listBuffer);
         } else {
-            lists[row] = listPathEntities(path, path.getLength(), &GraphPath::getEdge, ListBufferTypeTag::EdgeID, listBuffer);
+            lists[row] = listPathEntities(path, path.getLength(), &GraphPath::getEdge, CellTag::EdgeID, listBuffer);
         }
     }
 }
@@ -2378,7 +2356,7 @@ void caseWriteNullEntity(Column* result, size_t resultRow, const Column* value, 
 }
 
 void caseWriteNullTaggedCell(Column* result, size_t resultRow, const Column* value, size_t valueRow) {
-    static_cast<ColumnVector<ListElementView>*>(result)->getRaw()[resultRow] = ListElementView::nullElement();
+    static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = CellView::nullElement();
 }
 
 template <typename ID>
@@ -2400,12 +2378,12 @@ void writeCell(Column* result,
     }
 
     ListBuffer<>::ListItemVariant item = write._taggedRead(value, valueRow, stepBuffers);
-    static_cast<ColumnVector<ListElementView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
+    static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
 }
 
 void resetTaggedCells(Column* result, size_t rowCount) {
-    std::vector<ListElementView>& results = static_cast<ColumnVector<ListElementView>*>(result)->getRaw();
-    results.assign(rowCount, ListElementView::nullElement());
+    std::vector<CellView>& results = static_cast<ColumnVector<CellView>*>(result)->getRaw();
+    results.assign(rowCount, CellView::nullElement());
 }
 
 template <typename Primitive>
@@ -2425,8 +2403,8 @@ void caseResetEntityColumn(Column* result, size_t rowCount) {
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
 // a type, so a pair of different types compares by the order those types sort in; nulls
 // tie and sort after every value, as they do in a nullable value column.
-int compareListElementColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+int compareCellColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
     const std::strong_ordering order = raw[a] <=> raw[b];
 
     if (order == std::strong_ordering::less) {
@@ -2438,12 +2416,12 @@ int compareListElementColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
-int compareOptListElementColumn(const Column* column, size_t a, size_t b) {
-    const std::vector<std::optional<ListElementView>>& raw =
-        static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+int compareOptCellColumn(const Column* column, size_t a, size_t b) {
+    const std::vector<std::optional<CellView>>& raw =
+        static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
 
-    const auto isNull = [](const std::optional<ListElementView>& element) {
-        return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
+    const auto isNull = [](const std::optional<CellView>& element) {
+        return !element.has_value() || element->getTag() == CellTag::Null;
     };
 
     const bool aNull = isNull(raw[a]);
@@ -2585,7 +2563,7 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
     distinctAppendValueBytes(key, *value);
 }
 
-void distinctAppendElementBytes(std::string& key, ListElementView element);
+void distinctAppendElementBytes(std::string& key, CellView element);
 
 // Serialize a nested list into the row key as its length then its elements, so a list
 // never keys the same as the concatenation of its neighbours.
@@ -2593,7 +2571,7 @@ void distinctAppendListBytes(std::string& key, const ListView list) {
     const size_t size = list.size();
     key.append(reinterpret_cast<const char*>(&size), sizeof(size));
 
-    for (const ListElementView element : list) {
+    for (const CellView element : list) {
         distinctAppendElementBytes(key, element);
     }
 }
@@ -2611,7 +2589,7 @@ void distinctAppendValueBytes(std::string& key, const ListView value) {
 // A number keys under the Int tag whenever it holds one, so 1, 1.0 and a small unsigned 1
 // all key alike - which is what makes the key agree with numeric equality.
 void distinctAppendIntegerKey(std::string& key, const types::Int64::Primitive value) {
-    key.push_back(static_cast<char>(ListBufferTypeTag::Int));
+    key.push_back(static_cast<char>(CellTag::Int));
     distinctAppendValueBytes(key, value);
 }
 
@@ -2625,7 +2603,7 @@ void distinctAppendNumberKey(std::string& key, const types::UInt64::Primitive va
         return;
     }
 
-    key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
+    key.push_back(static_cast<char>(CellTag::UInt));
     distinctAppendValueBytes(key, value);
 }
 
@@ -2642,22 +2620,22 @@ void distinctAppendNumberKey(std::string& key, const types::Double::Primitive va
     } else if (holdsAnUnsigned) {
         distinctAppendNumberKey(key, static_cast<types::UInt64::Primitive>(value));
     } else {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Double));
+        key.push_back(static_cast<char>(CellTag::Double));
         distinctAppendValueBytes(key, value);
     }
 }
 
-void distinctAppendNumberBytes(std::string& key, const ListElementView element) {
+void distinctAppendNumberBytes(std::string& key, const CellView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return distinctAppendNumberKey(key, element.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return distinctAppendNumberKey(key, element.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return distinctAppendNumberKey(key, element.getAs<types::Double::Primitive>());
         break;
 
@@ -2665,97 +2643,6 @@ void distinctAppendNumberBytes(std::string& key, const ListElementView element) 
             bioassert(false, "Keying a non-numeric element as a number");
         break;
     }
-}
-
-// Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
-// two types never collide because the tag leads, and a null is the tag alone, so all
-// nulls dedup together as they do in a nullable value column.
-void distinctAppendMapBytes(std::string& key, MapView map);
-
-// Serialize one map value into the row key the way a list element is serialized: a number
-// normalised first, then the tag and the value's bytes.
-void distinctAppendMapValueBytes(std::string& key, const MapEntryView entry) {
-    const MapBufferTypeTag tag = entry.getValueTag();
-
-    switch (tag) {
-        case MapBufferTypeTag::Int:
-            distinctAppendNumberKey(key, entry.getValueAs<types::Int64::Primitive>());
-            return;
-        break;
-
-        case MapBufferTypeTag::UInt:
-            distinctAppendNumberKey(key, entry.getValueAs<types::UInt64::Primitive>());
-            return;
-        break;
-
-        case MapBufferTypeTag::Double:
-            distinctAppendNumberKey(key, entry.getValueAs<types::Double::Primitive>());
-            return;
-        break;
-
-        case MapBufferTypeTag::Bool:
-            key.push_back(static_cast<char>(ListBufferTypeTag::Bool));
-            distinctAppendValueBytes(key, static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()));
-            return;
-        break;
-
-        case MapBufferTypeTag::String:
-            key.push_back(static_cast<char>(ListBufferTypeTag::String));
-            distinctAppendValueBytes(key, entry.getValueAs<types::String::Primitive>());
-            return;
-        break;
-
-        case MapBufferTypeTag::ListView:
-            key.push_back(static_cast<char>(ListBufferTypeTag::ListView));
-            distinctAppendListBytes(key, entry.getValueAs<ListView>());
-            return;
-        break;
-
-        case MapBufferTypeTag::MapView:
-            key.push_back(static_cast<char>(ListBufferTypeTag::MapView));
-            distinctAppendMapBytes(key, entry.getValueAs<MapView>());
-            return;
-        break;
-
-        case MapBufferTypeTag::Null:
-            key.push_back(static_cast<char>(ListBufferTypeTag::Null));
-            return;
-        break;
-
-        case MapBufferTypeTag::NodeID:
-            key.push_back(static_cast<char>(ListBufferTypeTag::NodeID));
-            distinctAppendValueBytes(key, entry.getValueAs<NodeID>().getValue());
-            return;
-        break;
-
-        case MapBufferTypeTag::EdgeID:
-            key.push_back(static_cast<char>(ListBufferTypeTag::EdgeID));
-            distinctAppendValueBytes(key, entry.getValueAs<EdgeID>().getValue());
-            return;
-        break;
-
-        case MapBufferTypeTag::DateTime:
-            key.push_back(static_cast<char>(ListBufferTypeTag::DateTime));
-            distinctAppendValueBytes(key, entry.getValueAs<types::DateTime::Primitive>().getMicroseconds());
-            return;
-        break;
-
-        case MapBufferTypeTag::Duration:
-            key.push_back(static_cast<char>(ListBufferTypeTag::Duration));
-            distinctAppendValueBytes(key, entry.getValueAs<types::Duration::Primitive>().getMicroseconds());
-            return;
-        break;
-
-        case MapBufferTypeTag::Embedding:
-            throw IRException("cannot dedup by an embedding map value");
-        break;
-
-        case MapBufferTypeTag::INVALID:
-            throw IRException("cannot dedup by an untagged map value");
-        break;
-    }
-
-    bioassert(false, "Unknown MapBufferTypeTag");
 }
 
 // Serialize a map into the row key as its size, then each entry's key length, key bytes and
@@ -2770,83 +2657,86 @@ void distinctAppendMapBytes(std::string& key, const MapView map) {
         key.append(reinterpret_cast<const char*>(&keySize), sizeof(keySize));
         key.append(entryKey);
 
-        distinctAppendMapValueBytes(key, entry);
+        distinctAppendElementBytes(key, entry.getValue());
     }
 }
 
-void distinctAppendElementBytes(std::string& key, const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
+// Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
+// two types never collide because the tag leads, and a null is the tag alone, so all
+// nulls dedup together as they do in a nullable value column.
+void distinctAppendElementBytes(std::string& key, const CellView element) {
+    const CellTag tag = element.getTag();
 
     switch (tag) {
-        case ListBufferTypeTag::Int:
-        case ListBufferTypeTag::UInt:
-        case ListBufferTypeTag::Double:
+        case CellTag::Int:
+        case CellTag::UInt:
+        case CellTag::Double:
             return distinctAppendNumberBytes(key, element);
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, static_cast<bool>(element.getAs<types::Bool::Primitive>()));
             return;
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::String::Primitive>());
             return;
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             key.push_back(static_cast<char>(tag));
             distinctAppendListBytes(key, element.getAs<ListView>());
             return;
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             key.push_back(static_cast<char>(tag));
             return;
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<NodeID>().getValue());
             return;
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<EdgeID>().getValue());
             return;
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::DateTime::Primitive>().getMicroseconds());
             return;
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::Duration::Primitive>().getMicroseconds());
             return;
         break;
 
-        case ListBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             throw IRException("cannot dedup by an embedding element");
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             key.push_back(static_cast<char>(tag));
             distinctAppendMapBytes(key, element.getAs<MapView>());
             return;
         break;
 
-        case ListBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw IRException("cannot dedup by an untagged element");
         break;
     }
 
-    bioassert(false, "Unknown ListBufferTypeTag");
+    bioassert(false, "Unknown CellTag");
 }
 
 // A chunk of this kind holds neither a null nor a NaN - an ID column, a plainly-held
@@ -2900,25 +2790,25 @@ bool optEmbeddingColumnRowMatchable(const Column* column, size_t row) {
 
 // Whether one row of a type-erased column of tagged scalars carries a matchable key - the
 // cell's own tag says whether it is null, where a nullable column has a present flag.
-bool listElementColumnRowMatchable(const Column* column, size_t row) {
-    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+bool cellColumnRowMatchable(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
 
-    return raw[row].getTag() != ListBufferTypeTag::Null;
+    return raw[row].getTag() != CellTag::Null;
 }
 
 // Serialize one row of a type-erased column of tagged scalars into the row key.
-void distinctKeyAppendListElementColumn(const Column* column, size_t row, std::string& key) {
-    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+void distinctKeyAppendCellColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
     distinctAppendElementBytes(key, raw[row]);
 }
 
-void distinctKeyAppendOptListElementColumn(const Column* column, size_t row, std::string& key) {
-    const std::vector<std::optional<ListElementView>>& raw =
-        static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
-    const std::optional<ListElementView>& element = raw[row];
+void distinctKeyAppendOptCellColumn(const Column* column, size_t row, std::string& key) {
+    const std::vector<std::optional<CellView>>& raw =
+        static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
+    const std::optional<CellView>& element = raw[row];
 
     if (!element.has_value()) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
@@ -2954,7 +2844,7 @@ void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::strin
     const std::optional<ListView>& list = raw[row];
 
     if (!list.has_value()) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
@@ -2967,7 +2857,7 @@ void distinctKeyAppendOptMapColumn(const Column* column, size_t row, std::string
     const std::optional<MapView>& map = raw[row];
 
     if (!map.has_value()) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
@@ -3055,12 +2945,12 @@ void hashOptKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
 
 // A tagged scalar hashes through the bytes DISTINCT keys it by, so an integer and a float
 // holding one value hash alike, as they compare equal
-void hashListElementKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
-    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+void hashCellKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
     hashes.resize(raw.size());
 
     std::string bytes;
-    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const ListElementView element) {
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const CellView element) {
         bytes.clear();
         distinctAppendElementBytes(bytes, element);
         return hashKeyValue(std::string_view(bytes));
@@ -3160,18 +3050,18 @@ size_t findKeyGroup(const NLHashJoinIndex& index,
 // Count the non-null cells of a type-erased column of tagged scalars, so count(x) over a
 // heterogeneous unwind charges the same rows a nullable value column would.
 size_t countNonNullElementsColumn(const Column* column) {
-    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
-    return std::count_if(raw.begin(), raw.end(), [](const ListElementView element) {
-        return element.getTag() != ListBufferTypeTag::Null;
+    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
+    return std::count_if(raw.begin(), raw.end(), [](const CellView element) {
+        return element.getTag() != CellTag::Null;
     });
 }
 
 size_t countPresentElementsColumn(const Column* column) {
-    const std::vector<std::optional<ListElementView>>& raw =
-        static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+    const std::vector<std::optional<CellView>>& raw =
+        static_cast<const ColumnOptVector<CellView>*>(column)->getRaw();
 
-    return std::count_if(raw.begin(), raw.end(), [](const std::optional<ListElementView>& element) {
-        return element.has_value() && element->getTag() != ListBufferTypeTag::Null;
+    return std::count_if(raw.begin(), raw.end(), [](const std::optional<CellView>& element) {
+        return element.has_value() && element->getTag() != CellTag::Null;
     });
 }
 
@@ -3264,15 +3154,15 @@ void aggregateUpdateSum(NLAggregateState* state, const Column* input) {
     current = running;
 }
 
-std::optional<ListElementView> presentCell(const ListElementView element) {
-    if (element.getTag() == ListBufferTypeTag::Null) {
+std::optional<CellView> presentCell(const CellView element) {
+    if (element.getTag() == CellTag::Null) {
         return std::nullopt;
     }
 
     return element;
 }
 
-std::optional<ListElementView> presentCell(const std::optional<ListElementView>& element) {
+std::optional<CellView> presentCell(const std::optional<CellView>& element) {
     if (!element.has_value()) {
         return std::nullopt;
     }
@@ -3327,17 +3217,17 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
 // The number a tagged cell holds, whatever numeric type its tag names. A reduction over
 // a type-erased column is defined over numbers only, so any other tag is a query error -
 // the check the static column types make for a typed column, made per row here.
-double taggedNumericValue(const ListElementView element) {
+double taggedNumericValue(const CellView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return static_cast<double>(element.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return static_cast<double>(element.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return element.getAs<types::Double::Primitive>();
         break;
 
@@ -3358,7 +3248,7 @@ double numberOf(const Primitive& value) {
     return static_cast<double>(value);
 }
 
-double numberOf(const ListElementView element) {
+double numberOf(const CellView element) {
     return taggedNumericValue(element);
 }
 
@@ -3453,7 +3343,7 @@ void groupFoldDeviation(Column* accumulator,
         if constexpr (Distinct) {
             distinct.beginKey(group);
 
-            if constexpr (std::is_same_v<Cell, ListElementView> || std::is_same_v<Cell, std::optional<ListElementView>>) {
+            if constexpr (std::is_same_v<Cell, CellView> || std::is_same_v<Cell, std::optional<CellView>>) {
                 distinctAppendElementBytes(distinct.getKey(), *value);
             } else {
                 distinctAppendValueBytes(distinct.getKey(), *value);
@@ -3555,7 +3445,7 @@ void aggregateUpdateNumericTagged(NLAggregateState* state, const Column* input) 
     size_t seen = 0;
 
     for (const Cell& cell : inputRaw) {
-        const std::optional<ListElementView> element = presentCell(cell);
+        const std::optional<CellView> element = presentCell(cell);
         if (!element) {
             continue;
         }
@@ -3588,11 +3478,11 @@ NLAggregateUpdateFunction taggedAggregateUpdateFor(AggregateKind kind) {
         break;
 
         case AggregateKind::Min:
-            return &aggregateUpdateMinMax<ListElementView, /*IsMax=*/false, Cell>;
+            return &aggregateUpdateMinMax<CellView, /*IsMax=*/false, Cell>;
         break;
 
         case AggregateKind::Max:
-            return &aggregateUpdateMinMax<ListElementView, /*IsMax=*/true, Cell>;
+            return &aggregateUpdateMinMax<CellView, /*IsMax=*/true, Cell>;
         break;
     }
 
@@ -3892,7 +3782,7 @@ void groupFoldNumericTagged(Column* accumulator,
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListElementView> element = presentCell(inputRaw[row]);
+        const std::optional<CellView> element = presentCell(inputRaw[row]);
         if (!element) {
             continue;
         }
@@ -3998,15 +3888,15 @@ NLGroupAggregateFoldFunction taggedGroupAggregateFoldFor(GroupAggregateKind kind
         break;
 
         case GroupAggregateKind::Min:
-            return &groupFoldMinMax<ListElementView, /*IsMax=*/false, Cell>;
+            return &groupFoldMinMax<CellView, /*IsMax=*/false, Cell>;
         break;
 
         case GroupAggregateKind::Max:
-            return &groupFoldMinMax<ListElementView, /*IsMax=*/true, Cell>;
+            return &groupFoldMinMax<CellView, /*IsMax=*/true, Cell>;
         break;
 
         case GroupAggregateKind::First:
-            return &groupFoldFirst<ListElementView, Cell>;
+            return &groupFoldFirst<CellView, Cell>;
         break;
 
         case GroupAggregateKind::Count:
@@ -4220,7 +4110,7 @@ void groupFoldCountDistinctPresent(Column* accumulator,
 // grouped count(x) over a heterogeneous unwind charges the same rows a nullable value
 // column would.
 template <typename Cell>
-void groupFoldCountPresentListElement(Column* accumulator,
+void groupFoldCountPresentCell(Column* accumulator,
                                       std::vector<uint64_t>& counts,
                                       const Column* input,
                                       const std::vector<size_t>& groups,
@@ -4239,7 +4129,7 @@ void groupFoldCountPresentListElement(Column* accumulator,
 // The key carries the tag as well as the value, so cells of different types are told
 // apart the way a whole-row DISTINCT tells them apart.
 template <typename Cell>
-void groupFoldCountDistinctListElement(Column* accumulator,
+void groupFoldCountDistinctCell(Column* accumulator,
                                        std::vector<uint64_t>& counts,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
@@ -4248,7 +4138,7 @@ void groupFoldCountDistinctListElement(Column* accumulator,
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListElementView> element = presentCell(inputRaw[row]);
+        const std::optional<CellView> element = presentCell(inputRaw[row]);
         if (!element) {
             continue;
         }
@@ -4522,68 +4412,68 @@ void collectValidIDFoldDistinct(Column* values,
 // The list- or map-buffer value a tagged cell holds, read back as the type its tag names, so
 // a collect of type-erased cells buffers each one under the type it came in with.
 template <typename Item>
-Item taggedItem(const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
+Item taggedItem(const CellView element) {
+    const CellTag tag = element.getTag();
 
     switch (tag) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return Item {element.getAs<types::Int64::Primitive>()};
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return Item {element.getAs<types::UInt64::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return Item {element.getAs<types::Double::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return Item {element.getAs<types::Bool::Primitive>()};
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return Item {element.getAs<types::String::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             return Item {element.getAs<types::Embedding::Primitive>()};
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return Item {element.getAs<ListView>()};
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return Item {element.getAs<PropertyNull>()};
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return Item {element.getAs<NodeID>()};
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return Item {element.getAs<EdgeID>()};
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             return Item {element.getAs<types::DateTime::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             return Item {element.getAs<types::Duration::Primitive>()};
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return Item {element.getAs<MapView>()};
         break;
 
-        case ListBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw IRException("cannot collect an untagged element");
         break;
     }
 
-    throw IRException("Unknown ListBufferTypeTag");
+    throw IRException("Unknown CellTag");
 }
 
 // The type-erased sibling of collectFold: a tagged cell is there in every row, but one
@@ -4595,11 +4485,11 @@ void collectTaggedFold(Column* values,
                        std::vector<std::vector<size_t>>& groupPositions,
                        NLGroupDistinctTally& distinct,
                        NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<ListElementView>*>(values)->getRaw();
+    auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListElementView> element = presentCell(inputRaw[row]);
+        const std::optional<CellView> element = presentCell(inputRaw[row]);
         if (!element) {
             continue;
         }
@@ -4619,11 +4509,11 @@ void collectTaggedFoldDistinct(Column* values,
                                std::vector<std::vector<size_t>>& groupPositions,
                                NLGroupDistinctTally& distinct,
                                NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<ListElementView>*>(values)->getRaw();
+    auto& valuesRaw = static_cast<ColumnVector<CellView>*>(values)->getRaw();
     const std::vector<Cell>& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListElementView> element = presentCell(inputRaw[row]);
+        const std::optional<CellView> element = presentCell(inputRaw[row]);
         if (!element) {
             continue;
         }
@@ -4651,7 +4541,7 @@ void collectTaggedListEmit(const Column* values,
                            size_t count,
                            ListBuffer<>& listBuffer,
                            Column* output) {
-    const auto& valuesRaw = static_cast<const ColumnVector<ListElementView>*>(values)->getRaw();
+    const auto& valuesRaw = static_cast<const ColumnVector<CellView>*>(values)->getRaw();
     auto& outputRaw = static_cast<ColumnVector<ListView>*>(output)->getRaw();
 
     outputRaw.clear();
@@ -4822,16 +4712,16 @@ bool absentValueCell(const Column* source, size_t row) {
 // A cell of a type-erased column carries its own tag, so the null is the one that tag
 // names rather than a cell the column does not hold.
 bool absentTaggedCell(const Column* source, size_t row) {
-    const ListElementView element = (*static_cast<const ColumnVector<ListElementView>*>(source))[row];
+    const CellView element = (*static_cast<const ColumnVector<CellView>*>(source))[row];
 
-    return element.getTag() == ListBufferTypeTag::Null;
+    return element.getTag() == CellTag::Null;
 }
 
 bool absentOptTaggedCell(const Column* source, size_t row) {
-    const std::optional<ListElementView>& element =
-        (*static_cast<const ColumnOptVector<ListElementView>*>(source))[row];
+    const std::optional<CellView>& element =
+        (*static_cast<const ColumnOptVector<CellView>*>(source))[row];
 
-    return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
+    return !element.has_value() || element->getTag() == CellTag::Null;
 }
 
 // Read one cell of a nullable value column as the value it contributes to a list or a map:
@@ -4878,15 +4768,15 @@ NLKeyedValue mapRead(const Column* input, size_t row) {
 
 // The map, the node or the edge a type-erased cell holds, nothing where it holds anything
 // else
-NLKeyedValue readKeyedCell(const ListElementView cell) {
+NLKeyedValue readKeyedCell(const CellView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return cell.getAs<MapView>();
         break;
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return cell.getAs<NodeID>();
         break;
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return cell.getAs<EdgeID>();
         break;
         default:
@@ -4895,24 +4785,7 @@ NLKeyedValue readKeyedCell(const ListElementView cell) {
     }
 }
 
-NLKeyedValue readKeyedCell(const MapEntryView entry) {
-    switch (entry.getValueTag()) {
-        case MapBufferTypeTag::MapView:
-            return entry.getValueAs<MapView>();
-        break;
-        case MapBufferTypeTag::NodeID:
-            return entry.getValueAs<NodeID>();
-        break;
-        case MapBufferTypeTag::EdgeID:
-            return entry.getValueAs<EdgeID>();
-        break;
-        default:
-            return std::monostate {};
-        break;
-    }
-}
-
-NLKeyedValue readKeyedCell(const std::optional<ListElementView>& cell) {
+NLKeyedValue readKeyedCell(const std::optional<CellView>& cell) {
     if (!cell) {
         return std::monostate {};
     }
@@ -4925,19 +4798,6 @@ NLKeyedValue readKeyedCell(const std::optional<ListElementView>& cell) {
 template <typename ColumnT>
 NLKeyedValue readTaggedKeyed(const Column* input, size_t row) {
     return readKeyedCell((*static_cast<const ColumnT*>(input))[row]);
-}
-
-// The value a map entry holds, as the item a list cell is written from
-QueryListBuffer::ListItemVariant entryItem(const MapEntryView entry) {
-    const auto read = []<typename T>(const MapEntryView view) -> QueryListBuffer::ListItemVariant {
-        if constexpr (std::is_same_v<T, PropertyNull>) {
-            return PropertyNull {};
-        } else {
-            return view.getValueAs<T>();
-        }
-    };
-
-    return dispatchMapEntry(read, entry);
 }
 
 // The entry @param keyed holds under @param key: the one its map holds, or its node's or
@@ -4983,7 +4843,7 @@ std::optional<types::String::Primitive> stringValueArgument(const Column* input,
 template <typename ColumnT>
 std::optional<types::String::Primitive> cellStringArgument(const Column* input, size_t row, std::string_view functionName) {
     const auto* col = static_cast<const ColumnT*>(input);
-    const std::optional<ListElementView> cell = col->operator[](row);
+    const std::optional<CellView> cell = col->operator[](row);
     if (!cell.has_value()) {
         return std::nullopt;
     }
@@ -5007,7 +4867,7 @@ std::optional<types::Int64::Primitive> unsignedValueArgument(const Column* input
 
 template <typename ColumnT>
 std::optional<types::Int64::Primitive> cellIntegerArgument(const Column* input, size_t row, std::string_view functionName) {
-    const std::optional<ListElementView> cell = (*static_cast<const ColumnT*>(input))[row];
+    const std::optional<CellView> cell = (*static_cast<const ColumnT*>(input))[row];
     if (!cell.has_value()) {
         return std::nullopt;
     }
@@ -5021,8 +4881,8 @@ std::optional<types::String::Primitive> nullStringRead(const Column*, size_t) {
 }
 
 // The list a type-erased cell holds, absent where the cell holds anything else
-std::optional<ListView> cellListRead(const ListElementView cell) {
-    if (cell.getTag() != ListBufferTypeTag::ListView) {
+std::optional<ListView> cellListRead(const CellView cell) {
+    if (cell.getTag() != CellTag::ListView) {
         return std::nullopt;
     }
 
@@ -5030,12 +4890,12 @@ std::optional<ListView> cellListRead(const ListElementView cell) {
 }
 
 std::optional<ListView> taggedListRead(const Column* input, size_t row) {
-    return cellListRead((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
+    return cellListRead((*static_cast<const ColumnVector<CellView>*>(input))[row]);
 }
 
 std::optional<ListView> optTaggedListRead(const Column* input, size_t row) {
-    const std::optional<ListElementView>& cell =
-        (*static_cast<const ColumnOptVector<ListElementView>*>(input))[row];
+    const std::optional<CellView>& cell =
+        (*static_cast<const ColumnOptVector<CellView>*>(input))[row];
 
     if (!cell) {
         return std::nullopt;
@@ -5045,12 +4905,12 @@ std::optional<ListView> optTaggedListRead(const Column* input, size_t row) {
 }
 
 std::optional<ListView> constTaggedListRead(const Column* input, size_t) {
-    return cellListRead(static_cast<const ColumnConst<ListElementView>*>(input)->getRaw());
+    return cellListRead(static_cast<const ColumnConst<CellView>*>(input)->getRaw());
 }
 
 std::optional<ListView> optConstTaggedListRead(const Column* input, size_t) {
-    const std::optional<ListElementView>& cell =
-        static_cast<const ColumnConst<std::optional<ListElementView>>*>(input)->getRaw();
+    const std::optional<CellView>& cell =
+        static_cast<const ColumnConst<std::optional<CellView>>*>(input)->getRaw();
 
     if (!cell) {
         return std::nullopt;
@@ -5081,16 +4941,16 @@ std::optional<types::Double::Primitive> percentileArgument(const Column* input, 
 
 // The numbers one row's list holds, sorted. A percentile is taken of numbers alone, so any
 // other element is the error the row raises.
-void sortListNumbers(const ListView list, std::vector<ListElementView>& numbers, std::string_view functionName) {
+void sortListNumbers(const ListView list, std::vector<CellView>& numbers, std::string_view functionName) {
     numbers.clear();
 
-    for (const ListElementView element : list) {
-        const ListBufferTypeTag tag = element.getTag();
-        const bool isNumber = tag == ListBufferTypeTag::Int
-                           || tag == ListBufferTypeTag::UInt
-                           || tag == ListBufferTypeTag::Double;
+    for (const CellView element : list) {
+        const CellTag tag = element.getTag();
+        const bool isNumber = tag == CellTag::Int
+                           || tag == CellTag::UInt
+                           || tag == CellTag::Double;
 
-        if (tag == ListBufferTypeTag::Null) {
+        if (tag == CellTag::Null) {
             continue;
         } else if (!isNumber) {
             throw IRException(fmt::format("{}() takes the percentile of numbers only", functionName));
@@ -5111,7 +4971,7 @@ void throwIfNotAPercentile(double percentile, std::string_view functionName) {
 
 // The value at the percentile's position among the sorted numbers, interpolated between
 // the two around it where the position falls between them
-double continuousPercentile(const std::vector<ListElementView>& sorted, double percentile) {
+double continuousPercentile(const std::vector<CellView>& sorted, double percentile) {
     const double position = percentile * static_cast<double>(sorted.size() - 1);
     const size_t below = static_cast<size_t>(position);
     const size_t above = static_cast<size_t>(std::ceil(position));
@@ -5135,16 +4995,16 @@ size_t discretePercentilePosition(size_t count, double percentile) {
 
 template <typename Result>
 Result absentPercentile() {
-    if constexpr (std::is_same_v<Result, ListElementView>) {
-        return ListElementView::nullElement();
+    if constexpr (std::is_same_v<Result, CellView>) {
+        return CellView::nullElement();
     } else {
         return std::nullopt;
     }
 }
 
 template <typename Result>
-Result percentileElement(const ListElementView element) {
-    if constexpr (std::is_same_v<Result, ListElementView>) {
+Result percentileElement(const CellView element) {
+    if constexpr (std::is_same_v<Result, CellView>) {
         return element;
     } else {
         return element.getAs<typename Result::value_type>();
@@ -5167,7 +5027,7 @@ void runPercentileRows(const NLPercentileData* data, std::string_view functionNa
     std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(data->getResult())->getRaw();
     outputRaw.resize(rowCount);
 
-    std::vector<ListElementView> numbers;
+    std::vector<CellView> numbers;
 
     for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
         const std::optional<ListView> values = listRead(list, rowIndex);
@@ -5226,15 +5086,15 @@ Item validIDItem(const Column* input, size_t row, NLStepBuffers*) {
 // value is stored under, so it is stored as the type that tag names.
 template <typename Item>
 Item taggedColumnItem(const Column* input, size_t row, NLStepBuffers*) {
-    return taggedItem<Item>((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
+    return taggedItem<Item>((*static_cast<const ColumnVector<CellView>*>(input))[row]);
 }
 
 // The nullable sibling of taggedColumnItem: a column an OPTIONAL MATCH padded, or one an
 // index read off a list, has no cell in every row.
 template <typename Item>
 Item optTaggedColumnItem(const Column* input, size_t row, NLStepBuffers*) {
-    const std::optional<ListElementView>& element =
-        (*static_cast<const ColumnOptVector<ListElementView>*>(input))[row];
+    const std::optional<CellView>& element =
+        (*static_cast<const ColumnOptVector<CellView>*>(input))[row];
     if (!element.has_value()) {
         return Item {PropertyNull {}};
     }
@@ -8299,7 +8159,7 @@ void NLExecutor::runToAny(NLExecutionContext*, NLFunctionData* data) {
     const NLListItemReadFunction read = toAny->getRead();
     const size_t rowCount = operand->size();
 
-    std::vector<ListElementView>& results = static_cast<ColumnVector<ListElementView>*>(toAny->getResult())->getRaw();
+    std::vector<CellView>& results = static_cast<ColumnVector<CellView>*>(toAny->getResult())->getRaw();
     results.resize(rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
@@ -8353,7 +8213,7 @@ void NLExecutor::runListSlice(NLExecutionContext*, NLFunctionData* data) {
 }
 
 void NLExecutor::runPercentileCont(NLExecutionContext*, NLFunctionData* data) {
-    const auto interpolate = [](const std::vector<ListElementView>& sorted, double percentile) {
+    const auto interpolate = [](const std::vector<CellView>& sorted, double percentile) {
         return std::optional<double>(continuousPercentile(sorted, percentile));
     };
 
@@ -8362,7 +8222,7 @@ void NLExecutor::runPercentileCont(NLExecutionContext*, NLFunctionData* data) {
 
 template <typename Result>
 void NLExecutor::runPercentileDisc(NLExecutionContext*, NLFunctionData* data) {
-    const auto pick = [](const std::vector<ListElementView>& sorted, double percentile) {
+    const auto pick = [](const std::vector<CellView>& sorted, double percentile) {
         return percentileElement<Result>(sorted[discretePercentilePosition(sorted.size(), percentile)]);
     };
 
@@ -8372,7 +8232,7 @@ void NLExecutor::runPercentileDisc(NLExecutionContext*, NLFunctionData* data) {
 template void NLExecutor::runPercentileDisc<std::optional<types::Int64::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
 template void NLExecutor::runPercentileDisc<std::optional<types::UInt64::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
 template void NLExecutor::runPercentileDisc<std::optional<types::Double::Primitive>>(NLExecutionContext* context, NLFunctionData* data);
-template void NLExecutor::runPercentileDisc<ListElementView>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runPercentileDisc<CellView>(NLExecutionContext* context, NLFunctionData* data);
 
 void NLExecutor::runMakeMap(NLExecutionContext*, NLFunctionData* data) {
     const NLMakeMapData* makeMap = static_cast<NLMakeMapData*>(data);
@@ -8921,18 +8781,14 @@ NLKeyedReadFunction NLExecutor::selectKeyedRead(const Column* input) {
         return &mapRead<ColumnConst<MapView>>;
     } else if (kind == ColumnConst<std::optional<MapView>>::staticKind()) {
         return &mapRead<ColumnConst<std::optional<MapView>>>;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
-        return &readTaggedKeyed<ColumnVector<ListElementView>>;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
-        return &readTaggedKeyed<ColumnOptVector<ListElementView>>;
-    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
-        return &readTaggedKeyed<ColumnConst<ListElementView>>;
-    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
-        return &readTaggedKeyed<ColumnConst<std::optional<ListElementView>>>;
-    } else if (kind == ColumnVector<MapEntryView>::staticKind()) {
-        return &readTaggedKeyed<ColumnVector<MapEntryView>>;
-    } else if (kind == ColumnConst<MapEntryView>::staticKind()) {
-        return &readTaggedKeyed<ColumnConst<MapEntryView>>;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &readTaggedKeyed<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &readTaggedKeyed<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &readTaggedKeyed<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &readTaggedKeyed<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a map key read reads a map column, or a column of tagged cells");
@@ -8967,14 +8823,14 @@ NLStringArgumentRead NLExecutor::selectStringArgumentRead(const Column* input) {
         return &stringValueArgument<ColumnConst<types::String::Primitive>>;
     } else if (kind == ColumnConst<std::optional<types::String::Primitive>>::staticKind()) {
         return &stringValueArgument<ColumnConst<std::optional<types::String::Primitive>>>;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
-        return &cellStringArgument<ColumnVector<ListElementView>>;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
-        return &cellStringArgument<ColumnOptVector<ListElementView>>;
-    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
-        return &cellStringArgument<ColumnConst<ListElementView>>;
-    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
-        return &cellStringArgument<ColumnConst<std::optional<ListElementView>>>;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &cellStringArgument<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &cellStringArgument<ColumnOptVector<CellView>>;
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
+        return &cellStringArgument<ColumnConst<CellView>>;
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
+        return &cellStringArgument<ColumnConst<std::optional<CellView>>>;
     }
 
     throw IRException("a string function reads a string argument out of a nullable string column, or a column of tagged cells");
@@ -8987,19 +8843,18 @@ NLIntegerArgumentRead NLExecutor::selectIntegerArgumentRead(const Column* input)
         return &integerValueArgument;
     } else if (kind == ColumnOptVector<types::UInt64::Primitive>::staticKind()) {
         return &unsignedValueArgument;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
-        return &cellIntegerArgument<ColumnVector<ListElementView>>;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
-        return &cellIntegerArgument<ColumnOptVector<ListElementView>>;
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
+        return &cellIntegerArgument<ColumnVector<CellView>>;
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
+        return &cellIntegerArgument<ColumnOptVector<CellView>>;
     }
 
     throw IRException("a string function reads an integer argument out of a nullable integer column, or a column of tagged cells");
 }
 
-// Row r of the result views the entry row r's map already holds under the key, so the
-// read copies nothing. A row holding no map, and a map holding no such key, read back as
-// an entry under the same key whose tag is null: every row of the column names the key
-// the query read it under, so one entry per chunk serves all of them.
+// Row r of the result views the value row r's map already holds under the key, so the read
+// copies nothing. A row holding no map, and a map holding no such key, read back as a null
+// cell.
 void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLStaticMapKeyData* mapKey = static_cast<NLStaticMapKeyData*>(data);
 
@@ -9007,78 +8862,41 @@ void NLExecutor::runStaticMapKey(NLExecutionContext* context, NLFunctionData* da
     const NLKeyedReadFunction read = mapKey->getKeyedRead();
     const std::string_view key = mapKey->getKey();
 
-    const MapEntryView absent = mapKey->getAbsentEntry();
-
     NLStepBuffers* const stepBuffers = mapKey->getStepBuffers();
     stepBuffers->clear();
 
     MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
     NLEntityProperties properties(context, &stepBuffers->valueStore());
 
-    const auto entryAt = [input, read, key, absent, &properties, &mapBuffer](size_t row) {
+    const auto valueAt = [input, read, key, &properties, &mapBuffer](size_t row) {
         MapEntryView entry;
         if (!findKeyedEntry(read(input, row), key, properties, mapBuffer, entry)) {
-            return absent;
+            return CellView::nullElement();
         }
 
-        return entry;
+        return entry.getValue();
     };
 
     Column* result = mapKey->getResult();
 
-    if (result->getKind() == ColumnConst<MapEntryView>::staticKind()) {
-        *static_cast<ColumnConst<MapEntryView>*>(result) = entryAt(0);
+    if (result->getKind() == ColumnConst<CellView>::staticKind()) {
+        static_cast<ColumnConst<CellView>*>(result)->set(valueAt(0));
         return;
     }
 
-    std::vector<MapEntryView>& outputRaw = static_cast<ColumnVector<MapEntryView>*>(result)->getRaw();
+    std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(result)->getRaw();
     const size_t rowCount = input->size();
 
     outputRaw.resize(rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
-        outputRaw[row] = entryAt(row);
+        outputRaw[row] = valueAt(row);
     }
 }
 
-// The values are copied into the step's list buffer as one list, whose elements are the cells
-void NLExecutor::runMapEntryValue(NLExecutionContext*, NLFunctionData* data) {
-    NLMapEntryValueData* entryValue = static_cast<NLMapEntryValueData*>(data);
-
-    const Column* input = entryValue->getInput();
-    Column* result = entryValue->getResult();
-
-    NLStepBuffers* const stepBuffers = entryValue->getStepBuffers();
-    stepBuffers->clear();
-
-    std::vector<QueryListBuffer::ListItemVariant>& items = entryValue->getItems();
-    items.clear();
-
-    if (result->getKind() == ColumnConst<ListElementView>::staticKind()) {
-        const ColumnConst<MapEntryView>* constant = static_cast<const ColumnConst<MapEntryView>*>(input);
-        items.push_back(entryItem(constant->getRaw()));
-
-        const ListView cells = stepBuffers->listBuffer().insert(items);
-        static_cast<ColumnConst<ListElementView>*>(result)->set(cells.front());
-        return;
-    }
-
-    const std::vector<MapEntryView>& entries = static_cast<const ColumnVector<MapEntryView>*>(input)->getRaw();
-
-    items.resize(entries.size());
-    std::ranges::transform(entries, items.begin(), entryItem);
-
-    const ListView cells = stepBuffers->listBuffer().insert(items);
-    std::vector<ListElementView>& resultRaw = static_cast<ColumnVector<ListElementView>*>(result)->getRaw();
-
-    resultRaw.resize(entries.size());
-    std::ranges::copy(cells.elements(), resultRaw.begin());
-}
-
-// Row r of the result views the entry row r's map already holds under row r's key, so the
-// read copies nothing. A map holding no such key is answered by an entry written under that
-// row's key and tagged null, so the reader sees the key it asked for; a row holding no key
-// at all has none to name, and reads the one keyless entry translation wrote.
+// Row r of the result views the value row r's map already holds under row r's key, so the
+// read copies nothing. A map holding no such key, and a row holding no key, read back as a
+// null cell.
 void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* data) {
     const NLDynamicMapKeyData* dynamicMapKey = static_cast<NLDynamicMapKeyData*>(data);
 
@@ -9088,34 +8906,27 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* d
     const NLKeyedReadFunction readKeyed = dynamicMapKey->getKeyedRead();
     const NLStringReadFunction readKey = dynamicMapKey->getKeyRead();
 
-    const MapEntryView keyless = dynamicMapKey->getAbsentEntry();
     NLStepBuffers* const stepBuffers = dynamicMapKey->getStepBuffers();
     stepBuffers->clear();
 
     MapBuffer<>& mapBuffer = stepBuffers->mapBuffer();
     NLEntityProperties properties(context, &stepBuffers->valueStore());
 
-    const auto entryAt = [input, keyColumn, readKeyed, readKey, keyless, &properties, &mapBuffer](size_t row) {
+    const auto valueAt = [input, keyColumn, readKeyed, readKey, &properties, &mapBuffer](size_t row) {
         const std::optional<types::String::Primitive> key = readKey(keyColumn, row);
-        if (!key) {
-            return keyless;
-        }
 
         MapEntryView entry;
-        if (findKeyedEntry(readKeyed(input, row), *key, properties, mapBuffer, entry)) {
-            return entry;
+        if (!key || !findKeyedEntry(readKeyed(input, row), *key, properties, mapBuffer, entry)) {
+            return CellView::nullElement();
         }
 
-        MapWriteCursor absentCursor = mapBuffer.reserveMap(1, sizeof(PropertyNull));
-        absentCursor.writeKey(*key);
-
-        return absentCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+        return entry.getValue();
     };
 
     Column* result = dynamicMapKey->getResult();
 
-    if (result->getKind() == ColumnConst<MapEntryView>::staticKind()) {
-        *static_cast<ColumnConst<MapEntryView>*>(result) = entryAt(0);
+    if (result->getKind() == ColumnConst<CellView>::staticKind()) {
+        static_cast<ColumnConst<CellView>*>(result)->set(valueAt(0));
         return;
     }
 
@@ -9128,12 +8939,12 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* d
     bioassert(keyRows == rowCount || keyRows == 1,
               "Key column of a dynamic map key is not row-aligned with its map column.");
 
-    std::vector<MapEntryView>& outputRaw = static_cast<ColumnVector<MapEntryView>*>(result)->getRaw();
+    std::vector<CellView>& outputRaw = static_cast<ColumnVector<CellView>*>(result)->getRaw();
 
     outputRaw.resize(rowCount);
 
     for (size_t row = 0; row < rowCount; row++) {
-        outputRaw[row] = entryAt(row);
+        outputRaw[row] = valueAt(row);
     }
 }
 
@@ -9148,13 +8959,13 @@ NLListReadFunction NLExecutor::selectListRead(const Column* input) {
         return &constListRead;
     } else if (kind == ColumnConst<std::optional<ListView>>::staticKind()) {
         return &optConstListRead;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &taggedListRead;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
         return &optTaggedListRead;
-    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
         return &constTaggedListRead;
-    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
         return &optConstTaggedListRead;
     }
 
@@ -9304,9 +9115,9 @@ NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, 
         return &caseTestNever;
     } else if (condition->getContainerKind() == ContainerKind::code<ColumnMask>()) {
         return &caseTestMask;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &caseTestTaggedCell;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
         return &caseTestOptTaggedCell;
     }
 
@@ -9333,9 +9144,9 @@ NLUnaryFn NLExecutor::selectIsNotTrue(const Column* operand, bool untypedNull, L
         return &applyIsNotTrueOnMask;
     } else if (kind == ColumnOptMask::staticKind()) {
         return &applyIsNotTrueOnOptMask;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
         return &applyIsNotTrueOnTaggedCells;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
         return &applyIsNotTrueOnOptTaggedCells;
     }
 
@@ -9400,16 +9211,16 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
     } else if (kind == ColumnOptMask::staticKind()) {
         result = memory->alloc<ColumnOptMask>();
         return &applyNotOnOptMask;
-    } else if (kind == ColumnVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnVector<CellView>::staticKind()) {
         result = memory->alloc<ColumnOptMask>();
         return &applyNotOnTaggedCells;
-    } else if (kind == ColumnOptVector<ListElementView>::staticKind()) {
+    } else if (kind == ColumnOptVector<CellView>::staticKind()) {
         result = memory->alloc<ColumnOptMask>();
         return &applyNotOnOptTaggedCells;
-    } else if (kind == ColumnConst<ListElementView>::staticKind()) {
+    } else if (kind == ColumnConst<CellView>::staticKind()) {
         result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
         return &applyNotOnConstTaggedCell;
-    } else if (kind == ColumnConst<std::optional<ListElementView>>::staticKind()) {
+    } else if (kind == ColumnConst<std::optional<CellView>>::staticKind()) {
         result = memory->alloc<ColumnConst<std::optional<CustomBool>>>();
         return &applyNotOnOptConstTaggedCell;
     }
@@ -9722,9 +9533,7 @@ NLUnaryFunctionKernel NLExecutor::selectKeys(const Column* input, bool inputNull
     } else if (columnHoldsElement<EdgeID>(input)) {
         return selectFunction<NLKeysFunction<EdgeID>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedKeysFunction<ListElementView>>(input, inputNullable, memory, result);
-    } else if (readsMapValues(input)) {
-        return selectMapValueFunction<NLTaggedKeysFunction<MapEntryView>>(input, memory, result);
+        return selectTaggedCellFunction<NLTaggedKeysFunction>(input, inputNullable, memory, result);
     } else if (columnHoldsElement<MapView>(input)) {
         return selectFunction<MapKeysFunction>(input, inputNullable, memory, result);
     }
@@ -9736,9 +9545,7 @@ NLUnaryFunctionKernel NLExecutor::selectLabels(const Column* input, bool inputNu
     if (columnHoldsElement<NodeID>(input)) {
         return selectFunction<LabelsFunction>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedLabelsFunction<ListElementView>>(input, inputNullable, memory, result);
-    } else if (readsMapValues(input)) {
-        return selectMapValueFunction<NLTaggedLabelsFunction<MapEntryView>>(input, memory, result);
+        return selectTaggedCellFunction<NLTaggedLabelsFunction>(input, inputNullable, memory, result);
     }
 
     throw IRException("labels() reads a node column");
@@ -9748,9 +9555,7 @@ NLUnaryFunctionKernel NLExecutor::selectEdgeType(const Column* input, bool input
     if (columnHoldsElement<EdgeID>(input)) {
         return selectFunction<EdgeTypesFunction>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedEdgeTypeFunction<ListElementView>>(input, inputNullable, memory, result);
-    } else if (readsMapValues(input)) {
-        return selectMapValueFunction<NLTaggedEdgeTypeFunction<MapEntryView>>(input, memory, result);
+        return selectTaggedCellFunction<NLTaggedEdgeTypeFunction>(input, inputNullable, memory, result);
     }
 
     throw IRException("type() reads a relationship column");
@@ -9762,9 +9567,7 @@ NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inp
     } else if (columnHoldsElement<EdgeID>(input)) {
         return selectFunction<NLPropertiesFunction<EdgeID>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
-        return selectTaggedCellFunction<NLTaggedPropertiesFunction<ListElementView>>(input, inputNullable, memory, result);
-    } else if (readsMapValues(input)) {
-        return selectMapValueFunction<NLTaggedPropertiesFunction<MapEntryView>>(input, memory, result);
+        return selectTaggedCellFunction<NLTaggedPropertiesFunction>(input, inputNullable, memory, result);
     }
 
     throw IRException("properties() reads a node, a relationship or a map column");
@@ -11056,16 +10859,16 @@ void NLExecutor::selectCollectOptListHandlers(bool distinctValues,
 void NLExecutor::selectCollectTaggedHandlers(bool distinctValues,
                                              NLCollectFoldFunction& fold,
                                              NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectTaggedFoldDistinct<ListElementView>
-                          : &collectTaggedFold<ListElementView>;
+    fold = distinctValues ? &collectTaggedFoldDistinct<CellView>
+                          : &collectTaggedFold<CellView>;
     listEmit = &collectTaggedListEmit;
 }
 
 void NLExecutor::selectCollectOptTaggedHandlers(bool distinctValues,
                                                 NLCollectFoldFunction& fold,
                                                 NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectTaggedFoldDistinct<std::optional<ListElementView>>
-                          : &collectTaggedFold<std::optional<ListElementView>>;
+    fold = distinctValues ? &collectTaggedFoldDistinct<std::optional<CellView>>
+                          : &collectTaggedFold<std::optional<CellView>>;
     listEmit = &collectTaggedListEmit;
 }
 
@@ -11274,11 +11077,11 @@ NLFillNullFunction NLExecutor::selectOptListFillNull() {
     return &fillNullColumn<std::optional<ListView>>;
 }
 
-NLFillNullFunction NLExecutor::selectOptListElementFillNull() {
-    return &fillNullColumn<std::optional<ListElementView>>;
+NLFillNullFunction NLExecutor::selectOptCellFillNull() {
+    return &fillNullColumn<std::optional<CellView>>;
 }
 
-NLFillNullFunction NLExecutor::selectListElementFillNull() {
+NLFillNullFunction NLExecutor::selectCellFillNull() {
     return &resetTaggedCells;
 }
 
@@ -11326,7 +11129,7 @@ NLFetchNodesFunction NLExecutor::selectIntegerFetchFunction(ValueType valueType,
 }
 
 NLFetchNodesFunction NLExecutor::selectTaggedFetchFunction(bool nullable) {
-    return nullable ? &fetchNamedNodes<std::optional<ListElementView>> : &fetchNamedNodes<ListElementView>;
+    return nullable ? &fetchNamedNodes<std::optional<CellView>> : &fetchNamedNodes<CellView>;
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
@@ -11386,23 +11189,23 @@ NLBroadcastConstantFunction NLExecutor::selectConstantMapBroadcast() {
     return &broadcastConstantViewColumn<MapView>;
 }
 
-NLBroadcastConstantFunction NLExecutor::selectConstantMapEntryBroadcast() {
-    return &broadcastConstantViewColumn<MapEntryView>;
+NLBroadcastConstantFunction NLExecutor::selectConstantCellBroadcast() {
+    return &broadcastConstantViewColumn<CellView>;
 }
 
-NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
+NLBroadcastConstantFunction NLExecutor::selectOptCellBroadcast(const Column* value) {
     const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
-    const bool holdsOptional = value->getInternalKind() == InternalKind::code<std::optional<ListElementView>>();
+    const bool holdsOptional = value->getInternalKind() == InternalKind::code<std::optional<CellView>>();
 
     // A tagged cell carries its own null, so head() and last() answer with a plain cell rather
     // than an optional even where the chunk it is laid out over is a nullable one.
     if (!isConst) {
-        return &broadcastSingleRowColumn<ListElementView>;
+        return &broadcastSingleRowColumn<CellView>;
     } else if (holdsOptional) {
-        return &broadcastNullableConstantColumn<ListElementView>;
+        return &broadcastNullableConstantColumn<CellView>;
     }
 
-    return &broadcastConstantColumn<ListElementView>;
+    return &broadcastConstantColumn<CellView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {
@@ -11455,11 +11258,10 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     selectForElement.template operator()<EdgeID>();
     selectForElement.template operator()<ListView>();
     selectForElement.template operator()<std::optional<ListView>>();
-    selectForElement.template operator()<ListElementView>();
-    selectForElement.template operator()<std::optional<ListElementView>>();
+    selectForElement.template operator()<CellView>();
+    selectForElement.template operator()<std::optional<CellView>>();
     selectForElement.template operator()<MapView>();
     selectForElement.template operator()<std::optional<MapView>>();
-    selectForElement.template operator()<MapEntryView>();
 
     if (!read) {
         throw IRException(fmt::format("nl.row_constant can not read a {} as a constant", row->getTypeName()));
@@ -11468,102 +11270,78 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     return read;
 }
 
-// A !storage.any chunk is a ColumnVector<ListElementView> of fixed-width tagged
+// A !storage.any chunk is a ColumnVector<CellView> of fixed-width tagged
 // scalars, so the same broadcast templates carry the tag along with the value.
-NLBroadcastFunction NLExecutor::selectListElementBlockRepeatFunction() {
-    return &blockRepeatColumn<ListElementView>;
+NLBroadcastFunction NLExecutor::selectCellBlockRepeatFunction() {
+    return &blockRepeatColumn<CellView>;
 }
 
-NLBroadcastFunction NLExecutor::selectListElementTileFunction() {
-    return &tileColumn<ListElementView>;
+NLBroadcastFunction NLExecutor::selectCellTileFunction() {
+    return &tileColumn<CellView>;
 }
 
-NLAppendFunction NLExecutor::selectListElementAppendFunction() {
-    return &appendColumn<ListElementView>;
+NLAppendFunction NLExecutor::selectCellAppendFunction() {
+    return &appendColumn<CellView>;
 }
 
-NLGatherFunction NLExecutor::selectListElementGatherFunction() {
-    return &gatherColumn<ListElementView>;
+NLGatherFunction NLExecutor::selectCellGatherFunction() {
+    return &gatherColumn<CellView>;
 }
 
-NLAppendFunction NLExecutor::selectOptListElementAppendFunction() {
-    return &appendColumn<std::optional<ListElementView>>;
+NLAppendFunction NLExecutor::selectOptCellAppendFunction() {
+    return &appendColumn<std::optional<CellView>>;
 }
 
-NLGatherFunction NLExecutor::selectOptListElementGatherFunction() {
-    return &gatherColumn<std::optional<ListElementView>>;
+NLGatherFunction NLExecutor::selectOptCellGatherFunction() {
+    return &gatherColumn<std::optional<CellView>>;
 }
 
-NLCompareFunction NLExecutor::selectListElementCompareFunction() {
-    return &compareListElementColumn;
+NLCompareFunction NLExecutor::selectCellCompareFunction() {
+    return &compareCellColumn;
 }
 
-NLKeyAppendFunction NLExecutor::selectListElementKeyAppendFunction() {
-    return &distinctKeyAppendListElementColumn;
+NLKeyAppendFunction NLExecutor::selectCellKeyAppendFunction() {
+    return &distinctKeyAppendCellColumn;
 }
 
-NLCountFunction NLExecutor::selectListElementCountFunction() {
+NLCountFunction NLExecutor::selectCellCountFunction() {
     return &countNonNullElementsColumn;
 }
 
-NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {
-    return &groupGatherAppendColumn<ListElementView>;
+NLGroupKeyGatherFunction NLExecutor::selectCellGroupKeyGatherFunction() {
+    return &groupGatherAppendColumn<CellView>;
 }
 
-NLCopyFunction NLExecutor::selectListElementCopyFunction() {
-    return &copyRangeColumn<ListElementView>;
+NLCopyFunction NLExecutor::selectCellCopyFunction() {
+    return &copyRangeColumn<CellView>;
 }
 
-// A map_element chunk is a ColumnVector<MapEntryView> of fixed-width entries, so the
-// same templates carry each entry's key and tag along with its value. Only the passing
-// -through families are selected here: ordering, keying and joining a map value are not
-// supported, and their selectors reject it rather than silently misreading the entry.
-NLBroadcastFunction NLExecutor::selectMapEntryBlockRepeatFunction() {
-    return &blockRepeatColumn<MapEntryView>;
+NLBroadcastFunction NLExecutor::selectOptCellBlockRepeatFunction() {
+    return &blockRepeatColumn<std::optional<CellView>>;
 }
 
-NLBroadcastFunction NLExecutor::selectMapEntryTileFunction() {
-    return &tileColumn<MapEntryView>;
+NLBroadcastFunction NLExecutor::selectOptCellTileFunction() {
+    return &tileColumn<std::optional<CellView>>;
 }
 
-NLAppendFunction NLExecutor::selectMapEntryAppendFunction() {
-    return &appendColumn<MapEntryView>;
+NLCompareFunction NLExecutor::selectOptCellCompareFunction() {
+    return &compareOptCellColumn;
 }
 
-NLGatherFunction NLExecutor::selectMapEntryGatherFunction() {
-    return &gatherColumn<MapEntryView>;
+NLKeyAppendFunction NLExecutor::selectOptCellKeyAppendFunction() {
+    return &distinctKeyAppendOptCellColumn;
 }
 
-NLCopyFunction NLExecutor::selectMapEntryCopyFunction() {
-    return &copyRangeColumn<MapEntryView>;
-}
-
-NLBroadcastFunction NLExecutor::selectOptListElementBlockRepeatFunction() {
-    return &blockRepeatColumn<std::optional<ListElementView>>;
-}
-
-NLBroadcastFunction NLExecutor::selectOptListElementTileFunction() {
-    return &tileColumn<std::optional<ListElementView>>;
-}
-
-NLCompareFunction NLExecutor::selectOptListElementCompareFunction() {
-    return &compareOptListElementColumn;
-}
-
-NLKeyAppendFunction NLExecutor::selectOptListElementKeyAppendFunction() {
-    return &distinctKeyAppendOptListElementColumn;
-}
-
-NLCountFunction NLExecutor::selectOptListElementCountFunction() {
+NLCountFunction NLExecutor::selectOptCellCountFunction() {
     return &countPresentElementsColumn;
 }
 
-NLGroupKeyGatherFunction NLExecutor::selectOptListElementGroupKeyGatherFunction() {
-    return &groupGatherAppendColumn<std::optional<ListElementView>>;
+NLGroupKeyGatherFunction NLExecutor::selectOptCellGroupKeyGatherFunction() {
+    return &groupGatherAppendColumn<std::optional<CellView>>;
 }
 
-NLCopyFunction NLExecutor::selectOptListElementCopyFunction() {
-    return &copyRangeColumn<std::optional<ListElementView>>;
+NLCopyFunction NLExecutor::selectOptCellCopyFunction() {
+    return &copyRangeColumn<std::optional<CellView>>;
 }
 
 NLCompareFunction NLExecutor::selectListCompareFunction() {
@@ -11986,8 +11764,8 @@ NLKeyIsMatchableFunction NLExecutor::selectPlainKeyMatchableFunction(ValueType v
     return &everyRowMatchable;
 }
 
-NLKeyIsMatchableFunction NLExecutor::selectListElementKeyMatchableFunction() {
-    return &listElementColumnRowMatchable;
+NLKeyIsMatchableFunction NLExecutor::selectCellKeyMatchableFunction() {
+    return &cellColumnRowMatchable;
 }
 
 NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
@@ -12095,8 +11873,8 @@ NLJoinKeyFunctions NLExecutor::selectPlainJoinKeyFunctions(ValueType valueType) 
     }
 }
 
-NLJoinKeyFunctions NLExecutor::selectListElementJoinKeyFunctions() {
-    return {&hashListElementKeyColumn, &keyEqualColumn<ListElementView>};
+NLJoinKeyFunctions NLExecutor::selectCellJoinKeyFunctions() {
+    return {&hashCellKeyColumn, &keyEqualColumn<CellView>};
 }
 
 // An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,
@@ -12218,19 +11996,19 @@ NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, 
 }
 
 NLAggregateUpdateFunction NLExecutor::selectTaggedAggregateUpdate(AggregateKind kind) {
-    return taggedAggregateUpdateFor<ListElementView>(kind);
+    return taggedAggregateUpdateFor<CellView>(kind);
 }
 
 NLAggregateUpdateFunction NLExecutor::selectOptTaggedAggregateUpdate(AggregateKind kind) {
-    return taggedAggregateUpdateFor<std::optional<ListElementView>>(kind);
+    return taggedAggregateUpdateFor<std::optional<CellView>>(kind);
 }
 
 NLAggregateResetFunction NLExecutor::selectTaggedAggregateReset() {
-    return &aggregateResetNull<ListElementView>;
+    return &aggregateResetNull<CellView>;
 }
 
 NLAggregateResultFunction NLExecutor::selectTaggedAggregateResult() {
-    return &aggregateResultCopy<ListElementView>;
+    return &aggregateResultCopy<CellView>;
 }
 
 NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, ValueType resultType) {
@@ -12310,19 +12088,19 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAggregateKind kind) {
-    return taggedGroupAggregateFoldFor<ListElementView>(kind);
+    return taggedGroupAggregateFoldFor<CellView>(kind);
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectOptTaggedGroupAggregateFold(GroupAggregateKind kind) {
-    return taggedGroupAggregateFoldFor<std::optional<ListElementView>>(kind);
+    return taggedGroupAggregateFoldFor<std::optional<CellView>>(kind);
 }
 
 NLGroupAggregateGrowFunction NLExecutor::selectTaggedGroupAggregateGrow() {
-    return &groupGrowNull<ListElementView>;
+    return &groupGrowNull<CellView>;
 }
 
 NLGroupAggregateEmitFunction NLExecutor::selectTaggedGroupAggregateEmit() {
-    return &groupEmitCopy<ListElementView>;
+    return &groupEmitCopy<CellView>;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType) {
@@ -12392,20 +12170,20 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
     return nullptr;
 }
 
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountListElementFold() {
-    return &groupFoldCountPresentListElement<ListElementView>;
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountCellFold() {
+    return &groupFoldCountPresentCell<CellView>;
 }
 
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptListElementFold() {
-    return &groupFoldCountPresentListElement<std::optional<ListElementView>>;
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptCellFold() {
+    return &groupFoldCountPresentCell<std::optional<CellView>>;
 }
 
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctListElementFold() {
-    return &groupFoldCountDistinctListElement<ListElementView>;
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctCellFold() {
+    return &groupFoldCountDistinctCell<CellView>;
 }
 
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptListElementFold() {
-    return &groupFoldCountDistinctListElement<std::optional<ListElementView>>;
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptCellFold() {
+    return &groupFoldCountDistinctCell<std::optional<CellView>>;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {

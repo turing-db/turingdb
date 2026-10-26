@@ -3,10 +3,9 @@
 #include "Endpoints.h"
 #include "HTTP.h"
 #include "HTTPWriter.h"
-#include "list/ListUtils.h"
+#include "CellUtils.h"
 #include "list/ListView.h"
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyTypeMap.h"
@@ -334,12 +333,12 @@ public:
         write(std::to_string(v.getValue()));
     }
 
-    void writeValue(ListElementView element) {
-        const auto writeTyped = [this]<typename T>(const ListElementView view) {
+    void writeValue(CellView element) {
+        const auto writeTyped = [this]<typename T>(const CellView view) {
             this->writeValue(view.getAs<T>());
         };
 
-        const ListTagDispatcher dispatcher {element.getTag()};
+        const CellTagDispatcher dispatcher {element.getTag()};
         dispatcher.execute(writeTyped, element);
     }
 
@@ -347,7 +346,7 @@ public:
         write('[');
 
         bool first = true;
-        for (const ListElementView element : list) {
+        for (const CellView element : list) {
             if (!first) {
                 write(',');
             }
@@ -362,11 +361,7 @@ public:
         writeValue(entry.getKey());
         write(':');
 
-        const auto writeTyped = [this]<typename T>(const MapEntryView view) {
-            this->writeValue(view.getValueAs<T>());
-        };
-
-        dispatchMapEntry(writeTyped, entry);
+        writeValue(entry.getValue());
     }
 
     void writeValue(MapView map) {

@@ -21,7 +21,7 @@ const TYPE_UINT64 = 0;
 const TYPE_DOUBLE = 2;
 const TYPE_STRING = 3;
 const TYPE_LIST_VIEW = 6;
-const TYPE_LIST_ELEMENT_VIEW = 8;
+const TYPE_CELL_VIEW = 8;
 const TYPE_NODE_ID = 9;
 const TYPE_MAP_VIEW = 18;
 const TYPE_GRAPH_PATH = 22;
@@ -31,19 +31,13 @@ const ENCODING_OPTIONAL_VECTOR = 1;
 const ENCODING_CONSTANT = 2;
 
 const TAG_INT = 0;
+const TAG_DOUBLE = 2;
 const TAG_BOOL = 3;
 const TAG_STRING = 4;
 const TAG_LIST_VIEW = 6;
+const TAG_NULL = 7;
+const TAG_NODE_ID = 8;
 const TAG_MAP_VIEW = 11;
-
-// A map value carries MapBufferTypeTag, whose ordinals differ from the list tags past 6
-const MAP_TAG_INT = 0;
-const MAP_TAG_DOUBLE = 2;
-const MAP_TAG_STRING = 4;
-const MAP_TAG_LIST_VIEW = 6;
-const MAP_TAG_MAP_VIEW = 7;
-const MAP_TAG_NULL = 8;
-const MAP_TAG_NODE_ID = 9;
 
 const encoder = new TextEncoder();
 
@@ -275,7 +269,7 @@ function makeMapDataframe(split) {
     const header = makeHeader([
         { name: "person", typeCode: TYPE_MAP_VIEW, encoding: ENCODING_VECTOR },
         { name: "mixed", typeCode: TYPE_LIST_VIEW, encoding: ENCODING_VECTOR },
-        { name: "row", typeCode: TYPE_LIST_ELEMENT_VIEW, encoding: ENCODING_VECTOR },
+        { name: "row", typeCode: TYPE_CELL_VIEW, encoding: ENCODING_VECTOR },
         { name: "tags", typeCode: TYPE_MAP_VIEW, encoding: ENCODING_CONSTANT },
     ]);
 
@@ -287,11 +281,11 @@ function makeMapDataframe(split) {
     chunk.u32(2);
     chunk.u32(24);
     chunk.splitString("age", 1);
-    chunk.u8(MAP_TAG_INT);
+    chunk.u8(TAG_INT);
     chunk.i64(32n);
     chunk.string("name");
     chunk.mark();
-    chunk.u8(MAP_TAG_STRING);
+    chunk.u8(TAG_STRING);
     chunk.splitString("remy", 2);
 
     chunk.u32(0);
@@ -301,18 +295,18 @@ function makeMapDataframe(split) {
     chunk.u32(40);
     chunk.mark();
     chunk.string("id");
-    chunk.u8(MAP_TAG_NODE_ID);
+    chunk.u8(TAG_NODE_ID);
     chunk.u64(9n);
     chunk.string("inner");
-    chunk.u8(MAP_TAG_MAP_VIEW);
+    chunk.u8(TAG_MAP_VIEW);
     chunk.u32(1);
     chunk.u32(8);
     chunk.string("a");
     chunk.mark();
-    chunk.u8(MAP_TAG_INT);
+    chunk.u8(TAG_INT);
     chunk.i64(1n);
     chunk.string("xs");
-    chunk.u8(MAP_TAG_LIST_VIEW);
+    chunk.u8(TAG_LIST_VIEW);
     chunk.u32(1);
     chunk.u32(1);
     chunk.u8(TAG_BOOL);
@@ -327,7 +321,7 @@ function makeMapDataframe(split) {
     chunk.u32(1);
     chunk.u32(8);
     chunk.string("a");
-    chunk.u8(MAP_TAG_INT);
+    chunk.u8(TAG_INT);
     chunk.i64(1n);
     chunk.mark();
     chunk.u8(TAG_INT);
@@ -342,7 +336,7 @@ function makeMapDataframe(split) {
     chunk.u32(1);
     chunk.u32(8);
     chunk.string("__proto__");
-    chunk.u8(MAP_TAG_INT);
+    chunk.u8(TAG_INT);
     chunk.i64(5n);
 
     // row: one element per row - {b: 2}, 7, {c: null} - the path that records each row's view
@@ -352,7 +346,7 @@ function makeMapDataframe(split) {
     chunk.u32(1);
     chunk.u32(8);
     chunk.string("b");
-    chunk.u8(MAP_TAG_INT);
+    chunk.u8(TAG_INT);
     chunk.i64(2n);
     chunk.mark();
     chunk.u8(TAG_INT);
@@ -361,17 +355,17 @@ function makeMapDataframe(split) {
     chunk.u32(1);
     chunk.u32(1);
     chunk.string("c");
-    chunk.u8(MAP_TAG_NULL);
+    chunk.u8(TAG_NULL);
     chunk.u8(0);
 
     // tags: {k: "v", n: 1.5} - a constant has no row count
     chunk.u32(2);
     chunk.u32(24);
     chunk.string("k");
-    chunk.u8(MAP_TAG_STRING);
+    chunk.u8(TAG_STRING);
     chunk.string("v");
     chunk.string("n");
-    chunk.u8(MAP_TAG_DOUBLE);
+    chunk.u8(TAG_DOUBLE);
     chunk.f64(1.5);
 
     return [frame(MESSAGE_CHUNK_HEADER, header), ...chunkFrames(chunk, split)];
@@ -520,7 +514,7 @@ async function testRaggedQueryData(module) {
     chunk.u32(1);
     chunk.u32(8);
     chunk.string("k");
-    chunk.u8(MAP_TAG_INT);
+    chunk.u8(TAG_INT);
     chunk.i64(1n);
 
     chunk.u32(3);

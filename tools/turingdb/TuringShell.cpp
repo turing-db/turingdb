@@ -50,14 +50,12 @@
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
 
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
-#include "list/ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 
 #include "versioning/ChangeResult.h"
 #include "versioning/CommitBuilder.h"
@@ -599,10 +597,10 @@ void asString(std::string& out, std::span<const float> embedding) {
     out += "]";
 }
 
-void asString(std::string& out, const ListElementView v);
+void asString(std::string& out, const CellView v);
 
 // Forward declared so the generic and optional overloads below resolve a list or a map to
-// this one, and so the ListElementView overload sees them: an element may be either
+// this one, and so the CellView overload sees them: an element may be either
 void asString(std::string& out, ListView lv);
 void asString(std::string& out, MapView mv);
 
@@ -633,14 +631,14 @@ void asString(std::string& out, const std::optional<T>& value) {
     }
 }
 
-void asString(std::string& out, const ListElementView v) {
-    const auto writeTyped = [&out]<typename T>(const ListElementView ele) {
+void asString(std::string& out, const CellView v) {
+    const auto writeTyped = [&out]<typename T>(const CellView ele) {
         const T typed = ele.getAs<T>();
         asString(out, typed);
     };
 
-    const ListBufferTypeTag tag = v.getTag();
-    ListTagDispatcher writer {._tag = tag};
+    const CellTag tag = v.getTag();
+    CellTagDispatcher writer {._tag = tag};
     writer.execute(writeTyped, v);
 }
 
@@ -652,10 +650,10 @@ void asString(std::string& out, const ListView lv) {
 
     out += '[';
 
-    const ListElementView fst = lv.front();
+    const CellView fst = lv.front();
     asString(out, fst);
 
-    for (const ListElementView ele : lv.elements() | rv::drop(1)) {
+    for (const CellView ele : lv.elements() | rv::drop(1)) {
         out += ", ";
         asString(out, ele);
     }
@@ -663,22 +661,11 @@ void asString(std::string& out, const ListView lv) {
     out += ']';
 }
 
-// The value of one entry, which is what a map value column's cell is. The key is added by
-// entryAsString, for an entry read as a member of its map rather than alone.
-void asString(std::string& out, MapEntryView v) {
-    const auto writeTyped = [&out]<typename T>(const MapEntryView ele) {
-        const T typed = ele.getValueAs<T>();
-        asString(out, typed);
-    };
-
-    dispatchMapEntry(writeTyped, v);
-}
-
 void entryAsString(std::string& out, MapEntryView v) {
     out += v.getKey();
     out += " : ";
 
-    asString(out, v);
+    asString(out, v.getValue());
 }
 
 void asString(std::string& out, const MapView mv) {

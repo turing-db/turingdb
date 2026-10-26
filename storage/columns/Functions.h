@@ -17,7 +17,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 
 #include "list/ListBuffer.h"
 #include "map/MapView.h"
@@ -156,7 +156,7 @@ private:
 class TaggedStartNodeFunction : public EdgeEndsFunction {
 public:
     using EdgeEndsFunction::EdgeEndsFunction;
-    using ArgType = ListElementView;
+    using ArgType = CellView;
 
     ResultType operator()(ArgType cell) const;
     ResultType operator()(const std::optional<ArgType>& cell) const;
@@ -165,7 +165,7 @@ public:
 class TaggedEndNodeFunction : public EdgeEndsFunction {
 public:
     using EdgeEndsFunction::EdgeEndsFunction;
-    using ArgType = ListElementView;
+    using ArgType = CellView;
 
     ResultType operator()(ArgType cell) const;
     ResultType operator()(const std::optional<ArgType>& cell) const;
@@ -189,7 +189,7 @@ public:
 
 class TaggedIdFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
@@ -414,19 +414,19 @@ private:
 
 class TaggedDurationFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Duration::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
-        const ListBufferTypeTag tag = cell.getTag();
+        const CellTag tag = cell.getTag();
 
-        if (tag == ListBufferTypeTag::Int) {
+        if (tag == CellTag::Int) {
             return MicrosecondsToDurationFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
-        } else if (tag == ListBufferTypeTag::UInt) {
+        } else if (tag == CellTag::UInt) {
             return MicrosecondsToDurationFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
-        } else if (tag == ListBufferTypeTag::MapView) {
+        } else if (tag == CellTag::MapView) {
             return MapToDurationFunction {}(cell.getAs<MapView>());
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -445,15 +445,15 @@ public:
 template <DateTimePart part>
 class TaggedDateTimeComponentFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
-        const ListBufferTypeTag tag = cell.getTag();
+        const CellTag tag = cell.getTag();
 
-        if (tag == ListBufferTypeTag::DateTime) {
+        if (tag == CellTag::DateTime) {
             return DateTime::component(cell.getAs<types::DateTime::Primitive>(), part);
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -480,15 +480,15 @@ public:
 template <DurationPart part>
 class TaggedDurationComponentFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
-        const ListBufferTypeTag tag = cell.getTag();
+        const CellTag tag = cell.getTag();
 
-        if (tag == ListBufferTypeTag::Duration) {
+        if (tag == CellTag::Duration) {
             return Duration::component(cell.getAs<types::Duration::Primitive>(), part);
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -672,25 +672,25 @@ struct ConversionFunctorFor<ToBoolFunction, Argument> {
 [[noreturn]] void throwCellTypeError(std::string_view functionName, std::string_view expected);
 
 template <typename Result, typename Visit>
-Result visitNumberCell(const ListElementView cell, std::string_view functionName, Visit&& visit) {
-    const ListBufferTypeTag tag = cell.getTag();
+Result visitNumberCell(const CellView cell, std::string_view functionName, Visit&& visit) {
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::Int) {
+    if (tag == CellTag::Int) {
         return visit(cell.getAs<types::Int64::Primitive>());
-    } else if (tag == ListBufferTypeTag::UInt) {
+    } else if (tag == CellTag::UInt) {
         return visit(cell.getAs<types::UInt64::Primitive>());
-    } else if (tag == ListBufferTypeTag::Double) {
+    } else if (tag == CellTag::Double) {
         return visit(cell.getAs<types::Double::Primitive>());
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
     throwCellTypeError(functionName, "a number");
 }
 
-std::optional<types::String::Primitive> cellString(const ListElementView cell, std::string_view functionName);
+std::optional<types::String::Primitive> cellString(const CellView cell, std::string_view functionName);
 
-std::optional<types::Int64::Primitive> cellInteger(const ListElementView cell, std::string_view functionName);
+std::optional<types::Int64::Primitive> cellInteger(const CellView cell, std::string_view functionName);
 
 types::Int64::Primitive unsignedCharacterArgument(types::UInt64::Primitive value, std::string_view functionName);
 
@@ -720,7 +720,7 @@ private:
 template <typename StringFunctor, UnconvertibleCell OnUnconvertible>
 class TaggedConversionFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<TypeUtils::unwrap_optional_t<typename StringFunctor::ResultType>>;
 
     explicit TaggedConversionFunction(StringBuffer* stringBuffer)
@@ -736,28 +736,28 @@ public:
 
     ResultType operator()(const ArgType cell) {
         switch (cell.getTag()) {
-            case ListBufferTypeTag::Int:
+            case CellTag::Int:
                 return convert<types::Int64::Primitive>(cell, _fromInteger);
             break;
-            case ListBufferTypeTag::UInt:
+            case CellTag::UInt:
                 return convert<types::UInt64::Primitive>(cell, _fromUnsigned);
             break;
-            case ListBufferTypeTag::Double:
+            case CellTag::Double:
                 return convert<types::Double::Primitive>(cell, _fromDouble);
             break;
-            case ListBufferTypeTag::Bool:
+            case CellTag::Bool:
                 return convert<types::Bool::Primitive>(cell, _fromBoolean);
             break;
-            case ListBufferTypeTag::String:
+            case CellTag::String:
                 return convert<types::String::Primitive>(cell, _fromString);
             break;
-            case ListBufferTypeTag::DateTime:
+            case CellTag::DateTime:
                 return convert<types::DateTime::Primitive>(cell, _fromDateTime);
             break;
-            case ListBufferTypeTag::Duration:
+            case CellTag::Duration:
                 return convert<types::Duration::Primitive>(cell, _fromDuration);
             break;
-            case ListBufferTypeTag::Null:
+            case CellTag::Null:
                 return std::nullopt;
             break;
             default:
@@ -813,8 +813,8 @@ using TaggedToStringOrNullFunction = TaggedConversionFunction<ToStringFunction, 
 // abs keeps the type each cell holds, so its answer is a cell of its own
 class TaggedAbsFunction {
 public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<ListElementView>;
+    using ArgType = CellView;
+    using ResultType = std::optional<CellView>;
 
     explicit TaggedAbsFunction(QueryListBuffer* listBuffer);
 
@@ -849,8 +849,8 @@ public:
 // A unary minus over a cell keeps the type the cell holds, so its answer is a cell of its own
 class TaggedNegateFunction {
 public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<ListElementView>;
+    using ArgType = CellView;
+    using ResultType = std::optional<CellView>;
 
     explicit TaggedNegateFunction(QueryListBuffer* listBuffer);
 
@@ -868,8 +868,8 @@ private:
 // A unary plus over a cell answers the cell itself where it holds a number or a duration
 class TaggedUnaryPlusFunction {
 public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<ListElementView>;
+    using ArgType = CellView;
+    using ResultType = std::optional<CellView>;
 
     ResultType operator()(const ArgType cell) const;
     ResultType operator()(const std::optional<ArgType>& cell) const;
@@ -929,7 +929,7 @@ public:
 
 class TaggedSignFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(const ArgType cell) const;
@@ -1027,7 +1027,7 @@ public:
 template <FloatFunctionKind Kind>
 class TaggedFloatFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Double::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
@@ -1044,7 +1044,7 @@ public:
 template <typename TextFunctor>
 class TaggedTextFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::String::Primitive>;
 
     TaggedTextFunction()
@@ -1124,7 +1124,7 @@ private:
 template <typename NormalFormFunctor>
 class TaggedNormalFormFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<typename NormalFormFunctor::ResultType>;
 
     TaggedNormalFormFunction()
@@ -1139,7 +1139,7 @@ public:
     }
 
     ResultType operator()(const ArgType cell) {
-        if (cell.getTag() != ListBufferTypeTag::String) {
+        if (cell.getTag() != CellTag::String) {
             return std::nullopt;
         }
 
@@ -1311,8 +1311,8 @@ private:
 // A cell may hold a string or a list, so its reversal is a cell of its own
 class TaggedReverseFunction {
 public:
-    using ArgType = ListElementView;
-    using ResultType = std::optional<ListElementView>;
+    using ArgType = CellView;
+    using ResultType = std::optional<CellView>;
 
     TaggedReverseFunction(QueryListBuffer* listBuffer, StringBuffer* stringBuffer);
 
@@ -1332,7 +1332,7 @@ private:
 
 class TaggedSizeFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
@@ -1341,8 +1341,8 @@ public:
 
 class TaggedListHeadFunction {
 public:
-    using ArgType = ListElementView;
-    using ResultType = ListElementView;
+    using ArgType = CellView;
+    using ResultType = CellView;
 
     ResultType operator()(ArgType cell) const;
     ResultType operator()(const std::optional<ArgType>& cell) const;
@@ -1350,8 +1350,8 @@ public:
 
 class TaggedListLastFunction {
 public:
-    using ArgType = ListElementView;
-    using ResultType = ListElementView;
+    using ArgType = CellView;
+    using ResultType = CellView;
 
     ResultType operator()(ArgType cell) const;
     ResultType operator()(const std::optional<ArgType>& cell) const;
@@ -1359,7 +1359,7 @@ public:
 
 class TaggedListTailFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::List::Primitive>;
 
     ResultType operator()(ArgType cell) const;
@@ -1390,7 +1390,7 @@ public:
 
 class TaggedCharLengthFunction {
 public:
-    using ArgType = ListElementView;
+    using ArgType = CellView;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
@@ -1410,7 +1410,7 @@ public:
 class ListHeadFunction {
 public:
     using ArgType = types::List::Primitive;
-    using ResultType = ListElementView;
+    using ResultType = CellView;
     using TaggedCounterpart = TaggedListHeadFunction;
 
     // An empty list has no first element and an absent one has no element at all, so both
@@ -1418,28 +1418,28 @@ public:
     static constexpr bool ReadsNullsItself = true;
 
     ResultType operator()(const ArgType list) const {
-        return list.empty() ? ListElementView::nullElement() : list.front();
+        return list.empty() ? CellView::nullElement() : list.front();
     }
 
     ResultType operator()(const std::optional<ArgType>& list) const {
-        return list.has_value() ? (*this)(*list) : ListElementView::nullElement();
+        return list.has_value() ? (*this)(*list) : CellView::nullElement();
     }
 };
 
 class ListLastFunction {
 public:
     using ArgType = types::List::Primitive;
-    using ResultType = ListElementView;
+    using ResultType = CellView;
     using TaggedCounterpart = TaggedListLastFunction;
 
     static constexpr bool ReadsNullsItself = true;
 
     ResultType operator()(const ArgType list) const {
-        return list.empty() ? ListElementView::nullElement() : list.back();
+        return list.empty() ? CellView::nullElement() : list.back();
     }
 
     ResultType operator()(const std::optional<ArgType>& list) const {
-        return list.has_value() ? (*this)(*list) : ListElementView::nullElement();
+        return list.has_value() ? (*this)(*list) : CellView::nullElement();
     }
 };
 

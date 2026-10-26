@@ -5,7 +5,7 @@
   "query": "UNWIND [\"string\", true, 10, 333.3] AS elements RETURN elements",
   "expect": {
     "result": "elements\nstring\ntrue\n10\n333.3",
-    "resultJson": "{\"header\":{\"column_names\":[\"elements\"],\"column_types\":[\"ListElement\"]},\"data\":[[[\"string\",true,10,333.300000]]]}"
+    "resultJson": "{\"header\":{\"column_names\":[\"elements\"],\"column_types\":[\"Cell\"]},\"data\":[[[\"string\",true,10,333.300000]]]}"
   },
   "tags": [],
   "write-required": false

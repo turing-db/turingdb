@@ -31,7 +31,7 @@ if (EMSCRIPTEN)
 
     # The JS-facing decoder module: the shared decode core (net/decoders) compiled
     # against the wasm sink family, exposed to JS through embind. The listed native
-    # sources are the portable subset the decode path needs; storage/list is used
+    # sources are the portable subset the decode path needs; storage is used
     # header-only (tags and the tag dispatcher).
     add_executable(turing_wasm_decoder
         DecoderModule.cpp

@@ -1703,8 +1703,8 @@ TEST_F(DBDialectTest, parsesHeterogeneousUnwindConst) {
     const mlir::ArrayAttr elements = unwind.getElements();
     ASSERT_EQ(elements.size(), 3u);
 
-    const mlir::Type listElementColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::AnyType::get(&_context));
-    EXPECT_EQ(unwind.getResult().getType(), listElementColumnType);
+    const mlir::Type cellColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::AnyType::get(&_context));
+    EXPECT_EQ(unwind.getResult().getType(), cellColumnType);
 }
 
 TEST_F(DBDialectTest, heterogeneousUnwindConstRoundTripsThroughTextualForm) {

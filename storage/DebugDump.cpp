@@ -4,11 +4,10 @@
 
 #include <range/v3/view/drop.hpp>
 
-#include "list/ListElementView.h"
-#include "list/ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 
 using namespace db;
@@ -36,11 +35,11 @@ void DebugDump::dumpNull(std::ostream& out) {
     out << "null\n";
 }
 
-void DebugDump::dump(std::ostream& out, ListElementView view, bool isInList) {
-    const auto dumpTyped = [&out, isInList]<typename T>(const ListElementView ele) {
+void DebugDump::dump(std::ostream& out, CellView view, bool isInList) {
+    const auto dumpTyped = [&out, isInList]<typename T>(const CellView ele) {
         const T typed = ele.getAs<T>();
 
-        // Dumping a column of ListElementViews:
+        // Dumping a column of CellViews:
         if (!isInList) {
             dump(out, typed);
             return;
@@ -57,8 +56,8 @@ void DebugDump::dump(std::ostream& out, ListElementView view, bool isInList) {
         out << dumped;
     };
 
-    const ListBufferTypeTag tag = view.getTag();
-    ListTagDispatcher dumper {._tag = tag};
+    const CellTag tag = view.getTag();
+    CellTagDispatcher dumper {._tag = tag};
     dumper.execute(dumpTyped, view);
 }
 
@@ -72,10 +71,10 @@ void DebugDump::dump(std::ostream& out, ListView list) {
 
     constexpr bool isInList = true;
 
-    const ListElementView fst = list.front();
+    const CellView fst = list.front();
     dump(out, fst, isInList);
 
-    for (const ListElementView ele : list | rv::drop(1)) {
+    for (const CellView ele : list | rv::drop(1)) {
         out << ", ";
         dump(out, ele, isInList);
     }
@@ -86,25 +85,7 @@ void DebugDump::dump(std::ostream& out, ListView list) {
 void DebugDump::dump(std::ostream& out, MapEntryView view, bool isInMap) {
     out << view.getKey() << ": ";
 
-    const auto dumpTyped = [&out, isInMap]<typename T>(const MapEntryView entry) {
-        const T typed = entry.getValueAs<T>();
-
-        if (!isInMap) {
-            dump(out, typed);
-            return;
-        }
-
-        // Dumping inside a MapView: strip the trailing \n after each value
-        std::ostringstream temp;
-        dump(temp, typed);
-        std::string dumped = temp.str();
-        if (!dumped.empty() && dumped.back() == '\n') {
-            dumped.pop_back();
-        }
-        out << dumped;
-    };
-
-    dispatchMapEntry(dumpTyped, view);
+    dump(out, view.getValue(), isInMap);
 }
 
 void DebugDump::dump(std::ostream& out, MapView map) {

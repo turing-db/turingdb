@@ -11,10 +11,9 @@
 #include "columns/InternalKind.h"
 #include "list/EncodedList.h"
 #include "list/ListContainer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "map/EncodedMap.h"
-#include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
@@ -29,8 +28,7 @@ concept NLViewElement = std::same_as<T, types::String::Primitive>
                      || std::same_as<T, types::Embedding::Primitive>
                      || std::same_as<T, ListView>
                      || std::same_as<T, MapView>
-                     || std::same_as<T, ListElementView>
-                     || std::same_as<T, MapEntryView>;
+                     || std::same_as<T, CellView>;
 
 template <typename T>
 concept NLOptionalViewElement = requires { typename T::value_type; }
@@ -87,8 +85,7 @@ public:
     types::Embedding::Primitive own(types::Embedding::Primitive embedding);
     ListView own(ListView list);
     MapView own(MapView map);
-    ListElementView own(ListElementView element);
-    MapEntryView own(MapEntryView entry);
+    CellView own(CellView element);
 
     // A list or map a change holds encoded, decoded into this store
     ListView decode(const EncodedList& list);
@@ -96,7 +93,7 @@ public:
 
     // The copy of an item staged for a list, and of a tagged cell holding it
     ListBuffer<>::ListItemVariant ownItem(const ListBuffer<>::ListItemVariant& item);
-    ListElementView ownCell(ListBuffer<>::ListItemVariant& item);
+    CellView ownCell(ListBuffer<>::ListItemVariant& item);
 
     // Copy the views of rows [firstRow, end) of a column in, whatever its kind: a constant
     // is copied whole, and a column of values is left as it is

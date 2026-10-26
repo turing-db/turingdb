@@ -10,7 +10,7 @@
 #include "iterators/PathExplorationDir.h"
 #include "iterators/PathExplorator.h"
 #include "list/ListBuffer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "list/PathTrie.h"
 #include "metadata/LabelSet.h"
@@ -91,7 +91,7 @@ protected:
             emitted._target = targets[row].getValue();
 
             const ListView edges = trie.expandEdges(paths[row], _buffer, false);
-            for (const ListElementView& element : edges) {
+            for (const CellView& element : edges) {
                 emitted._edges.push_back(element.getAs<EdgeID>().getValue());
             }
         }

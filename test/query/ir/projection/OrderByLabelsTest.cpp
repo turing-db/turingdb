@@ -33,8 +33,8 @@
 #include "SystemManager.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -60,8 +60,8 @@ public:
             ASSERT_TRUE(raw[rowIndex].has_value());
 
             std::vector<std::string>& names = _values.emplace_back();
-            for (const ListElementView element : *raw[rowIndex]) {
-                ASSERT_EQ(element.getTag(), ListBufferTypeTag::String);
+            for (const CellView element : *raw[rowIndex]) {
+                ASSERT_EQ(element.getTag(), CellTag::String);
                 names.emplace_back(element.getAs<std::string_view>());
             }
         }

@@ -21,8 +21,8 @@
 #include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellView.h"
+#include "CellTag.h"
 #include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
@@ -130,17 +130,17 @@ private:
 
 // Render one tagged cell to a string, dispatching on its type tag. The test lists hold
 // an int, a bool and a string, so only those tags occur.
-std::string renderListElement(const ListElementView& element) {
+std::string renderCellView(const CellView& element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return element.getAs<CustomBool>() ? "true" : "false";
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return std::string(element.getAs<std::string_view>());
         break;
 
@@ -151,19 +151,19 @@ std::string renderListElement(const ListElementView& element) {
 }
 
 // Collects a single heterogeneous value column, rendering each type-tagged cell to a
-// string: a UNWIND of a mixed literal list lowers to one ColumnVector<ListElementView>
+// string: a UNWIND of a mixed literal list lowers to one ColumnVector<CellView>
 // chunk per step, each cell carrying its own tag.
-class CollectingListElementSink : public NLOutputSink {
+class CollectingCellSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnVector<ListElementView>*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnVector<CellView>*>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
-        const std::vector<ListElementView>& raw = values->getRaw();
+        const std::vector<CellView>& raw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(renderListElement(raw[rowIndex]));
+            _values.push_back(renderCellView(raw[rowIndex]));
         }
     }
 
@@ -175,8 +175,8 @@ private:
 
 // Collects (node ID, tagged scalar) rows in emission order: the pair a cross product of
 // a node scan with a heterogeneous unwind emits, a node ID chunk beside a
-// ColumnVector<ListElementView>.
-class CollectingNodeListElementSink : public NLOutputSink {
+// ColumnVector<CellView>.
+class CollectingNodeCellSink : public NLOutputSink {
 public:
     using Rows = std::vector<std::pair<uint64_t, std::string>>;
 
@@ -184,15 +184,15 @@ public:
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
-        const auto* values = dynamic_cast<const ColumnVector<ListElementView>*>(chunks[1]);
+        const auto* values = dynamic_cast<const ColumnVector<CellView>*>(chunks[1]);
         ASSERT_NE(nodeIDs, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(nodeIDs->size(), values->size());
 
         const std::vector<NodeID>& idRaw = nodeIDs->getRaw();
-        const std::vector<ListElementView>& valueRaw = values->getRaw();
+        const std::vector<CellView>& valueRaw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.push_back({idRaw[rowIndex].getValue(), renderListElement(valueRaw[rowIndex])});
+            _rows.push_back({idRaw[rowIndex].getValue(), renderCellView(valueRaw[rowIndex])});
         }
     }
 
@@ -2559,7 +2559,7 @@ TEST_F(DBLoweringTest, executesUnwindConstHeterogeneous) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingListElementSink sink;
+    CollectingCellSink sink;
     runLoweredProgram(unwindConstHeteroProgram, reader.getView(), sink);
 
     // One row per element in list order, each cell keeping its own type (bool, string,
@@ -2590,7 +2590,7 @@ TEST_F(DBLoweringTest, executesHeterogeneousUnwindConstAcrossChunkBoundary) {
 
     // The tagged-scalar fill slices the same ListView, so it has to survive the same
     // partial final chunk.
-    CollectingListElementSink sink;
+    CollectingCellSink sink;
     runLoweredProgram(unwindConstHeteroProgram, reader.getView(), sink, /*chunkSize=*/2);
 
     const std::vector<std::string> expected {"true", "hello", "10"};
@@ -2603,7 +2603,7 @@ TEST_F(DBLoweringTest, executesUnwindConstEmptyYieldsNoRow) {
     const GraphReader reader = transaction.readGraph();
 
     // An empty list has nothing to emit, so the source runs cleanly and produces no row.
-    CollectingListElementSink sink;
+    CollectingCellSink sink;
     runLoweredProgram(unwindConstEmptyProgram, reader.getView(), sink);
 
     EXPECT_TRUE(sink.values().empty());
@@ -2665,12 +2665,12 @@ TEST_F(DBLoweringTest, executesHeterogeneousUnwindConstCrossedWithIncomingRows) 
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingNodeListElementSink sink;
+    CollectingNodeCellSink sink;
     runLoweredProgram(unwindConstHeteroCrossProductProgram, reader.getView(), sink);
 
     // The scan is the outer factor, so its rows block-repeat while the three tagged
     // elements tile: every node carries all three, in list order.
-    const CollectingNodeListElementSink::Rows expected {{0, "true"},
+    const CollectingNodeCellSink::Rows expected {{0, "true"},
                                                         {0, "hello"},
                                                         {0, "10"},
                                                         {1, "true"},
@@ -2690,7 +2690,7 @@ TEST_F(DBLoweringTest, executesEmptyUnwindConstCrossedWithIncomingRowsAsNoRow) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingNodeListElementSink sink;
+    CollectingNodeCellSink sink;
     runLoweredProgram(unwindConstEmptyCrossProductProgram, reader.getView(), sink);
 
     EXPECT_TRUE(sink.rows().empty());

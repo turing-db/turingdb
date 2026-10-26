@@ -15,9 +15,8 @@
 #include "metadata/PropertyTypeMap.h"
 #include "metadata/PropertyType.h"
 #include "list/ListView.h"
-#include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellView.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "ID.h"
@@ -39,24 +38,24 @@ void appendDouble(std::string& out, double value) {
 }
 
 // Append a single element of a list as its typed JSON representation.
-void appendListElement(std::string& out, ListElementView element) {
+void appendCell(std::string& out, CellView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             out += fmt::format("{}", element.getAs<types::Int64::Primitive>());
         break;
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             out += fmt::format("{}", element.getAs<types::UInt64::Primitive>());
         break;
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             appendDouble(out, element.getAs<types::Double::Primitive>());
         break;
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             out += (static_cast<bool>(element.getAs<types::Bool::Primitive>()) ? "true" : "false");
         break;
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             ProcUtils::appendJsonString(out, element.getAs<types::String::Primitive>());
         break;
-        case ListBufferTypeTag::Embedding: {
+        case CellTag::Embedding: {
             out += '[';
             bool firstElem = true;
             for (const float f : element.getAs<types::Embedding::Primitive>()) {
@@ -69,34 +68,34 @@ void appendListElement(std::string& out, ListElementView element) {
             out += ']';
         }
         break;
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             appendListValue(out, element.getAs<ListView>());
         break;
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             out += fmt::format("{}", element.getAs<NodeID>().getValue());
         break;
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             out += fmt::format("{}", element.getAs<EdgeID>().getValue());
         break;
-        case ListBufferTypeTag::DateTime: {
+        case CellTag::DateTime: {
             std::string formatted;
             DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
 
             ProcUtils::appendJsonString(out, formatted);
         }
         break;
-        case ListBufferTypeTag::Duration: {
+        case CellTag::Duration: {
             std::string formatted;
             Duration::format(formatted, element.getAs<types::Duration::Primitive>());
 
             ProcUtils::appendJsonString(out, formatted);
         }
         break;
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             appendMapValue(out, element.getAs<MapView>());
         break;
-        case ListBufferTypeTag::Null:
-        case ListBufferTypeTag::INVALID:
+        case CellTag::Null:
+        case CellTag::INVALID:
             out += "null";
         break;
     }
@@ -107,79 +106,15 @@ void appendListValue(std::string& out, ListView list) {
     out += '[';
 
     bool firstElem = true;
-    for (const ListElementView element : list) {
+    for (const CellView element : list) {
         if (!firstElem) {
             out += ',';
         }
         firstElem = false;
-        appendListElement(out, element);
+        appendCell(out, element);
     }
 
     out += ']';
-}
-
-// Append the value of a single map entry as its typed JSON representation.
-void appendMapEntryValue(std::string& out, MapEntryView entry) {
-    switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
-            out += fmt::format("{}", entry.getValueAs<types::Int64::Primitive>());
-        break;
-        case MapBufferTypeTag::UInt:
-            out += fmt::format("{}", entry.getValueAs<types::UInt64::Primitive>());
-        break;
-        case MapBufferTypeTag::Double:
-            appendDouble(out, entry.getValueAs<types::Double::Primitive>());
-        break;
-        case MapBufferTypeTag::Bool:
-            out += (static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()) ? "true" : "false");
-        break;
-        case MapBufferTypeTag::String:
-            ProcUtils::appendJsonString(out, entry.getValueAs<types::String::Primitive>());
-        break;
-        case MapBufferTypeTag::Embedding: {
-            out += '[';
-            bool firstValue = true;
-            for (const float value : entry.getValueAs<types::Embedding::Primitive>()) {
-                if (!firstValue) {
-                    out += ',';
-                }
-                firstValue = false;
-                appendDouble(out, value);
-            }
-            out += ']';
-        }
-        break;
-        case MapBufferTypeTag::ListView:
-            appendListValue(out, entry.getValueAs<ListView>());
-        break;
-        case MapBufferTypeTag::MapView:
-            appendMapValue(out, entry.getValueAs<MapView>());
-        break;
-        case MapBufferTypeTag::NodeID:
-            out += fmt::format("{}", entry.getValueAs<NodeID>().getValue());
-        break;
-        case MapBufferTypeTag::EdgeID:
-            out += fmt::format("{}", entry.getValueAs<EdgeID>().getValue());
-        break;
-        case MapBufferTypeTag::DateTime: {
-            std::string formatted;
-            DateTime::format(formatted, entry.getValueAs<types::DateTime::Primitive>());
-
-            ProcUtils::appendJsonString(out, formatted);
-        }
-        break;
-        case MapBufferTypeTag::Duration: {
-            std::string formatted;
-            Duration::format(formatted, entry.getValueAs<types::Duration::Primitive>());
-
-            ProcUtils::appendJsonString(out, formatted);
-        }
-        break;
-        case MapBufferTypeTag::Null:
-        case MapBufferTypeTag::INVALID:
-            out += "null";
-        break;
-    }
 }
 
 // Append a map as a JSON object of its entries.
@@ -194,7 +129,7 @@ void appendMapValue(std::string& out, MapView map) {
         firstEntry = false;
         ProcUtils::appendJsonString(out, entry.getKey());
         out += ':';
-        appendMapEntryValue(out, entry);
+        appendCell(out, entry.getValue());
     }
 
     out += '}';
@@ -328,9 +263,9 @@ void ProcUtils::encodeProperties(const EntityPropertyView& props,
 
 void ProcUtils::readIntList(const ListView* view, std::vector<int64_t>& out) {
     out.clear();
-    for (const ListElementView& el : *view) {
+    for (const CellView& el : *view) {
         switch (el.getTag()) {
-            case ListBufferTypeTag::Int:
+            case CellTag::Int:
                 out.push_back(el.getAs<int64_t>());
                 break;
             default:

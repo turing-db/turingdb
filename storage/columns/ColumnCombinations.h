@@ -6,7 +6,7 @@
 #include "ColumnMask.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -67,37 +67,37 @@ public:
 /// answers a mask rather than a column of cells - a nullable one, since the cell may hold a
 /// null or a value of another type
 template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<ListElementView>> {
+class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<CellView>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>
-class ColumnCombinationImpl<Op, ColumnVector<ListElementView>, ColumnMask> {
+class ColumnCombinationImpl<Op, ColumnVector<CellView>, ColumnMask> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<ListElementView>> {
+class ColumnCombinationImpl<Op, ColumnMask, ColumnConst<CellView>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>
-class ColumnCombinationImpl<Op, ColumnConst<ListElementView>, ColumnMask> {
+class ColumnCombinationImpl<Op, ColumnConst<CellView>, ColumnMask> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>
-class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<std::optional<ListElementView>>> {
+class ColumnCombinationImpl<Op, ColumnMask, ColumnVector<std::optional<CellView>>> {
 public:
     using ResultColumnType = ColumnOptMask;
 };
 
 template <typename Op>
-class ColumnCombinationImpl<Op, ColumnVector<std::optional<ListElementView>>, ColumnMask> {
+class ColumnCombinationImpl<Op, ColumnVector<std::optional<CellView>>, ColumnMask> {
 public:
     using ResultColumnType = ColumnOptMask;
 };

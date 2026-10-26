@@ -101,10 +101,9 @@ public:
         Column*,
         ListView,
         std::optional<ListView>,
-        ListElementView,
-        std::optional<ListElementView>,
+        CellView,
+        std::optional<CellView>,
         MapView,
-        MapEntryView,
         std::optional<MapView>
     >;
 

@@ -10,11 +10,10 @@
 
 #include "QueryStatus.h"
 
-#include "list/ListElementView.h"
-#include "list/ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 
 #include "columns/AllowedKinds.h"
@@ -226,14 +225,14 @@ private:
         _writer.write(']');
     }
 
-    void encodeValue(const ListElementView ele) {
-        const auto writeTyped = [this]<typename T>(const ListElementView ele) {
+    void encodeValue(const CellView ele) {
+        const auto writeTyped = [this]<typename T>(const CellView ele) {
             const T typed = ele.getAs<T>();
             this->encodeValue(typed);
         };
 
-        const ListBufferTypeTag tag = ele.getTag();
-        ListTagDispatcher writer {._tag = tag};
+        const CellTag tag = ele.getTag();
+        CellTagDispatcher writer {._tag = tag};
         writer.execute(writeTyped, ele);
     }
 
@@ -245,10 +244,10 @@ private:
 
         _writer.write('[');
 
-        const ListElementView fst = lv.front();
+        const CellView fst = lv.front();
         encodeValue(fst);
 
-        for (const ListElementView ele : lv.elements() | rv::drop(1)) {
+        for (const CellView ele : lv.elements() | rv::drop(1)) {
             _writer.write(", ");
             encodeValue(ele);
         }
@@ -256,22 +255,11 @@ private:
         _writer.write(']');
     }
 
-    // The value of one entry, which is what a map_element column's cell is. The key is
-    // written by encodeEntry, for an entry read as a member of its map rather than alone.
-    void encodeValue(const MapEntryView entry) {
-        const auto writeTyped = [this]<typename T>(const MapEntryView entry) {
-            const T typed = entry.getValueAs<T>();
-            this->encodeValue(typed);
-        };
-
-        dispatchMapEntry(writeTyped, entry);
-    }
-
     void encodeEntry(const MapEntryView entry) {
         encodeValue(entry.getKey());
         _writer.write(": ");
 
-        encodeValue(entry);
+        encodeValue(entry.getValue());
     }
 
     void encodeValue(const MapView mv) {

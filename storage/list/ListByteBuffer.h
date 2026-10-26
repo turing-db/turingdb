@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "ListBufferTypeTag.h"
-#include "ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 
 namespace db {
 
@@ -61,7 +61,7 @@ public:
      * @warn Does not perform bounds checking.
      */
     template <typename T>
-    ListElementView write(ListBufferTypeTag tag, const T& val);
+    CellView write(CellTag tag, const T& val);
 
     void clear();
 
@@ -75,7 +75,7 @@ private:
     /// Allocates a new chunk, updating @ref _last, with @param capacity bytes
     ByteChunk* allocateNextChunk(size_t capacity);
 
-    static constexpr size_t _tagSize = sizeof(ListBufferTypeTag);
+    static constexpr size_t _tagSize = sizeof(CellTag);
 
     static_assert(_tagSize == 1, "Tag size changed");
     static_assert(N != 0);

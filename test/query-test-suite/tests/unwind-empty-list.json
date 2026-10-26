@@ -5,7 +5,7 @@
   "query": "UNWIND [] AS empty MATCH (n)-[e]->(m) RETURN e.name, empty",
   "expect": {
     "result": "e.name,empty",
-    "resultJson": "{\"header\":{\"column_names\":[\"e.name\",\"empty\"],\"column_types\":[\"String\",\"ListElement\"]},\"data\":[[[],[]]]}"
+    "resultJson": "{\"header\":{\"column_names\":[\"e.name\",\"empty\"],\"column_types\":[\"String\",\"Cell\"]},\"data\":[[[],[]]]}"
   },
   "tags": [
     "list",

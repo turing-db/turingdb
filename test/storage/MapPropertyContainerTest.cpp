@@ -92,7 +92,7 @@ TEST_F(MapPropertyContainerTest, SortKeepsExplicitNull) {
     const std::optional<const types::Map::Primitive*> value = container.tryGetWithNull(EntityID(1));
     ASSERT_TRUE(value.has_value());
     ASSERT_NE(value.value(), nullptr);
-    EXPECT_EQ(value.value()->front().getValueAs<int64_t>(), 1);
+    EXPECT_EQ(value.value()->front().getValue().getAs<int64_t>(), 1);
 }
 
 TEST_F(MapPropertyContainerTest, OwnsKeysAndPayloadsPastTheSourceBuffer) {
@@ -110,7 +110,7 @@ TEST_F(MapPropertyContainerTest, OwnsKeysAndPayloadsPastTheSourceBuffer) {
     const MapView stored = container.get(EntityID(1));
     ASSERT_EQ(stored.size(), 1);
     EXPECT_EQ(stored.front().getKey(), "name");
-    EXPECT_EQ(stored.front().getValueAs<types::String::Primitive>(), "Remy");
+    EXPECT_EQ(stored.front().getValue().getAs<types::String::Primitive>(), "Remy");
 }
 
 TEST_F(MapPropertyContainerTest, StoresTheEntriesSortedByKey) {

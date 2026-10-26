@@ -35,7 +35,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "versioning/Transaction.h"
@@ -56,25 +56,25 @@ using Rows = std::vector<Row>;
 std::string renderMap(MapView map);
 
 std::string renderMapValue(const MapEntryView entry) {
-    switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
-            return std::to_string(entry.getValueAs<int64_t>());
+    switch (entry.getValue().getTag()) {
+        case CellTag::Int:
+            return std::to_string(entry.getValue().getAs<int64_t>());
         break;
 
-        case MapBufferTypeTag::Bool:
-            return static_cast<bool>(entry.getValueAs<CustomBool>()) ? "true" : "false";
+        case CellTag::Bool:
+            return static_cast<bool>(entry.getValue().getAs<CustomBool>()) ? "true" : "false";
         break;
 
         // Quoted so a zero-length string reads as a value rather than as nothing
-        case MapBufferTypeTag::String:
-            return "'" + std::string(entry.getValueAs<std::string_view>()) + "'";
+        case CellTag::String:
+            return "'" + std::string(entry.getValue().getAs<std::string_view>()) + "'";
         break;
 
-        case MapBufferTypeTag::MapView:
-            return renderMap(entry.getValueAs<MapView>());
+        case CellTag::MapView:
+            return renderMap(entry.getValue().getAs<MapView>());
         break;
 
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 

@@ -116,7 +116,7 @@ TEST_F(ListPropertyOrderCollectTest, ordersTheRowsByTheStoredListDescending) {
                       {{"Remy"}, {"Adam"}, {"Maxime"}});
 }
 
-// A prefix sorts before the longer list it opens, as ListElementOrder has it.
+// A prefix sorts before the longer list it opens, as CellOrder has it.
 TEST_F(ListPropertyOrderCollectTest, ordersAPrefixBeforeTheLongerList) {
     write("MATCH (n {name: 'Remy'}) SET n.tags = [1, 2]");
     write("MATCH (n {name: 'Adam'}) SET n.tags = [1]");

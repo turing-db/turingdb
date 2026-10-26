@@ -2,8 +2,8 @@
 
 #include <variant>
 
-#include "ListElementView.h"
-#include "ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 
 #include "map/MapContainer.h"
 
@@ -78,21 +78,21 @@ ListView ListContainer::copy(ListView list) {
     std::vector<ListItemVariant> elements;
     elements.reserve(list.size());
 
-    for (const ListElementView element : list) {
+    for (const CellView element : list) {
         elements.push_back(ownedItem(element));
     }
 
     return insert(elements);
 }
 
-ListElementView ListContainer::copy(ListElementView element) {
+CellView ListContainer::copy(CellView element) {
     const ListItemVariant item = ownedItem(element);
 
     return insert(std::span<const ListItemVariant> {&item, 1}).front();
 }
 
-ListContainer::ListItemVariant ListContainer::ownedItem(ListElementView element) {
-    const auto asVariant = [this]<typename T>(const ListElementView view) -> ListItemVariant {
+ListContainer::ListItemVariant ListContainer::ownedItem(CellView element) {
+    const auto asVariant = [this]<typename T>(const CellView view) -> ListItemVariant {
         if constexpr (std::same_as<T, ListView>) {
             return copy(view.getAs<ListView>());
         } else if constexpr (std::same_as<T, MapView>) {
@@ -102,7 +102,7 @@ ListContainer::ListItemVariant ListContainer::ownedItem(ListElementView element)
         }
     };
 
-    const ListTagDispatcher dispatcher {element.getTag()};
+    const CellTagDispatcher dispatcher {element.getTag()};
 
     return dispatcher.execute(asVariant, element);
 }

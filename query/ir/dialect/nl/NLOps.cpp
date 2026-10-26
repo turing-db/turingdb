@@ -65,7 +65,7 @@ bool holdsAMapPerRow(Type chunkType) {
     const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
     const Type read = nullable ? nullable.getValueType() : chunk.getElementType();
 
-    return isa<storage::MapType, storage::AnyType, storage::MapElementType>(read);
+    return isa<storage::MapType, storage::AnyType>(read);
 }
 
 // The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
@@ -855,15 +855,6 @@ LogicalResult StaticMapKey::verify() {
 
     if (getKey().empty()) {
         return emitOpError("reads a key, which cannot be empty");
-    }
-
-    return success();
-}
-
-LogicalResult MapEntryValue::verify() {
-    const Type resultElement = llvm::cast<ChunkType>(getResult().getType()).getElementType();
-    if (!llvm::isa<storage::AnyType>(resultElement)) {
-        return emitOpError("answers a chunk of tagged cells");
     }
 
     return success();

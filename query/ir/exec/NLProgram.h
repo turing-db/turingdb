@@ -452,7 +452,7 @@ private:
 // The literal-list sibling of NLConstScanLoopData: streams a fixed ListView one chunk
 // at a time. A homogeneous list fills a nullable value column of _valueType, the shape
 // every value-chunk consumer reads; a heterogeneous list fills a
-// ColumnVector<ListElementView> of tagged scalars, in which case _valueType is unused.
+// ColumnVector<CellView> of tagged scalars, in which case _valueType is unused.
 // The ListView spans the query-scoped ListBuffer, so the elements outlive the loop. A
 // plain source, so a downstream LIMIT can bound it.
 class NLUnwindConstLoopData : public NLFunctionData {
@@ -4265,43 +4265,19 @@ using NLKeyedReadFunction = NLKeyedValue (*)(const Column* input, size_t row);
 using NLStringReadFunction = std::optional<types::String::Primitive> (*)(const Column* input,
                                                                         size_t row);
 
-// Row-wise copy of map entries' values into tagged cells (nl.map_entry_value)
-class NLMapEntryValueData : public NLFunctionData {
-public:
-    NLMapEntryValueData(const Column* input, Column* result, NLStepBuffers* stepBuffers)
-        : _input(input),
-        _result(result),
-        _stepBuffers(stepBuffers)
-    {
-    }
-
-    const Column* getInput() const { return _input; }
-    Column* getResult() const { return _result; }
-    NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
-    std::vector<QueryListBuffer::ListItemVariant>& getItems() { return _items; }
-
-private:
-    const Column* _input {nullptr};
-    Column* _result {nullptr};
-    NLStepBuffers* _stepBuffers {nullptr};
-    std::vector<QueryListBuffer::ListItemVariant> _items;
-};
-
-// Row-wise map key read (nl.static_map_key): row r of the result views the entry row r's map
-// holds under the key, or the null entry where it holds none.
+// Row-wise map key read (nl.static_map_key): row r of the result views the value row r's map
+// holds under the key, or a null cell where it holds none.
 class NLStaticMapKeyData : public NLFunctionData {
 public:
     NLStaticMapKeyData(const Column* input,
                  Column* result,
                  NLKeyedReadFunction keyedRead,
                  std::string_view key,
-                 MapEntryView absent,
                  NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
         _keyedRead(keyedRead),
         _key(key),
-        _absent(absent),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4312,21 +4288,16 @@ public:
     std::string_view getKey() const { return _key; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
-    // The entry a row whose map holds no such key reads: the key the statement reads under,
-    // tagged null. Fixed by the key, so one serves every row of every chunk.
-    MapEntryView getAbsentEntry() const { return _absent; }
-
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
     NLKeyedReadFunction _keyedRead {nullptr};
     std::string_view _key {};
-    MapEntryView _absent;
     NLStepBuffers* _stepBuffers {nullptr};
 };
 
-// Row-wise map key read (nl.dynamic_map_key): row r of the result views the entry row r's
-// map holds under row r's key, or a null entry where it holds none.
+// Row-wise map key read (nl.dynamic_map_key): row r of the result views the value row r's
+// map holds under row r's key, or a null cell where it holds none.
 class NLDynamicMapKeyData : public NLFunctionData {
 public:
     NLDynamicMapKeyData(const Column* input,
@@ -4334,14 +4305,12 @@ public:
                         NLKeyedReadFunction keyedRead,
                         const Column* key,
                         NLStringReadFunction keyRead,
-                        MapEntryView absent,
                         NLStepBuffers* stepBuffers)
         : _input(input),
         _result(result),
         _keyedRead(keyedRead),
         _key(key),
         _keyRead(keyRead),
-        _absent(absent),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4353,18 +4322,12 @@ public:
     NLStringReadFunction getKeyRead() const { return _keyRead; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
-    // The entry a row holding no key reads: no key to name it by, so one keyless null entry
-    // serves every such row. A row whose key the map does not hold is named by that key, so
-    // its entry is written as the row is read.
-    MapEntryView getAbsentEntry() const { return _absent; }
-
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
     NLKeyedReadFunction _keyedRead {nullptr};
     const Column* _key {nullptr};
     NLStringReadFunction _keyRead {nullptr};
-    MapEntryView _absent;
     NLStepBuffers* _stepBuffers {nullptr};
 };
 
