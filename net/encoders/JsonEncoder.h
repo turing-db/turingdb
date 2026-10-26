@@ -220,18 +220,10 @@ private:
                 _writer.write(',');
             }
 
-            encodePathEntity(GraphPath::isNodeAt(position) ? "node" : "edge", ids[position]);
+            encodeValue(ids[position]);
         }
 
         _writer.write(']');
-    }
-
-    void encodePathEntity(const char* type, uint64_t id) {
-        _writer.write("{\"type\":\"");
-        _writer.write(type);
-        _writer.write("\",\"id\":");
-        _writer.write(id);
-        _writer.write('}');
     }
 
     void encodeValue(const ListElementView ele) {

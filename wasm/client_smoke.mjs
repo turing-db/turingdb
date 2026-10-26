@@ -538,8 +538,8 @@ async function testRaggedQueryData(module) {
     ]]);
 }
 
-// A path's entries are plain objects, but not maps: queryData keeps their ids BigInt, so an
-// id above 2^53 survives exactly.
+// A path reads as its IDs in the order it runs, node, edge, node. query() keeps them BigInt,
+// so an id above 2^53 survives exactly.
 async function testGraphPathIdsStayExact(module) {
     const header = makeHeader([{ name: "path", typeCode: TYPE_GRAPH_PATH, encoding: ENCODING_VECTOR }]);
 
@@ -551,13 +551,9 @@ async function testGraphPathIdsStayExact(module) {
     chunk.u64(5n);
 
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(1), makeEnd(1.0)]);
-    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+    const { chunks } = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).query("RETURN 1");
 
-    assert.deepStrictEqual(data, [[[[
-        { type: 0, id: 9007199254740993n },
-        { type: 1, id: 9007199254740995n },
-        { type: 0, id: 5n },
-    ]]]]);
+    assert.deepStrictEqual(chunks[0].columns[0].toArray(), [[9007199254740993n, 9007199254740995n, 5n]]);
 }
 
 // The null path an OPTIONAL MATCH leaves arrives as a path of 0 nodes and reads as null,
@@ -574,10 +570,7 @@ async function testNullGraphPath(module) {
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(2), makeEnd(1.0)]);
     const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
 
-    assert.deepStrictEqual(data, [[[
-        [{ type: 0, id: 7n }],
-        null,
-    ]]]);
+    assert.deepStrictEqual(data, [[[[7], null]]]);
 }
 
 createTuringDecoderModule().then(async (module) => {
