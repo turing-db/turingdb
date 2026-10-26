@@ -3,29 +3,24 @@
 #include <stddef.h>
 #include <vector>
 
-#include "QueryCommand.h"
+#include "RegularQuery.h"
 
 namespace db {
 
-class CallSubqueryStmt;
 class CypherAST;
-class SinglePartQuery;
 
-class UnionQuery : public QueryCommand {
+class UnionQuery : public RegularQuery {
 public:
     // One branch of the union and the operator joining it to the ones before it. The
-    // first branch is joined to nothing, so its flag is never read. A `{ WHEN ... }`
-    // branch is written as `CALL () { WHEN ... } RETURN <its columns>`, that CALL held in
-    // _whenCall so a CALL holding the union can hand it its imports.
+    // first branch is joined to nothing, so its flag is never read.
     struct Branch {
-        SinglePartQuery* _query {nullptr};
+        RegularQuery* _query {nullptr};
         bool _all {false};
-        CallSubqueryStmt* _whenCall {nullptr};
     };
 
     using Branches = std::vector<Branch>;
 
-    static UnionQuery* create(CypherAST* ast, SinglePartQuery* first, const Branches& rest);
+    static UnionQuery* create(CypherAST* ast, RegularQuery* first, const Branches& rest);
 
     Kind getKind() const override { return Kind::UNION_QUERY; }
 
@@ -37,7 +32,10 @@ public:
     // rows a later one would have dropped anyway, so the whole chain collapses to: the
     // branches up to the last distinct operator share one dedup, and the branches after
     // it are appended as they come. Zero for a chain of UNION ALL alone.
-    static size_t getDedupedBranchCount(const Branches& branches);
+    size_t getDedupedBranchCount() const;
+
+    bool writesToTheGraph() const override;
+    bool readsTheGraph() const override;
 
 private:
     Branches _branches;

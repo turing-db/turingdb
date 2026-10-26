@@ -138,7 +138,9 @@ void CypherASTDumper::dump(std::ostream& out) {
     for (const auto& query : _ast->queries()) {
         switch (query->getKind()) {
             case QueryCommand::Kind::SINGLE_PART_QUERY:
-                dump(out, static_cast<const SinglePartQuery*>(query));
+            case QueryCommand::Kind::UNION_QUERY:
+            case QueryCommand::Kind::CONDITIONAL_QUERY:
+                dump(out, static_cast<const RegularQuery*>(query));
             break;
 
             case QueryCommand::Kind::LOAD_GRAPH_QUERY:
@@ -236,19 +238,33 @@ void CypherASTDumper::dump(std::ostream& out) {
                 dump(out, static_cast<const MergeDataPartsQuery*>(query));
             break;
 
-            case QueryCommand::Kind::UNION_QUERY:
-                dump(out, static_cast<const UnionQuery*>(query));
-            break;
-
-            case QueryCommand::Kind::CONDITIONAL_QUERY:
-                dump(out, static_cast<const ConditionalQuery*>(query));
-            break;
         }
     }
 }
 
-void CypherASTDumper::dump(std::ostream& out, const UnionQuery* query) {
+void CypherASTDumper::dump(std::ostream& out, const RegularQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+
+    dumpRegularQuery(out, query);
+}
+
+void CypherASTDumper::dumpRegularQuery(std::ostream& out, const RegularQuery* query) {
+    switch (query->getKind()) {
+        case QueryCommand::Kind::UNION_QUERY:
+            dumpUnion(out, static_cast<const UnionQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::CONDITIONAL_QUERY:
+            dumpConditional(out, static_cast<const ConditionalQuery*>(query));
+        break;
+
+        default:
+            dumpQueryBody(out, static_cast<const SinglePartQuery*>(query));
+        break;
+    }
+}
+
+void CypherASTDumper::dumpUnion(std::ostream& out, const UnionQuery* query) {
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType UnionQuery\n";
     out << "    }\n";
@@ -263,30 +279,23 @@ void CypherASTDumper::dump(std::ostream& out, const UnionQuery* query) {
         out << "    _" << std::hex << query << " ||--o{ _" << std::hex << branch._query
             << " : \"" << label << "\"\n";
 
-        dumpQueryBody(out, branch._query);
+        dumpRegularQuery(out, branch._query);
     }
 }
 
-void CypherASTDumper::dump(std::ostream& out, const ConditionalQuery* query) {
-    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+void CypherASTDumper::dumpConditional(std::ostream& out, const ConditionalQuery* query) {
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType ConditionalQuery\n";
     out << "    }\n";
 
-    for (const CallSubqueryStmt::Branch& branch : query->getBody()->branches()) {
+    for (const ConditionalQuery::Branch& branch : query->branches()) {
         const char* const label = branch._condition ? "WHEN" : "ELSE";
 
         out << "    _" << std::hex << query << " ||--o{ _" << std::hex << branch._query
             << " : \"" << label << "\"\n";
 
-        dumpQueryBody(out, branch._query);
+        dumpRegularQuery(out, branch._query);
     }
-}
-
-void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
-    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
-
-    dumpQueryBody(out, query);
 }
 
 void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* query) {
@@ -390,9 +399,7 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                     out << "    _" << std::hex << subquery << " {\n";
                     out << "        ASTType CALL_SUBQUERY\n";
                     out << "    }\n";
-                    for (const CallSubqueryStmt::Branch& branch : subquery->branches()) {
-                        dump(out, branch._query);
-                    }
+                    dump(out, subquery->getBody());
                 }
                 break;
 
@@ -402,10 +409,7 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                     out << "    _" << std::hex << segment << " {\n";
                     out << "        ASTType NEXT_SEGMENT\n";
                     out << "    }\n";
-                    const CallSubqueryStmt* body = segment->getBody();
-                    for (const CallSubqueryStmt::Branch& branch : body->branches()) {
-                        dump(out, branch._query);
-                    }
+                    dump(out, segment->getBody()->getBody());
                 }
                 break;
 

@@ -256,11 +256,14 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
 // The shape of the list a COLLECT gathers its one column into, which every branch of a
 // UNION contributes to: the one each branch would gather where they all agree, and a list
 // of tagged scalars where they do not
-ListShape collectedListShape(const UnionQuery::Branches& branches) {
+ListShape collectedListShape(const RegularQuery* body) {
+    std::vector<const SinglePartQuery*> queries;
+    RegularQuery::collectSingleQueries(body, queries);
+
     std::optional<ListShape> shared;
 
-    for (const UnionQuery::Branch& branch : branches) {
-        const Projection* projection = branch._query->getReturnStmt()->getProjection();
+    for (const SinglePartQuery* query : queries) {
+        const Projection* projection = query->getReturnStmt()->getProjection();
 
         const ListShape collected = std::visit([](auto&& item) {
             return ListShape::collecting(item->getType(), item->getListShape());
@@ -473,7 +476,7 @@ void ExprAnalyzer::analyzeCollectSubqueryExpr(CollectSubqueryExpr* expr) {
     _queryAnalyzer->analyzeCollectSubqueryBody(expr);
 
     expr->setType(EvaluatedType::List);
-    expr->setListShape(collectedListShape(expr->getBranches()));
+    expr->setListShape(collectedListShape(expr->getBody()));
     expr->setDynamic();
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));

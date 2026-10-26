@@ -21,7 +21,6 @@
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
 #include "metadata/DateTime.h"
-#include "stmt/CallSubqueryStmt.h"
 
 #include "ExplainRequest.h"
 
@@ -83,6 +82,8 @@ class VariableDependency;
 class DependencyEdge;
 class SetStmt;
 class RemoveStmt;
+class CallSubqueryStmt;
+class RegularQuery;
 class SinglePartQuery;
 class UnionQuery;
 class ConditionalQuery;
@@ -366,7 +367,9 @@ private:
     // body in its own right
     void generateUnion(const UnionQuery* unionQuery);
 
-    void generateConditionalQuery(const ConditionalQuery* query);
+    // Emits a UNION or a WHEN whose branches yield their rows into one result, and the
+    // db.output of the columns its RETURN names. @param branch is null outside a union.
+    void generateBodyOutput(const RegularQuery* body, const UnionBranch* branch);
 
     void generateQueryParts(const SinglePartQuery* query);
 
@@ -575,32 +578,54 @@ private:
 
     void bindReturnedEntities(CarriedEntities& returnedEntities);
 
-    // The scope one branch of a CALL body opens with: the imports it names, read through
+    // The scope a query of a subquery body opens with, and what the query around wrote
+    // that it reads under the declarations of its own
+    struct BranchScope {
+        llvm::SmallVector<PublishedColumn> _columns;
+        CarriedEntities _importedEntities;
+    };
+
+    // The scope of each query of a body that reads the row it runs for: each single
+    // query, and each WHEN, whose predicates read it
+    using BodyScopes = std::unordered_map<const RegularQuery*, BranchScope>;
+
+    static const BranchScope& findBranchScope(const BodyScopes& scopes, const RegularQuery* query);
+
+    // The scope a query of a CALL body opens with: the imports it names, read through
     // @param inputArguments or where they are bound as constants, and - for a body carrying
     // the scope - every input under a hidden name
-    void collectSubqueryBranchScope(const CallSubqueryStmt::Branch& branch,
+    void collectSubqueryBranchScope(const RegularQuery* query,
                                     llvm::ArrayRef<PublishedColumn> inputs,
                                     llvm::ArrayRef<mlir::Value> inputArguments,
                                     mlir::Value tagArgument,
                                     llvm::ArrayRef<PublishedColumn> constants,
                                     bool bindsHidden,
-                                    llvm::SmallVectorImpl<PublishedColumn>& scope,
-                                    CarriedEntities& importedEntities) const;
+                                    BranchScope& scope) const;
 
-    // Emits the db.union of a CALL or COUNT body that is a UNION, and fills @param yielded
-    // with its results under the names and declarations the body returns them as
-    void generateSubqueryUnion(llvm::ArrayRef<const SinglePartQuery*> branches,
-                               size_t dedupedBranches,
-                               std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
-                               std::span<const CarriedEntities> importedEntities,
+    // collectSubqueryBranchScope for every query of @param body that reads its row
+    void collectBodyScopes(const RegularQuery* body,
+                           llvm::ArrayRef<PublishedColumn> inputs,
+                           llvm::ArrayRef<mlir::Value> inputArguments,
+                           mlir::Value tagArgument,
+                           llvm::ArrayRef<PublishedColumn> constants,
+                           bool bindsHidden,
+                           BodyScopes& scopes) const;
+
+    // Emits the db.union or the db.conditional of a body that is a UNION or a WHEN, its
+    // branches generated under @param scopes, and fills @param yielded with its results
+    // under the names and declarations the body returns them as
+    void generateSubqueryBody(const RegularQuery* body,
+                              const BodyScopes& scopes,
+                              llvm::SmallVectorImpl<PublishedColumn>& yielded,
+                              CarriedEntities& returnedEntities);
+
+    void generateSubqueryUnion(const UnionQuery* unionQuery,
+                               const BodyScopes& scopes,
                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                CarriedEntities& returnedEntities);
 
-    // Emits the db.conditional of a WHEN body and fills @param yielded as
-    // generateSubqueryUnion does
-    void generateSubqueryConditional(llvm::ArrayRef<CallSubqueryStmt::Branch> branches,
-                                     std::span<const llvm::SmallVector<PublishedColumn>> branchScopes,
-                                     std::span<const CarriedEntities> importedEntities,
+    void generateSubqueryConditional(const ConditionalQuery* conditional,
+                                     const BodyScopes& scopes,
                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                      CarriedEntities& returnedEntities);
 
@@ -612,7 +637,7 @@ private:
         std::vector<std::vector<std::optional<PartScope::WrittenEntity>>> _writtenColumns;
     };
 
-    void rebindSubqueryBranchScope(llvm::ArrayRef<PublishedColumn> scope, const CarriedEntities& importedEntities);
+    void rebindSubqueryBranchScope(const BranchScope& scope);
 
     void generateConditionRegion(const Expr* predicate,
                                  mlir::Block* bodyBlock,
@@ -622,10 +647,14 @@ private:
 
     // Generates one branch into @param block, opened by openSubqueryBranch, ending in a
     // db.yield of what its RETURN publishes, none for a branch ending on a write
-    void generateSubqueryBranch(const SinglePartQuery* query,
+    void generateSubqueryBranch(const RegularQuery* query,
+                                const BodyScopes& scopes,
                                 mlir::Block* block,
                                 mlir::Block* bodyBlock,
                                 SubqueryBranchResults& branchResults);
+
+    // The block whose rows a branch generated into @param block starts from
+    mlir::Block* findRowBlock(mlir::Block* block) const;
 
     void generateUnionOverBranches(mlir::Value distinctSet,
                                    size_t dedupedBranches,
@@ -1207,12 +1236,11 @@ private:
     void translateCollectSubqueryExpr(const Expr* expr, const CollectSubqueryExpr* collectExpr);
 
     // Emits the db.exists_subquery, db.count_subquery or db.collect_subquery of @param
-    // branches: the columns in flight become the inputs it reads through block arguments,
-    // one query is generated into the op's region as a correlated query of its own, or the
-    // db.union of several, and the op's one result is returned
+    // body: the columns in flight become the inputs it reads through block arguments, the
+    // body is generated into the op's region as a correlated query of its own, and the
+    // op's one result is returned
     template <typename SubqueryOp, typename YieldOp>
-    mlir::Value generateSubqueryExpression(llvm::ArrayRef<const SinglePartQuery*> branches,
-                                           size_t dedupedBranches,
+    mlir::Value generateSubqueryExpression(const RegularQuery* body,
                                            mlir::Type resultType,
                                            std::string_view tagName);
 

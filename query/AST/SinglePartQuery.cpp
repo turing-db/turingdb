@@ -9,7 +9,7 @@
 using namespace db;
 
 SinglePartQuery::SinglePartQuery(DeclContext* declContext)
-    : QueryCommand(declContext)
+    : RegularQuery(declContext)
 {
 }
 

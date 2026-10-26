@@ -1,25 +1,23 @@
 #include "ExistsExpr.h"
 
 #include "CypherAST.h"
-#include "SinglePartQuery.h"
+#include "RegularQuery.h"
 
 using namespace db;
 
-ExistsExpr::ExistsExpr(const Branches& branches)
+ExistsExpr::ExistsExpr(RegularQuery* body)
     : Expr(Expr::Kind::EXISTS),
-    _branches(branches)
+    _body(body)
 {
 }
 
 ExistsExpr::~ExistsExpr() {
 }
 
-ExistsExpr* ExistsExpr::create(CypherAST* ast, const Branches& branches) {
-    for (SinglePartQuery* branch : branches) {
-        ast->nestQuery(branch);
-    }
+ExistsExpr* ExistsExpr::create(CypherAST* ast, RegularQuery* body) {
+    ast->nestQuery(body);
 
-    ExistsExpr* expr = new ExistsExpr(branches);
+    ExistsExpr* expr = new ExistsExpr(body);
     ast->addExpr(expr);
 
     return expr;

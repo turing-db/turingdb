@@ -3,13 +3,12 @@
 #include <vector>
 
 #include "expr/Operators.h"
-#include "stmt/CallSubqueryStmt.h"
 #include "SourceLocation.h"
-#include "UnionQuery.h"
 #include "UnicodeNormalForm.h"
 
 namespace db {
 
+class CallSubqueryStmt;
 class CypherAST;
 class EdgePattern;
 class EmbeddingLiteral;
@@ -26,6 +25,7 @@ class Parameter;
 class PatternElement;
 class PropertyExpr;
 class Projection;
+class RegularQuery;
 class ReturnStmt;
 class SetStmt;
 class SinglePartQuery;
@@ -43,9 +43,8 @@ public:
         SourceLocation _rightOperandLocation;
     };
 
-    // The queries a NEXT chains, in order: each a single query, the branches of a UNION or
-    // those of a WHEN
-    using NextSegments = std::vector<CallSubqueryStmt::Branches>;
+    // The queries a NEXT chains, in order: each a single query, a UNION or a WHEN
+    using NextSegments = std::vector<RegularQuery*>;
 
     ParserUtils() = delete;
     ~ParserUtils() = delete;
@@ -62,7 +61,7 @@ public:
     // A query that is one CALL and nothing else has no projection of its own, so what the
     // call yields is the result it reports. A subquery body is not such a query: it is a
     // clause of the query around it, and the RETURN it owes is its own
-    static void markStandaloneCall(const SinglePartQuery* query);
+    static void markStandaloneCall(const RegularQuery* query);
 
     // `MATCH (a WHERE p)-[r WHERE q]->(b) WHERE w` filters as `WHERE p AND q AND w`
     static void foldEntityWheres(CypherAST* ast, Pattern* pattern);
@@ -77,17 +76,9 @@ public:
                                           MapLiteral* properties,
                                           WhereClause* where);
 
-    // `{ WHEN ... }` combined by a UNION is `CALL () { WHEN ... } RETURN <its columns>`.
-    // False when a column of the first branch has no name to return it under: a WHEN
-    // combined by a UNION names each column with AS.
-    static bool createWhenOperand(CypherAST* ast,
-                                  const CallSubqueryStmt::Branches& branches,
-                                  const SourceLocation& location,
-                                  UnionQuery::Branch& operand);
-
     // Whether an item of a segment's RETURN has neither an alias nor a variable to name the
     // column the next segment reads it through
-    static bool returnsUnaliasedItem(const CallSubqueryStmt::Branches& segment);
+    static bool returnsUnaliasedItem(const RegularQuery* segment);
 
     // `a RETURN x NEXT b` is `a WITH x b`. A UNION or a WHEN segment, and one ending on an
     // updating clause that NEXT follows, is a NextSegmentStmt; ending the chain, its

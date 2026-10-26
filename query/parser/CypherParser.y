@@ -56,6 +56,7 @@
     #include "Pattern.h"
     #include "NodePattern.h"
     #include "EdgePattern.h"
+    #include "RegularQuery.h"
     #include "SinglePartQuery.h"
     #include "UnionQuery.h"
     #include "ConditionalQuery.h"
@@ -450,17 +451,17 @@
 %type<db::CallSubqueryStmt*> callSubquerySt
 %type<db::CallSubqueryStmt*> foreachSt
 %type<db::StmtContainer*> foreachUpdates
-%type<db::CallSubqueryStmt::Branches> callSubqueryBody
-%type<db::CallSubqueryStmt::Branches> nextSegment
-%type<db::CallSubqueryStmt::Branches> segmentBeforeNext
+%type<db::RegularQuery*> callSubqueryBody
+%type<db::RegularQuery*> nextSegment
+%type<db::RegularQuery*> segmentBeforeNext
 %type<db::ParserUtils::NextSegments> nextHead
 %type<db::ParserUtils::NextSegments> nextChain
-%type<db::CallSubqueryStmt::Branches> conditionalBranches
-%type<db::CallSubqueryStmt::Branches> whenBranches
-%type<db::SinglePartQuery*> conditionalBranchQuery
-%type<db::ExistsExpr::Branches> existsBody
-%type<db::UnionQuery::Branches> countBody
-%type<db::UnionQuery::Branches> collectBody
+%type<db::ConditionalQuery*> conditionalBranches
+%type<db::ConditionalQuery::Branches> whenBranches
+%type<db::RegularQuery*> conditionalBranchQuery
+%type<db::RegularQuery*> existsBody
+%type<db::RegularQuery*> countBody
+%type<db::RegularQuery*> collectBody
 %type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
 %type<db::MergeStmt*> mergeSt
@@ -527,13 +528,7 @@ regularQuery
         $$ = UnionQuery::create(ast, $1._query, $2);
         LOC($$, @$);
       }
-    | conditionalBranches {
-        CallSubqueryStmt* body = CallSubqueryStmt::create(ast, $1);
-        LOC(body, @$);
-
-        $$ = ConditionalQuery::create(ast, body);
-        LOC($$, @$);
-      }
+    | conditionalBranches { $$ = $1; }
     | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
     ;
 
@@ -545,10 +540,10 @@ nextChain
     ;
 
 nextHead
-    : segmentBeforeNext { $$.push_back(std::move($1)); }
+    : segmentBeforeNext { $$.push_back($1); }
     | nextHead segmentBeforeNext {
         $$ = std::move($1);
-        $$.push_back(std::move($2));
+        $$.push_back($2);
       }
     ;
 
@@ -558,19 +553,14 @@ segmentBeforeNext
             scanner.syntaxError(@1, "Expression in a RETURN followed by NEXT must be aliased (use AS)");
         }
 
-        $$ = std::move($1);
+        $$ = $1;
       }
     ;
 
 nextSegment
-    : singlePartQuery { $$.push_back({$1, false, {}}); }
-    | unionOperand unionList {
-        $$.push_back({$1._query, false, {}, nullptr, $1._whenCall});
-        for (const UnionQuery::Branch& branch : $2) {
-            $$.push_back({branch._query, branch._all, {}, nullptr, branch._whenCall});
-        }
-      }
-    | conditionalBranches { $$ = std::move($1); }
+    : singlePartQuery { $$ = $1; }
+    | unionOperand unionList { $$ = UnionQuery::create(ast, $1._query, $2); LOC($$, @$); }
+    | conditionalBranches { $$ = $1; }
     ;
 
 explainQuery
@@ -1261,23 +1251,26 @@ callSubquerySt
     ;
 
 callSubqueryBody
-    : nextSegment { $$ = std::move($1); }
-    | nextChain { $$.push_back({ParserUtils::createNextQuery(ast, $1, @$), false, {}}); }
+    : nextSegment { $$ = $1; }
+    | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
     ;
 
 conditionalBranches
-    : whenBranches { $$ = std::move($1); }
+    : whenBranches { $$ = ConditionalQuery::create(ast, $1); LOC($$, @$); }
     | whenBranches ELSE conditionalBranchQuery {
-        $$ = std::move($1);
-        $$.push_back({$3, false, {}, nullptr});
+        ConditionalQuery::Branches branches = std::move($1);
+        branches.push_back({nullptr, $3});
+
+        $$ = ConditionalQuery::create(ast, branches);
+        LOC($$, @$);
       }
     ;
 
 whenBranches
-    : WHEN expr THEN conditionalBranchQuery { $$.push_back({$4, false, {}, $2}); }
+    : WHEN expr THEN conditionalBranchQuery { $$.push_back({$2, $4}); }
     | whenBranches WHEN expr THEN conditionalBranchQuery {
         $$ = std::move($1);
-        $$.push_back({$5, false, {}, $3});
+        $$.push_back({$3, $5});
       }
     ;
 
@@ -1289,58 +1282,58 @@ conditionalBranchQuery
     ;
 
 existsBody
-    : singlePartQuery { $$.push_back($1); }
+    : singlePartQuery { $$ = $1; }
     | unionOperand unionList {
-        if ($1._whenCall) {
+        if ($1._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
             scanner.notImplemented(@1, "WHEN in an EXISTS body");
         }
 
-        $$.push_back($1._query);
         for (const UnionQuery::Branch& branch : $2) {
-            if (branch._whenCall) {
+            if (branch._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
                 scanner.notImplemented(@2, "WHEN in an EXISTS body");
             }
-
-            $$.push_back(branch._query);
         }
+
+        $$ = UnionQuery::create(ast, $1._query, $2);
+        LOC($$, @$);
       }
-    | nextChain { $$.push_back(ParserUtils::createNextQuery(ast, $1, @$)); }
+    | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
     ;
 
 countBody
-    : singlePartQuery { $$.push_back({$1, false}); }
+    : singlePartQuery { $$ = $1; }
     | unionOperand unionList {
-        if ($1._whenCall) {
+        if ($1._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
             scanner.notImplemented(@1, "WHEN in a COUNT body");
         }
 
-        $$.push_back($1);
         for (const UnionQuery::Branch& branch : $2) {
-            if (branch._whenCall) {
+            if (branch._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
                 scanner.notImplemented(@2, "WHEN in a COUNT body");
             }
-
-            $$.push_back(branch);
         }
+
+        $$ = UnionQuery::create(ast, $1._query, $2);
+        LOC($$, @$);
       }
-    | nextChain { $$.push_back({ParserUtils::createNextQuery(ast, $1, @$), false}); }
+    | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
     ;
 
 collectBody
-    : singlePartQuery { $$.push_back({$1, false}); }
+    : singlePartQuery { $$ = $1; }
     | unionOperand unionList {
-        if ($1._whenCall) {
+        if ($1._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
             scanner.notImplemented(@1, "WHEN in a COLLECT body");
         }
 
-        $$.push_back($1);
         for (const UnionQuery::Branch& branch : $2) {
-            if (branch._whenCall) {
+            if (branch._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
                 scanner.notImplemented(@2, "WHEN in a COLLECT body");
             }
-
-            $$.push_back(branch);
         }
+
+        $$ = UnionQuery::create(ast, $1._query, $2);
+        LOC($$, @$);
       }
     ;
 
@@ -1889,20 +1882,16 @@ unionSt
     ;
 
 unionOperand
-    : singlePartQuery { $$ = {$1, false, nullptr}; }
-    | OBRACE conditionalBranches CBRACE {
-        if (!ParserUtils::createWhenOperand(ast, $2, @$, $$)) {
-            scanner.syntaxError(@2, "A WHEN combined by UNION must name each column it returns with AS");
-        }
-      }
-    | OBRACE nextChain CBRACE { $$ = {ParserUtils::createNextQuery(ast, $2, @2), false, nullptr}; }
+    : singlePartQuery { $$ = {$1, false}; }
+    | OBRACE conditionalBranches CBRACE { $$ = {$2, false}; }
+    | OBRACE nextChain CBRACE { $$ = {ParserUtils::createNextQuery(ast, $2, @2), false}; }
     ;
 
 subqueryExist
     : EXISTS OBRACE existsBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
     | EXISTS OBRACE patternWhere CBRACE {
         SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
-        $$ = ExistsExpr::create(ast, {body});
+        $$ = ExistsExpr::create(ast, body);
         LOC($$, @$);
       }
     ;
@@ -1911,7 +1900,7 @@ subqueryCount
     : COUNT OBRACE countBody CBRACE { $$ = CountSubqueryExpr::create(ast, $3); LOC($$, @$); }
     | COUNT OBRACE patternWhere CBRACE {
         SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
-        $$ = CountSubqueryExpr::create(ast, {{body, false}});
+        $$ = CountSubqueryExpr::create(ast, body);
         LOC($$, @$);
       }
     ;

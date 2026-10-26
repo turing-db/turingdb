@@ -49,6 +49,11 @@ TEST_F(ConditionalQueryTest, unwindsInsideABranch) {
                {{"1"}, {"2"}, {"3"}});
 }
 
+TEST_F(ConditionalQueryTest, opensABranchOnAWith) {
+    expectRows("WHEN true THEN WITH 1 AS x RETURN x ELSE RETURN 2 AS x", {{"1"}});
+    expectRows("WHEN false THEN RETURN 1 AS x ELSE { WITH 2 AS y RETURN y + 1 AS x }", {{"3"}});
+}
+
 TEST_F(ConditionalQueryTest, takesANullPredicateAsFalse) {
     expectRows("WHEN null THEN RETURN 1 AS x ELSE RETURN 2 AS x", {{"2"}});
 }
