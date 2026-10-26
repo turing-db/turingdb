@@ -204,7 +204,7 @@
 %token<std::string_view> DELETE
 %token<std::string_view> DETACH
 %token<std::string_view> EXISTS
-%token<std::string_view> IS_NOT
+%token<std::string_view> IS_VALUE_TEST
 %token<std::string_view> LIMIT
 %token<std::string_view> YIELD
 %token<std::string_view> MATCH
@@ -1364,6 +1364,7 @@ setItem
 // the | continues the disjunction: IELR keeps the two contexts apart, LALR merges them.
 labelExpression
     : COLON labelDisjunction %prec LABEL_EXPRESSION { $$ = $2; }
+    | IS labelDisjunction %prec LABEL_EXPRESSION { $$ = $2; }
     ;
 
 labelDisjunction
@@ -1466,8 +1467,8 @@ comparisonChain
     ;
 
 isKeyword
-    : IS { $$ = false; }
-    | IS_NOT { $$ = true; }
+    : IS_VALUE_TEST { $$ = false; }
+    | IS_VALUE_TEST NOT { $$ = true; }
     ;
 
 comparisonSign
@@ -2075,10 +2076,10 @@ caseTest
                              ._operator = $1,
                              ._kind = CaseExpr::TestKind::Comparison};
       }
-    | IS NULL_ {
+    | IS_VALUE_TEST NULL_ {
         $$ = CaseExpr::Test {._kind = CaseExpr::TestKind::IsNull};
       }
-    | IS_NOT NULL_ {
+    | IS_VALUE_TEST NOT NULL_ {
         $$ = CaseExpr::Test {._kind = CaseExpr::TestKind::IsNotNull};
       }
     ;
@@ -2207,7 +2208,7 @@ edgeConstraintPattern
 
 constraint
     : qualifiedName DOT name IS UNIQUE
-    | qualifiedName DOT name IS NOT NULL_
+    | qualifiedName DOT name IS_VALUE_TEST NOT NULL_
     ;
 
 dropConstraint

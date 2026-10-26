@@ -106,7 +106,6 @@ using Token = db::YCypherParser::token;
 "DELETE" { KEYWORD(DELETE) }
 "DETACH" { KEYWORD(DETACH) }
 "EXISTS" { KEYWORD(EXISTS) }
-"IS NOT" { KEYWORD(IS_NOT) }
 "LIMIT" { KEYWORD(LIMIT) }
 "YIELD" { KEYWORD(YIELD) }
 "MATCH" { KEYWORD(MATCH) }
@@ -175,6 +174,13 @@ using Token = db::YCypherParser::token;
 "AND" { KEYWORD(AND) }
 "OR" { KEYWORD(OR) }
 "IN" { KEYWORD(IN) }
+    /*
+     * IS before NOT, NULL or a normal form opens a null or normal-form test, and before
+     * anything else a label expression. The longest match counts the trailing context, so
+     * the second rule keeps a label such as Nullable or Nothing a label.
+     */
+"IS"/[ \t\r\n]+("NOT"|"NULL"|"NORMALIZED"|"NFC"|"NFD"|"NFKC"|"NFKD") { KEYWORD(IS_VALUE_TEST) }
+"IS"/[ \t\r\n]+[a-zA-Z_][a-zA-Z0-9_]* { KEYWORD(IS) }
 "IS" { KEYWORD(IS) }
 "S3" { KEYWORD(S3) }
 "BY" { KEYWORD(BY) }
