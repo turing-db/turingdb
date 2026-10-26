@@ -910,6 +910,17 @@ Value comparedNodeColumn(Value side) {
     return isNodeColumn(side) ? side : Value();
 }
 
+bool nodeIDOfLiteral(Attribute literal, int64_t& nodeID) {
+    const IntegerAttr integer = dyn_cast<IntegerAttr>(literal);
+    if (!integer || !integer.getType().isSignlessInteger(64)) {
+        return false;
+    }
+
+    nodeID = integer.getInt();
+
+    return nodeID >= 0;
+}
+
 bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
     EqOp equality = mask.getDefiningOp<EqOp>();
     if (!equality) {
@@ -933,14 +944,40 @@ bool matchNodeIDEquality(Value mask, Value scanColumn, int64_t& nodeID) {
         return false;
     }
 
-    const IntegerAttr literal = dyn_cast<IntegerAttr>(constant.getValue());
-    if (!literal || !literal.getType().isSignlessInteger(64)) {
+    return nodeIDOfLiteral(constant.getValue(), nodeID);
+}
+
+bool matchNodeIDMembership(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
+    InOp membership = mask.getDefiningOp<InOp>();
+    if (!membership || comparedNodeColumn(membership.getLhs()) != scanColumn) {
         return false;
     }
 
-    nodeID = literal.getInt();
+    const Value list = membership.getRhs();
+    ConstantOp constant = list.getDefiningOp<ConstantOp>();
+    if (!constant) {
+        return false;
+    }
 
-    return nodeID >= 0;
+    const ArrayAttr elements = dyn_cast<ArrayAttr>(constant.getValue());
+    if (!elements) {
+        return false;
+    }
+
+    for (const Attribute element : elements) {
+        if (isa<UnitAttr>(element)) {
+            continue;
+        }
+
+        int64_t nodeID = 0;
+        if (!nodeIDOfLiteral(element, nodeID)) {
+            return false;
+        }
+
+        nodeIDs.push_back(nodeID);
+    }
+
+    return true;
 }
 
 // An UNWIND of N elements folds into a chain of N - 1 ORs, so the walk keeps its own stack:
@@ -957,11 +994,11 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImp
         }
 
         int64_t nodeID = 0;
-        if (!matchNodeIDEquality(disjunct, scanColumn, nodeID)) {
+        if (matchNodeIDEquality(disjunct, scanColumn, nodeID)) {
+            nodeIDs.push_back(nodeID);
+        } else if (!matchNodeIDMembership(disjunct, scanColumn, nodeIDs)) {
             return false;
         }
-
-        nodeIDs.push_back(nodeID);
     }
 
     llvm::sort(nodeIDs);
@@ -2799,13 +2836,14 @@ Value disjunctionColumn(Value mask) {
         mask = disjunction.getLhs();
     }
 
-    EqOp equality = mask.getDefiningOp<EqOp>();
-    if (!equality) {
-        return {};
+    if (InOp membership = mask.getDefiningOp<InOp>()) {
+        return comparedNodeColumn(membership.getLhs());
+    } else if (EqOp equality = mask.getDefiningOp<EqOp>()) {
+        const Value lhs = equality.getLhs();
+        return comparedNodeColumn(lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs);
     }
 
-    const Value lhs = equality.getLhs();
-    return comparedNodeColumn(lhs.getDefiningOp<ConstantOp>() ? equality.getRhs() : lhs);
+    return {};
 }
 
 bool keepsTheSourceRows(Operation& op) {
