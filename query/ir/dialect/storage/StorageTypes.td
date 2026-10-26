@@ -128,10 +128,10 @@ def Any : StorageType<"Any", "any"> {
     let summary = "A value of any type, tagged per cell";
     let description = [{
         The element type of a chunk whose rows share no single type - storage's
-        ColumnVector<ListElementView>. Each cell carries its own type tag beside its
+        ColumnVector<CellView>. Each cell carries its own type tag beside its
         value. Produced where Cypher answers a value whose type is known only per row:
-        an element of a heterogeneous list, an UNWIND of one, a reduce accumulator
-        whose updates change type.
+        an element of a heterogeneous list, an UNWIND of one, a value read out of a map,
+        a reduce accumulator whose updates change type.
     }];
 }
 
@@ -179,20 +179,6 @@ def Map : StorageType<"Map", "map"> {
         The element type of a chunk holding one map per row - storage's ColumnVector<Map>.
         Each cell is a MapView: a span over contiguous MapEntityViews forming one map.
         }];
-}
-
-def MapElement : StorageType<"MapElement", "map_element"> {
-    let summary = "A single key-tagged scalar value read out of a map";
-    let description = [{
-        The element type of a chunk holding one map entry per row - storage's
-        ColumnVector<MapEntryView>. Each cell views the entry the map already holds: its
-        key, its own MapBufferTypeTag and its value, so a key read copies nothing. Like
-        !storage.any it is a fixed-width scalar rather than a container, and it
-        carries its null in the tag rather than in a !storage.nullable around it, so a
-        row whose map holds no such key - or no map at all - reads back as a Null-tagged
-        entry. Produced by db.static_map_key and db.dynamic_map_key, and only ever passed
-        through or rendered.
-    }];
 }
 
 // One string array per entity of a MERGE pattern: the label set of each chain node,

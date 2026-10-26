@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "list/ListBuffer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "list/PathTrie.h"
 
@@ -23,7 +23,7 @@ protected:
     template <typename IDType>
     void readIDs(const ListView& list, std::vector<uint64_t>& ids) {
         ids.clear();
-        for (const ListElementView& element : list) {
+        for (const CellView& element : list) {
             ids.push_back(element.getAs<IDType>().getValue());
         }
     }

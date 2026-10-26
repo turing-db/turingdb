@@ -36,9 +36,8 @@ constexpr bool isFixedWidth = TrivialInternalTypes<T> || std::is_same_v<T, db::P
 
 template <typename T>
 constexpr bool isNestedHandle = std::is_same_v<T, wasm::ListView>
-                             || std::is_same_v<T, wasm::ListElementView>
-                             || std::is_same_v<T, wasm::MapView>
-                             || std::is_same_v<T, wasm::MapEntryView>;
+                             || std::is_same_v<T, wasm::WasmCellView>
+                             || std::is_same_v<T, wasm::MapView>;
 
 template <typename T>
 constexpr bool isString = std::is_same_v<T, db::types::String::Primitive>;

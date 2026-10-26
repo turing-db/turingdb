@@ -57,7 +57,7 @@ bool mayHoldAnyType(Value operand) {
     const Type element = columnElement(operand);
     const bool unresolved = isa<NoneType>(column.getType()) && isa<NoneType>(element);
 
-    return unresolved || isa<storage::AnyType, storage::MapElementType>(element);
+    return unresolved || isa<storage::AnyType>(element);
 }
 
 // A logical operator raises on a value that is no boolean

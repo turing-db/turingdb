@@ -35,7 +35,7 @@
 #include "SystemManager.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
@@ -69,7 +69,7 @@ public:
             const ListView list = constView ? (*constView)[rowIndex] : vectorView->getRaw()[rowIndex];
 
             std::vector<types::Int64::Primitive> elements;
-            for (const ListElementView element : list) {
+            for (const CellView element : list) {
                 elements.push_back(element.getAs<types::Int64::Primitive>());
             }
 

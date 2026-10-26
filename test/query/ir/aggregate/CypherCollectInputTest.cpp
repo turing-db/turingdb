@@ -14,7 +14,7 @@
 
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 
 #include "LocalMemory.h"
@@ -42,7 +42,7 @@ using NodeIDs = std::vector<uint64_t>;
 // Reads one list cell as a vector of strings.
 void readStringList(const ListView& view, Names& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(std::string(element.getAs<std::string_view>()));
     }
 }
@@ -50,7 +50,7 @@ void readStringList(const ListView& view, Names& out) {
 // Reads one list cell as a vector of int64s.
 void readInt64List(const ListView& view, Values& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(element.getAs<int64_t>());
     }
 }
@@ -58,8 +58,8 @@ void readInt64List(const ListView& view, Values& out) {
 // Reads one list cell as a vector of node ids, asserting the node tag.
 void readNodeIDList(const ListView& view, NodeIDs& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::NodeID);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::NodeID);
         out.push_back(element.getAs<NodeID>().getValue());
     }
 }

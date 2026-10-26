@@ -19,7 +19,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -95,7 +95,7 @@ public:
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
             std::vector<int64_t> scores;
-            for (const ListElementView& element : listRaw[row]) {
+            for (const CellView& element : listRaw[row]) {
                 scores.push_back(element.getAs<int64_t>());
             }
 

@@ -36,8 +36,8 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -57,31 +57,31 @@ using Rows = std::vector<Row>;
 std::string renderList(ListView list);
 
 // Render one element of a list as its value, recursing into a nested list.
-std::string renderListElement(const ListElementView element) {
+std::string renderCellView(const CellView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return std::to_string(element.getAs<double>());
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(element.getAs<CustomBool>()) ? "true" : "false";
         break;
 
         // Quoted so a zero-length string reads as an element rather than as nothing: an
         // unquoted [''] renders exactly as the empty list does.
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(element.getAs<std::string_view>()) + "'";
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return renderList(element.getAs<ListView>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
@@ -93,12 +93,12 @@ std::string renderListElement(const ListElementView element) {
 
 std::string renderList(const ListView list) {
     std::string rendered = "[";
-    for (size_t index = 0; const ListElementView& element : list) {
+    for (size_t index = 0; const CellView& element : list) {
         if (index > 0) {
             rendered += ", ";
         }
 
-        rendered += renderListElement(element);
+        rendered += renderCellView(element);
         index++;
     }
 

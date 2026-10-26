@@ -1032,8 +1032,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMakeMap(makeMap, body);
         } else if (nl::StaticMapKey mapKey = mlir::dyn_cast<nl::StaticMapKey>(operation)) {
             translateStaticMapKey(mapKey, body);
-        } else if (nl::MapEntryValue entryValue = mlir::dyn_cast<nl::MapEntryValue>(operation)) {
-            translateMapEntryValue(entryValue, body);
         } else if (nl::DynamicMapKey dynamicMapKey = mlir::dyn_cast<nl::DynamicMapKey>(operation)) {
             translateDynamicMapKey(dynamicMapKey, body);
         } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
@@ -1578,7 +1576,7 @@ void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
     ValueType valueType {ValueType::Invalid};
 
     if (heterogeneous) {
-        output = allocListElementColumn();
+        output = allocCellColumn();
     } else {
         valueType = nullableChunkValueType(valueChunk.getType());
         output = allocOptColumnForValueType(valueType);
@@ -1985,23 +1983,23 @@ MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
         cursor.writeKey(ownedCharacters(name.getValue()));
 
         if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+            cursor.writeValue(CellTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
         } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Int,
+            cursor.writeValue(CellTag::Int,
                               static_cast<types::Int64::Primitive>(intAttr.getInt()));
         } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Double,
+            cursor.writeValue(CellTag::Double,
                               static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::String, ownedCharacters(stringAttr.getValue()));
+            cursor.writeValue(CellTag::String, ownedCharacters(stringAttr.getValue()));
         } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
+            cursor.writeValue(CellTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
         } else if (const auto nestedList = mlir::dyn_cast<mlir::ArrayAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::ListView, materializeListView(nestedList));
+            cursor.writeValue(CellTag::ListView, materializeListView(nestedList));
         } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::MapView, materializeMapView(nestedMap));
+            cursor.writeValue(CellTag::MapView, materializeMapView(nestedMap));
         } else if (mlir::isa<mlir::UnitAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+            cursor.writeValue(CellTag::Null, PropertyNull {});
         } else {
             throw IRException("Unsupported literal attribute in a constant map");
         }
@@ -2020,23 +2018,23 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
 
     for (const mlir::Attribute element : elements) {
         if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+            cursor.writeValue(CellTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
         } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Int,
+            cursor.writeValue(CellTag::Int,
                               static_cast<types::Int64::Primitive>(intAttr.getInt()));
         } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Double,
+            cursor.writeValue(CellTag::Double,
                               static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::String, ownedCharacters(stringAttr.getValue()));
+            cursor.writeValue(CellTag::String, ownedCharacters(stringAttr.getValue()));
         } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
+            cursor.writeValue(CellTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
+            cursor.writeValue(CellTag::Null, PropertyNull {});
         } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::ListView, materializeListView(nestedAttr));
+            cursor.writeValue(CellTag::ListView, materializeListView(nestedAttr));
         } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::MapView, materializeMapView(nestedMap));
+            cursor.writeValue(CellTag::MapView, materializeMapView(nestedMap));
         } else {
             throw IRException("Unsupported literal attribute in a constant list");
         }
@@ -3343,10 +3341,10 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
         fill = NLExecutor::selectConstantListBroadcast();
     } else if (isMap) {
         fill = NLExecutor::selectConstantMapBroadcast();
-    } else if (mlir::isa<storage::MapElementType>(resultElement)) {
-        fill = NLExecutor::selectConstantMapEntryBroadcast();
+    } else if (mlir::isa<storage::AnyType>(resultElement)) {
+        fill = NLExecutor::selectConstantCellBroadcast();
     } else if (isNullableAny(resultElement)) {
-        fill = NLExecutor::selectOptListElementBroadcast(value);
+        fill = NLExecutor::selectOptCellBroadcast(value);
     } else {
         fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType), value);
     }
@@ -3585,46 +3583,19 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
     const mlir::Value resultValue = mapKey.getResult();
 
     const Column* input = getColumn(mapKey.getMap());
-    Column* const result = yieldsConstantColumn(resultValue) ? allocConstMapEntryColumn()
-                                                             : allocMapEntryColumn();
+    Column* const result = yieldsConstantColumn(resultValue) ? allocConstCellColumn()
+                                                             : allocCellColumn();
     _valueSlots[resultValue] = result;
 
     const std::string_view key = ownedCharacters(mapKey.getKey());
-
-    // The single null entry every row missing the key points at. It is the same on every
-    // row and every chunk, so it is written into the query's map buffer once, here.
-    MapWriteCursor absentCursor = _memory->mapBuffer().reserveMap(1, sizeof(PropertyNull));
-    absentCursor.writeKey(key);
-    const MapEntryView absent = absentCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
 
     NLStaticMapKeyData* data = _program->allocFunctionData<NLStaticMapKeyData>(input,
                                                                    result,
                                                                    NLExecutor::selectKeyedRead(input),
                                                                    key,
-                                                                   absent,
                                                                    _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runStaticMapKey, data);
-}
-
-void NLTranslator::translateMapEntryValue(nl::MapEntryValue entryValue, NLStmtContainer* body) {
-    const mlir::Value resultValue = entryValue.getResult();
-
-    const Column* input = getColumn(entryValue.getEntries());
-
-    Column* result = nullptr;
-    if (yieldsConstantColumn(resultValue)) {
-        result = _memory->alloc<ColumnConst<ListElementView>>();
-    } else {
-        result = _memory->alloc<ColumnVector<ListElementView>>();
-    }
-    _valueSlots[resultValue] = result;
-
-    NLMapEntryValueData* data = _program->allocFunctionData<NLMapEntryValueData>(input,
-                                                                                 result,
-                                                                                 _program->allocStepBuffers());
-
-    body->emplaceStmt(&NLExecutor::runMapEntryValue, data);
 }
 
 void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContainer* body) {
@@ -3633,23 +3604,15 @@ void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContai
     const Column* input = getColumn(mapKey.getMap());
     const Column* key = getColumn(mapKey.getKey());
 
-    Column* const result = yieldsConstantColumn(resultValue) ? allocConstMapEntryColumn()
-                                                             : allocMapEntryColumn();
+    Column* const result = yieldsConstantColumn(resultValue) ? allocConstCellColumn()
+                                                             : allocCellColumn();
     _valueSlots[resultValue] = result;
-
-    // A row holding no key has no key to name its null entry by, so one keyless entry
-    // serves every such row and is written into the query's map buffer once, here. The
-    // entry for a key the map does not hold carries that key, so the executor writes it.
-    MapWriteCursor keylessCursor = _memory->mapBuffer().reserveMap(1, sizeof(PropertyNull));
-    keylessCursor.writeKey(std::string_view {});
-    const MapEntryView keyless = keylessCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
 
     NLDynamicMapKeyData* data = _program->allocFunctionData<NLDynamicMapKeyData>(input,
                                                                                  result,
                                                                                  NLExecutor::selectKeyedRead(input),
                                                                                  key,
                                                                                  NLExecutor::selectStringRead(key),
-                                                                                 keyless,
                                                                                  _program->allocStepBuffers());
 
     body->emplaceStmt(&NLExecutor::runDynamicMapKey, data);
@@ -3719,7 +3682,7 @@ void NLTranslator::translatePercentile(mlir::Operation* operation, NLStmtContain
     const auto nullable = mlir::dyn_cast<storage::NullableType>(resultElement);
 
     if (!nullable) {
-        body->emplaceStmt(&NLExecutor::runPercentileDisc<ListElementView>, data);
+        body->emplaceStmt(&NLExecutor::runPercentileDisc<CellView>, data);
         return;
     }
 
@@ -4120,7 +4083,7 @@ void NLTranslator::translateToAny(nl::ToAny toAny, NLStmtContainer* body) {
     if (isUntypedNullChunk(operandValue.getType())) {
         NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
                                                                                result,
-                                                                               NLExecutor::selectListElementFillNull());
+                                                                               NLExecutor::selectCellFillNull());
         body->emplaceStmt(&NLExecutor::runFillNull, fillData);
         return;
     }
@@ -4465,8 +4428,8 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         output = allocOptListColumn();
         copyPrefix = NLExecutor::selectOptListBlockRepeatFunction();
     } else if (isNullableAny(elementType)) {
-        output = allocOptListElementColumn();
-        copyPrefix = NLExecutor::selectOptListElementBlockRepeatFunction();
+        output = allocOptCellColumn();
+        copyPrefix = NLExecutor::selectOptCellBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
@@ -4479,11 +4442,8 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         output = allocPlainColumn(valueType);
         copyPrefix = NLExecutor::selectPlainBlockRepeatFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        output = allocListElementColumn();
-        copyPrefix = NLExecutor::selectListElementBlockRepeatFunction();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        output = allocMapEntryColumn();
-        copyPrefix = NLExecutor::selectMapEntryBlockRepeatFunction();
+        output = allocCellColumn();
+        copyPrefix = NLExecutor::selectCellBlockRepeatFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -4574,8 +4534,8 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         output = allocOptListColumn();
         copySuffix = NLExecutor::selectOptListCopyFunction();
     } else if (isNullableAny(elementType)) {
-        output = allocOptListElementColumn();
-        copySuffix = NLExecutor::selectOptListElementCopyFunction();
+        output = allocOptCellColumn();
+        copySuffix = NLExecutor::selectOptCellCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
         if (isIDElement(wrappedType)) {
@@ -4596,11 +4556,8 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         output = allocPlainColumn(valueType);
         copySuffix = NLExecutor::selectPlainCopyFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        output = allocListElementColumn();
-        copySuffix = NLExecutor::selectListElementCopyFunction();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        output = allocMapEntryColumn();
-        copySuffix = NLExecutor::selectMapEntryCopyFunction();
+        output = allocCellColumn();
+        copySuffix = NLExecutor::selectCellCopyFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -5456,7 +5413,7 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     Column* accumulator = nullptr;
     NLAggregateResetFunction reset = nullptr;
     if (mlir::isa<storage::AnyType>(accumulatorElement)) {
-        accumulator = allocOptListElementColumn();
+        accumulator = allocOptCellColumn();
         reset = NLExecutor::selectTaggedAggregateReset();
     } else {
         const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
@@ -5502,7 +5459,7 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     Column* output = nullptr;
     NLAggregateResultFunction emit = nullptr;
     if (isNullableAny(resultElement)) {
-        output = allocOptListElementColumn();
+        output = allocOptCellColumn();
         emit = NLExecutor::selectTaggedAggregateResult();
     } else {
         const ValueType resultType = nullableChunkValueType(resultChunk.getType());
@@ -5566,12 +5523,12 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             if (isNullableList(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountOptListFold();
             } else if (isNullableAny(countElementType)) {
-                aggregate._fold = NLExecutor::selectGroupCountOptListElementFold();
+                aggregate._fold = NLExecutor::selectGroupCountOptCellFold();
             } else if (nullable) {
                 const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
             } else if (mlir::isa<storage::AnyType>(countElementType)) {
-                aggregate._fold = NLExecutor::selectGroupCountListElementFold();
+                aggregate._fold = NLExecutor::selectGroupCountCellFold();
             } else if (llvm::isa<storage::ListType>(countElementType)) {
                 // No row of a list chunk is null, so a group's tally is its whole row
                 // count, as it is for count(*).
@@ -5617,12 +5574,12 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             if (isNullableList(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptListFold();
             } else if (isNullableAny(distinctElementType)) {
-                aggregate._fold = NLExecutor::selectGroupCountDistinctOptListElementFold();
+                aggregate._fold = NLExecutor::selectGroupCountDistinctOptCellFold();
             } else if (nullable) {
                 const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
             } else if (mlir::isa<storage::AnyType>(distinctElementType)) {
-                aggregate._fold = NLExecutor::selectGroupCountDistinctListElementFold();
+                aggregate._fold = NLExecutor::selectGroupCountDistinctCellFold();
             } else {
                 const NLChunkKind distinctKind = getChunkKind(chunkType);
                 aggregate._distinct.setRowKey(NLExecutor::selectKeyAppendFunction(distinctKind));
@@ -5671,7 +5628,7 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const ValueType accumulatorType = accumulatesAsDouble ? ValueType::Double : inputType;
 
             if (keepsTaggedCells) {
-                aggregate._accumulator = allocOptListElementColumn();
+                aggregate._accumulator = allocOptCellColumn();
                 aggregate._grow = NLExecutor::selectTaggedGroupAggregateGrow();
                 aggregate._emit = NLExecutor::selectTaggedGroupAggregateEmit();
             } else {
@@ -5906,7 +5863,7 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             NLCollectListEmitFunction listEmit = nullptr;
             NLExecutor::selectCollectOptTaggedHandlers(isDistinct, fold, listEmit);
 
-            value._buffer = allocListElementColumn();
+            value._buffer = allocCellColumn();
             value._fold = fold;
             value._listEmit = listEmit;
         } else if (const auto nullableElement = mlir::dyn_cast<storage::NullableType>(element);
@@ -5941,7 +5898,7 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
             NLCollectListEmitFunction listEmit = nullptr;
             NLExecutor::selectCollectTaggedHandlers(isDistinct, fold, listEmit);
 
-            value._buffer = allocListElementColumn();
+            value._buffer = allocCellColumn();
             value._fold = fold;
             value._listEmit = listEmit;
         } else {
@@ -6575,7 +6532,7 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     if (isNullableList(elementType)) {
         return allocOptListColumn();
     } else if (isNullableAny(elementType)) {
-        return allocOptListElementColumn();
+        return allocOptCellColumn();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6588,9 +6545,7 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return allocListElementColumn();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        return allocMapEntryColumn();
+        return allocCellColumn();
     } else if (isMaskElementType(elementType)) {
         return allocMaskColumn();
     }
@@ -6609,7 +6564,7 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListAppendFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementAppendFunction();
+        return NLExecutor::selectOptCellAppendFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6622,9 +6577,7 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptAppendFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementAppendFunction();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        return NLExecutor::selectMapEntryAppendFunction();
+        return NLExecutor::selectCellAppendFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskAppend();
     }
@@ -6643,7 +6596,7 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListGatherFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementGatherFunction();
+        return NLExecutor::selectOptCellGatherFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6656,9 +6609,7 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptGatherFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementGatherFunction();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        return NLExecutor::selectMapEntryGatherFunction();
+        return NLExecutor::selectCellGatherFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskGather();
     }
@@ -6693,7 +6644,7 @@ NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListFillNull();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementFillNull();
+        return NLExecutor::selectOptCellFillNull();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6706,7 +6657,7 @@ NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptFillNullFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementFillNull();
+        return NLExecutor::selectCellFillNull();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskFillNull();
     }
@@ -6725,7 +6676,7 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListCompareFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementCompareFunction();
+        return NLExecutor::selectOptCellCompareFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6738,7 +6689,7 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptCompareFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementCompareFunction();
+        return NLExecutor::selectCellCompareFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskCompare();
     }
@@ -6792,7 +6743,7 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListKeyAppendFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementKeyAppendFunction();
+        return NLExecutor::selectOptCellKeyAppendFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6805,7 +6756,7 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptKeyAppendFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementKeyAppendFunction();
+        return NLExecutor::selectCellKeyAppendFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskKeyAppend();
     }
@@ -6827,7 +6778,7 @@ NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type c
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         return NLExecutor::selectOptJoinKeyFunctions(valueTypeFromElementType(nullableType.getValueType()));
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementJoinKeyFunctions();
+        return NLExecutor::selectCellJoinKeyFunctions();
     } else if (isPlainValueElementType(elementType)) {
         return NLExecutor::selectPlainJoinKeyFunctions(valueTypeFromElementType(elementType));
     }
@@ -6845,7 +6796,7 @@ NLKeyIsMatchableFunction NLTranslator::selectKeyMatchableForChunkType(mlir::Type
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         return NLExecutor::selectOptKeyMatchableFunction(valueTypeFromElementType(nullableType.getValueType()));
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementKeyMatchableFunction();
+        return NLExecutor::selectCellKeyMatchableFunction();
     } else if (isPlainValueElementType(elementType)) {
         return NLExecutor::selectPlainKeyMatchableFunction(valueTypeFromElementType(elementType));
     }
@@ -6876,7 +6827,7 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListCountFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementCountFunction();
+        return NLExecutor::selectOptCellCountFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6889,7 +6840,7 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptCountFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementCountFunction();
+        return NLExecutor::selectCellCountFunction();
     }
 
     // An entity an OPTIONAL MATCH did not match is an invalid ID and a path it did not match
@@ -6912,7 +6863,7 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListGroupKeyGatherFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementGroupKeyGatherFunction();
+        return NLExecutor::selectOptCellGroupKeyGatherFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6925,7 +6876,7 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptGroupKeyGather(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementGroupKeyGatherFunction();
+        return NLExecutor::selectCellGroupKeyGatherFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskGroupKeyGather();
     }
@@ -6944,7 +6895,7 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     if (isNullableList(elementType)) {
         return NLExecutor::selectOptListCopyFunction();
     } else if (isNullableAny(elementType)) {
-        return NLExecutor::selectOptListElementCopyFunction();
+        return NLExecutor::selectOptCellCopyFunction();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6957,9 +6908,7 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptCopyFunction(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return NLExecutor::selectListElementCopyFunction();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        return NLExecutor::selectMapEntryCopyFunction();
+        return NLExecutor::selectCellCopyFunction();
     } else if (isMaskElementType(elementType)) {
         return NLExecutor::selectMaskCopy();
     }
@@ -6982,7 +6931,7 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     if (isNullableList(elementType)) {
         return allocOptListColumn();
     } else if (isNullableAny(elementType)) {
-        return allocOptListElementColumn();
+        return allocOptCellColumn();
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -6995,9 +6944,7 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
         const ValueType valueType = valueTypeFromElementType(wrappedType);
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        return allocListElementColumn();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        return allocMapEntryColumn();
+        return allocCellColumn();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -7107,9 +7054,9 @@ void NLTranslator::allocBroadcastColumn(mlir::Value inputValue,
         broadcast = isOuter ? NLExecutor::selectOptListBlockRepeatFunction()
                             : NLExecutor::selectOptListTileFunction();
     } else if (isNullableAny(elementType)) {
-        output = allocOptListElementColumn();
-        broadcast = isOuter ? NLExecutor::selectOptListElementBlockRepeatFunction()
-                            : NLExecutor::selectOptListElementTileFunction();
+        output = allocOptCellColumn();
+        broadcast = isOuter ? NLExecutor::selectOptCellBlockRepeatFunction()
+                            : NLExecutor::selectOptCellTileFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const mlir::Type wrappedType = nullableType.getValueType();
         if (isIDElement(wrappedType)) {
@@ -7127,13 +7074,9 @@ void NLTranslator::allocBroadcastColumn(mlir::Value inputValue,
         output = allocMaskColumn();
         broadcast = isOuter ? NLExecutor::selectMaskBlockRepeat() : NLExecutor::selectMaskTile();
     } else if (mlir::isa<storage::AnyType>(elementType)) {
-        output = allocListElementColumn();
-        broadcast = isOuter ? NLExecutor::selectListElementBlockRepeatFunction()
-                            : NLExecutor::selectListElementTileFunction();
-    } else if (mlir::isa<storage::MapElementType>(elementType)) {
-        output = allocMapEntryColumn();
-        broadcast = isOuter ? NLExecutor::selectMapEntryBlockRepeatFunction()
-                            : NLExecutor::selectMapEntryTileFunction();
+        output = allocCellColumn();
+        broadcast = isOuter ? NLExecutor::selectCellBlockRepeatFunction()
+                            : NLExecutor::selectCellTileFunction();
     } else if (isPlainValueElementType(elementType)) {
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
@@ -7358,26 +7301,19 @@ Column* NLTranslator::allocOptListColumn() {
     return column;
 }
 
-Column* NLTranslator::allocListElementColumn() {
-    ColumnVector<ListElementView>* column = _memory->alloc<ColumnVector<ListElementView>>();
+Column* NLTranslator::allocCellColumn() {
+    ColumnVector<CellView>* column = _memory->alloc<ColumnVector<CellView>>();
     column->reserve(_program->getChunkSize());
 
     return column;
 }
 
-Column* NLTranslator::allocConstMapEntryColumn() {
-    return _memory->alloc<ColumnConst<MapEntryView>>();
+Column* NLTranslator::allocConstCellColumn() {
+    return _memory->alloc<ColumnConst<CellView>>();
 }
 
-Column* NLTranslator::allocMapEntryColumn() {
-    ColumnVector<MapEntryView>* column = _memory->alloc<ColumnVector<MapEntryView>>();
-    column->reserve(_program->getChunkSize());
-
-    return column;
-}
-
-Column* NLTranslator::allocOptListElementColumn() {
-    ColumnOptVector<ListElementView>* column = _memory->alloc<ColumnOptVector<ListElementView>>();
+Column* NLTranslator::allocOptCellColumn() {
+    ColumnOptVector<CellView>* column = _memory->alloc<ColumnOptVector<CellView>>();
     column->reserve(_program->getChunkSize());
 
     return column;

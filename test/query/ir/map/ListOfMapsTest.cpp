@@ -35,10 +35,9 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
-#include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "versioning/Transaction.h"
@@ -60,28 +59,28 @@ std::string renderMap(MapView map);
 std::string renderList(ListView list);
 
 std::string renderMapValue(const MapEntryView entry) {
-    switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
-            return std::to_string(entry.getValueAs<int64_t>());
+    switch (entry.getValue().getTag()) {
+        case CellTag::Int:
+            return std::to_string(entry.getValue().getAs<int64_t>());
         break;
 
-        case MapBufferTypeTag::Bool:
-            return static_cast<bool>(entry.getValueAs<CustomBool>()) ? "true" : "false";
+        case CellTag::Bool:
+            return static_cast<bool>(entry.getValue().getAs<CustomBool>()) ? "true" : "false";
         break;
 
-        case MapBufferTypeTag::String:
-            return "'" + std::string(entry.getValueAs<std::string_view>()) + "'";
+        case CellTag::String:
+            return "'" + std::string(entry.getValue().getAs<std::string_view>()) + "'";
         break;
 
-        case MapBufferTypeTag::ListView:
-            return renderList(entry.getValueAs<ListView>());
+        case CellTag::ListView:
+            return renderList(entry.getValue().getAs<ListView>());
         break;
 
-        case MapBufferTypeTag::MapView:
-            return renderMap(entry.getValueAs<MapView>());
+        case CellTag::MapView:
+            return renderMap(entry.getValue().getAs<MapView>());
         break;
 
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
@@ -105,25 +104,25 @@ std::string renderMap(const MapView map) {
     return rendered + "}";
 }
 
-std::string renderElement(const ListElementView element) {
+std::string renderElement(const CellView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(element.getAs<std::string_view>()) + "'";
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return renderList(element.getAs<ListView>());
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return renderMap(element.getAs<MapView>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
@@ -135,7 +134,7 @@ std::string renderElement(const ListElementView element) {
 
 std::string renderList(const ListView list) {
     std::string rendered = "[";
-    for (size_t index = 0; const ListElementView& element : list) {
+    for (size_t index = 0; const CellView& element : list) {
         if (index > 0) {
             rendered += ", ";
         }
@@ -156,7 +155,7 @@ std::string renderCell(const Column* column, size_t row) {
         return renderList((*listRows)[row]);
     }
 
-    if (const auto* elements = dynamic_cast<const ColumnVector<ListElementView>*>(column)) {
+    if (const auto* elements = dynamic_cast<const ColumnVector<CellView>*>(column)) {
         return renderElement((*elements)[row]);
     }
 

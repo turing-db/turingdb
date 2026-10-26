@@ -2,7 +2,7 @@
 
 using namespace net::proto;
 
-NestedContainerIterator::NestedContainerIterator(std::span<const db::ListElementView> elements)
+NestedContainerIterator::NestedContainerIterator(std::span<const db::CellView> elements)
     : _kind(NestedContainerKind::List),
     _listIt(elements.begin()),
     _listEnd(elements.end())

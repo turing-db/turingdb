@@ -21,7 +21,7 @@
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -29,9 +29,7 @@
 using namespace db;
 using namespace turing::test;
 
-// The entry a dynamic map key read hands back, inspected as the MapEntryView it is.
-// A rendered result shows the value alone, so only a sink reading the cell can tell
-// which key a null entry is named by - and the binary protocol writes that key.
+// The cell a dynamic map key read hands back, inspected as the CellView it is.
 // The values themselves are pinned by the dynamic-map-key-* query suite tests.
 class DynamicMapKeyTest : public TuringTest {
 protected:
@@ -127,44 +125,39 @@ protected:
 
 namespace {
 
-// Collects the key and the tag of every entry a map read emits, which no rendered row shows
-class MapEntrySink : public db::NLOutputSink {
+// Collects the tag of every cell a map read emits
+class CellTagSink : public db::NLOutputSink {
 public:
-    struct Entry {
-        std::string _key;
-        db::MapBufferTypeTag _tag {db::MapBufferTypeTag::Null};
-    };
-
     void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_FALSE(chunks.empty());
 
         const db::Column* const column = chunks.back();
-        const bool holdsOneEntryForEveryRow =
-            column->getKind() == db::ColumnConst<db::MapEntryView>::staticKind();
+        const bool holdsOneCellForEveryRow =
+            column->getKind() == db::ColumnConst<db::CellView>::staticKind();
 
-        ASSERT_TRUE(holdsOneEntryForEveryRow
-                    || column->getKind() == db::ColumnVector<db::MapEntryView>::staticKind());
+        ASSERT_TRUE(holdsOneCellForEveryRow
+                    || column->getKind() == db::ColumnVector<db::CellView>::staticKind());
 
         for (size_t row = offset; row < offset + rowCount; row++) {
-            const db::MapEntryView entry =
-                holdsOneEntryForEveryRow
-                    ? (*static_cast<const db::ColumnConst<db::MapEntryView>*>(column))[row]
-                    : (*static_cast<const db::ColumnVector<db::MapEntryView>*>(column))[row];
+            const db::CellView cell =
+                holdsOneCellForEveryRow
+                    ? (*static_cast<const db::ColumnConst<db::CellView>*>(column))[row]
+                    : (*static_cast<const db::ColumnVector<db::CellView>*>(column))[row];
 
-            _entries.push_back(Entry {std::string {entry.getKey()}, entry.getValueTag()});
+            _tags.push_back(cell.getTag());
         }
     }
 
-    const std::vector<Entry>& entries() const { return _entries; }
+    const std::vector<db::CellTag>& tags() const { return _tags; }
 
 private:
-    std::vector<Entry> _entries;
+    std::vector<db::CellTag> _tags;
 };
 
 }
 
-TEST_F(DynamicMapKeyTest, namesAMissingKeyByTheKeyTheRowAskedFor) {
-    MapEntrySink sink;
+TEST_F(DynamicMapKeyTest, readsAMissingKeyAsANullCell) {
+    CellTagSink sink;
     QueryStatus status;
     _interpreter->execute(status,
                           "UNWIND ['a', 'nope', 'gone'] AS k WITH {a: 1} AS m, k RETURN m[k]",
@@ -174,23 +167,14 @@ TEST_F(DynamicMapKeyTest, namesAMissingKeyByTheKeyTheRowAskedFor) {
                           &sink);
     ASSERT_TRUE(status.isOk()) << status.getError();
 
-    const std::vector<MapEntrySink::Entry>& entries = sink.entries();
-    ASSERT_EQ(entries.size(), 3u);
-
-    EXPECT_EQ(entries[0]._key, "a");
-    EXPECT_NE(entries[0]._tag, MapBufferTypeTag::Null);
-
-    EXPECT_EQ(entries[1]._key, "nope");
-    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
-
-    EXPECT_EQ(entries[2]._key, "gone");
-    EXPECT_EQ(entries[2]._tag, MapBufferTypeTag::Null);
+    const std::vector<CellTag> expected {CellTag::Int, CellTag::Null, CellTag::Null};
+    EXPECT_EQ(sink.tags(), expected);
 }
 
-TEST_F(DynamicMapKeyTest, namesAStoredMissingKeyByTheKeyTheRowAskedFor) {
+TEST_F(DynamicMapKeyTest, readsAStoredMissingKeyAsANullCell) {
     write("CREATE (n:Tagged {name: 'a', attrs: {x: 1}})");
 
-    MapEntrySink sink;
+    CellTagSink sink;
     QueryStatus status;
     _interpreter->execute(status,
                           "MATCH (t:Tagged) UNWIND ['x', 'absent'] AS k RETURN t.attrs[k]",
@@ -200,18 +184,12 @@ TEST_F(DynamicMapKeyTest, namesAStoredMissingKeyByTheKeyTheRowAskedFor) {
                           &sink);
     ASSERT_TRUE(status.isOk()) << status.getError();
 
-    const std::vector<MapEntrySink::Entry>& entries = sink.entries();
-    ASSERT_EQ(entries.size(), 2u);
-
-    EXPECT_EQ(entries[0]._key, "x");
-    EXPECT_NE(entries[0]._tag, MapBufferTypeTag::Null);
-
-    EXPECT_EQ(entries[1]._key, "absent");
-    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
+    const std::vector<CellTag> expected {CellTag::Int, CellTag::Null};
+    EXPECT_EQ(sink.tags(), expected);
 }
 
-TEST_F(DynamicMapKeyTest, leavesANullKeyEntryUnnamed) {
-    MapEntrySink sink;
+TEST_F(DynamicMapKeyTest, readsANullKeyAsANullCell) {
+    CellTagSink sink;
     QueryStatus status;
     _interpreter->execute(status,
                           "UNWIND ['a', null] AS k WITH {a: 1} AS m, k RETURN m[k]",
@@ -221,14 +199,8 @@ TEST_F(DynamicMapKeyTest, leavesANullKeyEntryUnnamed) {
                           &sink);
     ASSERT_TRUE(status.isOk()) << status.getError();
 
-    const std::vector<MapEntrySink::Entry>& entries = sink.entries();
-    ASSERT_EQ(entries.size(), 2u);
-
-    EXPECT_EQ(entries[0]._key, "a");
-    EXPECT_EQ(entries[0]._tag, MapBufferTypeTag::Int);
-
-    EXPECT_TRUE(entries[1]._key.empty());
-    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
+    const std::vector<CellTag> expected {CellTag::Int, CellTag::Null};
+    EXPECT_EQ(sink.tags(), expected);
 }
 
 // The suite cannot express this one: it runs a single query, and a property that query

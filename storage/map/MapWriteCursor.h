@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string_view>
 
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "MapEntryView.h"
 #include "MapView.h"
 
@@ -52,7 +52,7 @@ public:
      * entry's view, advances the cursor, returns the view.
      */
     template <typename T>
-    MapEntryView writeValue(MapBufferTypeTag tag, const T& value);
+    MapEntryView writeValue(CellTag tag, const T& value);
 
     /**
      * @brief Copies @param numBytes bytes from a pre-formed [tag][value] straight into the open

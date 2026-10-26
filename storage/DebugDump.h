@@ -9,7 +9,7 @@
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 
 #include "map/MapEntryView.h"
@@ -70,7 +70,7 @@ public:
     static void dumpNull(std::ostream& out);
 
     static void dump(std::ostream& out, ListView list);
-    static void dump(std::ostream& out, ListElementView view, bool isInList = false);
+    static void dump(std::ostream& out, CellView view, bool isInList = false);
 
     static void dump(std::ostream& out, MapView map);
     static void dump(std::ostream& out, MapEntryView view, bool isInMap = false);

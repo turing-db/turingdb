@@ -396,46 +396,26 @@ def MakeMap : NLOp<"make_map", [Pure, RowAlignedThroughOperands]> {
 def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise read of one value of a map chunk, by a key fixed at plan time";
   let description = [{
-    Imperative counterpart of db.static_map_key. Row r of the result views the entry row r's map
-    already holds, so the read copies nothing:
+    Imperative counterpart of db.static_map_key. Row r of the result views the value row r's
+    map already holds, a tagged cell, so the read copies nothing:
 
       %v = nl.static_map_key %m key "name"
-             : (!nl.chunk<!storage.nullable<!storage.map>>) -> !nl.chunk<!storage.map_element>
+             : (!nl.chunk<!storage.nullable<!storage.map>>) -> !nl.chunk<!storage.any>
 
     The operand is nullable where a stored property fetched it and plain where a literal
     built it, so both spellings are accepted. It is a chunk of tagged cells where the map
     was itself read out of a list or a map. A cell holding a node or an edge reads that
     entity's property, written into the step's map buffer as an entry of its own, and a
-    cell holding anything else answers like a row holding none. The result never is a
-    tagged cell: a map value carries its null in its own tag, so a
-    missing key and an absent map both read back as a Null-tagged entry rather than as an
-    absent optional.
+    cell holding anything else answers like a row holding none. The result is never
+    nullable: a cell carries its null in its own tag, so a missing key and an absent map
+    both read back as a Null-tagged cell rather than as an absent optional.
   }];
 
   let arguments = (ins NLChunk:$map, StrAttr:$key);
-  let results   = (outs NLMapElementChunk:$result);
+  let results   = (outs NLCellChunk:$result);
   let hasVerifier = 1;
 
   let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
-}
-
-def MapEntryValue : NLOp<"map_entry_value", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
-  let summary = "Row-wise read of the value each map entry holds, as a tagged cell";
-  let description = [{
-    A value read out of a map rides the entry it views in the map buffer. Where it meets an
-    op reading the tagged cells every value of type any rides - a CASE, a list, an
-    aggregate, NOT or a minus - its value is copied into a cell of its own:
-
-      %c = nl.map_entry_value %v : (!nl.chunk<!storage.map_element>) -> !nl.chunk<!storage.any>
-
-    A Null-tagged entry answers a Null-tagged cell.
-  }];
-
-  let arguments = (ins NLMapElementChunk:$entries);
-  let results   = (outs NLChunk:$result);
-  let hasVerifier = 1;
-
-  let assemblyFormat = "$entries attr-dict `:` functional-type(operands, results)";
 }
 
 /**
@@ -2606,23 +2586,23 @@ def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThr
 def DynamicMapKey : NLOp<"dynamic_map_key", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise read of one value of a map chunk, by a key read per row";
   let description = [{
-    Imperative counterpart of db.dynamic_map_key. Row r of the result views the entry row
-    r's map already holds under row r's key, so the read copies nothing:
+    Imperative counterpart of db.dynamic_map_key. Row r of the result views the value row
+    r's map already holds under row r's key, a tagged cell, so the read copies nothing:
 
       %v = nl.dynamic_map_key %m, %k
              : (!nl.chunk<!storage.nullable<!storage.map>>, !nl.chunk<!storage.string>)
-               -> !nl.chunk<!storage.map_element>
+               -> !nl.chunk<!storage.any>
 
     Either operand is nullable where a stored property fetched it and plain where a literal
     built it, so both spellings are accepted on both. The map operand is a chunk of tagged
     cells where the map was itself read out of a list or a map, and a cell holding a node or
-    an edge reads that entity's property under the key. The result never is: a map
-    value carries its null in its own tag, so a map holding no such key, a row holding no
-    map and a row holding no key all read back as a Null-tagged entry.
+    an edge reads that entity's property under the key. The result is never nullable: a
+    cell carries its null in its own tag, so a map holding no such key, a row holding no
+    map and a row holding no key all read back as a Null-tagged cell.
   }];
 
   let arguments = (ins NLChunk:$map, NLChunk:$key);
-  let results   = (outs NLMapElementChunk:$result);
+  let results   = (outs NLCellChunk:$result);
   let hasVerifier = 1;
 
   let assemblyFormat = "$map `,` $key attr-dict `:` functional-type(operands, results)";

@@ -10,36 +10,13 @@
 #include "NestedContainerKind.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
-#include "list/ListUtils.h"
-#include "map/MapUtils.h"
+#include "CellUtils.h"
 
 namespace net::proto {
 
-// The view each container's tag dispatcher hands its visitor, and the width of the tag it
-// stores.
-template <NestedContainerKind Kind>
-struct ContainerViewOf {
-    using Type = db::ListElementView;
-};
-
-template <>
-struct ContainerViewOf<NestedContainerKind::Map> {
-    using Type = db::MapEntryView;
-};
-
-template <NestedContainerKind Kind>
-constexpr size_t tagSizeOf() {
-    if constexpr (Kind == NestedContainerKind::List) {
-        return sizeof(db::ListBufferTypeTag);
-    } else {
-        return sizeof(db::MapBufferTypeTag);
-    }
-}
-
 /**
  * @brief Reads one value off the wire and appends it to the container on top of the sink's
- * stack, dispatched on the value's tag via @ref db::ListTagDispatcher or
- * @ref db::dispatchMapTag.
+ * stack, dispatched on the value's tag via @ref db::CellTagDispatcher.
  *
  * The tag is glanced (not yet consumed) by the caller; this visitor consumes the tag
  * together with its value once enough is buffered. Returns true if the value was fully
@@ -51,24 +28,17 @@ constexpr size_t tagSizeOf() {
  * [tag][value] is copied straight into the reserved slot. In a map that slot sits after the
  * key's string_view, which the entry's key wrote before the value arrived.
  */
-// What one value of this container kind is viewed by: a list hands out element views, a
-// map entry views, and the column families that store one per row take the matching one.
-template <ProtoDecodeSink Sink, NestedContainerKind Kind>
-using OutViewOf = std::conditional_t<Kind == NestedContainerKind::Map,
-                                     SinkMapEntryView<Sink>,
-                                     SinkListElementView<Sink>>;
-
 template <ProtoDecodeSink Sink, NestedContainerKind Kind>
 struct NestedValueReadVisitor {
     DecodeContext* _context {nullptr};
     Sink* _sink {nullptr};
     // Optional: if set, receives the view of each value appended to the container (used by
-    // the ListElementView and MapEntryView columns, which store one view per row).
-    OutViewOf<Sink, Kind>* _outView {nullptr};
+    // the CellView columns, which store one view per row).
+    SinkCellView<Sink>* _outView {nullptr};
 
     template <typename T>
-    bool operator()(const typename ContainerViewOf<Kind>::Type unusedView) const {
-        constexpr size_t tagSize = tagSizeOf<Kind>();
+    bool operator()(const db::CellView unusedView) const {
+        constexpr size_t tagSize = sizeof(db::CellTag);
 
         if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
             if (_context->_inBuf->readable() < tagSize + sizeof(WireSize)) {
@@ -151,32 +121,22 @@ private:
             captureOutView(_sink->writeListValue(value));
         } else {
             _sink->writeMapValue(value);
-            captureOutView({});
         }
     }
 
     // The same, for a [tag][value] pair lifted straight off the wire.
     void writeValueBytes(const char* bytes, size_t numBytes) const {
         if constexpr (Kind == NestedContainerKind::List) {
-            captureOutView(_sink->writeListElementBytes(bytes, numBytes));
+            captureOutView(_sink->writeCellBytes(bytes, numBytes));
         } else {
             _sink->writeMapValueBytes(bytes, numBytes);
-            captureOutView({});
         }
     }
 
-    // If a caller asked for it, hands back the view of the value just written. A list's
-    // writers return it; a map's entry is recorded on the sink, since the two nested
-    // openers hand back the element view of a list even when a map is what they filled.
-    void captureOutView(const SinkListElementView<Sink> view) const {
-        if (!_outView) {
-            return;
-        }
-
-        if constexpr (Kind == NestedContainerKind::List) {
+    // If a caller asked for it, hands back the view of the value just written.
+    void captureOutView(const SinkCellView<Sink> view) const {
+        if (_outView) {
             *_outView = view;
-        } else {
-            *_outView = _sink->lastMapEntry();
         }
     }
 };
@@ -227,25 +187,18 @@ inline void closeCompletedContainers(Sink* sink) {
  *
  * For each top-level element completed (one written through the column's own cursor, i.e. stack
  * depth 1 — nested values live deeper and are not column rows), @param onTopLevelElement is
- * invoked with its 0-based index and view. ListElementView columns store the view; ListView
+ * invoked with its 0-based index and view. CellView columns store the view; ListView
  * and MapView columns pass a no-op.
  *
  * return false if we have an incomplete value in the input buffer.
  */
-struct IgnoreTopLevelValue {
-    template <typename View>
-    void operator()(size_t, const View&) const {}
-};
-
-template <ProtoDecodeSink Sink, typename OnTopLevelElement, typename OnTopLevelEntry = IgnoreTopLevelValue>
+template <ProtoDecodeSink Sink, typename OnTopLevelElement>
 inline bool drainContainerStack(DecodeContext* context,
                                 Sink* sink,
-                                const OnTopLevelElement& onTopLevelElement,
-                                const OnTopLevelEntry& onTopLevelEntry = {}) {
-    SinkListElementView<Sink> elementView;
-    SinkMapEntryView<Sink> entryView;
+                                const OnTopLevelElement& onTopLevelElement) {
+    SinkCellView<Sink> elementView;
     const NestedValueReadVisitor<Sink, NestedContainerKind::List> listVisitor {context, sink, &elementView};
-    const NestedValueReadVisitor<Sink, NestedContainerKind::Map> mapVisitor {context, sink, &entryView};
+    const NestedValueReadVisitor<Sink, NestedContainerKind::Map> mapVisitor {context, sink};
 
     while (sink->hasOpenContainer()) {
         if (sink->topContainerComplete()) {
@@ -258,23 +211,14 @@ inline bool drainContainerStack(DecodeContext* context,
                 return false;
             }
 
-            if (context->_inBuf->readable() < sizeof(db::MapBufferTypeTag)) {
+            if (context->_inBuf->readable() < sizeof(db::CellTag)) {
                 return false;
             }
 
-            db::MapBufferTypeTag tag {};
+            db::CellTag tag {};
             memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));
 
-            const bool topLevelEntry = (sink->openContainerCount() == 1);
-            const size_t entryIndex = sink->topLevelValuesWritten();
-
-            const bool entryComplete = db::dispatchMapTag(tag, mapVisitor, db::MapEntryView {});
-
-            // As for a list element: a map entry column's rows are the top-level entries,
-            // and onTopLevelEntry is what writes each one into its row
-            if (topLevelEntry && sink->topLevelValuesWritten() > entryIndex) {
-                onTopLevelEntry(entryIndex, entryView);
-            }
+            const bool entryComplete = db::CellTagDispatcher {tag}.execute(mapVisitor, db::CellView {});
 
             if (!entryComplete) {
                 // The value's bytes are still streaming, but its view is recorded, so every
@@ -286,11 +230,11 @@ inline bool drainContainerStack(DecodeContext* context,
 
             continue;
         } else {
-            if (context->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
+            if (context->_inBuf->readable() < sizeof(db::CellTag)) {
                 return false;
             }
 
-            db::ListBufferTypeTag tag {};
+            db::CellTag tag {};
             // Peek the tag (don't consume): keeping it in the buffer lets the fixed-width path
             // memcpy [tag][value] in one go.
             memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));
@@ -298,7 +242,7 @@ inline bool drainContainerStack(DecodeContext* context,
             const bool topLevel = (sink->openContainerCount() == 1);
             const size_t elementIndex = sink->topLevelValuesWritten();
 
-            const bool elementComplete = db::ListTagDispatcher {tag}.execute(listVisitor, db::ListElementView {});
+            const bool elementComplete = db::CellTagDispatcher {tag}.execute(listVisitor, db::CellView {});
 
             // In the special case of list element view where each element corresponds to a
             // container column row - onTopLevelElement is used to write the value into the

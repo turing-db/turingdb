@@ -5,9 +5,9 @@
 #include <utility>
 
 #include "ListByteBuffer.h"
-#include "ListElementViewBuffer.h"
+#include "CellViewBuffer.h"
 
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "ListView.h"
 #include "ListWriteCursor.h"
@@ -38,10 +38,10 @@ namespace db {
  * permamently stable.
  *
  * @detail Stores list elements (in @ref _elements) alongside a non-owning view for each
- * element (in @ref ListElementViewBuffer).
+ * element (in @ref CellViewBuffer).
  *
  * @tparam N size {in bytes, in elements} of each chunk of the underlying
- * {@ref ListByteBuffer, @ref ListElementViewBuffer}.
+ * {@ref ListByteBuffer, @ref CellViewBuffer}.
  */
 template <size_t N = 4096>
 class ListBuffer {
@@ -93,18 +93,18 @@ public:
      * @brief Stores @param element - the elements of a nested list among them - in this
      * buffer and returns a view of the copy, which stands as long as @ref copy(ListView)'s.
      */
-    ListElementView copy(ListElementView element);
+    CellView copy(CellView element);
 
     void clear();
 
 private:
     /// Container of raw bytes for each element
     ListByteBuffer<N> _elements;
-    /// Container of @ref ListElementView, for each element in @ref _elements
-    ListElementViewBuffer<N> _views;
+    /// Container of @ref CellView, for each element in @ref _elements
+    CellViewBuffer<N> _views;
 
     /// Returns the value @param element holds, a nested list copied into this buffer
-    ListItemVariant ownedItem(ListElementView element);
+    ListItemVariant ownedItem(CellView element);
 };
 
 // Default size; alias to avoid ugly empty template
@@ -115,5 +115,5 @@ concept Listable = TypeConcepts::InTuple<T, ListableTypesImpl>;
 
 // Ensure we have a type tag for each listable type
 static_assert(std::tuple_size_v<ListableTypesImpl>
-              == std::to_underlying(ListBufferTypeTag::INVALID));
+              == std::to_underlying(CellTag::INVALID));
 }

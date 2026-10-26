@@ -35,9 +35,9 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "metadata/DateTime.h"
@@ -59,17 +59,17 @@ std::string renderMap(MapView map);
 
 std::string renderList(ListView list);
 
-std::string renderListElement(const ListElementView element) {
+std::string renderCellView(const CellView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(element.getAs<std::string_view>()) + "'";
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
@@ -81,12 +81,12 @@ std::string renderListElement(const ListElementView element) {
 
 std::string renderList(const ListView list) {
     std::string rendered = "[";
-    for (size_t index = 0; const ListElementView& element : list) {
+    for (size_t index = 0; const CellView& element : list) {
         if (index > 0) {
             rendered += ", ";
         }
 
-        rendered += renderListElement(element);
+        rendered += renderCellView(element);
         index++;
     }
 
@@ -94,46 +94,46 @@ std::string renderList(const ListView list) {
 }
 
 std::string renderMapValue(const MapEntryView entry) {
-    switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
-            return std::to_string(entry.getValueAs<int64_t>());
+    switch (entry.getValue().getTag()) {
+        case CellTag::Int:
+            return std::to_string(entry.getValue().getAs<int64_t>());
         break;
 
-        case MapBufferTypeTag::UInt:
-            return std::to_string(entry.getValueAs<uint64_t>());
+        case CellTag::UInt:
+            return std::to_string(entry.getValue().getAs<uint64_t>());
         break;
 
-        case MapBufferTypeTag::Bool:
-            return static_cast<bool>(entry.getValueAs<CustomBool>()) ? "true" : "false";
+        case CellTag::Bool:
+            return static_cast<bool>(entry.getValue().getAs<CustomBool>()) ? "true" : "false";
         break;
 
-        case MapBufferTypeTag::String:
-            return "'" + std::string(entry.getValueAs<std::string_view>()) + "'";
+        case CellTag::String:
+            return "'" + std::string(entry.getValue().getAs<std::string_view>()) + "'";
         break;
 
-        case MapBufferTypeTag::ListView:
-            return renderList(entry.getValueAs<ListView>());
+        case CellTag::ListView:
+            return renderList(entry.getValue().getAs<ListView>());
         break;
 
-        case MapBufferTypeTag::MapView:
-            return renderMap(entry.getValueAs<MapView>());
+        case CellTag::MapView:
+            return renderMap(entry.getValue().getAs<MapView>());
         break;
 
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
-        case MapBufferTypeTag::NodeID:
-            return "node:" + std::to_string(entry.getValueAs<NodeID>().getValue());
+        case CellTag::NodeID:
+            return "node:" + std::to_string(entry.getValue().getAs<NodeID>().getValue());
         break;
 
-        case MapBufferTypeTag::EdgeID:
-            return "edge:" + std::to_string(entry.getValueAs<EdgeID>().getValue());
+        case CellTag::EdgeID:
+            return "edge:" + std::to_string(entry.getValue().getAs<EdgeID>().getValue());
         break;
 
-        case MapBufferTypeTag::DateTime: {
+        case CellTag::DateTime: {
             std::string formatted;
-            DateTime::format(formatted, entry.getValueAs<types::DateTime::Primitive>());
+            DateTime::format(formatted, entry.getValue().getAs<types::DateTime::Primitive>());
             return formatted;
         }
         break;

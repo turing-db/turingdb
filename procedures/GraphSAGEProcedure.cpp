@@ -23,8 +23,8 @@
 #include "columns/Column.h"
 #include "columns/ColumnConst.h"
 
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
 
 #include "metadata/PropertyType.h"
@@ -55,8 +55,8 @@ struct Data final : public TypedProcedureData<GraphSAGEProcedure> {
 };
 
 void numericList(const ListView l) {
-    const auto isInt = [](ListElementView ele) -> bool {
-        return ele.getTag() == ListBufferTypeTag::Int;
+    const auto isInt = [](CellView ele) -> bool {
+        return ele.getTag() == CellTag::Int;
     };
     const bool allInts = std::ranges::all_of(l, isInt);
     if (!allInts) {
@@ -72,7 +72,7 @@ void validFanoutList(const ListView l) {
         throw TuringException(fmt::format(fanoutSizeErr, reqSize, listSize));
     }
 
-    for (const ListElementView ele : l) {
+    for (const CellView ele : l) {
         const size_t fanout = ele.getAs<types::Int64::Primitive>();
         if (fanout > ChunkConfig::CHUNK_SIZE) {
             throw TuringException(fmt::format(fanoutWidthErr, fanout, ChunkConfig::CHUNK_SIZE));
@@ -120,7 +120,7 @@ void seedSampler(Data& data) {
     bioassert(seeds, "Invalid seeds");
 
     const ListView list = seeds->getRaw();
-    for (const ListElementView ele : list) {
+    for (const CellView ele : list) {
         nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
     }
 

@@ -13,7 +13,7 @@
 
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 
 #include "LocalMemory.h"
@@ -38,8 +38,8 @@ namespace {
 // tag rather than a bare integer.
 void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::NodeID);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::NodeID);
         out.push_back(element.getAs<NodeID>().getValue());
     }
 }
@@ -47,8 +47,8 @@ void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
 // Reads one list cell as a vector of edge ids, asserting the edge tag.
 void readEdgeIDList(const ListView& view, std::vector<uint64_t>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::EdgeID);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::EdgeID);
         out.push_back(element.getAs<EdgeID>().getValue());
     }
 }

@@ -15,7 +15,7 @@
 #include "iterators/PathExplorator.h"
 #include "iterators/PathHopFilter.h"
 #include "list/ListBuffer.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/PathTrie.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
@@ -214,7 +214,7 @@ uint64_t edgeBound(uint64_t repetitions, size_t stepCount) {
 
 void readIDs(const ListView& list, std::vector<uint64_t>& ids) {
     ids.clear();
-    for (const ListElementView& element : list) {
+    for (const CellView& element : list) {
         ids.push_back(element.getAs<uint64_t>());
     }
 }

@@ -38,7 +38,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -268,7 +268,7 @@ public:
 
         const std::vector<ListView>& raw = lists->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            for (const ListElementView& element : raw[rowIndex]) {
+            for (const CellView& element : raw[rowIndex]) {
                 _elements.push_back(element.getAs<int64_t>());
             }
 

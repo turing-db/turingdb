@@ -47,20 +47,20 @@ pointer stability.
 # Implementation
 
 `storage/ListBuffer.h` implements the required datastructure. `ListBuffer` provides stable references to
-contiguously stored list elements, as well as views into each element: `ListElementView`.
+contiguously stored list elements, as well as views into each element: `CellView`.
 
 
-Each list element is stored packed and type erased: a "type tag" (`ListBufferTypeTag`) followed by the bytes
+Each list element is stored packed and type erased: a "type tag" (`CellTag`) followed by the bytes
 of the value of the element. Each element must be trivially copyable.
 
 
-A `ListElementView` is a slim wrapper over a pointer to the element's type tag. Helper functions are provided
+A `CellView` is a slim wrapper over a pointer to the element's type tag. Helper functions are provided
 to interpret the tag. The type tag is used to determine the number of bytes of the value of the element, which
 can then be read into a generic `T` with the `getAs` helper function.
 
 
 Since the `ListBuffer` guarantees that all elements in a single list are stored contiguously, a `ListView` is
-a span over the `ListElementViews` which make up the elements of the list.
+a span over the `CellViews` which make up the elements of the list.
 
 
 We can then have `using types::List::Primitive = ListView`, with the desired properties outlined above.

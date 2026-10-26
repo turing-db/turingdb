@@ -7,7 +7,7 @@
 #include <functional>
 #include <string_view>
 
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "MapEntryView.h"
 
 #include "ID.h"
@@ -30,53 +30,53 @@ size_t hashValue(const T& value) {
 }
 
 size_t hashMapValue(MapEntryView entry) {
-    const MapBufferTypeTag tag = entry.getValueTag();
+    const CellTag tag = entry.getValue().getTag();
     const size_t seed = static_cast<size_t>(tag);
 
     switch (tag) {
-        case MapBufferTypeTag::Int:
-            return hashNumber(static_cast<double>(entry.getValueAs<types::Int64::Primitive>()));
+        case CellTag::Int:
+            return hashNumber(static_cast<double>(entry.getValue().getAs<types::Int64::Primitive>()));
         break;
-        case MapBufferTypeTag::UInt:
-            return hashNumber(static_cast<double>(entry.getValueAs<types::UInt64::Primitive>()));
+        case CellTag::UInt:
+            return hashNumber(static_cast<double>(entry.getValue().getAs<types::UInt64::Primitive>()));
         break;
-        case MapBufferTypeTag::Double:
-            return hashNumber(entry.getValueAs<types::Double::Primitive>());
+        case CellTag::Double:
+            return hashNumber(entry.getValue().getAs<types::Double::Primitive>());
         break;
-        case MapBufferTypeTag::Bool:
-            return combine(seed, hashValue(entry.getValueAs<types::Bool::Primitive>()));
+        case CellTag::Bool:
+            return combine(seed, hashValue(entry.getValue().getAs<types::Bool::Primitive>()));
         break;
-        case MapBufferTypeTag::String:
-            return combine(seed, hashValue(entry.getValueAs<types::String::Primitive>()));
+        case CellTag::String:
+            return combine(seed, hashValue(entry.getValue().getAs<types::String::Primitive>()));
         break;
-        case MapBufferTypeTag::NodeID:
-            return combine(seed, hashValue(entry.getValueAs<NodeID>().getValue()));
+        case CellTag::NodeID:
+            return combine(seed, hashValue(entry.getValue().getAs<NodeID>().getValue()));
         break;
-        case MapBufferTypeTag::EdgeID:
-            return combine(seed, hashValue(entry.getValueAs<EdgeID>().getValue()));
+        case CellTag::EdgeID:
+            return combine(seed, hashValue(entry.getValue().getAs<EdgeID>().getValue()));
         break;
-        case MapBufferTypeTag::DateTime:
-            return combine(seed, hashValue(entry.getValueAs<types::DateTime::Primitive>()));
+        case CellTag::DateTime:
+            return combine(seed, hashValue(entry.getValue().getAs<types::DateTime::Primitive>()));
         break;
-        case MapBufferTypeTag::Duration:
-            return combine(seed, hashValue(entry.getValueAs<types::Duration::Primitive>()));
+        case CellTag::Duration:
+            return combine(seed, hashValue(entry.getValue().getAs<types::Duration::Primitive>()));
         break;
-        case MapBufferTypeTag::Embedding: {
+        case CellTag::Embedding: {
             size_t hash = seed;
-            for (const float value : entry.getValueAs<types::Embedding::Primitive>()) {
+            for (const float value : entry.getValue().getAs<types::Embedding::Primitive>()) {
                 hash = combine(hash, hashValue(value));
             }
             return hash;
         }
         break;
-        case MapBufferTypeTag::ListView:
-            return combine(seed, hashList(entry.getValueAs<ListView>()));
+        case CellTag::ListView:
+            return combine(seed, hashList(entry.getValue().getAs<ListView>()));
         break;
-        case MapBufferTypeTag::MapView:
-            return combine(seed, hashMap(entry.getValueAs<MapView>()));
+        case CellTag::MapView:
+            return combine(seed, hashMap(entry.getValue().getAs<MapView>()));
         break;
-        case MapBufferTypeTag::Null:
-        case MapBufferTypeTag::INVALID:
+        case CellTag::Null:
+        case CellTag::INVALID:
             return seed;
         break;
     }
@@ -85,56 +85,56 @@ size_t hashMapValue(MapEntryView entry) {
 }
 
 bool sameMapValue(MapEntryView lhs, MapEntryView rhs) {
-    const MapBufferTypeTag tag = lhs.getValueTag();
-    if (tag != rhs.getValueTag()) {
+    const CellTag tag = lhs.getValue().getTag();
+    if (tag != rhs.getValue().getTag()) {
         return false;
     }
 
     switch (tag) {
-        case MapBufferTypeTag::Int:
-            return lhs.getValueAs<types::Int64::Primitive>() == rhs.getValueAs<types::Int64::Primitive>();
+        case CellTag::Int:
+            return lhs.getValue().getAs<types::Int64::Primitive>() == rhs.getValue().getAs<types::Int64::Primitive>();
         break;
-        case MapBufferTypeTag::UInt:
-            return lhs.getValueAs<types::UInt64::Primitive>() == rhs.getValueAs<types::UInt64::Primitive>();
+        case CellTag::UInt:
+            return lhs.getValue().getAs<types::UInt64::Primitive>() == rhs.getValue().getAs<types::UInt64::Primitive>();
         break;
-        case MapBufferTypeTag::Double:
-            return std::bit_cast<uint64_t>(lhs.getValueAs<types::Double::Primitive>())
-                == std::bit_cast<uint64_t>(rhs.getValueAs<types::Double::Primitive>());
+        case CellTag::Double:
+            return std::bit_cast<uint64_t>(lhs.getValue().getAs<types::Double::Primitive>())
+                == std::bit_cast<uint64_t>(rhs.getValue().getAs<types::Double::Primitive>());
         break;
-        case MapBufferTypeTag::Bool:
-            return lhs.getValueAs<types::Bool::Primitive>() == rhs.getValueAs<types::Bool::Primitive>();
+        case CellTag::Bool:
+            return lhs.getValue().getAs<types::Bool::Primitive>() == rhs.getValue().getAs<types::Bool::Primitive>();
         break;
-        case MapBufferTypeTag::String:
-            return lhs.getValueAs<types::String::Primitive>() == rhs.getValueAs<types::String::Primitive>();
+        case CellTag::String:
+            return lhs.getValue().getAs<types::String::Primitive>() == rhs.getValue().getAs<types::String::Primitive>();
         break;
-        case MapBufferTypeTag::NodeID:
-            return lhs.getValueAs<NodeID>() == rhs.getValueAs<NodeID>();
+        case CellTag::NodeID:
+            return lhs.getValue().getAs<NodeID>() == rhs.getValue().getAs<NodeID>();
         break;
-        case MapBufferTypeTag::EdgeID:
-            return lhs.getValueAs<EdgeID>() == rhs.getValueAs<EdgeID>();
+        case CellTag::EdgeID:
+            return lhs.getValue().getAs<EdgeID>() == rhs.getValue().getAs<EdgeID>();
         break;
-        case MapBufferTypeTag::DateTime:
-            return lhs.getValueAs<types::DateTime::Primitive>() == rhs.getValueAs<types::DateTime::Primitive>();
+        case CellTag::DateTime:
+            return lhs.getValue().getAs<types::DateTime::Primitive>() == rhs.getValue().getAs<types::DateTime::Primitive>();
         break;
-        case MapBufferTypeTag::Duration:
-            return lhs.getValueAs<types::Duration::Primitive>() == rhs.getValueAs<types::Duration::Primitive>();
+        case CellTag::Duration:
+            return lhs.getValue().getAs<types::Duration::Primitive>() == rhs.getValue().getAs<types::Duration::Primitive>();
         break;
-        case MapBufferTypeTag::Embedding: {
-            const types::Embedding::Primitive lhsValues = lhs.getValueAs<types::Embedding::Primitive>();
-            const types::Embedding::Primitive rhsValues = rhs.getValueAs<types::Embedding::Primitive>();
+        case CellTag::Embedding: {
+            const types::Embedding::Primitive lhsValues = lhs.getValue().getAs<types::Embedding::Primitive>();
+            const types::Embedding::Primitive rhsValues = rhs.getValue().getAs<types::Embedding::Primitive>();
 
             return lhsValues.size() == rhsValues.size()
                 && memcmp(lhsValues.data(), rhsValues.data(), lhsValues.size_bytes()) == 0;
         }
         break;
-        case MapBufferTypeTag::ListView:
-            return EncodedList(lhs.getValueAs<ListView>()) == EncodedList(rhs.getValueAs<ListView>());
+        case CellTag::ListView:
+            return EncodedList(lhs.getValue().getAs<ListView>()) == EncodedList(rhs.getValue().getAs<ListView>());
         break;
-        case MapBufferTypeTag::MapView:
-            return sameMap(lhs.getValueAs<MapView>(), rhs.getValueAs<MapView>());
+        case CellTag::MapView:
+            return sameMap(lhs.getValue().getAs<MapView>(), rhs.getValue().getAs<MapView>());
         break;
-        case MapBufferTypeTag::Null:
-        case MapBufferTypeTag::INVALID:
+        case CellTag::Null:
+        case CellTag::INVALID:
             return true;
         break;
     }

@@ -668,9 +668,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
         ASSERT_TRUE(rows[0].has_value());
         ASSERT_EQ(rows[0]->size(), 2u);
         EXPECT_EQ(rows[0]->front().getKey(), "a"sv);
-        EXPECT_EQ(rows[0]->front().getValueAs<Int64>(), 1);
+        EXPECT_EQ(rows[0]->front().getValue().getAs<Int64>(), 1);
         EXPECT_EQ(rows[0]->back().getKey(), "b"sv);
-        EXPECT_EQ(rows[0]->back().getValueAs<StringView>(),
+        EXPECT_EQ(rows[0]->back().getValue().getAs<StringView>(),
                   "this value is deliberately long enough to cross chunk boundaries"sv);
 
         EXPECT_FALSE(rows[1].has_value());
@@ -681,7 +681,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalMapColumnsAcrossChunkSizes) {
         ASSERT_TRUE(rows[3].has_value());
         ASSERT_EQ(rows[3]->size(), 1u);
         EXPECT_EQ(rows[3]->front().getKey(), "z"sv);
-        EXPECT_EQ(rows[3]->front().getValueAs<Int64>(), 8);
+        EXPECT_EQ(rows[3]->front().getValue().getAs<Int64>(), 8);
     }
 }
 
@@ -865,23 +865,23 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantListColumns) {
     ASSERT_EQ(view.size(), 4u);
 
     auto element = view.begin();
-    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(element->getTag(), db::CellTag::Int);
     EXPECT_EQ(element->getAs<Int64>(), -7);
     ++element;
-    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(element->getTag(), db::CellTag::String);
     EXPECT_EQ(element->getAs<StringView>(), std::string_view(text));
     ++element;
-    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::Embedding);
+    EXPECT_EQ(element->getTag(), db::CellTag::Embedding);
     expectEmbedding(element->getAs<Embedding>(), std::span<const float>(embedding));
     ++element;
-    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::UInt);
+    EXPECT_EQ(element->getTag(), db::CellTag::UInt);
     EXPECT_EQ(element->getAs<UInt64>(), 99u);
 }
 
-// Encode a ColumnVector<ListElementView> — one tagged element per row — and decode it
+// Encode a ColumnVector<CellView> — one tagged element per row — and decode it
 // back. Same wire shape as a list of N elements; the small chunk size splits the string
 // element's payload across packets.
-TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
+TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumns) {
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
     db::Dataframe source;
@@ -898,7 +898,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
 
     const db::ListView list = localMem.listBuffer().insert(items);
 
-    auto* col = localMem.alloc<db::ColumnVector<db::ListElementView>>();
+    auto* col = localMem.alloc<db::ColumnVector<db::CellView>>();
     for (const auto& element : list) {
         col->push_back(element);
     }
@@ -917,26 +917,23 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
-    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
     ASSERT_NE(decodedCol, nullptr);
     ASSERT_EQ(decodedCol->size(), 5u);
 
-    EXPECT_EQ(decodedCol->at(0).getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(decodedCol->at(0).getTag(), db::CellTag::Int);
     EXPECT_EQ(decodedCol->at(0).getAs<Int64>(), -3);
-    EXPECT_EQ(decodedCol->at(1).getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(decodedCol->at(1).getTag(), db::CellTag::String);
     EXPECT_EQ(decodedCol->at(1).getAs<StringView>(), std::string_view(text));
-    EXPECT_EQ(decodedCol->at(2).getTag(), db::ListBufferTypeTag::Embedding);
+    EXPECT_EQ(decodedCol->at(2).getTag(), db::CellTag::Embedding);
     expectEmbedding(decodedCol->at(2).getAs<Embedding>(), std::span<const float>(embedding));
-    EXPECT_EQ(decodedCol->at(3).getTag(), db::ListBufferTypeTag::UInt);
+    EXPECT_EQ(decodedCol->at(3).getTag(), db::CellTag::UInt);
     EXPECT_EQ(decodedCol->at(3).getAs<UInt64>(), 123u);
-    EXPECT_EQ(decodedCol->at(4).getTag(), db::ListBufferTypeTag::Null);
+    EXPECT_EQ(decodedCol->at(4).getTag(), db::CellTag::Null);
 }
 
-// A map entry column - one entry per row, what m.key reads. Every row was read under the
-// same key, so the wire carries that key with each entry, exactly as a map's own entries
-// do: the column is one map of as many entries as it has rows. A row whose map held no
-// such key still names it, tagged null.
-TEST(TuringProtoRoundTripTest, RoundTripsMapEntryColumns) {
+// A column of cells viewing the values a map holds - one per row, what m.key reads
+TEST(TuringProtoRoundTripTest, RoundTripsCellsViewingMapValues) {
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
     db::Dataframe source;
@@ -955,9 +952,9 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapEntryColumns) {
 
     const db::MapView entries = localMem.mapBuffer().insert(pairs);
 
-    auto* col = localMem.alloc<db::ColumnVector<db::MapEntryView>>();
+    auto* col = localMem.alloc<db::ColumnVector<db::CellView>>();
     for (const db::MapEntryView entry : entries) {
-        col->push_back(entry);
+        col->push_back(entry.getValue());
     }
 
     addColumn(&dfMan, &source, "values", col);
@@ -974,31 +971,27 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapEntryColumns) {
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
-    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::MapEntryView>>();
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
     ASSERT_NE(decodedCol, nullptr);
     ASSERT_EQ(decodedCol->size(), 4u);
 
-    for (size_t row = 0; row < decodedCol->size(); row++) {
-        EXPECT_EQ(decodedCol->at(row).getKey(), "a") << "row " << row;
-    }
+    EXPECT_EQ(decodedCol->at(0).getTag(), db::CellTag::Int);
+    EXPECT_EQ(decodedCol->at(0).getAs<Int64>(), -3);
+    EXPECT_EQ(decodedCol->at(1).getTag(), db::CellTag::String);
+    EXPECT_EQ(decodedCol->at(1).getAs<StringView>(), std::string_view(text));
 
-    EXPECT_EQ(decodedCol->at(0).getValueTag(), db::MapBufferTypeTag::Int);
-    EXPECT_EQ(decodedCol->at(0).getValueAs<Int64>(), -3);
-    EXPECT_EQ(decodedCol->at(1).getValueTag(), db::MapBufferTypeTag::String);
-    EXPECT_EQ(decodedCol->at(1).getValueAs<StringView>(), std::string_view(text));
-
-    EXPECT_EQ(decodedCol->at(2).getValueTag(), db::MapBufferTypeTag::MapView);
-    const db::MapView decodedNested = decodedCol->at(2).getValueAs<db::MapView>();
+    EXPECT_EQ(decodedCol->at(2).getTag(), db::CellTag::MapView);
+    const db::MapView decodedNested = decodedCol->at(2).getAs<db::MapView>();
     ASSERT_EQ(decodedNested.size(), 1u);
     EXPECT_EQ(decodedNested.front().getKey(), "k");
-    EXPECT_EQ(decodedNested.front().getValueAs<Int64>(), 3);
+    EXPECT_EQ(decodedNested.front().getValue().getAs<Int64>(), 3);
 
-    EXPECT_EQ(decodedCol->at(3).getValueTag(), db::MapBufferTypeTag::Null);
+    EXPECT_EQ(decodedCol->at(3).getTag(), db::CellTag::Null);
 }
 
 // The constant shape of the same column, which is what `WITH {a: 1} AS m RETURN m.a`
-// produces: one entry standing for every row.
-TEST(TuringProtoRoundTripTest, RoundTripsConstantMapEntryColumn) {
+// produces: one cell standing for every row.
+TEST(TuringProtoRoundTripTest, RoundTripsConstantCellColumn) {
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
     db::Dataframe source;
@@ -1007,8 +1000,8 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantMapEntryColumn) {
     pairs.emplace_back("a", StringView {"xyz"});
     const db::MapView entries = localMem.mapBuffer().insert(pairs);
 
-    auto* col = localMem.alloc<db::ColumnConst<db::MapEntryView>>();
-    col->set(entries.front());
+    auto* col = localMem.alloc<db::ColumnConst<db::CellView>>();
+    col->set(entries.front().getValue());
     addColumn(&dfMan, &source, "value", col);
 
     const auto packets = encodeDataframeWithChunkSize(source, 4096);
@@ -1023,12 +1016,11 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantMapEntryColumn) {
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
-    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnConst<db::MapEntryView>>();
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnConst<db::CellView>>();
     ASSERT_NE(decodedCol, nullptr);
 
-    EXPECT_EQ(decodedCol->at(0).getKey(), "a");
-    EXPECT_EQ(decodedCol->at(0).getValueTag(), db::MapBufferTypeTag::String);
-    EXPECT_EQ(decodedCol->at(0).getValueAs<StringView>(), "xyz");
+    EXPECT_EQ(decodedCol->at(0).getTag(), db::CellTag::String);
+    EXPECT_EQ(decodedCol->at(0).getAs<StringView>(), "xyz");
 }
 
 // Encode a ColumnConst<ListView> whose elements include a nested list, which itself
@@ -1087,44 +1079,44 @@ TEST(TuringProtoRoundTripTest, RoundTripsNestedListColumns) {
     ASSERT_EQ(outerView.size(), 3u);
 
     auto outerIt = outerView.begin();
-    EXPECT_EQ(outerIt->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(outerIt->getTag(), db::CellTag::Int);
     EXPECT_EQ(outerIt->getAs<Int64>(), 7);
 
     ++outerIt;
-    EXPECT_EQ(outerIt->getTag(), db::ListBufferTypeTag::ListView);
+    EXPECT_EQ(outerIt->getTag(), db::CellTag::ListView);
     const db::ListView innerView = outerIt->getAs<db::ListView>();
     ASSERT_EQ(innerView.size(), 3u);
 
     auto innerIt = innerView.begin();
-    EXPECT_EQ(innerIt->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(innerIt->getTag(), db::CellTag::Int);
     EXPECT_EQ(innerIt->getAs<Int64>(), 1);
 
     ++innerIt;
-    EXPECT_EQ(innerIt->getTag(), db::ListBufferTypeTag::ListView);
+    EXPECT_EQ(innerIt->getTag(), db::CellTag::ListView);
     const db::ListView deepView = innerIt->getAs<db::ListView>();
     ASSERT_EQ(deepView.size(), 2u);
 
     auto deepIt = deepView.begin();
-    EXPECT_EQ(deepIt->getTag(), db::ListBufferTypeTag::UInt);
+    EXPECT_EQ(deepIt->getTag(), db::CellTag::UInt);
     EXPECT_EQ(deepIt->getAs<UInt64>(), 2u);
     ++deepIt;
-    EXPECT_EQ(deepIt->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(deepIt->getTag(), db::CellTag::String);
     EXPECT_EQ(deepIt->getAs<StringView>(), std::string_view(deepText));
 
     ++innerIt;
-    EXPECT_EQ(innerIt->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(innerIt->getTag(), db::CellTag::Int);
     EXPECT_EQ(innerIt->getAs<Int64>(), 3);
 
     ++outerIt;
-    EXPECT_EQ(outerIt->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(outerIt->getTag(), db::CellTag::String);
     EXPECT_EQ(outerIt->getAs<StringView>(), std::string_view("end"));
 }
 
-// Encode a ColumnVector<ListElementView> whose every row is itself a list (nested), one
+// Encode a ColumnVector<CellView> whose every row is itself a list (nested), one
 // of them empty, and decode it back. Each row is a top-level element that pushes a child
 // cursor; the empty row's child completes with zero elements. Guards the row-capture path
 // that stores the top-level element's view (and not a nested child's) into each row.
-TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfNestedLists) {
+TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumnOfNestedLists) {
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
     db::Dataframe source;
@@ -1151,7 +1143,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfNestedLists) {
     rowItems.emplace_back(third);
     const db::ListView rows = localMem.listBuffer().insert(rowItems);
 
-    auto* col = localMem.alloc<db::ColumnVector<db::ListElementView>>();
+    auto* col = localMem.alloc<db::ColumnVector<db::CellView>>();
     for (const auto& element : rows) {
         col->push_back(element);
     }
@@ -1169,19 +1161,19 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfNestedLists) {
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
     ASSERT_EQ(decoded.cols().size(), 1u);
-    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
     ASSERT_NE(decodedCol, nullptr);
     ASSERT_EQ(decodedCol->size(), 3u);
 
-    EXPECT_EQ(decodedCol->at(0).getTag(), db::ListBufferTypeTag::ListView);
+    EXPECT_EQ(decodedCol->at(0).getTag(), db::CellTag::ListView);
     const db::ListView firstView = decodedCol->at(0).getAs<db::ListView>();
     ASSERT_EQ(firstView.size(), 2u);
     EXPECT_EQ(firstView.begin()->getAs<Int64>(), 1);
 
-    EXPECT_EQ(decodedCol->at(1).getTag(), db::ListBufferTypeTag::ListView);
+    EXPECT_EQ(decodedCol->at(1).getTag(), db::CellTag::ListView);
     EXPECT_EQ(decodedCol->at(1).getAs<db::ListView>().size(), 0u);
 
-    EXPECT_EQ(decodedCol->at(2).getTag(), db::ListBufferTypeTag::ListView);
+    EXPECT_EQ(decodedCol->at(2).getTag(), db::CellTag::ListView);
     const db::ListView thirdView = decodedCol->at(2).getAs<db::ListView>();
     ASSERT_EQ(thirdView.size(), 1u);
     EXPECT_EQ(thirdView.begin()->getAs<StringView>(), std::string_view("only"));
@@ -1208,12 +1200,12 @@ TEST(TuringProtoRoundTripTest, RejectsSchemaLargerThanChunkSize) {
     EXPECT_THROW(encodeDataframeWithChunkSize(source, 24), TuringException);
 }
 
-// Encode a ColumnOptVector<ListElementView> — the shape an out-of-range list index reads
+// Encode a ColumnOptVector<CellView> — the shape an out-of-range list index reads
 // as — and decode it back. A row that holds no element and a row that holds a null taken
 // out of a list both travel as a null-tagged element, so what tells them apart on the
 // far side is the column's null mask; the two must not collapse into one.
-TEST(TuringProtoRoundTripTest, RoundTripsOptionalListElementViewColumns) {
-    using OptionalElement = std::optional<db::ListElementView>;
+TEST(TuringProtoRoundTripTest, RoundTripsOptionalCellViewColumns) {
+    using OptionalElement = std::optional<db::CellView>;
 
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
@@ -1228,13 +1220,13 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalListElementViewColumns) {
 
     const db::ListView list = localMem.listBuffer().insert(items);
 
-    std::vector<db::ListElementView> elements;
+    std::vector<db::CellView> elements;
     for (const auto& element : list) {
         elements.push_back(element);
     }
     ASSERT_EQ(elements.size(), 3u);
 
-    auto* col = localMem.alloc<db::ColumnOptVector<db::ListElementView>>();
+    auto* col = localMem.alloc<db::ColumnOptVector<db::CellView>>();
     col->push_back(OptionalElement {elements[0]});
     col->push_back(std::nullopt);
     col->push_back(OptionalElement {elements[1]});
@@ -1258,33 +1250,33 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalListElementViewColumns) {
         decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
         ASSERT_EQ(decoded.cols().size(), 1u);
-        const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnOptVector<db::ListElementView>>();
+        const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnOptVector<db::CellView>>();
         ASSERT_NE(decodedCol, nullptr);
 
         const std::vector<OptionalElement>& raw = decodedCol->getRaw();
         ASSERT_EQ(raw.size(), 5u);
 
         ASSERT_TRUE(raw[0].has_value());
-        EXPECT_EQ(raw[0]->getTag(), db::ListBufferTypeTag::Int);
+        EXPECT_EQ(raw[0]->getTag(), db::CellTag::Int);
         EXPECT_EQ(raw[0]->getAs<Int64>(), -3);
 
         EXPECT_FALSE(raw[1].has_value());
 
         ASSERT_TRUE(raw[2].has_value());
-        EXPECT_EQ(raw[2]->getTag(), db::ListBufferTypeTag::String);
+        EXPECT_EQ(raw[2]->getTag(), db::CellTag::String);
         EXPECT_EQ(raw[2]->getAs<StringView>(), std::string_view(text));
 
         ASSERT_TRUE(raw[3].has_value());
-        EXPECT_EQ(raw[3]->getTag(), db::ListBufferTypeTag::Null);
+        EXPECT_EQ(raw[3]->getTag(), db::CellTag::Null);
 
         EXPECT_FALSE(raw[4].has_value());
     }
 }
 
-// Encode a ColumnConst<std::optional<ListElementView>> — the shape an index read of a
+// Encode a ColumnConst<std::optional<CellView>> — the shape an index read of a
 // literal list at a literal position takes — both carrying an element and carrying none.
-TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantListElementViewColumns) {
-    using OptionalElement = std::optional<db::ListElementView>;
+TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantCellViewColumns) {
+    using OptionalElement = std::optional<db::CellView>;
 
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
@@ -1327,7 +1319,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantListElementViewColumns)
 
     const OptionalElement decodedValue = decodedElement->at(0);
     ASSERT_TRUE(decodedValue.has_value());
-    EXPECT_EQ(decodedValue->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(decodedValue->getTag(), db::CellTag::String);
     EXPECT_EQ(decodedValue->getAs<StringView>(), std::string_view(text));
 
     EXPECT_FALSE(decodedMissing->at(0).has_value());
@@ -1476,20 +1468,20 @@ TEST(TuringProtoRoundTripTest, RoundTripsConstantMapColumn) {
 
     auto entry = view.begin();
     EXPECT_EQ(entry->getKey(), "a");
-    EXPECT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Int);
-    EXPECT_EQ(entry->getValueAs<Int64>(), -7);
+    EXPECT_EQ(entry->getValue().getTag(), db::CellTag::Int);
+    EXPECT_EQ(entry->getValue().getAs<Int64>(), -7);
     ++entry;
     EXPECT_EQ(entry->getKey(), "bb");
-    EXPECT_EQ(entry->getValueTag(), db::MapBufferTypeTag::String);
-    EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view("xyz"));
+    EXPECT_EQ(entry->getValue().getTag(), db::CellTag::String);
+    EXPECT_EQ(entry->getValue().getAs<StringView>(), std::string_view("xyz"));
     ++entry;
     EXPECT_EQ(entry->getKey(), "c");
-    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::MapView);
+    ASSERT_EQ(entry->getValue().getTag(), db::CellTag::MapView);
 
-    const db::MapView nested = entry->getValueAs<db::MapView>();
+    const db::MapView nested = entry->getValue().getAs<db::MapView>();
     ASSERT_EQ(nested.size(), 1u);
     EXPECT_EQ(nested.front().getKey(), "d");
-    EXPECT_EQ(nested.front().getValueAs<Int64>(), 2);
+    EXPECT_EQ(nested.front().getValue().getAs<Int64>(), 2);
 }
 
 // A map laid out row by row rather than held as the one value a constant is - what a cut
@@ -1535,11 +1527,11 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapVectorColumn) {
 
         auto entry = view.begin();
         EXPECT_EQ(entry->getKey(), "index");
-        EXPECT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Int);
-        EXPECT_EQ(entry->getValueAs<Int64>(), static_cast<int64_t>(row));
+        EXPECT_EQ(entry->getValue().getTag(), db::CellTag::Int);
+        EXPECT_EQ(entry->getValue().getAs<Int64>(), static_cast<int64_t>(row));
         ++entry;
         EXPECT_EQ(entry->getKey(), "name");
-        EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view("row"));
+        EXPECT_EQ(entry->getValue().getAs<StringView>(), std::string_view("row"));
     }
 }
 
@@ -1584,10 +1576,10 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapKeysAndValuesAcrossMultipleBuffers) 
 
     auto entry = view.begin();
     EXPECT_EQ(entry->getKey(), std::string_view(longKey));
-    EXPECT_EQ(entry->getValueAs<Int64>(), 11);
+    EXPECT_EQ(entry->getValue().getAs<Int64>(), 11);
     ++entry;
     EXPECT_EQ(entry->getKey(), "short");
-    EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view(longValue));
+    EXPECT_EQ(entry->getValue().getAs<StringView>(), std::string_view(longValue));
 }
 
 // One map per row, with a chunk size small enough that maps split across packets, some of
@@ -1641,19 +1633,19 @@ TEST(TuringProtoRoundTripTest, RoundTripsMapVectorColumnAcrossMultipleBuffers) {
 
         auto entry = view.begin();
         EXPECT_EQ(entry->getKey(), "age");
-        EXPECT_EQ(entry->getValueAs<Int64>(), static_cast<int64_t>(row));
+        EXPECT_EQ(entry->getValue().getAs<Int64>(), static_cast<int64_t>(row));
         ++entry;
         EXPECT_EQ(entry->getKey(), "name");
-        EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view(names[row]));
+        EXPECT_EQ(entry->getValue().getAs<StringView>(), std::string_view(names[row]));
         ++entry;
         EXPECT_EQ(entry->getKey(), "missing");
-        EXPECT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Null);
+        EXPECT_EQ(entry->getValue().getTag(), db::CellTag::Null);
         ++entry;
         EXPECT_EQ(entry->getKey(), "node");
-        EXPECT_EQ(entry->getValueAs<db::NodeID>(), db::NodeID {row});
+        EXPECT_EQ(entry->getValue().getAs<db::NodeID>(), db::NodeID {row});
         ++entry;
         EXPECT_EQ(entry->getKey(), "edge");
-        EXPECT_EQ(entry->getValueAs<db::EdgeID>(), db::EdgeID {row + 100});
+        EXPECT_EQ(entry->getValue().getAs<db::EdgeID>(), db::EdgeID {row + 100});
     }
 }
 
@@ -1699,19 +1691,19 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingNestedLists) {
 
     auto entry = view.begin();
     EXPECT_EQ(entry->getKey(), "items");
-    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::ListView);
+    ASSERT_EQ(entry->getValue().getTag(), db::CellTag::ListView);
 
-    const db::ListView decodedOuter = entry->getValueAs<db::ListView>();
+    const db::ListView decodedOuter = entry->getValue().getAs<db::ListView>();
     ASSERT_EQ(decodedOuter.size(), 2u);
     auto element = decodedOuter.begin();
     EXPECT_EQ(element->getAs<StringView>(), std::string_view("deep"));
     ++element;
-    ASSERT_EQ(element->getTag(), db::ListBufferTypeTag::ListView);
+    ASSERT_EQ(element->getTag(), db::CellTag::ListView);
     EXPECT_EQ(element->getAs<db::ListView>().size(), 1u);
 
     ++entry;
     EXPECT_EQ(entry->getKey(), "n");
-    EXPECT_EQ(entry->getValueAs<Int64>(), 3);
+    EXPECT_EQ(entry->getValue().getAs<Int64>(), 3);
 }
 
 // An empty map: [entryCount] of 0 and nothing after it.
@@ -1794,42 +1786,42 @@ TEST(TuringProtoRoundTripTest, RoundTripsAMapHoldingEveryValueTag) {
     const std::span<const db::MapEntryView> decodedEntries = view.entries();
 
     EXPECT_EQ(decodedEntries[0].getKey(), "i");
-    EXPECT_EQ(decodedEntries[0].getValueAs<Int64>(), -7);
+    EXPECT_EQ(decodedEntries[0].getValue().getAs<Int64>(), -7);
 
     EXPECT_EQ(decodedEntries[1].getKey(), "u");
-    EXPECT_EQ(decodedEntries[1].getValueAs<UInt64>(), 7u);
+    EXPECT_EQ(decodedEntries[1].getValue().getAs<UInt64>(), 7u);
 
     EXPECT_EQ(decodedEntries[2].getKey(), "d");
-    EXPECT_EQ(decodedEntries[2].getValueAs<db::types::Double::Primitive>(), 2.25);
+    EXPECT_EQ(decodedEntries[2].getValue().getAs<db::types::Double::Primitive>(), 2.25);
 
     EXPECT_EQ(decodedEntries[3].getKey(), "s");
-    EXPECT_EQ(decodedEntries[3].getValueAs<StringView>(), std::string_view("xyz"));
+    EXPECT_EQ(decodedEntries[3].getValue().getAs<StringView>(), std::string_view("xyz"));
 
     EXPECT_EQ(decodedEntries[4].getKey(), "b");
-    EXPECT_TRUE(decodedEntries[4].getValueAs<Bool>());
+    EXPECT_TRUE(decodedEntries[4].getValue().getAs<Bool>());
 
     EXPECT_EQ(decodedEntries[5].getKey(), "e");
-    ASSERT_EQ(decodedEntries[5].getValueTag(), db::MapBufferTypeTag::Embedding);
-    expectEmbedding(decodedEntries[5].getValueAs<Embedding>(), std::span<const float>(embedding));
+    ASSERT_EQ(decodedEntries[5].getValue().getTag(), db::CellTag::Embedding);
+    expectEmbedding(decodedEntries[5].getValue().getAs<Embedding>(), std::span<const float>(embedding));
 
     EXPECT_EQ(decodedEntries[6].getKey(), "l");
-    ASSERT_EQ(decodedEntries[6].getValueTag(), db::MapBufferTypeTag::ListView);
-    EXPECT_EQ(decodedEntries[6].getValueAs<db::ListView>().front().getAs<Int64>(), 9);
+    ASSERT_EQ(decodedEntries[6].getValue().getTag(), db::CellTag::ListView);
+    EXPECT_EQ(decodedEntries[6].getValue().getAs<db::ListView>().front().getAs<Int64>(), 9);
 
     EXPECT_EQ(decodedEntries[7].getKey(), "m");
-    ASSERT_EQ(decodedEntries[7].getValueTag(), db::MapBufferTypeTag::MapView);
-    EXPECT_FALSE(decodedEntries[7].getValueAs<db::MapView>().front().getValueAs<Bool>());
+    ASSERT_EQ(decodedEntries[7].getValue().getTag(), db::CellTag::MapView);
+    EXPECT_FALSE(decodedEntries[7].getValue().getAs<db::MapView>().front().getValue().getAs<Bool>());
 
     EXPECT_EQ(decodedEntries[8].getKey(), "n");
-    EXPECT_EQ(decodedEntries[8].getValueTag(), db::MapBufferTypeTag::Null);
+    EXPECT_EQ(decodedEntries[8].getValue().getTag(), db::CellTag::Null);
 
     EXPECT_EQ(decodedEntries[9].getKey(), "node");
-    ASSERT_EQ(decodedEntries[9].getValueTag(), db::MapBufferTypeTag::NodeID);
-    EXPECT_EQ(decodedEntries[9].getValueAs<db::NodeID>(), db::NodeID {42});
+    ASSERT_EQ(decodedEntries[9].getValue().getTag(), db::CellTag::NodeID);
+    EXPECT_EQ(decodedEntries[9].getValue().getAs<db::NodeID>(), db::NodeID {42});
 
     EXPECT_EQ(decodedEntries[10].getKey(), "edge");
-    ASSERT_EQ(decodedEntries[10].getValueTag(), db::MapBufferTypeTag::EdgeID);
-    EXPECT_EQ(decodedEntries[10].getValueAs<db::EdgeID>(), db::EdgeID {43});
+    ASSERT_EQ(decodedEntries[10].getValue().getTag(), db::CellTag::EdgeID);
+    EXPECT_EQ(decodedEntries[10].getValue().getAs<db::EdgeID>(), db::EdgeID {43});
 }
 
 // The mirror of RoundTripsAMapHoldingNestedLists: a list may hold a map, so the wire has to
@@ -1871,35 +1863,35 @@ TEST(TuringProtoRoundTripTest, RoundTripsAListHoldingAMap) {
     ASSERT_EQ(view.size(), 3u);
 
     auto element = view.begin();
-    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ(element->getTag(), db::CellTag::Int);
     EXPECT_EQ(element->getAs<Int64>(), 7);
 
     ++element;
-    ASSERT_EQ(element->getTag(), db::ListBufferTypeTag::MapView);
+    ASSERT_EQ(element->getTag(), db::CellTag::MapView);
 
     const db::MapView decodedMap = element->getAs<db::MapView>();
     ASSERT_EQ(decodedMap.size(), 2u);
 
     auto entry = decodedMap.begin();
     EXPECT_EQ(entry->getKey(), "age");
-    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::Int);
-    EXPECT_EQ(entry->getValueAs<Int64>(), 32);
+    ASSERT_EQ(entry->getValue().getTag(), db::CellTag::Int);
+    EXPECT_EQ(entry->getValue().getAs<Int64>(), 32);
 
     ++entry;
     EXPECT_EQ(entry->getKey(), "name");
-    ASSERT_EQ(entry->getValueTag(), db::MapBufferTypeTag::String);
-    EXPECT_EQ(entry->getValueAs<StringView>(), std::string_view("Remy"));
+    ASSERT_EQ(entry->getValue().getTag(), db::CellTag::String);
+    EXPECT_EQ(entry->getValue().getAs<StringView>(), std::string_view("Remy"));
 
     ++element;
-    EXPECT_EQ(element->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(element->getTag(), db::CellTag::String);
     EXPECT_EQ(element->getAs<StringView>(), std::string_view("end"));
 }
 
-// The row-capture sibling of RoundTripsAListHoldingAMap: each row of a ListElementView
+// The row-capture sibling of RoundTripsAListHoldingAMap: each row of a CellView
 // column is one top-level tagged element, so a map row has to record the element view the
 // list cursor hands back. A constant list column never exercises that - its rows are the
 // one list - so this is where a dropped view shows up.
-TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfMaps) {
+TEST(TuringProtoRoundTripTest, RoundTripsCellViewColumnOfMaps) {
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
     db::Dataframe source;
@@ -1917,7 +1909,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfMaps) {
 
     const db::ListView list = localMem.listBuffer().insert(items);
 
-    auto* col = localMem.alloc<db::ColumnVector<db::ListElementView>>();
+    auto* col = localMem.alloc<db::ColumnVector<db::CellView>>();
     for (const auto& element : list) {
         col->push_back(element);
     }
@@ -1933,24 +1925,24 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumnOfMaps) {
     std::vector<net::proto::DecodedColumnSchema> schemas;
     decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &mapBuffer, &dfMan, &decoded, &schemas);
 
-    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
+    const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::CellView>>();
     ASSERT_NE(decodedCol, nullptr);
     ASSERT_EQ(decodedCol->size(), 3u);
 
-    ASSERT_EQ((*decodedCol)[0].getTag(), db::ListBufferTypeTag::MapView);
+    ASSERT_EQ((*decodedCol)[0].getTag(), db::CellTag::MapView);
     const db::MapView first = (*decodedCol)[0].getAs<db::MapView>();
     ASSERT_EQ(first.size(), 1u);
     EXPECT_EQ(first.front().getKey(), "a");
-    EXPECT_EQ(first.front().getValueAs<Int64>(), 1);
+    EXPECT_EQ(first.front().getValue().getAs<Int64>(), 1);
 
-    EXPECT_EQ((*decodedCol)[1].getTag(), db::ListBufferTypeTag::Int);
+    EXPECT_EQ((*decodedCol)[1].getTag(), db::CellTag::Int);
     EXPECT_EQ((*decodedCol)[1].getAs<Int64>(), 7);
 
-    ASSERT_EQ((*decodedCol)[2].getTag(), db::ListBufferTypeTag::MapView);
+    ASSERT_EQ((*decodedCol)[2].getTag(), db::CellTag::MapView);
     const db::MapView second = (*decodedCol)[2].getAs<db::MapView>();
     ASSERT_EQ(second.size(), 1u);
     EXPECT_EQ(second.front().getKey(), "b");
-    EXPECT_EQ(second.front().getValueAs<Int64>(), 2);
+    EXPECT_EQ(second.front().getValue().getAs<Int64>(), 2);
 }
 
 // A path goes over as its node count, then its IDs in path order. The long path's payload

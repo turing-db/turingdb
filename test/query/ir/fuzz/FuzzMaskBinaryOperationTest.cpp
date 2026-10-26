@@ -23,7 +23,7 @@ using namespace db;
 using namespace turing::test;
 
 // AFL inputs that threw 'Unsupported binary operation of columns of kinds ColumnMask and
-// ColumnMask' or 'ColumnMask and ColumnVector<ListElementView>': two predicates ordered
+// ColumnMask' or 'ColumnMask and ColumnVector<CellView>': two predicates ordered
 // against each other, and a predicate compared to the element of a mixed list.
 class FuzzMaskBinaryOperationTest : public TuringTest {
 protected:

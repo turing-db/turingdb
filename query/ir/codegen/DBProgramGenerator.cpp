@@ -9356,17 +9356,17 @@ mlir::Value DBProgramGenerator::translatePropertyLookupExpr(const PropertyLookup
 
 mlir::Value DBProgramGenerator::emitStaticMapKey(mlir::Value map, std::string_view key) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType entryType = allocColumnType(mlir::storage::MapElementType::get(_mlirCtxt));
+    const mlir::db::ColumnType cellType = allocColumnType(mlir::storage::AnyType::get(_mlirCtxt));
     const mlir::StringAttr keyAttr = _opBuilder.getStringAttr(llvm::StringRef(key.data(), key.size()));
 
-    return _opBuilder.create<mlir::db::StaticMapKey>(loc, entryType, map, keyAttr).getResult();
+    return _opBuilder.create<mlir::db::StaticMapKey>(loc, cellType, map, keyAttr).getResult();
 }
 
 mlir::Value DBProgramGenerator::emitDynamicMapKey(mlir::Value map, mlir::Value key) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType entryType = allocColumnType(mlir::storage::MapElementType::get(_mlirCtxt));
+    const mlir::db::ColumnType cellType = allocColumnType(mlir::storage::AnyType::get(_mlirCtxt));
 
-    return _opBuilder.create<mlir::db::DynamicMapKey>(loc, entryType, map, key).getResult();
+    return _opBuilder.create<mlir::db::DynamicMapKey>(loc, cellType, map, key).getResult();
 }
 
 mlir::Value DBProgramGenerator::emitDateTimeComponent(DateTimePart part, mlir::Value instant) {

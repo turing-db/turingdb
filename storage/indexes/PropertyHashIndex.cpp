@@ -3,7 +3,7 @@
 #include <range/v3/view/reverse.hpp>
 
 #include "datapart/DataPart.h"
-#include "list/ListElementOrder.h"
+#include "CellOrder.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 

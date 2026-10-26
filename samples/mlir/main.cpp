@@ -46,8 +46,8 @@
 #include "GraphPath.h"
 
 #include "list/ListView.h"
-#include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellView.h"
+#include "CellTag.h"
 
 #include "DBProgramGenerator.h"
 #include "StorageDialect.h"
@@ -344,7 +344,7 @@ private:
             // A per-group list cell from an nl.collect drain
         } else if (printConstListCell(column, row)) {
             // The one list a list-valued nl.constant holds for every row
-        } else if (printListElementCell(column, row)) {
+        } else if (printCellViewCell(column, row)) {
             // A tagged scalar from a heterogeneous unwind
         } else if (printPathCell(column, row)) {
             // The alternating node and edge IDs a db.shortest_path emits
@@ -427,49 +427,49 @@ private:
     // Print one element of a list, dispatching on its type tag. A collect produces
     // homogeneous scalar lists, so Int/UInt/Double/Bool/String are the tags that occur
     // there; a list literal may also hold a list, which is printed as one.
-    static void printListElement(const ListElementView& element) {
+    static void printCellView(const CellView& element) {
         switch (element.getTag()) {
-            case ListBufferTypeTag::Int:
+            case CellTag::Int:
                 std::cout << element.getAs<int64_t>();
             break;
 
-            case ListBufferTypeTag::UInt:
+            case CellTag::UInt:
                 std::cout << element.getAs<uint64_t>();
             break;
 
-            case ListBufferTypeTag::Double:
+            case CellTag::Double:
                 std::cout << element.getAs<double>();
             break;
 
-            case ListBufferTypeTag::Bool:
+            case CellTag::Bool:
                 std::cout << (static_cast<bool>(element.getAs<CustomBool>()) ? "true" : "false");
             break;
 
-            case ListBufferTypeTag::String:
+            case CellTag::String:
                 std::cout << element.getAs<std::string_view>();
             break;
 
-            case ListBufferTypeTag::Embedding:
+            case CellTag::Embedding:
                 std::cout << "<embedding>";
             break;
 
-            case ListBufferTypeTag::ListView:
+            case CellTag::ListView:
                 printList(element.getAs<ListView>());
             break;
 
-            case ListBufferTypeTag::Null:
+            case CellTag::Null:
                 std::cout << "null";
             break;
 
-            case ListBufferTypeTag::NodeID:
+            case CellTag::NodeID:
                 std::cout << element.getAs<NodeID>().getValue();
             break;
 
-            case ListBufferTypeTag::EdgeID:
+            case CellTag::EdgeID:
                 std::cout << element.getAs<EdgeID>().getValue();
             break;
 
-            case ListBufferTypeTag::DateTime: {
+            case CellTag::DateTime: {
                 std::string formatted;
                 DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
 
@@ -477,7 +477,7 @@ private:
             }
             break;
 
-            case ListBufferTypeTag::Duration: {
+            case CellTag::Duration: {
                 std::string formatted;
                 Duration::format(formatted, element.getAs<types::Duration::Primitive>());
 
@@ -485,8 +485,8 @@ private:
             }
             break;
 
-            case ListBufferTypeTag::MapView:
-            case ListBufferTypeTag::INVALID:
+            case CellTag::MapView:
+            case CellTag::INVALID:
                 std::cout << "?";
             break;
         }
@@ -495,27 +495,27 @@ private:
     // Print a list as [a, b, c].
     static void printList(const ListView list) {
         std::cout << "[";
-        for (size_t index = 0; const ListElementView& element : list) {
+        for (size_t index = 0; const CellView& element : list) {
             if (index > 0) {
                 std::cout << ", ";
             }
 
-            printListElement(element);
+            printCellView(element);
             index++;
         }
         std::cout << "]";
     }
 
-    // Print one cell of a type-tagged scalar column (a ColumnVector<ListElementView>
+    // Print one cell of a type-tagged scalar column (a ColumnVector<CellView>
     // from a heterogeneous nl.unwind_const, whose cells need not share a type) as the
     // value alone; returns whether the column matched.
-    static bool printListElementCell(const Column* column, size_t row) {
-        const auto* elements = dynamic_cast<const ColumnVector<ListElementView>*>(column);
+    static bool printCellViewCell(const Column* column, size_t row) {
+        const auto* elements = dynamic_cast<const ColumnVector<CellView>*>(column);
         if (!elements) {
             return false;
         }
 
-        printListElement((*elements)[row]);
+        printCellView((*elements)[row]);
 
         return true;
     }

@@ -11,7 +11,7 @@ NestedContainerWriter::~NestedContainerWriter() {
 }
 
 void NestedContainerWriter::writeListView(const db::ListView& listView) {
-    const std::span<const db::ListElementView> elements = listView.elements();
+    const std::span<const db::CellView> elements = listView.elements();
 
     bioassert(elements.size() <= MAX_WIRE_SIZE, "List element count exceeds maximum wire size");
     const WireSize elementCount = static_cast<WireSize>(elements.size());
@@ -22,7 +22,7 @@ void NestedContainerWriter::writeListView(const db::ListView& listView) {
     _outBuf->copyFixedLenData(&elementCount, sizeof(elementCount));
     _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
-    writeListElementValues(elements);
+    writeCellValues(elements);
 }
 
 void NestedContainerWriter::writeMapView(const db::MapView& mapView) {
@@ -41,26 +41,26 @@ void NestedContainerWriter::writeMapView(const db::MapView& mapView) {
     drainNestedValues();
 }
 
-void NestedContainerWriter::writeListElements(std::span<const db::ListElementView> elements) {
+void NestedContainerWriter::writeCells(std::span<const db::CellView> elements) {
     const WireSize listByteSize = computeListByteSize(elements);
 
     _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
-    writeListElementValues(elements);
+    writeCellValues(elements);
 }
 
-void NestedContainerWriter::writeOptionalListElements(std::span<const std::optional<db::ListElementView>> elements) {
+void NestedContainerWriter::writeOptionalCells(std::span<const std::optional<db::CellView>> elements) {
     const WireSize listByteSize = computeOptionalListByteSize(elements);
 
     _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
-    for (const std::optional<db::ListElementView>& element : elements) {
+    for (const std::optional<db::CellView>& element : elements) {
         if (!element.has_value()) {
-            writeNullListElement();
+            writeNullCell();
             continue;
         }
 
-        writeListElementValues(std::span<const db::ListElementView>(&element.value(), 1));
+        writeCellValues(std::span<const db::CellView>(&element.value(), 1));
     }
 }
 
@@ -76,8 +76,7 @@ void NestedContainerWriter::writeMapEntries(std::span<const db::MapEntryView> en
 // Drain the stack of nested values. A nested container will push a nested frame onto the stack
 // which will need to be fully drained and popped off the stack before the parent frame continues draining.
 void NestedContainerWriter::drainNestedValues() {
-    const ElementWriteVisitor<ListWritePolicy> listVisitor {_outBuf, &_stack};
-    const ElementWriteVisitor<MapWritePolicy> mapVisitor {_outBuf, &_stack};
+    const ElementWriteVisitor visitor {_outBuf, &_stack};
 
     while (!_stack.empty()) {
         NestedContainerIterator& frame = _stack.top();
@@ -89,20 +88,21 @@ void NestedContainerWriter::drainNestedValues() {
 
         if (frame.isMap()) {
             const db::MapEntryView entry = frame.getEntry();
+            const db::CellView value = entry.getValue();
 
             writeMapKey(entry.getKey());
-            db::dispatchMapEntry(mapVisitor, entry);
+            db::CellTagDispatcher {value.getTag()}.execute(visitor, value);
         } else {
-            const db::ListElementView element = frame.getElement();
+            const db::CellView element = frame.getElement();
 
-            db::ListTagDispatcher {element.getTag()}.execute(listVisitor, element);
+            db::CellTagDispatcher {element.getTag()}.execute(visitor, element);
         }
 
         frame.advance();
     }
 }
 
-void NestedContainerWriter::writeListElementValues(std::span<const db::ListElementView> elements) {
+void NestedContainerWriter::writeCellValues(std::span<const db::CellView> elements) {
     _stack.emplace(NestedContainerIterator::list(elements));
     drainNestedValues();
 }
@@ -115,9 +115,9 @@ void NestedContainerWriter::writeMapKey(std::string_view key) {
     _outBuf->copyVarLenData(key.data(), keyLen);
 }
 
-void NestedContainerWriter::writeNullListElement() {
-    constexpr size_t tagSize = sizeof(db::ListBufferTypeTag);
-    constexpr db::ListBufferTypeTag tag = db::TypeToListBufferTag<db::PropertyNull>::Tag;
+void NestedContainerWriter::writeNullCell() {
+    constexpr size_t tagSize = sizeof(db::CellTag);
+    constexpr db::CellTag tag = db::TypeToCellTag<db::PropertyNull>::Tag;
     const db::PropertyNull value {};
 
     _outBuf->checkRemainingAndFlush(tagSize + sizeof(value));

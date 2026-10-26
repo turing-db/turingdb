@@ -64,10 +64,8 @@ struct ColInternalKindToProtoEnum {
             return Enum::LIST_VIEW;
         } else if constexpr (db::IsMap<T>) {
             return Enum::MAP_VIEW;
-        } else if constexpr (db::IsMapEntry<T>) {
-            return Enum::MAP_ENTRY_VIEW;
-        } else if constexpr (db::IsListElement<T>) {
-            return Enum::LIST_ELEMENT_VIEW;
+        } else if constexpr (db::IsCell<T>) {
+            return Enum::CELL_VIEW;
         } else if constexpr (db::IsValueType<T>) {
             return Enum::VALUE_TYPE;
         } else if constexpr (db::IsNull<T>) {
@@ -187,12 +185,10 @@ public:
             for (const auto& mapView : values) {
                 _nestedWriter.writeMapView(mapView);
             }
-        } else if constexpr (db::IsListElement<T>) {
+        } else if constexpr (db::IsCell<T>) {
             // One element per row: the row count (already written above) is the element
             // count, so only [listByteSize] + the elements follow.
-            _nestedWriter.writeListElements(values);
-        } else if constexpr (db::IsMapEntry<T>) {
-            _nestedWriter.writeMapEntries(values);
+            _nestedWriter.writeCells(values);
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "TuringProtoEncoder can't encode a non trivial element in a trivial manner");
@@ -251,8 +247,8 @@ public:
             for (const auto& val : *col) {
                 _nestedWriter.writeListView(val.has_value() ? *val : db::ListView {});
             }
-        } else if constexpr (db::IsListElement<T>) {
-            _nestedWriter.writeOptionalListElements(values);
+        } else if constexpr (db::IsCell<T>) {
+            _nestedWriter.writeOptionalCells(values);
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -290,12 +286,9 @@ public:
             _nestedWriter.writeListView(col->at(0));
         } else if constexpr (db::IsMap<T>) {
             _nestedWriter.writeMapView(col->at(0));
-        } else if constexpr (db::IsListElement<T>) {
-            const db::ListElementView element = col->at(0);
-            _nestedWriter.writeListElements(std::span<const db::ListElementView>(&element, 1));
-        } else if constexpr (db::IsMapEntry<T>) {
-            const db::MapEntryView entry = col->at(0);
-            _nestedWriter.writeMapEntries(std::span<const db::MapEntryView>(&entry, 1));
+        } else if constexpr (db::IsCell<T>) {
+            const db::CellView element = col->at(0);
+            _nestedWriter.writeCells(std::span<const db::CellView>(&element, 1));
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -333,9 +326,9 @@ public:
             _nestedWriter.writeMapView(*opt);
         } else if constexpr (db::IsListView<T>) {
             _nestedWriter.writeListView(*opt);
-        } else if constexpr (db::IsListElement<T>) {
-            const db::ListElementView element = *opt;
-            _nestedWriter.writeListElements(std::span<const db::ListElementView>(&element, 1));
+        } else if constexpr (db::IsCell<T>) {
+            const db::CellView element = *opt;
+            _nestedWriter.writeCells(std::span<const db::CellView>(&element, 1));
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {

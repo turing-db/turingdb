@@ -564,17 +564,17 @@ def StaticMapKey : TuringOp<"static_map_key", [Pure, ConstantThroughOperands]> {
     `m.name`, or `n.attrs.name`. The key is spelled in the query, so it rides an attribute
     rather than a column:
 
-      %v = db.static_map_key %m key "name" : (!db.column<none>) -> !db.column<map_element>
+      %v = db.static_map_key %m key "name" : (!db.column<none>) -> !db.column<any>
 
-    Row r of the result is the entry row r's map holds under the key. A row whose map holds
-    no such key - and a row holding no map at all - reads back as a null entry, since a map
-    value carries its null in its own tag. The map column is a column of tagged cells where
+    Row r of the result is the value row r's map holds under the key, a tagged cell. A row
+    whose map holds no such key - and a row holding no map at all - reads back as a
+    Null-tagged cell. The map column is a column of tagged cells where
     the map was itself read out of a list or a map. A cell holding a node or an edge reads
     that entity's property under the key, as `n.name` does.
   }];
 
   let arguments = (ins Column:$map, StrAttr:$key);
-  let results   = (outs ColumnMapElements:$result);
+  let results   = (outs ColumnCells:$result);
 
   let assemblyFormat = "$map `key` $key attr-dict `:` functional-type(operands, results)";
 }
@@ -3272,17 +3272,17 @@ def DynamicMapKey : BinaryOp<"dynamic_map_key", [Pure]> {
     `m[k]`. The key is an expression rather than a name spelled in the query, so it rides a
     column rather than the attribute db.static_map_key carries:
 
-      %v = db.dynamic_map_key %m, %k : (!db.column<none>, !db.column<none>) -> !db.column<map_element>
+      %v = db.dynamic_map_key %m, %k : (!db.column<none>, !db.column<none>) -> !db.column<any>
 
-    Row r of the result is the entry row r's map holds under row r's key. A row whose map
-    holds no such key - and a row holding no map at all - reads back as a null entry, as
-    db.static_map_key's does. The map column is a column of tagged cells where the map was
+    Row r of the result is the value row r's map holds under row r's key, a tagged cell. A
+    row whose map holds no such key - and a row holding no map at all - reads back as a
+    Null-tagged cell, as db.static_map_key's does. The map column is a column of tagged cells where the map was
     itself read out of a list or a map, and a cell holding a node or an edge reads that
     entity's property under the key.
   }];
 
   let arguments = (ins Column:$map, Column:$key);
-  let results   = (outs ColumnMapElements:$result);
+  let results   = (outs ColumnCells:$result);
 
   let assemblyFormat = "$map`,` $key attr-dict `:` functional-type(operands, results)";
 }

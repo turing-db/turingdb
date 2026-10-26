@@ -48,16 +48,10 @@ MapView NLValueStore::own(MapView map) {
     return getLists().getMaps().copy(map);
 }
 
-ListElementView NLValueStore::own(ListElementView element) {
+CellView NLValueStore::own(CellView element) {
     _valueCount++;
 
     return getLists().copy(element);
-}
-
-MapEntryView NLValueStore::own(MapEntryView entry) {
-    _valueCount++;
-
-    return getLists().getMaps().copy(entry);
 }
 
 ListView NLValueStore::decode(const EncodedList& list) {
@@ -76,7 +70,7 @@ ListBuffer<>::ListItemVariant NLValueStore::ownItem(const ListBuffer<>::ListItem
     return std::visit([this](const auto& value) -> ListBuffer<>::ListItemVariant { return ownElement(value); }, item);
 }
 
-ListElementView NLValueStore::ownCell(ListBuffer<>::ListItemVariant& item) {
+CellView NLValueStore::ownCell(ListBuffer<>::ListItemVariant& item) {
     _valueCount++;
 
     const auto ownNested = [this](auto& value) {

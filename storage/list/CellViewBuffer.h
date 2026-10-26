@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "ListElementView.h"
+#include "CellView.h"
 
 namespace db {
 
@@ -19,22 +19,22 @@ namespace db {
  * @tparam N size (in number of views) of each chunk.
  */
 template <size_t N = 4096>
-class ListElementViewBuffer {
+class CellViewBuffer {
 public:
     /// Allocates the first chunk
-    ListElementViewBuffer();
+    CellViewBuffer();
     /// Deallocates all owned chunks
-    ~ListElementViewBuffer();
+    ~CellViewBuffer();
 
-    ListElementViewBuffer(const ListElementViewBuffer&) = delete;
-    ListElementViewBuffer(ListElementViewBuffer&&) = delete;
-    ListElementViewBuffer& operator=(const ListElementViewBuffer&) = delete;
-    ListElementViewBuffer& operator=(ListElementViewBuffer&&) = delete;
+    CellViewBuffer(const CellViewBuffer&) = delete;
+    CellViewBuffer(CellViewBuffer&&) = delete;
+    CellViewBuffer& operator=(const CellViewBuffer&) = delete;
+    CellViewBuffer& operator=(CellViewBuffer&&) = delete;
 
     /**
      * @brief Ensures that after this call is complete, the current @ref Chunk
      * contains at least enough free space at the end of the its internal buffer to store
-     * @param numViews @ref ListElementViews.
+     * @param numViews @ref CellViews.
      * @warn Can allocate unbounded amounts of memory; no size check is performed.
      */
     void reserveContiguous(size_t numViews);
@@ -45,7 +45,7 @@ public:
      * @warn Must only be called after an appropriate call to @ref reserveContiguous.
      * @warn Does not perform bounds checking.
      */
-    void write(ListElementView view);
+    void write(CellView view);
 
     /**
      * @brief Reserves space for @param numViews views and commits it (advancing the write
@@ -55,10 +55,10 @@ public:
      * reserved slots itself through the returned pointer.
      * @warn Can allocate unbounded amounts of memory; no size check is performed.
      */
-    ListElementView* reserveAndCommit(size_t numViews);
+    CellView* reserveAndCommit(size_t numViews);
 
     /// Returns a pointer to the next free available slot in the last buffer
-    const ListElementView* nextPtr() const { return &_last->_buf[_last->_size]; }
+    const CellView* nextPtr() const { return &_last->_buf[_last->_size]; }
 
     void clear();
 
@@ -72,7 +72,7 @@ private:
     /// Allocates a new chunk, updating @ref _last, with @param capacity views
     Chunk* allocateNextChunk(size_t capacity);
 
-    static constexpr size_t _viewSize = sizeof(ListElementView);
+    static constexpr size_t _viewSize = sizeof(CellView);
 
     static_assert(N != 0);
     static_assert(N < std::numeric_limits<int64_t>::max());
@@ -83,23 +83,23 @@ private:
 
 /**
  * @brief Internal class to manage the chunks of views of the outer
- * @ref ListElementViewBuffer.
+ * @ref CellViewBuffer.
  *
  * @tparam N size (in number of views) of this chunk's buffer.
  */
 template <size_t N>
-class ListElementViewBuffer<N>::Chunk {
+class CellViewBuffer<N>::Chunk {
 public:
-    friend ListElementViewBuffer;
+    friend CellViewBuffer;
 
     Chunk()
-        : _buf(new ListElementView[N]),
+        : _buf(new CellView[N]),
         _capacity(N)
     {
     }
 
     explicit Chunk(size_t numViews)
-        : _buf(new ListElementView[numViews]),
+        : _buf(new CellView[numViews]),
         _capacity(numViews)
     {
     }
@@ -117,7 +117,7 @@ public:
     [[nodiscard]] bool canFit(size_t numViews) const;
 
 private:
-    ListElementView* _buf;
+    CellView* _buf;
     /// The number of elements of @ref _buf that have been written to
     size_t _size {0};
     size_t _capacity {0};

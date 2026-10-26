@@ -18,8 +18,8 @@
 #include "TuringException.h"
 #include "comparators/GraphComparator.h"
 #include "datapart/EdgeRecord.h"
-#include "list/ListBufferTypeTag.h"
-#include "list/ListElementView.h"
+#include "CellTag.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/DateTime.h"
@@ -338,8 +338,8 @@ TEST_F(ParquetImporterTest, ImportsAListOfTimestamps) {
     std::vector<std::vector<int64_t>> lists;
     for (const ListView list : reader.scanNodeProperties<types::List>(propType->_id)) {
         std::vector<int64_t>& microseconds = lists.emplace_back();
-        for (const ListElementView element : list) {
-            ASSERT_EQ(element.getTag(), ListBufferTypeTag::DateTime);
+        for (const CellView element : list) {
+            ASSERT_EQ(element.getTag(), CellTag::DateTime);
             microseconds.push_back(element.getAs<types::DateTime::Primitive>().getMicroseconds());
         }
     }
@@ -419,8 +419,8 @@ TEST_F(ParquetImporterTest, ImportsListProperty) {
     std::vector<std::vector<int64_t>> tags;
     for (const ListView list : reader.scanNodeProperties<types::List>(tagsType->_id)) {
         std::vector<int64_t>& elements = tags.emplace_back();
-        for (const ListElementView element : list) {
-            ASSERT_EQ(element.getTag(), ListBufferTypeTag::Int);
+        for (const CellView element : list) {
+            ASSERT_EQ(element.getTag(), CellTag::Int);
             elements.push_back(element.getAs<int64_t>());
         }
     }
@@ -451,8 +451,8 @@ TEST_F(ParquetImporterTest, ImportsNestedListProperty) {
     ASSERT_TRUE(groupsType.has_value());
     ASSERT_EQ(groupsType->_valueType, ValueType::List);
 
-    const auto renderElement = [](const ListElementView element) -> std::string {
-        if (element.getTag() == ListBufferTypeTag::Null) {
+    const auto renderElement = [](const CellView element) -> std::string {
+        if (element.getTag() == CellTag::Null) {
             return "null";
         }
 
@@ -462,21 +462,21 @@ TEST_F(ParquetImporterTest, ImportsNestedListProperty) {
     std::vector<std::string> groups;
     for (const ListView list : reader.scanNodeProperties<types::List>(groupsType->_id)) {
         std::string rendered = "[";
-        for (const ListElementView outer : list) {
+        for (const CellView outer : list) {
             if (rendered.size() > 1) {
                 rendered += ", ";
             }
 
-            if (outer.getTag() == ListBufferTypeTag::Null) {
+            if (outer.getTag() == CellTag::Null) {
                 rendered += "null";
                 continue;
             }
 
-            ASSERT_EQ(outer.getTag(), ListBufferTypeTag::ListView);
+            ASSERT_EQ(outer.getTag(), CellTag::ListView);
 
             rendered += "[";
             bool first = true;
-            for (const ListElementView inner : outer.getAs<ListView>()) {
+            for (const CellView inner : outer.getAs<ListView>()) {
                 if (!first) {
                     rendered += ", ";
                 }

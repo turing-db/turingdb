@@ -96,10 +96,8 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
             return fn.template operator()<SinkListView<Sink>>(encoding);
         case net::proto::ColumnInternalKind::MAP_VIEW:
             return fn.template operator()<SinkMapView<Sink>>(encoding);
-        case net::proto::ColumnInternalKind::MAP_ENTRY_VIEW:
-            return fn.template operator()<SinkMapEntryView<Sink>>(encoding);
-        case ColumnInternalKind::LIST_ELEMENT_VIEW:
-            return fn.template operator()<SinkListElementView<Sink>>(encoding);
+        case ColumnInternalKind::CELL_VIEW:
+            return fn.template operator()<SinkCellView<Sink>>(encoding);
         case ColumnInternalKind::NODE_ID:
             return fn.template operator()<db::NodeID>(encoding);
         case ColumnInternalKind::EDGE_ID:

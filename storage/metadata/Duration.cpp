@@ -315,21 +315,21 @@ bool Duration::fromMap(const MapView& map, Duration& out) {
         }
 
         const Duration perUnit(microseconds);
-        const MapBufferTypeTag tag = entry.getValueTag();
+        const CellTag tag = entry.getValue().getTag();
 
-        if (tag == MapBufferTypeTag::Int) {
-            sum = sum + perUnit * entry.getValueAs<int64_t>();
-        } else if (tag == MapBufferTypeTag::UInt) {
-            const uint64_t count = entry.getValueAs<uint64_t>();
+        if (tag == CellTag::Int) {
+            sum = sum + perUnit * entry.getValue().getAs<int64_t>();
+        } else if (tag == CellTag::UInt) {
+            const uint64_t count = entry.getValue().getAs<uint64_t>();
 
             if (count > static_cast<uint64_t>(INT64_MAX)) {
                 throw TuringException("Duration overflow");
             }
 
             sum = sum + perUnit * static_cast<int64_t>(count);
-        } else if (tag == MapBufferTypeTag::Double) {
-            sum = sum + perUnit * entry.getValueAs<double>();
-        } else if (tag == MapBufferTypeTag::Null) {
+        } else if (tag == CellTag::Double) {
+            sum = sum + perUnit * entry.getValue().getAs<double>();
+        } else if (tag == CellTag::Null) {
             holdsANullCount = true;
         } else {
             throw TuringException(fmt::format("duration() reads a number for each unit, and the map key '{}' holds a value that is not one", unit));

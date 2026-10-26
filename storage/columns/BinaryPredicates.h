@@ -14,22 +14,22 @@
 #include "TypeUtils.h"
 #include "ColumnMask.h"
 #include "ColumnConst.h"
-#include "list/ListElementOrder.h"
+#include "CellOrder.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
 
 // A mask's boolean reaches the comparisons of a type-erased cell only through its
 // conversion to a number, so it is compared as the boolean property type
-inline bool operator==(ListElementView element, ColumnMask::Bool_t predicate) {
+inline bool operator==(CellView element, ColumnMask::Bool_t predicate) {
     return element == types::Bool::Primitive {predicate._value};
 }
 
-inline std::strong_ordering operator<=>(ListElementView element, ColumnMask::Bool_t predicate) {
+inline std::strong_ordering operator<=>(CellView element, ColumnMask::Bool_t predicate) {
     return element <=> types::Bool::Primitive {predicate._value};
 }
 
-inline std::optional<std::partial_ordering> comparisonOrder(ListElementView element, ColumnMask::Bool_t predicate) {
+inline std::optional<std::partial_ordering> comparisonOrder(CellView element, ColumnMask::Bool_t predicate) {
     return comparisonOrder(element, types::Bool::Primitive {predicate._value});
 }
 
@@ -60,13 +60,7 @@ concept ListOperand =
 // answers, since the type of an element is settled row by row
 template <typename T>
 concept TaggedListOperand =
-    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
-
-// A map value, which carries its own null in the entry's tag rather than in a nullable
-// column. Comparing one is three-valued for that reason, so it needs an overload of its
-// own.
-template <typename T>
-concept MapEntryOperand = std::same_as<std::decay_t<T>, MapEntryView>;
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, CellView>;
 
 // The list a type-erased cell holds, absent where it holds anything else - a number, a
 // string, a null - which is what a membership test over it then answers
@@ -79,7 +73,7 @@ inline std::optional<ListView> taggedList(const C& cell) {
 
         return taggedList(*cell);
     } else {
-        if (cell.getTag() != ListBufferTypeTag::ListView) {
+        if (cell.getTag() != CellTag::ListView) {
             return std::nullopt;
         }
 
@@ -89,18 +83,11 @@ inline std::optional<ListView> taggedList(const C& cell) {
 
 template <typename T>
 concept TaggedCellOperand =
-    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListElementView>;
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, CellView>;
 
 // Every comparison of a cell but one against a null of unknown type
 template <typename T, typename U>
 concept ComparesATaggedCell = (TaggedCellOperand<T> || TaggedCellOperand<U>) && !HoldsPropertyNull<T, U>;
-
-// The same for a map value, on whichever side it is written. A pair meeting a list element
-// is left to ComparesATaggedCell, whose body reads both.
-template <typename T, typename U>
-concept ComparesAMapEntry = (MapEntryOperand<T> || MapEntryOperand<U>)
-                         && !TaggedCellOperand<T> && !TaggedCellOperand<U>
-                         && !HoldsPropertyNull<T, U>;
 
 template <typename T>
 concept IDOperand = TypedInternalID<TypeUtils::unwrap_optional_t<std::decay_t<T>>>;
@@ -117,19 +104,16 @@ concept ComparesAnID = (IDOperand<T> && (IDOperand<U> || IntegerOperand<U>))
 
 template <typename T, typename U>
 concept OrdersToANullableBool = ComparesATaggedCell<T, U>
-                             || ComparesAMapEntry<T, U>
                              || (ListOperand<T> && ListOperand<U>);
 
 template <typename T>
 inline bool holdsAValue(const T& operand) {
     if constexpr (TypeUtils::is_optional_v<T>) {
         return operand.has_value() && holdsAValue(*operand);
-    } else if constexpr (std::is_same_v<T, ListElementView>) {
-        return operand.getTag() != ListBufferTypeTag::Null;
+    } else if constexpr (std::is_same_v<T, CellView>) {
+        return operand.getTag() != CellTag::Null;
     } else if constexpr (TypedInternalID<T> || std::is_same_v<T, PathRef>) {
         return operand.isValid();
-    } else if constexpr (std::is_same_v<T, MapEntryView>) {
-        return operand.getValueTag() != MapBufferTypeTag::Null;
     } else if constexpr (std::is_same_v<T, GraphPath>) {
         return !operand.isNull();
     } else if constexpr (std::is_same_v<T, PropertyNull>) {
@@ -139,14 +123,9 @@ inline bool holdsAValue(const T& operand) {
     }
 }
 
-inline bool holdsAnInteger(const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
-    return tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
-}
-
-inline bool holdsAnInteger(const MapEntryView entry) {
-    const MapBufferTypeTag tag = entry.getValueTag();
-    return tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt;
+inline bool holdsAnInteger(const CellView element) {
+    const CellTag tag = element.getTag();
+    return tag == CellTag::Int || tag == CellTag::UInt;
 }
 
 template <typename Cell, TypedInternalID IDT>
@@ -159,24 +138,12 @@ inline bool cellIsID(const Cell cell, const IDT id) {
     return cell == id;
 }
 
-// The list a map entry holds, absent where it holds anything else, as taggedList answers
-// for a list element
-inline std::optional<ListView> entryList(const MapEntryView entry) {
-    if (entry.getValueTag() != MapBufferTypeTag::ListView) {
-        return std::nullopt;
-    }
-
-    return entry.getValueAs<ListView>();
-}
-
 template <typename T>
 inline std::optional<ListView> heldList(const T& operand) {
     if constexpr (std::is_same_v<T, ListView>) {
         return operand;
-    } else if constexpr (std::is_same_v<T, ListElementView>) {
+    } else if constexpr (std::is_same_v<T, CellView>) {
         return taggedList(operand);
-    } else if constexpr (std::is_same_v<T, MapEntryView>) {
-        return entryList(operand);
     } else {
         return std::nullopt;
     }
@@ -184,9 +151,7 @@ inline std::optional<ListView> heldList(const T& operand) {
 
 template <typename T, typename U>
 inline std::optional<std::partial_ordering> cellComparisonOrder(const T& a, const U& b) {
-    constexpr bool leadsWithAMapEntry = std::is_same_v<T, MapEntryView> && !std::is_same_v<U, ListElementView>;
-
-    if constexpr (std::is_same_v<T, ListElementView> || std::is_same_v<T, U> || leadsWithAMapEntry) {
+    if constexpr (std::is_same_v<T, CellView> || std::is_same_v<T, U>) {
         return comparisonOrder(a, b);
     } else {
         const std::optional<std::partial_ordering> order = comparisonOrder(b, a);
@@ -314,12 +279,12 @@ inline std::optional<CustomBool> truthValue(const T& value) {
         }
 
         return truthValue(*value);
-    } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        const ListBufferTypeTag tag = value.getTag();
+    } else if constexpr (std::is_same_v<Decayed, CellView>) {
+        const CellTag tag = value.getTag();
 
-        if (tag == ListBufferTypeTag::Bool) {
+        if (tag == CellTag::Bool) {
             return value.template getAs<types::Bool::Primitive>();
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -766,8 +731,8 @@ struct TuringEqual {
             }
         }
 
-        const std::span<const ListElementView> lhs = TypeUtils::unwrap(a).elements();
-        const std::span<const ListElementView> rhs = TypeUtils::unwrap(b).elements();
+        const std::span<const CellView> lhs = TypeUtils::unwrap(a).elements();
+        const std::span<const CellView> rhs = TypeUtils::unwrap(b).elements();
 
         if (lhs.size() != rhs.size()) {
             return CustomBool {false};
@@ -776,8 +741,8 @@ struct TuringEqual {
         bool unknown = false;
 
         for (size_t index = 0; index < lhs.size(); index++) {
-            const bool holdsNull = lhs[index].getTag() == ListBufferTypeTag::Null
-                                || rhs[index].getTag() == ListBufferTypeTag::Null;
+            const bool holdsNull = lhs[index].getTag() == CellTag::Null
+                                || rhs[index].getTag() == CellTag::Null;
             if (holdsNull) {
                 unknown = true;
                 continue;
@@ -797,7 +762,7 @@ struct TuringEqual {
 
     // A cell holding a list compares as that list, so its null elements answer as a list's do
     template <typename T, typename U>
-        requires ComparesATaggedCell<T, U> || ComparesAMapEntry<T, U>
+        requires ComparesATaggedCell<T, U>
     std::optional<CustomBool> operator()(const T& a, const U& b) {
         if (!holdsAValue(a) || !holdsAValue(b)) {
             return std::nullopt;
@@ -863,7 +828,6 @@ struct TuringEqual {
     template <typename T, typename U>
         requires (!ListOperand<T> || !ListOperand<U>)
               && (!ComparesATaggedCell<T, U>)
-              && (!ComparesAMapEntry<T, U>)
               && (!ComparesAnID<T, U>)
     bool operator()(const T& a, const U& b) {
         if constexpr (MixedNumbers<T, U>) {
@@ -918,8 +882,8 @@ inline std::optional<types::String::Primitive> predicateText(const types::String
     return value;
 }
 
-inline std::optional<types::String::Primitive> predicateText(const ListElementView element) {
-    if (element.getTag() != ListBufferTypeTag::String) {
+inline std::optional<types::String::Primitive> predicateText(const CellView element) {
+    if (element.getTag() != CellTag::String) {
         return std::nullopt;
     }
 
@@ -1035,21 +999,12 @@ struct TuringIn {
         using Scalar = TypeUtils::unwrap_optional_t<T>;
         const Scalar& scalar = TypeUtils::unwrap(value);
 
-        if constexpr (std::is_same_v<Scalar, ListElementView>) {
-            if (scalar.getTag() == ListBufferTypeTag::Null) {
+        if constexpr (std::is_same_v<Scalar, CellView>) {
+            if (scalar.getTag() == CellTag::Null) {
                 return std::nullopt;
             }
 
             const std::optional<ListView> scalarList = taggedList(scalar);
-            if (scalarList) {
-                return (*this)(*scalarList, elements);
-            }
-        } else if constexpr (std::is_same_v<Scalar, MapEntryView>) {
-            if (scalar.getValueTag() == MapBufferTypeTag::Null) {
-                return std::nullopt;
-            }
-
-            const std::optional<ListView> scalarList = entryList(scalar);
             if (scalarList) {
                 return (*this)(*scalarList, elements);
             }
@@ -1061,8 +1016,8 @@ struct TuringIn {
 
         bool unknown = false;
 
-        for (const ListElementView element : elements) {
-            if (element.getTag() == ListBufferTypeTag::Null) {
+        for (const CellView element : elements) {
+            if (element.getTag() == CellTag::Null) {
                 unknown = true;
                 continue;
             }

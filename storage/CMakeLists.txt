@@ -4,6 +4,7 @@ set(storage_sources
         DebugDump.cpp
         RowStore.cpp
         GraphPath.cpp
+        CellOrder.cpp
 
         buffers/BufferChunk.cpp
         buffers/RawBuffer.cpp
@@ -21,9 +22,8 @@ set(storage_sources
         list/ListByteBuffer.cpp
         list/ListBuffer.cpp
         list/ListContainer.cpp
-        list/ListElementOrder.cpp
         list/ListHash.cpp
-        list/ListElementViewBuffer.cpp
+        list/CellViewBuffer.cpp
         list/ListWriteCursor.cpp
         list/PathTrie.cpp
 

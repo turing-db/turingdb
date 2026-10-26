@@ -2,18 +2,18 @@
 
 #include <span>
 
-#include "ListElementView.h"
+#include "CellView.h"
 
 namespace db {
 
 /**
- * @brief Non-owning view into a series of contiguously-stored @ref ListElementViews.
+ * @brief Non-owning view into a series of contiguously-stored @ref CellViews.
  */
 class ListView {
 public:
     ListView() = default;
 
-    std::span<const ListElementView> elements() const { return _elements; }
+    std::span<const CellView> elements() const { return _elements; }
 
     auto begin() { return std::begin(_elements); }
     auto end() { return std::end(_elements); }
@@ -25,8 +25,8 @@ public:
 
     size_t size() const { return _elements.size(); }
 
-    ListElementView front() const { return _elements.front(); }
-    ListElementView back() const { return _elements.back(); }
+    CellView front() const { return _elements.front(); }
+    CellView back() const { return _elements.back(); }
 
     /// Returns this list without its first element; an empty list has none to drop.
     ListView tail() const { return empty() ? *this : ListView {_elements.data() + 1, _elements.size() - 1}; }
@@ -41,12 +41,12 @@ private:
     template <size_t N>
     friend class ListBuffer;
 
-    ListView(const ListElementView* data, size_t size)
+    ListView(const CellView* data, size_t size)
         : _elements({data, size})
     {
     }
 
-    std::span<const ListElementView> _elements;
+    std::span<const CellView> _elements;
 };
 
 bool operator==(ListView lhs, ListView rhs);

@@ -14,7 +14,7 @@
 
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 
 #include "LocalMemory.h"
@@ -42,7 +42,7 @@ using OptDouble = std::optional<double>;
 // Reads one list cell as a vector of strings.
 void readStringList(const ListView& view, Names& out) {
     out.clear();
-    for (const ListElementView& element : view) {
+    for (const CellView& element : view) {
         out.push_back(std::string(element.getAs<std::string_view>()));
     }
 }

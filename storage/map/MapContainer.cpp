@@ -4,7 +4,7 @@
 #include <variant>
 
 #include "MapEntryView.h"
-#include "MapUtils.h"
+#include "CellUtils.h"
 
 using namespace db;
 
@@ -78,24 +78,20 @@ MapView MapContainer::copy(MapView map) {
     return insert(entries);
 }
 
-MapEntryView MapContainer::copy(MapEntryView entry) {
-    const MapKeyValuePair owned = ownedEntry(entry);
-
-    return insert(std::span<const MapKeyValuePair> {&owned, 1}).front();
-}
-
 MapContainer::MapKeyValuePair MapContainer::ownedEntry(MapEntryView entry) {
-    const auto asVariant = [this]<typename T>(const MapEntryView view) -> MapBuffer<>::MapItemVariant {
+    const auto asVariant = [this]<typename T>(const CellView value) -> MapBuffer<>::MapItemVariant {
         if constexpr (std::same_as<T, MapView>) {
-            return copy(view.getValueAs<MapView>());
+            return copy(value.getAs<MapView>());
         } else if constexpr (std::same_as<T, ListView>) {
-            return _lists.copy(view.getValueAs<ListView>());
+            return _lists.copy(value.getAs<ListView>());
         } else {
-            return view.getValueAs<T>();
+            return value.getAs<T>();
         }
     };
 
-    return {entry.getKey(), dispatchMapEntry(asVariant, entry)};
+    const CellView value = entry.getValue();
+
+    return {entry.getKey(), CellTagDispatcher {value.getTag()}.execute(asVariant, value)};
 }
 
 MapContainer::MapKeyValuePair MapContainer::own(const MapKeyValuePair& entry) {

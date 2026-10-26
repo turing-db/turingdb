@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 #include "ListView.h"
-#include "ListElementView.h"
-#include "ListBufferTypeTag.h"
+#include "CellView.h"
+#include "CellTag.h"
 
 namespace db {
 
@@ -21,7 +21,7 @@ namespace db {
 class ListWriteCursor {
 public:
     ListWriteCursor() = default;
-    ListWriteCursor(const ListView& view, std::byte* elementWritePtr, ListElementView* viewWritePtr)
+    ListWriteCursor(const ListView& view, std::byte* elementWritePtr, CellView* viewWritePtr)
         : _view(view),
         _elementWritePtr(elementWritePtr),
         _viewWritePtr(viewWritePtr)
@@ -42,7 +42,7 @@ public:
      * the region, records its view, advances the cursor, and returns the view. For
      * fixed-width types, whose wire layout already matches the stored layout.
      */
-    ListElementView writeRaw(const void* data, size_t numBytes);
+    CellView writeRaw(const void* data, size_t numBytes);
 
     /**
      * @brief Writes [tag][value] into the region, where @param value is the stored value
@@ -50,7 +50,7 @@ public:
      * lives in a separate buffer), records its view, advances the cursor, returns the view.
      */
     template <typename T>
-    ListElementView writeValue(ListBufferTypeTag tag, const T& value);
+    CellView writeValue(CellTag tag, const T& value);
 
     /**
      * @brief Writes [tag][value] into slot @param index of a region whose elements are all
@@ -58,17 +58,17 @@ public:
      * the sequential write position, so it is not mixed with @ref writeValue on one cursor.
      */
     template <typename T>
-    ListElementView writeValueAt(size_t index, ListBufferTypeTag tag, const T& value);
+    CellView writeValueAt(size_t index, CellTag tag, const T& value);
 
 private:
     ListView _view;
     std::byte* _elementWritePtr {nullptr};
-    ListElementView* _viewWritePtr {nullptr};
+    CellView* _viewWritePtr {nullptr};
     uint64_t _written {0};
 
     /// Records the view of the element written at @param elementStart, advancing the view
     /// pointer and the written count, and returns it.
-    ListElementView recordView(const std::byte* elementStart);
+    CellView recordView(const std::byte* elementStart);
 };
 
 }

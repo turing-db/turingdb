@@ -16,7 +16,7 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
@@ -41,7 +41,7 @@ public:
         const auto& listsRaw = lists->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::vector<std::string>& list = _lists.emplace_back();
-            for (const ListElementView& element : listsRaw[rowIndex]) {
+            for (const CellView& element : listsRaw[rowIndex]) {
                 list.push_back(std::string(element.getAs<std::string_view>()));
             }
         }

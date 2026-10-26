@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 
-#include "ListElementView.h"
+#include "CellView.h"
 #include "ListView.h"
 
 namespace db {
@@ -12,7 +12,7 @@ namespace db {
  * built them - the hash counterpart of @ref operator==(ListView, ListView).
  */
 size_t hashList(ListView list);
-size_t hashListElement(ListElementView element);
+size_t hashCell(CellView element);
 
 /// Hashes a number by its value, so an integer and a double that compare equal hash alike
 size_t hashNumber(double value);

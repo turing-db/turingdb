@@ -11,7 +11,7 @@
 
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
 
@@ -37,8 +37,8 @@ namespace {
 // tag: the tag is what tells a renderer a number apart from an entity id.
 void readDoubleList(const ListView& view, std::vector<double>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::Double);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::Double);
         out.push_back(element.getAs<types::Double::Primitive>());
     }
 }
@@ -46,8 +46,8 @@ void readDoubleList(const ListView& view, std::vector<double>& out) {
 // Reads one list cell as a vector of booleans, asserting the boolean tag.
 void readBoolList(const ListView& view, std::vector<bool>& out) {
     out.clear();
-    for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::Bool);
+    for (const CellView& element : view) {
+        ASSERT_EQ(element.getTag(), CellTag::Bool);
         out.push_back(static_cast<bool>(element.getAs<types::Bool::Primitive>()));
     }
 }

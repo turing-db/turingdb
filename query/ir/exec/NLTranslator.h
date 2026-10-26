@@ -369,7 +369,7 @@ private:
 
     // Translate the nl.for over an nl.unwind_const iterator: allocate the single
     // value loop variable (a nullable value column for a homogeneous list, a
-    // ColumnVector<ListElementView> for a heterogeneous one) and record the
+    // ColumnVector<CellView> for a heterogeneous one) and record the
     // unwind-const loop statement in body. The literal sibling of
     // translateConstScanLoop - a source loop that streams a fixed ListView one chunk
     // at a time rather than a set of node IDs.
@@ -1091,7 +1091,6 @@ private:
     void translateStringEnd(StringEndOp stringEnd, NLStmtContainer* body);
     void translateMakeMap(mlir::nl::MakeMap makeMap, NLStmtContainer* body);
     void translateStaticMapKey(mlir::nl::StaticMapKey mapKey, NLStmtContainer* body);
-    void translateMapEntryValue(mlir::nl::MapEntryValue entryValue, NLStmtContainer* body);
     void translateDynamicMapKey(mlir::nl::DynamicMapKey mapKey, NLStmtContainer* body);
 
     // Translate an nl.list_comprehension: allocate the element chunk, one chunk per
@@ -1230,10 +1229,9 @@ private:
     Column* allocListColumn();
     Column* allocOptListColumn();
 
-    Column* allocListElementColumn();
-    Column* allocOptListElementColumn();
-    Column* allocMapEntryColumn();
-    Column* allocConstMapEntryColumn();
+    Column* allocCellColumn();
+    Column* allocOptCellColumn();
+    Column* allocConstCellColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
 

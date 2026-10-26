@@ -6,7 +6,7 @@
 #include "ColumnOptVector.h"
 #include "ColumnKind.h"
 #include "GraphPath.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 
@@ -55,7 +55,7 @@ using AllValueTypes = TypeList<
     const Change*,
     ListView,
     std::optional<ListView>,
-    ListElementView
+    CellView
 >;
 template <ColumnKind::Code K, typename... TypeList>
 struct ColumnTypeFromKindImpl;
@@ -148,7 +148,7 @@ struct ColumnTypeFromKind {
         COL_CASE(ColumnVector<std::string>)                                              \
         COL_CASE(ColumnVector<const CommitBuilder*>)                                     \
         COL_CASE(ColumnVector<const Change*>)                                            \
-        COL_CASE(ColumnVector<ListElementView>)                                          \
+        COL_CASE(ColumnVector<CellView>)                                          \
                                                                                          \
         default: {                                                                       \
             throw FatalException(fmt::format(                                            \

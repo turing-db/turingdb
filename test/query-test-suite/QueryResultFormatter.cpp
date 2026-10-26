@@ -9,12 +9,11 @@
 #include "BioAssert.h"
 #include "GraphPath.h"
 #include "ID.h"
-#include "list/ListElementView.h"
-#include "list/ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 #include "list/ListView.h"
 
 #include "map/MapEntryView.h"
-#include "map/MapUtils.h"
 #include "map/MapView.h"
 #include "QueryStatus.h"
 #include "columns/AllowedKinds.h"
@@ -134,7 +133,7 @@ template <typename T>
     return result;
 }
 
-[[maybe_unused]] std::string valueToString(const db::ListElementView element);
+[[maybe_unused]] std::string valueToString(const db::CellView element);
 [[maybe_unused]] std::string valueToString(db::ListView view);
 [[maybe_unused]] std::string valueToString(db::MapView view);
 
@@ -147,13 +146,13 @@ template <typename T>
     return valueToString(*value);
 }
 
-[[maybe_unused]] std::string valueToString(const db::ListElementView element) {
-    const auto writeTyped = []<typename T>(const db::ListElementView element) -> std::string {
+[[maybe_unused]] std::string valueToString(const db::CellView element) {
+    const auto writeTyped = []<typename T>(const db::CellView element) -> std::string {
         return valueToString(element.getAs<T>());
     };
 
-    const db::ListBufferTypeTag tag = element.getTag();
-    db::ListTagDispatcher writer {._tag = tag};
+    const db::CellTag tag = element.getTag();
+    db::CellTagDispatcher writer {._tag = tag};
 
     return writer.execute(writeTyped, element);
 }
@@ -166,7 +165,7 @@ template <typename T>
     std::string out = "[";
     size_t i = 0;
 
-    for (const db::ListElementView element : view.elements()) {
+    for (const db::CellView element : view.elements()) {
         if (i++ > 0) {
             out += ", ";
         }
@@ -177,20 +176,10 @@ template <typename T>
     return out;
 }
 
-// The value of one entry, which is what a cell of a map value column is. The key is added
-// by entryToString, for an entry read as a member of its map rather than alone.
-[[maybe_unused]] std::string valueToString(const db::MapEntryView entry) {
-    const auto writeTyped = []<typename T>(const db::MapEntryView entry) -> std::string {
-        return valueToString(entry.getValueAs<T>());
-    };
-
-    return db::dispatchMapEntry(writeTyped, entry);
-}
-
 [[maybe_unused]] std::string entryToString(const db::MapEntryView entry) {
     std::string out {entry.getKey()};
     out += ": ";
-    out += valueToString(entry);
+    out += valueToString(entry.getValue());
     return out;
 }
 

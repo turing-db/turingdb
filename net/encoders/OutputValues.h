@@ -5,7 +5,7 @@
 
 #include "GraphPath.h"
 #include "ID.h"
-#include "list/ListElementView.h"
+#include "CellView.h"
 #include "OptionalLike.h"
 #include "TypeUtils.h"
 #include "map/MapEntryView.h"
@@ -68,13 +68,10 @@ template <typename T>
 concept IsListView = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ListView>;
 
 template <typename T>
-concept IsListElement = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ListElementView>;
+concept IsCell = std::is_same_v<TypeUtils::unwrap_optional_t<T>, CellView>;
 
 template <typename T>
 concept IsMap = std::is_same_v<TypeUtils::unwrap_optional_t<T>, MapView>;
-
-template <typename T>
-concept IsMapEntry = std::is_same_v<T, MapEntryView>;
 
 template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;
@@ -117,12 +114,10 @@ struct ColumnTypeGenerator {
             _name = fmt::format("NULL");
         } else if constexpr (IsListView<T>) {
             _name = fmt::format("List");
-        } else if constexpr (IsListElement<T>) {
-            _name = fmt::format("ListElement");
+        } else if constexpr (IsCell<T>) {
+            _name = fmt::format("Cell");
         } else if constexpr (IsMap<T>) {
             _name = fmt::format("Map");
-        } else if constexpr (IsMapEntry<T>) {
-            _name = fmt::format("MapValue");
         } else {
             COMPILE_ERROR("Unknown column type");
         }

@@ -4,17 +4,17 @@
 #include <type_traits>
 #include <vector>
 
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "ListByteBuffer.h"
-#include "ListElementView.h"
-#include "ListUtils.h"
+#include "CellView.h"
+#include "CellUtils.h"
 
 using namespace db;
 
 namespace {
 
-size_t elementValueSize(const ListElementView element) {
-    const ListTagDispatcher dispatch {element.getTag()};
+size_t elementValueSize(const CellView element) {
+    const CellTagDispatcher dispatch {element.getTag()};
     return dispatch.execute([]<typename T>(auto&&) { return sizeof(T); }, element);
 }
 
@@ -40,13 +40,13 @@ ListView ListBuffer<N>::insert(std::span<const ListItemVariant> elements) {
     _views.reserveContiguous(numElements);
 
     // Before writing, calculate the address at which this list will start
-    const ListElementView* listStart = _views.nextPtr();
+    const CellView* listStart = _views.nextPtr();
 
     const auto write = [this](auto&& typed) -> void {
         using T = std::decay_t<decltype(typed)>;
 
-        const ListBufferTypeTag tag = TypeToListBufferTag<T>::Tag;
-        const ListElementView view = _elements.write(tag, typed);
+        const CellTag tag = TypeToCellTag<T>::Tag;
+        const CellView view = _elements.write(tag, typed);
         _views.write(view);
     };
 
@@ -65,7 +65,7 @@ ListWriteCursor ListBuffer<N>::reserveList(size_t numElements, size_t valueBytes
     // the bytes or the views: the cursor's pointers and ListView stay valid as it is filled
     // in, and any later reservation lands after this region rather than inside it.
     std::byte* elementWritePtr = _elements.reserveAndCommit(numBytes);
-    ListElementView* viewWritePtr = _views.reserveAndCommit(numElements);
+    CellView* viewWritePtr = _views.reserveAndCommit(numElements);
 
     return ListWriteCursor {
         ListView {viewWritePtr, numElements},
@@ -79,21 +79,21 @@ ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
     const size_t numElements = a.size() + b.size();
 
     size_t valueBytes = 0;
-    for (const ListElementView element : a) {
+    for (const CellView element : a) {
         valueBytes += elementValueSize(element);
     }
-    for (const ListElementView element : b) {
+    for (const CellView element : b) {
         valueBytes += elementValueSize(element);
     }
 
     ListWriteCursor cursor = reserveList(numElements, valueBytes);
     constexpr size_t tagSize = decltype(_elements)::tagSize();
 
-    for (const ListElementView element : a) {
+    for (const CellView element : a) {
         const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }
-    for (const ListElementView element : b) {
+    for (const CellView element : b) {
         const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }
@@ -104,14 +104,14 @@ ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
 template <size_t N>
 ListView ListBuffer<N>::reverse(ListView list) {
     size_t valueBytes = 0;
-    for (const ListElementView element : list) {
+    for (const CellView element : list) {
         valueBytes += elementValueSize(element);
     }
 
     ListWriteCursor cursor = reserveList(list.size(), valueBytes);
     constexpr size_t tagSize = decltype(_elements)::tagSize();
 
-    for (const ListElementView element : std::views::reverse(list.elements())) {
+    for (const CellView element : std::views::reverse(list.elements())) {
         const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }
@@ -124,7 +124,7 @@ ListView ListBuffer<N>::copy(ListView list) {
     std::vector<ListItemVariant> elements;
     elements.reserve(list.size());
 
-    for (const ListElementView element : list) {
+    for (const CellView element : list) {
         elements.push_back(ownedItem(element));
     }
 
@@ -132,15 +132,15 @@ ListView ListBuffer<N>::copy(ListView list) {
 }
 
 template <size_t N>
-ListElementView ListBuffer<N>::copy(ListElementView element) {
+CellView ListBuffer<N>::copy(CellView element) {
     const ListItemVariant item = ownedItem(element);
 
     return insert(std::span<const ListItemVariant> {&item, 1}).front();
 }
 
 template <size_t N>
-typename ListBuffer<N>::ListItemVariant ListBuffer<N>::ownedItem(ListElementView element) {
-    const auto asVariant = [this]<typename T>(const ListElementView view) -> ListItemVariant {
+typename ListBuffer<N>::ListItemVariant ListBuffer<N>::ownedItem(CellView element) {
+    const auto asVariant = [this]<typename T>(const CellView view) -> ListItemVariant {
         if constexpr (std::same_as<T, ListView>) {
             return copy(view.getAs<ListView>());
         } else {
@@ -148,7 +148,7 @@ typename ListBuffer<N>::ListItemVariant ListBuffer<N>::ownedItem(ListElementView
         }
     };
 
-    const ListTagDispatcher dispatcher {element.getTag()};
+    const CellTagDispatcher dispatcher {element.getTag()};
 
     return dispatcher.execute(asVariant, element);
 }

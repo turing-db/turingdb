@@ -584,7 +584,7 @@ bool isIndexableChunk(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type indexed = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::ListType, storage::AnyType, storage::MapElementType>(indexed);
+    return mlir::isa<storage::ListType, storage::AnyType>(indexed);
 }
 
 // The chunk shapes a key read accepts: a column of maps, and a tagged cell the row may
@@ -599,7 +599,7 @@ bool holdsAMapPerRow(mlir::Type chunkType) {
     const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
     const mlir::Type read = nullable ? nullable.getValueType() : element;
 
-    return mlir::isa<storage::MapType, storage::AnyType, storage::MapElementType>(read);
+    return mlir::isa<storage::MapType, storage::AnyType>(read);
 }
 
 // The element type an indexed list hands out, read through the nullable an optional list
@@ -666,19 +666,11 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
 
 bool isTaggedCellChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    return chunk && mlir::isa<storage::AnyType, storage::MapElementType>(chunk.getElementType());
+    return chunk && mlir::isa<storage::AnyType>(chunk.getElementType());
 }
 
 bool mayHoldANull(mlir::Type chunkType) {
     return isNullableChunk(chunkType) || isTaggedCellChunk(chunkType);
-}
-
-// A list element's null rides the column's optional, so a plain !storage.any column holds
-// none. A map value's null rides the entry's own tag, so even a plain column can answer
-// one - which is what makes comparing it three-valued whatever the column's shape.
-bool isMapElementChunk(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    return chunk && mlir::isa<storage::MapElementType>(chunk.getElementType());
 }
 
 // The same cell behind the nullable an index wraps it in: reading an element out of a list
@@ -1214,49 +1206,6 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
-    // A value read out of a map is read as a tagged cell by every op but the ones whose
-    // kernels read a map entry where it stands, and the ones carrying it. IN looks its
-    // left side up in place, while its right side is a list or a cell holding one.
-    const bool readsEntriesInPlace = mlir::isa<mlir::db::StaticMapKey,
-                                               mlir::db::DynamicMapKey,
-                                               mlir::db::ListIndex,
-                                               mlir::db::EqOp,
-                                               mlir::db::NeqOp,
-                                               mlir::db::GtOp,
-                                               mlir::db::LtOp,
-                                               mlir::db::GteOp,
-                                               mlir::db::LteOp,
-                                               mlir::db::Keys,
-                                               mlir::db::PropertyMap,
-                                               mlir::db::Labels,
-                                               mlir::db::EdgeType,
-                                               mlir::db::Output,
-                                               mlir::db::Yield>(operation);
-
-    const bool looksUpAnEntry = mlir::isa<mlir::db::InOp>(operation);
-
-    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> entryChunks;
-    if (!readsEntriesInPlace) {
-        for (mlir::OpOperand& use : operation.getOpOperands()) {
-            if (looksUpAnEntry && use.getOperandNumber() == 0) {
-                continue;
-            }
-
-            const mlir::Value operand = use.get();
-            const auto slotIt = _valueMap.find(operand);
-            if (slotIt == _valueMap.end()) {
-                continue;
-            }
-
-            const mlir::Value chunk = slotIt->second;
-            const mlir::Value cells = mapEntriesAsCells(chunk);
-            if (cells != chunk) {
-                entryChunks.emplace_back(operand, chunk);
-                _valueMap[operand] = cells;
-            }
-        }
-    }
-
     if (computesOnceOverConstants(operation)) {
         lowerOnceOverConstants(operation);
     } else if (raisesOverConstants(operation)) {
@@ -1265,27 +1214,6 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerOperationByKind(operation);
     }
 
-    for (const auto& [operand, entries] : llvm::reverse(entryChunks)) {
-        _valueMap[operand] = entries;
-    }
-}
-
-mlir::Value DBLowering::mapEntriesAsCells(mlir::Value chunk) {
-    if (!isMapElementChunk(chunk.getType())) {
-        return chunk;
-    }
-
-    mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType cellsType = nl::ChunkType::get(context, storage::AnyType::get(context));
-
-    mlir::OpBuilder::InsertionGuard guard(_builder);
-    setInsertionForUnaryOp(chunk);
-
-    return _builder.create<nl::MapEntryValue>(_builder.getUnknownLoc(), cellsType, chunk).getResult();
-}
-
-mlir::Value DBLowering::yieldedChunk(mlir::Value column) {
-    return mapEntriesAsCells(mapValue(column));
 }
 
 bool DBLowering::computesOnceOverConstants(mlir::Operation& operation) {
@@ -1936,7 +1864,7 @@ void DBLowering::lowerUnwindComputed(mlir::db::UnwindComputed unwind) {
     for (mlir::Operation& operation : dbSource) {
         mlir::db::UnwindYield yield = mlir::dyn_cast<mlir::db::UnwindYield>(operation);
         if (yield) {
-            sourceChunk = rowAlignedChunk(yieldedChunk(yield.getSource()), runCardinality);
+            sourceChunk = rowAlignedChunk(mapValue(yield.getSource()), runCardinality);
         } else {
             lowerOperation(operation);
         }
@@ -2027,7 +1955,7 @@ mlir::Operation* DBLowering::lowerElementBody(mlir::Block& dbBody,
         }
 
         rowTagChunk = mapValue(yield.getRowTags());
-        valueChunk = yieldedChunk(yield.getValue());
+        valueChunk = mapValue(yield.getValue());
     }
 
     _innermostLoopBody = previousInnermostLoopBody;
@@ -2205,7 +2133,7 @@ mlir::Operation* DBLowering::lowerReduceBody(mlir::Block& dbBody, mlir::Block* n
     for (mlir::Operation& operation : dbBody) {
         mlir::db::ReduceYield yield = mlir::dyn_cast<mlir::db::ReduceYield>(operation);
         if (yield) {
-            valueChunk = yieldedChunk(yield.getValue());
+            valueChunk = mapValue(yield.getValue());
         } else {
             lowerOperation(operation);
         }
@@ -2316,7 +2244,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
             rowTagChunk = mapValue(yield.getRowTags());
         }
 
-        valueChunk = yieldedChunk(yield.getValue());
+        valueChunk = mapValue(yield.getValue());
     }
 
     // PatternComprehension::verify guarantees the yield, so an empty one here means
@@ -2422,11 +2350,11 @@ void DBLowering::lowerDynamicMapKey(mlir::db::DynamicMapKey mapKey) {
         throw IRException("db.dynamic_map_key reads its key out of a string column");
     }
 
-    // The entry carries its own null in its tag, so the result is never wrapped in a
+    // A cell carries its own null in its tag, so the result is never wrapped in a
     // nullable: a missing key, an absent map and a null key all read back as a Null-tagged
-    // entry
+    // cell
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(),
-                                                        storage::MapElementType::get(_builder.getContext()));
+                                                        storage::AnyType::get(_builder.getContext()));
 
     setInsertionForBinaryOp(mapChunk, keyChunk);
 
@@ -2445,10 +2373,10 @@ void DBLowering::lowerStaticMapKey(mlir::db::StaticMapKey mapKey) {
         throw IRException("db.static_map_key reads from a map column, or from a column of tagged cells");
     }
 
-    // The entry carries its own null in its tag, so the result is never wrapped in a
-    // nullable: a missing key and an absent map both read back as a Null-tagged entry
+    // A cell carries its own null in its tag, so the result is never wrapped in a
+    // nullable: a missing key and an absent map both read back as a Null-tagged cell
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(),
-                                                        storage::MapElementType::get(_builder.getContext()));
+                                                        storage::AnyType::get(_builder.getContext()));
 
     setInsertionForUnaryOp(mapChunk);
 
@@ -3211,7 +3139,7 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         }
 
         for (const mlir::Value column : yield.getColumns()) {
-            matchedChunks.push_back(yieldedChunk(column));
+            matchedChunks.push_back(mapValue(column));
         }
 
         if (yield.getTag()) {
@@ -3336,7 +3264,7 @@ void DBLowering::lowerSubqueryBody(mlir::db::CallSubquery call,
         }
 
         for (const mlir::Value column : yield.getColumns()) {
-            yieldedChunks.push_back(yieldedChunk(column));
+            yieldedChunks.push_back(mapValue(column));
         }
 
         if (yield.getTag()) {
@@ -3664,7 +3592,7 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
 
     mlir::Value collectedValue;
     if constexpr (collectsValues) {
-        collectedValue = rowListsValueChunk(yieldedChunk(yield.getValue()), heldTag ? heldTag : heldRows);
+        collectedValue = rowListsValueChunk(mapValue(yield.getValue()), heldTag ? heldTag : heldRows);
         answeredChunks.push_back(collectedValue);
     }
 
@@ -6169,8 +6097,6 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             // A cell may hold a null, or a value of another type than the one it meets
             const bool comparesATaggedCell = holdsTaggedCells(lhsType) || holdsTaggedCells(rhsType);
 
-            const bool comparesAMapValue = isMapElementChunk(lhsType) || isMapElementChunk(rhsType);
-
             // An ID column carries its null in the ID: the invalid one an OPTIONAL MATCH leaves
             const bool lhsIsAnEntity = isEntityChunk(lhsType);
             const bool rhsIsAnEntity = isEntityChunk(rhsType);
@@ -6184,7 +6110,6 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const bool alwaysNullable = operandNullable
                                      || comparesTwoLists
                                      || comparesATaggedCell
-                                     || comparesAMapValue
                                      || comparesAnEntity
                                      || comparesTwoPaths;
 
@@ -6630,7 +6555,7 @@ mlir::Value DBLowering::lowerBlockOverRows(mlir::Block& block, mlir::Value cardi
     mlir::Value value;
     for (mlir::Operation& operation : block) {
         if (operation.hasTrait<mlir::OpTrait::IsTerminator>()) {
-            value = yieldedChunk(operation.getOperand(0));
+            value = mapValue(operation.getOperand(0));
         } else {
             lowerOperation(operation);
         }
@@ -7095,7 +7020,7 @@ void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop, size_t 
     mlir::Value mask;
     for (mlir::Operation& operation : dbHop) {
         if (mlir::db::Yield yield = mlir::dyn_cast<mlir::db::Yield>(operation)) {
-            mask = yieldedChunk(yield.getColumns().front());
+            mask = mapValue(yield.getColumns().front());
         } else {
             lowerOperation(operation);
         }
@@ -7516,11 +7441,9 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // what every fold, key serialization and reduction reads a value column as. A list or
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
-    // A map entry carries its null in its own tag.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const bool isMapEntry = llvm::isa<storage::MapElementType>(valueElement);
-    const bool staysPlain = (isContainer && !nullable) || isMapEntry;
+    const bool staysPlain = isContainer && !nullable;
     const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);

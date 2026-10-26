@@ -113,7 +113,7 @@ struct VectorColumnDecoder<SinkListView<Sink>, Sink> {
             }
 
             // Stream this row's list (and any nested children) straight into the reserved space.
-            auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+            auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
             if (!drainContainerStack(context, sink, onTopLevelElement)) {
                 return false;
             }
@@ -156,7 +156,7 @@ struct VectorColumnDecoder<SinkMapView<Sink>, Sink> {
             }
 
             //we are in the middle of processing a map and should drain the container stack
-            auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+            auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
             if (!drainContainerStack(context, sink, onTopLevelElement)) {
                 return false;
             }
@@ -169,14 +169,14 @@ struct VectorColumnDecoder<SinkMapView<Sink>, Sink> {
 };
 
 template <ProtoDecodeSink Sink>
-struct VectorColumnDecoder<SinkListElementView<Sink>, Sink> {
-    using T = SinkListElementView<Sink>;
+struct VectorColumnDecoder<SinkCellView<Sink>, Sink> {
+    using T = SinkCellView<Sink>;
 
     static bool decode(DecodeContext* context,
                        Sink* sink,
                        SinkColumnVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
-        // A ListElementView column has one element per column row, wire-encoded as
+        // A CellView column has one element per column row, wire-encoded as
         // [listByteSize] followed by the elements. Each element is streamed onto the list
         // buffer and its view stored in the corresponding row.
 
@@ -196,44 +196,10 @@ struct VectorColumnDecoder<SinkListElementView<Sink>, Sink> {
         }
 
         // One column row per top-level element; its view is stored in the matching row.
-        auto onTopLevelElement = [typedColumn](size_t index, const SinkListElementView<Sink>& view) {
+        auto onTopLevelElement = [typedColumn](size_t index, const SinkCellView<Sink>& view) {
             typedColumn->data()[index] = view;
         };
         return drainContainerStack(context, sink, onTopLevelElement);
-    }
-};
-
-// A MapEntryView column has one entry per column row, wire-encoded as [mapByteSize]
-// followed by the entries, each [keyLen][key][tag][value] as a map's own are. The column
-// is therefore one map of as many entries as it has rows, and each entry's view is stored
-// in the row it came from.
-template <ProtoDecodeSink Sink>
-struct VectorColumnDecoder<SinkMapEntryView<Sink>, Sink> {
-    using T = SinkMapEntryView<Sink>;
-
-    static bool decode(DecodeContext* context,
-                       Sink* sink,
-                       SinkColumnVector<T, Sink>* typedColumn,
-                       ProtoColumnState* columnState) {
-        if (context->_rowIndex == 0) {
-            if (context->_inBuf->readable() < sizeof(WireSize)) {
-                return false;
-            }
-
-            WireSize mapByteSize = 0;
-            context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
-
-            sink->beginMap(columnState->getNumRows(), mapByteSize);
-            typedColumn->resize(columnState->getNumRows());
-            context->_rowIndex = 1;
-        }
-
-        auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
-        auto onTopLevelEntry = [typedColumn](size_t index, const T& view) {
-            typedColumn->data()[index] = view;
-        };
-
-        return drainContainerStack(context, sink, onTopLevelElement, onTopLevelEntry);
     }
 };
 
@@ -377,7 +343,7 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
                 entry.emplace(sink->beginList(elementCount, listByteSize));
             }
 
-            auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+            auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
             if (!drainContainerStack(context, sink, onTopLevelElement)) {
                 return false;
             }
@@ -422,7 +388,7 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
                 entry.emplace(sink->beginMap(entryCount, mapByteSize));
             }
 
-            auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+            auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
             if (!drainContainerStack(context, sink, onTopLevelElement)) {
                 return false;
             }
@@ -435,8 +401,8 @@ struct OptionalVectorColumnDecoder<SinkMapView<Sink>, Sink> {
 };
 
 template <ProtoDecodeSink Sink>
-struct OptionalVectorColumnDecoder<SinkListElementView<Sink>, Sink> {
-    using T = SinkListElementView<Sink>;
+struct OptionalVectorColumnDecoder<SinkCellView<Sink>, Sink> {
+    using T = SinkCellView<Sink>;
 
     static bool decode(DecodeContext* context,
                        Sink* sink,
@@ -458,7 +424,7 @@ struct OptionalVectorColumnDecoder<SinkListElementView<Sink>, Sink> {
         }
 
         const ProtoColumnState::BitMask& mask = columnState->getBitMask();
-        auto onTopLevelElement = [typedColumn, &mask](size_t index, const SinkListElementView<Sink>& view) {
+        auto onTopLevelElement = [typedColumn, &mask](size_t index, const SinkCellView<Sink>& view) {
             if (mask.test(index)) {
                 typedColumn->data()[index] = view;
             }
@@ -644,18 +610,18 @@ struct ConstColumnDecoder<SinkListView<Sink>, Sink> {
             typedColumn->set(sink->beginList(elementCount, listByteSize));
             context->_constListStarted = true;
         }
-        auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+        auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
         return drainContainerStack(context, sink, onTopLevelElement);
     }
 };
 
 template <ProtoDecodeSink Sink>
-struct ConstColumnDecoder<SinkListElementView<Sink>, Sink> {
-    using T = SinkListElementView<Sink>;
+struct ConstColumnDecoder<SinkCellView<Sink>, Sink> {
+    using T = SinkCellView<Sink>;
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
-        // A constant ListElementView is a single element, wire-encoded as [listByteSize] + one
+        // A constant CellView is a single element, wire-encoded as [listByteSize] + one
         // element. Stream it onto the list buffer and set the column to its view.
 
         if (!context->_constListStarted) {
@@ -671,7 +637,7 @@ struct ConstColumnDecoder<SinkListElementView<Sink>, Sink> {
         }
 
         // The constant is the single top-level element; store its view on the column.
-        auto onTopLevelElement = [typedColumn](size_t, const SinkListElementView<Sink>& view) {
+        auto onTopLevelElement = [typedColumn](size_t, const SinkCellView<Sink>& view) {
             typedColumn->set(view);
         };
 
@@ -703,37 +669,8 @@ struct ConstColumnDecoder<SinkMapView<Sink>, Sink> {
             context->_constListStarted = true;
         }
 
-        auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+        auto onTopLevelElement = [](size_t, const SinkCellView<Sink>&) {};
         return drainContainerStack(context, sink, onTopLevelElement);
-    }
-};
-
-// A constant map entry column holds one entry, wire-encoded as [mapByteSize] followed by
-// that entry. It opens a one-entry map and takes the view the entry records.
-template <ProtoDecodeSink Sink>
-struct ConstColumnDecoder<SinkMapEntryView<Sink>, Sink> {
-    using T = SinkMapEntryView<Sink>;
-
-    template <ConstColumnOf<T, Sink> Column>
-    static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
-        if (!context->_constListStarted) {
-            if (context->_inBuf->readable() < sizeof(WireSize)) {
-                return false;
-            }
-
-            WireSize mapByteSize = 0;
-            context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
-
-            sink->beginMap(1, mapByteSize);
-            context->_constListStarted = true;
-        }
-
-        auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
-        auto onTopLevelEntry = [typedColumn](size_t, const T& view) {
-            typedColumn->set(view);
-        };
-
-        return drainContainerStack(context, sink, onTopLevelElement, onTopLevelEntry);
     }
 };
 
