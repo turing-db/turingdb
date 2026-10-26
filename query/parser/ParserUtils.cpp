@@ -268,6 +268,21 @@ NodePattern* ParserUtils::createNodePattern(CypherAST* ast,
     return node;
 }
 
+EdgePattern* ParserUtils::createEdgePattern(CypherAST* ast,
+                                            Symbol* symbol,
+                                            LabelExpr* labelExpr,
+                                            QuantifiedPath* range,
+                                            MapLiteral* properties,
+                                            WhereClause* where) {
+    EdgePattern* edge = EdgePattern::create(ast, range, EdgePattern::Direction::Undirected);
+    edge->setSymbol(symbol);
+    edge->setLabelExpr(labelExpr);
+    edge->setProperties(properties);
+    edge->setWhere(where);
+
+    return edge;
+}
+
 bool ParserUtils::returnsUnaliasedItem(const RegularQuery* segment) {
     std::vector<const SinglePartQuery*> queries;
     RegularQuery::collectSingleQueries(segment, queries);
@@ -689,9 +704,7 @@ void ParserUtils::extendComparisonChain(CypherAST* ast,
 
     // A link spans the two operands it compares, not the chain that ended on the left
     // one: a diagnostic about `2 < 'a'` of `1 < 2 < 'a'` underlines that much
-    SourceLocation comparisonLocation = chain._rightOperandLocation;
-    comparisonLocation._endLine = rhsLocation._endLine;
-    comparisonLocation._endColumn = rhsLocation._endColumn;
+    const SourceLocation comparisonLocation = SourceLocation::join(chain._rightOperandLocation, rhsLocation);
 
     BinaryExpr* const comparison = BinaryExpr::create(ast, op, chain._rightOperand, rhs);
     sourceManager->setLocation(comparison, comparisonLocation);
@@ -701,6 +714,25 @@ void ParserUtils::extendComparisonChain(CypherAST* ast,
     chain._rightOperandLocation = rhsLocation;
 
     sourceManager->setLocation(chain._expr, chainLocation);
+}
+
+void ParserUtils::createIsTest(CypherAST* ast,
+                               ComparisonChain& chain,
+                               Expr* operand,
+                               const IsTest& test,
+                               const SourceLocation& testLocation,
+                               const SourceLocation& chainLocation) {
+    if (test._normalForm) {
+        chain._expr = createIsNormalized(ast, operand, *test._normalForm, test._negated, chainLocation);
+        chain._rightOperand = nullptr;
+        return;
+    }
+
+    Expr* null = LiteralExpr::create(ast, NullLiteral::create(ast));
+    ast->getSourceManager()->setLocation(null, testLocation);
+
+    const BinaryOperator nullTest = test._negated ? BinaryOperator::IsNotNull : BinaryOperator::IsNull;
+    startComparisonChain(ast, chain, operand, nullTest, null, testLocation, chainLocation);
 }
 
 Parameter* ParserUtils::createNumberedParameter(CypherAST* ast, int64_t number) {

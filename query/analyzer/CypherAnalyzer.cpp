@@ -78,6 +78,7 @@
 
 #include "BioAssert.h"
 #include "AnalyzeException.h"
+#include "FileName.h"
 
 using namespace db;
 
@@ -1841,28 +1842,16 @@ void CypherAnalyzer::analyze(const LoadGraphQuery* loadGraph) {
         throwError("LOAD GRAPH should not have an empty graph name");
     }
 
-    // Check that the graph name is only [A-Z0-9_]+
-    for (char c : graphName) {
-        if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", c), loadGraph);
-        }
-    }
+    throwIfInvalidGraphName(graphName, loadGraph);
 }
 
 void CypherAnalyzer::analyze(const CreateGraphQuery* createGraph) {
     const std::string_view graphName = createGraph->getGraphName();
     if (graphName.empty()) {
         throwError("CREATE GRAPH should not have an empty graph name");
-        // Check that the graph name is only [A-Z0-9_]+
-        for (char c : graphName) {
-            if (!(isalnum(c) || c == '_')) [[unlikely]] {
-                throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
-                                       "character '{}' not allowed.",
-                                       c),
-                           createGraph);
-            }
-        }
     }
+
+    throwIfInvalidGraphName(graphName, createGraph);
 }
 
 void CypherAnalyzer::analyze(LoadJsonlQuery* loadJsonl) {
@@ -1873,15 +1862,7 @@ void CypherAnalyzer::analyze(LoadJsonlQuery* loadJsonl) {
 
     loadJsonl->setGraphName(graphName);
 
-    // Check that the graph name is only [A-Z0-9_]+
-    for (char c : graphName) {
-        if (!(isalnum(c) || c == '_')) {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
-                                   "character '{}' not allowed.",
-                                   c),
-                       loadJsonl);
-        }
-    }
+    throwIfInvalidGraphName(graphName, loadJsonl);
 
     const auto& embDims = loadJsonl->getEmbeddingSpecs();
     const bool validDims =
@@ -1910,15 +1891,7 @@ void CypherAnalyzer::analyze(LoadGMLQuery* loadGML) {
 
     loadGML->setGraphName(graphName);
 
-    // Check that the graph name is only [A-Z0-9_]+
-    for (char c : graphName) {
-        if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': "
-                                   "character '{}' not allowed.",
-                                   c),
-                       loadGML);
-        }
-    }
+    throwIfInvalidGraphName(graphName, loadGML);
 }
 
 void CypherAnalyzer::analyze(LoadParquetQuery* loadParquet) {
@@ -1929,16 +1902,7 @@ void CypherAnalyzer::analyze(LoadParquetQuery* loadParquet) {
 
     loadParquet->setGraphName(graphName);
 
-    // Check that the graph name is only [A-Z0-9_]+
-    for (char c : graphName) {
-        if (!(isalnum(c) || c == '_')) {
-            throwError(fmt::format(
-                           "Graph name must only contain alphanumeric characters or '_': "
-                           "character '{}' not allowed.",
-                           c),
-                       loadParquet);
-        }
-    }
+    throwIfInvalidGraphName(graphName, loadParquet);
 }
 
 void CypherAnalyzer::analyze(const S3ConnectQuery* s3Connect) {
@@ -2035,13 +1999,12 @@ void CypherAnalyzer::analyze(const InstallExtensionQuery* query) {
         throwError("INSTALL extension name cannot be empty", query);
     }
 
-    for (char c : name) {
-        if (!(isalnum(c) || c == '_')) [[unlikely]] {
-            throwError(fmt::format("Extension name must only contain "
-                                   "alphanumeric characters or '_': "
-                                   "character '{}' not allowed.", c),
-                       query);
-        }
+    const size_t invalid = FileName::findInvalidCharacter(name);
+    if (invalid != std::string_view::npos) [[unlikely]] {
+        throwError(fmt::format("Extension name must only contain "
+                               "alphanumeric characters or '_': "
+                               "character '{}' not allowed.", name[invalid]),
+                   query);
     }
 }
 
@@ -2116,6 +2079,13 @@ void CypherAnalyzer::analyze(const CreateEdgePropertyIndexQuery* query) {
     const GraphReader reader = _graphView.read();
     if (!reader.isEdgeProperty(propType._id)) {
         throwError("Property is not an edge property.", propertyExpr);
+    }
+}
+
+void CypherAnalyzer::throwIfInvalidGraphName(std::string_view graphName, const void* obj) const {
+    const size_t invalid = FileName::findInvalidCharacter(graphName);
+    if (invalid != std::string_view::npos) [[unlikely]] {
+        throwError(fmt::format("Graph name must only contain alphanumeric characters or '_': character '{}' not allowed.", graphName[invalid]), obj);
     }
 }
 

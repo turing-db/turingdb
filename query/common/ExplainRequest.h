@@ -49,6 +49,9 @@ public:
     static std::string_view getStageName(ExplainStage stage);
     static void describeOptions(std::string_view word, std::string& message);
 
+    // Whether the word names a stage or is one of before, after and around
+    static bool isOptionWord(std::string_view word);
+
 private:
     uint32_t _stages {0};
     std::vector<std::string_view> _passesBefore;

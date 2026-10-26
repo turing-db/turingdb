@@ -1,1 +1,3 @@
 add_turing_test(test_query_parser_parenthesized_property_access ParenthesizedPropertyAccessTest.cpp)
+add_turing_test(test_query_parser_keyword_object_name KeywordObjectNameTest.cpp)
+add_turing_test(test_query_parser_parse_error_message ParseErrorMessageTest.cpp)

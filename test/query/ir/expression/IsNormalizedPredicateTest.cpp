@@ -164,8 +164,8 @@ TEST_F(IsNormalizedPredicateTest, formNamesRemainUsableAsNames) {
 TEST_F(IsNormalizedPredicateTest, invalidFormIsASyntaxError) {
     expectError("RETURN 'a' IS 'NFC' NORMALIZED", "syntax error");
     expectError("RETURN 'a' IS NFX NORMALIZED", "syntax error");
-    expectError("RETURN 'a' IS NFC NFD NORMALIZED", "syntax error");
-    expectError("RETURN 'a' IS NOT NOT NORMALIZED", "syntax error");
+    expectError("RETURN 'a' IS NFC NFD NORMALIZED", "The right side of IS [NOT] must be NULL or [NFC | NFD | NFKC | NFKD] NORMALIZED");
+    expectError("RETURN 'a' IS NOT NOT NORMALIZED", "The right side of IS [NOT] must be NULL or [NFC | NFD | NFKC | NFKD] NORMALIZED");
 }
 
 int main(int argc, char** argv) {

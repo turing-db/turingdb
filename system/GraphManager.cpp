@@ -21,6 +21,7 @@
 #include "JobSystem.h"
 
 #include "Path.h"
+#include "FileName.h"
 #include "FileUtils.h"
 #include "FatalException.h"
 #include "TuringException.h"
@@ -71,7 +72,8 @@ ChangeResult<Graph*> GraphManager::findGraph(std::string_view graphName) const {
 }
 
 Graph* GraphManager::createGraph(std::string_view name) {
-    const fs::Path path = _config->getGraphsDir() / name;
+    fs::Path path;
+    getGraphPath(name, path);
 
     if (_config->isSyncedOnDisk() && path.exists()) {
         throw TuringException(fmt::format("Graph '{}' already exists", name));
@@ -98,7 +100,8 @@ Graph* GraphManager::createGraph(std::string_view name) {
 }
 
 LoadGraphResult<Graph*> GraphManager::loadGraph(std::string_view name) {
-    const fs::Path graphPath = _config->getGraphsDir() / name;
+    fs::Path graphPath;
+    getGraphPath(name, graphPath);
 
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(name);
     if (!reservation.isValid()) {
@@ -253,6 +256,15 @@ GraphFileType GraphManager::getGraphFileType(const fs::Path& graphPath) const {
     return GraphFileType::UNKNOWN;
 }
 
+void GraphManager::getGraphPath(std::string_view graphName, fs::Path& graphPath) const {
+    const bool hasInvalidCharacter = FileName::findInvalidCharacter(graphName) != std::string_view::npos;
+    if (graphName.empty() || hasInvalidCharacter) {
+        throw TuringException(fmt::format("Invalid graph name '{}': a graph name is not empty and only contains alphanumeric characters or '_'", graphName));
+    }
+
+    graphPath = _config->getGraphsDir() / graphName;
+}
+
 bool GraphManager::isGraphLoading(std::string_view graphName) const {
     return _graphLoadStatus.isGraphLoading(graphName);
 }
@@ -293,7 +305,8 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
                                  const EmbeddingsSpec& embeddingSpecs,
                                  const DateTimeSpec& dateTimeSpecs,
                                  const DurationSpec& durationSpecs) {
-    const fs::Path graphPath = _config->getGraphsDir() / graphName;
+    fs::Path graphPath;
+    getGraphPath(graphName, graphPath);
     if (graphPath == dbPath) {
         return nullptr;
     }
@@ -357,7 +370,8 @@ Graph* GraphManager::loadJsonlDB(std::string_view graphName,
 Graph* GraphManager::loadGmlDB(std::string_view graphName,
                                const fs::Path& dbPath,
                                JobSystem* jobSystem) {
-    const fs::Path graphPath = _config->getGraphsDir() / graphName;
+    fs::Path graphPath;
+    getGraphPath(graphName, graphPath);
     if (graphPath == dbPath) {
         return nullptr;
     }
@@ -402,7 +416,8 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
                                    const fs::Path& dbPath,
                                    JobSystem* jobSystem,
                                    const DurationSpec& durationSpecs) {
-    const fs::Path graphPath = _config->getGraphsDir() / graphName;
+    fs::Path graphPath;
+    getGraphPath(graphName, graphPath);
     if (graphPath == dbPath) {
         return nullptr;
     }

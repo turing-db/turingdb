@@ -19,8 +19,13 @@ std::string_view nextLine(std::string_view& str) {
         return line;
     }
 
-    const auto line = str.substr(0, pos);
+    std::string_view line = str.substr(0, pos);
     str = str.substr(pos + 1, str.size());
+
+    if (line.ends_with('\r')) {
+        line.remove_suffix(1);
+    }
+
     return line;
 }
 
@@ -148,7 +153,7 @@ void CypherError::generateMultiLine(std::string& errorOutput) {
 
     const LinePatternLocation lastLineLoc = {
         ._beginLine = 0,
-        ._count = _loc->_endColumn + 1,
+        ._count = _loc->_endColumn - 1,
     };
 
     errorOutput += errorBars<UP_ERR_CHAR>(lastLineLoc);

@@ -30,6 +30,16 @@ const std::array<StageWord, 6> stageWords {{
     {"nl", ExplainStage::NL},
 }};
 
+bool isStageWord(std::string_view word) {
+    return std::ranges::any_of(stageWords, [word](const StageWord& stageWord) {
+        return equalsInsensitive(stageWord.word, word);
+    });
+}
+
+bool isPassSelector(std::string_view word) {
+    return equalsInsensitive(word, "around") || equalsInsensitive(word, "before") || equalsInsensitive(word, "after");
+}
+
 bool contains(const std::vector<std::string_view>& passNames, std::string_view passName) {
     return std::ranges::any_of(passNames, [passName](std::string_view name) {
         return equalsInsensitive(name, passName);
@@ -142,6 +152,10 @@ std::string_view ExplainRequest::getStageName(ExplainStage stage) {
     }
 
     return "";
+}
+
+bool ExplainRequest::isOptionWord(std::string_view word) {
+    return isStageWord(word) || isPassSelector(word);
 }
 
 void ExplainRequest::describeOptions(std::string_view word, std::string& message) {

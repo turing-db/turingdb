@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "expr/Operators.h"
@@ -25,6 +26,7 @@ class Parameter;
 class PatternElement;
 class PropertyExpr;
 class Projection;
+class QuantifiedPath;
 class RegularQuery;
 class ReturnStmt;
 class SetStmt;
@@ -41,6 +43,12 @@ public:
         Expr* _expr {nullptr};
         Expr* _rightOperand {nullptr};
         SourceLocation _rightOperandLocation;
+    };
+
+    // What IS tests its left side for: being null, or being in a normal form
+    struct IsTest {
+        std::optional<UnicodeNormalForm> _normalForm;
+        bool _negated {false};
     };
 
     // The queries a NEXT chains, in order: each a single query, a UNION or a WHEN
@@ -73,6 +81,14 @@ public:
     static NodePattern* createNodePattern(CypherAST* ast,
                                           Symbol* symbol,
                                           LabelExpr* labelExpr,
+                                          MapLiteral* properties,
+                                          WhereClause* where);
+
+    // The relationship inside `-[...]-`, undirected until the arrows around it set its direction
+    static EdgePattern* createEdgePattern(CypherAST* ast,
+                                          Symbol* symbol,
+                                          LabelExpr* labelExpr,
+                                          QuantifiedPath* range,
                                           MapLiteral* properties,
                                           WhereClause* where);
 
@@ -156,6 +172,14 @@ public:
                                       Expr* rhs,
                                       const SourceLocation& rhsLocation,
                                       const SourceLocation& chainLocation);
+
+    // An IS test takes what stands to its left whole: it does not chain like a comparison
+    static void createIsTest(CypherAST* ast,
+                             ComparisonChain& chain,
+                             Expr* operand,
+                             const IsTest& test,
+                             const SourceLocation& testLocation,
+                             const SourceLocation& chainLocation);
 
 private:
     static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);

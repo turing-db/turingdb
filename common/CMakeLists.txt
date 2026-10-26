@@ -8,6 +8,7 @@ set(common_sources
         TimerStat.cpp
         PerfStat.cpp
         FileUtils.cpp
+        FileName.cpp
         Demonology.cpp
         DemonReadiness.cpp
         BannerDisplay.cpp

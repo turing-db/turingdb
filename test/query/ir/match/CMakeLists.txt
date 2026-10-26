@@ -83,3 +83,9 @@ add_call_v3_test(test_query_ir_both_arrow_heads BothArrowHeadsTest.cpp)
 add_call_v3_test(test_query_ir_scan_edges_by_endpoint_labels ScanEdgesByEndpointLabelsTest.cpp)
 
 add_call_v3_test(test_query_ir_property_constraint_on_an_entity PropertyConstraintOnAnEntityTest.cpp)
+
+add_call_v3_test(test_query_ir_non_reserved_keyword NonReservedKeywordTest.cpp)
+
+add_call_v3_test(test_query_ir_reserved_keyword ReservedKeywordTest.cpp)
+
+add_call_v3_test(test_query_ir_token_whitespace TokenWhitespaceTest.cpp)

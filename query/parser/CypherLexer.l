@@ -9,7 +9,7 @@
 using namespace db;
 
 #define yyterminate() return db::YCypherParser::token::PROG_END
-#define YY_USER_ACTION advanceLocation(*yylloc, yyleng);
+#define YY_USER_ACTION advanceLocation(*yylloc, std::string_view(yytext, yyleng));
 
 using Token = db::YCypherParser::token;
 
@@ -21,17 +21,22 @@ using Token = db::YCypherParser::token;
 
 %option caseless noyywrap c++ yyclass="YCypherScanner"
 
+BLOCK_COMMENT "/*"([^*]|"*"+[^*/])*"*"+"/"
+BREAK ([ \t\r\n]|"//"[^\n]*\n|{BLOCK_COMMENT})
+GAP {BREAK}*
+
 %%
 
 "//"[^\n]* { }
+{BLOCK_COMMENT} { }
+"/*"([^*]|"*"+[^*/])*"*"* { throwUnclosedComment(*yylloc); }
 
-\n        { locationNewLine(*yylloc); }
-[ \t\r]+  { }
+[ \t\r\n]+ { }
 
-"<"[ \t\r]*-[ \t\r]*- { return Token::TIP_TAIL_TAIL; }
-"-"[ \t\r]*-[ \t\r]*> { return Token::TAIL_TAIL_TIP; }
-"<"[ \t\r]*-[ \t\r]*\[ { return Token::TIP_TAIL_BRACKET; }
-"-"[ \t\r]*\[  { return Token::TAIL_BRACKET; }
+"<"{GAP}-{GAP}- { return Token::TIP_TAIL_TAIL; }
+"-"{GAP}-{GAP}> { return Token::TAIL_TAIL_TIP; }
+"<"{GAP}-{GAP}\[ { return Token::TIP_TAIL_BRACKET; }
+"-"{GAP}\[  { return Token::TAIL_BRACKET; }
 
 "+=" { return Token::ADD_ASSIGN; }
 "<>" { return Token::NOT_EQUAL; }
@@ -122,10 +127,10 @@ using Token = db::YCypherParser::token;
 "AVAILABLE" { KEYWORD(AVAILABLE) }
 "INDEX" { KEYWORD(INDEX) }
 "INDEXES" { KEYWORD(INDEXES) }
-"COUNT"/[ \t\r\n]*[({] { KEYWORD(COUNT) }
-"REDUCE"/[ \t\r\n]*"(" { KEYWORD(REDUCE) }
-"ALLREDUCE"/[ \t\r\n]*"(" { KEYWORD(ALLREDUCE) }
-"NORMALIZE"/[ \t\r\n]*"(" { KEYWORD(NORMALIZE) }
+"COUNT" { KEYWORD(COUNT) }
+"REDUCE" { KEYWORD(REDUCE) }
+"ALLREDUCE" { KEYWORD(ALLREDUCE) }
+"NORMALIZE" { KEYWORD(NORMALIZE) }
 "NORMALIZED" { KEYWORD(NORMALIZED) }
 "HEADERS" { KEYWORD(HEADERS) }
 "DATETIMES" { KEYWORD(DATETIMES) }
@@ -180,8 +185,8 @@ using Token = db::YCypherParser::token;
      * anything else a label expression. The longest match counts the trailing context, so
      * the second rule keeps a label such as Nullable or Nothing a label.
      */
-"IS"/[ \t\r\n]+("NOT"|"NULL"|"NORMALIZED"|"NFC"|"NFD"|"NFKC"|"NFKD") { KEYWORD(IS_VALUE_TEST) }
-"IS"/[ \t\r\n]+[a-zA-Z_][a-zA-Z0-9_]* { KEYWORD(IS) }
+"IS"/{BREAK}+("NOT"|"NULL"|"NORMALIZED"|"NFC"|"NFD"|"NFKC"|"NFKD") { KEYWORD(IS_VALUE_TEST) }
+"IS"/{BREAK}+[a-zA-Z_][a-zA-Z0-9_]* { KEYWORD(IS) }
 "IS" { KEYWORD(IS) }
 "S3" { KEYWORD(S3) }
 "BY" { KEYWORD(BY) }
@@ -199,13 +204,13 @@ using Token = db::YCypherParser::token;
 }
 
 
-\"([^\"\\\r\n]|\\.)*\" {
+\"([^\"\\]|\\.)*\" {
     /* String literal */
     STORE_STRING(_offset + 1, yyleng - 2);
     return Token::STRING_LITERAL;
 }
 
-\'([^\'\\\r\n]|\\.)*\' {
+\'([^\'\\]|\\.)*\' {
     /* Single-quoted string literal */
     STORE_STRING(_offset + 1, yyleng - 2);
     return Token::STRING_LITERAL;

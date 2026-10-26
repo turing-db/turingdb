@@ -9,6 +9,7 @@
 #include "ProcedureManager.h"
 #include "ProcedureNamespace.h"
 
+#include "FileName.h"
 #include "TuringException.h"
 
 using namespace db;
@@ -45,12 +46,11 @@ void ExtensionManager::installExtension(std::string_view name) {
                         name));
     }
 
-    for (char c : name) {
-        if (!(isalnum(c) || c == '_')) {
-            throw TuringException(
-                fmt::format("Extension name contains invalid character '{}': '{}'",
-                            c, name));
-        }
+    const size_t invalid = FileName::findInvalidCharacter(name);
+    if (invalid != std::string_view::npos) {
+        throw TuringException(
+            fmt::format("Extension name contains invalid character '{}': '{}'",
+                        name[invalid], name));
     }
 
 #ifdef __APPLE__

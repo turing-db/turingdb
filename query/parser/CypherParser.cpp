@@ -29,7 +29,9 @@ void CypherParser::parse(std::string_view query) {
     std::istringstream iss({std::string(query)});
 
     yscanner.switch_streams(&iss, nullptr);
-    yparser.parse();
+    if (yparser.parse() != 0) {
+        yscanner.throwHeldSyntaxError();
+    }
 
     const Expr* tooDeep = ExprDepth::findDeeperThan(_ast->getExpressions(), MAX_EXPRESSION_DEPTH);
     if (tooDeep) {

@@ -25,18 +25,20 @@ public:
         _readPos = 0;
     }
 
-    void advanceLocation(SourceLocation& loc, uint64_t yyleng) {
-        _offset = _nextOffset;
-        _nextOffset += yyleng;
-        loc.step();
-        loc.columns(yyleng);
-    }
-
-    static void locationNewLine(SourceLocation& loc) { loc.lines(1); }
+    // A token can hold line breaks: a comment, a string, or the gap between the parts of an arrow
+    void advanceLocation(SourceLocation& loc, std::string_view token);
 
     [[noreturn]] void syntaxError(const SourceLocation& loc, const std::string& msg);
 
+    // The parser reports an error before it tries to recover from it, so the report is held
+    // until the recovery fails: an error rule that recovers throws a message of its own
+    void holdSyntaxError(const SourceLocation& loc, const std::string& msg);
+    [[noreturn]] void throwHeldSyntaxError();
+
     void notImplemented(const SourceLocation& loc, std::string_view rawMsg);
+
+    // Points at the /* of a comment that runs to the end of the query
+    [[noreturn]] void throwUnclosedComment(const SourceLocation& comment);
 
 protected:
     /// Allows the scanner to batch copy query string bytes into the @ref _query buffer
@@ -57,6 +59,8 @@ private:
     /// Character position in @ref _query which has been consumed so far (inclusive)
     size_t _readPos {0};
     std::string_view _query;
+    SourceLocation _heldErrorLocation;
+    std::string _heldErrorMessage;
 
     std::string_view getStringView(size_t offset, size_t length) const {
         return _query.substr(offset, length);

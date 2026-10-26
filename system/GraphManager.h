@@ -78,6 +78,10 @@ private:
     ChangeManager _changes;
     GraphLoadStatus _graphLoadStatus;
 
+    // The directory of a graph. Throws on a name that is empty or could reach outside the
+    // graphs directory
+    void getGraphPath(std::string_view graphName, fs::Path& graphPath) const;
+
     Graph* loadJsonlDB(std::string_view graphName,
                        const fs::Path& dbPath,
                        JobSystem* jobSystem,

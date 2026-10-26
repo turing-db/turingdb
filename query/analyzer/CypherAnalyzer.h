@@ -283,6 +283,9 @@ private:
                                         const VarDecl* distDecl,
                                         const VarDecl* pathDecl) const;
 
+    // A graph name is the name of its directory, so a separator or a dot is turned away
+    void throwIfInvalidGraphName(std::string_view graphName, const void* obj) const;
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 

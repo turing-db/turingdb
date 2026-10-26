@@ -53,7 +53,6 @@ enum class TypingReason : uint8_t {
     Valid,
     DoubleEquality,
     IncompatibleTypes,
-    NotANullTest,
     IncompatibleOrderingTypes,
     IncompatibleAdditionTypes,
     IncompatibleConcatenationTypes,
@@ -125,14 +124,6 @@ RuleResult equalityType(EvaluatedType a, EvaluatedType b) {
         return invalid(TypingReason::IncompatibleTypes);
     } else if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
         return valid(EvaluatedType::Null);
-    }
-
-    return valid(EvaluatedType::Bool);
-}
-
-RuleResult nullTestType(EvaluatedType b) {
-    if (b != EvaluatedType::Null) {
-        return invalid(TypingReason::NotANullTest);
     }
 
     return valid(EvaluatedType::Bool);
@@ -301,7 +292,7 @@ RuleResult ruleType(BinaryOperator op, EvaluatedType a, EvaluatedType b) {
         break;
         case BinaryOperator::IsNull:
         case BinaryOperator::IsNotNull:
-            return nullTestType(b);
+            return valid(EvaluatedType::Bool);
         break;
         case BinaryOperator::LessThan:
         case BinaryOperator::GreaterThan:
@@ -376,11 +367,6 @@ void writeError(TypingReason reason, EvaluatedType a, EvaluatedType b, BinaryTyp
         break;
         case TypingReason::IncompatibleTypes:
             out._error = fmt::format("Operands are not valid or compatible types: '{}' and '{}'", left, right);
-        break;
-        case TypingReason::NotANullTest:
-            out._error = fmt::format("IS tests whether its operand is null, so its right side "
-                                     "must be NULL, not '{}'",
-                                     right);
         break;
         case TypingReason::IncompatibleOrderingTypes:
             out._error = fmt::format("Operands are not valid or compatible types for an ordering: '{}' and '{}'", left, right);

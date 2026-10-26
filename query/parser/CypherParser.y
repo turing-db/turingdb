@@ -4,7 +4,8 @@
 %define api.parser.class { YCypherParser }
 %define api.value.type variant
 %define parse.assert
-%define parse.error detailed
+%define parse.error custom
+%define parse.lac full
 %define lr.type ielr
 %define api.namespace { db }
 %parse-param {db::YCypherScanner& scanner}
@@ -114,6 +115,10 @@
 }
 
 %code top {
+    #include <algorithm>
+    #include <array>
+    #include <span>
+
     #include "YCypherScanner.h"
     #include "GeneratedCypherParser.h"
     #include "CypherAST.h"
@@ -133,6 +138,8 @@
     constexpr const char* NESTED_QUANTIFIER_MESSAGE = "A quantified pattern cannot repeat a pattern that is quantified itself";
 
     constexpr const char* HOPLESS_QUANTIFIER_MESSAGE = "A quantified pattern repeats at least one relationship";
+
+    constexpr const char* IS_OPERAND_MESSAGE = "The right side of IS [NOT] must be NULL or [NFC | NFD | NFKC | NFKD] NORMALIZED";
 
     }
 }
@@ -174,7 +181,8 @@
 %token GT
 %token LT
 
-// Keywords
+// Keywords. Every token from PROCEDURES to ID can spell a name, and a syntax error that
+// expects a name reports them as one
 %token<std::string_view> PROCEDURES
 %token<std::string_view> SHORTESTPATH 
 %token<std::string_view> DESCENDING
@@ -205,7 +213,6 @@
 %token<std::string_view> DELETE
 %token<std::string_view> DETACH
 %token<std::string_view> EXISTS
-%token<std::string_view> IS_VALUE_TEST
 %token<std::string_view> LIMIT
 %token<std::string_view> YIELD
 %token<std::string_view> MATCH
@@ -296,8 +303,9 @@
 %token<std::string_view> SEARCH
 
 %token<std::string_view> ESC_LITERAL
-%token<std::string_view> STRING_LITERAL
 %token<std::string_view> ID
+%token<std::string_view> STRING_LITERAL
+%token<std::string_view> IS_VALUE_TEST
 %token<int64_t> DIGIT
 %token<double> DOUBLE
 %token INT64_MIN_MAGNITUDE "integer literal 9223372036854775808, which exceeds int64 range unless negated"
@@ -329,7 +337,6 @@
 %type<db::LabelExpr*> labelAtom
 %type<db::MapLiteral*> properties
 
-%type<db::Symbol*> opt_symbol
 %type<db::LabelExpr*> opt_labelExpression
 %type<db::MapLiteral*> opt_properties
 
@@ -361,7 +368,6 @@
 %type<db::Expr*> filterWith
 %type<db::Expr*> reduceExpr
 %type<db::Expr*> allReduceExpr
-%type<db::ListPredicateExpr::Quantifier> filterKeyword
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
 %type<std::pair<db::CaseExpr::Tests, db::Expr*>> whenThen
@@ -374,9 +380,10 @@
 %type<db::Expr*> projectionItem
 %type<db::Projection*> projectionItems
 %type<db::Projection*> projectionBody
+%type<db::Projection*> projectionClauses
 
 %type<db::BinaryOperator> comparisonSign
-%type<bool> isKeyword
+%type<db::ParserUtils::IsTest> isTest
 %type<db::StringOperator> stringExpPrefix
 
 %type<db::Pattern*> pattern
@@ -386,6 +393,7 @@
 %type<db::PatternElement*> patternElem
 %type<db::PatternElement*> pathExprElem
 %type<db::NodePattern*> nodePattern
+%type<db::NodePattern*> nodeDetail
 %type<db::NodePattern*> predicateRoot
 %type<db::EdgePattern*> edgePattern
 %type<db::EdgePattern*> exprEdgePattern
@@ -436,6 +444,7 @@
 %type<db::UnionQuery::Branches> unionList
 %type<db::UnionQuery::Branch> unionSt
 %type<db::UnionQuery::Branch> unionOperand
+%type<std::string_view> explainWord
 %type<std::vector<std::string_view>> explainPassNames
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
@@ -481,7 +490,6 @@
 %type<db::Limit*> opt_limitSSt
 %type<db::OrderBy*> opt_orderBySSt
 %type<db::OrderByItem*> orderByItem
-%type<bool> opt_distinct
 %type<db::CreateNodePropertyIndexQuery*> createNodePropertyIndexQuery
 %type<db::CreateEdgePropertyIndexQuery*> createEdgePropertyIndexQuery
 %type<db::DropIndexQuery*> dropIndexQuery
@@ -492,6 +500,16 @@
 %type<db::JsonlImportSpecs> jsonlOption
 %type<DateTimeSpec> dateTimeSpecs
 %type<DurationSpec> durationSpecs
+
+// Every keyword is a name too. Where one token cannot tell a keyword that opens an expression
+// from a name, AS or an infix operator after it makes it a name and anything else the
+// keyword: `not AS x` reads a variable, `NOT match.x` negates one. WHEN after CASE is always
+// the keyword, `(where` always a name
+%precedence WHEN_AS_NAME
+%precedence AS AND OR XOR IN IS IS_VALUE_TEST STARTS ENDS CONTAINS
+%precedence KEYWORD_AS_NAME
+%precedence OPAREN CPAREN OBRACE OBRACK PLUS SUB MULT ASSIGN NOT_EQUAL LT GT LE GE ASC ASCENDING CALL CREATE DELETE DESC DESCENDING DETACH ELSE END FOREACH LIMIT LOAD MATCH MERGE NEXT ON OPTIONAL ORDER REMOVE RETURN SET SHORTESTPATH SKIP THEN UNION UNWIND VECTOR WHEN WHERE WITH
+%precedence WHERE_AS_NAME
 
 %precedence PIPE
 %precedence LABEL_EXPRESSION
@@ -577,7 +595,7 @@ explainOptions
     ;
 
 explainOption
-    : ID {
+    : explainWord {
         if (!ast->explainRequest().requestStage($1)) {
             std::string message;
             ExplainRequest::describeOptions($1, message);
@@ -585,14 +603,14 @@ explainOption
         }
       }
     | ALL { ast->explainRequest().requestAll(); }
-    | ID ID {
+    | explainWord ID {
         if (!ast->explainRequest().requestPass($1, $2)) {
             std::string message;
             ExplainRequest::describeOptions($1, message);
             scanner.syntaxError(@1, message);
         }
       }
-    | ID OBRACK explainPassNames CBRACK {
+    | explainWord OBRACK explainPassNames CBRACK {
         ExplainRequest& explain = ast->explainRequest();
 
         for (const std::string_view passName : $3) {
@@ -602,6 +620,20 @@ explainOption
                 scanner.syntaxError(@1, message);
             }
         }
+      }
+    ;
+
+// Reduced as soon as it is shifted, before the next token is read, so that a word that is no
+// option is reported as such rather than as the syntax error after it
+explainWord
+    : ID {
+        if (!ExplainRequest::isOptionWord($1)) {
+            std::string message;
+            ExplainRequest::describeOptions($1, message);
+            scanner.syntaxError(@1, message);
+        }
+
+        $$ = $1;
       }
     ;
 
@@ -651,14 +683,14 @@ singleQuery
     ;
 
 loadGraph
-    : LOAD GRAPH ID { $$ = LoadGraphQuery::create(ast, $3); LOC($$, @$); }
+    : LOAD GRAPH name { $$ = LoadGraphQuery::create(ast, $3->getName()); LOC($$, @$); }
     ;
 
 loadJsonl
     : LOAD JSONL STRING_LITERAL { $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3))); LOC($$, @$); }
-    | LOAD JSONL STRING_LITERAL AS ID {
+    | LOAD JSONL STRING_LITERAL AS name {
         $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
-        $$->setGraphName($5);
+        $$->setGraphName($5->getName());
         LOC($$, @$);
       }
     | LOAD JSONL STRING_LITERAL jsonlOptions {
@@ -668,9 +700,9 @@ loadJsonl
         $$->setDurationSpecs(std::move($4._durations));
         LOC($$, @$);
       }
-    | LOAD JSONL STRING_LITERAL AS ID jsonlOptions {
+    | LOAD JSONL STRING_LITERAL AS name jsonlOptions {
         $$ = LoadJsonlQuery::create(ast, fs::Path(std::string($3)));
-        $$->setGraphName($5);
+        $$->setGraphName($5->getName());
         $$->setEmbeddingSpecs(std::move($6._embeddings));
         $$->setDateTimeSpecs(std::move($6._dateTimes));
         $$->setDurationSpecs(std::move($6._durations));
@@ -704,16 +736,16 @@ dateTimeSpecs
     : STRING_LITERAL {
         $$.emplace($1);
       }
-    | ID {
-        $$.emplace($1);
+    | name {
+        $$.emplace($1->getName());
       }
     | dateTimeSpecs COMMA STRING_LITERAL {
         $$ = std::move($1);
         $$.emplace($3);
       }
-    | dateTimeSpecs COMMA ID {
+    | dateTimeSpecs COMMA name {
         $$ = std::move($1);
-        $$.emplace($3);
+        $$.emplace($3->getName());
       }
     ;
 
@@ -721,16 +753,16 @@ durationSpecs
     : STRING_LITERAL {
         $$.emplace($1);
       }
-    | ID {
-        $$.emplace($1);
+    | name {
+        $$.emplace($1->getName());
       }
     | durationSpecs COMMA STRING_LITERAL {
         $$ = std::move($1);
         $$.emplace($3);
       }
-    | durationSpecs COMMA ID {
+    | durationSpecs COMMA name {
         $$ = std::move($1);
-        $$.emplace($3);
+        $$.emplace($3->getName());
       }
     ;
 
@@ -748,8 +780,8 @@ embeddingSpec
     : OBRACE STRING_LITERAL COMMA DIGIT CBRACE {
         $$ = {$2, static_cast<size_t>($4)};
       }
-    | OBRACE ID COMMA DIGIT CBRACE {
-        $$ = {$2, static_cast<size_t>($4)};
+    | OBRACE name COMMA DIGIT CBRACE {
+        $$ = {$2->getName(), static_cast<size_t>($4)};
       }
     ;
 
@@ -770,18 +802,18 @@ showExtensionsQuery
     ;
 
 installExtensionQuery
-    : INSTALL ID { $$ = InstallExtensionQuery::create(ast, $2); LOC($$, @$); }
+    : INSTALL name { $$ = InstallExtensionQuery::create(ast, $2->getName()); LOC($$, @$); }
     ;
 
 // CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID [TYPE HNSW|FLAT]
 createVectorIndexQuery
     // no type provided => default to flat
-    : CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric {
-        $$ = CreateVectorIndexQuery::create(ast, $4, $7, $9, vec::IndexType::FLAT);
+    : CREATE VECTOR INDEX name WITH DIMENSION DIGIT METRIC distanceMetric {
+        $$ = CreateVectorIndexQuery::create(ast, $4->getName(), $7, $9, vec::IndexType::FLAT);
         LOC($$, @$);
       }
-    | CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric TYPE indexType {
-        $$ = CreateVectorIndexQuery::create(ast, $4, $7, $9, $11);
+    | CREATE VECTOR INDEX name WITH DIMENSION DIGIT METRIC distanceMetric TYPE indexType {
+        $$ = CreateVectorIndexQuery::create(ast, $4->getName(), $7, $9, $11);
         LOC($$, @$);
       }
     ;
@@ -792,18 +824,18 @@ indexType
     ;
 
 createNodePropertyIndexQuery
-    : CREATE INDEX ID FOR nodePattern ON propertyExpr {
+    : CREATE INDEX name FOR nodePattern ON propertyExpr {
         if ($5->getWhere()) {
             scanner.syntaxError(@5, "WHERE is not allowed in an index pattern");
         }
 
-        $$ = CreateNodePropertyIndexQuery::create(ast, $3, $5, dynamic_cast<PropertyExpr*>($7));
+        $$ = CreateNodePropertyIndexQuery::create(ast, $3->getName(), $5, dynamic_cast<PropertyExpr*>($7));
         LOC($$, @$);
       }
     ;
 
 createEdgePropertyIndexQuery
-    : CREATE INDEX ID FOR OBRACK edgeDetail CBRACK ON propertyExpr {
+    : CREATE INDEX name FOR OBRACK edgeDetail CBRACK ON propertyExpr {
         if ($6->getWhere()) {
             scanner.syntaxError(@6, "WHERE is not allowed in an index pattern");
         }
@@ -812,13 +844,13 @@ createEdgePropertyIndexQuery
             scanner.syntaxError(@6, "An edge property index takes no length quantifier");
         }
 
-        $$ = CreateEdgePropertyIndexQuery::create(ast, $3, $6, dynamic_cast<PropertyExpr*>($9));
+        $$ = CreateEdgePropertyIndexQuery::create(ast, $3->getName(), $6, dynamic_cast<PropertyExpr*>($9));
         LOC($$, @$);
       }
     ;
 
 dropIndexQuery
-    : DROP INDEX ID { $$ = DropIndexQuery::create(ast, $3); LOC($$, @$); }
+    : DROP INDEX name { $$ = DropIndexQuery::create(ast, $3->getName()); LOC($$, @$); }
 
 distanceMetric
     : EUCLID { $$ = vec::DistanceMetric::EUCLIDEAN_DIST; }
@@ -827,24 +859,24 @@ distanceMetric
 
 // LOAD VECTOR FROM "filepath" IN vector1
 loadVectorQuery
-    : LOAD VECTOR FROM STRING_LITERAL IN ID {
-        $$ = LoadVectorQuery::create(ast, $4, $6);
+    : LOAD VECTOR FROM STRING_LITERAL IN name {
+        $$ = LoadVectorQuery::create(ast, $4, $6->getName());
         LOC($$, @$);
       }
     ;
 
 // LOAD EMBEDDING FROM "filepath" AS embeddingProperty
 loadEmbedding
-    : LOAD EMBEDDING FROM STRING_LITERAL AS ID {
-        $$ = LoadEmbeddingQuery::create(ast, $4, $6);
+    : LOAD EMBEDDING FROM STRING_LITERAL AS name {
+        $$ = LoadEmbeddingQuery::create(ast, $4, $6->getName());
         LOC($$, @$);
       }
     ;
 
 // DELETE VECTOR INDEX vector1
 deleteVectorIndexQuery
-    : DELETE VECTOR INDEX ID {
-        $$ = DeleteVectorIndexQuery::create(ast, $4);
+    : DELETE VECTOR INDEX name {
+        $$ = DeleteVectorIndexQuery::create(ast, $4->getName());
         LOC($$, @$);
       }
     ;
@@ -856,9 +888,9 @@ showVectorIndexesQuery
 
 // VECTOR SEARCH IN vector1 FOR 10 [0.1, 0.2, ...] YIELD ids
 vectorSearchSt
-    : VECTOR SEARCH IN ID FOR DIGIT embeddingLit yieldClause {
+    : VECTOR SEARCH IN name FOR DIGIT embeddingLit yieldClause {
         $$ = VectorSearchStmt::create(ast);
-        $$->setIndexName($4);
+        $$->setIndexName($4->getName());
         $$->setK(static_cast<uint64_t>($6));
         $$->setQueryVector($7);
         $$->setYield($8);
@@ -870,13 +902,13 @@ loadCommitQuery
     ;
 
 createGraphQuery
-    : CREATE GRAPH ID { $$ = CreateGraphQuery::create(ast, $3); LOC($$, @$); }
+    : CREATE GRAPH name { $$ = CreateGraphQuery::create(ast, $3->getName()); LOC($$, @$); }
     ;
 
 loadGML
-    : LOAD GML STRING_LITERAL AS ID {
+    : LOAD GML STRING_LITERAL AS name {
         $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
-        $$->setGraphName($5);
+        $$->setGraphName($5->getName());
         LOC($$, @$);
       }
     | LOAD GML STRING_LITERAL {
@@ -886,18 +918,18 @@ loadGML
     ;
 
 loadParquet
-    : LOAD PARQUET STRING_LITERAL AS ID {
+    : LOAD PARQUET STRING_LITERAL AS name {
         $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
-        $$->setGraphName($5);
+        $$->setGraphName($5->getName());
         LOC($$, @$);
       }
     | LOAD PARQUET STRING_LITERAL {
         $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
         LOC($$, @$);
       }
-    | LOAD PARQUET STRING_LITERAL AS ID WITH DURATIONS OBRACK durationSpecs CBRACK {
+    | LOAD PARQUET STRING_LITERAL AS name WITH DURATIONS OBRACK durationSpecs CBRACK {
         $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
-        $$->setGraphName($5);
+        $$->setGraphName($5->getName());
         $$->setDurationSpecs(std::move($9));
         LOC($$, @$);
       }
@@ -954,18 +986,17 @@ limitSSt
     ;
 
 projectionBody
-    : opt_distinct projectionItems opt_orderBySSt opt_skipSSt opt_limitSSt {
-        $$ = $2;
-        $$->setDistinct($1);
-        $$->setOrderBy($3);
-        $$->setSkip($4);
-        $$->setLimit($5);
-      }
+    : projectionClauses { $$ = $1; }
+    | DISTINCT projectionClauses { $$ = $2; $$->setDistinct(true); }
     ;
 
-opt_distinct
-    : DISTINCT { $$ = true; }
-    | { $$ = false; }
+projectionClauses
+    : projectionItems opt_orderBySSt opt_skipSSt opt_limitSSt {
+        $$ = $1;
+        $$->setOrderBy($2);
+        $$->setSkip($3);
+        $$->setLimit($4);
+      }
     ;
 
 opt_orderBySSt
@@ -1082,31 +1113,31 @@ shortestPathSt
     ;
 
 unwindSt
-    : UNWIND expr AS symbol { $$ = UnwindStmt::create(ast, $2, $4); LOC($$, @$); }
+    : UNWIND expr AS name { $$ = UnwindStmt::create(ast, $2, $4); LOC($$, @$); }
     ;
 
 loadCSVSt
-    : LOAD CSV STRING_LITERAL AS symbol {
+    : LOAD CSV STRING_LITERAL AS name {
         $$ = LoadCSVStmt::create(ast, $3, $5); LOC($$, @$);
       }
-    | LOAD CSV STRING_LITERAL WITH HEADERS AS symbol {
+    | LOAD CSV STRING_LITERAL WITH HEADERS AS name {
         $$ = LoadCSVStmt::create(ast, $3, $7);
         $$->setHasHeaders(true); LOC($$, @$);
       }
-    | LOAD CSV STRING_LITERAL ON ERROR_ SKIP AS symbol {
+    | LOAD CSV STRING_LITERAL ON ERROR_ SKIP AS name {
         $$ = LoadCSVStmt::create(ast, $3, $8);
         $$->setSkipOnError(true); LOC($$, @$);
       }
-    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR_ SKIP AS symbol {
+    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR_ SKIP AS name {
         $$ = LoadCSVStmt::create(ast, $3, $10);
         $$->setHasHeaders(true);
         $$->setSkipOnError(true); LOC($$, @$);
       }
-    | LOAD CSV STRING_LITERAL ON ERROR_ FAIL AS symbol {
+    | LOAD CSV STRING_LITERAL ON ERROR_ FAIL AS name {
         $$ = LoadCSVStmt::create(ast, $3, $8);
         LOC($$, @$);
       }
-    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR_ FAIL AS symbol {
+    | LOAD CSV STRING_LITERAL WITH HEADERS ON ERROR_ FAIL AS name {
         $$ = LoadCSVStmt::create(ast, $3, $10);
         $$->setHasHeaders(true);
         LOC($$, @$);
@@ -1133,7 +1164,7 @@ updatingStatement
     ;
 
 foreachSt
-    : FOREACH OPAREN symbol IN expr PIPE foreachUpdates CPAREN {
+    : FOREACH OPAREN name IN expr PIPE foreachUpdates CPAREN {
         $$ = ParserUtils::createForeach(ast, $3, $5, $7, @$);
       }
     ;
@@ -1448,30 +1479,22 @@ comparisonChain
     : addSubExpr comparisonSign addSubExpr {
         ParserUtils::startComparisonChain(ast, $$, $1, $2, $3, @3, @$);
       }
-    | addSubExpr isKeyword addSubExpr {
-        const BinaryOperator nullTest = $2 ? BinaryOperator::IsNotNull : BinaryOperator::IsNull;
-        ParserUtils::startComparisonChain(ast, $$, $1, nullTest, $3, @3, @$);
-      }
-    | addSubExpr isKeyword optionalNormalForm NORMALIZED {
-        $$._expr = ParserUtils::createIsNormalized(ast, $1, $3, $2, @$);
-      }
+    | addSubExpr IS_VALUE_TEST isTest { ParserUtils::createIsTest(ast, $$, $1, $3, @3, @$); }
     | comparisonChain comparisonSign addSubExpr {
         $$ = $1;
         ParserUtils::extendComparisonChain(ast, $$, $2, $3, @3, @$);
       }
-    | comparisonChain isKeyword addSubExpr {
-        const BinaryOperator nullTest = $2 ? BinaryOperator::IsNotNull : BinaryOperator::IsNull;
-        $$ = $1;
-        ParserUtils::extendComparisonChain(ast, $$, nullTest, $3, @3, @$);
-      }
-    | comparisonChain isKeyword optionalNormalForm NORMALIZED {
-        $$._expr = ParserUtils::createIsNormalized(ast, $1._expr, $3, $2, @$);
-      }
+    | comparisonChain IS_VALUE_TEST isTest { ParserUtils::createIsTest(ast, $$, $1._expr, $3, @3, @$); }
     ;
 
-isKeyword
-    : IS_VALUE_TEST { $$ = false; }
-    | IS_VALUE_TEST NOT { $$ = true; }
+// IS takes [NOT] NULL or [NOT] [form] NORMALIZED, never an expression, so NORMALIZED stays
+// free as a name
+isTest
+    : NULL_ { $$ = ParserUtils::IsTest {}; }
+    | NOT NULL_ { $$ = ParserUtils::IsTest {._negated = true}; }
+    | optionalNormalForm NORMALIZED { $$ = ParserUtils::IsTest {._normalForm = $1}; }
+    | NOT optionalNormalForm NORMALIZED { $$ = ParserUtils::IsTest {._normalForm = $2, ._negated = true}; }
+    | error { scanner.syntaxError(@1, IS_OPERAND_MESSAGE); }
     ;
 
 comparisonSign
@@ -1599,7 +1622,7 @@ propertyLookupExpr
     | propertyLookupExpr DOT name { $$ = PropertyLookupExpr::create(ast, $1, $3->getName()); LOC($$, @$); }
     | atomicExpr OBRACK expr CBRACK DOT name {
         Expr* indexed = IndexExpr::create(ast, $1, $3);
-        LOC(indexed, (SourceLocation {@1._beginLine, @1._beginColumn, @4._endLine, @4._endColumn}));
+        LOC(indexed, SourceLocation::join(@1, @4));
         $$ = PropertyLookupExpr::create(ast, indexed, $6->getName());
         LOC($$, @$);
       }
@@ -1660,7 +1683,7 @@ patternPart
     ;
 
 patternAlias
-    : symbol ASSIGN patternElem { $$ = $3; $$->setPathSymbol($1); LOC($$, @$); }
+    : name ASSIGN patternElem { $$ = $3; $$->setPathSymbol($1); LOC($$, @$); }
     ;
 
 patternElem
@@ -1749,19 +1772,17 @@ properties
     ;
 
 nodePattern
-    : OPAREN opt_symbol opt_labelExpression opt_properties opt_whereClause CPAREN {
-        $$ = NodePattern::create(ast);
-        $$->setSymbol($2);
-        $$->setLabelExpr($3);
-        $$->setProperties($4);
-        $$->setWhere($5);
-        LOC($$, @$);
-      }
+    : OPAREN nodeDetail CPAREN { $$ = $2; LOC($$, @$); }
     ;
 
-opt_symbol
-    : symbol { $$ = $1; }
-    | { $$ = nullptr; }
+// Spelled out with no optional part ahead of a WHERE, so that `(where` is shifted before the
+// next token decides whether WHERE names the node or opens its predicate
+nodeDetail
+    : %empty { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, nullptr); }
+    | whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, nullptr, $1); }
+    | name opt_labelExpression opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, $1, $2, $3, $4); }
+    | labelExpression opt_properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, $1, $2, $3); }
+    | properties opt_whereClause { $$ = ParserUtils::createNodePattern(ast, nullptr, nullptr, $1, $2); }
     ;
 
 opt_labelExpression
@@ -1795,15 +1816,12 @@ exprEdgePattern
     ;
 
 edgeDetail
-    : opt_symbol opt_labelExpression opt_edgeRange opt_properties opt_whereClause {
-        $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected);
-        $$->setSymbol($1);
-        $$->setLabelExpr($2);
-        $$->setQuantifiedPath($3);
-        $$->setProperties($4);
-        $$->setWhere($5);
-        LOC($$, @$);
-      }
+    : %empty { $$ = ParserUtils::createEdgePattern(ast, nullptr, nullptr, nullptr, nullptr, nullptr); LOC($$, @$); }
+    | whereClause { $$ = ParserUtils::createEdgePattern(ast, nullptr, nullptr, nullptr, nullptr, $1); LOC($$, @$); }
+    | name opt_labelExpression opt_edgeRange opt_properties opt_whereClause { $$ = ParserUtils::createEdgePattern(ast, $1, $2, $3, $4, $5); LOC($$, @$); }
+    | labelExpression opt_edgeRange opt_properties opt_whereClause { $$ = ParserUtils::createEdgePattern(ast, nullptr, $1, $2, $3, $4); LOC($$, @$); }
+    | edgeRange opt_properties opt_whereClause { $$ = ParserUtils::createEdgePattern(ast, nullptr, nullptr, $1, $2, $3); LOC($$, @$); }
+    | properties opt_whereClause { $$ = ParserUtils::createEdgePattern(ast, nullptr, nullptr, nullptr, $1, $2); LOC($$, @$); }
     ;
 
 opt_edgeRange
@@ -1945,28 +1963,24 @@ parenthesizedExpr
     ;
 
 filterWith
-    : filterKeyword OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, $1, $3); LOC($$, @$); }
+    : ALL OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, ListPredicateExpr::Quantifier::All, $3); LOC($$, @$); }
+    | ANY OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, ListPredicateExpr::Quantifier::Any, $3); LOC($$, @$); }
+    | NONE OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, ListPredicateExpr::Quantifier::None, $3); LOC($$, @$); }
+    | SINGLE OPAREN filterExpr CPAREN { $$ = ListPredicateExpr::create(ast, ListPredicateExpr::Quantifier::Single, $3); LOC($$, @$); }
     ;
 
 reduceExpr
-    : REDUCE OPAREN symbol ASSIGN expr COMMA symbol IN expr PIPE expr CPAREN {
+    : REDUCE OPAREN name ASSIGN expr COMMA name IN expr PIPE expr CPAREN {
         $$ = ReduceExpr::create(ast, $3, $5, $7, $9, $11);
         LOC($$, @$);
       }
     ;
 
 allReduceExpr
-    : ALLREDUCE OPAREN symbol ASSIGN expr COMMA symbol IN expr PIPE expr COMMA expr CPAREN {
+    : ALLREDUCE OPAREN name ASSIGN expr COMMA name IN expr PIPE expr COMMA expr CPAREN {
         $$ = AllReduceExpr::create(ast, $3, $5, $7, $9, $11, $13);
         LOC($$, @$);
       }
-    ;
-
-filterKeyword
-    : ALL { $$ = ListPredicateExpr::Quantifier::All; }
-    | ANY { $$ = ListPredicateExpr::Quantifier::Any; }
-    | NONE { $$ = ListPredicateExpr::Quantifier::None; }
-    | SINGLE { $$ = ListPredicateExpr::Quantifier::Single; }
     ;
 
 bracketExpr
@@ -1984,7 +1998,7 @@ bracketExpr
     | OBRACK expr comprehensionTail CBRACK {
         $$ = ParserUtils::createComprehension(ast, $2, $3.first, $3.second, @2);
         if (!$$) {
-            error(@2, "Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
+            scanner.syntaxError(@2, "Invalid comprehension. Expected 'variable IN list', or a path '(...)-[...]-(...)' followed by '|'");
         }
         LOC($$, @$);
       }
@@ -1997,8 +2011,8 @@ comprehensionTail
     ;
 
 filterExpr
-    : symbol IN expr { $$ = ListComprehensionExpr::create(ast, $1, $3); LOC($$, @$); }
-    | symbol IN expr whereClause {
+    : name IN expr { $$ = ListComprehensionExpr::create(ast, $1, $3); LOC($$, @$); }
+    | name IN expr whereClause {
         $$ = ListComprehensionExpr::create(ast, $1, $3);
         $$->setPredicate($4->getExpr());
         LOC($$, @$);
@@ -2116,7 +2130,7 @@ caseComparisonSign
     ;
 
 parameter
-    : DOLLAR symbol { $$ = Parameter::create(ast, $2->getName()); LOC($$, @$); }
+    : DOLLAR name { $$ = Parameter::create(ast, $2->getName()); LOC($$, @$); }
     | DOLLAR DIGIT { $$ = ParserUtils::createNumberedParameter(ast, $2); LOC($$, @$); }
     ;
 
@@ -2185,7 +2199,9 @@ mapPair
 
 name
     : symbol { $$ = $1; }
-    | reservedWord { $$ = $1 ; }
+    | NULL_ { $$ = Symbol::create(ast, $1); }
+    | TRUE { $$ = Symbol::create(ast, $1); }
+    | FALSE { $$ = Symbol::create(ast, $1); }
     ;
 
 symbol
@@ -2203,9 +2219,49 @@ symbol
     | NFD { $$ = Symbol::create(ast, $1); }
     | NFKC { $$ = Symbol::create(ast, $1); }
     | NFKD { $$ = Symbol::create(ast, $1); }
-    //| ANY { $$ = Symbol::create(ast, $1); } // Causes conflicts
-    //| NONE { $$ = Symbol::create(ast, $1); } // Causes conflicts
-    //| SINGLE { $$ = Symbol::create(ast, $1); } // Causes conflicts
+    | PROCEDURES { $$ = Symbol::create(ast, $1); }
+    | MERGE_DATAPARTS { $$ = Symbol::create(ast, $1); }
+    | SHORTESTPATH { $$ = Symbol::create(ast, $1); }
+    | EMBEDDINGS { $$ = Symbol::create(ast, $1); }
+    | DIMENSION { $$ = Symbol::create(ast, $1); }
+    | CONNECT { $$ = Symbol::create(ast, $1); }
+    | INDEXES { $$ = Symbol::create(ast, $1); }
+    | PARQUET { $$ = Symbol::create(ast, $1); }
+    | SUBMIT { $$ = Symbol::create(ast, $1); }
+    | CHANGE { $$ = Symbol::create(ast, $1); }
+    | COMMIT { $$ = Symbol::create(ast, $1); }
+    | COSINE { $$ = Symbol::create(ast, $1); }
+    | EUCLID { $$ = Symbol::create(ast, $1); }
+    | METRIC { $$ = Symbol::create(ast, $1); }
+    | SEARCH { $$ = Symbol::create(ast, $1); }
+    | VECTOR { $$ = Symbol::create(ast, $1); }
+    | YIELD { $$ = Symbol::create(ast, $1); }
+    | HEADERS { $$ = Symbol::create(ast, $1); }
+    | JSONL { $$ = Symbol::create(ast, $1); }
+    | GRAPH { $$ = Symbol::create(ast, $1); }
+    | INDEX { $$ = Symbol::create(ast, $1); }
+    | FLAT { $$ = Symbol::create(ast, $1); }
+    | FROM { $$ = Symbol::create(ast, $1); }
+    | HNSW { $$ = Symbol::create(ast, $1); }
+    | LOAD { $$ = Symbol::create(ast, $1); }
+    | PULL { $$ = Symbol::create(ast, $1); }
+    | PUSH { $$ = Symbol::create(ast, $1); }
+    | CSV { $$ = Symbol::create(ast, $1); }
+    | FAIL { $$ = Symbol::create(ast, $1); }
+    | ERROR_ { $$ = Symbol::create(ast, $1); }
+    | GRAPHS { $$ = Symbol::create(ast, $1); }
+    | AVAILABLE { $$ = Symbol::create(ast, $1); }
+    | CALL { $$ = Symbol::create(ast, $1); }
+    | SHOW { $$ = Symbol::create(ast, $1); }
+    | INSTALL { $$ = Symbol::create(ast, $1); }
+    | EXPLAIN { $$ = Symbol::create(ast, $1); }
+    | FOREACH { $$ = Symbol::create(ast, $1); }
+    | EXTENSIONS { $$ = Symbol::create(ast, $1); }
+    | NEW { $$ = Symbol::create(ast, $1); }
+    | GML { $$ = Symbol::create(ast, $1); }
+    | IF { $$ = Symbol::create(ast, $1); }
+    | S3 { $$ = Symbol::create(ast, $1); }
+    | reservedWord { $$ = $1; }
     ;
 
 createConstraint
@@ -2237,30 +2293,18 @@ dropConstraint
     ;
 
 reservedWord
-    : PROCEDURES { $$ = Symbol::create(ast, $1); }
-    | MERGE_DATAPARTS { $$ = Symbol::create(ast, $1); }
-    | SHORTESTPATH { $$ = Symbol::create(ast, $1); }
-    | DESCENDING { $$ = Symbol::create(ast, $1); }
+    : DESCENDING { $$ = Symbol::create(ast, $1); }
     | CONSTRAINT { $$ = Symbol::create(ast, $1); }
-    | EMBEDDINGS { $$ = Symbol::create(ast, $1); }
     | MANDATORY { $$ = Symbol::create(ast, $1); }
     | ASCENDING { $$ = Symbol::create(ast, $1); }
-    | DIMENSION { $$ = Symbol::create(ast, $1); }
     | OPTIONAL { $$ = Symbol::create(ast, $1); }
     | CONTAINS { $$ = Symbol::create(ast, $1); }
-    | DISTINCT { $$ = Symbol::create(ast, $1); }
-    // | EXTRACT { $$ = Symbol::create(ast, $1); }
+    | DISTINCT %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | REQUIRE { $$ = Symbol::create(ast, $1); }
-    | COLLECT { $$ = Symbol::create(ast, $1); }
-    | CONNECT { $$ = Symbol::create(ast, $1); }
-    | INDEXES { $$ = Symbol::create(ast, $1); }
-    | PARQUET { $$ = Symbol::create(ast, $1); }
-    | SUBMIT { $$ = Symbol::create(ast, $1); }
-    | CHANGE { $$ = Symbol::create(ast, $1); }
+    | COLLECT %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | STARTS { $$ = Symbol::create(ast, $1); }
     | UNIQUE { $$ = Symbol::create(ast, $1); }
-    // | FILTER { $$ = Symbol::create(ast, $1); }
-    | SINGLE { $$ = Symbol::create(ast, $1); }
+    | SINGLE %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | SCALAR { $$ = Symbol::create(ast, $1); }
     | UNWIND { $$ = Symbol::create(ast, $1); }
     | REMOVE { $$ = Symbol::create(ast, $1); }
@@ -2268,87 +2312,99 @@ reservedWord
     | CREATE { $$ = Symbol::create(ast, $1); }
     | DELETE { $$ = Symbol::create(ast, $1); }
     | DETACH { $$ = Symbol::create(ast, $1); }
-    | EXISTS { $$ = Symbol::create(ast, $1); }
-    | COMMIT { $$ = Symbol::create(ast, $1); }
-    | COSINE { $$ = Symbol::create(ast, $1); }
-    | EUCLID { $$ = Symbol::create(ast, $1); }
-    | METRIC { $$ = Symbol::create(ast, $1); }
-    | REDUCE { $$ = Symbol::create(ast, $1); }
-    | ALLREDUCE { $$ = Symbol::create(ast, $1); }
-    | SEARCH { $$ = Symbol::create(ast, $1); }
-    | VECTOR { $$ = Symbol::create(ast, $1); }
+    | EXISTS %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
+    | REDUCE %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
+    | ALLREDUCE %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | LIMIT { $$ = Symbol::create(ast, $1); }
-    | YIELD { $$ = Symbol::create(ast, $1); }
     | MATCH { $$ = Symbol::create(ast, $1); }
     | MERGE { $$ = Symbol::create(ast, $1); }
     | ORDER { $$ = Symbol::create(ast, $1); }
-    | WHERE { $$ = Symbol::create(ast, $1); }
+    | WHERE %prec WHERE_AS_NAME { $$ = Symbol::create(ast, $1); }
     | UNION { $$ = Symbol::create(ast, $1); }
-    | FALSE { $$ = Symbol::create(ast, $1); }
-    | COUNT { $$ = Symbol::create(ast, $1); }
-    | NORMALIZE { $$ = Symbol::create(ast, $1); }
+    | COUNT %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
+    | NORMALIZE %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | NORMALIZED { $$ = Symbol::create(ast, $1); }
-    | HEADERS { $$ = Symbol::create(ast, $1); }
-    | JSONL { $$ = Symbol::create(ast, $1); }
-    | GRAPH { $$ = Symbol::create(ast, $1); }
-    | INDEX { $$ = Symbol::create(ast, $1); }
-    | FLAT { $$ = Symbol::create(ast, $1); }
-    | FROM { $$ = Symbol::create(ast, $1); }
-    | HNSW { $$ = Symbol::create(ast, $1); }
-    | LOAD { $$ = Symbol::create(ast, $1); }
-    | PULL { $$ = Symbol::create(ast, $1); }
-    | PUSH { $$ = Symbol::create(ast, $1); }
-    | CSV { $$ = Symbol::create(ast, $1); }
-    | FAIL { $$ = Symbol::create(ast, $1); }
-    | ERROR_ { $$ = Symbol::create(ast, $1); }
-    | GRAPHS { $$ = Symbol::create(ast, $1); }
-    | AVAILABLE { $$ = Symbol::create(ast, $1); }
     | DESC { $$ = Symbol::create(ast, $1); }
-    | CALL { $$ = Symbol::create(ast, $1); }
-    | NULL_ { $$ = Symbol::create(ast, $1); }
-    | TRUE { $$ = Symbol::create(ast, $1); }
-    | WHEN { $$ = Symbol::create(ast, $1); }
-    | NONE { $$ = Symbol::create(ast, $1); }
+    | WHEN %prec WHEN_AS_NAME { $$ = Symbol::create(ast, $1); }
+    | NONE %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | THEN { $$ = Symbol::create(ast, $1); }
     | ELSE { $$ = Symbol::create(ast, $1); }
-    | CASE { $$ = Symbol::create(ast, $1); }
+    | CASE %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | ENDS { $$ = Symbol::create(ast, $1); }
     | DROP { $$ = Symbol::create(ast, $1); }
-    | SHOW { $$ = Symbol::create(ast, $1); }
-    | INSTALL { $$ = Symbol::create(ast, $1); }
-    | EXPLAIN { $$ = Symbol::create(ast, $1); }
-    | FOREACH { $$ = Symbol::create(ast, $1); }
-    | EXTENSIONS { $$ = Symbol::create(ast, $1); }
     | SKIP { $$ = Symbol::create(ast, $1); }
     | WITH { $$ = Symbol::create(ast, $1); }
-    | NEW { $$ = Symbol::create(ast, $1); }
-    | ANY { $$ = Symbol::create(ast, $1); }
+    | ANY %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | SET { $$ = Symbol::create(ast, $1); }
-    | ALL { $$ = Symbol::create(ast, $1); }
+    | ALL %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | ASC { $$ = Symbol::create(ast, $1); }
-    | NOT { $$ = Symbol::create(ast, $1); }
+    | NOT %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | END { $$ = Symbol::create(ast, $1); }
     | XOR { $$ = Symbol::create(ast, $1); }
     | FOR { $$ = Symbol::create(ast, $1); }
     | ADD { $$ = Symbol::create(ast, $1); }
     | AND { $$ = Symbol::create(ast, $1); }
-    | GML { $$ = Symbol::create(ast, $1); }
     | OR { $$ = Symbol::create(ast, $1); }
     | IN { $$ = Symbol::create(ast, $1); }
-    | IS { $$ = Symbol::create(ast, $1); }
+    | IS %prec KEYWORD_AS_NAME { $$ = Symbol::create(ast, $1); }
     | BY { $$ = Symbol::create(ast, $1); }
     | DO { $$ = Symbol::create(ast, $1); }
     | OF { $$ = Symbol::create(ast, $1); }
     | ON { $$ = Symbol::create(ast, $1); }
-    | IF { $$ = Symbol::create(ast, $1); }
     | AS { $$ = Symbol::create(ast, $1); }
-    | S3 { $$ = Symbol::create(ast, $1); }
     ;
 
 %%
 
 void db::YCypherParser::error(const location_type& l, const std::string& m) {
-    scanner.syntaxError(l, m);
+    scanner.holdSyntaxError(l, m);
+}
+
+// The message bison's detailed report writes, with the tokens that spell a name counted as
+// one expected entry where an identifier is expected
+void db::YCypherParser::report_syntax_error(const context& errorContext) const {
+    static constexpr size_t MAX_EXPECTED_ENTRIES = 4;
+
+    const symbol_kind_type unexpected = errorContext.token();
+    if (unexpected == symbol_kind::S_YYEMPTY) {
+        scanner.holdSyntaxError(errorContext.location(), "syntax error");
+        return;
+    }
+
+    std::array<symbol_kind_type, YYNTOKENS> expected;
+    const int expectedCount = errorContext.expected_tokens(expected.data(), YYNTOKENS);
+    const std::span<const symbol_kind_type> expectedTokens(expected.data(), expectedCount);
+
+    const bool expectsName = std::ranges::contains(expectedTokens, symbol_kind::S_ID);
+    const auto spellsName = [](symbol_kind_type token) {
+        return symbol_kind::S_PROCEDURES <= token && token <= symbol_kind::S_ID;
+    };
+
+    std::vector<std::string_view> entries;
+    bool nameListed = false;
+    for (const symbol_kind_type token : expectedTokens) {
+        if (!expectsName || !spellsName(token)) {
+            entries.push_back(symbol_name(token));
+        } else if (!nameListed) {
+            entries.push_back("a name");
+            nameListed = true;
+        }
+    }
+
+    std::string message = "syntax error, unexpected ";
+    message += symbol_name(unexpected);
+
+    if (!entries.empty() && entries.size() <= MAX_EXPECTED_ENTRIES) {
+        message += ", expecting ";
+        message += entries.front();
+
+        for (size_t entry = 1; entry < entries.size(); ++entry) {
+            message += " or ";
+            message += entries[entry];
+        }
+    }
+
+    scanner.holdSyntaxError(errorContext.location(), message);
 }
 
 
