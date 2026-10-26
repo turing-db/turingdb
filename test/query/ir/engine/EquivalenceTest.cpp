@@ -198,7 +198,7 @@ std::string valueToString(const ListElementView element) {
         return valueToString(element.getAs<T>());
     };
 
-    const ListBufferTypeTag tag = element.getTag();
+    const CellTag tag = element.getTag();
     ListTagDispatcher writer {._tag = tag};
 
     return writer.execute(writeTyped, element);

@@ -13,7 +13,7 @@ using namespace db;
 namespace {
 
 constexpr size_t keySize = sizeof(std::string_view);
-constexpr size_t tagSize = sizeof(db::MapBufferTypeTag);
+constexpr size_t tagSize = sizeof(db::CellTag);
 
 }
 
@@ -24,7 +24,7 @@ void MapWriteCursor::writeKey(std::string_view key) {
 }
 
 template <typename T>
-MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag tag, const T& value) {
+MapEntryView MapWriteCursor::writeValue(CellTag tag, const T& value) {
     std::byte* valueStart = _entryWritePtr + keySize;
 
     std::memcpy(valueStart, &tag, tagSize);
@@ -53,21 +53,21 @@ MapEntryView MapWriteCursor::recordEntry(size_t entryBytes) {
 }
 
 namespace db {
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::String::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Embedding::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const ListView&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const MapView&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::String::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Embedding::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const ListView&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const MapView&);
 
 // The fixed-width values. A decoder reading a wire whose layout already matches the stored one
 // copies these through writeValueBytes instead; a caller holding the value itself, with no such
 // buffer to copy from, writes it through here.
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Int64::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::UInt64::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Double::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Bool::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const PropertyNull&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const NodeID&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const EdgeID&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::DateTime::Primitive&);
-template MapEntryView MapWriteCursor::writeValue(MapBufferTypeTag, const types::Duration::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Int64::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::UInt64::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Double::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Bool::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const PropertyNull&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const NodeID&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const EdgeID&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::DateTime::Primitive&);
+template MapEntryView MapWriteCursor::writeValue(CellTag, const types::Duration::Primitive&);
 }

@@ -22,7 +22,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
@@ -132,15 +132,15 @@ private:
 // an int, a bool and a string, so only those tags occur.
 std::string renderListElement(const ListElementView& element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return element.getAs<CustomBool>() ? "true" : "false";
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return std::string(element.getAs<std::string_view>());
         break;
 

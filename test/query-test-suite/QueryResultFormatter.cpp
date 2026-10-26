@@ -171,7 +171,7 @@ template <typename T>
         return valueToString(element.getAs<T>());
     };
 
-    const db::ListBufferTypeTag tag = element.getTag();
+    const db::CellTag tag = element.getTag();
     db::ListTagDispatcher writer {._tag = tag};
 
     return writer.execute(writeTyped, element);

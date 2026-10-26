@@ -31,8 +31,7 @@
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "ID.h"
@@ -65,7 +64,7 @@ void toLowerInto(std::string_view src, std::string& dst) {
 // which enforces the constant-list rule.
 void readStringList(const ListView* view, std::vector<std::string>& out) {
     for (const ListElementView& el : *view) {
-        if (el.getTag() != ListBufferTypeTag::String) {
+        if (el.getTag() != CellTag::String) {
             continue;
         }
         out.emplace_back(el.getAs<std::string_view>());
@@ -83,7 +82,7 @@ void readPropertyFilters(const MapView* properties,
     std::string lowered;
 
     for (const MapEntryView& entry : properties->entries()) {
-        if (entry.getValueTag() != MapBufferTypeTag::String) {
+        if (entry.getValueTag() != CellTag::String) {
             continue;
         }
 

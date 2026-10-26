@@ -4,7 +4,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "ListByteBuffer.h"
 #include "ListElementView.h"
 #include "ListUtils.h"
@@ -45,7 +45,7 @@ ListView ListBuffer<N>::insert(std::span<const ListItemVariant> elements) {
     const auto write = [this](auto&& typed) -> void {
         using T = std::decay_t<decltype(typed)>;
 
-        const ListBufferTypeTag tag = TypeToListBufferTag<T>::Tag;
+        const CellTag tag = TypeToCellTag<T>::Tag;
         const ListElementView view = _elements.write(tag, typed);
         _views.write(view);
     };

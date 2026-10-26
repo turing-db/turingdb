@@ -116,8 +116,8 @@ void NestedContainerWriter::writeMapKey(std::string_view key) {
 }
 
 void NestedContainerWriter::writeNullListElement() {
-    constexpr size_t tagSize = sizeof(db::ListBufferTypeTag);
-    constexpr db::ListBufferTypeTag tag = db::TypeToListBufferTag<db::PropertyNull>::Tag;
+    constexpr size_t tagSize = sizeof(db::CellTag);
+    constexpr db::CellTag tag = db::TypeToCellTag<db::PropertyNull>::Tag;
     const db::PropertyNull value {};
 
     _outBuf->checkRemainingAndFlush(tagSize + sizeof(value));

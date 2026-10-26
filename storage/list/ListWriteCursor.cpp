@@ -18,8 +18,8 @@ ListElementView ListWriteCursor::writeRaw(const void* data, size_t numBytes) {
 }
 
 template <typename T>
-ListElementView ListWriteCursor::writeValue(ListBufferTypeTag tag, const T& value) {
-    constexpr size_t tagSize = sizeof(ListBufferTypeTag);
+ListElementView ListWriteCursor::writeValue(CellTag tag, const T& value) {
+    constexpr size_t tagSize = sizeof(CellTag);
 
     std::byte* start = _elementWritePtr;
 
@@ -31,8 +31,8 @@ ListElementView ListWriteCursor::writeValue(ListBufferTypeTag tag, const T& valu
 }
 
 template <typename T>
-ListElementView ListWriteCursor::writeValueAt(size_t index, ListBufferTypeTag tag, const T& value) {
-    constexpr size_t tagSize = sizeof(ListBufferTypeTag);
+ListElementView ListWriteCursor::writeValueAt(size_t index, CellTag tag, const T& value) {
+    constexpr size_t tagSize = sizeof(CellTag);
     constexpr size_t elementSize = tagSize + sizeof(T);
 
     std::byte* start = _elementWritePtr + index * elementSize;
@@ -60,20 +60,20 @@ ListElementView ListWriteCursor::recordView(const std::byte* elementStart) {
 }
 
 namespace db {
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::String::Primitive&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Embedding::Primitive&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const ListView&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const MapView&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const types::String::Primitive&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const types::Embedding::Primitive&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const ListView&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const MapView&);
 
 // The fixed-width elements. A decoder reading a wire whose layout already matches the
 // stored one copies these through writeRaw instead; a caller holding the value itself,
 // with no such buffer to copy from, writes it through here.
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Int64::Primitive&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::UInt64::Primitive&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Double::Primitive&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Bool::Primitive&);
-template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const PropertyNull&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const types::Int64::Primitive&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const types::UInt64::Primitive&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const types::Double::Primitive&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const types::Bool::Primitive&);
+template ListElementView ListWriteCursor::writeValue(CellTag, const PropertyNull&);
 
-template ListElementView ListWriteCursor::writeValueAt(size_t, ListBufferTypeTag, const EdgeID&);
-template ListElementView ListWriteCursor::writeValueAt(size_t, ListBufferTypeTag, const NodeID&);
+template ListElementView ListWriteCursor::writeValueAt(size_t, CellTag, const EdgeID&);
+template ListElementView ListWriteCursor::writeValueAt(size_t, CellTag, const NodeID&);
 }

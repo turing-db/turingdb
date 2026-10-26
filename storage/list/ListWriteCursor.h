@@ -5,7 +5,7 @@
 
 #include "ListView.h"
 #include "ListElementView.h"
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 
 namespace db {
 
@@ -50,7 +50,7 @@ public:
      * lives in a separate buffer), records its view, advances the cursor, returns the view.
      */
     template <typename T>
-    ListElementView writeValue(ListBufferTypeTag tag, const T& value);
+    ListElementView writeValue(CellTag tag, const T& value);
 
     /**
      * @brief Writes [tag][value] into slot @param index of a region whose elements are all
@@ -58,7 +58,7 @@ public:
      * the sequential write position, so it is not mixed with @ref writeValue on one cursor.
      */
     template <typename T>
-    ListElementView writeValueAt(size_t index, ListBufferTypeTag tag, const T& value);
+    ListElementView writeValueAt(size_t index, CellTag tag, const T& value);
 
 private:
     ListView _view;

@@ -28,7 +28,7 @@ protected:
     }
 
     std::optional<types::Int64::Primitive> integerAt(const std::optional<ListElementView>& element) {
-        if (!element.has_value() || element->getTag() != ListBufferTypeTag::Int) {
+        if (!element.has_value() || element->getTag() != CellTag::Int) {
             return std::nullopt;
         }
 

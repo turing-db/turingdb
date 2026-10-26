@@ -57,7 +57,7 @@ void DebugDump::dump(std::ostream& out, ListElementView view, bool isInList) {
         out << dumped;
     };
 
-    const ListBufferTypeTag tag = view.getTag();
+    const CellTag tag = view.getTag();
     ListTagDispatcher dumper {._tag = tag};
     dumper.execute(dumpTyped, view);
 }

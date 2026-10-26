@@ -67,11 +67,11 @@ public:
     db::ListElementView beginNestedList(size_t elementCount, size_t byteSize);
 
     db::ListElementView writeListValue(std::string_view value) {
-        return listCursor().writeValue<db::types::String::Primitive>(db::TypeToListBufferTag<db::types::String::Primitive>::Tag, value);
+        return listCursor().writeValue<db::types::String::Primitive>(db::TypeToCellTag<db::types::String::Primitive>::Tag, value);
     }
 
     db::ListElementView writeListValue(std::span<const float> value) {
-        return listCursor().writeValue<db::types::Embedding::Primitive>(db::TypeToListBufferTag<db::types::Embedding::Primitive>::Tag, value);
+        return listCursor().writeValue<db::types::Embedding::Primitive>(db::TypeToCellTag<db::types::Embedding::Primitive>::Tag, value);
     }
 
     db::ListElementView writeListElementBytes(const char* bytes, size_t byteSize) {
@@ -85,7 +85,7 @@ public:
 
     template <typename T>
     void writeMapValue(const T& value) {
-        _lastMapEntry = mapCursor().writeValue<T>(db::TypeToMapBufferTag<T>::Tag, value);
+        _lastMapEntry = mapCursor().writeValue<T>(db::TypeToCellTag<T>::Tag, value);
     }
 
     void writeMapValueBytes(const char* bytes, size_t byteSize) {

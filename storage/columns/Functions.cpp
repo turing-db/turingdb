@@ -11,7 +11,7 @@
 #include <utf8proc.h>
 
 #include "datapart/EdgeRecord.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
@@ -63,11 +63,11 @@ bool isAscii(std::string_view text) {
 // list function: a cell of any other type is a list function applied to something that is
 // no list, which no plan can see coming because the cell carries its type per row.
 std::optional<ListView> taggedList(const ListElementView cell) {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::ListView) {
+    if (tag == CellTag::ListView) {
         return cell.getAs<ListView>();
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -177,11 +177,11 @@ ListElementView stageCell(QueryListBuffer* listBuffer, const QueryListBuffer::Li
 // function applied to something that is no edge, which no plan can see coming because the
 // cell carries its type per row.
 std::optional<EdgeID> taggedEdge(const ListElementView cell) {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::EdgeID) {
+    if (tag == CellTag::EdgeID) {
         return cell.getAs<EdgeID>();
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -197,13 +197,13 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const std::optiona
 }
 
 TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell) const {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::ListView) {
+    if (tag == CellTag::ListView) {
         return static_cast<types::Int64::Primitive>(cell.getAs<ListView>().size());
-    } else if (tag == ListBufferTypeTag::String) {
+    } else if (tag == CellTag::String) {
         return characterCount(cell.getAs<types::String::Primitive>());
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -382,11 +382,11 @@ void db::throwCellTypeError(std::string_view functionName, std::string_view expe
 }
 
 std::optional<types::String::Primitive> db::cellString(const ListElementView cell, std::string_view functionName) {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::String) {
+    if (tag == CellTag::String) {
         return cell.getAs<types::String::Primitive>();
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -394,13 +394,13 @@ std::optional<types::String::Primitive> db::cellString(const ListElementView cel
 }
 
 std::optional<types::Int64::Primitive> db::cellInteger(const ListElementView cell, std::string_view functionName) {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::Int) {
+    if (tag == CellTag::Int) {
         return cell.getAs<types::Int64::Primitive>();
-    } else if (tag == ListBufferTypeTag::UInt) {
+    } else if (tag == CellTag::UInt) {
         return unsignedCharacterArgument(cell.getAs<types::UInt64::Primitive>(), functionName);
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -495,17 +495,17 @@ TaggedNegateFunction::TaggedNegateFunction(QueryListBuffer* listBuffer)
 }
 
 TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const ArgType cell) const {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::Null) {
+    if (tag == CellTag::Null) {
         return std::nullopt;
-    } else if (tag == ListBufferTypeTag::Int) {
+    } else if (tag == CellTag::Int) {
         return stageCell(_listBuffer, NegateFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>()));
-    } else if (tag == ListBufferTypeTag::UInt) {
+    } else if (tag == CellTag::UInt) {
         return stageCell(_listBuffer, NegateFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>()));
-    } else if (tag == ListBufferTypeTag::Double) {
+    } else if (tag == CellTag::Double) {
         return stageCell(_listBuffer, NegateFunction<types::Double::Primitive> {}(cell.getAs<types::Double::Primitive>()));
-    } else if (tag == ListBufferTypeTag::Duration) {
+    } else if (tag == CellTag::Duration) {
         return stageCell(_listBuffer, NegateFunction<types::Duration::Primitive> {}(cell.getAs<types::Duration::Primitive>()));
     }
 
@@ -517,14 +517,14 @@ TaggedNegateFunction::ResultType TaggedNegateFunction::operator()(const std::opt
 }
 
 TaggedUnaryPlusFunction::ResultType TaggedUnaryPlusFunction::operator()(const ArgType cell) const {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    const bool holdsASignedValue = tag == ListBufferTypeTag::Int
-                                || tag == ListBufferTypeTag::UInt
-                                || tag == ListBufferTypeTag::Double
-                                || tag == ListBufferTypeTag::Duration;
+    const bool holdsASignedValue = tag == CellTag::Int
+                                || tag == CellTag::UInt
+                                || tag == CellTag::Double
+                                || tag == CellTag::Duration;
 
-    if (tag == ListBufferTypeTag::Null) {
+    if (tag == CellTag::Null) {
         return std::nullopt;
     } else if (holdsASignedValue) {
         return cell;
@@ -684,14 +684,14 @@ TaggedReverseFunction::TaggedReverseFunction(QueryListBuffer* listBuffer, String
 }
 
 TaggedReverseFunction::ResultType TaggedReverseFunction::operator()(const ArgType cell) const {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::String) {
+    if (tag == CellTag::String) {
         const ReverseFunction reverse(_stringBuffer);
         return stageCell(_listBuffer, reverse(cell.getAs<types::String::Primitive>()));
-    } else if (tag == ListBufferTypeTag::ListView) {
+    } else if (tag == CellTag::ListView) {
         return stageCell(_listBuffer, _listBuffer->reverse(cell.getAs<ListView>()));
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -989,13 +989,13 @@ TaggedEndNodeFunction::ResultType TaggedEndNodeFunction::operator()(const ArgTyp
 }
 
 TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) const {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::NodeID) {
+    if (tag == CellTag::NodeID) {
         return static_cast<types::Int64::Primitive>(cell.getAs<NodeID>().getValue());
-    } else if (tag == ListBufferTypeTag::EdgeID) {
+    } else if (tag == CellTag::EdgeID) {
         return static_cast<types::Int64::Primitive>(cell.getAs<EdgeID>().getValue());
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 

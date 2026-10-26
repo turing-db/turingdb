@@ -1,6 +1,6 @@
 #include "PathTrie.h"
 
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "ListWriteCursor.h"
 
 #include "BioAssert.h"
@@ -117,7 +117,7 @@ ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer, bool rever
 
         if (taken % hops._stride == hops._offset) {
             const uint64_t index = taken / hops._stride;
-            cursor.writeValueAt(reversed ? count - 1 - index : index, ListBufferTypeTag::EdgeID, entry._edge);
+            cursor.writeValueAt(reversed ? count - 1 - index : index, CellTag::EdgeID, entry._edge);
         }
 
         current = entry._parent;
@@ -139,7 +139,7 @@ ListView PathTrie::expandEnds(PathRef path, QueryListBuffer& buffer, bool revers
 
         if (taken % hops._stride == hops._offset) {
             const uint64_t index = taken / hops._stride;
-            cursor.writeValueAt(reversed ? count - 1 - index : index, ListBufferTypeTag::NodeID, entry._node);
+            cursor.writeValueAt(reversed ? count - 1 - index : index, CellTag::NodeID, entry._node);
         }
 
         current = entry._parent;
@@ -156,11 +156,11 @@ ListView PathTrie::expandNodes(PathRef path, NodeID seed, QueryListBuffer& buffe
     PathRef current = path;
     for (uint64_t index = depth; index > 0; index--) {
         const PathTrieEntry& entry = get(current);
-        cursor.writeValueAt(reversed ? depth - index : index, ListBufferTypeTag::NodeID, entry._node);
+        cursor.writeValueAt(reversed ? depth - index : index, CellTag::NodeID, entry._node);
         current = entry._parent;
     }
 
-    cursor.writeValueAt(reversed ? depth : 0, ListBufferTypeTag::NodeID, seed);
+    cursor.writeValueAt(reversed ? depth : 0, CellTag::NodeID, seed);
 
     return cursor.getView();
 }
@@ -181,14 +181,14 @@ ListView PathTrie::expandSources(PathRef path, NodeID seed, QueryListBuffer& buf
 
         if (hop % hops._stride == hops._offset) {
             const uint64_t index = hop / hops._stride;
-            cursor.writeValueAt(reversed ? count - 1 - index : index, ListBufferTypeTag::NodeID, entry._node);
+            cursor.writeValueAt(reversed ? count - 1 - index : index, CellTag::NodeID, entry._node);
         }
 
         current = entry._parent;
     }
 
     if (hops._offset == 0) {
-        cursor.writeValueAt(reversed ? count - 1 : 0, ListBufferTypeTag::NodeID, seed);
+        cursor.writeValueAt(reversed ? count - 1 : 0, CellTag::NodeID, seed);
     }
 
     return cursor.getView();

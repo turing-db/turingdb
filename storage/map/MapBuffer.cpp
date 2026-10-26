@@ -2,7 +2,7 @@
 
 #include <type_traits>
 
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "MapByteBuffer.h"
 #include "MapEntryView.h"
 #include "MapUtils.h"
@@ -36,7 +36,7 @@ MapView MapBuffer<N>::insert(std::span<const MapKeyValuePair> entries) {
         std::visit([this, &entry](auto&& typed) -> void {
             using T = std::decay_t<decltype(typed)>;
 
-            const MapBufferTypeTag tag = TypeToMapBufferTag<T>::Tag;
+            const CellTag tag = TypeToCellTag<T>::Tag;
             const MapEntryView view = _entries.write(entry.key, tag, typed);
             _views.write(view);
         }, entry.value);

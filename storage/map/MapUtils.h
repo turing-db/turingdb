@@ -2,10 +2,11 @@
 
 #include "MapView.h"
 #include "MapEntryView.h"
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "ID.h"
 #include "list/ListView.h"
+#include "list/ListUtils.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -28,127 +29,58 @@ inline bool findMapEntry(const MapView map, const std::string_view key, MapEntry
 }
 
 // Call the executor with the type a map value tag names 
-auto dispatchMapTag(const MapBufferTypeTag tag, const auto& executor, const MapEntryView view) {
+auto dispatchMapTag(const CellTag tag, const auto& executor, const MapEntryView view) {
     switch (tag) {
-        case MapBufferTypeTag::Int:
+        case CellTag::Int:
             return executor.template operator()<types::Int64::Primitive>(view);
         break;
-        case MapBufferTypeTag::UInt:
+        case CellTag::UInt:
             return executor.template operator()<types::UInt64::Primitive>(view);
         break;
-        case MapBufferTypeTag::Double:
+        case CellTag::Double:
             return executor.template operator()<types::Double::Primitive>(view);
         break;
-        case MapBufferTypeTag::Bool:
+        case CellTag::Bool:
             return executor.template operator()<types::Bool::Primitive>(view);
         break;
-        case MapBufferTypeTag::String:
+        case CellTag::String:
             return executor.template operator()<types::String::Primitive>(view);
         break;
-        case MapBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             return executor.template operator()<types::Embedding::Primitive>(view);
         break;
-        case MapBufferTypeTag::ListView:
+        case CellTag::ListView:
             return executor.template operator()<ListView>(view);
         break;
-        case MapBufferTypeTag::MapView:
+        case CellTag::MapView:
             return executor.template operator()<MapView>(view);
         break;
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return executor.template operator()<PropertyNull>(view);
         break;
-        case MapBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return executor.template operator()<NodeID>(view);
         break;
-        case MapBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return executor.template operator()<EdgeID>(view);
         break;
-        case MapBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             return executor.template operator()<types::DateTime::Primitive>(view);
         break;
-        case MapBufferTypeTag::Duration:
+        case CellTag::Duration:
             return executor.template operator()<types::Duration::Primitive>(view);
         break;
 
-        case MapBufferTypeTag::INVALID:
+        case CellTag::INVALID:
         break;
     }
 
-    throw FatalException("Unknown MapBufferTypeTag.");
+    throw FatalException("Unknown CellTag.");
 }
 
 /// Call the executor with the type the entry's own tag names.
 auto dispatchMapEntry(const auto& executor, const MapEntryView entry) {
     return dispatchMapTag(entry.getValueTag(), executor, entry);
 }
-
-/// Helpers to convert types to map value tags
-template <typename T>
-struct TypeToMapBufferTag;
-
-template <>
-struct TypeToMapBufferTag<types::Int64::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Int;
-};
-
-template <>
-struct TypeToMapBufferTag<types::UInt64::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::UInt;
-};
-
-template <>
-struct TypeToMapBufferTag<types::Double::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Double;
-};
-
-template <>
-struct TypeToMapBufferTag<types::Bool::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Bool;
-};
-
-template <>
-struct TypeToMapBufferTag<types::String::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::String;
-};
-
-template <>
-struct TypeToMapBufferTag<types::Embedding::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Embedding;
-};
-
-template <>
-struct TypeToMapBufferTag<ListView> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::ListView;
-};
-
-template <>
-struct TypeToMapBufferTag<MapView> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::MapView;
-};
-
-template <>
-struct TypeToMapBufferTag<PropertyNull> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Null;
-};
-
-template <>
-struct TypeToMapBufferTag<NodeID> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::NodeID;
-};
-
-template <>
-struct TypeToMapBufferTag<EdgeID> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::EdgeID;
-};
-
-template <>
-struct TypeToMapBufferTag<types::DateTime::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::DateTime;
-};
-
-template <>
-struct TypeToMapBufferTag<types::Duration::Primitive> {
-    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Duration;
-};
 
 }

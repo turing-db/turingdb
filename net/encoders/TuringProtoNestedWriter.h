@@ -90,10 +90,10 @@ inline WireSize computeMapByteSize(std::span<const db::MapEntryView> entries) {
 // should write values belonging to their respective containeres
 struct ListWritePolicy {
     using View = db::ListElementView;
-    using Tag = db::ListBufferTypeTag;
+    using Tag = db::CellTag;
 
     template <typename T>
-    static constexpr Tag tagFor() { return db::TypeToListBufferTag<T>::Tag; }
+    static constexpr Tag tagFor() { return db::TypeToCellTag<T>::Tag; }
 
     template <typename T>
     static T valueAs(View view) { return view.getAs<T>(); }
@@ -101,10 +101,10 @@ struct ListWritePolicy {
 
 struct MapWritePolicy {
     using View = db::MapEntryView;
-    using Tag = db::MapBufferTypeTag;
+    using Tag = db::CellTag;
 
     template <typename T>
-    static constexpr Tag tagFor() { return db::TypeToMapBufferTag<T>::Tag; }
+    static constexpr Tag tagFor() { return db::TypeToCellTag<T>::Tag; }
 
     template <typename T>
     static T valueAs(View view) { return view.getValueAs<T>(); }

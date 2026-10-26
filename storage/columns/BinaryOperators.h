@@ -159,29 +159,29 @@ inline auto arithmeticOperand(T&& value) {
  */
 inline std::optional<double> cellNumber(const ListElementView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return static_cast<double>(cell.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return static_cast<double>(cell.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return cell.getAs<types::Double::Primitive>();
         break;
 
-        case ListBufferTypeTag::Bool:
-        case ListBufferTypeTag::String:
-        case ListBufferTypeTag::Embedding:
-        case ListBufferTypeTag::ListView:
-        case ListBufferTypeTag::Null:
-        case ListBufferTypeTag::NodeID:
-        case ListBufferTypeTag::EdgeID:
-        case ListBufferTypeTag::DateTime:
-        case ListBufferTypeTag::MapView:
-        case ListBufferTypeTag::Duration:
-        case ListBufferTypeTag::INVALID:
+        case CellTag::Bool:
+        case CellTag::String:
+        case CellTag::Embedding:
+        case CellTag::ListView:
+        case CellTag::Null:
+        case CellTag::NodeID:
+        case CellTag::EdgeID:
+        case CellTag::DateTime:
+        case CellTag::MapView:
+        case CellTag::Duration:
+        case CellTag::INVALID:
             return std::nullopt;
         break;
     }
@@ -210,14 +210,14 @@ inline std::optional<double> cellOperand(const T& value) {
 
 /// Whether a type-erased cell is tagged as one of the integers.
 inline bool cellHoldsAnInteger(const ListElementView cell) {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    return tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+    return tag == CellTag::Int || tag == CellTag::UInt;
 }
 
 /// The integer a cell holds, read where @ref cellHoldsAnInteger answered for it.
 inline int64_t cellInteger(const ListElementView cell) {
-    if (cell.getTag() == ListBufferTypeTag::UInt) {
+    if (cell.getTag() == CellTag::UInt) {
         return static_cast<int64_t>(cell.getAs<types::UInt64::Primitive>());
     }
 
@@ -247,7 +247,7 @@ inline bool holdsAString(const T& value) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        return value.getTag() == ListBufferTypeTag::String;
+        return value.getTag() == CellTag::String;
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() && holdsAString(*value);
     } else {
@@ -262,7 +262,7 @@ inline bool holdsAList(const T& value) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        return value.getTag() == ListBufferTypeTag::ListView;
+        return value.getTag() == CellTag::ListView;
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() && holdsAList(*value);
     } else {
@@ -276,7 +276,7 @@ inline bool holdsNull(const T& value) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        return value.getTag() == ListBufferTypeTag::Null;
+        return value.getTag() == CellTag::Null;
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return !value.has_value() || holdsNull(*value);
     } else {
@@ -296,7 +296,7 @@ inline ListView joinedListOperand(QueryListBuffer* listBuffer, StringBuffer* str
     if constexpr (std::is_same_v<Decayed, ListView>) {
         return value;
     } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        if (value.getTag() == ListBufferTypeTag::ListView) {
+        if (value.getTag() == CellTag::ListView) {
             return value.template getAs<ListView>();
         }
 
@@ -363,13 +363,13 @@ inline bool holdsAnArithmeticValue(const T& value) {
     using Decayed = std::decay_t<T>;
 
     if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        const ListBufferTypeTag tag = value.getTag();
+        const CellTag tag = value.getTag();
 
-        return tag == ListBufferTypeTag::Int
-            || tag == ListBufferTypeTag::UInt
-            || tag == ListBufferTypeTag::Double
-            || tag == ListBufferTypeTag::DateTime
-            || tag == ListBufferTypeTag::Duration;
+        return tag == CellTag::Int
+            || tag == CellTag::UInt
+            || tag == CellTag::Double
+            || tag == CellTag::DateTime
+            || tag == CellTag::Duration;
     } else if constexpr (TypeUtils::is_optional_v<T>) {
         return value.has_value() && holdsAnArithmeticValue(*value);
     } else {
@@ -467,37 +467,37 @@ using CellConcatenation = std::conditional_t<TaggedCell<A> && TaggedCell<B>,
 // value that has none
 inline bool cellText(const ListElementView cell, std::string_view& text, ValueTextScratch& scratch) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             text = cell.getAs<types::String::Primitive>();
             return true;
         break;
 
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             text = valueTextInto(cell.getAs<types::Int64::Primitive>(), scratch);
             return true;
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             text = valueTextInto(cell.getAs<types::UInt64::Primitive>(), scratch);
             return true;
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             text = valueTextInto(cell.getAs<types::Double::Primitive>(), scratch);
             return true;
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             text = valueTextInto(cell.getAs<types::Bool::Primitive>(), scratch);
             return true;
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             text = valueTextInto(cell.getAs<types::DateTime::Primitive>(), scratch);
             return true;
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             text = valueTextInto(cell.getAs<types::Duration::Primitive>(), scratch);
             return true;
         break;
@@ -834,7 +834,7 @@ struct ListIndexImpl {
     }
 
     inline std::optional<ListElementView> operator()(ListElementView cell, int64_t index) const {
-        if (cell.getTag() != ListBufferTypeTag::ListView) {
+        if (cell.getTag() != CellTag::ListView) {
             return std::nullopt;
         }
 
@@ -850,7 +850,7 @@ struct ListIndexImpl {
     }
 
     inline std::optional<ListElementView> operator()(ListElementView cell, uint64_t index) const {
-        if (cell.getTag() != ListBufferTypeTag::ListView) {
+        if (cell.getTag() != CellTag::ListView) {
             return std::nullopt;
         }
 
@@ -858,7 +858,7 @@ struct ListIndexImpl {
     }
 
     inline std::optional<ListElementView> operator()(MapEntryView entry, int64_t index) const {
-        if (entry.getValueTag() != MapBufferTypeTag::ListView) {
+        if (entry.getValueTag() != CellTag::ListView) {
             return std::nullopt;
         }
 
@@ -866,7 +866,7 @@ struct ListIndexImpl {
     }
 
     inline std::optional<ListElementView> operator()(MapEntryView entry, uint64_t index) const {
-        if (entry.getValueTag() != MapBufferTypeTag::ListView) {
+        if (entry.getValueTag() != CellTag::ListView) {
             return std::nullopt;
         }
 
@@ -927,7 +927,7 @@ struct ValueListIndexImpl {
     inline std::optional<T> operator()(const Base& base, const Index& index) const {
         const std::optional<ListElementView> cell = ListIndexImpl {}(base, index);
 
-        if (!cell.has_value() || cell->getTag() != TypeToListBufferTag<T>::Tag) {
+        if (!cell.has_value() || cell->getTag() != TypeToCellTag<T>::Tag) {
             return std::nullopt;
         }
 

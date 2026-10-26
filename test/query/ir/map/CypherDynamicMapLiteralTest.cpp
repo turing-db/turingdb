@@ -37,7 +37,7 @@
 #include "iterators/ChunkConfig.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "metadata/DateTime.h"
@@ -61,15 +61,15 @@ std::string renderList(ListView list);
 
 std::string renderListElement(const ListElementView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(element.getAs<std::string_view>()) + "'";
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
@@ -95,43 +95,43 @@ std::string renderList(const ListView list) {
 
 std::string renderMapValue(const MapEntryView entry) {
     switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(entry.getValueAs<int64_t>());
         break;
 
-        case MapBufferTypeTag::UInt:
+        case CellTag::UInt:
             return std::to_string(entry.getValueAs<uint64_t>());
         break;
 
-        case MapBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(entry.getValueAs<CustomBool>()) ? "true" : "false";
         break;
 
-        case MapBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(entry.getValueAs<std::string_view>()) + "'";
         break;
 
-        case MapBufferTypeTag::ListView:
+        case CellTag::ListView:
             return renderList(entry.getValueAs<ListView>());
         break;
 
-        case MapBufferTypeTag::MapView:
+        case CellTag::MapView:
             return renderMap(entry.getValueAs<MapView>());
         break;
 
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
-        case MapBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return "node:" + std::to_string(entry.getValueAs<NodeID>().getValue());
         break;
 
-        case MapBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return "edge:" + std::to_string(entry.getValueAs<EdgeID>().getValue());
         break;
 
-        case MapBufferTypeTag::DateTime: {
+        case CellTag::DateTime: {
             std::string formatted;
             DateTime::format(formatted, entry.getValueAs<types::DateTime::Primitive>());
             return formatted;

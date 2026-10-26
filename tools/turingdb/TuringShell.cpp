@@ -50,12 +50,11 @@
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
 
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapUtils.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
-#include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 
@@ -660,7 +659,7 @@ void asString(std::string& out, const ListElementView v) {
         asString(out, typed);
     };
 
-    const ListBufferTypeTag tag = v.getTag();
+    const CellTag tag = v.getTag();
     ListTagDispatcher writer {._tag = tag};
     writer.execute(writeTyped, v);
 }

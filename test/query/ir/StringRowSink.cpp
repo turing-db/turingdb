@@ -15,7 +15,7 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
@@ -146,39 +146,39 @@ void appendListText(const ListView& list, std::string& text);
 
 std::string elementText(const ListElementView& element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return fmt::format("{}", element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return fmt::format("{}", element.getAs<uint64_t>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return scalarText(element.getAs<double>());
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return element.getAs<bool>() ? "true" : "false";
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return std::string(element.getAs<std::string_view>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return fmt::format("{}", element.getAs<NodeID>().getValue());
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return fmt::format("{}", element.getAs<EdgeID>().getValue());
         break;
 
-        case ListBufferTypeTag::DateTime: {
+        case CellTag::DateTime: {
             std::string formatted;
             DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
 
@@ -186,7 +186,7 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
-        case ListBufferTypeTag::Duration: {
+        case CellTag::Duration: {
             std::string formatted;
             Duration::format(formatted, element.getAs<types::Duration::Primitive>());
 
@@ -194,7 +194,7 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
-        case ListBufferTypeTag::ListView: {
+        case CellTag::ListView: {
             std::string elements;
             appendListText(element.getAs<ListView>(), elements);
 
@@ -202,9 +202,9 @@ std::string elementText(const ListElementView& element) {
         }
         break;
 
-        case ListBufferTypeTag::Embedding:
-        case ListBufferTypeTag::MapView:
-        case ListBufferTypeTag::INVALID:
+        case CellTag::Embedding:
+        case CellTag::MapView:
+        case CellTag::INVALID:
             throw std::runtime_error("StringRowSink cannot read this list element as text");
         break;
     }

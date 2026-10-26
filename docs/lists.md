@@ -50,7 +50,7 @@ pointer stability.
 contiguously stored list elements, as well as views into each element: `ListElementView`.
 
 
-Each list element is stored packed and type erased: a "type tag" (`ListBufferTypeTag`) followed by the bytes
+Each list element is stored packed and type erased: a "type tag" (`CellTag`) followed by the bytes
 of the value of the element. Each element must be trivially copyable.
 
 

@@ -7,10 +7,9 @@
 #include <type_traits>
 
 #include "ID.h"
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "NumberOrder.h"
 
-#include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 
@@ -36,117 +35,68 @@ enum class ListElementOrderClass {
     Null,
 };
 
-ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
+ListElementOrderClass orderClassOf(CellTag tag) {
     switch (tag) {
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return ListElementOrderClass::Node;
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return ListElementOrderClass::Edge;
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return ListElementOrderClass::List;
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return ListElementOrderClass::String;
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return ListElementOrderClass::Bool;
         break;
 
-        case ListBufferTypeTag::Int:
-        case ListBufferTypeTag::UInt:
-        case ListBufferTypeTag::Double:
+        case CellTag::Int:
+        case CellTag::UInt:
+        case CellTag::Double:
             return ListElementOrderClass::Number;
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return ListElementOrderClass::Null;
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             return ListElementOrderClass::DateTime;
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             return ListElementOrderClass::Duration;
         break;
 
-        case ListBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             throw FatalException("Cannot order an embedding list element.");
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return ListElementOrderClass::Map;
         break;
 
-        case ListBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw FatalException("Cannot order an untagged list element.");
         break;
     }
 
-    throw FatalException("Unknown ListBufferTypeTag.");
+    throw FatalException("Unknown CellTag.");
 }
 
-ListBufferTypeTag listTagOf(MapBufferTypeTag tag) {
-    switch (tag) {
-        case MapBufferTypeTag::Int:
-            return ListBufferTypeTag::Int;
-        break;
-        case MapBufferTypeTag::UInt:
-            return ListBufferTypeTag::UInt;
-        break;
-        case MapBufferTypeTag::Double:
-            return ListBufferTypeTag::Double;
-        break;
-        case MapBufferTypeTag::Bool:
-            return ListBufferTypeTag::Bool;
-        break;
-        case MapBufferTypeTag::String:
-            return ListBufferTypeTag::String;
-        break;
-        case MapBufferTypeTag::Embedding:
-            return ListBufferTypeTag::Embedding;
-        break;
-        case MapBufferTypeTag::ListView:
-            return ListBufferTypeTag::ListView;
-        break;
-        case MapBufferTypeTag::MapView:
-            return ListBufferTypeTag::MapView;
-        break;
-        case MapBufferTypeTag::Null:
-            return ListBufferTypeTag::Null;
-        break;
-        case MapBufferTypeTag::NodeID:
-            return ListBufferTypeTag::NodeID;
-        break;
-        case MapBufferTypeTag::EdgeID:
-            return ListBufferTypeTag::EdgeID;
-        break;
-        case MapBufferTypeTag::DateTime:
-            return ListBufferTypeTag::DateTime;
-        break;
-        case MapBufferTypeTag::Duration:
-            return ListBufferTypeTag::Duration;
-        break;
-        case MapBufferTypeTag::INVALID:
-            return ListBufferTypeTag::INVALID;
-        break;
-    }
-
-    return ListBufferTypeTag::INVALID;
-}
-
-ListBufferTypeTag tagOf(const ListElementView element) {
+CellTag tagOf(const ListElementView element) {
     return element.getTag();
 }
 
-ListBufferTypeTag tagOf(const MapEntryView entry) {
-    return listTagOf(entry.getValueTag());
+CellTag tagOf(const MapEntryView entry) {
+    return entry.getValueTag();
 }
 
 template <typename T>
@@ -196,11 +146,11 @@ std::strong_ordering compareNumericValues(const Lhs lhs, const Rhs rhs) {
 template <typename View, typename Value>
 std::strong_ordering compareNumberWithValue(const View view, const Value value) {
     switch (tagOf(view)) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return compareNumericValues(valueOf<types::Int64::Primitive>(view), value);
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return compareNumericValues(valueOf<types::UInt64::Primitive>(view), value);
         break;
 
@@ -213,11 +163,11 @@ std::strong_ordering compareNumberWithValue(const View view, const Value value) 
 template <typename Lhs, typename Rhs>
 std::strong_ordering compareNumbers(const Lhs lhs, const Rhs rhs) {
     switch (tagOf(rhs)) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return compareNumberWithValue(lhs, valueOf<types::Int64::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return compareNumberWithValue(lhs, valueOf<types::UInt64::Primitive>(rhs));
         break;
 
@@ -287,15 +237,15 @@ std::strong_ordering compareValues(const Lhs lhs, const Rhs rhs) {
 template <typename View, typename Value>
 bool elementEqualsNumber(const View view, const Value value) {
     switch (tagOf(view)) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return numbersEqual(valueOf<types::Int64::Primitive>(view), value);
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return numbersEqual(valueOf<types::UInt64::Primitive>(view), value);
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return numbersEqual(valueOf<types::Double::Primitive>(view), value);
         break;
 
@@ -321,13 +271,13 @@ std::strong_ordering compareElementWithNumber(const ListElementView element, con
 // sit - directly, or anywhere inside a nested list or map
 template <typename Lhs, typename Rhs>
 bool valuesEqual(const Lhs lhs, const Rhs rhs) {
-    const ListBufferTypeTag lhsTag = tagOf(lhs);
-    const ListBufferTypeTag rhsTag = tagOf(rhs);
+    const CellTag lhsTag = tagOf(lhs);
+    const CellTag rhsTag = tagOf(rhs);
 
-    const bool lhsIsEmbedding = lhsTag == ListBufferTypeTag::Embedding;
-    const bool rhsIsEmbedding = rhsTag == ListBufferTypeTag::Embedding;
-    const bool bothMaps = lhsTag == ListBufferTypeTag::MapView && rhsTag == ListBufferTypeTag::MapView;
-    const bool bothLists = lhsTag == ListBufferTypeTag::ListView && rhsTag == ListBufferTypeTag::ListView;
+    const bool lhsIsEmbedding = lhsTag == CellTag::Embedding;
+    const bool rhsIsEmbedding = rhsTag == CellTag::Embedding;
+    const bool bothMaps = lhsTag == CellTag::MapView && rhsTag == CellTag::MapView;
+    const bool bothLists = lhsTag == CellTag::ListView && rhsTag == CellTag::ListView;
 
     if (lhsIsEmbedding || rhsIsEmbedding) {
         return lhsIsEmbedding && rhsIsEmbedding
@@ -345,15 +295,15 @@ bool valuesEqual(const Lhs lhs, const Rhs rhs) {
 template <typename View, typename Value>
 std::optional<std::partial_ordering> numberComparisonOrder(const View view, const Value value) {
     switch (tagOf(view)) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return numberOrder(valueOf<types::Int64::Primitive>(view), value);
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return numberOrder(valueOf<types::UInt64::Primitive>(view), value);
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return numberOrder(valueOf<types::Double::Primitive>(view), value);
         break;
 
@@ -364,7 +314,7 @@ std::optional<std::partial_ordering> numberComparisonOrder(const View view, cons
 }
 
 template <typename Value, typename View>
-std::optional<std::partial_ordering> sameTypeComparisonOrder(const View view, const ListBufferTypeTag tag, const Value value) {
+std::optional<std::partial_ordering> sameTypeComparisonOrder(const View view, const CellTag tag, const Value value) {
     if (tagOf(view) != tag) {
         return std::nullopt;
     }
@@ -382,38 +332,38 @@ std::optional<std::partial_ordering> sameTypeComparisonOrder(const View view, co
 // <, <=, > and >= do
 template <typename Lhs, typename Rhs>
 std::optional<std::partial_ordering> taggedComparisonOrder(const Lhs lhs, const Rhs rhs) {
-    const ListBufferTypeTag rhsTag = tagOf(rhs);
+    const CellTag rhsTag = tagOf(rhs);
 
     switch (rhsTag) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return numberComparisonOrder(lhs, valueOf<types::Int64::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return numberComparisonOrder(lhs, valueOf<types::UInt64::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return numberComparisonOrder(lhs, valueOf<types::Double::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<types::String::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<types::Bool::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<types::DateTime::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<types::Duration::Primitive>(rhs));
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return sameTypeComparisonOrder(lhs, rhsTag, valueOf<ListView>(rhs));
         break;
 
@@ -523,56 +473,56 @@ bool db::operator==(const ListElementView element, const types::Double::Primitiv
 }
 
 bool db::operator==(const ListElementView element, const types::String::Primitive value) {
-    return element.getTag() == ListBufferTypeTag::String
+    return element.getTag() == CellTag::String
         && element.getAs<types::String::Primitive>() == value;
 }
 
 bool db::operator==(const ListElementView element, const types::Bool::Primitive value) {
-    return element.getTag() == ListBufferTypeTag::Bool
+    return element.getTag() == CellTag::Bool
         && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
 
 bool db::operator==(const ListElementView element, const types::DateTime::Primitive value) {
-    return element.getTag() == ListBufferTypeTag::DateTime
+    return element.getTag() == CellTag::DateTime
         && element.getAs<types::DateTime::Primitive>() == value;
 }
 
 bool db::operator==(const ListElementView element, const types::Duration::Primitive value) {
-    return element.getTag() == ListBufferTypeTag::Duration
+    return element.getTag() == CellTag::Duration
         && element.getAs<types::Duration::Primitive>() == value;
 }
 
 bool db::operator==(const ListElementView element, const types::Embedding::Primitive value) {
-    return element.getTag() == ListBufferTypeTag::Embedding
+    return element.getTag() == CellTag::Embedding
         && EmbeddingEqual {}(element.getAs<types::Embedding::Primitive>(), value);
 }
 
 bool db::operator==(const ListElementView element, const NodeID value) {
-    return element.getTag() == ListBufferTypeTag::NodeID
+    return element.getTag() == CellTag::NodeID
         && element.getAs<NodeID>() == value;
 }
 
 bool db::operator==(const ListElementView element, const EdgeID value) {
-    return element.getTag() == ListBufferTypeTag::EdgeID
+    return element.getTag() == CellTag::EdgeID
         && element.getAs<EdgeID>() == value;
 }
 
 bool db::operator==(const ListElementView element, const ListView value) {
-    return element.getTag() == ListBufferTypeTag::ListView
+    return element.getTag() == CellTag::ListView
         && element.getAs<ListView>() == value;
 }
 
 bool db::operator==(const ListElementView element, const MapView value) {
-    return element.getTag() == ListBufferTypeTag::MapView
+    return element.getTag() == CellTag::MapView
         && element.getAs<MapView>() == value;
 }
 
 bool db::operator==(const ListElementView element, PropertyNull) {
-    return element.getTag() == ListBufferTypeTag::Null;
+    return element.getTag() == CellTag::Null;
 }
 
 bool db::operator==(const MapEntryView entry, PropertyNull) {
-    return entry.getValueTag() == MapBufferTypeTag::Null;
+    return entry.getValueTag() == CellTag::Null;
 }
 
 bool db::operator==(const MapEntryView lhs, const MapEntryView rhs) {
@@ -596,47 +546,47 @@ bool db::operator==(const MapEntryView entry, const types::Double::Primitive val
 }
 
 bool db::operator==(const MapEntryView entry, const types::String::Primitive value) {
-    return entry.getValueTag() == MapBufferTypeTag::String
+    return entry.getValueTag() == CellTag::String
         && entry.getValueAs<types::String::Primitive>() == value;
 }
 
 bool db::operator==(const MapEntryView entry, const types::Bool::Primitive value) {
-    return entry.getValueTag() == MapBufferTypeTag::Bool
+    return entry.getValueTag() == CellTag::Bool
         && static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
 
 bool db::operator==(const MapEntryView entry, const types::DateTime::Primitive value) {
-    return entry.getValueTag() == MapBufferTypeTag::DateTime
+    return entry.getValueTag() == CellTag::DateTime
         && entry.getValueAs<types::DateTime::Primitive>() == value;
 }
 
 bool db::operator==(const MapEntryView entry, const types::Duration::Primitive value) {
-    return entry.getValueTag() == MapBufferTypeTag::Duration
+    return entry.getValueTag() == CellTag::Duration
         && entry.getValueAs<types::Duration::Primitive>() == value;
 }
 
 bool db::operator==(const MapEntryView entry, const types::Embedding::Primitive value) {
-    return entry.getValueTag() == MapBufferTypeTag::Embedding
+    return entry.getValueTag() == CellTag::Embedding
         && EmbeddingEqual {}(entry.getValueAs<types::Embedding::Primitive>(), value);
 }
 
 bool db::operator==(const MapEntryView entry, const NodeID value) {
-    return entry.getValueTag() == MapBufferTypeTag::NodeID
+    return entry.getValueTag() == CellTag::NodeID
         && entry.getValueAs<NodeID>() == value;
 }
 
 bool db::operator==(const MapEntryView entry, const EdgeID value) {
-    return entry.getValueTag() == MapBufferTypeTag::EdgeID
+    return entry.getValueTag() == CellTag::EdgeID
         && entry.getValueAs<EdgeID>() == value;
 }
 
 bool db::operator==(const MapEntryView entry, const ListView value) {
-    return entry.getValueTag() == MapBufferTypeTag::ListView
+    return entry.getValueTag() == CellTag::ListView
         && entry.getValueAs<ListView>() == value;
 }
 
 bool db::operator==(const MapEntryView entry, const MapView value) {
-    return entry.getValueTag() == MapBufferTypeTag::MapView
+    return entry.getValueTag() == CellTag::MapView
         && entry.getValueAs<MapView>() == value;
 }
 
@@ -710,23 +660,23 @@ std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView e
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::String::Primitive value) {
-    return sameTypeComparisonOrder(element, ListBufferTypeTag::String, value);
+    return sameTypeComparisonOrder(element, CellTag::String, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Bool::Primitive value) {
-    return sameTypeComparisonOrder(element, ListBufferTypeTag::Bool, value);
+    return sameTypeComparisonOrder(element, CellTag::Bool, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::DateTime::Primitive value) {
-    return sameTypeComparisonOrder(element, ListBufferTypeTag::DateTime, value);
+    return sameTypeComparisonOrder(element, CellTag::DateTime, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const types::Duration::Primitive value) {
-    return sameTypeComparisonOrder(element, ListBufferTypeTag::Duration, value);
+    return sameTypeComparisonOrder(element, CellTag::Duration, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const ListElementView element, const ListView value) {
-    return sameTypeComparisonOrder(element, ListBufferTypeTag::ListView, value);
+    return sameTypeComparisonOrder(element, CellTag::ListView, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entry, const types::Int64::Primitive value) {
@@ -742,23 +692,23 @@ std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entr
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entry, const types::String::Primitive value) {
-    return sameTypeComparisonOrder(entry, ListBufferTypeTag::String, value);
+    return sameTypeComparisonOrder(entry, CellTag::String, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entry, const types::Bool::Primitive value) {
-    return sameTypeComparisonOrder(entry, ListBufferTypeTag::Bool, value);
+    return sameTypeComparisonOrder(entry, CellTag::Bool, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entry, const types::DateTime::Primitive value) {
-    return sameTypeComparisonOrder(entry, ListBufferTypeTag::DateTime, value);
+    return sameTypeComparisonOrder(entry, CellTag::DateTime, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entry, const types::Duration::Primitive value) {
-    return sameTypeComparisonOrder(entry, ListBufferTypeTag::Duration, value);
+    return sameTypeComparisonOrder(entry, CellTag::Duration, value);
 }
 
 std::optional<std::partial_ordering> db::comparisonOrder(const MapEntryView entry, const ListView value) {
-    return sameTypeComparisonOrder(entry, ListBufferTypeTag::ListView, value);
+    return sameTypeComparisonOrder(entry, CellTag::ListView, value);
 }
 
 std::strong_ordering db::operator<=>(const ListElementView element, const types::DateTime::Primitive value) {

@@ -87,22 +87,22 @@ TEST_F(TuringProtoParameterWriterTest, scalarsKeepTheirTypesUnderSortedNames) {
 
     auto entry = view.begin();
     EXPECT_EQ(entry->getKey(), "active");
-    ASSERT_EQ(entry->getValueTag(), MapBufferTypeTag::Bool);
+    ASSERT_EQ(entry->getValueTag(), CellTag::Bool);
     EXPECT_TRUE(entry->getValueAs<Bool>());
     ++entry;
     EXPECT_EQ(entry->getKey(), "age");
-    ASSERT_EQ(entry->getValueTag(), MapBufferTypeTag::Int);
+    ASSERT_EQ(entry->getValueTag(), CellTag::Int);
     EXPECT_EQ(entry->getValueAs<Int64>(), -32);
     ++entry;
     EXPECT_EQ(entry->getKey(), "missing");
-    EXPECT_EQ(entry->getValueTag(), MapBufferTypeTag::Null);
+    EXPECT_EQ(entry->getValueTag(), CellTag::Null);
     ++entry;
     EXPECT_EQ(entry->getKey(), "name");
-    ASSERT_EQ(entry->getValueTag(), MapBufferTypeTag::String);
+    ASSERT_EQ(entry->getValueTag(), CellTag::String);
     EXPECT_EQ(entry->getValueAs<String>(), "Remy");
     ++entry;
     EXPECT_EQ(entry->getKey(), "score");
-    ASSERT_EQ(entry->getValueTag(), MapBufferTypeTag::Double);
+    ASSERT_EQ(entry->getValueTag(), CellTag::Double);
     EXPECT_EQ(entry->getValueAs<Double>(), 1.5);
 }
 
@@ -133,31 +133,31 @@ TEST_F(TuringProtoParameterWriterTest, listsAndMapsNest) {
 
     const MapEntryView labelsEntry = view.front();
     EXPECT_EQ(labelsEntry.getKey(), "labels");
-    ASSERT_EQ(labelsEntry.getValueTag(), MapBufferTypeTag::ListView);
+    ASSERT_EQ(labelsEntry.getValueTag(), CellTag::ListView);
 
     const ListView decodedLabels = labelsEntry.getValueAs<ListView>();
     ASSERT_EQ(decodedLabels.size(), 2u);
-    ASSERT_EQ(decodedLabels.front().getTag(), ListBufferTypeTag::String);
+    ASSERT_EQ(decodedLabels.front().getTag(), CellTag::String);
     EXPECT_EQ(decodedLabels.front().getAs<String>(), "Person");
-    ASSERT_EQ(decodedLabels.back().getTag(), ListBufferTypeTag::ListView);
+    ASSERT_EQ(decodedLabels.back().getTag(), CellTag::ListView);
 
     const ListView decodedInner = decodedLabels.back().getAs<ListView>();
     ASSERT_EQ(decodedInner.size(), 2u);
     EXPECT_EQ(decodedInner.front().getAs<String>(), "a");
-    ASSERT_EQ(decodedInner.back().getTag(), ListBufferTypeTag::Int);
+    ASSERT_EQ(decodedInner.back().getTag(), CellTag::Int);
     EXPECT_EQ(decodedInner.back().getAs<Int64>(), 1);
 
     const MapEntryView propertiesEntry = view.back();
     EXPECT_EQ(propertiesEntry.getKey(), "properties");
-    ASSERT_EQ(propertiesEntry.getValueTag(), MapBufferTypeTag::MapView);
+    ASSERT_EQ(propertiesEntry.getValueTag(), CellTag::MapView);
 
     const MapView decodedProperties = propertiesEntry.getValueAs<MapView>();
     ASSERT_EQ(decodedProperties.size(), 2u);
     EXPECT_EQ(decodedProperties.front().getKey(), "a");
-    ASSERT_EQ(decodedProperties.front().getValueTag(), MapBufferTypeTag::ListView);
+    ASSERT_EQ(decodedProperties.front().getValueTag(), CellTag::ListView);
     EXPECT_TRUE(decodedProperties.front().getValueAs<ListView>().empty());
     EXPECT_EQ(decodedProperties.back().getKey(), "b");
-    ASSERT_EQ(decodedProperties.back().getValueTag(), MapBufferTypeTag::MapView);
+    ASSERT_EQ(decodedProperties.back().getValueTag(), CellTag::MapView);
 
     const MapView decodedC = decodedProperties.back().getValueAs<MapView>();
     ASSERT_EQ(decodedC.size(), 1u);
@@ -214,12 +214,12 @@ TEST_F(TuringProtoParameterWriterTest, aDeeplyNestedParameterIsWritten) {
     MapView view;
     decode(view);
     ASSERT_EQ(view.size(), 1u);
-    ASSERT_EQ(view.front().getValueTag(), MapBufferTypeTag::ListView);
+    ASSERT_EQ(view.front().getValueTag(), CellTag::ListView);
 
     ListView list = view.front().getValueAs<ListView>();
     for (size_t depth = 1; depth < DEPTH; depth++) {
         ASSERT_EQ(list.size(), 1u);
-        ASSERT_EQ(list.front().getTag(), ListBufferTypeTag::ListView);
+        ASSERT_EQ(list.front().getTag(), CellTag::ListView);
         list = list.front().getAs<ListView>();
     }
 

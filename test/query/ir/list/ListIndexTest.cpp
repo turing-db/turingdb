@@ -43,7 +43,7 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListElementView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
@@ -64,7 +64,7 @@ using GroupRows = std::vector<std::pair<std::optional<types::Int64::Primitive>, 
 // the end of the list, or a null inside it. getAs reads the cell without checking its
 // tag, so a null has to be told from a value before the read, not after.
 std::optional<types::Int64::Primitive> elementAsInteger(const std::optional<ListElementView>& element) {
-    if (!element.has_value() || element->getTag() == ListBufferTypeTag::Null) {
+    if (!element.has_value() || element->getTag() == CellTag::Null) {
         return std::nullopt;
     }
 

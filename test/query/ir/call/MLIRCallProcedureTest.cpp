@@ -27,7 +27,7 @@
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/LabelSet.h"
@@ -879,7 +879,7 @@ public:
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             std::vector<std::string> tags;
             for (const ListElementView& element : tagRaw[rowIndex]) {
-                ASSERT_EQ(element.getTag(), ListBufferTypeTag::String);
+                ASSERT_EQ(element.getTag(), CellTag::String);
                 tags.push_back(std::string(element.getAs<std::string_view>()));
             }
 
@@ -887,7 +887,7 @@ public:
             // floats are that element's span.
             std::vector<float> coords;
             for (const ListElementView& element : coordRaw[rowIndex]) {
-                ASSERT_EQ(element.getTag(), ListBufferTypeTag::Embedding);
+                ASSERT_EQ(element.getTag(), CellTag::Embedding);
                 const std::span<const float> embedding = element.getAs<std::span<const float>>();
                 coords.assign(embedding.begin(), embedding.end());
             }

@@ -69,20 +69,20 @@ export const ColumnEncoding = Object.freeze({
     OPTIONAL_CONSTANT: 3,
 });
 
-// Mirrors db::ListBufferTypeTag (storage/list/ListBufferTypeTag.h).
-const LIST_TAG_INT = 0;
-const LIST_TAG_UINT = 1;
-const LIST_TAG_DOUBLE = 2;
-const LIST_TAG_BOOL = 3;
-const LIST_TAG_STRING = 4;
-const LIST_TAG_EMBEDDING = 5;
-const LIST_TAG_LIST_VIEW = 6;
-const LIST_TAG_NULL = 7;
-const LIST_TAG_NODE_ID = 8;
-const LIST_TAG_EDGE_ID = 9;
-const LIST_TAG_DATETIME = 10;
-const LIST_TAG_MAP_VIEW = 11;
-const LIST_TAG_DURATION = 12;
+// Mirrors db::CellTag (storage/CellTag.h).
+const CELL_TAG_INT = 0;
+const CELL_TAG_UINT = 1;
+const CELL_TAG_DOUBLE = 2;
+const CELL_TAG_BOOL = 3;
+const CELL_TAG_STRING = 4;
+const CELL_TAG_EMBEDDING = 5;
+const CELL_TAG_LIST_VIEW = 6;
+const CELL_TAG_NULL = 7;
+const CELL_TAG_NODE_ID = 8;
+const CELL_TAG_EDGE_ID = 9;
+const CELL_TAG_DATETIME = 10;
+const CELL_TAG_MAP_VIEW = 11;
+const CELL_TAG_DURATION = 12;
 
 // Mirrors db::QueryStatus::Status (base/QueryStatus.h); the ERROR packet's first
 // payload byte indexes into this.
@@ -302,41 +302,41 @@ export class NestedReader {
         const payload = this._cursor + 1;
 
         switch (tag) {
-            case LIST_TAG_INT:
+            case CELL_TAG_INT:
                 this._cursor = payload + 8;
                 return this._view.getBigInt64(payload, true);
-            case LIST_TAG_UINT:
-            case LIST_TAG_NODE_ID:
-            case LIST_TAG_EDGE_ID:
+            case CELL_TAG_UINT:
+            case CELL_TAG_NODE_ID:
+            case CELL_TAG_EDGE_ID:
                 this._cursor = payload + 8;
                 return this._view.getBigUint64(payload, true);
-            case LIST_TAG_DATETIME:
-            case LIST_TAG_DURATION:
+            case CELL_TAG_DATETIME:
+            case CELL_TAG_DURATION:
                 this._cursor = payload + 8;
                 return this._view.getBigInt64(payload, true);
-            case LIST_TAG_DOUBLE:
+            case CELL_TAG_DOUBLE:
                 this._cursor = payload + 8;
                 return this._view.getFloat64(payload, true);
-            case LIST_TAG_BOOL:
+            case CELL_TAG_BOOL:
                 this._cursor = payload + 1;
                 return this._bytes[payload] !== 0;
-            case LIST_TAG_NULL:
+            case CELL_TAG_NULL:
                 this._cursor = payload + 1;
                 return null;
-            case LIST_TAG_STRING:
+            case CELL_TAG_STRING:
                 this._cursor = payload + 4;
                 return this._readString(this._view.getUint32(payload, true));
-            case LIST_TAG_EMBEDDING: {
+            case CELL_TAG_EMBEDDING: {
                 const size = this._view.getUint32(payload, true);
                 const start = payload + 4;
                 this._cursor = start + size;
                 // slice() lands the floats in a fresh, aligned buffer.
                 return new Float32Array(this._bytes.slice(start, start + size).buffer);
             }
-            case LIST_TAG_LIST_VIEW:
+            case CELL_TAG_LIST_VIEW:
                 this._cursor = payload;
                 return this._readList();
-            case LIST_TAG_MAP_VIEW:
+            case CELL_TAG_MAP_VIEW:
                 this._cursor = payload;
                 return this._readMap();
             default:

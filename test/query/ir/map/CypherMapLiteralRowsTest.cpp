@@ -35,7 +35,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "versioning/Transaction.h"
@@ -57,24 +57,24 @@ std::string renderMap(MapView map);
 
 std::string renderMapValue(const MapEntryView entry) {
     switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(entry.getValueAs<int64_t>());
         break;
 
-        case MapBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(entry.getValueAs<CustomBool>()) ? "true" : "false";
         break;
 
         // Quoted so a zero-length string reads as a value rather than as nothing
-        case MapBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(entry.getValueAs<std::string_view>()) + "'";
         break;
 
-        case MapBufferTypeTag::MapView:
+        case CellTag::MapView:
             return renderMap(entry.getValueAs<MapView>());
         break;
 
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 

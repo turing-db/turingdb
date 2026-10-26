@@ -425,13 +425,13 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
         // without consulting its type tag, so check the tag against the one the
         // primitive is stored under: a homogeneous unwind whose column type disagrees
         // with its literals would otherwise read a value of the wrong type.
-        constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+        constexpr CellTag expectedTag = TypeToCellTag<Primitive>::Tag;
 
         for (size_t index = 0; index < rows; index++) {
             const ListElementView element = elements[offset + index];
-            const ListBufferTypeTag tag = element.getTag();
+            const CellTag tag = element.getTag();
 
-            if (tag == ListBufferTypeTag::Null) {
+            if (tag == CellTag::Null) {
                 raw[index] = std::nullopt;
                 continue;
             }
@@ -520,13 +520,13 @@ void unwindListValueEmit(const Column* source,
     std::vector<std::optional<Primitive>>& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
-    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+    constexpr CellTag expectedTag = TypeToCellTag<Primitive>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
         const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
-        const ListBufferTypeTag tag = element.getTag();
+        const CellTag tag = element.getTag();
 
-        if (tag == ListBufferTypeTag::Null) {
+        if (tag == CellTag::Null) {
             outputRaw[index] = std::nullopt;
             continue;
         }
@@ -552,13 +552,13 @@ void unwindListValidIDEmit(const Column* source,
     std::vector<IDType>& outputRaw = static_cast<ColumnVector<IDType>*>(output)->getRaw();
     outputRaw.resize(rowsRaw.size());
 
-    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<IDType>::Tag;
+    constexpr CellTag expectedTag = TypeToCellTag<IDType>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
         const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
-        const ListBufferTypeTag tag = element.getTag();
+        const CellTag tag = element.getTag();
 
-        if (tag == ListBufferTypeTag::Null) {
+        if (tag == CellTag::Null) {
             outputRaw[index] = IDType {};
             continue;
         }
@@ -572,19 +572,19 @@ void unwindListValidIDEmit(const Column* source,
 // The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
 // and any other tagged scalar the single row it is.
 size_t taggedCellRowCount(const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
+    const CellTag tag = element.getTag();
 
-    if (tag == ListBufferTypeTag::ListView) {
+    if (tag == CellTag::ListView) {
         return element.getAs<ListView>().size();
     }
 
-    return tag == ListBufferTypeTag::Null ? 0 : 1;
+    return tag == CellTag::Null ? 0 : 1;
 }
 
 // The element one tagged cell gives up at @param position: that of the list it holds, or
 // the cell itself where it holds anything else.
 ListElementView taggedCellElement(const ListElementView element, size_t position) {
-    if (element.getTag() != ListBufferTypeTag::ListView) {
+    if (element.getTag() != CellTag::ListView) {
         return element;
     }
 
@@ -1498,11 +1498,11 @@ void collectNoSurvivors(const Column*, ColumnVector<size_t>*) {
 // The truth value a type-erased cell holds: its boolean, or null where it holds a null
 std::optional<bool> cellTruth(ListElementView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(cell.getAs<types::Bool::Primitive>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return std::nullopt;
         break;
 
@@ -1553,15 +1553,15 @@ std::optional<NodeID> namedNode(types::UInt64::Primitive id) {
 
 std::optional<NodeID> namedNode(ListElementView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return namedNode(cell.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return namedNode(cell.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return cell.getAs<NodeID>();
         break;
 
@@ -2161,7 +2161,7 @@ EntityID pathEntityAt(const Path& path, size_t index) {
 // The entities of one kind a path runs through, in the order the path holds them. A path
 // alternates node and edge from its first node, so they are every other entry from @param first
 template <typename IDType, typename PathType>
-ListView listPathEntities(const PathType& path, size_t first, ListBufferTypeTag tag, QueryListBuffer& buffer) {
+ListView listPathEntities(const PathType& path, size_t first, CellTag tag, QueryListBuffer& buffer) {
     const size_t count = (path.size() - first + 1) / 2;
     ListWriteCursor cursor = buffer.reserveList(count, count * sizeof(IDType));
 
@@ -2203,9 +2203,9 @@ void readPathElements(const std::vector<PathType>& paths,
         if (path.empty()) {
             lists[row] = std::nullopt;
         } else if (kind == PathElementsKind::Nodes) {
-            lists[row] = listPathEntities<NodeID>(path, 0, ListBufferTypeTag::NodeID, listBuffer);
+            lists[row] = listPathEntities<NodeID>(path, 0, CellTag::NodeID, listBuffer);
         } else {
-            lists[row] = listPathEntities<EdgeID>(path, 1, ListBufferTypeTag::EdgeID, listBuffer);
+            lists[row] = listPathEntities<EdgeID>(path, 1, CellTag::EdgeID, listBuffer);
         }
     }
 }
@@ -2417,7 +2417,7 @@ int compareOptListElementColumn(const Column* column, size_t a, size_t b) {
         static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
 
     const auto isNull = [](const std::optional<ListElementView>& element) {
-        return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
+        return !element.has_value() || element->getTag() == CellTag::Null;
     };
 
     const bool aNull = isNull(raw[a]);
@@ -2585,7 +2585,7 @@ void distinctAppendValueBytes(std::string& key, const ListView value) {
 // A number keys under the Int tag whenever it holds one, so 1, 1.0 and a small unsigned 1
 // all key alike - which is what makes the key agree with numeric equality.
 void distinctAppendIntegerKey(std::string& key, const types::Int64::Primitive value) {
-    key.push_back(static_cast<char>(ListBufferTypeTag::Int));
+    key.push_back(static_cast<char>(CellTag::Int));
     distinctAppendValueBytes(key, value);
 }
 
@@ -2599,7 +2599,7 @@ void distinctAppendNumberKey(std::string& key, const types::UInt64::Primitive va
         return;
     }
 
-    key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
+    key.push_back(static_cast<char>(CellTag::UInt));
     distinctAppendValueBytes(key, value);
 }
 
@@ -2616,22 +2616,22 @@ void distinctAppendNumberKey(std::string& key, const types::Double::Primitive va
     } else if (holdsAnUnsigned) {
         distinctAppendNumberKey(key, static_cast<types::UInt64::Primitive>(value));
     } else {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Double));
+        key.push_back(static_cast<char>(CellTag::Double));
         distinctAppendValueBytes(key, value);
     }
 }
 
 void distinctAppendNumberBytes(std::string& key, const ListElementView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return distinctAppendNumberKey(key, element.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return distinctAppendNumberKey(key, element.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return distinctAppendNumberKey(key, element.getAs<types::Double::Primitive>());
         break;
 
@@ -2649,87 +2649,87 @@ void distinctAppendMapBytes(std::string& key, MapView map);
 // Serialize one map value into the row key the way a list element is serialized: a number
 // normalised first, then the tag and the value's bytes.
 void distinctAppendMapValueBytes(std::string& key, const MapEntryView entry) {
-    const MapBufferTypeTag tag = entry.getValueTag();
+    const CellTag tag = entry.getValueTag();
 
     switch (tag) {
-        case MapBufferTypeTag::Int:
+        case CellTag::Int:
             distinctAppendNumberKey(key, entry.getValueAs<types::Int64::Primitive>());
             return;
         break;
 
-        case MapBufferTypeTag::UInt:
+        case CellTag::UInt:
             distinctAppendNumberKey(key, entry.getValueAs<types::UInt64::Primitive>());
             return;
         break;
 
-        case MapBufferTypeTag::Double:
+        case CellTag::Double:
             distinctAppendNumberKey(key, entry.getValueAs<types::Double::Primitive>());
             return;
         break;
 
-        case MapBufferTypeTag::Bool:
-            key.push_back(static_cast<char>(ListBufferTypeTag::Bool));
+        case CellTag::Bool:
+            key.push_back(static_cast<char>(CellTag::Bool));
             distinctAppendValueBytes(key, static_cast<bool>(entry.getValueAs<types::Bool::Primitive>()));
             return;
         break;
 
-        case MapBufferTypeTag::String:
-            key.push_back(static_cast<char>(ListBufferTypeTag::String));
+        case CellTag::String:
+            key.push_back(static_cast<char>(CellTag::String));
             distinctAppendValueBytes(key, entry.getValueAs<types::String::Primitive>());
             return;
         break;
 
-        case MapBufferTypeTag::ListView:
-            key.push_back(static_cast<char>(ListBufferTypeTag::ListView));
+        case CellTag::ListView:
+            key.push_back(static_cast<char>(CellTag::ListView));
             distinctAppendListBytes(key, entry.getValueAs<ListView>());
             return;
         break;
 
-        case MapBufferTypeTag::MapView:
-            key.push_back(static_cast<char>(ListBufferTypeTag::MapView));
+        case CellTag::MapView:
+            key.push_back(static_cast<char>(CellTag::MapView));
             distinctAppendMapBytes(key, entry.getValueAs<MapView>());
             return;
         break;
 
-        case MapBufferTypeTag::Null:
-            key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        case CellTag::Null:
+            key.push_back(static_cast<char>(CellTag::Null));
             return;
         break;
 
-        case MapBufferTypeTag::NodeID:
-            key.push_back(static_cast<char>(ListBufferTypeTag::NodeID));
+        case CellTag::NodeID:
+            key.push_back(static_cast<char>(CellTag::NodeID));
             distinctAppendValueBytes(key, entry.getValueAs<NodeID>().getValue());
             return;
         break;
 
-        case MapBufferTypeTag::EdgeID:
-            key.push_back(static_cast<char>(ListBufferTypeTag::EdgeID));
+        case CellTag::EdgeID:
+            key.push_back(static_cast<char>(CellTag::EdgeID));
             distinctAppendValueBytes(key, entry.getValueAs<EdgeID>().getValue());
             return;
         break;
 
-        case MapBufferTypeTag::DateTime:
-            key.push_back(static_cast<char>(ListBufferTypeTag::DateTime));
+        case CellTag::DateTime:
+            key.push_back(static_cast<char>(CellTag::DateTime));
             distinctAppendValueBytes(key, entry.getValueAs<types::DateTime::Primitive>().getMicroseconds());
             return;
         break;
 
-        case MapBufferTypeTag::Duration:
-            key.push_back(static_cast<char>(ListBufferTypeTag::Duration));
+        case CellTag::Duration:
+            key.push_back(static_cast<char>(CellTag::Duration));
             distinctAppendValueBytes(key, entry.getValueAs<types::Duration::Primitive>().getMicroseconds());
             return;
         break;
 
-        case MapBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             throw IRException("cannot dedup by an embedding map value");
         break;
 
-        case MapBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw IRException("cannot dedup by an untagged map value");
         break;
     }
 
-    bioassert(false, "Unknown MapBufferTypeTag");
+    bioassert(false, "Unknown CellTag");
 }
 
 // Serialize a map into the row key as its size, then each entry's key length, key bytes and
@@ -2749,78 +2749,78 @@ void distinctAppendMapBytes(std::string& key, const MapView map) {
 }
 
 void distinctAppendElementBytes(std::string& key, const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
+    const CellTag tag = element.getTag();
 
     switch (tag) {
-        case ListBufferTypeTag::Int:
-        case ListBufferTypeTag::UInt:
-        case ListBufferTypeTag::Double:
+        case CellTag::Int:
+        case CellTag::UInt:
+        case CellTag::Double:
             return distinctAppendNumberBytes(key, element);
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, static_cast<bool>(element.getAs<types::Bool::Primitive>()));
             return;
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::String::Primitive>());
             return;
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             key.push_back(static_cast<char>(tag));
             distinctAppendListBytes(key, element.getAs<ListView>());
             return;
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             key.push_back(static_cast<char>(tag));
             return;
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<NodeID>().getValue());
             return;
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<EdgeID>().getValue());
             return;
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::DateTime::Primitive>().getMicroseconds());
             return;
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             key.push_back(static_cast<char>(tag));
             distinctAppendValueBytes(key, element.getAs<types::Duration::Primitive>().getMicroseconds());
             return;
         break;
 
-        case ListBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             throw IRException("cannot dedup by an embedding element");
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             key.push_back(static_cast<char>(tag));
             distinctAppendMapBytes(key, element.getAs<MapView>());
             return;
         break;
 
-        case ListBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw IRException("cannot dedup by an untagged element");
         break;
     }
 
-    bioassert(false, "Unknown ListBufferTypeTag");
+    bioassert(false, "Unknown CellTag");
 }
 
 // A chunk of this kind holds neither a null nor a NaN - an ID column, a plainly-held
@@ -2877,7 +2877,7 @@ bool optEmbeddingColumnRowMatchable(const Column* column, size_t row) {
 bool listElementColumnRowMatchable(const Column* column, size_t row) {
     const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
 
-    return raw[row].getTag() != ListBufferTypeTag::Null;
+    return raw[row].getTag() != CellTag::Null;
 }
 
 // Serialize one row of a type-erased column of tagged scalars into the row key.
@@ -2892,7 +2892,7 @@ void distinctKeyAppendOptListElementColumn(const Column* column, size_t row, std
     const std::optional<ListElementView>& element = raw[row];
 
     if (!element.has_value()) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
@@ -2931,7 +2931,7 @@ void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::strin
     const std::optional<ListView>& list = raw[row];
 
     if (!list.has_value()) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
@@ -2944,7 +2944,7 @@ void distinctKeyAppendOptMapColumn(const Column* column, size_t row, std::string
     const std::optional<MapView>& map = raw[row];
 
     if (!map.has_value()) {
-        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        key.push_back(static_cast<char>(CellTag::Null));
         return;
     }
 
@@ -3139,7 +3139,7 @@ size_t findKeyGroup(const NLHashJoinIndex& index,
 size_t countNonNullElementsColumn(const Column* column) {
     const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
     return std::count_if(raw.begin(), raw.end(), [](const ListElementView element) {
-        return element.getTag() != ListBufferTypeTag::Null;
+        return element.getTag() != CellTag::Null;
     });
 }
 
@@ -3148,7 +3148,7 @@ size_t countPresentElementsColumn(const Column* column) {
         static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
 
     return std::count_if(raw.begin(), raw.end(), [](const std::optional<ListElementView>& element) {
-        return element.has_value() && element->getTag() != ListBufferTypeTag::Null;
+        return element.has_value() && element->getTag() != CellTag::Null;
     });
 }
 
@@ -3242,7 +3242,7 @@ void aggregateUpdateSum(NLAggregateState* state, const Column* input) {
 }
 
 std::optional<ListElementView> presentCell(const ListElementView element) {
-    if (element.getTag() == ListBufferTypeTag::Null) {
+    if (element.getTag() == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -3306,15 +3306,15 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
 // the check the static column types make for a typed column, made per row here.
 double taggedNumericValue(const ListElementView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return static_cast<double>(element.getAs<types::Int64::Primitive>());
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return static_cast<double>(element.getAs<types::UInt64::Primitive>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return element.getAs<types::Double::Primitive>();
         break;
 
@@ -4528,67 +4528,67 @@ void collectValidIDFoldDistinct(Column* values,
 // a collect of type-erased cells buffers each one under the type it came in with.
 template <typename Item>
 Item taggedItem(const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
+    const CellTag tag = element.getTag();
 
     switch (tag) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return Item {element.getAs<types::Int64::Primitive>()};
         break;
 
-        case ListBufferTypeTag::UInt:
+        case CellTag::UInt:
             return Item {element.getAs<types::UInt64::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return Item {element.getAs<types::Double::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return Item {element.getAs<types::Bool::Primitive>()};
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return Item {element.getAs<types::String::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Embedding:
+        case CellTag::Embedding:
             return Item {element.getAs<types::Embedding::Primitive>()};
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return Item {element.getAs<ListView>()};
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return Item {element.getAs<PropertyNull>()};
         break;
 
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return Item {element.getAs<NodeID>()};
         break;
 
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return Item {element.getAs<EdgeID>()};
         break;
 
-        case ListBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             return Item {element.getAs<types::DateTime::Primitive>()};
         break;
 
-        case ListBufferTypeTag::Duration:
+        case CellTag::Duration:
             return Item {element.getAs<types::Duration::Primitive>()};
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return Item {element.getAs<MapView>()};
         break;
 
-        case ListBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw IRException("cannot collect an untagged element");
         break;
     }
 
-    throw IRException("Unknown ListBufferTypeTag");
+    throw IRException("Unknown CellTag");
 }
 
 // The type-erased sibling of collectFold: a tagged cell is there in every row, but one
@@ -4829,14 +4829,14 @@ bool absentValueCell(const Column* source, size_t row) {
 bool absentTaggedCell(const Column* source, size_t row) {
     const ListElementView element = (*static_cast<const ColumnVector<ListElementView>*>(source))[row];
 
-    return element.getTag() == ListBufferTypeTag::Null;
+    return element.getTag() == CellTag::Null;
 }
 
 bool absentOptTaggedCell(const Column* source, size_t row) {
     const std::optional<ListElementView>& element =
         (*static_cast<const ColumnOptVector<ListElementView>*>(source))[row];
 
-    return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
+    return !element.has_value() || element->getTag() == CellTag::Null;
 }
 
 // Read one cell of a nullable value column as the value it contributes to a list or a map:
@@ -4885,13 +4885,13 @@ NLKeyedValue mapRead(const Column* input, size_t row) {
 // else
 NLKeyedValue readKeyedCell(const ListElementView cell) {
     switch (cell.getTag()) {
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return cell.getAs<MapView>();
         break;
-        case ListBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return cell.getAs<NodeID>();
         break;
-        case ListBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return cell.getAs<EdgeID>();
         break;
         default:
@@ -4902,13 +4902,13 @@ NLKeyedValue readKeyedCell(const ListElementView cell) {
 
 NLKeyedValue readKeyedCell(const MapEntryView entry) {
     switch (entry.getValueTag()) {
-        case MapBufferTypeTag::MapView:
+        case CellTag::MapView:
             return entry.getValueAs<MapView>();
         break;
-        case MapBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             return entry.getValueAs<NodeID>();
         break;
-        case MapBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             return entry.getValueAs<EdgeID>();
         break;
         default:
@@ -5027,7 +5027,7 @@ std::optional<types::String::Primitive> nullStringRead(const Column*, size_t) {
 
 // The list a type-erased cell holds, absent where the cell holds anything else
 std::optional<ListView> cellListRead(const ListElementView cell) {
-    if (cell.getTag() != ListBufferTypeTag::ListView) {
+    if (cell.getTag() != CellTag::ListView) {
         return std::nullopt;
     }
 
@@ -5090,12 +5090,12 @@ void sortListNumbers(const ListView list, std::vector<ListElementView>& numbers,
     numbers.clear();
 
     for (const ListElementView element : list) {
-        const ListBufferTypeTag tag = element.getTag();
-        const bool isNumber = tag == ListBufferTypeTag::Int
-                           || tag == ListBufferTypeTag::UInt
-                           || tag == ListBufferTypeTag::Double;
+        const CellTag tag = element.getTag();
+        const bool isNumber = tag == CellTag::Int
+                           || tag == CellTag::UInt
+                           || tag == CellTag::Double;
 
-        if (tag == ListBufferTypeTag::Null) {
+        if (tag == CellTag::Null) {
             continue;
         } else if (!isNumber) {
             throw IRException(fmt::format("{}() takes the percentile of numbers only", functionName));
@@ -9083,7 +9083,7 @@ void NLExecutor::runDynamicMapKey(NLExecutionContext* context, NLFunctionData* d
         MapWriteCursor absentCursor = mapBuffer.reserveMap(1, sizeof(PropertyNull));
         absentCursor.writeKey(*key);
 
-        return absentCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+        return absentCursor.writeValue(CellTag::Null, PropertyNull {});
     };
 
     Column* result = dynamicMapKey->getResult();

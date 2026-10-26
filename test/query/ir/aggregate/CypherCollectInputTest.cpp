@@ -59,7 +59,7 @@ void readInt64List(const ListView& view, Values& out) {
 void readNodeIDList(const ListView& view, NodeIDs& out) {
     out.clear();
     for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::NodeID);
+        ASSERT_EQ(element.getTag(), CellTag::NodeID);
         out.push_back(element.getAs<NodeID>().getValue());
     }
 }

@@ -47,7 +47,7 @@
 
 #include "list/ListView.h"
 #include "list/ListElementView.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "DBProgramGenerator.h"
 #include "StorageDialect.h"
@@ -429,47 +429,47 @@ private:
     // there; a list literal may also hold a list, which is printed as one.
     static void printListElement(const ListElementView& element) {
         switch (element.getTag()) {
-            case ListBufferTypeTag::Int:
+            case CellTag::Int:
                 std::cout << element.getAs<int64_t>();
             break;
 
-            case ListBufferTypeTag::UInt:
+            case CellTag::UInt:
                 std::cout << element.getAs<uint64_t>();
             break;
 
-            case ListBufferTypeTag::Double:
+            case CellTag::Double:
                 std::cout << element.getAs<double>();
             break;
 
-            case ListBufferTypeTag::Bool:
+            case CellTag::Bool:
                 std::cout << (static_cast<bool>(element.getAs<CustomBool>()) ? "true" : "false");
             break;
 
-            case ListBufferTypeTag::String:
+            case CellTag::String:
                 std::cout << element.getAs<std::string_view>();
             break;
 
-            case ListBufferTypeTag::Embedding:
+            case CellTag::Embedding:
                 std::cout << "<embedding>";
             break;
 
-            case ListBufferTypeTag::ListView:
+            case CellTag::ListView:
                 printList(element.getAs<ListView>());
             break;
 
-            case ListBufferTypeTag::Null:
+            case CellTag::Null:
                 std::cout << "null";
             break;
 
-            case ListBufferTypeTag::NodeID:
+            case CellTag::NodeID:
                 std::cout << element.getAs<NodeID>().getValue();
             break;
 
-            case ListBufferTypeTag::EdgeID:
+            case CellTag::EdgeID:
                 std::cout << element.getAs<EdgeID>().getValue();
             break;
 
-            case ListBufferTypeTag::DateTime: {
+            case CellTag::DateTime: {
                 std::string formatted;
                 DateTime::format(formatted, element.getAs<types::DateTime::Primitive>());
 
@@ -477,7 +477,7 @@ private:
             }
             break;
 
-            case ListBufferTypeTag::Duration: {
+            case CellTag::Duration: {
                 std::string formatted;
                 Duration::format(formatted, element.getAs<types::Duration::Primitive>());
 
@@ -485,8 +485,8 @@ private:
             }
             break;
 
-            case ListBufferTypeTag::MapView:
-            case ListBufferTypeTag::INVALID:
+            case CellTag::MapView:
+            case CellTag::INVALID:
                 std::cout << "?";
             break;
         }

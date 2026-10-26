@@ -7,7 +7,7 @@ We wish to support the CYPHER map type as a stored property value; https://neo4j
 
 `storage/map/` mirrors `storage/list/`. `MapBuffer` stores entries contiguously and hands out a
 `MapView`: a span over `MapEntryView`s. An entry is laid out as a 16-byte `std::string_view` key,
-a one-byte `MapBufferTypeTag`, then the bytes of the value.
+a one-byte `CellTag`, then the bytes of the value.
 
 The key is a view. So is a string or embedding value, and a list or nested map value is a view
 into another buffer. A `MapBuffer` therefore owns none of the data a map refers to.

@@ -29,11 +29,7 @@ struct ContainerViewOf<NestedContainerKind::Map> {
 
 template <NestedContainerKind Kind>
 constexpr size_t tagSizeOf() {
-    if constexpr (Kind == NestedContainerKind::List) {
-        return sizeof(db::ListBufferTypeTag);
-    } else {
-        return sizeof(db::MapBufferTypeTag);
-    }
+    return sizeof(db::CellTag);
 }
 
 /**
@@ -258,11 +254,11 @@ inline bool drainContainerStack(DecodeContext* context,
                 return false;
             }
 
-            if (context->_inBuf->readable() < sizeof(db::MapBufferTypeTag)) {
+            if (context->_inBuf->readable() < sizeof(db::CellTag)) {
                 return false;
             }
 
-            db::MapBufferTypeTag tag {};
+            db::CellTag tag {};
             memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));
 
             const bool topLevelEntry = (sink->openContainerCount() == 1);
@@ -286,11 +282,11 @@ inline bool drainContainerStack(DecodeContext* context,
 
             continue;
         } else {
-            if (context->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
+            if (context->_inBuf->readable() < sizeof(db::CellTag)) {
                 return false;
             }
 
-            db::ListBufferTypeTag tag {};
+            db::CellTag tag {};
             // Peek the tag (don't consume): keeping it in the buffer lets the fixed-width path
             // memcpy [tag][value] in one go.
             memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));

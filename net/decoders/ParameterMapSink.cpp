@@ -6,8 +6,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "ParameterMap.h"
-#include "list/ListBufferTypeTag.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "metadata/PropertyType.h"
 
 #include "TuringException.h"
@@ -27,39 +26,37 @@ T readValue(const char* bytes) {
     return value;
 }
 
-// List and map tags name their members alike but number them differently, so one reader
-// serves both. The bytes are [tag][value].
-template <typename Tag>
+// The bytes are [tag][value]
 void readScalar(const char* bytes, db::ParameterValue& slot) {
-    const Tag tag = readValue<Tag>(bytes);
-    const char* value = bytes + sizeof(Tag);
+    const db::CellTag tag = readValue<db::CellTag>(bytes);
+    const char* value = bytes + sizeof(db::CellTag);
 
     switch (tag) {
-        case Tag::Int:
+        case db::CellTag::Int:
             slot.setInt64(readValue<db::types::Int64::Primitive>(value));
         break;
-        case Tag::Double:
+        case db::CellTag::Double:
             slot.setDouble(readValue<db::types::Double::Primitive>(value));
         break;
-        case Tag::Bool:
+        case db::CellTag::Bool:
             slot.setBool(readValue<db::types::Bool::Primitive>(value));
         break;
-        case Tag::Null:
+        case db::CellTag::Null:
             slot.setNull();
         break;
-        case Tag::UInt:
+        case db::CellTag::UInt:
             throwUnsupportedType("UInt64");
         break;
-        case Tag::NodeID:
+        case db::CellTag::NodeID:
             throwUnsupportedType("NodeID");
         break;
-        case Tag::EdgeID:
+        case db::CellTag::EdgeID:
             throwUnsupportedType("EdgeID");
         break;
-        case Tag::DateTime:
+        case db::CellTag::DateTime:
             throwUnsupportedType("DateTime");
         break;
-        case Tag::Duration:
+        case db::CellTag::Duration:
             throwUnsupportedType("Duration");
         break;
         default:
@@ -121,7 +118,7 @@ db::ListElementView ParameterMapSink::writeListValue(std::span<const float> valu
 }
 
 db::ListElementView ParameterMapSink::writeListElementBytes(const char* bytes, size_t byteSize) {
-    readScalar<db::ListBufferTypeTag>(bytes, nextSlot());
+    readScalar(bytes, nextSlot());
     completeValue();
     return {};
 }
@@ -143,7 +140,7 @@ void ParameterMapSink::writeMapKey(std::string_view key) {
 }
 
 void ParameterMapSink::writeMapValueBytes(const char* bytes, size_t byteSize) {
-    readScalar<db::MapBufferTypeTag>(bytes, nextSlot());
+    readScalar(bytes, nextSlot());
     completeValue();
 }
 

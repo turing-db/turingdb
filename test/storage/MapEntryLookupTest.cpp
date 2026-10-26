@@ -32,7 +32,7 @@ TEST(MapEntryLookupTest, findsTheEntryUnderAKey) {
     ASSERT_TRUE(findMapEntry(map, "b", entry));
 
     EXPECT_EQ(entry.getKey(), "b");
-    EXPECT_EQ(entry.getValueTag(), MapBufferTypeTag::Int);
+    EXPECT_EQ(entry.getValueTag(), CellTag::Int);
     EXPECT_EQ(entry.getValueAs<int64_t>(), 2);
 }
 

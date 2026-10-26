@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ListView.h"
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "map/MapView.h"
 
@@ -14,124 +14,124 @@ namespace db {
 
 /// Helper to call a function on a type given a tag
 struct ListTagDispatcher {
-    ListBufferTypeTag _tag {ListBufferTypeTag::INVALID};
+    CellTag _tag {CellTag::INVALID};
 
     auto execute(const auto& executor, const ListElementView view) const {
         switch (_tag) {
-            case ListBufferTypeTag::Int:
+            case CellTag::Int:
                 return executor.template operator()<types::Int64::Primitive>(view);
             break;
-            case ListBufferTypeTag::UInt:
+            case CellTag::UInt:
                 return executor.template operator()<types::UInt64::Primitive>(view);
             break;
-            case ListBufferTypeTag::Double:
+            case CellTag::Double:
                 return executor.template operator()<types::Double::Primitive>(view);
             break;
-            case ListBufferTypeTag::Bool:
+            case CellTag::Bool:
                 return executor.template operator()<types::Bool::Primitive>(view);
             break;
-            case ListBufferTypeTag::String:
+            case CellTag::String:
                 return executor.template operator()<types::String::Primitive>(view);
             break;
-            case ListBufferTypeTag::Embedding:
+            case CellTag::Embedding:
                 return executor.template operator()<types::Embedding::Primitive>(view);
             break;
-            case ListBufferTypeTag::ListView:
+            case CellTag::ListView:
                 return executor.template operator()<ListView>(view);
             break;
-            case ListBufferTypeTag::Null:
+            case CellTag::Null:
                 return executor.template operator()<PropertyNull>(view);
             break;
-            case ListBufferTypeTag::NodeID:
+            case CellTag::NodeID:
                 return executor.template operator()<NodeID>(view);
             break;
-            case ListBufferTypeTag::EdgeID:
+            case CellTag::EdgeID:
                 return executor.template operator()<EdgeID>(view);
             break;
-            case ListBufferTypeTag::DateTime:
+            case CellTag::DateTime:
                 return executor.template operator()<types::DateTime::Primitive>(view);
             break;
-            case ListBufferTypeTag::Duration:
+            case CellTag::Duration:
                 return executor.template operator()<types::Duration::Primitive>(view);
             break;
-            case ListBufferTypeTag::MapView:
+            case CellTag::MapView:
                 return executor.template operator()<MapView>(view);
             break;
 
-            case ListBufferTypeTag::INVALID:
+            case CellTag::INVALID:
             break;
         }
-        throw FatalException("Unknown ListBufferTypeTag.");
+        throw FatalException("Unknown CellTag.");
     }
 };
     
 /// Helpers to convert types to tags
 template <typename T>
-struct TypeToListBufferTag;
+struct TypeToCellTag;
 
 template <>
-struct TypeToListBufferTag<types::Int64::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Int;
+struct TypeToCellTag<types::Int64::Primitive> {
+    static constexpr CellTag Tag = CellTag::Int;
 };
 
 template <>
-struct TypeToListBufferTag<types::UInt64::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::UInt;
+struct TypeToCellTag<types::UInt64::Primitive> {
+    static constexpr CellTag Tag = CellTag::UInt;
 };
 
 template <>
-struct TypeToListBufferTag<types::Double::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Double;
+struct TypeToCellTag<types::Double::Primitive> {
+    static constexpr CellTag Tag = CellTag::Double;
 };
 
 template <>
-struct TypeToListBufferTag<types::Bool::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Bool;
+struct TypeToCellTag<types::Bool::Primitive> {
+    static constexpr CellTag Tag = CellTag::Bool;
 };
 
 template <>
-struct TypeToListBufferTag<types::String::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::String;
+struct TypeToCellTag<types::String::Primitive> {
+    static constexpr CellTag Tag = CellTag::String;
 };
 
 template <>
-struct TypeToListBufferTag<types::Embedding::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Embedding;
+struct TypeToCellTag<types::Embedding::Primitive> {
+    static constexpr CellTag Tag = CellTag::Embedding;
 };
 
 template <>
-struct TypeToListBufferTag<ListView> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::ListView;
+struct TypeToCellTag<ListView> {
+    static constexpr CellTag Tag = CellTag::ListView;
 };
 
 template <>
-struct TypeToListBufferTag<PropertyNull> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Null;
+struct TypeToCellTag<PropertyNull> {
+    static constexpr CellTag Tag = CellTag::Null;
 };
 
 template <>
-struct TypeToListBufferTag<NodeID> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::NodeID;
+struct TypeToCellTag<NodeID> {
+    static constexpr CellTag Tag = CellTag::NodeID;
 };
 
 template <>
-struct TypeToListBufferTag<EdgeID> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::EdgeID;
+struct TypeToCellTag<EdgeID> {
+    static constexpr CellTag Tag = CellTag::EdgeID;
 };
 
 template <>
-struct TypeToListBufferTag<types::DateTime::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::DateTime;
+struct TypeToCellTag<types::DateTime::Primitive> {
+    static constexpr CellTag Tag = CellTag::DateTime;
 };
 
 template <>
-struct TypeToListBufferTag<types::Duration::Primitive> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Duration;
+struct TypeToCellTag<types::Duration::Primitive> {
+    static constexpr CellTag Tag = CellTag::Duration;
 };
 
 template <>
-struct TypeToListBufferTag<MapView> {
-    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::MapView;
+struct TypeToCellTag<MapView> {
+    static constexpr CellTag Tag = CellTag::MapView;
 };
 
 }

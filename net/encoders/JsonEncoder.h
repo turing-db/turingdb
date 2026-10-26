@@ -254,7 +254,7 @@ private:
             this->encodeValue(typed);
         };
 
-        const ListBufferTypeTag tag = ele.getTag();
+        const CellTag tag = ele.getTag();
         ListTagDispatcher writer {._tag = tag};
         writer.execute(writeTyped, ele);
     }

@@ -4,8 +4,9 @@
 
 namespace db {
 
-/// @brief Tag used in @ref ListByteBuffer to store type information
-enum class ListBufferTypeTag : uint8_t {
+/// @brief Tag of a list element or of a map value, stored with it in @ref ListByteBuffer
+/// and @ref MapByteBuffer
+enum class CellTag : uint8_t {
     Int = 0,
     UInt,
     Double,

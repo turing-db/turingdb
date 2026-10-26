@@ -35,7 +35,7 @@
 #include "SystemManager.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyType.h"
@@ -93,27 +93,27 @@ std::string renderTaggedList(const ListView list) {
 
 std::string renderTaggedElement(const ListElementView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::Double:
+        case CellTag::Double:
             return std::to_string(element.getAs<double>());
         break;
 
-        case ListBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(element.getAs<CustomBool>()) ? "true" : "false";
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return std::string(element.getAs<std::string_view>());
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return renderTaggedList(element.getAs<ListView>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 

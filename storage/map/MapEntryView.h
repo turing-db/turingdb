@@ -6,7 +6,7 @@
 #include <string_view>
 #include <type_traits>
 
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "metadata/PropertyNull.h"
 
@@ -37,12 +37,12 @@ public:
     }
 
     /// Returns the type tag of the value of this entry.
-    MapBufferTypeTag getValueTag() const {
-        static_assert(sizeof(MapBufferTypeTag) == 1,
-                      "MapBufferTypeTag changed size: function may need modifying.");
+    CellTag getValueTag() const {
+        static_assert(sizeof(CellTag) == 1,
+                      "CellTag changed size: function may need modifying.");
 
         const std::byte* tagPtr = _start + sizeof(std::string_view);
-        return MapBufferTypeTag {std::to_integer<uint8_t>(*tagPtr)};
+        return CellTag {std::to_integer<uint8_t>(*tagPtr)};
     }
 
     /**
@@ -63,7 +63,7 @@ T MapEntryView::getValueAs() const {
     static_assert(std::is_trivially_copyable_v<T>);
 
     constexpr size_t keySize = sizeof(std::string_view);
-    constexpr size_t tagSize = sizeof(MapBufferTypeTag);
+    constexpr size_t tagSize = sizeof(CellTag);
     static_assert(tagSize == 1, "Tag size changed: function may need modifying.");
 
     // Key is at _start, tag follows the key, value follows the tag

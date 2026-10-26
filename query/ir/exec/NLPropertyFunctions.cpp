@@ -1,7 +1,6 @@
 #include "NLPropertyFunctions.h"
 
-#include "list/ListBufferTypeTag.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "NLExecutionContext.h"
 #include "NLStepBuffers.h"
@@ -10,11 +9,11 @@ using namespace db;
 
 namespace {
 
-ListBufferTypeTag cellTag(const ListElementView cell) {
+CellTag cellTag(const ListElementView cell) {
     return cell.getTag();
 }
 
-MapBufferTypeTag cellTag(const MapEntryView entry) {
+CellTag cellTag(const MapEntryView entry) {
     return entry.getValueTag();
 }
 

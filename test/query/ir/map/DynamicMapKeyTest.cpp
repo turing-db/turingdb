@@ -21,7 +21,7 @@
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
-#include "map/MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "map/MapEntryView.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -132,7 +132,7 @@ class MapEntrySink : public db::NLOutputSink {
 public:
     struct Entry {
         std::string _key;
-        db::MapBufferTypeTag _tag {db::MapBufferTypeTag::Null};
+        db::CellTag _tag {db::CellTag::Null};
     };
 
     void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -178,13 +178,13 @@ TEST_F(DynamicMapKeyTest, namesAMissingKeyByTheKeyTheRowAskedFor) {
     ASSERT_EQ(entries.size(), 3u);
 
     EXPECT_EQ(entries[0]._key, "a");
-    EXPECT_NE(entries[0]._tag, MapBufferTypeTag::Null);
+    EXPECT_NE(entries[0]._tag, CellTag::Null);
 
     EXPECT_EQ(entries[1]._key, "nope");
-    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
+    EXPECT_EQ(entries[1]._tag, CellTag::Null);
 
     EXPECT_EQ(entries[2]._key, "gone");
-    EXPECT_EQ(entries[2]._tag, MapBufferTypeTag::Null);
+    EXPECT_EQ(entries[2]._tag, CellTag::Null);
 }
 
 TEST_F(DynamicMapKeyTest, namesAStoredMissingKeyByTheKeyTheRowAskedFor) {
@@ -204,10 +204,10 @@ TEST_F(DynamicMapKeyTest, namesAStoredMissingKeyByTheKeyTheRowAskedFor) {
     ASSERT_EQ(entries.size(), 2u);
 
     EXPECT_EQ(entries[0]._key, "x");
-    EXPECT_NE(entries[0]._tag, MapBufferTypeTag::Null);
+    EXPECT_NE(entries[0]._tag, CellTag::Null);
 
     EXPECT_EQ(entries[1]._key, "absent");
-    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
+    EXPECT_EQ(entries[1]._tag, CellTag::Null);
 }
 
 TEST_F(DynamicMapKeyTest, leavesANullKeyEntryUnnamed) {
@@ -225,10 +225,10 @@ TEST_F(DynamicMapKeyTest, leavesANullKeyEntryUnnamed) {
     ASSERT_EQ(entries.size(), 2u);
 
     EXPECT_EQ(entries[0]._key, "a");
-    EXPECT_EQ(entries[0]._tag, MapBufferTypeTag::Int);
+    EXPECT_EQ(entries[0]._tag, CellTag::Int);
 
     EXPECT_TRUE(entries[1]._key.empty());
-    EXPECT_EQ(entries[1]._tag, MapBufferTypeTag::Null);
+    EXPECT_EQ(entries[1]._tag, CellTag::Null);
 }
 
 // The suite cannot express this one: it runs a single query, and a property that query

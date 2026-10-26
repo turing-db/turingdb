@@ -5,7 +5,7 @@
 #include <cstring>
 #include <type_traits>
 
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "metadata/PropertyNull.h"
 
@@ -24,13 +24,13 @@ public:
     }
 
     /// Returns the type tag of the viewed element.
-    ListBufferTypeTag getTag() const {
-        static_assert(sizeof(ListBufferTypeTag) == 1,
+    CellTag getTag() const {
+        static_assert(sizeof(CellTag) == 1,
                       "TypeTag changed size: function may need modifying.");
 
         const auto tagValue = std::to_integer<uint8_t>(*_tag);
 
-        return ListBufferTypeTag {tagValue};
+        return CellTag {tagValue};
     }
 
     /// Returns a pointer to the raw element bytes: the tag, followed by the value bytes.
@@ -54,7 +54,7 @@ private:
     // What a ListByteBuffer holds for a null element: the tag, then the bytes of the
     // value, which getAs reads whatever the size of the type it reads them into.
     static constexpr std::byte _nullElementBytes[1 + sizeof(PropertyNull)] {
-        static_cast<std::byte>(ListBufferTypeTag::Null),
+        static_cast<std::byte>(CellTag::Null),
     };
 };
 
@@ -62,7 +62,7 @@ template <typename T>
 T ListElementView::getAs() const {
     static_assert(std::is_trivially_copyable_v<T>);
 
-    constexpr size_t tagSize = sizeof(ListBufferTypeTag);
+    constexpr size_t tagSize = sizeof(CellTag);
     static_assert(tagSize == 1, "Tag size changed: function may need modifying.");
 
     // @ref _tag points to the tag; the data is contiguous after the tag: read from there

@@ -79,7 +79,7 @@ inline std::optional<ListView> taggedList(const C& cell) {
 
         return taggedList(*cell);
     } else {
-        if (cell.getTag() != ListBufferTypeTag::ListView) {
+        if (cell.getTag() != CellTag::ListView) {
             return std::nullopt;
         }
 
@@ -129,24 +129,24 @@ inline bool holdsAValue(const T& operand) {
     if constexpr (TypeUtils::is_optional_v<T>) {
         return operand.has_value() && holdsAValue(*operand);
     } else if constexpr (std::is_same_v<T, ListElementView>) {
-        return operand.getTag() != ListBufferTypeTag::Null;
+        return operand.getTag() != CellTag::Null;
     } else if constexpr (TypedInternalID<T>) {
         return operand.isValid();
     } else if constexpr (std::is_same_v<T, MapEntryView>) {
-        return operand.getValueTag() != MapBufferTypeTag::Null;
+        return operand.getValueTag() != CellTag::Null;
     } else {
         return true;
     }
 }
 
 inline bool holdsAnInteger(const ListElementView element) {
-    const ListBufferTypeTag tag = element.getTag();
-    return tag == ListBufferTypeTag::Int || tag == ListBufferTypeTag::UInt;
+    const CellTag tag = element.getTag();
+    return tag == CellTag::Int || tag == CellTag::UInt;
 }
 
 inline bool holdsAnInteger(const MapEntryView entry) {
-    const MapBufferTypeTag tag = entry.getValueTag();
-    return tag == MapBufferTypeTag::Int || tag == MapBufferTypeTag::UInt;
+    const CellTag tag = entry.getValueTag();
+    return tag == CellTag::Int || tag == CellTag::UInt;
 }
 
 template <typename Cell, TypedInternalID IDT>
@@ -162,7 +162,7 @@ inline bool cellIsID(const Cell cell, const IDT id) {
 // The list a map entry holds, absent where it holds anything else, as taggedList answers
 // for a list element
 inline std::optional<ListView> entryList(const MapEntryView entry) {
-    if (entry.getValueTag() != MapBufferTypeTag::ListView) {
+    if (entry.getValueTag() != CellTag::ListView) {
         return std::nullopt;
     }
 
@@ -298,11 +298,11 @@ inline std::optional<CustomBool> truthValue(const T& value) {
 
         return truthValue(*value);
     } else if constexpr (std::is_same_v<Decayed, ListElementView>) {
-        const ListBufferTypeTag tag = value.getTag();
+        const CellTag tag = value.getTag();
 
-        if (tag == ListBufferTypeTag::Bool) {
+        if (tag == CellTag::Bool) {
             return value.template getAs<types::Bool::Primitive>();
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -766,8 +766,8 @@ struct TuringEqual {
         bool unknown = false;
 
         for (size_t index = 0; index < lhs.size(); index++) {
-            const bool holdsNull = lhs[index].getTag() == ListBufferTypeTag::Null
-                                || rhs[index].getTag() == ListBufferTypeTag::Null;
+            const bool holdsNull = lhs[index].getTag() == CellTag::Null
+                                || rhs[index].getTag() == CellTag::Null;
             if (holdsNull) {
                 unknown = true;
                 continue;
@@ -906,7 +906,7 @@ inline std::optional<types::String::Primitive> predicateText(const types::String
 }
 
 inline std::optional<types::String::Primitive> predicateText(const ListElementView element) {
-    if (element.getTag() != ListBufferTypeTag::String) {
+    if (element.getTag() != CellTag::String) {
         return std::nullopt;
     }
 
@@ -1023,7 +1023,7 @@ struct TuringIn {
         const Scalar& scalar = TypeUtils::unwrap(value);
 
         if constexpr (std::is_same_v<Scalar, ListElementView>) {
-            if (scalar.getTag() == ListBufferTypeTag::Null) {
+            if (scalar.getTag() == CellTag::Null) {
                 return std::nullopt;
             }
 
@@ -1032,7 +1032,7 @@ struct TuringIn {
                 return (*this)(*scalarList, elements);
             }
         } else if constexpr (std::is_same_v<Scalar, MapEntryView>) {
-            if (scalar.getValueTag() == MapBufferTypeTag::Null) {
+            if (scalar.getValueTag() == CellTag::Null) {
                 return std::nullopt;
             }
 
@@ -1049,7 +1049,7 @@ struct TuringIn {
         bool unknown = false;
 
         for (const ListElementView element : elements) {
-            if (element.getTag() == ListBufferTypeTag::Null) {
+            if (element.getTag() == CellTag::Null) {
                 unknown = true;
                 continue;
             }

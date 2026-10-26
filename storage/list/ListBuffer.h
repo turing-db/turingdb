@@ -7,7 +7,7 @@
 #include "ListByteBuffer.h"
 #include "ListElementViewBuffer.h"
 
-#include "ListBufferTypeTag.h"
+#include "CellTag.h"
 
 #include "ListView.h"
 #include "ListWriteCursor.h"
@@ -115,5 +115,5 @@ concept Listable = TypeConcepts::InTuple<T, ListableTypesImpl>;
 
 // Ensure we have a type tag for each listable type
 static_assert(std::tuple_size_v<ListableTypesImpl>
-              == std::to_underlying(ListBufferTypeTag::INVALID));
+              == std::to_underlying(CellTag::INVALID));
 }

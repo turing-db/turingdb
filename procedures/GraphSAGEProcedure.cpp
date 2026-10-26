@@ -23,7 +23,7 @@
 #include "columns/Column.h"
 #include "columns/ColumnConst.h"
 
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 
@@ -56,7 +56,7 @@ struct Data final : public TypedProcedureData<GraphSAGEProcedure> {
 
 void numericList(const ListView l) {
     const auto isInt = [](ListElementView ele) -> bool {
-        return ele.getTag() == ListBufferTypeTag::Int;
+        return ele.getTag() == CellTag::Int;
     };
     const bool allInts = std::ranges::all_of(l, isInt);
     if (!allInts) {

@@ -418,15 +418,15 @@ public:
     using ResultType = std::optional<types::Duration::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
-        const ListBufferTypeTag tag = cell.getTag();
+        const CellTag tag = cell.getTag();
 
-        if (tag == ListBufferTypeTag::Int) {
+        if (tag == CellTag::Int) {
             return MicrosecondsToDurationFunction<types::Int64::Primitive> {}(cell.getAs<types::Int64::Primitive>());
-        } else if (tag == ListBufferTypeTag::UInt) {
+        } else if (tag == CellTag::UInt) {
             return MicrosecondsToDurationFunction<types::UInt64::Primitive> {}(cell.getAs<types::UInt64::Primitive>());
-        } else if (tag == ListBufferTypeTag::MapView) {
+        } else if (tag == CellTag::MapView) {
             return MapToDurationFunction {}(cell.getAs<MapView>());
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -449,11 +449,11 @@ public:
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
-        const ListBufferTypeTag tag = cell.getTag();
+        const CellTag tag = cell.getTag();
 
-        if (tag == ListBufferTypeTag::DateTime) {
+        if (tag == CellTag::DateTime) {
             return DateTime::component(cell.getAs<types::DateTime::Primitive>(), part);
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -484,11 +484,11 @@ public:
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(const ArgType cell) const {
-        const ListBufferTypeTag tag = cell.getTag();
+        const CellTag tag = cell.getTag();
 
-        if (tag == ListBufferTypeTag::Duration) {
+        if (tag == CellTag::Duration) {
             return Duration::component(cell.getAs<types::Duration::Primitive>(), part);
-        } else if (tag == ListBufferTypeTag::Null) {
+        } else if (tag == CellTag::Null) {
             return std::nullopt;
         }
 
@@ -673,15 +673,15 @@ struct ConversionFunctorFor<ToBoolFunction, Argument> {
 
 template <typename Result, typename Visit>
 Result visitNumberCell(const ListElementView cell, std::string_view functionName, Visit&& visit) {
-    const ListBufferTypeTag tag = cell.getTag();
+    const CellTag tag = cell.getTag();
 
-    if (tag == ListBufferTypeTag::Int) {
+    if (tag == CellTag::Int) {
         return visit(cell.getAs<types::Int64::Primitive>());
-    } else if (tag == ListBufferTypeTag::UInt) {
+    } else if (tag == CellTag::UInt) {
         return visit(cell.getAs<types::UInt64::Primitive>());
-    } else if (tag == ListBufferTypeTag::Double) {
+    } else if (tag == CellTag::Double) {
         return visit(cell.getAs<types::Double::Primitive>());
-    } else if (tag == ListBufferTypeTag::Null) {
+    } else if (tag == CellTag::Null) {
         return std::nullopt;
     }
 
@@ -736,28 +736,28 @@ public:
 
     ResultType operator()(const ArgType cell) {
         switch (cell.getTag()) {
-            case ListBufferTypeTag::Int:
+            case CellTag::Int:
                 return convert<types::Int64::Primitive>(cell, _fromInteger);
             break;
-            case ListBufferTypeTag::UInt:
+            case CellTag::UInt:
                 return convert<types::UInt64::Primitive>(cell, _fromUnsigned);
             break;
-            case ListBufferTypeTag::Double:
+            case CellTag::Double:
                 return convert<types::Double::Primitive>(cell, _fromDouble);
             break;
-            case ListBufferTypeTag::Bool:
+            case CellTag::Bool:
                 return convert<types::Bool::Primitive>(cell, _fromBoolean);
             break;
-            case ListBufferTypeTag::String:
+            case CellTag::String:
                 return convert<types::String::Primitive>(cell, _fromString);
             break;
-            case ListBufferTypeTag::DateTime:
+            case CellTag::DateTime:
                 return convert<types::DateTime::Primitive>(cell, _fromDateTime);
             break;
-            case ListBufferTypeTag::Duration:
+            case CellTag::Duration:
                 return convert<types::Duration::Primitive>(cell, _fromDuration);
             break;
-            case ListBufferTypeTag::Null:
+            case CellTag::Null:
                 return std::nullopt;
             break;
             default:
@@ -1139,7 +1139,7 @@ public:
     }
 
     ResultType operator()(const ArgType cell) {
-        if (cell.getTag() != ListBufferTypeTag::String) {
+        if (cell.getTag() != CellTag::String) {
             return std::nullopt;
         }
 

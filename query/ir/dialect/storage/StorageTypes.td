@@ -192,7 +192,7 @@ def MapElement : StorageType<"MapElement", "map_element"> {
     let description = [{
         The element type of a chunk holding one map entry per row - storage's
         ColumnVector<MapEntryView>. Each cell views the entry the map already holds: its
-        key, its own MapBufferTypeTag and its value, so a key read copies nothing. Like
+        key, its own CellTag and its value, so a key read copies nothing. Like
         !storage.any it is a fixed-width scalar rather than a container, and it
         carries its null in the tag rather than in a !storage.nullable around it, so a
         row whose map holds no such key - or no map at all - reads back as a Null-tagged

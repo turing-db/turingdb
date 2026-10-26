@@ -39,7 +39,7 @@ namespace {
 void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
     out.clear();
     for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::NodeID);
+        ASSERT_EQ(element.getTag(), CellTag::NodeID);
         out.push_back(element.getAs<NodeID>().getValue());
     }
 }
@@ -48,7 +48,7 @@ void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
 void readEdgeIDList(const ListView& view, std::vector<uint64_t>& out) {
     out.clear();
     for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::EdgeID);
+        ASSERT_EQ(element.getTag(), CellTag::EdgeID);
         out.push_back(element.getAs<EdgeID>().getValue());
     }
 }

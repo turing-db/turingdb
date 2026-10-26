@@ -1983,23 +1983,23 @@ MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
         cursor.writeKey(ownedCharacters(name.getValue()));
 
         if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+            cursor.writeValue(CellTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
         } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Int,
+            cursor.writeValue(CellTag::Int,
                               static_cast<types::Int64::Primitive>(intAttr.getInt()));
         } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Double,
+            cursor.writeValue(CellTag::Double,
                               static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::String, ownedCharacters(stringAttr.getValue()));
+            cursor.writeValue(CellTag::String, ownedCharacters(stringAttr.getValue()));
         } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
+            cursor.writeValue(CellTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
         } else if (const auto nestedList = mlir::dyn_cast<mlir::ArrayAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::ListView, materializeListView(nestedList));
+            cursor.writeValue(CellTag::ListView, materializeListView(nestedList));
         } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::MapView, materializeMapView(nestedMap));
+            cursor.writeValue(CellTag::MapView, materializeMapView(nestedMap));
         } else if (mlir::isa<mlir::UnitAttr>(value)) {
-            cursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+            cursor.writeValue(CellTag::Null, PropertyNull {});
         } else {
             throw IRException("Unsupported literal attribute in a constant map");
         }
@@ -2018,23 +2018,23 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
 
     for (const mlir::Attribute element : elements) {
         if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+            cursor.writeValue(CellTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
         } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Int,
+            cursor.writeValue(CellTag::Int,
                               static_cast<types::Int64::Primitive>(intAttr.getInt()));
         } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Double,
+            cursor.writeValue(CellTag::Double,
                               static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::String, ownedCharacters(stringAttr.getValue()));
+            cursor.writeValue(CellTag::String, ownedCharacters(stringAttr.getValue()));
         } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
+            cursor.writeValue(CellTag::Embedding, ownedFloats(embeddingAttr.asArrayRef()));
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
+            cursor.writeValue(CellTag::Null, PropertyNull {});
         } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::ListView, materializeListView(nestedAttr));
+            cursor.writeValue(CellTag::ListView, materializeListView(nestedAttr));
         } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(element)) {
-            cursor.writeValue(ListBufferTypeTag::MapView, materializeMapView(nestedMap));
+            cursor.writeValue(CellTag::MapView, materializeMapView(nestedMap));
         } else {
             throw IRException("Unsupported literal attribute in a constant list");
         }
@@ -3583,7 +3583,7 @@ void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContaine
     // row and every chunk, so it is written into the query's map buffer once, here.
     MapWriteCursor absentCursor = _memory->mapBuffer().reserveMap(1, sizeof(PropertyNull));
     absentCursor.writeKey(key);
-    const MapEntryView absent = absentCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+    const MapEntryView absent = absentCursor.writeValue(CellTag::Null, PropertyNull {});
 
     NLStaticMapKeyData* data = _program->allocFunctionData<NLStaticMapKeyData>(input,
                                                                    result,
@@ -3630,7 +3630,7 @@ void NLTranslator::translateDynamicMapKey(nl::DynamicMapKey mapKey, NLStmtContai
     // entry for a key the map does not hold carries that key, so the executor writes it.
     MapWriteCursor keylessCursor = _memory->mapBuffer().reserveMap(1, sizeof(PropertyNull));
     keylessCursor.writeKey(std::string_view {});
-    const MapEntryView keyless = keylessCursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+    const MapEntryView keyless = keylessCursor.writeValue(CellTag::Null, PropertyNull {});
 
     NLDynamicMapKeyData* data = _program->allocFunctionData<NLDynamicMapKeyData>(input,
                                                                                  result,

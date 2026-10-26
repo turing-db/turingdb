@@ -67,7 +67,7 @@ std::byte* MapByteBuffer<N>::reserveAndCommit(size_t numBytes) {
 
 template <size_t N>
 template <typename T>
-MapEntryView MapByteBuffer<N>::write(std::string_view key, MapBufferTypeTag tag, const T& val) {
+MapEntryView MapByteBuffer<N>::write(std::string_view key, CellTag tag, const T& val) {
     static_assert(std::is_trivially_copyable_v<T>);
     static_assert(std::is_trivially_copyable_v<std::string_view>);
 
@@ -119,17 +119,17 @@ void MapByteBuffer<N>::clear() {
 
 namespace db {
 template class MapByteBuffer<>;
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Int64::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::UInt64::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Double::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Bool::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::String::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Embedding::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const ListView&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const MapView&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const PropertyNull&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const NodeID&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const EdgeID&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::DateTime::Primitive&);
-template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Duration::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Int64::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::UInt64::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Double::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Bool::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::String::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Embedding::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const ListView&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const MapView&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const PropertyNull&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const NodeID&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const EdgeID&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::DateTime::Primitive&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, CellTag, const types::Duration::Primitive&);
 }

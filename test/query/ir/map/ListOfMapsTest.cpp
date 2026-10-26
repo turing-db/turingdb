@@ -35,10 +35,9 @@
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
-#include "map/MapBufferTypeTag.h"
 #include "map/MapEntryView.h"
 #include "map/MapView.h"
 #include "versioning/Transaction.h"
@@ -61,27 +60,27 @@ std::string renderList(ListView list);
 
 std::string renderMapValue(const MapEntryView entry) {
     switch (entry.getValueTag()) {
-        case MapBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(entry.getValueAs<int64_t>());
         break;
 
-        case MapBufferTypeTag::Bool:
+        case CellTag::Bool:
             return static_cast<bool>(entry.getValueAs<CustomBool>()) ? "true" : "false";
         break;
 
-        case MapBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(entry.getValueAs<std::string_view>()) + "'";
         break;
 
-        case MapBufferTypeTag::ListView:
+        case CellTag::ListView:
             return renderList(entry.getValueAs<ListView>());
         break;
 
-        case MapBufferTypeTag::MapView:
+        case CellTag::MapView:
             return renderMap(entry.getValueAs<MapView>());
         break;
 
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 
@@ -107,23 +106,23 @@ std::string renderMap(const MapView map) {
 
 std::string renderElement(const ListElementView element) {
     switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
+        case CellTag::Int:
             return std::to_string(element.getAs<int64_t>());
         break;
 
-        case ListBufferTypeTag::String:
+        case CellTag::String:
             return "'" + std::string(element.getAs<std::string_view>()) + "'";
         break;
 
-        case ListBufferTypeTag::ListView:
+        case CellTag::ListView:
             return renderList(element.getAs<ListView>());
         break;
 
-        case ListBufferTypeTag::MapView:
+        case CellTag::MapView:
             return renderMap(element.getAs<MapView>());
         break;
 
-        case ListBufferTypeTag::Null:
+        case CellTag::Null:
             return "null";
         break;
 

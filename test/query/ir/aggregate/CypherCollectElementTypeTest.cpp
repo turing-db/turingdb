@@ -38,7 +38,7 @@ namespace {
 void readDoubleList(const ListView& view, std::vector<double>& out) {
     out.clear();
     for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::Double);
+        ASSERT_EQ(element.getTag(), CellTag::Double);
         out.push_back(element.getAs<types::Double::Primitive>());
     }
 }
@@ -47,7 +47,7 @@ void readDoubleList(const ListView& view, std::vector<double>& out) {
 void readBoolList(const ListView& view, std::vector<bool>& out) {
     out.clear();
     for (const ListElementView& element : view) {
-        ASSERT_EQ(element.getTag(), ListBufferTypeTag::Bool);
+        ASSERT_EQ(element.getTag(), CellTag::Bool);
         out.push_back(static_cast<bool>(element.getAs<types::Bool::Primitive>()));
     }
 }

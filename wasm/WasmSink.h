@@ -9,9 +9,8 @@
 
 #include "ChunkedBuffer.h"
 #include "TuringProtoDecoderConcepts.h"
-#include "list/ListBufferTypeTag.h"
+#include "CellTag.h"
 #include "list/ListUtils.h"
-#include "map/MapBufferTypeTag.h"
 
 #include "Column.h"
 #include "ColumnConst.h"
@@ -144,7 +143,7 @@ public:
 
     template <typename T>
     void writeMapValue(const T& value) {
-        const db::ListBufferTypeTag tag = db::TypeToListBufferTag<T>::Tag;
+        const db::CellTag tag = db::TypeToCellTag<T>::Tag;
         appendBytes(&tag, sizeof(tag));
         appendBytes(&value, sizeof(value));
 
@@ -198,8 +197,8 @@ private:
 
     uint32_t appendBytes(const void* bytes, size_t byteSize);
     uint32_t appendCountHeader(size_t count);
-    ListElementView appendNestedHeader(db::ListBufferTypeTag tag, size_t count);
-    ListElementView appendDeferredPayload(db::ListBufferTypeTag tag, const char* source, size_t byteSize);
+    ListElementView appendNestedHeader(db::CellTag tag, size_t count);
+    ListElementView appendDeferredPayload(db::CellTag tag, const char* source, size_t byteSize);
     void countElementWritten();
 };
 

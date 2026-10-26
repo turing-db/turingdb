@@ -283,11 +283,11 @@ void disengagedValue(ValueType valueType, CommitWriteBuffer::SupportedTypeVarian
     ValueTypeDispatcher(valueType).execute(disengage);
 }
 
-ListBufferTypeTag listBufferTag(ValueType valueType) {
-    ListBufferTypeTag tag {ListBufferTypeTag::INVALID};
+CellTag listBufferTag(ValueType valueType) {
+    CellTag tag {CellTag::INVALID};
 
     const auto tagOf = [&]<SupportedType T>() {
-        tag = TypeToListBufferTag<typename T::Primitive>::Tag;
+        tag = TypeToCellTag<typename T::Primitive>::Tag;
     };
 
     ValueTypeDispatcher(valueType).execute(tagOf);
@@ -342,13 +342,13 @@ void stageListElementAsItsType(const ListElementView element,
 void stageListElement(const ListElementView element,
                       ValueType valueType,
                       CommitWriteBuffer::SupportedTypeVariant& value) {
-    const ListBufferTypeTag tag = element.getTag();
+    const CellTag tag = element.getTag();
 
-    const bool holdsAnInteger = tag == ListBufferTypeTag::Int;
+    const bool holdsAnInteger = tag == CellTag::Int;
     const bool widensToDouble = holdsAnInteger && valueType == ValueType::Double;
     const bool widensToUnsigned = holdsAnInteger && valueType == ValueType::UInt64;
 
-    if (tag == ListBufferTypeTag::Null) {
+    if (tag == CellTag::Null) {
         disengagedValue(valueType, value);
     } else if (widensToDouble) {
         value = std::optional {static_cast<types::Double::Primitive>(element.getAs<types::Int64::Primitive>())};

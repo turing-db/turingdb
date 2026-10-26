@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-#include "MapBufferTypeTag.h"
+#include "CellTag.h"
 #include "MapContainer.h"
 #include "MapEntryView.h"
 
@@ -32,58 +32,58 @@ void appendValue(std::vector<std::byte>& out, const T& value) {
 void encodeMap(MapView map, std::vector<std::byte>& out);
 
 void encodeValue(MapEntryView entry, std::vector<std::byte>& out) {
-    const MapBufferTypeTag tag = entry.getValueTag();
+    const CellTag tag = entry.getValueTag();
     appendValue(out, tag);
 
     switch (tag) {
-        case MapBufferTypeTag::Int:
+        case CellTag::Int:
             appendValue(out, entry.getValueAs<types::Int64::Primitive>());
         break;
-        case MapBufferTypeTag::UInt:
+        case CellTag::UInt:
             appendValue(out, entry.getValueAs<types::UInt64::Primitive>());
         break;
-        case MapBufferTypeTag::Double:
+        case CellTag::Double:
             appendValue(out, entry.getValueAs<types::Double::Primitive>());
         break;
-        case MapBufferTypeTag::Bool:
+        case CellTag::Bool:
             appendValue(out, entry.getValueAs<types::Bool::Primitive>());
         break;
-        case MapBufferTypeTag::NodeID:
+        case CellTag::NodeID:
             appendValue(out, entry.getValueAs<NodeID>());
         break;
-        case MapBufferTypeTag::EdgeID:
+        case CellTag::EdgeID:
             appendValue(out, entry.getValueAs<EdgeID>());
         break;
-        case MapBufferTypeTag::DateTime:
+        case CellTag::DateTime:
             appendValue(out, entry.getValueAs<types::DateTime::Primitive>());
         break;
-        case MapBufferTypeTag::Duration:
+        case CellTag::Duration:
             appendValue(out, entry.getValueAs<types::Duration::Primitive>());
         break;
-        case MapBufferTypeTag::Null:
+        case CellTag::Null:
         break;
-        case MapBufferTypeTag::String: {
+        case CellTag::String: {
             const types::String::Primitive value = entry.getValueAs<types::String::Primitive>();
             appendValue<uint64_t>(out, value.size());
             appendBytes(out, value.data(), value.size());
         }
         break;
-        case MapBufferTypeTag::Embedding: {
+        case CellTag::Embedding: {
             const types::Embedding::Primitive value = entry.getValueAs<types::Embedding::Primitive>();
             appendValue<uint64_t>(out, value.size());
             appendBytes(out, value.data(), value.size_bytes());
         }
         break;
-        case MapBufferTypeTag::ListView: {
+        case CellTag::ListView: {
             const EncodedList list(entry.getValueAs<ListView>());
             appendValue<uint64_t>(out, list.byteSize());
             appendBytes(out, list.bytes().data(), list.byteSize());
         }
         break;
-        case MapBufferTypeTag::MapView:
+        case CellTag::MapView:
             encodeMap(entry.getValueAs<MapView>(), out);
         break;
-        case MapBufferTypeTag::INVALID:
+        case CellTag::INVALID:
             throw FatalException("Cannot encode a map entry with an invalid type tag");
         break;
     }
@@ -175,49 +175,49 @@ private:
     }
 
     MapBuffer<>::MapItemVariant decodeValue() {
-        const MapBufferTypeTag tag = read<MapBufferTypeTag>();
+        const CellTag tag = read<CellTag>();
 
         switch (tag) {
-            case MapBufferTypeTag::Int:
+            case CellTag::Int:
                 return read<types::Int64::Primitive>();
             break;
-            case MapBufferTypeTag::UInt:
+            case CellTag::UInt:
                 return read<types::UInt64::Primitive>();
             break;
-            case MapBufferTypeTag::Double:
+            case CellTag::Double:
                 return read<types::Double::Primitive>();
             break;
-            case MapBufferTypeTag::Bool:
+            case CellTag::Bool:
                 return read<types::Bool::Primitive>();
             break;
-            case MapBufferTypeTag::NodeID:
+            case CellTag::NodeID:
                 return read<NodeID>();
             break;
-            case MapBufferTypeTag::EdgeID:
+            case CellTag::EdgeID:
                 return read<EdgeID>();
             break;
-            case MapBufferTypeTag::DateTime:
+            case CellTag::DateTime:
                 return read<types::DateTime::Primitive>();
             break;
-            case MapBufferTypeTag::Duration:
+            case CellTag::Duration:
                 return read<types::Duration::Primitive>();
             break;
-            case MapBufferTypeTag::Null:
+            case CellTag::Null:
                 return PropertyNull {};
             break;
-            case MapBufferTypeTag::String:
+            case CellTag::String:
                 return decodeString();
             break;
-            case MapBufferTypeTag::Embedding:
+            case CellTag::Embedding:
                 return decodeEmbedding();
             break;
-            case MapBufferTypeTag::ListView:
+            case CellTag::ListView:
                 return decodeList();
             break;
-            case MapBufferTypeTag::MapView:
+            case CellTag::MapView:
                 return decodeMap();
             break;
-            case MapBufferTypeTag::INVALID:
+            case CellTag::INVALID:
             break;
         }
 
