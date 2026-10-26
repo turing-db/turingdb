@@ -267,20 +267,24 @@ void WriteStmtAnalyzer::analyze(NodePattern* nodePattern) {
                 continue;
             }
 
+            const EvaluatedType writtenType = expr->getCommonType();
+
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
                 // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, exprType)) {
+                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, writtenType)) {
                     throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
-                                           EvaluatedTypeName::value(exprType)),
+                                           EvaluatedTypeName::value(writtenType)),
                                nodePattern);
                 }
                 data->addExprConstraint(propName->getName(), propType->_valueType, expr);
             } else {
                 // Property type needs to be created
-                const ValueType valueType = evaluatedToValueType(exprType);
-                if (valueType == ValueType::Invalid) {
+                const ValueType valueType = evaluatedToValueType(writtenType);
+                if (valueType == ValueType::Invalid && writtenType == EvaluatedType::Any) {
+                    throwPropertyTypedPerRow(propName->getName(), expr);
+                } else if (valueType == ValueType::Invalid) {
                     throwError(fmt::format("Cannot evaluate node property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                                expr);
                 }
@@ -345,20 +349,24 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                 continue;
             }
 
+            const EvaluatedType writtenType = expr->getCommonType();
+
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
             if (propType) {
                 // Property type already exists
-                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, exprType)) {
+                if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, writtenType)) {
                     throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
-                                           EvaluatedTypeName::value(exprType)),
+                                           EvaluatedTypeName::value(writtenType)),
                                edgePattern);
                 }
                 data->addExprConstraint(propName->getName(), propType->_valueType, expr);
             } else {
                 // Property type needs to be created
-                const ValueType valueType = evaluatedToValueType(exprType);
-                if (valueType == ValueType::Invalid) {
+                const ValueType valueType = evaluatedToValueType(writtenType);
+                if (valueType == ValueType::Invalid && writtenType == EvaluatedType::Any) {
+                    throwPropertyTypedPerRow(propName->getName(), expr);
+                } else if (valueType == ValueType::Invalid) {
                     throwError(fmt::format("Cannot evaluate edge property: unsupported type '{}'", EvaluatedTypeName::value(exprType)),
                                expr);
                 }
@@ -385,7 +393,7 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
             const bool writesNull = rhsType == EvaluatedType::Null;
             const bool allowCreates = !writesNull;
 
-            const ValueType valType = evaluatedToValueType(rhsType);
+            const ValueType valType = evaluatedToValueType(rhs->getCommonType());
             const ValueType lhsEvaluatedVt =
                 _exprAnalyzer->analyzePropertyExpr(lhs, allowCreates, valType);
 
@@ -397,20 +405,18 @@ void WriteStmtAnalyzer::analyze(SetItem* item) {
                 throwError("Invalid use of aggregate expression in this context", item);
             }
 
-            // An element of a mixed list carries its type per row, so the write checks it
-            // against the property's type
-            const bool writesAListElement = rhsType == EvaluatedType::Any;
+            // A value whose type is only known per row is checked against the property's
+            // type as each row is written
+            const bool writesAValueTypedPerRow = rhsType == EvaluatedType::Any;
             const bool propertyHasAType = lhsEvaluatedVt != ValueType::Invalid;
-            const bool checksTheTypePerRow = writesAListElement && propertyHasAType;
+            const bool checksTheTypePerRow = writesAValueTypedPerRow && propertyHasAType;
 
             if (writesNull || checksTheTypePerRow) {
                 return;
             }
 
-            if (writesAListElement) {
-                const std::string err = fmt::format(
-                    "Cannot create property '{}' from a list.", lhs->getPropName());
-                throwError(err, item);
+            if (writesAValueTypedPerRow) {
+                throwPropertyTypedPerRow(lhs->getPropName(), item);
             }
 
             if (!ExprAnalyzer::propTypeCompatible(lhsEvaluatedVt, rhsType)) {
@@ -438,6 +444,11 @@ void WriteStmtAnalyzer::throwError(std::string_view msg, const void* obj) const 
     std::string errorStr;
     _ast->getDiagnosticsManager()->createErrorString(msg, obj, errorStr);
     throw AnalyzeException(std::move(errorStr));
+}
+
+void WriteStmtAnalyzer::throwPropertyTypedPerRow(std::string_view propName, const void* obj) const {
+    throwError(fmt::format("Cannot create property '{}' from a value whose type is only known per row", propName),
+               obj);
 }
 
 db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {

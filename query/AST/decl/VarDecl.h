@@ -25,6 +25,7 @@ public:
     void setType(EvaluatedType type) { _type = type; }
 
     void setListShape(const ListShape& shape) { _listShape = shape; }
+    void setCommonType(EvaluatedType type) { _commonType = type; }
 
     // The variable of the enclosing query an EXISTS or COUNT body imported this one from;
     // null for a variable the body declares itself, even under the name of an outer one
@@ -38,6 +39,10 @@ public:
     // variable to the elements' own type rather than to tagged scalars.
     const ListShape& getListShape() const { return _listShape; }
 
+    // The type every value converts to without loss: the type itself, or for Any the one
+    // the selection it was published from shares, Any if none
+    EvaluatedType getCommonType() const { return _type == EvaluatedType::Any ? _commonType : _type; }
+
     const std::string_view& getName() const { return _name; }
     bool isUnnamed() const { return _isUnnamed; }
     bool isUnwound() const { return _isUnwound; }
@@ -48,6 +53,7 @@ public:
 
 private:
     EvaluatedType _type {EvaluatedType::Invalid};
+    EvaluatedType _commonType {EvaluatedType::Any};
     ListShape _listShape;
     std::string_view _name;
     const VarDecl* _importSource {nullptr};

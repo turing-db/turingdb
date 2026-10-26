@@ -4700,7 +4700,7 @@ void DBProgramGenerator::collectMergeProperties(const PatternData* data, MergeEn
 
         const std::string_view propName = constraint._propTypeName;
         entity._propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
-        entity._propValues.push_back(_part._exprMap.at(constraint._expr));
+        entity._propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
     }
 }
 
@@ -4919,7 +4919,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                 translateExprOverRows(constraint._expr);
                 const std::string_view propName = constraint._propTypeName;
                 propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
-                propValues.push_back(_part._exprMap.at(constraint._expr));
+                propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
             }
         }
 
@@ -4968,7 +4968,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                     translateExprOverRows(constraint._expr);
                     const std::string_view propName = constraint._propTypeName;
                     propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
-                    propValues.push_back(_part._exprMap.at(constraint._expr));
+                    propValues.push_back(assignedColumn(constraint._expr, constraint._valueType));
                 }
             }
 
@@ -5412,10 +5412,29 @@ void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value ro
 
         translateExprOverRows(assign->_propValueExpr);
 
-        generatePropertyWrite(assign->_propTypeExpr,
-                              _part._exprMap.at(assign->_propValueExpr),
+        const PropertyExpr* propertyExpr = assign->_propTypeExpr;
+        generatePropertyWrite(propertyExpr,
+                              assignedColumn(assign->_propValueExpr, propertyExpr->getValueType()),
                               rows);
     }
+}
+
+// A value whose type varies per row and whose common type is the property's is converted to
+// it before it is written, as SQL casts a value to the column it is assigned to. commonType
+// widens only an integer beside a double, so that type is Double.
+mlir::Value DBProgramGenerator::assignedColumn(const Expr* value, ValueType propertyType) {
+    const mlir::Value column = _part._exprMap.at(value);
+
+    const bool convertsToTheProperty = value->getType() == EvaluatedType::Any
+                                    && value->getCommonType() == EvaluatedType::Double
+                                    && propertyType == ValueType::Double;
+    if (!convertsToTheProperty) {
+        return column;
+    }
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    return _opBuilder.create<mlir::db::ToFloat>(_opBuilder.getUnknownLoc(), noneType, column).getResult();
 }
 
 void DBProgramGenerator::generateRemoveProperties(const RemoveStmt* removeStmt) {

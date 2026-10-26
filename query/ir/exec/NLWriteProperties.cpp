@@ -1,6 +1,7 @@
 #include "NLWriteProperties.h"
 
 #include <optional>
+#include <string_view>
 #include <variant>
 
 #include <spdlog/fmt/bundled/format.h>
@@ -295,6 +296,25 @@ ListBufferTypeTag listBufferTag(ValueType valueType) {
     return tag;
 }
 
+// The name of the type a tagged cell holds: the entity it names, or the property type whose
+// values carry its tag
+std::string_view cellTypeName(ListBufferTypeTag tag) {
+    if (tag == ListBufferTypeTag::NodeID) {
+        return "Node";
+    } else if (tag == ListBufferTypeTag::EdgeID) {
+        return "Edge";
+    }
+
+    for (size_t index = static_cast<size_t>(ValueType::Invalid) + 1; index < static_cast<size_t>(ValueType::_SIZE); index++) {
+        const ValueType valueType = static_cast<ValueType>(index);
+        if (listBufferTag(valueType) == tag) {
+            return ValueTypeName::value(valueType);
+        }
+    }
+
+    return ValueTypeName::value(ValueType::Invalid);
+}
+
 void stageListElementAsItsType(const ListElementView element,
                                ValueType valueType,
                                CommitWriteBuffer::SupportedTypeVariant& value) {
@@ -357,8 +377,9 @@ void stageListElement(const ListElementView element,
     } else if (tag == listBufferTag(valueType)) {
         stageListElementAsItsType(element, valueType, value);
     } else {
-        throw IRException(fmt::format("Cannot set a property of type '{}' to a list element of another type",
-                                      ValueTypeName::value(valueType)));
+        throw IRException(fmt::format("Cannot set a property of type '{}' to a value of type '{}'",
+                                      ValueTypeName::value(valueType),
+                                      cellTypeName(tag)));
     }
 }
 

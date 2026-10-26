@@ -420,6 +420,14 @@ lowering picks the type once every branch is lowered (`DBLowering::unionResultTy
 converts each branch before the dedup the branches share, a scalar through `nl.to_any`.
 CASE and coalesce follow the same rule (`selectedValueElement`).
 
+A property holds one type, so a value whose type varies per row also has a common type
+(`Expr::getCommonType`): the type all its values convert to without loss, Double for an
+integer beside a float, and Any when there is none. SET, CREATE and MERGE create a property
+with that type, and codegen converts the value to it before the write
+(`DBProgramGenerator::assignedColumn`), as SQL casts a value to the column it is assigned to.
+A value with no common type creates no property. SET writes it to an existing property and
+checks each row against the property's type.
+
 A body can be a WHEN: `CALL (p) { WHEN p.age > 60 THEN { ... } WHEN ... ELSE { ... } }`.
 For each input row the first branch whose predicate is true runs, a null predicate counting
 as false, and the ELSE branch runs when none is. With no ELSE and no predicate true the row

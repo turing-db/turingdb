@@ -444,6 +444,7 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
             const VarDecl* decl = *declPtr;
             VarDecl* published = scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
             published->setListShape(decl->getListShape());
+            published->setCommonType(decl->getCommonType());
             published->setIsQuantifiedPath(decl->isQuantifiedPath());
             projection->addPublishedDecl(published);
 
@@ -464,6 +465,7 @@ void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scop
 
         VarDecl* published = scope->getOrCreateNamedVariable(_ast, item->getType(), *name);
         published->setListShape(item->getListShape());
+        published->setCommonType(item->getCommonType());
         published->setIsQuantifiedPath(itemDecl && itemDecl->isQuantifiedPath());
         projection->addPublishedDecl(published);
 
@@ -516,6 +518,7 @@ void CypherAnalyzer::analyze(NextSegmentStmt* segment) {
 
             VarDecl* carried = scope->getOrCreateNamedVariable(_ast, decl->getType(), import);
             carried->setListShape(decl->getListShape());
+            carried->setCommonType(decl->getCommonType());
             carried->setIsQuantifiedPath(decl->isQuantifiedPath());
             _declSources[carried] = decl;
 
@@ -702,6 +705,7 @@ void CypherAnalyzer::importIntoQuery(RegularQuery* query,
 
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
+        imported->setCommonType(decl->getCommonType());
         imported->setIsQuantifiedPath(decl->isQuantifiedPath());
         _declSources[imported] = decl;
         _exprAnalyzer->importCSVSource(imported, decl);
@@ -868,6 +872,7 @@ void CypherAnalyzer::importCorrelatedVariables(DeclContext* inner, std::vector<s
     const auto importDecl = [this, inner, &correlated](std::string_view name, const VarDecl* decl) {
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
         imported->setListShape(decl->getListShape());
+        imported->setCommonType(decl->getCommonType());
         imported->setIsQuantifiedPath(decl->isQuantifiedPath());
         imported->setImportSource(decl);
         _declSources[imported] = decl;
@@ -1140,18 +1145,22 @@ void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, cons
         VarDecl* decl = published[index];
 
         EvaluatedType itemType = EvaluatedType::Invalid;
+        EvaluatedType itemCommonType = EvaluatedType::Invalid;
         const ListShape* itemShape = nullptr;
 
         if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
             itemType = (*declPtr)->getType();
+            itemCommonType = (*declPtr)->getCommonType();
             itemShape = &(*declPtr)->getListShape();
         } else {
             const Expr* item = std::get<Expr*>(returnItem);
             itemType = item->getType();
+            itemCommonType = item->getCommonType();
             itemShape = &item->getListShape();
         }
 
         const EvaluatedType columnType = decl->getType();
+        const EvaluatedType columnCommonType = decl->getCommonType();
         const EvaluatedType selected = selectedType(columnType, itemType);
 
         if (selected == EvaluatedType::Invalid) {
@@ -1166,6 +1175,7 @@ void CypherAnalyzer::publishUnionBranchReturn(Projection* branchProjection, cons
         const ListShape itemListShape = ListShape::selected(itemType, *itemShape);
 
         decl->setType(selected);
+        decl->setCommonType(commonType(columnCommonType, itemCommonType));
         decl->setListShape(selected == EvaluatedType::List ? ListShape::unified(columnShape, itemListShape) : ListShape());
 
         branchProjection->addPublishedDecl(decl);
