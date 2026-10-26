@@ -451,7 +451,7 @@
 %type<db::CallSubqueryStmt*> callSubquerySt
 %type<db::CallSubqueryStmt*> foreachSt
 %type<db::StmtContainer*> foreachUpdates
-%type<db::RegularQuery*> callSubqueryBody
+%type<db::RegularQuery*> queryBody
 %type<db::RegularQuery*> nextSegment
 %type<db::RegularQuery*> segmentBeforeNext
 %type<db::ParserUtils::NextSegments> nextHead
@@ -459,9 +459,6 @@
 %type<db::ConditionalQuery*> conditionalBranches
 %type<db::ConditionalQuery::Branches> whenBranches
 %type<db::RegularQuery*> conditionalBranchQuery
-%type<db::RegularQuery*> existsBody
-%type<db::RegularQuery*> countBody
-%type<db::RegularQuery*> collectBody
 %type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
 %type<db::MergeStmt*> mergeSt
@@ -1198,16 +1195,16 @@ callSt
     ;
 
 callSubquerySt
-    : CALL OBRACE callSubqueryBody CBRACE {
+    : CALL OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $3);
         LOC($$, @$);
     }
-    | CALL OPAREN CPAREN OBRACE callSubqueryBody CBRACE {
+    | CALL OPAREN CPAREN OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $5);
         $$->setHasScopeClause(true);
         LOC($$, @$);
     }
-    | CALL OPAREN callScope CPAREN OBRACE callSubqueryBody CBRACE {
+    | CALL OPAREN callScope CPAREN OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $6);
         $$->setHasScopeClause(true);
         for (const Symbol* symbol : $3) {
@@ -1215,24 +1212,24 @@ callSubquerySt
         }
         LOC($$, @$);
     }
-    | CALL OPAREN MULT CPAREN OBRACE callSubqueryBody CBRACE {
+    | CALL OPAREN MULT CPAREN OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $6);
         $$->setHasScopeClause(true);
         $$->setImportsEverything(true);
         LOC($$, @$);
     }
-    | OPTIONAL CALL OBRACE callSubqueryBody CBRACE {
+    | OPTIONAL CALL OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $4);
         $$->setOptional(true);
         LOC($$, @$);
     }
-    | OPTIONAL CALL OPAREN CPAREN OBRACE callSubqueryBody CBRACE {
+    | OPTIONAL CALL OPAREN CPAREN OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $6);
         $$->setHasScopeClause(true);
         $$->setOptional(true);
         LOC($$, @$);
     }
-    | OPTIONAL CALL OPAREN callScope CPAREN OBRACE callSubqueryBody CBRACE {
+    | OPTIONAL CALL OPAREN callScope CPAREN OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $7);
         $$->setHasScopeClause(true);
         $$->setOptional(true);
@@ -1241,7 +1238,7 @@ callSubquerySt
         }
         LOC($$, @$);
     }
-    | OPTIONAL CALL OPAREN MULT CPAREN OBRACE callSubqueryBody CBRACE {
+    | OPTIONAL CALL OPAREN MULT CPAREN OBRACE queryBody CBRACE {
         $$ = CallSubqueryStmt::create(ast, $7);
         $$->setHasScopeClause(true);
         $$->setImportsEverything(true);
@@ -1250,7 +1247,7 @@ callSubquerySt
     }
     ;
 
-callSubqueryBody
+queryBody
     : nextSegment { $$ = $1; }
     | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
     ;
@@ -1276,65 +1273,7 @@ whenBranches
 
 conditionalBranchQuery
     : singlePartQuery { $$ = $1; }
-    | OBRACE singlePartQuery CBRACE { $$ = $2; }
-    | OBRACE unionOperand unionList CBRACE { scanner.notImplemented(@$, "UNION inside a WHEN branch"); }
-    | OBRACE nextChain CBRACE { $$ = ParserUtils::createNextQuery(ast, $2, @2); }
-    ;
-
-existsBody
-    : singlePartQuery { $$ = $1; }
-    | unionOperand unionList {
-        if ($1._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-            scanner.notImplemented(@1, "WHEN in an EXISTS body");
-        }
-
-        for (const UnionQuery::Branch& branch : $2) {
-            if (branch._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-                scanner.notImplemented(@2, "WHEN in an EXISTS body");
-            }
-        }
-
-        $$ = UnionQuery::create(ast, $1._query, $2);
-        LOC($$, @$);
-      }
-    | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
-    ;
-
-countBody
-    : singlePartQuery { $$ = $1; }
-    | unionOperand unionList {
-        if ($1._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-            scanner.notImplemented(@1, "WHEN in a COUNT body");
-        }
-
-        for (const UnionQuery::Branch& branch : $2) {
-            if (branch._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-                scanner.notImplemented(@2, "WHEN in a COUNT body");
-            }
-        }
-
-        $$ = UnionQuery::create(ast, $1._query, $2);
-        LOC($$, @$);
-      }
-    | nextChain { $$ = ParserUtils::createNextQuery(ast, $1, @$); }
-    ;
-
-collectBody
-    : singlePartQuery { $$ = $1; }
-    | unionOperand unionList {
-        if ($1._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-            scanner.notImplemented(@1, "WHEN in a COLLECT body");
-        }
-
-        for (const UnionQuery::Branch& branch : $2) {
-            if (branch._query->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-                scanner.notImplemented(@2, "WHEN in a COLLECT body");
-            }
-        }
-
-        $$ = UnionQuery::create(ast, $1._query, $2);
-        LOC($$, @$);
-      }
+    | OBRACE queryBody CBRACE { $$ = $2; }
     ;
 
 callScope
@@ -1684,7 +1623,7 @@ atomExpr
     ;
 
 collectExpr
-    : COLLECT OBRACE collectBody CBRACE { $$ = CollectSubqueryExpr::create(ast, $3); LOC($$, @$); }
+    : COLLECT OBRACE queryBody CBRACE { $$ = CollectSubqueryExpr::create(ast, $3); LOC($$, @$); }
     | COLLECT OPAREN expr CPAREN {
         Symbol* symbol = Symbol::create(ast, "collect");
         QualifiedName* name = QualifiedName::create(ast);
@@ -1883,12 +1822,11 @@ unionSt
 
 unionOperand
     : singlePartQuery { $$ = {$1, false}; }
-    | OBRACE conditionalBranches CBRACE { $$ = {$2, false}; }
-    | OBRACE nextChain CBRACE { $$ = {ParserUtils::createNextQuery(ast, $2, @2), false}; }
+    | OBRACE queryBody CBRACE { $$ = {$2, false}; }
     ;
 
 subqueryExist
-    : EXISTS OBRACE existsBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
+    : EXISTS OBRACE queryBody CBRACE { $$ = ExistsExpr::create(ast, $3); LOC($$, @$); }
     | EXISTS OBRACE patternWhere CBRACE {
         SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
         $$ = ExistsExpr::create(ast, body);
@@ -1897,7 +1835,7 @@ subqueryExist
     ;
 
 subqueryCount
-    : COUNT OBRACE countBody CBRACE { $$ = CountSubqueryExpr::create(ast, $3); LOC($$, @$); }
+    : COUNT OBRACE queryBody CBRACE { $$ = CountSubqueryExpr::create(ast, $3); LOC($$, @$); }
     | COUNT OBRACE patternWhere CBRACE {
         SinglePartQuery* body = ParserUtils::createPatternBody(ast, $3, @3);
         $$ = CountSubqueryExpr::create(ast, body);

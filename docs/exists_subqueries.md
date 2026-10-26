@@ -41,10 +41,12 @@ A body can be a UNION. It holds for a row when any branch produces a row for it,
 generated as one `db.exists_subquery` per branch, ORed together. A branch needs no RETURN,
 but if one branch has a RETURN every branch must return the same columns.
 
-Out of scope: the conditional `WHEN ... THEN { } ELSE { }` body, which the grammar has no
-clause for at all. `test/query/ir/subquery/ExistsNeo4jManualTest.cpp` holds it, skipping with what is
-missing and keeping the rows the manual documents, so it is the test to make pass when its
-clause lands.
+A body can be a WHEN: `EXISTS { WHEN p.age > 35 THEN { ... } ELSE { ... } }` holds for a row
+when the branch its predicates pick produces a row for it. Its predicates read the
+variables in flight as the branches do. A body that is a WHEN, or a UNION nested in one,
+is one `db.exists_subquery` over the `db.conditional`, run one input row at a time. A single
+query of such a body that returns nothing yields one constant column, so the op holding
+the branches has rows to answer for.
 
 ## 2. Ops
 

@@ -185,7 +185,8 @@ TEST_F(CollectNeo4jManualTest, collectSubqueryWithWhereClause) {
 }
 
 TEST_F(CollectNeo4jManualTest, conditionalCollectSubquery) {
-    GTEST_SKIP() << "The grammar has no conditional WHEN body in a COLLECT subquery";
+    GTEST_SKIP() << "The exists() function over a pattern has no rule in the grammar: the parser "
+                    "stops at its parenthesis";
 
     expectRows("MATCH (n:Person) "
                "RETURN n.name AS name, "

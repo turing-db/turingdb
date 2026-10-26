@@ -662,7 +662,11 @@ void CypherAnalyzer::analyzeConditionalPredicates(ConditionalQuery* conditional,
     }
 
     setScope(inner);
+    analyzePredicates(conditional);
+    setScope(outer);
+}
 
+void CypherAnalyzer::analyzePredicates(const ConditionalQuery* conditional) {
     for (const ConditionalQuery::Branch& branch : conditional->branches()) {
         Expr* predicate = branch._condition;
         if (!predicate) {
@@ -680,8 +684,6 @@ void CypherAnalyzer::analyzeConditionalPredicates(ConditionalQuery* conditional,
             throwError("WHEN predicate must be a boolean", predicate);
         }
     }
-
-    setScope(outer);
 }
 
 void CypherAnalyzer::importIntoQuery(RegularQuery* query,
@@ -770,29 +772,55 @@ void CypherAnalyzer::analyzeCorrelatedBody(RegularQuery* body, bool dedupNamesCo
 
     if (kind == QueryCommand::Kind::SINGLE_PART_QUERY) {
         analyzeExistsBranch(static_cast<const SinglePartQuery*>(body));
+    } else if (kind == QueryCommand::Kind::UNION_QUERY) {
+        const UnionQuery* unionQuery = static_cast<const UnionQuery*>(body);
+        const UnionQuery::Branches& branches = unionQuery->branches();
+
+        for (const UnionQuery::Branch& branch : branches) {
+            analyzeCorrelatedBody(branch._query, dedupNamesColumns);
+        }
+
+        const auto hasReturn = [](const UnionQuery::Branch& branch) {
+            return branch._query->isReturning();
+        };
+
+        const bool dedupNames = dedupNamesColumns && unionQuery->getDedupedBranchCount() > 0;
+        const bool namesColumns = dedupNames || std::ranges::any_of(branches, hasReturn);
+        if (namesColumns) {
+            for (size_t index = 1; index < branches.size(); index++) {
+                analyzeUnionColumns(branches.front()._query, branches[index]._query);
+            }
+        }
+    } else {
+        ConditionalQuery* conditional = static_cast<ConditionalQuery*>(body);
+        const ConditionalQuery::Branches& branches = conditional->branches();
+
+        analyzeCorrelatedPredicates(conditional);
+
+        for (const ConditionalQuery::Branch& branch : branches) {
+            analyzeCorrelatedBody(branch._query, dedupNamesColumns);
+        }
+
+        for (size_t index = 1; index < branches.size(); index++) {
+            analyzeConditionalColumns(branches.front()._query, branches[index]._query);
+        }
+    }
+}
+
+void CypherAnalyzer::analyzeCorrelatedPredicates(ConditionalQuery* conditional) {
+    if (!_analyzedBodies.insert(conditional).second) {
         return;
     }
 
-    bioassert(kind == QueryCommand::Kind::UNION_QUERY, "WHEN in an EXISTS, COUNT or COLLECT body.");
+    DeclContext* const outer = _ctxt;
+    DeclContext* const inner = conditional->getDeclContext();
 
-    const UnionQuery* unionQuery = static_cast<const UnionQuery*>(body);
-    const UnionQuery::Branches& branches = unionQuery->branches();
+    std::vector<std::string_view> correlated;
+    importCorrelatedVariables(inner, correlated);
 
-    for (const UnionQuery::Branch& branch : branches) {
-        analyzeCorrelatedBody(branch._query, dedupNamesColumns);
-    }
-
-    const auto hasReturn = [](const UnionQuery::Branch& branch) {
-        return branch._query->isReturning();
-    };
-
-    const bool dedupNames = dedupNamesColumns && unionQuery->getDedupedBranchCount() > 0;
-    const bool namesColumns = dedupNames || std::ranges::any_of(branches, hasReturn);
-    if (namesColumns) {
-        for (size_t index = 1; index < branches.size(); index++) {
-            analyzeUnionColumns(branches.front()._query, branches[index]._query);
-        }
-    }
+    setScope(inner);
+    analyzePredicates(conditional);
+    setScope(outer);
 }
 
 void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
@@ -800,15 +828,42 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
         return;
     }
 
-    // EXISTS is correlated: the body reads every variable in flight, through declarations
-    // of its own, so the variables it binds stay inside it
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = body->getDeclContext();
 
-    // Each one stays readable through the whole body, as what a CALL's scope clause names
-    // does: a WITH inside it carries them past the barrier rather than descoping them,
-    // which is what keeps a pattern below that WITH reading the row the EXISTS answers for
+    // Each variable in flight stays readable through the whole body, as what a CALL's scope
+    // clause names does: a WITH inside it carries them past the barrier rather than descoping
+    // them, which is what keeps a pattern below that WITH reading the row the EXISTS answers for
     std::vector<std::string_view> correlated;
+    importCorrelatedVariables(inner, correlated);
+
+    const Projection* const orderedProjection = std::exchange(_orderedProjection, nullptr);
+    DeclSet consumedVariables;
+
+    std::swap(_subqueryImports, correlated);
+    std::swap(_consumedVariables, consumedVariables);
+
+    setScope(inner);
+
+    analyzeQueryBody(body, /*returnRequired=*/false);
+
+    std::swap(_subqueryImports, correlated);
+    std::swap(_consumedVariables, consumedVariables);
+    _orderedProjection = orderedProjection;
+
+    // A RETURN answers for no column outside the body, but the code generator reads the
+    // declarations its items publish, so they are declared in a scope nothing else holds
+    if (const ReturnStmt* returnStmt = body->getReturnStmt()) {
+        publishProjection(returnStmt->getProjection(), DeclContext::create(_ast, inner));
+    }
+
+    setScope(outer);
+}
+
+// EXISTS is correlated: the body reads every variable in flight, through declarations of
+// its own, so the variables it binds stay inside it
+void CypherAnalyzer::importCorrelatedVariables(DeclContext* inner, std::vector<std::string_view>& correlated) {
+    DeclContext* const outer = _ctxt;
 
     const auto importDecl = [this, inner, &correlated](std::string_view name, const VarDecl* decl) {
         VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
@@ -879,28 +934,6 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
             }
         }
     }
-
-    const Projection* const orderedProjection = std::exchange(_orderedProjection, nullptr);
-    DeclSet consumedVariables;
-
-    std::swap(_subqueryImports, correlated);
-    std::swap(_consumedVariables, consumedVariables);
-
-    setScope(inner);
-
-    analyzeQueryBody(body, /*returnRequired=*/false);
-
-    std::swap(_subqueryImports, correlated);
-    std::swap(_consumedVariables, consumedVariables);
-    _orderedProjection = orderedProjection;
-
-    // A RETURN answers for no column outside the body, but the code generator reads the
-    // declarations its items publish, so they are declared in a scope nothing else holds
-    if (const ReturnStmt* returnStmt = body->getReturnStmt()) {
-        publishProjection(returnStmt->getProjection(), DeclContext::create(_ast, inner));
-    }
-
-    setScope(outer);
 }
 
 void CypherAnalyzer::throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const {

@@ -380,6 +380,10 @@ constexpr std::string_view countTagName {"`hidden_`count_tag"};
 
 constexpr std::string_view collectTagName {"`hidden_`collect_tag"};
 
+// What a single query of an EXISTS or COUNT body returning nothing yields when the body is a
+// UNION or a WHEN: one constant column, so the op holding its branches has rows to count
+constexpr std::string_view ANSWER_COLUMN_NAME {"`hidden_`answer"};
+
 // The mask of an entity a MERGE wrote is bound past a WITH under the entity's name behind
 // this prefix. No hidden name starts with it, so a barrier publishing no entity drops it
 constexpr std::string_view pendingMaskPrefix {"`pending_"};
@@ -2042,7 +2046,7 @@ void DBProgramGenerator::generateBodyOutput(const RegularQuery* body, const Unio
 
     llvm::SmallVector<PublishedColumn> yielded;
     CarriedEntities returnedEntities;
-    generateSubqueryBody(body, scopes, yielded, returnedEntities);
+    generateSubqueryBody(body, scopes, /*answersRows=*/false, yielded, returnedEntities);
 
     const ReturnStmt* returnStmt = body->getFirstSingleQuery()->getReturnStmt();
     if (!returnStmt) {
@@ -5879,7 +5883,12 @@ void DBProgramGenerator::generateUnionSegment(const CallSubqueryStmt* body) {
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
         mlir::Block* const block = &branchResults._regions[branchIndex]->front();
-        generateSubqueryBranch(branches[branchIndex]._query, scopes, block, outerBlock, branchResults);
+        generateSubqueryBranch(branches[branchIndex]._query,
+                               scopes,
+                               /*answersRows=*/false,
+                               block,
+                               outerBlock,
+                               branchResults);
     }
 
     llvm::SmallVector<PublishedColumn> yielded;
@@ -6111,7 +6120,7 @@ void DBProgramGenerator::emitCallSubquery(const CallSubqueryStmt* subquery, Subq
     mlir::Value yieldedTag;
 
     if (runsPerRow) {
-        generateSubqueryBody(body, scopes, yielded, returnedEntities);
+        generateSubqueryBody(body, scopes, /*answersRows=*/false, yielded, returnedEntities);
     } else {
         const SinglePartQuery* query = static_cast<const SinglePartQuery*>(body);
 
@@ -6328,12 +6337,17 @@ void DBProgramGenerator::collectSubqueryBranchScope(const RegularQuery* query,
 
 void DBProgramGenerator::generateSubqueryBody(const RegularQuery* body,
                                               const BodyScopes& scopes,
+                                              bool answersRows,
                                               llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                               CarriedEntities& returnedEntities) {
     if (body->getKind() == QueryCommand::Kind::UNION_QUERY) {
-        generateSubqueryUnion(static_cast<const UnionQuery*>(body), scopes, yielded, returnedEntities);
+        generateSubqueryUnion(static_cast<const UnionQuery*>(body), scopes, answersRows, yielded, returnedEntities);
     } else {
-        generateSubqueryConditional(static_cast<const ConditionalQuery*>(body), scopes, yielded, returnedEntities);
+        generateSubqueryConditional(static_cast<const ConditionalQuery*>(body),
+                                    scopes,
+                                    answersRows,
+                                    yielded,
+                                    returnedEntities);
     }
 }
 
@@ -6342,6 +6356,7 @@ void DBProgramGenerator::generateSubqueryBody(const RegularQuery* body,
 // declarations the analyzer gave the first one, so they come out in the same order.
 void DBProgramGenerator::generateSubqueryUnion(const UnionQuery* unionQuery,
                                                const BodyScopes& scopes,
+                                               bool answersRows,
                                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                                CarriedEntities& returnedEntities) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -6356,7 +6371,12 @@ void DBProgramGenerator::generateSubqueryUnion(const UnionQuery* unionQuery,
     SubqueryBranchResults branchResults;
 
     for (const UnionQuery::Branch& branch : unionQuery->branches()) {
-        generateSubqueryBranch(branch._query, scopes, openSubqueryBranch(branchResults), bodyBlock, branchResults);
+        generateSubqueryBranch(branch._query,
+                               scopes,
+                               answersRows,
+                               openSubqueryBranch(branchResults),
+                               bodyBlock,
+                               branchResults);
     }
 
     generateUnionOverBranches(distinctSet, dedupedBranches, bodyBlock, branchResults, yielded, returnedEntities);
@@ -6396,6 +6416,7 @@ void DBProgramGenerator::generateUnionOverBranches(mlir::Value distinctSet,
 
 void DBProgramGenerator::generateSubqueryConditional(const ConditionalQuery* conditional,
                                                      const BodyScopes& scopes,
+                                                     bool answersRows,
                                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                                      CarriedEntities& returnedEntities) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -6414,7 +6435,12 @@ void DBProgramGenerator::generateSubqueryConditional(const ConditionalQuery* con
             generateConditionRegion(predicate, bodyBlock, conditionRegions);
         }
 
-        generateSubqueryBranch(branch._query, scopes, openSubqueryBranch(branchResults), bodyBlock, branchResults);
+        generateSubqueryBranch(branch._query,
+                               scopes,
+                               answersRows,
+                               openSubqueryBranch(branchResults),
+                               bodyBlock,
+                               branchResults);
     }
 
     yieldEveryPendingMask(branchResults);
@@ -6493,6 +6519,7 @@ mlir::Block* DBProgramGenerator::openSubqueryBranch(SubqueryBranchResults& branc
 // branch's region, and those branches start from the rows the outermost one does
 void DBProgramGenerator::generateSubqueryBranch(const RegularQuery* query,
                                                 const BodyScopes& scopes,
+                                                bool answersRows,
                                                 mlir::Block* block,
                                                 mlir::Block* bodyBlock,
                                                 SubqueryBranchResults& branchResults) {
@@ -6514,6 +6541,11 @@ void DBProgramGenerator::generateSubqueryBranch(const RegularQuery* query,
         if (const ReturnStmt* returnStmt = single->getReturnStmt()) {
             publishProjection(returnStmt->getProjection(), nullptr, true);
             collectPublishedColumns(branchColumns);
+        } else if (answersRows) {
+            llvm::SmallVector<mlir::Value> answer {constantBool(true)};
+            broadcastConstantProjection(answer);
+
+            branchColumns.push_back({nullptr, std::string(ANSWER_COLUMN_NAME), answer.front()});
         }
 
         for (const PublishedColumn& column : branchColumns) {
@@ -6524,7 +6556,7 @@ void DBProgramGenerator::generateSubqueryBranch(const RegularQuery* query,
         }
     } else {
         CarriedEntities returnedEntities;
-        generateSubqueryBody(query, scopes, branchColumns, returnedEntities);
+        generateSubqueryBody(query, scopes, answersRows, branchColumns, returnedEntities);
 
         for (const PublishedColumn& column : branchColumns) {
             std::optional<PartScope::WrittenEntity>& written = writtenColumns.emplace_back();
@@ -8545,7 +8577,7 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
 
     if (runsPerRow) {
         CarriedEntities returnedEntities;
-        generateSubqueryBody(body, scopes, held, returnedEntities);
+        generateSubqueryBody(body, scopes, !body->isReturning(), held, returnedEntities);
     } else {
         const SinglePartQuery* query = static_cast<const SinglePartQuery*>(body);
 

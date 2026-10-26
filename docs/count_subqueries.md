@@ -27,6 +27,9 @@ RETURN naming the same columns, as Neo4j requires. A chain mixing both follows U
 `A UNION ALL B UNION C` counts distinct(A ++ B ++ C), `A UNION B UNION ALL C` counts
 distinct(A ++ B) ++ C.
 
+A body can be a WHEN: it counts the rows of the branch its predicates pick for the row, and
+a branch needs no RETURN, as in an EXISTS body.
+
 The result is a `ui64` column, as `count(*)` is. A `UNION ALL` body adds its branch counts
 together, and that sum is an `i64`, as any arithmetic over a count is.
 

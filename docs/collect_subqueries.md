@@ -33,8 +33,10 @@ branches. A chain mixing both follows UnionQuery, as COUNT does.
 The result is a list column. Its element type is the body's column's, resolved during
 lowering, as a pattern comprehension's is.
 
-Out of scope: the conditional `WHEN ... THEN { } ELSE { }` body, as in COUNT and EXISTS.
-`CollectNeo4jManualTest` holds the manual's example, skipped.
+A body can be a WHEN, as an EXISTS or a COUNT body can: the list holds what the branch
+its predicates pick returns for the row. `CollectNeo4jManualTest` holds the manual's
+example, skipped: it tests its predicate with the `exists()` function over a pattern, which
+the grammar has no rule for.
 
 ## 2. Ops
 
