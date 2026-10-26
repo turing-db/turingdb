@@ -427,10 +427,17 @@ collect into one `nl.union_buffer`, as a UNION body does. A branch can return an
 MERGE wrote: each branch yields the entity's pending mask, `false` in a branch that did not
 write it. A column one branch created and another did not gets a mask too, `true` in each
 branch that created it. A UNION can combine a WHEN, in braces, with another WHEN or any
-other query: `{ WHEN ... } UNION { WHEN ... }`. The parser writes each braced WHEN as
-`CALL () { WHEN ... } RETURN <its columns>`, which the CALL holding the union hands its
-imports, so the union handles it as any other side. Not done yet: a UNION inside a WHEN
+other query: `{ WHEN ... } UNION { WHEN ... }`. Not done yet: a UNION inside a WHEN
 branch, and WHEN in an EXISTS or COUNT body.
+
+A body is a `RegularQuery` (`query/AST/RegularQuery.h`): a `SinglePartQuery`, or a
+`UnionQuery` or a `ConditionalQuery` whose branches are regular queries again. The top
+level, a CALL, a NEXT segment, EXISTS, COUNT and COLLECT all hold one. The analyzer reads a
+body through `analyzeSubqueryBody` and the code generator through `generateSubqueryBody`.
+Each single query of a body, and each WHEN, holds the declarations it imports
+(`RegularQuery::getImportDecls`), and the code generator binds them to the row the body
+runs for. A branch that is a UNION or a WHEN of its own nests its `db.union` or
+`db.conditional` in the region of the branch holding it.
 
 `CALL (*) { ... }` imports every variable in scope: the analyzer fills the import list from
 the scope's named declarations (`CypherAnalyzer::importEveryVariable`), and the body then

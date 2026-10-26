@@ -21,6 +21,7 @@
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CallStmt.h"
+#include "stmt/CallSubqueryStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/NextSegmentStmt.h"
@@ -267,66 +268,12 @@ NodePattern* ParserUtils::createNodePattern(CypherAST* ast,
     return node;
 }
 
-bool ParserUtils::createWhenOperand(CypherAST* ast,
-                                    const CallSubqueryStmt::Branches& branches,
-                                    const SourceLocation& location,
-                                    UnionQuery::Branch& operand) {
-    SourceManager* sourceManager = ast->getSourceManager();
+bool ParserUtils::returnsUnaliasedItem(const RegularQuery* segment) {
+    std::vector<const SinglePartQuery*> queries;
+    RegularQuery::collectSingleQueries(segment, queries);
 
-    CallSubqueryStmt* call = CallSubqueryStmt::create(ast, branches);
-    call->setHasScopeClause(true);
-    sourceManager->setLocation(call, location);
-
-    StmtContainer* stmts = StmtContainer::create(ast);
-    stmts->add(call);
-    sourceManager->setLocation(stmts, location);
-
-    SinglePartQuery* query = SinglePartQuery::create(ast);
-    query->setStmts(stmts);
-    sourceManager->setLocation(query, location);
-
-    operand = {query, false, call};
-
-    const ReturnStmt* branchReturn = branches.front()._query->getReturnStmt();
-    if (!branchReturn) {
-        return true;
-    }
-
-    const Projection* branchProjection = branchReturn->getProjection();
-    if (branchProjection->isReturningAll()) {
-        return false;
-    }
-
-    Projection* projection = Projection::create(ast);
-    sourceManager->setLocation(projection, location);
-
-    for (const Projection::ReturnItem& item : branchProjection->items()) {
-        const Expr* expr = std::get<Expr*>(item);
-
-        std::string_view name = expr->getName();
-        if (name.empty() && expr->getKind() == Expr::Kind::SYMBOL) {
-            name = static_cast<const SymbolExpr*>(expr)->getSymbol()->getName();
-        }
-
-        if (name.empty()) {
-            return false;
-        }
-
-        SymbolExpr* column = SymbolExpr::create(ast, Symbol::create(ast, name));
-        sourceManager->setLocation(column, location);
-        projection->addExpr(column);
-    }
-
-    ReturnStmt* returnStmt = ReturnStmt::create(ast, projection);
-    sourceManager->setLocation(returnStmt, location);
-    query->setReturnStmt(returnStmt);
-
-    return true;
-}
-
-bool ParserUtils::returnsUnaliasedItem(const CallSubqueryStmt::Branches& segment) {
-    for (const CallSubqueryStmt::Branch& branch : segment) {
-        const ReturnStmt* returnStmt = branch._query->getReturnStmt();
+    for (const SinglePartQuery* query : queries) {
+        const ReturnStmt* returnStmt = query->getReturnStmt();
         if (!returnStmt) {
             continue;
         }
@@ -359,14 +306,13 @@ SinglePartQuery* ParserUtils::createNextQuery(CypherAST* ast,
     sourceManager->setLocation(query, location);
 
     for (size_t index = 0; index < segments.size(); index++) {
-        const CallSubqueryStmt::Branches& segment = segments[index];
+        RegularQuery* segment = segments[index];
         const bool endsTheChain = index + 1 == segments.size();
 
-        const CallSubqueryStmt::Branch& firstBranch = segment.front();
-        SinglePartQuery* first = firstBranch._query;
+        SinglePartQuery* first = segment->getFirstSingleQuery();
         ReturnStmt* returnStmt = first->getReturnStmt();
 
-        const bool composite = segment.size() > 1 || firstBranch._condition;
+        const bool composite = segment->getKind() != QueryCommand::Kind::SINGLE_PART_QUERY;
 
         if (!composite && (returnStmt || endsTheChain)) {
             ast->nestQuery(first);
@@ -459,7 +405,7 @@ CallSubqueryStmt* ParserUtils::createForeach(CypherAST* ast,
     body->setStmts(stmts);
     sourceManager->setLocation(body, location);
 
-    CallSubqueryStmt* call = CallSubqueryStmt::create(ast, {{body, false, {}}});
+    CallSubqueryStmt* call = CallSubqueryStmt::create(ast, body);
     call->setHasScopeClause(true);
     call->setImportsEverything(true);
     sourceManager->setLocation(call, location);
@@ -495,7 +441,7 @@ ExistsExpr* ParserUtils::createPatternPredicate(CypherAST* ast,
 
     SinglePartQuery* body = createPatternBody(ast, pattern, location);
 
-    ExistsExpr* predicate = ExistsExpr::create(ast, {body});
+    ExistsExpr* predicate = ExistsExpr::create(ast, body);
     predicate->setPredicatePattern(pattern);
     ast->getSourceManager()->setLocation(predicate, location);
 
@@ -669,12 +615,17 @@ EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const 
     return EmbeddingLiteral::create(ast, std::move(data));
 }
 
-void ParserUtils::markStandaloneCall(const SinglePartQuery* query) {
-    if (query->getReturnStmt()) {
+void ParserUtils::markStandaloneCall(const RegularQuery* query) {
+    if (query->getKind() != QueryCommand::Kind::SINGLE_PART_QUERY) {
         return;
     }
 
-    const StmtContainer* stmts = query->getStmts();
+    const SinglePartQuery* single = static_cast<const SinglePartQuery*>(query);
+    if (single->getReturnStmt()) {
+        return;
+    }
+
+    const StmtContainer* stmts = single->getStmts();
     if (!stmts) {
         return;
     }

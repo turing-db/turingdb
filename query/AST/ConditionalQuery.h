@@ -1,26 +1,39 @@
 #pragma once
 
-#include "QueryCommand.h"
+#include <vector>
+
+#include "RegularQuery.h"
 
 namespace db {
 
-class CallSubqueryStmt;
 class CypherAST;
+class Expr;
 
-// A standalone WHEN ... THEN ... ELSE query. It is the body of a CALL () { ... } with
-// nothing around it, so it holds that subquery and its result is what the subquery returns.
-class ConditionalQuery : public QueryCommand {
+// WHEN ... THEN ... ELSE: for each row it runs for, the first branch whose predicate is
+// true, or the ELSE branch when none is
+class ConditionalQuery : public RegularQuery {
 public:
-    static ConditionalQuery* create(CypherAST* ast, CallSubqueryStmt* body);
+    // A WHEN branch holds its predicate; the ELSE branch holds none
+    struct Branch {
+        Expr* _condition {nullptr};
+        RegularQuery* _query {nullptr};
+    };
+
+    using Branches = std::vector<Branch>;
+
+    static ConditionalQuery* create(CypherAST* ast, const Branches& branches);
 
     Kind getKind() const override { return Kind::CONDITIONAL_QUERY; }
 
-    CallSubqueryStmt* getBody() const { return _body; }
+    const Branches& branches() const { return _branches; }
+
+    bool writesToTheGraph() const override;
+    bool readsTheGraph() const override;
 
 private:
-    CallSubqueryStmt* _body {nullptr};
+    Branches _branches;
 
-    ConditionalQuery(DeclContext* declContext, CallSubqueryStmt* body);
+    ConditionalQuery(DeclContext* declContext, const Branches& branches);
     ~ConditionalQuery() override;
 };
 

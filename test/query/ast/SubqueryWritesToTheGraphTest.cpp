@@ -32,7 +32,7 @@ protected:
     ReturnStmt* returns() { return ReturnStmt::create(&_ast, nullptr); }
 
     CallSubqueryStmt* subqueryOver(SinglePartQuery* body) {
-        return CallSubqueryStmt::create(&_ast, {{body, false, {}}});
+        return CallSubqueryStmt::create(&_ast, body);
     }
 
     CypherAST _ast;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stddef.h>
 #include <vector>
 
 #include "Stmt.h"
@@ -8,10 +7,8 @@
 namespace db {
 
 class CypherAST;
-class Expr;
-class SinglePartQuery;
+class RegularQuery;
 class Symbol;
-class VarDecl;
 
 // CALL (a, b) { ... }: a query of its own, run once per row in flight, reading the
 // variables it imports and nothing else of the scope around it
@@ -19,39 +16,15 @@ class CallSubqueryStmt final : public Stmt {
 public:
     using Imports = std::vector<const Symbol*>;
 
-    // One query of the body - the whole body, one side of a UNION in it, or one branch of
-    // a WHEN - with the operator joining it to the ones before it and the variables it
-    // imports. Each branch imports through a leading WITH of its own, so the imports are
-    // held per branch. A WHEN branch holds its predicate; the ELSE branch holds none. A
-    // `{ WHEN ... }` side of a UNION holds the CALL it is written as, as UnionQuery's does.
-    struct Branch {
-        SinglePartQuery* _query {nullptr};
-        bool _all {false};
-        Imports _imports;
-        Expr* _condition {nullptr};
-        CallSubqueryStmt* _whenCall {nullptr};
-
-        // The declaration the analyzer binds each import to, which a later clause of the
-        // body may name again
-        std::vector<const VarDecl*> _importDecls;
-    };
-
-    using Branches = std::vector<Branch>;
-
-    static CallSubqueryStmt* create(CypherAST* ast, const Branches& branches);
+    static CallSubqueryStmt* create(CypherAST* ast, RegularQuery* body);
 
     Kind getKind() const final { return Kind::CALL_SUBQUERY; }
 
-    const Branches& branches() const { return _branches; }
-    Branches& branches() { return _branches; }
+    RegularQuery* getBody() const { return _body; }
 
-    bool isUnion() const { return !isConditional() && _branches.size() > 1; }
-
-    // A body of WHEN ... THEN branches runs the first one whose predicate is true
-    bool isConditional() const { return _branches.front()._condition != nullptr; }
-
-    // How many leading branches dedup against one another, as UnionQuery counts them
-    size_t getDedupedBranchCount() const;
+    // What the scope clause names, which every query of the body imports. A body with no
+    // scope clause imports through the leading WITH of each of its single queries.
+    const Imports& getImports() const { return _imports; }
 
     bool hasScopeClause() const { return _hasScopeClause; }
     bool importsEverything() const { return _importsEverything; }
@@ -64,20 +37,20 @@ public:
     bool writesToTheGraph() const;
     bool readsTheGraph() const;
 
-    // What the scope clause names is imported by every branch
-    void addImport(const Symbol* symbol);
+    void addImport(const Symbol* symbol) { _imports.push_back(symbol); }
 
     void setHasScopeClause(bool hasScopeClause) { _hasScopeClause = hasScopeClause; }
     void setImportsEverything(bool importsEverything) { _importsEverything = importsEverything; }
     void setOptional(bool optional) { _optional = optional; }
 
 private:
-    Branches _branches;
+    RegularQuery* _body {nullptr};
+    Imports _imports;
     bool _hasScopeClause {false};
     bool _importsEverything {false};
     bool _optional {false};
 
-    explicit CallSubqueryStmt(const Branches& branches);
+    explicit CallSubqueryStmt(RegularQuery* body);
     ~CallSubqueryStmt() final;
 };
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "QueryCommand.h"
+#include "RegularQuery.h"
 
 namespace db {
 
@@ -11,7 +11,7 @@ class DeclContext;
 class ShortestPathStmt;
 class Stmt;
 
-class SinglePartQuery : public QueryCommand {
+class SinglePartQuery : public RegularQuery {
 public:
     static SinglePartQuery* create(CypherAST* ast);
 
@@ -22,8 +22,8 @@ public:
     ReturnStmt* getReturnStmt() { return _returnStmt; }
 
     // A CALL subquery counts when its own body does
-    bool writesToTheGraph() const;
-    bool readsTheGraph() const;
+    bool writesToTheGraph() const override;
+    bool readsTheGraph() const override;
 
     void setStmts(StmtContainer* stmts) { _stmts = stmts; }
     void addStmt(Stmt* stmt);

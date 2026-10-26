@@ -18,6 +18,7 @@ class ReadStmtAnalyzer;
 class WriteStmtAnalyzer;
 class ExprAnalyzer;
 class QueryCommand;
+class RegularQuery;
 class SinglePartQuery;
 class UnionQuery;
 class ConditionalQuery;
@@ -70,12 +71,10 @@ public:
 
     // Query types
     void analyze(const SinglePartQuery* query);
-    void analyze(const UnionQuery* query);
     void analyze(const ReturnStmt* returnSt);
     void analyze(WithStmt* withSt);
     void analyze(CallSubqueryStmt* subquery);
     void analyze(NextSegmentStmt* segment);
-    void analyze(const ConditionalQuery* query);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(LoadGMLQuery* loadGML);
@@ -152,6 +151,8 @@ private:
     const Projection* _orderedProjection {nullptr};
     DeclSet _consumedVariables;
 
+    void analyzeTopLevelQuery(RegularQuery* query);
+
     // The shared body of a query and of a subquery's. @param returnRequired says whether a
     // body ending on a reading clause needs a RETURN: an EXISTS body does not
     void analyzeQueryBody(const SinglePartQuery* query, bool returnRequired);
@@ -165,23 +166,41 @@ private:
 
     void setScope(DeclContext* scope);
 
-    // A body opening on a WITH of plain variables imports them, when no scope clause says
-    // what the body reads
-    void importThroughLeadingWith(CallSubqueryStmt::Branch& branch) const;
+    // A single query opening on a WITH of plain variables imports them, when no scope
+    // clause says what the body reads
+    void importThroughLeadingWith(const SinglePartQuery* query, CallSubqueryStmt::Imports& imports) const;
 
     // `CALL (*)` imports every variable in scope
     void importEveryVariable(CallSubqueryStmt* subquery) const;
 
-    // Analyzes one query of a CALL body under its own scope, seeded with what it imports
-    // @returns the scope the branch's RETURN reads
-    DeclContext* analyzeSubqueryBranch(CallSubqueryStmt::Branch& branch, BranchImports imports);
+    // Analyzes every query of @param body, each under its own scope, seeded with what
+    // @param imports names as @param mode reads it. Fills @param returnScopes with the
+    // scope each single query's RETURN reads, in the order the branches are written.
+    void analyzeSubqueryBody(RegularQuery* body,
+                             std::span<const Symbol* const> imports,
+                             BranchImports mode,
+                             std::vector<DeclContext*>& returnScopes);
 
-    void analyzeBranchColumns(const CallSubqueryStmt* subquery) const;
+    // @returns the scope the query's RETURN reads
+    DeclContext* analyzeSubqueryBranch(SinglePartQuery* query,
+                                       std::span<const Symbol* const> imports,
+                                       BranchImports mode);
 
-    void carrySegmentImports(const CallSubqueryStmt* body, std::span<DeclContext* const> returnScopes);
-    void importIntoBranch(CallSubqueryStmt::Branch& branch, DeclContext* outer, DeclContext* inner);
+    void analyzeConditionalPredicates(ConditionalQuery* conditional,
+                                      std::span<const Symbol* const> imports,
+                                      BranchImports mode);
+
+    void carrySegmentImports(RegularQuery* body, std::span<DeclContext* const> returnScopes);
+    void importIntoQuery(RegularQuery* query,
+                         std::span<const Symbol* const> imports,
+                         DeclContext* outer,
+                         DeclContext* inner);
 
     void throwOnPatternPredicateVariable(const Pattern* pattern, const DeclContext* outer) const;
+
+    // Analyzes the body of an EXISTS, COUNT or COLLECT subquery. A UNION in it names its
+    // columns when a branch returns them, or when @param dedupNamesColumns and it dedups.
+    void analyzeCorrelatedBody(RegularQuery* body, bool dedupNamesColumns);
 
     // Analyzes one query of an EXISTS body, correlated with the variables in flight
     void analyzeExistsBranch(const SinglePartQuery* body);
@@ -192,7 +211,7 @@ private:
 
     // Declares in @param scope the columns the branches of a body return, under the
     // declarations the first branch makes
-    void publishBranchReturns(const CallSubqueryStmt* subquery, DeclContext* scope);
+    void publishBranchReturns(RegularQuery* body, DeclContext* scope);
     void publishUnionBranchReturn(Projection* branchProjection, const Projection* firstProjection);
 
     // Adds to a barrier of a subquery body the imports it does not project, so what the
@@ -225,7 +244,7 @@ private:
 
     // Whether every variable of the scope around @param body that the body reads is a
     // grouping key or an element
-    bool readsGroupWiseVariables(const SinglePartQuery* body,
+    bool readsGroupWiseVariables(const RegularQuery* body,
                                  const Projection* projection,
                                  const DeclSet& elements) const;
 
@@ -235,19 +254,19 @@ private:
     // Every branch of a union must project the same columns, in the same order and
     // under the same names: the union emits one result table, so a branch naming
     // other columns has no column of that table to fill
-    void analyzeUnionColumns(const SinglePartQuery* first, const SinglePartQuery* branch) const;
-    const Projection* unionBranchProjection(const SinglePartQuery* branch) const;
+    void analyzeUnionColumns(const RegularQuery* first, const RegularQuery* branch) const;
+    const Projection* unionBranchProjection(const RegularQuery* branch) const;
     static void collectProjectionNames(const Projection* projection,
                                        std::vector<std::string_view>& names);
 
     // The branches of a WHEN fill the same columns too, and a branch ending on a write
     // fills none, so either every branch returns them or none does
-    void analyzeConditionalColumns(const SinglePartQuery* first, const SinglePartQuery* branch) const;
+    void analyzeConditionalColumns(const RegularQuery* first, const RegularQuery* branch) const;
 
     void throwOnDifferentColumns(std::string_view branches,
                                  std::span<const std::string_view> firstNames,
                                  std::span<const std::string_view> names,
-                                 const SinglePartQuery* branch) const;
+                                 const RegularQuery* branch) const;
 
     void throwOnReadAfterUpdate(const StmtContainer* stmts) const;
     void analyzeShortestPathReturn(const SinglePartQuery* query) const;

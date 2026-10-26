@@ -1,71 +1,35 @@
 #include "CallSubqueryStmt.h"
 
 #include "CypherAST.h"
-#include "SinglePartQuery.h"
+#include "RegularQuery.h"
 
 using namespace db;
 
-CallSubqueryStmt::CallSubqueryStmt(const Branches& branches)
-    : _branches(branches)
+CallSubqueryStmt::CallSubqueryStmt(RegularQuery* body)
+    : _body(body)
 {
 }
 
 CallSubqueryStmt::~CallSubqueryStmt() {
 }
 
-CallSubqueryStmt* CallSubqueryStmt::create(CypherAST* ast, const Branches& branches) {
-    for (const Branch& branch : branches) {
-        ast->nestQuery(branch._query);
-    }
+CallSubqueryStmt* CallSubqueryStmt::create(CypherAST* ast, RegularQuery* body) {
+    ast->nestQuery(body);
 
-    CallSubqueryStmt* stmt = new CallSubqueryStmt(branches);
+    CallSubqueryStmt* stmt = new CallSubqueryStmt(body);
     ast->addStmt(stmt);
 
     return stmt;
 }
 
-size_t CallSubqueryStmt::getDedupedBranchCount() const {
-    size_t deduped = 0;
-
-    for (size_t index = 1; index < _branches.size(); index++) {
-        if (!_branches[index]._all) {
-            deduped = index + 1;
-        }
-    }
-
-    return deduped;
-}
-
 bool CallSubqueryStmt::isReturning() const {
-    return _branches.front()._query->getReturnStmt() != nullptr;
+    return _body->isReturning();
 }
 
 bool CallSubqueryStmt::writesToTheGraph() const {
-    for (const Branch& branch : _branches) {
-        if (branch._query->writesToTheGraph()) {
-            return true;
-        }
-    }
-
-    return false;
+    return _body->writesToTheGraph();
 }
 
 bool CallSubqueryStmt::readsTheGraph() const {
-    for (const Branch& branch : _branches) {
-        if (branch._query->readsTheGraph()) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void CallSubqueryStmt::addImport(const Symbol* symbol) {
-    for (Branch& branch : _branches) {
-        branch._imports.push_back(symbol);
-
-        if (branch._whenCall) {
-            branch._whenCall->addImport(symbol);
-        }
-    }
+    return _body->readsTheGraph();
 }

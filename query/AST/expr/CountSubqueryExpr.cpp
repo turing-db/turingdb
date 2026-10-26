@@ -1,25 +1,23 @@
 #include "CountSubqueryExpr.h"
 
 #include "CypherAST.h"
-#include "SinglePartQuery.h"
+#include "RegularQuery.h"
 
 using namespace db;
 
-CountSubqueryExpr::CountSubqueryExpr(const Branches& branches)
+CountSubqueryExpr::CountSubqueryExpr(RegularQuery* body)
     : Expr(Expr::Kind::COUNT_SUBQUERY),
-    _branches(branches)
+    _body(body)
 {
 }
 
 CountSubqueryExpr::~CountSubqueryExpr() {
 }
 
-CountSubqueryExpr* CountSubqueryExpr::create(CypherAST* ast, const Branches& branches) {
-    for (const UnionQuery::Branch& branch : branches) {
-        ast->nestQuery(branch._query);
-    }
+CountSubqueryExpr* CountSubqueryExpr::create(CypherAST* ast, RegularQuery* body) {
+    ast->nestQuery(body);
 
-    CountSubqueryExpr* expr = new CountSubqueryExpr(branches);
+    CountSubqueryExpr* expr = new CountSubqueryExpr(body);
     ast->addExpr(expr);
 
     return expr;

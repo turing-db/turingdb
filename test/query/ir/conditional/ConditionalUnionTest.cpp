@@ -104,9 +104,10 @@ TEST_F(ConditionalUnionTest, rejectsSidesReturningDifferentColumns) {
                 "All sub-queries of a UNION must return the same column names");
 }
 
-TEST_F(ConditionalUnionTest, rejectsAColumnWithoutAName) {
+TEST_F(ConditionalUnionTest, namesAColumnWithoutAnAliasByItsExpression) {
+    expectRows("{ WHEN true THEN RETURN 1 + 1 } UNION ALL { WHEN true THEN RETURN 1 + 1 }", {{"2"}, {"2"}});
     expectError("{ WHEN true THEN RETURN 1 + 1 } UNION { WHEN true THEN RETURN 2 AS x }",
-                "A WHEN combined by UNION must name each column it returns with AS");
+                "All sub-queries of a UNION must return the same column names");
 }
 
 TEST_F(ConditionalUnionTest, rejectsAPredicateReadingWhatNoScopeClauseImports) {

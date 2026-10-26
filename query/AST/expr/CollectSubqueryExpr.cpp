@@ -1,25 +1,23 @@
 #include "CollectSubqueryExpr.h"
 
 #include "CypherAST.h"
-#include "SinglePartQuery.h"
+#include "RegularQuery.h"
 
 using namespace db;
 
-CollectSubqueryExpr::CollectSubqueryExpr(const Branches& branches)
+CollectSubqueryExpr::CollectSubqueryExpr(RegularQuery* body)
     : Expr(Expr::Kind::COLLECT_SUBQUERY),
-    _branches(branches)
+    _body(body)
 {
 }
 
 CollectSubqueryExpr::~CollectSubqueryExpr() {
 }
 
-CollectSubqueryExpr* CollectSubqueryExpr::create(CypherAST* ast, const Branches& branches) {
-    for (const UnionQuery::Branch& branch : branches) {
-        ast->nestQuery(branch._query);
-    }
+CollectSubqueryExpr* CollectSubqueryExpr::create(CypherAST* ast, RegularQuery* body) {
+    ast->nestQuery(body);
 
-    CollectSubqueryExpr* expr = new CollectSubqueryExpr(branches);
+    CollectSubqueryExpr* expr = new CollectSubqueryExpr(body);
     ast->addExpr(expr);
 
     return expr;

@@ -60,6 +60,7 @@ set(ast_sources
     EntityPattern.cpp
     Projection.cpp
     QueryCommand.cpp
+    RegularQuery.cpp
     SinglePartQuery.cpp
     UnionQuery.cpp
     ConditionalQuery.cpp

@@ -1,20 +1,21 @@
 #include "UnionQuery.h"
 
+#include <algorithm>
+
 #include "CypherAST.h"
-#include "SinglePartQuery.h"
 #include "decl/DeclContext.h"
 
 using namespace db;
 
 UnionQuery::UnionQuery(DeclContext* declContext)
-    : QueryCommand(declContext)
+    : RegularQuery(declContext)
 {
 }
 
 UnionQuery::~UnionQuery() {
 }
 
-UnionQuery* UnionQuery::create(CypherAST* ast, SinglePartQuery* first, const Branches& rest) {
+UnionQuery* UnionQuery::create(CypherAST* ast, RegularQuery* first, const Branches& rest) {
     DeclContext* declContext = DeclContext::create(ast, nullptr);
     UnionQuery* query = new UnionQuery(declContext);
 
@@ -32,14 +33,26 @@ UnionQuery* UnionQuery::create(CypherAST* ast, SinglePartQuery* first, const Bra
     return query;
 }
 
-size_t UnionQuery::getDedupedBranchCount(const Branches& branches) {
+size_t UnionQuery::getDedupedBranchCount() const {
     size_t deduped = 0;
 
-    for (size_t index = 1; index < branches.size(); index++) {
-        if (!branches[index]._all) {
+    for (size_t index = 1; index < _branches.size(); index++) {
+        if (!_branches[index]._all) {
             deduped = index + 1;
         }
     }
 
     return deduped;
+}
+
+bool UnionQuery::writesToTheGraph() const {
+    return std::ranges::any_of(_branches, [](const Branch& branch) {
+        return branch._query->writesToTheGraph();
+    });
+}
+
+bool UnionQuery::readsTheGraph() const {
+    return std::ranges::any_of(_branches, [](const Branch& branch) {
+        return branch._query->readsTheGraph();
+    });
 }
