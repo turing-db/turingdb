@@ -156,6 +156,15 @@ TEST_F(MergeRejectionTest, rejectsAnEdgeKeyThatIsNullOnOneRow) {
         << status.getError();
 }
 
+TEST_F(MergeRejectionTest, rejectsAPropertyReadOffANodeAnOptionalMatchMissed) {
+    QueryStatus status;
+    runQuery("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) MERGE (:Friend {name: f.name})", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("MERGE cannot match on property 'name', which is null"), std::string::npos)
+        << status.getError();
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
