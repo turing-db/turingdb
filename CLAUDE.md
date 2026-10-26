@@ -35,7 +35,9 @@ source setup.sh
 - Release with debug info: `RELDEBUG=1 cmake -G Ninja ..`
 - Callgrind profiling: `CALLGRIND_PROFILE=1 cmake -G Ninja ..`
 
-Always use ninja, do not use make. CMake compiles through ccache and links with mold when they are installed; `-DTURING_USE_CCACHE=OFF` and `-DTURING_USE_MOLD=OFF` turn them off.
+Ninja is the preferred way to build: configure with `cmake -G Ninja ..` and build with `ninja`, not make. CMake compiles through ccache and links with mold when they are installed; `-DTURING_USE_CCACHE=OFF` and `-DTURING_USE_MOLD=OFF` turn them off.
+
+If `ccache` is not on `PATH`, install it in the home directory, which needs no sudo. On Linux, download the latest `linux-<arch>-musl-static` archive from the ccache GitHub releases page (https://github.com/ccache/ccache/releases), where `<arch>` is the output of `uname -m`, and copy the `ccache` binary it contains into `~/.local/bin`. `~/.local/bin` must be on `PATH`. On macOS, `brew install ccache`. A build directory configured without ccache picks it up on the next `cmake ..`.
 
 ## Testing
 
