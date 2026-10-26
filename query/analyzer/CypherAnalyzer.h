@@ -139,7 +139,7 @@ private:
     constexpr static int64_t MAX_VECTOR_INDEX_DIMENSION = 8192;
 
     // The EXISTS and COUNT bodies analyzed so far: a SET analyzes its value expression twice
-    std::unordered_set<const SinglePartQuery*> _analyzedBodies;
+    std::unordered_set<const RegularQuery*> _analyzedBodies;
 
     // The declaration each import of a subquery body, and each variable a projection
     // carries on, was made from
@@ -189,6 +189,7 @@ private:
     void analyzeConditionalPredicates(ConditionalQuery* conditional,
                                       std::span<const Symbol* const> imports,
                                       BranchImports mode);
+    void analyzePredicates(const ConditionalQuery* conditional);
 
     void carrySegmentImports(RegularQuery* body, std::span<DeclContext* const> returnScopes);
     void importIntoQuery(RegularQuery* query,
@@ -202,8 +203,14 @@ private:
     // columns when a branch returns them, or when @param dedupNamesColumns and it dedups.
     void analyzeCorrelatedBody(RegularQuery* body, bool dedupNamesColumns);
 
+    void analyzeCorrelatedPredicates(ConditionalQuery* conditional);
+
     // Analyzes one query of an EXISTS body, correlated with the variables in flight
     void analyzeExistsBranch(const SinglePartQuery* body);
+
+    // Declares in @param inner every variable in flight, and fills @param correlated with
+    // their names
+    void importCorrelatedVariables(DeclContext* inner, std::vector<std::string_view>& correlated);
 
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds

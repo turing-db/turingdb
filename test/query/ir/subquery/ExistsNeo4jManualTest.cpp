@@ -158,9 +158,6 @@ TEST_F(ExistsNeo4jManualTest, existsSubqueryWithWhereClause) {
 }
 
 TEST_F(ExistsNeo4jManualTest, conditionalExistsSubqueries) {
-    GTEST_SKIP() << "A conditional subquery body, WHEN ... THEN { } ELSE { }, has no clause "
-                    "in the grammar: the parser stops at the WHEN";
-
     expectRows("MATCH (n:Person) "
                "WHERE EXISTS { "
                "  WHEN n.age > 35 THEN { "

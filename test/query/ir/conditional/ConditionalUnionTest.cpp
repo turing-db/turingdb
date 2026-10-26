@@ -115,13 +115,6 @@ TEST_F(ConditionalUnionTest, rejectsAPredicateReadingWhatNoScopeClauseImports) {
                 "Variable 'p' not found");
 }
 
-TEST_F(ConditionalUnionTest, rejectsAConditionalInAnExistsOrCountBody) {
-    expectError("MATCH (p:Person) RETURN EXISTS { { WHEN true THEN RETURN 1 AS x } UNION RETURN 2 AS x }",
-                "Not implemented: WHEN in an EXISTS body");
-    expectError("MATCH (p:Person) RETURN COUNT { RETURN 2 AS x UNION { WHEN true THEN RETURN 1 AS x } }",
-                "Not implemented: WHEN in a COUNT body");
-}
-
 TEST_F(ConditionalUnionTest, dedupsAnEntityOneSideMergedAndAnotherMatched) {
     expectWriteRowCount("{ WHEN true THEN { MERGE (n:Person {name: 'Remy'}) RETURN n } } "
                         "UNION "

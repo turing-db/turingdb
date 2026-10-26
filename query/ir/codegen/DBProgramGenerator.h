@@ -613,19 +613,23 @@ private:
 
     // Emits the db.union or the db.conditional of a body that is a UNION or a WHEN, its
     // branches generated under @param scopes, and fills @param yielded with its results
-    // under the names and declarations the body returns them as
+    // under the names and declarations the body returns them as. With @param answersRows,
+    // a single query of the body returning nothing yields a column of its rows.
     void generateSubqueryBody(const RegularQuery* body,
                               const BodyScopes& scopes,
+                              bool answersRows,
                               llvm::SmallVectorImpl<PublishedColumn>& yielded,
                               CarriedEntities& returnedEntities);
 
     void generateSubqueryUnion(const UnionQuery* unionQuery,
                                const BodyScopes& scopes,
+                               bool answersRows,
                                llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                CarriedEntities& returnedEntities);
 
     void generateSubqueryConditional(const ConditionalQuery* conditional,
                                      const BodyScopes& scopes,
+                                     bool answersRows,
                                      llvm::SmallVectorImpl<PublishedColumn>& yielded,
                                      CarriedEntities& returnedEntities);
 
@@ -649,6 +653,7 @@ private:
     // db.yield of what its RETURN publishes, none for a branch ending on a write
     void generateSubqueryBranch(const RegularQuery* query,
                                 const BodyScopes& scopes,
+                                bool answersRows,
                                 mlir::Block* block,
                                 mlir::Block* bodyBlock,
                                 SubqueryBranchResults& branchResults);
