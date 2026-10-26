@@ -240,14 +240,43 @@ const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
 
 // The untyped null column the null literal compiles to: nullable with no value type of
 // its own, so nothing about it says which column would carry a value
-bool isUntypedNullColumn(mlir::Value column) {
-    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
+bool isUntypedNullColumnType(mlir::Type type) {
+    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(type);
     if (!columnType) {
         return false;
     }
 
     const auto nullableType = mlir::dyn_cast<mlir::storage::NullableType>(columnType.getType());
     return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+}
+
+bool isUntypedNullColumn(mlir::Value column) {
+    return isUntypedNullColumnType(column.getType());
+}
+
+// The branches of @param body when it is a UNION, and @param body itself otherwise
+void collectUnionBranches(const RegularQuery* body, llvm::SmallVectorImpl<const RegularQuery*>& branches) {
+    if (body->getKind() != QueryCommand::Kind::UNION_QUERY) {
+        branches.push_back(body);
+        return;
+    }
+
+    for (const UnionQuery::Branch& branch : static_cast<const UnionQuery*>(body)->branches()) {
+        branches.push_back(branch._query);
+    }
+}
+
+// The queries whose rows add up to the rows of @param body: the branches of a UNION ALL, and
+// @param body itself otherwise
+void collectUnionAllBranches(const RegularQuery* body, llvm::SmallVectorImpl<const RegularQuery*>& branches) {
+    const bool unionAll = body->getKind() == QueryCommand::Kind::UNION_QUERY
+                       && static_cast<const UnionQuery*>(body)->getDedupedBranchCount() == 0;
+
+    if (unionAll) {
+        collectUnionBranches(body, branches);
+    } else {
+        branches.push_back(body);
+    }
 }
 
 mlir::Type pathElementsType(mlir::MLIRContext* context, mlir::storage::PathElementsKind kind) {
@@ -5887,7 +5916,7 @@ void DBProgramGenerator::generateUnionSegment(const CallSubqueryStmt* body) {
                                scopes,
                                /*answersRows=*/false,
                                block,
-                               outerBlock,
+                               block,
                                branchResults);
     }
 
@@ -6521,11 +6550,11 @@ void DBProgramGenerator::generateSubqueryBranch(const RegularQuery* query,
                                                 const BodyScopes& scopes,
                                                 bool answersRows,
                                                 mlir::Block* block,
-                                                mlir::Block* bodyBlock,
+                                                mlir::Block* rowBlock,
                                                 SubqueryBranchResults& branchResults) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-    _unionBranchRowBlocks[block] = findRowBlock(bodyBlock);
+    _unionBranchRowBlocks[block] = findRowBlock(rowBlock);
 
     _opBuilder.setInsertionPointToEnd(block);
 
@@ -6708,7 +6737,7 @@ void DBProgramGenerator::typeSubqueryBranchResults(SubqueryBranchResults& branch
     for (const llvm::SmallVector<PublishedColumn>& branchColumns : branchResults._branchColumns) {
         for (size_t columnIndex = 0; columnIndex < branchColumns.size(); columnIndex++) {
             const mlir::db::ColumnType resultType = mlir::cast<mlir::db::ColumnType>(resultTypes[columnIndex]);
-            if (mlir::isa<mlir::NoneType>(resultType.getType())) {
+            if (mlir::isa<mlir::NoneType>(resultType.getType()) || isUntypedNullColumnType(resultType)) {
                 resultTypes[columnIndex] = branchColumns[columnIndex]._column.getType();
             }
         }
@@ -8313,16 +8342,8 @@ void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr*
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
-    const RegularQuery* body = existsExpr->getBody();
-
     llvm::SmallVector<const RegularQuery*> branches;
-    if (body->getKind() == QueryCommand::Kind::UNION_QUERY) {
-        for (const UnionQuery::Branch& branch : static_cast<const UnionQuery*>(body)->branches()) {
-            branches.push_back(branch._query);
-        }
-    } else {
-        branches.push_back(body);
-    }
+    collectUnionBranches(existsExpr->getBody(), branches);
 
     mlir::Value exists;
     for (const RegularQuery* branch : branches) {
@@ -8342,27 +8363,17 @@ void DBProgramGenerator::translateExistsExpr(const Expr* expr, const ExistsExpr*
 }
 
 void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const CountSubqueryExpr* countExpr) {
-    const RegularQuery* body = countExpr->getBody();
-    const mlir::db::ColumnType countType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
-
-    const bool unionAll = body->getKind() == QueryCommand::Kind::UNION_QUERY
-                       && static_cast<const UnionQuery*>(body)->getDedupedBranchCount() == 0;
-
-    if (!unionAll) {
-        _part._exprMap[expr] =
-            generateSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(body,
-                                                                                              countType,
-                                                                                              countTagName);
-        return;
-    }
-
     const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType countType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
+    llvm::SmallVector<const RegularQuery*> branches;
+    collectUnionAllBranches(countExpr->getBody(), branches);
+
     mlir::Value count;
-    for (const UnionQuery::Branch& branch : static_cast<const UnionQuery*>(body)->branches()) {
+    for (const RegularQuery* branch : branches) {
         const mlir::Value branchCount =
-            generateSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(branch._query,
+            generateSubqueryExpression<mlir::db::CountSubquery, mlir::db::CountSubqueryYield>(branch,
                                                                                               countType,
                                                                                               countTagName);
 
@@ -8379,26 +8390,16 @@ void DBProgramGenerator::translateCountSubqueryExpr(const Expr* expr, const Coun
 // A UNION ALL holds a row's values from every branch, one after the other, so each branch
 // is a COLLECT of its own and the lists are concatenated in branch order
 void DBProgramGenerator::translateCollectSubqueryExpr(const Expr* expr, const CollectSubqueryExpr* collectExpr) {
-    const RegularQuery* body = collectExpr->getBody();
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    const bool unionAll = body->getKind() == QueryCommand::Kind::UNION_QUERY
-                       && static_cast<const UnionQuery*>(body)->getDedupedBranchCount() == 0;
-
-    if (!unionAll) {
-        _part._exprMap[expr] =
-            generateSubqueryExpression<mlir::db::CollectSubquery, mlir::db::CollectSubqueryYield>(body,
-                                                                                                  noneType,
-                                                                                                  collectTagName);
-        return;
-    }
-
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    llvm::SmallVector<const RegularQuery*> branches;
+    collectUnionAllBranches(collectExpr->getBody(), branches);
 
     mlir::Value lists;
-    for (const UnionQuery::Branch& branch : static_cast<const UnionQuery*>(body)->branches()) {
+    for (const RegularQuery* branch : branches) {
         const mlir::Value branchLists =
-            generateSubqueryExpression<mlir::db::CollectSubquery, mlir::db::CollectSubqueryYield>(branch._query,
+            generateSubqueryExpression<mlir::db::CollectSubquery, mlir::db::CollectSubqueryYield>(branch,
                                                                                                   noneType,
                                                                                                   collectTagName);
 

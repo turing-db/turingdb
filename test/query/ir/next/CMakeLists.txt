@@ -21,3 +21,6 @@ add_turing_test(test_query_ir_next_keeps_call_imports_after_write NextKeepsCallI
 
 # A CALL's import read after a UNION segment whose branch projects through a WITH.
 add_turing_test(test_query_ir_next_import_past_branch_with NextImportPastBranchWithTest.cpp)
+
+# A branch of a UNION segment that is a UNION or a WHEN runs once per row the segment reads.
+add_turing_test(test_query_ir_next_union_segment_nested_branch NextUnionSegmentNestedBranchTest.cpp)
