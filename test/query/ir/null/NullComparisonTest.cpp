@@ -105,7 +105,8 @@ TEST_F(NullComparisonTest, comparingAnAbsentValueAgainstOneIsNull) {
 }
 
 TEST_F(NullComparisonTest, rejectsAnIsTestAgainstAValue) {
-    runQueryExpectingError("MATCH (n:Person) RETURN n.age IS 5", "must be NULL");
+    runQueryExpectingError("MATCH (n:Person) RETURN n.age IS 5", "syntax error, unexpected DIGIT");
+    runQueryExpectingError("MATCH (n:Person) RETURN n.age IS NOT 5", "must be NULL");
 }
 
 // Ordering a value against null is null, the same as testing it for equality. The type of
