@@ -4,9 +4,9 @@
 #include <optional>
 #include <string_view>
 
+#include "columns/BinaryPredicates.h"
 #include "list/ListElementView.h"
 #include "map/MapEntryView.h"
-#include "metadata/PropertyNull.h"
 
 using namespace db;
 
@@ -17,10 +17,9 @@ TEST(CellNullTest, readsAListElementTaggedNullAsNull) {
     const std::optional<ListElementView> nullCell {ListElementView {nullElement.data()}};
     const std::optional<ListElementView> integerCell {ListElementView {integerElement.data()}};
 
-    EXPECT_TRUE(nullCell == PropertyNull {});
-    EXPECT_TRUE(PropertyNull {} == nullCell);
-    EXPECT_FALSE(integerCell == PropertyNull {});
-    EXPECT_TRUE(std::optional<ListElementView> {} == PropertyNull {});
+    EXPECT_FALSE(holdsAValue(nullCell));
+    EXPECT_TRUE(holdsAValue(integerCell));
+    EXPECT_FALSE(holdsAValue(std::optional<ListElementView> {}));
 }
 
 TEST(CellNullTest, readsAMapEntryTaggedNullAsNull) {
@@ -33,6 +32,6 @@ TEST(CellNullTest, readsAMapEntryTaggedNullAsNull) {
     const std::optional<MapEntryView> nullCell {MapEntryView {nullEntry.data()}};
     const std::optional<MapEntryView> integerCell {MapEntryView {integerEntry.data()}};
 
-    EXPECT_TRUE(nullCell == PropertyNull {});
-    EXPECT_FALSE(integerCell == PropertyNull {});
+    EXPECT_FALSE(holdsAValue(nullCell));
+    EXPECT_TRUE(holdsAValue(integerCell));
 }
