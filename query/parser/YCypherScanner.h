@@ -61,6 +61,12 @@ private:
     std::string_view getStringView(size_t offset, size_t length) const {
         return _query.substr(offset, length);
     }
+
+    void retractToFirstCharacter(SourceLocation& loc);
+
+    bool opensAnEdgeDetail(size_t bracketOffset) const;
+
+    bool continuesAnEdge(size_t offset) const;
 };
 
 }

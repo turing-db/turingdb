@@ -28,10 +28,44 @@ using Token = db::YCypherParser::token;
 \n        { locationNewLine(*yylloc); }
 [ \t\r]+  { }
 
-"<"[ \t\r]*-[ \t\r]*- { return Token::TIP_TAIL_TAIL; }
+    /* An arrow is one token, so that one token of lookahead tells `(a)-[e]->(b)` from
+     * `(a) - [1][0]`. It is read only where an edge goes on after it: `1 - [1, 2][0]` and
+     * `1 <--1` keep their operators.
+     */
+"<"[ \t\r]*-[ \t\r]*- {
+    if (continuesAnEdge(_nextOffset)) {
+        return Token::TIP_TAIL_TAIL;
+    }
+
+    retractToFirstCharacter(*yylloc);
+    yyless(1);
+
+    return Token::LT;
+}
+
 "-"[ \t\r]*-[ \t\r]*> { return Token::TAIL_TAIL_TIP; }
-"<"[ \t\r]*-[ \t\r]*\[ { return Token::TIP_TAIL_BRACKET; }
-"-"[ \t\r]*\[  { return Token::TAIL_BRACKET; }
+
+"<"[ \t\r]*-[ \t\r]*\[ {
+    if (opensAnEdgeDetail(_nextOffset - 1)) {
+        return Token::TIP_TAIL_BRACKET;
+    }
+
+    retractToFirstCharacter(*yylloc);
+    yyless(1);
+
+    return Token::LT;
+}
+
+"-"[ \t\r]*\[ {
+    if (opensAnEdgeDetail(_nextOffset - 1)) {
+        return Token::TAIL_BRACKET;
+    }
+
+    retractToFirstCharacter(*yylloc);
+    yyless(1);
+
+    return Token::SUB;
+}
 
 "+=" { return Token::ADD_ASSIGN; }
 "<>" { return Token::NOT_EQUAL; }

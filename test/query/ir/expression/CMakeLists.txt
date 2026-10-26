@@ -153,5 +153,7 @@ target_include_directories(test_query_ir_entity_comparison_lowering PRIVATE ${IR
 
 add_call_v3_test(test_query_ir_unary_minus UnaryMinusTest.cpp)
 
+add_call_v3_test(test_query_ir_minus_before_a_list MinusBeforeAListTest.cpp)
+
 add_turing_test(test_query_ir_list_element_concatenation ListElementConcatenationTest.cpp)
 target_include_directories(test_query_ir_list_element_concatenation PRIVATE ${IR_TEST_DIR})
