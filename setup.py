@@ -1,71 +1,10 @@
 #!/usr/bin/env python3
-import os
-import shutil
-import subprocess
-import sys
-from pathlib import Path
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.egg_info import egg_info
 from setuptools.command.bdist_wheel import bdist_wheel as _bdist_wheel
 
-
-def _get_project_root() -> Path:
-    """Get the project root directory."""
-    return Path(__file__).parent.resolve()
-
-
-def _get_build_executable() -> Path:
-    """Get the path to the executable in the build directory."""
-    turing_home = os.environ.get("TURING_HOME")
-    if turing_home:
-        return Path(turing_home) / "bin" / "turingdb"
-    return _get_project_root() / "build" / "turing_install" / "bin" / "turingdb"
-
-
-def _run_cmake_build():
-    """Run cmake configure, build, and install."""
-    source_dir = _get_project_root()
-    build_dir = source_dir / "build"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
-    cmake_args = [
-        "cmake",
-        "-G", "Unix Makefiles",
-        "-DCMAKE_MAKE_PROGRAM=/usr/bin/make",
-        "-DCMAKE_BUILD_TYPE=Release",
-        # Pin CMake's FindPython to the interpreter running the build, so the
-        # nanobind modules get the same ABI tag as the installing Python.
-        f"-DPython_EXECUTABLE={sys.executable}",
-        str(source_dir),
-    ]
-    subprocess.check_call(cmake_args, cwd=str(build_dir))
-    subprocess.check_call(["make", f"-j{os.cpu_count() or 4}"], cwd=str(build_dir))
-    subprocess.check_call(["make", "install"], cwd=str(build_dir))
-
-
-def _ensure_executable_built() -> Path:
-    """Ensure the executable is built, building if necessary."""
-    exe_path = _get_build_executable()
-
-    if exe_path.exists():
-        return exe_path
-
-    cmake_file = _get_project_root() / "CMakeLists.txt"
-    if not cmake_file.exists():
-        raise RuntimeError(
-            "Cannot build turingdb: CMakeLists.txt not found and no pre-built "
-            "executable exists. Please build from the source repository:\n"
-            "  cd build && cmake -G Ninja .. && ninja -j8 && ninja install\n"
-            "Then run the build again."
-        )
-
-    _run_cmake_build()
-
-    if not exe_path.exists():
-        raise RuntimeError(f"Build completed but executable not found at {exe_path}")
-
-    return exe_path
+from build_backend import _ensure_executables_built, _get_project_root
 
 
 class BuildDirEggInfo(egg_info):
@@ -80,7 +19,7 @@ class BuildDirEggInfo(egg_info):
 class CMakeDevelop(develop):
     """Custom develop command that ensures the executable is built."""
     def run(self):
-        _ensure_executable_built()
+        _ensure_executables_built()
         super().run()
 
 
