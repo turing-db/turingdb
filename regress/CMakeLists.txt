@@ -53,6 +53,7 @@ add_subdirectory(history_on_change)
 add_subdirectory(reload_submit_edge)
 add_subdirectory(json_escape_properties)
 add_subdirectory(query_parameters)
+add_subdirectory(entity_list_values)
 
 # write run_regress target
 # The script finds the wheel at runtime to avoid needing to re-run cmake after wheel build
