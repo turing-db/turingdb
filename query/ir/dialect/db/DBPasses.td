@@ -123,6 +123,11 @@ def RerootPatternAtSeed : Pass<"reroot_pattern_at_seed"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def RerootPatternAtCheapestNode : Pass<"reroot_pattern_at_cheapest_node"> {
+    let summary = "Walk a pattern out from the node the graph's counts say makes the fewest rows, rather than from the node the query writes first";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseHashJoin : Pass<"fuse_hash_join"> {
     let summary = "Fuse a cross product and the equality filter over it into a hash_join";
     let dependentDialects = ["mlir::db::DB"];

@@ -194,7 +194,7 @@ TEST_F(PatternComprehensionTest, projectsTheNodeItMatched) {
 }
 
 TEST_F(PatternComprehensionTest, matchesTheWholeGraphWhereNothingIsInFlight) {
-    expectRows("RETURN [(a:Person)-[:KNOWS_WELL]->(b:Person) | b.name]", {{"[Adam, Remy]"}});
+    expectRows("RETURN [(a:Person)-[:KNOWS_WELL]->(b:Person) | b.name]", {{"[Remy, Adam]"}});
 }
 
 TEST_F(PatternComprehensionTest, joinsTwoVariablesAlreadyInFlight) {

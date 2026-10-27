@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 #include <algorithm>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <tuple>
@@ -66,6 +65,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEFETCHNODES
 #define GEN_PASS_DEF_REROOTPATTERNATSEED
+#define GEN_PASS_DEF_REROOTPATTERNATCHEAPESTNODE
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_HOISTHOPCONJUNCTS
 #define GEN_PASS_DEF_FUSEEXPLOREHOPLABELS
@@ -7737,33 +7737,262 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
 // yielded item at.
 constexpr size_t uncountableRows = 10;
 
-size_t multiplySaturating(size_t rows, size_t factor) {
-    constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
-    if (factor != 0 && rows > rowCeiling / factor) {
-        return rowCeiling;
+// System R's share of rows a predicate keeps (Selinger et al., 1979): the graph counts
+// nodes per label set and edges per end, but no value per property.
+constexpr double EQUALITY_SELECTIVITY = 0.1;
+constexpr double RANGE_SELECTIVITY = 1.0 / 3.0;
+constexpr double MEMBERSHIP_SELECTIVITY_CEILING = 0.5;
+
+using KnownLabels = llvm::DenseMap<Value, ::db::LabelSet>;
+
+class RowEstimator {
+public:
+    explicit RowEstimator(const ::db::GraphView& view)
+        : _metadata(view.metadata()),
+        _estimation(view),
+        _nodeCount(static_cast<double>(_estimation.estimateNodeCount(::db::LabelSet {}))),
+        _edgeCount(static_cast<double>(_estimation.estimateEdgeCount()))
+    {
     }
 
-    return rows * factor;
-}
+    double getNodeCount() const { return _nodeCount; }
+    double getEdgeCount() const { return _edgeCount; }
+
+    double getLabelledNodes(const ::db::LabelSet& labels) const {
+        if (labels.empty()) {
+            return _nodeCount;
+        }
+
+        return static_cast<double>(_estimation.estimateNodeCount(labels));
+    }
+
+    double getLabelledNodes(ArrayAttr labelNames) const {
+        return static_cast<double>(estimateLabelledNodes(labelNames, _metadata, _estimation));
+    }
+
+    double getIndexedEdges(ArrayAttr labelNames, bool indexedByTarget) const {
+        return static_cast<double>(estimateIndexedEdges(labelNames, indexedByTarget, _metadata, _estimation));
+    }
+
+    // The average degree of nodes known to carry @param labels, in the direction the hop walks
+    double getHopFanOut(Operation* hop, bool walksBackward, const ::db::LabelSet& labels) const {
+        const ArrayAttr edgeTypes = hop->getAttrOfType<ArrayAttr>("edge_types");
+        const double nodes = getLabelledNodes(labels);
+        if ((edgeTypes && edgeTypes.empty()) || nodes == 0) {
+            return 0;
+        }
+
+        const bool walksBoth = isa<GetEdges>(hop);
+        const bool readsInEdges = isReverseHop(hop) != walksBackward;
+
+        double edges = 0;
+        if (labels.empty()) {
+            edges = walksBoth ? 2 * _edgeCount : _edgeCount;
+        } else {
+            if (walksBoth || !readsInEdges) {
+                edges += static_cast<double>(_estimation.estimateOutEdgeCount(labels));
+            }
+            if (walksBoth || readsInEdges) {
+                edges += static_cast<double>(_estimation.estimateInEdgeCount(labels));
+            }
+        }
+
+        return edges / nodes;
+    }
+
+    // The share of nodes carrying @param known that a label check keeps, which then adds the
+    // labels every alternative asks for to @param known
+    double keepLabelled(ArrayAttr alternatives, ::db::LabelSet& known) const {
+        const double knownNodes = getLabelledNodes(known);
+        if (knownNodes == 0) {
+            return 0;
+        }
+
+        double kept = 0;
+        for (const Attribute alternative : alternatives) {
+            ::db::LabelSet labels;
+            if (collectScanLabels(cast<ArrayAttr>(alternative), _metadata, labels)) {
+                labels.merge(known);
+                kept += getLabelledNodes(labels);
+            }
+        }
+
+        llvm::DenseSet<Attribute> sharedNames;
+        addSharedLabelNames(alternatives, sharedNames);
+
+        const ::db::LabelMap& labelMap = _metadata.labels();
+        for (const Attribute name : sharedNames) {
+            const StringAttr nameAttr = dyn_cast<StringAttr>(name);
+            if (!nameAttr) {
+                continue;
+            }
+
+            const llvm::StringRef nameRef = nameAttr.getValue();
+            const std::optional<::db::LabelID> label = labelMap.get(std::string_view(nameRef.data(), nameRef.size()));
+            if (label) {
+                known.set(*label);
+            }
+        }
+
+        return std::min(1.0, kept / knownNodes);
+    }
+
+    // @param nodeOf names the node a column holds, whose labels @param known keeps
+    double getSelectivity(Value mask, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+        llvm::SmallVector<Value, 4> conjuncts;
+        collectConjuncts(mask, conjuncts);
+
+        double kept = 1;
+        for (const Value conjunct : conjuncts) {
+            const LabelCheck check = readLabelCheck(conjunct);
+            if (check._alternatives) {
+                kept *= keepLabelled(check._alternatives, known[nodeOf(check._nodes)]);
+            } else {
+                kept *= getPredicateSelectivity(conjunct, nodeOf, known);
+            }
+        }
+
+        return kept;
+    }
+
+private:
+    const ::db::GraphMetadata& _metadata;
+    ::db::CardinalityEstimation _estimation;
+    double _nodeCount {0};
+    double _edgeCount {0};
+
+    struct LabelCheck {
+        ArrayAttr _alternatives;
+        Value _nodes;
+    };
+
+    static LabelCheck readLabelCheck(Value predicate) {
+        CheckLabelConstraint check = predicate.getDefiningOp<CheckLabelConstraint>();
+        if (!check) {
+            return {};
+        }
+
+        GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+        if (!labelSet) {
+            return {};
+        }
+
+        return LabelCheck {._alternatives = check.getAlternatives(), ._nodes = labelSet.getInputNodes()};
+    }
+
+    // An equality naming a node keeps one node of those it compares, as one on a key does
+    double getEqualitySelectivity(EqOp equality, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+        double nodes = 0;
+        for (const Value side : {equality.getLhs(), equality.getRhs()}) {
+            const Value nodeColumn = comparedNodeColumn(side);
+            if (nodeColumn) {
+                nodes = std::max(nodes, getLabelledNodes(known.lookup(nodeOf(nodeColumn))));
+            }
+        }
+
+        return nodes >= 1 ? 1 / nodes : EQUALITY_SELECTIVITY;
+    }
+
+    double getMembershipSelectivity(InOp membership) const {
+        ConstantOp constant = membership.getRhs().getDefiningOp<ConstantOp>();
+        const ArrayAttr elements = constant ? dyn_cast<ArrayAttr>(constant.getValue()) : ArrayAttr();
+        if (!elements) {
+            return MEMBERSHIP_SELECTIVITY_CEILING;
+        }
+
+        return std::min(MEMBERSHIP_SELECTIVITY_CEILING, EQUALITY_SELECTIVITY * static_cast<double>(elements.size()));
+    }
+
+    double getLeafSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+        Operation* const def = predicate.getDefiningOp();
+
+        if (EqOp equality = dyn_cast_or_null<EqOp>(def)) {
+            return getEqualitySelectivity(equality, nodeOf, known);
+        } else if (isa_and_nonnull<NeqOp>(def)) {
+            return 1 - EQUALITY_SELECTIVITY;
+        } else if (isa_and_nonnull<GtOp, LtOp, GteOp, LteOp>(def)) {
+            return RANGE_SELECTIVITY;
+        } else if (InOp membership = dyn_cast_or_null<InOp>(def)) {
+            return getMembershipSelectivity(membership);
+        } else if (const LabelCheck check = readLabelCheck(predicate); check._alternatives) {
+            ::db::LabelSet labels = known.lookup(nodeOf(check._nodes));
+            return keepLabelled(check._alternatives, labels);
+        }
+
+        return 1;
+    }
+
+    // A flat OR or AND chain is as long as the query, so the walk keeps its own stack
+    double getPredicateSelectivity(Value predicate, llvm::function_ref<Value(Value)> nodeOf, KnownLabels& known) const {
+        llvm::DenseMap<Value, double> kept;
+        llvm::SmallVector<Value> pending {predicate};
+
+        while (!pending.empty()) {
+            const Value current = pending.back();
+            if (kept.count(current)) {
+                pending.pop_back();
+                continue;
+            }
+
+            Operation* const def = current.getDefiningOp();
+            if (!isa_and_nonnull<AndOp, OrOp, XorOp, NotOp>(def)) {
+                kept[current] = getLeafSelectivity(current, nodeOf, known);
+                pending.pop_back();
+                continue;
+            }
+
+            bool operandsPending = false;
+            for (const Value operand : def->getOperands()) {
+                if (!kept.count(operand)) {
+                    pending.push_back(operand);
+                    operandsPending = true;
+                }
+            }
+
+            if (operandsPending) {
+                continue;
+            }
+
+            const double first = kept.lookup(def->getOperand(0));
+            const double second = def->getNumOperands() > 1 ? kept.lookup(def->getOperand(1)) : 0;
+
+            if (isa<AndOp>(def)) {
+                kept[current] = first * second;
+            } else if (isa<OrOp>(def)) {
+                kept[current] = first + second - first * second;
+            } else if (isa<XorOp>(def)) {
+                kept[current] = first + second - 2 * first * second;
+            } else {
+                kept[current] = 1 - first;
+            }
+
+            pending.pop_back();
+        }
+
+        return kept.lookup(predicate);
+    }
+};
 
 // The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
 // count, a literal list one row per element, a by-label scan what the graph holds under
-// those labels, and a property scan the whole node count: selectivity is not something
-// the db level knows.
-std::optional<size_t> estimateSourceRows(Operation* op,
-                                         const ::db::GraphMetadata& metadata,
-                                         const ::db::CardinalityEstimation& estimation) {
+// those labels, and a property scan the share of those an equality keeps.
+std::optional<double> estimateSourceRows(Operation* op, const RowEstimator& estimator) {
     if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
-        return constScan.getNodeIDs().size();
+        return static_cast<double>(constScan.getNodeIDs().size());
     } else if (UnwindConst unwind = dyn_cast<UnwindConst>(op)) {
-        return unwind.getElements().size();
+        return static_cast<double>(unwind.getElements().size());
     } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
-        return estimateLabelledNodes(byLabel.getLabels(), metadata, estimation);
-    } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
-        return estimation.estimateNodeCount(::db::LabelSet {});
+        return estimator.getLabelledNodes(byLabel.getLabels());
+    } else if (isa<ScanNodes>(op)) {
+        return estimator.getNodeCount();
+    } else if (ScanNodesByPropertyValue byValue = dyn_cast<ScanNodesByPropertyValue>(op)) {
+        const std::optional<ArrayAttr> labels = byValue.getLabels();
+        const double scanned = labels ? estimator.getLabelledNodes(*labels) : estimator.getNodeCount();
+
+        return scanned * EQUALITY_SELECTIVITY;
     } else if (EdgeScanLabels scanLabels; readEdgeScanLabels(op, scanLabels)) {
-        const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
+        const double nodeCount = estimator.getNodeCount();
         if (nodeCount == 0) {
             return 0;
         }
@@ -7774,13 +8003,13 @@ std::optional<size_t> estimateSourceRows(Operation* op,
 
         // The other end's labels keep the share of the walked edges they select of the nodes,
         // the two ends' labels taken as independent.
-        size_t rows = estimation.estimateEdgeCount();
+        double rows = estimator.getEdgeCount();
         if (indexedLabels) {
-            rows = estimateIndexedEdges(indexedLabels, indexedByTarget, metadata, estimation);
+            rows = estimator.getIndexedEdges(indexedLabels, indexedByTarget);
         }
 
         if (otherLabels) {
-            rows = multiplySaturating(estimateLabelledNodes(otherLabels, metadata, estimation), rows) / nodeCount;
+            rows = estimator.getLabelledNodes(otherLabels) * rows / nodeCount;
         }
 
         return rows;
@@ -7789,7 +8018,7 @@ std::optional<size_t> estimateSourceRows(Operation* op,
             return 0;
         }
 
-        return estimation.estimateEdgeCount();
+        return estimator.getEdgeCount();
     }
 
     return std::nullopt;
@@ -7803,70 +8032,49 @@ std::optional<size_t> estimateSourceRows(Operation* op,
 // per element of each row's list, whose length is a property of the rows themselves: no
 // statistic of the graph measures it, so it reads at the figure an uncountable source
 // does - where a literal list, whose elements are in the IR, is counted exactly instead.
-struct RowMultiplier {
-    size_t _numerator {1};
-    size_t _denominator {1};
-};
-
-std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::CardinalityEstimation& estimation) {
+std::optional<double> estimateRowMultiplier(Operation* op, const RowEstimator& estimator) {
     if (isa<Unwind>(op)) {
-        return RowMultiplier {uncountableRows, 1};
-    }
-
-    const bool walksOneDirection = isa<GetOutEdges,
-                                       GetInEdges,
-                                       GetOutEdgesByType,
-                                       GetInEdgesByType,
-                                       GetOutEdgesByLabel,
-                                       GetInEdgesByLabel,
-                                       GetOutEdgesByTypeAndLabel,
-                                       GetInEdgesByTypeAndLabel>(op);
-    const bool walksBoth = isa<GetEdges>(op);
-    if (!walksOneDirection && !walksBoth) {
+        return static_cast<double>(uncountableRows);
+    } else if (!isEdgeHop(op)) {
         return std::nullopt;
     }
 
-    const bool isByTypeHop = isa<GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByTypeAndLabel, GetInEdgesByTypeAndLabel>(op);
-    const bool walksNoEdge = isByTypeHop && op->getAttrOfType<ArrayAttr>("edge_types").empty();
-    if (walksNoEdge) {
-        return RowMultiplier {0, 1};
-    }
-
-    const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
-    if (nodeCount == 0) {
-        return std::nullopt;
-    }
-
-    const size_t edgeCount = estimation.estimateEdgeCount();
-
-    return RowMultiplier {walksBoth ? 2 * edgeCount : edgeCount, nodeCount};
+    return estimator.getHopFanOut(op, false, ::db::LabelSet {});
 }
 
 // The rows a factor makes: the product of what its sources seed it with, a factor crossing
 // two of them holding a row per pair, grown or shrunk by every hop and unwind reading from
-// one. A factor seeded from somewhere the db level cannot count - a procedure, a load -
-// counts as an uncountable source's rows.
-size_t estimateFactorRows(Region& factor,
-                          const ::db::GraphMetadata& metadata,
-                          const ::db::CardinalityEstimation& estimation) {
+// one and cut by every filter. A factor seeded from somewhere the db level cannot count - a
+// procedure, a load - counts as an uncountable source's rows.
+double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
     bool countedASource = false;
-    size_t rows = 1;
+    double rows = 1;
+    KnownLabels known;
+
+    const auto columnItself = [](Value column) {
+        return column;
+    };
 
     factor.walk([&](Operation* op) {
-        const std::optional<size_t> seeded = estimateSourceRows(op, metadata, estimation);
-        if (seeded) {
-            countedASource = true;
-            rows = multiplySaturating(rows, *seeded);
+        if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+            rows *= estimator.getSelectivity(filter.getMask(), columnItself, known);
             return;
         }
 
-        const std::optional<RowMultiplier> multiplier = estimateRowMultiplier(op, estimation);
+        const std::optional<double> seeded = estimateSourceRows(op, estimator);
+        if (seeded) {
+            countedASource = true;
+            rows *= *seeded;
+            return;
+        }
+
+        const std::optional<double> multiplier = estimateRowMultiplier(op, estimator);
         if (multiplier) {
-            rows = multiplySaturating(rows, multiplier->_numerator) / multiplier->_denominator;
+            rows *= *multiplier;
         }
     });
 
-    return countedASource ? rows : uncountableRows;
+    return countedASource ? rows : static_cast<double>(uncountableRows);
 }
 
 // Which way round the two sides go into the join, whose right factor is the built one. The
@@ -7888,12 +8096,9 @@ bool buildsTheLeftFactor(const EqualityCross& match, const DBPassContext& contex
         return rightHoldsAProduct && !leftHoldsAProduct;
     }
 
-    const ::db::GraphView& view = *context._view;
-    const ::db::GraphMetadata& metadata = view.metadata();
-    const ::db::CardinalityEstimation estimation(view);
+    const RowEstimator estimator(*context._view);
 
-    return estimateFactorRows(leftFactor, metadata, estimation)
-         < estimateFactorRows(rightFactor, metadata, estimation);
+    return estimateFactorRows(leftFactor, estimator) < estimateFactorRows(rightFactor, estimator);
 }
 
 bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
@@ -8501,6 +8706,19 @@ bool standsFromTheJunction(Operation* op, const SeedJunction& junction) {
     return !op->isBeforeInBlock(junction._op);
 }
 
+struct WalkEvent {
+    enum class Kind {
+        RootLabels,
+        Filter,
+        Forward,
+        Backward,
+    };
+
+    Kind _kind {Kind::Filter};
+    FilterOp _filter {nullptr};
+    const PatternStep* _step {nullptr};
+};
+
 struct PatternSeed {
     SeedJunction _junction;
     SeedPattern _pattern;
@@ -8508,6 +8726,7 @@ struct PatternSeed {
     EqOp _equality {nullptr};
     Value _seeded;
     Value _ids;
+    llvm::SmallVector<WalkEvent> _events;
 };
 
 // The value a pattern column was bound as, following the ops that only hand it on
@@ -8555,7 +8774,11 @@ void collectPatternInputs(Value value, const SeedPattern& pattern, llvm::SmallPt
 
         const Value origin = patternOrigin(current, pattern);
         Operation* const originDef = origin.getDefiningOp();
-        if (originDef && pattern._ops.contains(originDef)) {
+        if (!originDef || !pattern._ops.contains(originDef)) {
+            continue;
+        } else if (computesPerRow(originDef)) {
+            worklist.push_back(origin);
+        } else {
             inputs.insert(origin.getAsOpaquePointer());
         }
     }
@@ -8672,6 +8895,156 @@ bool isPatternNode(const SeedPattern& pattern, Value origin) {
     }
 
     return llvm::any_of(pattern._steps, [origin](const PatternStep& step) { return step._to == origin; });
+}
+
+size_t eventRank(const WalkEvent& event) {
+    if (event._kind == WalkEvent::Kind::RootLabels) {
+        return 1;
+    }
+
+    FilterOp filter = event._filter;
+    const Value mask = filter.getMask();
+
+    if (mask.getDefiningOp<CheckEdgeTypeConstraint>()) {
+        return 0;
+    } else if (mask.getDefiningOp<CheckLabelConstraint>()) {
+        return 1;
+    }
+
+    return 2;
+}
+
+bool raisesOnSomeRow(Value mask, const SeedPattern& pattern) {
+    llvm::SmallVector<Value> pending {mask};
+    llvm::DenseSet<Value> visited;
+
+    while (!pending.empty()) {
+        const Value current = pending.pop_back_val();
+        if (!visited.insert(current).second) {
+            continue;
+        }
+
+        Operation* const def = current.getDefiningOp();
+        if (!def || !pattern._ops.contains(def) || !computesPerRow(def)) {
+            continue;
+        } else if (raisesOnSomeRows(def)) {
+            return true;
+        }
+
+        llvm::append_range(pending, def->getOperands());
+    }
+
+    return false;
+}
+
+// The order a pattern is rebuilt in from its seeded node: each filter as soon as what it
+// reads is bound, then the first step written that leaves a bound node. The rows already
+// pass the filters of @param applied, and the root's labels when @param rootChecked. False
+// when the walk leaves a step or a filter out.
+bool planWalk(const SeedPattern& pattern,
+              Value seeded,
+              const llvm::SmallPtrSetImpl<Operation*>& applied,
+              bool rootChecked,
+              llvm::SmallVectorImpl<WalkEvent>& events) {
+    const Value root = pattern._root->getResult(0);
+    llvm::DenseSet<Value> bound {seeded};
+    llvm::SmallPtrSet<Operation*, 16> appliedFilters(applied.begin(), applied.end());
+    llvm::SmallPtrSet<Operation*, 16> walked;
+
+    const auto readsBound = [&pattern, &bound](Value value) {
+        llvm::SmallPtrSet<void*, 8> inputs;
+        collectPatternInputs(value, pattern, inputs);
+
+        return llvm::all_of(inputs, [&bound](void* input) { return bound.contains(Value::getFromOpaquePointer(input)); });
+    };
+
+    // A filter whose mask may raise on a row's value runs on no row the written pattern did
+    // not run it on: only once every filter and step written ahead of it holds
+    const auto holdsWhatPrecedes = [&pattern, &appliedFilters, &walked, &rootChecked](FilterOp filter) {
+        Operation* const filterOp = filter.getOperation();
+        const auto precedes = [filterOp](Operation* op) {
+            return op->isBeforeInBlock(filterOp);
+        };
+
+        for (FilterOp written : pattern._filters) {
+            if (precedes(written) && !appliedFilters.contains(written.getOperation())) {
+                return false;
+            }
+        }
+
+        for (const PatternStep& step : pattern._steps) {
+            if (precedes(step._op) && !walked.contains(step._op)) {
+                return false;
+            }
+        }
+
+        return rootChecked;
+    };
+
+    bool progressed = true;
+    while (progressed) {
+        progressed = false;
+
+        llvm::SmallVector<WalkEvent> checks;
+        if (!rootChecked && bound.contains(root)) {
+            checks.push_back(WalkEvent {._kind = WalkEvent::Kind::RootLabels});
+            rootChecked = true;
+        }
+
+        for (FilterOp filter : pattern._filters) {
+            const Value mask = filter.getMask();
+            const bool unapplied = !appliedFilters.contains(filter.getOperation());
+            const bool applicable = unapplied
+                                 && readsBound(mask)
+                                 && (!raisesOnSomeRow(mask, pattern) || holdsWhatPrecedes(filter));
+            if (applicable) {
+                checks.push_back(WalkEvent {._kind = WalkEvent::Kind::Filter, ._filter = filter});
+                appliedFilters.insert(filter.getOperation());
+            }
+        }
+
+        // The order codegen writes them in under a hop, which the passes fusing them into
+        // the hop match on: its edge types, then its end's labels, then the rest
+        llvm::stable_sort(checks, [](const WalkEvent& lhs, const WalkEvent& rhs) {
+            return eventRank(lhs) < eventRank(rhs);
+        });
+
+        llvm::append_range(events, checks);
+
+        for (const PatternStep& step : pattern._steps) {
+            Operation* const stepOp = step._op;
+            if (walked.contains(stepOp)) {
+                continue;
+            }
+
+            const bool forward = bound.contains(step._from);
+            const bool backward = !forward && bound.contains(step._to) && isHop(stepOp);
+            if (!forward && !backward) {
+                continue;
+            }
+
+            events.push_back(WalkEvent {._kind = forward ? WalkEvent::Kind::Forward : WalkEvent::Kind::Backward, ._step = &step});
+
+            bound.insert(step._from);
+            bound.insert(step._to);
+            if (ExplorePaths exploration = dyn_cast<ExplorePaths>(stepOp)) {
+                bound.insert(exploration.getPaths());
+            } else {
+                bound.insert(stepOp->getResult(1));
+                bound.insert(stepOp->getResult(2));
+            }
+
+            walked.insert(stepOp);
+            progressed = true;
+            break;
+        }
+    }
+
+    const bool appliesEveryFilter = llvm::all_of(pattern._filters, [&appliedFilters](FilterOp filter) {
+        return appliedFilters.contains(filter.getOperation());
+    });
+
+    return walked.size() == pattern._steps.size() && appliesEveryFilter;
 }
 
 // The junction column each column of a block is carried from through the filters after it,
@@ -8954,6 +9327,11 @@ bool matchPatternSeedSide(FilterOp filter, EqOp equality, Value seeded, Value id
         return false;
     }
 
+    const llvm::SmallPtrSet<Operation*, 1> noneApplied;
+    if (!planWalk(seed._pattern, seed._seeded, noneApplied, false, seed._events)) {
+        return false;
+    }
+
     seed._filter = filter;
     seed._equality = equality;
     seed._ids = ids;
@@ -9016,16 +9394,18 @@ public:
 
             const Value origin = patternOrigin(pending, _pattern);
             Operation* const def = pending.getDefiningOp();
+            Operation* const originDef = origin.getDefiningOp();
 
             if (_current.count(origin)) {
                 materialized.map(pending, _current.lookup(origin));
             } else if (!def || !_pattern._ops.contains(def)) {
                 materialized.map(pending, pending);
             } else {
-                bioassert(computesPerRow(def), "A pattern column read before the step binding it");
+                const bool computedPerRow = originDef && _pattern._ops.contains(originDef) && computesPerRow(originDef);
+                bioassert(computedPerRow, "A pattern column read before the step binding it");
 
                 bool operandsPending = false;
-                for (const Value operand : llvm::reverse(def->getOperands())) {
+                for (const Value operand : llvm::reverse(originDef->getOperands())) {
                     if (!materialized.contains(operand)) {
                         worklist.push_back(operand);
                         operandsPending = true;
@@ -9036,8 +9416,8 @@ public:
                     continue;
                 }
 
-                Operation* const cloned = _builder.clone(*def, materialized);
-                materialized.map(pending, cloned->getResult(cast<OpResult>(pending).getResultNumber()));
+                Operation* const cloned = _builder.clone(*originDef, materialized);
+                materialized.map(pending, cloned->getResult(cast<OpResult>(origin).getResultNumber()));
             }
 
             worklist.pop_back();
@@ -9046,43 +9426,22 @@ public:
         return materialized.lookup(value);
     }
 
-    void walkFrom(Value seeded) {
-        llvm::SmallPtrSet<Operation*, 16> walked;
-        llvm::SmallPtrSet<Operation*, 16> applied;
-        bool rootChecked = false;
-
-        bool progressed = true;
-        while (progressed) {
-            progressed = false;
-
-            if (!rootChecked && isAvailable(_pattern._root->getResult(0))) {
-                applyRootLabels();
-                rootChecked = true;
-            }
-
-            for (FilterOp filter : _pattern._filters) {
-                const bool applicable = !applied.contains(filter.getOperation()) && dependsOnAvailable(filter.getMask());
-                if (applicable) {
+    void walk(llvm::ArrayRef<WalkEvent> events) {
+        for (const WalkEvent& event : events) {
+            switch (event._kind) {
+                case WalkEvent::Kind::RootLabels:
+                    applyRootLabels();
+                break;
+                case WalkEvent::Kind::Filter: {
+                    FilterOp filter = event._filter;
                     keepRows(materialize(filter.getMask()));
-                    applied.insert(filter.getOperation());
                 }
-            }
-
-            for (const PatternStep& step : _pattern._steps) {
-                if (walked.contains(step._op)) {
-                    continue;
-                }
-
-                if (isAvailable(step._from)) {
-                    walkForward(step);
-                } else if (isAvailable(step._to)) {
-                    walkBackward(step);
-                } else {
-                    continue;
-                }
-
-                walked.insert(step._op);
-                progressed = true;
+                break;
+                case WalkEvent::Kind::Forward:
+                    walkForward(*event._step);
+                break;
+                case WalkEvent::Kind::Backward:
+                    walkBackward(*event._step);
                 break;
             }
         }
@@ -9095,42 +9454,39 @@ private:
     llvm::DenseMap<Value, Value> _current;
     llvm::SmallVector<Value> _inFlight;
 
-    bool isAvailable(Value origin) const { return _current.count(origin) > 0; }
-
-    bool dependsOnAvailable(Value value) const {
-        llvm::SmallPtrSet<void*, 8> inputs;
-        collectPatternInputs(value, _pattern, inputs);
-
-        return llvm::all_of(inputs, [this](void* input) { return isAvailable(Value::getFromOpaquePointer(input)); });
-    }
-
-    void carried(llvm::SmallVectorImpl<Value>& columns) const {
+    // A hop hands back the node it walks from as its own result, so it does not carry it
+    void carried(llvm::SmallVectorImpl<Value>& columns, Value walkedFrom) const {
         for (const Value origin : _inFlight) {
-            columns.push_back(_current.lookup(origin));
+            if (origin != walkedFrom) {
+                columns.push_back(_current.lookup(origin));
+            }
         }
     }
 
-    void carried(llvm::SmallVectorImpl<Value>& columns, llvm::SmallVectorImpl<Type>& types) const {
+    void carried(llvm::SmallVectorImpl<Value>& columns, llvm::SmallVectorImpl<Type>& types, Value walkedFrom) const {
         const size_t first = columns.size();
-        carried(columns);
+        carried(columns, walkedFrom);
         for (size_t index = first; index < columns.size(); index++) {
             types.push_back(columns[index].getType());
         }
     }
 
-    void rebindCarried(Operation* op, size_t firstCarried) {
-        for (size_t index = 0; index < _inFlight.size(); index++) {
-            _current[_inFlight[index]] = op->getResult(firstCarried + index);
+    void rebindCarried(Operation* op, size_t firstCarried, Value walkedFrom) {
+        size_t resultIndex = firstCarried;
+        for (const Value origin : _inFlight) {
+            if (origin != walkedFrom) {
+                _current[origin] = op->getResult(resultIndex++);
+            }
         }
     }
 
     void keepRows(Value mask) {
         llvm::SmallVector<Value> columns;
         llvm::SmallVector<Type> types;
-        carried(columns, types);
+        carried(columns, types, Value());
 
         FilterOp filter = _builder.create<FilterOp>(_loc, types, mask, columns);
-        rebindCarried(filter.getOperation(), 0);
+        rebindCarried(filter.getOperation(), 0, Value());
     }
 
     void applyRootLabels() {
@@ -9143,8 +9499,8 @@ private:
         keepRows(checkLabels(root, scanByLabel.getLabels(), _loc, _builder));
     }
 
-    void bindHop(const PatternStep& step, Operation* walked, size_t fromResult, size_t toResult) {
-        rebindCarried(walked, hopFixedResultCount);
+    void bindHop(const PatternStep& step, Operation* walked, Value walkedFrom, size_t fromResult, size_t toResult) {
+        rebindCarried(walked, hopFixedResultCount, walkedFrom);
 
         bind(step._from, walked->getResult(fromResult));
         bind(step._to, walked->getResult(toResult));
@@ -9161,7 +9517,7 @@ private:
         llvm::SmallVector<Value> columns;
         llvm::SmallVector<Type> types;
         hopTypes(step._op, types);
-        carried(columns, types);
+        carried(columns, types, step._from);
 
         OperationState state(_loc, step._op->getName());
         state.addOperands(_current.lookup(step._from));
@@ -9169,24 +9525,24 @@ private:
         state.addTypes(types);
         Operation* const walked = _builder.create(state);
 
-        bindHop(step, walked, hopInputResult(step._op), hopReachedResult(step._op));
+        bindHop(step, walked, step._from, hopInputResult(step._op), hopReachedResult(step._op));
     }
 
     // An out-hop reversed is an in-hop from the node it reached, over the same edges
     void walkBackward(const PatternStep& step) {
         llvm::SmallVector<Value> columns;
-        carried(columns);
+        carried(columns, step._to);
 
         const Value from = _current.lookup(step._to);
         Operation* const walked = createReversedHop(step._op, from, ArrayAttr(), columns, _builder);
 
-        bindHop(step, walked, hopReachedResult(walked), hopInputResult(walked));
+        bindHop(step, walked, step._to, hopReachedResult(walked), hopInputResult(walked));
     }
 
     void walkExploration(ExplorePaths exploration, const PatternStep& step) {
         llvm::SmallVector<Value> columns;
         llvm::SmallVector<Type> types {exploration.getSrcids().getType(), exploration.getTgtids().getType(), exploration.getPaths().getType()};
-        carried(columns, types);
+        carried(columns, types, step._from);
 
         ExplorePaths walked = _builder.create<ExplorePaths>(_loc,
                                                             types,
@@ -9206,7 +9562,7 @@ private:
                                                             exploration.getStepCount());
         takeHopRegions(exploration, walked);
 
-        rebindCarried(walked.getOperation(), pathFixedResultCount);
+        rebindCarried(walked.getOperation(), pathFixedResultCount, step._from);
         bind(step._from, walked.getSrcids());
         bind(step._to, walked.getTgtids());
         bind(exploration.getPaths(), walked.getPaths());
@@ -9264,6 +9620,40 @@ Value cloneSeedIDs(Value ids, const SeedJunction& junction, mlir::IRMapping& see
     return seedColumns.lookup(ids);
 }
 
+// Whether every row of a column names a node the graph holds, so that a fetch would keep
+// it as it is: a scan's nodes, a fetch's, or either end of a hop or a walk
+bool namesGraphNodes(Value column) {
+    for (;;) {
+        const OpResult result = dyn_cast<OpResult>(column);
+        if (!result) {
+            return false;
+        }
+
+        Operation* const op = result.getOwner();
+        const size_t resultIndex = result.getResultNumber();
+
+        if (isa<ScanNodes, ScanNodesByLabel, ScanNodesByPropertyValue>(op)) {
+            return true;
+        } else if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+            column = filter.getColumnsToFilter()[resultIndex];
+        } else if (isa<FetchNodes>(op) && resultIndex > 0) {
+            column = op->getOperand(resultIndex);
+        } else if (isa<FetchNodes>(op)) {
+            return true;
+        } else if (isEdgeHop(op) && resultIndex >= hopFixedResultCount) {
+            column = op->getOperand(1 + resultIndex - hopFixedResultCount);
+        } else if (isEdgeHop(op)) {
+            return resultIndex == hopInputResult(op) || resultIndex == hopReachedResult(op);
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op); exploration && resultIndex >= pathFixedResultCount) {
+            column = exploration.getColumnsToFilter()[resultIndex - pathFixedResultCount];
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+            return column == exploration.getSrcids() || column == exploration.getTgtids();
+        } else {
+            return false;
+        }
+    }
+}
+
 void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
     SeedJunction& junction = seed._junction;
     Operation* const junctionOp = junction._op;
@@ -9297,10 +9687,8 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
 
     const Value ids = cloneSeedIDs(seed._ids, junction, seedMapping, rewriter);
 
-    // A scan only produces nodes a fetch would keep, so its column is the seeded node as is
     llvm::SmallVector<Value> seededColumns {ids};
-    const bool namesScannedNodes = isa_and_nonnull<ScanNodes, ScanNodesByLabel, ScanNodesByPropertyValue>(ids.getDefiningOp());
-    if (namesScannedNodes) {
+    if (namesGraphNodes(ids)) {
         llvm::append_range(seededColumns, seedColumns);
     } else {
         llvm::SmallVector<Type> fetchTypes {seed._seeded.getType()};
@@ -9318,7 +9706,7 @@ void reroot(PatternSeed& seed, mlir::RewriterBase& rewriter) {
     }
 
     replay.bind(seed._seeded, seededColumns.front());
-    replay.walkFrom(seed._seeded);
+    replay.walk(seed._events);
 
     for (size_t index = 0; index < junction._patternResults.size(); index++) {
         junction._patternResults[index].replaceAllUsesWith(replay.materialize(junction._patternOutputs[index]));
@@ -9364,6 +9752,272 @@ struct RerootPatternAtSeed : public impl::RerootPatternAtSeedBase<RerootPatternA
 
         runFilterWorklist<PatternSeed>(getOperation(), matchSeed, rerootAtSeed);
     }
+};
+
+// The estimate counts no edge per type and no label pair across an edge, so it moves a
+// pattern off the root the query wrote only when another start costs this much less
+constexpr double REROOT_GAIN_FACTOR = 2;
+
+// A pattern rooted at a scan up to the first op reading it that is not rebuilt with it, and
+// the walk out of the node making the fewest rows, scanned by the labels its filters ask for
+struct CheapestRoot {
+    SeedPattern _pattern;
+    llvm::SmallVector<Operation*> _orderedOps;
+    Operation* _end {nullptr};
+    Value _start;
+    ArrayAttr _labels;
+    llvm::SmallVector<WalkEvent> _events;
+};
+
+// False when a graph write stands before the end, which the rebuilt pattern would read past
+bool collectRootedPattern(Operation* scan, CheapestRoot& match) {
+    SeedPattern& pattern = match._pattern;
+    pattern._root = scan;
+    pattern._ops.insert(scan);
+    match._orderedOps.push_back(scan);
+
+    const auto definedByThePattern = [&pattern](Value value) {
+        Operation* const def = value.getDefiningOp();
+        return def && pattern._ops.contains(def);
+    };
+
+    for (Operation& op : llvm::make_range(std::next(Block::iterator(scan)), scan->getBlock()->end())) {
+        bool writesTheGraph = false;
+        bool readsThePattern = false;
+        op.walk([&](Operation* nested) {
+            writesTheGraph = writesTheGraph || isGraphWrite(nested);
+            readsThePattern = readsThePattern || llvm::any_of(nested->getOperands(), definedByThePattern);
+        });
+
+        if (writesTheGraph) {
+            return false;
+        } else if (!readsThePattern) {
+            continue;
+        }
+
+        const bool buildsThePattern = isa<FilterOp>(op) || isHop(&op) || computesPerRow(&op);
+        if (!buildsThePattern) {
+            match._end = &op;
+            return true;
+        }
+
+        FilterOp filter = dyn_cast<FilterOp>(op);
+        const bool carriesRows = filter || isHop(&op);
+        const OperandRange carried = filter ? filter.getColumnsToFilter() : op.getOperands();
+        if (carriesRows && !llvm::all_of(carried, definedByThePattern)) {
+            return false;
+        }
+
+        pattern._ops.insert(&op);
+        match._orderedOps.push_back(&op);
+    }
+
+    return false;
+}
+
+void collectWrittenWalk(const CheapestRoot& match, llvm::SmallVectorImpl<WalkEvent>& events) {
+    const llvm::SmallVector<PatternStep>& steps = match._pattern._steps;
+
+    size_t stepIndex = 0;
+    for (Operation* const op : match._orderedOps) {
+        if (FilterOp filter = dyn_cast<FilterOp>(op)) {
+            events.push_back(WalkEvent {._kind = WalkEvent::Kind::Filter, ._filter = filter});
+        } else if (isHop(op)) {
+            events.push_back(WalkEvent {._kind = WalkEvent::Kind::Forward, ._step = &steps[stepIndex++]});
+        }
+    }
+}
+
+void collectScanLabelFilters(const SeedPattern& pattern,
+                             Value node,
+                             llvm::SmallPtrSetImpl<Operation*>& absorbed,
+                             llvm::SmallVectorImpl<Attribute>& labels) {
+    for (FilterOp filter : pattern._filters) {
+        CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+        const ArrayAttr conjunction = check ? check.getConjunction() : ArrayAttr();
+        if (!conjunction) {
+            continue;
+        }
+
+        GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+        if (!labelSet || patternOrigin(labelSet.getInputNodes(), pattern) != node) {
+            continue;
+        }
+
+        absorbed.insert(filter.getOperation());
+        for (const Attribute label : conjunction) {
+            if (!llvm::is_contained(labels, label)) {
+                labels.push_back(label);
+            }
+        }
+    }
+}
+
+// The rows a walk builds, summed over the ops it emits: the scan of its first node, then
+// each filter and each hop
+double estimateWalkCost(const SeedPattern& pattern,
+                        Value start,
+                        ArrayAttr startLabels,
+                        llvm::ArrayRef<WalkEvent> events,
+                        const RowEstimator& estimator) {
+    const auto nodeOf = [&pattern](Value column) {
+        return patternOrigin(column, pattern);
+    };
+
+    KnownLabels known;
+    double rows = estimator.getNodeCount();
+    if (startLabels) {
+        rows *= estimator.keepLabelled(ArrayAttr::get(startLabels.getContext(), {startLabels}), known[start]);
+    }
+
+    double cost = rows;
+    for (const WalkEvent& event : events) {
+        switch (event._kind) {
+            case WalkEvent::Kind::RootLabels: {
+                const ArrayAttr rootLabels = cast<ScanNodesByLabel>(pattern._root).getLabels();
+                rows *= estimator.keepLabelled(ArrayAttr::get(rootLabels.getContext(), {rootLabels}), known[pattern._root->getResult(0)]);
+            }
+            break;
+            case WalkEvent::Kind::Filter: {
+                FilterOp filter = event._filter;
+                rows *= estimator.getSelectivity(filter.getMask(), nodeOf, known);
+            }
+            break;
+            case WalkEvent::Kind::Forward:
+                rows *= estimator.getHopFanOut(event._step->_op, false, known.lookup(event._step->_from));
+            break;
+            case WalkEvent::Kind::Backward:
+                rows *= estimator.getHopFanOut(event._step->_op, true, known.lookup(event._step->_to));
+            break;
+        }
+
+        cost += rows;
+    }
+
+    return cost;
+}
+
+bool matchCheapestRoot(Operation* scan, const RowEstimator& estimator, CheapestRoot& match) {
+    SeedPattern& pattern = match._pattern;
+    if (!collectRootedPattern(scan, match) || !analyzePattern(pattern, match._orderedOps) || pattern._steps.empty()) {
+        return false;
+    }
+
+    const Value root = scan->getResult(0);
+    ScanNodesByLabel rootScan = dyn_cast<ScanNodesByLabel>(scan);
+    const ArrayAttr rootLabels = rootScan ? rootScan.getLabels() : ArrayAttr();
+
+    llvm::SmallVector<WalkEvent> written;
+    collectWrittenWalk(match, written);
+
+    double cheapest = estimateWalkCost(pattern, root, rootLabels, written, estimator) / REROOT_GAIN_FACTOR;
+    bool foundCheaper = false;
+
+    llvm::SmallVector<Value> candidates {root};
+    for (const PatternStep& step : pattern._steps) {
+        candidates.push_back(step._to);
+    }
+
+    for (const Value candidate : candidates) {
+        if (!isWalkableFrom(pattern, candidate)) {
+            continue;
+        }
+
+        const bool isTheRoot = candidate == root;
+
+        llvm::SmallVector<Attribute> labels;
+        if (isTheRoot && rootLabels) {
+            labels.append(rootLabels.begin(), rootLabels.end());
+        }
+
+        llvm::SmallPtrSet<Operation*, 4> absorbed;
+        collectScanLabelFilters(pattern, candidate, absorbed, labels);
+        const ArrayAttr startLabels = labels.empty() ? ArrayAttr() : ArrayAttr::get(scan->getContext(), labels);
+
+        llvm::SmallVector<WalkEvent> events;
+        if (!planWalk(pattern, candidate, absorbed, isTheRoot || !rootLabels, events)) {
+            continue;
+        }
+
+        const double cost = estimateWalkCost(pattern, candidate, startLabels, events, estimator);
+        if (cost < cheapest) {
+            cheapest = cost;
+            foundCheaper = true;
+
+            match._start = candidate;
+            match._labels = startLabels;
+            match._events.assign(events.begin(), events.end());
+        }
+    }
+
+    return foundCheaper;
+}
+
+void rerootAtCheapestNode(CheapestRoot& match, mlir::RewriterBase& rewriter) {
+    const SeedPattern& pattern = match._pattern;
+    Operation* const rootOp = pattern._root;
+    const Location loc = rootOp->getLoc();
+    const Type nodesType = rootOp->getResult(0).getType();
+
+    rewriter.setInsertionPoint(match._end);
+
+    Value scanned;
+    if (match._labels) {
+        scanned = rewriter.create<ScanNodesByLabel>(loc, nodesType, match._labels).getResult();
+    } else {
+        scanned = rewriter.create<ScanNodes>(loc, nodesType).getResult();
+    }
+
+    PatternReplay replay(pattern, rewriter, loc);
+    replay.bind(match._start, scanned);
+    replay.walk(match._events);
+
+    const auto readOutsideThePattern = [&pattern](OpOperand& use) {
+        return !pattern._ops.contains(use.getOwner());
+    };
+
+    for (Operation* const op : match._orderedOps) {
+        for (Value result : op->getResults()) {
+            if (llvm::any_of(result.getUses(), readOutsideThePattern)) {
+                result.replaceUsesWithIf(replay.materialize(result), readOutsideThePattern);
+            }
+        }
+    }
+
+    for (Operation* const op : llvm::reverse(match._orderedOps)) {
+        op->dropAllUses();
+        rewriter.eraseOp(op);
+    }
+}
+
+struct RerootPatternAtCheapestNode : public impl::RerootPatternAtCheapestNodeBase<RerootPatternAtCheapestNode> {
+    RerootPatternAtCheapestNode() {}
+
+    RerootPatternAtCheapestNode(const DBPassContext* context)
+        : _context(context)
+    {
+    }
+
+    void runOnOperation() override {
+        if (!_context->_view) {
+            return;
+        }
+
+        const RowEstimator estimator(*_context->_view);
+
+        runWorklist<ScanNodes, ScanNodesByLabel>(getOperation(), [&estimator](Operation* op, mlir::RewriterBase& rewriter) {
+            CheapestRoot match;
+            if (!matchCheapestRoot(op, estimator, match)) {
+                return false;
+            }
+
+            rerootAtCheapestNode(match, rewriter);
+            return true;
+        });
+    }
+
+private:
+    const DBPassContext* _context {&defaultPassContext};
 };
 
 // The node scans a column's rows come off, in factor order. A cross product's rows are its
@@ -9589,6 +10243,10 @@ std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context) {
 
 std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context) {
     return std::make_unique<CountFromMetadata>(context);
+}
+
+std::unique_ptr<Pass> createRerootPatternAtCheapestNode(const DBPassContext* context) {
+    return std::make_unique<RerootPatternAtCheapestNode>(context);
 }
 
 }

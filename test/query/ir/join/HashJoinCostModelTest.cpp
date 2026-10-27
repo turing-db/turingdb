@@ -207,6 +207,23 @@ TEST_F(HashJoinCostModelTest, buildsTheSideTheLabelsNarrow) {
     EXPECT_LT(program.find("} factor {"), program.find("db.scan_nodes_by_label")) << program;
 }
 
+// A property equality keeps a tenth of the nodes it reads, the System R default, so the
+// four hundred named nodes filtered to one name are forty rows against the four hundred
+// of the bare scan, and the filtered side is the one to hold.
+TEST_F(HashJoinCostModelTest, buildsTheSideItsFilterNarrows) {
+    buildGraph(400, 0);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (n {name: 'point3'}), (m) WHERE n.name = m.name RETURN n, m", forced, program);
+
+    EXPECT_LT(program.find("} factor {"), program.find("db.scan_nodes_by_property_value")) << program;
+}
+
 // A factor a hop seeds carries a row per edge, not per node, and the graph counts those
 // too: a hundred nodes with three edges each is three hundred rows against the hundred the
 // bare scan beside it makes, so the bare scan is the side to hold.
