@@ -379,6 +379,33 @@ Key points:
 - Don't preface `ninja` with `cmake ..`. `ninja` already re-runs cmake when any tracked `CMakeLists.txt` has changed. Only run `cmake ..` after editing `CMakeLists.txt` / `dependencies.sh`, or when resetting the build directory.
 - **Make minimal, targeted edits — fix exactly what's asked.** When the request is narrow (a comment, a wording, one line), change only that and leave surrounding working code alone. Don't refactor an adjacent loop or rename things just because you're nearby (e.g. asked to fix a confusing comment over a loop, rewrite the comment — don't also convert the loop to `all_of`). It keeps diffs small and reviewable and respects the existing structure. If a larger refactor seems worthwhile, propose it separately and let the user decide rather than bundling it in. This rule is about *unrelated* changes. A refactor that the root-cause fix needs is part of the fix, not scope creep (see "Fix the root cause, in its most general form").
 
+## Benchmarking
+
+**Compare binaries one server at a time.** Start a server, load the graph, time the queries,
+stop it, then start the next. Never keep two servers resident, loading or answering at the
+same time, even when their queries are interleaved and never execute at once: they share the
+L3, the memory bandwidth and the CPU's turbo budget. Run the servers in ABAB order (baseline,
+new, baseline, new) with the same seed and query order, so drift over the session hits both
+binaries equally.
+
+**A broad slowdown is the machine until an A/B says otherwise.** When turing-bench reports
+regressions spread over many unrelated queries, check the host before the code:
+- Idle states: `cat /sys/devices/system/cpu/cpu*/cpuidle/state*/disable`.
+- The clock one busy core reaches: `perf stat -e cycles,task-clock -- timeout 3 sh -c 'while :; do :; done'`.
+- Other load during the run: `sar -u -f /var/log/sysstat/saDD`.
+- Changes made with sudo: `sudo grep COMMAND /var/log/auth.log`.
+
+Then time the two commits' binaries as above. turing-bench keeps them on hetz-bench in
+`~/.cache/turing-bench/bin/<sha>/turingdb`. hetz-bench is shared: work in a private directory
+on a private port, and kill only your own pids. An interrupted ssh command does not stop a
+job it started with `setsid nohup`; check `ps` and stop it before the next measurement.
+
+Worked example: turing-bench run #4 (2026-10-27) reported 55 regressions of +20-40% for
+`2ed7e5956` against `1ea18067`. Between the two runs C6 had been disabled on hetz-bench, which
+capped one busy core at 2.8 GHz instead of 3.9. The two binaries timed the same, and
+`LOAD JSONL`, whose code had not changed, took 215 s against 167 s. With C6 back on, a rerun
+cleared the 55 regressions.
+
 ## Project context
 
 - **Partitioning** is on the near-term roadmap (as of 2026-05-04). Some customers have specifically asked for **METIS-style structural partitioning** (edge-cut minimization), not hash partitioning. Treat partitioning as a near-term constraint when discussing scale-out, not a future-optional.
