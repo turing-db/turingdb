@@ -9850,8 +9850,29 @@ void collectScanLabelFilters(const SeedPattern& pattern,
     }
 }
 
+bool fusesIntoScanByPropertyValue(FilterOp filter, Value start, const SeedPattern& pattern) {
+    const auto readsTheStart = [&pattern, start](Value column) {
+        return patternOrigin(column, pattern) == start;
+    };
+
+    const MaskCone cone = collectMaskCone(filter.getMask());
+    if (!llvm::all_of(cone._inputs, readsTheStart)) {
+        return false;
+    }
+
+    llvm::SmallVector<Value> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    return llvm::any_of(conjuncts, [&readsTheStart](Value conjunct) {
+        EqOp equality = conjunct.getDefiningOp<EqOp>();
+        PropertyEquality property;
+        return equality && matchPropertyEquality(equality, property) && readsTheStart(property._read.getInputNodes());
+    });
+}
+
 // The rows a walk builds, summed over the ops it emits: the scan of its first node, then
-// each filter and each hop
+// each filter and each hop. A property equality in the first filter makes that scan and
+// filter one scan by property value, which emits only the rows the filter keeps.
 double estimateWalkCost(const SeedPattern& pattern,
                         Value start,
                         ArrayAttr startLabels,
@@ -9867,7 +9888,10 @@ double estimateWalkCost(const SeedPattern& pattern,
         rows *= estimator.keepLabelled(ArrayAttr::get(startLabels.getContext(), {startLabels}), known[start]);
     }
 
-    double cost = rows;
+    const bool startsWithFilter = !events.empty() && events.front()._kind == WalkEvent::Kind::Filter;
+    const bool scansByPropertyValue = startsWithFilter && fusesIntoScanByPropertyValue(events.front()._filter, start, pattern);
+
+    double cost = scansByPropertyValue ? 0 : rows;
     for (const WalkEvent& event : events) {
         switch (event._kind) {
             case WalkEvent::Kind::RootLabels: {

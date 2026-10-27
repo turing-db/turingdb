@@ -135,3 +135,7 @@ add_call_v3_test(test_query_ir_push_down_filters_past_writes PushDownFiltersPast
 add_call_v3_test(test_query_ir_constant_rows_passes ConstantRowsPassesTest.cpp)
 
 add_call_v3_test(test_query_ir_reuse_label_and_type_reads ReuseLabelAndTypeReadsTest.cpp)
+
+add_turing_test(test_query_ir_reroot_control_graph RerootControlGraphTest.cpp)
+target_sources(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
+target_include_directories(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR})
