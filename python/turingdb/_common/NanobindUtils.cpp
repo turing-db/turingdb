@@ -221,11 +221,7 @@ struct ValueToPyObject {
 
     template <typename T>
     nb::object operator()(const db::ListElementView element) const {
-        if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
-            return nb::cast(element.getAs<T>()._boolean);
-        } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            return nb::cast(element.getAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
+        if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
             nb::list floats;
             for (const float value : element.getAs<T>()) {
                 floats.append(nb::cast(value));
@@ -242,17 +238,13 @@ struct ValueToPyObject {
         } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
             return dateTime(element.getAs<T>());
         } else {
-            return nb::cast(element.getAs<T>());
+            return toPy(element.getAs<T>());
         }
     }
 
     template <typename T>
     nb::object operator()(const db::MapEntryView entry) const {
-        if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
-            return nb::cast(entry.getValueAs<T>()._boolean);
-        } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            return nb::cast(entry.getValueAs<T>());
-        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
+        if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
             nb::list floats;
             for (const float value : entry.getValueAs<T>()) {
                 floats.append(nb::cast(value));
@@ -269,7 +261,7 @@ struct ValueToPyObject {
         } else if constexpr (std::is_same_v<T, db::types::DateTime::Primitive>) {
             return dateTime(entry.getValueAs<T>());
         } else {
-            return nb::cast(entry.getValueAs<T>());
+            return toPy(entry.getValueAs<T>());
         }
     }
 };
