@@ -24,6 +24,7 @@ namespace mlir::db {
 // With no graph there is nothing to estimate, so every match fuses. count_from_metadata
 // reads _hasPendingWrites: the query then sees writes the graph's counts leave out.
 // fuse_scan_edges_by_endpoint_label reads the graph to walk the index of the end with fewer nodes.
+// reroot_pattern_at_cheapest_node reads it to start a pattern from the node making the fewest rows.
 struct DBPassContext {
     const ::db::GraphView* _view {nullptr};
     bool _forcesHashJoin {false};
@@ -34,5 +35,6 @@ struct DBPassContext {
 std::unique_ptr<Pass> createFuseScanEdgesByEndpointLabel(const DBPassContext* context);
 std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext* context);
 std::unique_ptr<Pass> createCountFromMetadata(const DBPassContext* context);
+std::unique_ptr<Pass> createRerootPatternAtCheapestNode(const DBPassContext* context);
 
 }

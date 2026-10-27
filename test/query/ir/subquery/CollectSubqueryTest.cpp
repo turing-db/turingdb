@@ -93,14 +93,14 @@ TEST_F(CollectSubqueryTest, collectsTheListsTheBodyReturns) {
 }
 
 TEST_F(CollectSubqueryTest, collectsOverNoRowInFlight) {
-    expectRows("RETURN COLLECT { MATCH (a:Person)-[:KNOWS_WELL]->(b:Person) RETURN b.name }", {{"[Adam, Remy]"}});
+    expectRows("RETURN COLLECT { MATCH (a:Person)-[:KNOWS_WELL]->(b:Person) RETURN b.name }", {{"[Remy, Adam]"}});
     expectRows("RETURN COLLECT { MATCH (p:Person {name: 'Nobody'}) RETURN p.name }", {{"[]"}});
 }
 
 TEST_F(CollectSubqueryTest, anUncorrelatedBodyCollectsTheSameForEveryRow) {
     expectRows("MATCH (p:Person) WHERE p.name = 'Remy' OR p.name = 'Doruk' "
                "RETURN p.name, COLLECT { MATCH (a)-[:KNOWS_WELL]->(b:Person) RETURN a.name }",
-               {{"Remy", "[Remy, Adam, Ghosts]"}, {"Doruk", "[Remy, Adam, Ghosts]"}});
+               {{"Remy", "[Adam, Ghosts, Remy]"}, {"Doruk", "[Adam, Ghosts, Remy]"}});
 }
 
 TEST_F(CollectSubqueryTest, collectsABodyReturningOnlyAConstantOfTheScope) {
