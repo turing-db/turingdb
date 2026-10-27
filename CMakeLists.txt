@@ -310,7 +310,7 @@ execute_process(COMMAND git rev-parse HEAD
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Get timestamp of current HEAD commit
-execute_process(COMMAND git show --no-patch --format=%at
+execute_process(COMMAND git show --no-patch --format=%ct
                 OUTPUT_VARIABLE HEAD_COMMIT_TIMESTAMP
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
