@@ -151,6 +151,9 @@ add_turing_test(test_query_ir_count_comparison CountComparisonTest.cpp)
 add_turing_test(test_query_ir_component_of_grouping_key ComponentOfGroupingKeyTest.cpp)
 target_include_directories(test_query_ir_component_of_grouping_key PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_grouping_key_in_container GroupingKeyInContainerTest.cpp)
+target_include_directories(test_query_ir_grouping_key_in_container PRIVATE ${IR_TEST_DIR})
+
 # collect() over toString() results.
 add_call_v3_test(test_query_ir_collect_computed_string CollectComputedStringTest.cpp)
 
