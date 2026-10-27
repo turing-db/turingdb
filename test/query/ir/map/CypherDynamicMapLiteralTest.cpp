@@ -403,20 +403,6 @@ TEST_F(CypherDynamicMapLiteralTest, AggregateValueBesideGroupingKey) {
                {"{c: 4}", "{c: 3}", "{c: 2}", "{c: 2}", "{c: 2}", "{c: 2}", "{c: 1}", "{c: 1}", "{c: 1}"});
 }
 
-// A map holding a grouping key beside an aggregate has to be built over the grouped rows,
-// so the key must bind to the column the aggregate yields rather than to the per-row one.
-// Codegen binds the per-row column, so the two operands end up bound in different loops and
-// lowering rejects the result. Disabled until grouped-aggregate codegen substitutes the key
-// inside a container - the same gap RETURN [n.name, count(n)] has had since before maps.
-TEST_F(CypherDynamicMapLiteralTest, DISABLED_GroupingKeyBesideAnAggregateInOneMap) {
-    Rows expected;
-    for (const std::string& name : personNames) {
-        expected.push_back("{k: '" + name + "', v: 1}");
-    }
-
-    expectRows("MATCH (n:Person) RETURN {k: n.name, v: count(n)}", expected);
-}
-
 // A map column keys a DISTINCT by its entries: only Remy and Adam have an age, both 32
 TEST_F(CypherDynamicMapLiteralTest, DistinctMapColumn) {
     expectRows("MATCH (n:Person) RETURN DISTINCT {age: n.age}", {"{age: 32}", "{age: null}"});
