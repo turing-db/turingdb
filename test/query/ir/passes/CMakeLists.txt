@@ -139,3 +139,5 @@ add_call_v3_test(test_query_ir_reuse_label_and_type_reads ReuseLabelAndTypeReads
 add_turing_test(test_query_ir_reroot_control_graph RerootControlGraphTest.cpp)
 target_sources(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR}/StringRowSink.cpp)
 target_include_directories(test_query_ir_reroot_control_graph PRIVATE ${IR_TEST_DIR})
+
+add_turing_test(test_query_ir_fuse_unwind_equality FuseUnwindEqualityTest.cpp)
