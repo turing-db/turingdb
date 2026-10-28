@@ -284,6 +284,37 @@ TEST_F(HashJoinCostModelTest, sizesAFactorThroughTheListItUnwinds) {
     EXPECT_LT(program.find("db.cross_product"), program.find("} factor {")) << program;
 }
 
+// A join makes as many rows as its smaller side, so the first MATCH joins the 20 pairs to
+// the 400 nodes in 20 rows. Read as the product its equality keeps a tenth of, they would
+// be 800, twice b's scan: the second join holds the 20 rows and streams the scan.
+TEST_F(HashJoinCostModelTest, sizesAJoinByItsSmallerSide) {
+    buildGraph(400, 0);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string pairs;
+    for (size_t pair = 0; pair < 20; pair++) {
+        pairs += pair == 0 ? "[" : ", [";
+        pairs += "'" + _names[2 * pair] + "', '" + _names[2 * pair + 1] + "']";
+    }
+
+    std::string program;
+    generate("UNWIND [" + pairs + "] AS p "
+             "MATCH (a:Point {name: p[0]}) MATCH (b:Point {name: p[1]}) RETURN a, b",
+             forced,
+             program);
+
+    const size_t outerJoin = program.find("db.hash_join");
+    ASSERT_NE(outerJoin, std::string::npos) << program;
+
+    const size_t innerJoin = program.find("db.hash_join", outerJoin + 1);
+    ASSERT_NE(innerJoin, std::string::npos) << program;
+    EXPECT_LT(program.find("} factor {"), innerJoin) << program;
+}
+
 // Each MATCH crosses the unwound rows with the 400 nodes and keeps those whose name is a
 // key the row reads off its pair, so each is a cut the join takes, and no OR of the keys
 // is evaluated per node in its place.

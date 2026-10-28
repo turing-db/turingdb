@@ -7626,7 +7626,7 @@ bool carriesJoinColumnsOnly(FilterOp filter, const EqualityCross& match) {
 // multiply where a scan or a traversal contributes them linearly.
 bool factorHoldsAProduct(Region& factor) {
     const WalkResult walked = factor.walk([](Operation* op) {
-        if (isa<CrossProduct, HashJoin>(op)) {
+        if (isa<CrossProduct>(op)) {
             return WalkResult::interrupt();
         }
 
@@ -8027,13 +8027,23 @@ std::optional<double> estimateRowMultiplier(Operation* op, const RowEstimator& e
     return estimator.getHopFanOut(op, false, ::db::LabelSet {});
 }
 
+struct RegionRows {
+    double _rows {1};
+    bool _countedASource {false};
+};
+
+double estimateRegionRows(const RegionRows& region) {
+    return region._countedASource ? region._rows : static_cast<double>(uncountableRows);
+}
+
 // The rows a factor makes: the product of what its sources seed it with, a factor crossing
 // two of them holding a row per pair, grown or shrunk by every hop and unwind reading from
-// one and cut by every filter. A factor seeded from somewhere the db level cannot count - a
-// procedure, a load - counts as an uncountable source's rows.
+// one and cut by every filter. A join makes as many as its smaller side, each key taken as
+// distinct on its side: the db level counts no distinct values. A factor seeded from
+// somewhere the db level cannot count - a procedure, a load - counts as an uncountable
+// source's rows.
 double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
-    bool countedASource = false;
-    double rows = 1;
+    llvm::DenseMap<Region*, RegionRows> regionRows;
     KnownLabels known;
 
     const auto columnItself = [](Value column) {
@@ -8041,25 +8051,42 @@ double estimateFactorRows(Region& factor, const RowEstimator& estimator) {
     };
 
     factor.walk([&](Operation* op) {
+        RegionRows nested;
+        if (HashJoin join = dyn_cast<HashJoin>(op)) {
+            const double leftRows = estimateRegionRows(regionRows.lookup(&join.getLeftFactor()));
+            const double rightRows = estimateRegionRows(regionRows.lookup(&join.getRightFactor()));
+            nested = RegionRows {std::min(leftRows, rightRows), true};
+        } else {
+            for (Region& region : op->getRegions()) {
+                const RegionRows counted = regionRows.lookup(&region);
+                nested._rows *= counted._rows;
+                nested._countedASource = nested._countedASource || counted._countedASource;
+            }
+        }
+
+        RegionRows& rows = regionRows[op->getParentRegion()];
+        rows._rows *= nested._rows;
+        rows._countedASource = rows._countedASource || nested._countedASource;
+
         if (FilterOp filter = dyn_cast<FilterOp>(op)) {
-            rows *= estimator.getSelectivity(filter.getMask(), columnItself, known);
+            rows._rows *= estimator.getSelectivity(filter.getMask(), columnItself, known);
             return;
         }
 
         const std::optional<double> seeded = estimateSourceRows(op, estimator);
         if (seeded) {
-            countedASource = true;
-            rows *= *seeded;
+            rows._countedASource = true;
+            rows._rows *= *seeded;
             return;
         }
 
         const std::optional<double> multiplier = estimateRowMultiplier(op, estimator);
         if (multiplier) {
-            rows *= *multiplier;
+            rows._rows *= *multiplier;
         }
     });
 
-    return countedASource ? rows : static_cast<double>(uncountableRows);
+    return estimateRegionRows(regionRows.lookup(&factor));
 }
 
 // Which way round the two sides go into the join, whose right factor is the built one. The
@@ -8271,12 +8298,12 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
                 return;
             }
 
-            match._buildsTheLeftFactor = buildsTheLeftFactor(match, context);
             matches.push_back(match);
         });
 
         mlir::OpBuilder builder(&getContext());
         for (EqualityCross& match : matches) {
+            match._buildsTheLeftFactor = buildsTheLeftFactor(match, context);
             fuseHashJoin(match, builder);
         }
     }
