@@ -5203,21 +5203,24 @@ void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
                                              selectGatherForChunkType(bufferType)));
     }
 
-    // The probe key is read against the build key buffer through the handlers of one
-    // chunk type, so the two sides must have collected and probed chunks of that type.
     if (buildKey >= buildTypes.size()) {
         throw IRException("hash join build key column index is out of range");
     }
 
     const mlir::Value keyColumn = columns[probeKey];
-    if (keyColumn.getType() != buildTypes[buildKey]) {
-        throw IRException("nl.hash_join_probe must read its key from a chunk of the type the build key was collected as");
+    const mlir::Type keyType = keyColumn.getType();
+    const Column* probeKeyColumn = getColumn(keyColumn);
+    const Column* buildKeyColumn = state->buffer(buildKey);
+
+    NLJoinKeyFunctions keyFunctions = selectJoinKeyFunctionsForChunkType(keyType);
+    if (keyType != buildTypes[buildKey]) {
+        keyFunctions._equal = NLExecutor::selectCrossTypeKeyEqualFunction(probeKeyColumn, buildKeyColumn);
     }
 
-    data->setKeyColumns(getColumn(keyColumn),
-                        state->buffer(buildKey),
-                        selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
-                        selectKeyMatchableForChunkType(keyColumn.getType()));
+    data->setKeyColumns(probeKeyColumn,
+                        buildKeyColumn,
+                        keyFunctions,
+                        selectKeyMatchableForChunkType(keyType));
 
     body->emplaceStmt(&NLExecutor::runHashJoinProbeLoop, data);
 
@@ -6775,10 +6778,14 @@ NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type c
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+    if (isNullableAny(elementType)) {
+        return NLExecutor::selectOptCellJoinKeyFunctions();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         return NLExecutor::selectOptJoinKeyFunctions(valueTypeFromElementType(nullableType.getValueType()));
     } else if (mlir::isa<storage::AnyType>(elementType)) {
         return NLExecutor::selectCellJoinKeyFunctions();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskJoinKeyFunctions();
     } else if (isPlainValueElementType(elementType)) {
         return NLExecutor::selectPlainJoinKeyFunctions(valueTypeFromElementType(elementType));
     }
@@ -6787,16 +6794,20 @@ NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type c
 }
 
 // The gating sibling of selectKeyAppendForChunkType: a nullable value chunk reads its
-// present flag and a type-erased cell its tag, a double chunk of either shape also
-// rejects a NaN, and every other chunk holds a matchable key in every row.
+// present flag and a tagged cell its tag, a double, an embedding or a list also reads its
+// value, and every other chunk holds a matchable key in every row.
 NLKeyIsMatchableFunction NLTranslator::selectKeyMatchableForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+    if (isNullableAny(elementType)) {
+        return NLExecutor::selectOptCellKeyMatchableFunction();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         return NLExecutor::selectOptKeyMatchableFunction(valueTypeFromElementType(nullableType.getValueType()));
     } else if (mlir::isa<storage::AnyType>(elementType)) {
         return NLExecutor::selectCellKeyMatchableFunction();
+    } else if (mlir::isa<storage::ListType>(elementType)) {
+        return NLExecutor::selectListKeyMatchableFunction();
     } else if (isPlainValueElementType(elementType)) {
         return NLExecutor::selectPlainKeyMatchableFunction(valueTypeFromElementType(elementType));
     }

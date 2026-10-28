@@ -1901,10 +1901,8 @@ using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::stri
 
 // Type of handle that answers whether one row of a join key column can match at all. One
 // per column kind / value type, selected during translation the same way the key-append
-// family is. Two values the key bytes cannot tell apart from a matchable one are not: a
-// null, for which Cypher gives null rather than true for `=`, and a NaN, which is not
-// equal to itself - and the serializer maps every NaN payload to one canonical NaN, which
-// is what DISTINCT wants and the opposite of what a join does.
+// family is. A null cannot, for which Cypher gives null rather than true for `=`, and
+// neither can a NaN, which is not equal to itself, nor a list holding a null.
 using NLKeyIsMatchableFunction = bool (*)(const Column* column, size_t row);
 
 // Type of handle that hashes every row of a join key column, one hash per row, for the
@@ -1914,10 +1912,11 @@ using NLKeyIsMatchableFunction = bool (*)(const Column* column, size_t row);
 using NLKeyHashFunction = void (*)(const Column* column, std::vector<uint64_t>& hashes);
 
 // Type of handle that answers whether a probe row's key equals a build row's, both read in
-// place from columns of one chunk type.
+// place from their columns.
 using NLKeyEqualFunction = bool (*)(const Column* probe, size_t probeRow, const Column* build, size_t buildRow);
 
-// The two handlers a join reads a key column through, selected together from its chunk type.
+// The two handlers a join reads a key column through, selected together from its chunk
+// type. The equality compares two columns of that type.
 struct NLJoinKeyFunctions {
     NLKeyHashFunction _hash {nullptr};
     NLKeyEqualFunction _equal {nullptr};
@@ -2048,8 +2047,8 @@ public:
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
 
-    // The probe key chunk and the build key buffer it is matched against, read through
-    // the handlers of their shared chunk type.
+    // The probe key chunk and the build key buffer it is matched against: the hash is the
+    // probe chunk type's, the equality compares that type to the build key's.
     void setKeyColumns(const Column* key,
                        const Column* buildKey,
                        const NLJoinKeyFunctions& keyFunctions,

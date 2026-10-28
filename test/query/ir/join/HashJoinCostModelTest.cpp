@@ -284,6 +284,36 @@ TEST_F(HashJoinCostModelTest, sizesAFactorThroughTheListItUnwinds) {
     EXPECT_LT(program.find("db.cross_product"), program.find("} factor {")) << program;
 }
 
+// Each MATCH crosses the unwound rows with the 400 nodes and keeps those whose name is a
+// key the row reads off its pair, so each is a cut the join takes, and no OR of the keys
+// is evaluated per node in its place.
+TEST_F(HashJoinCostModelTest, fusesTheKeyLookupsOfUnwoundRows) {
+    buildGraph(400, 0);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext context {&view, false, true};
+
+    std::string program;
+    generate("UNWIND [['point1', 'point2'], ['point3', 'point4']] AS p "
+             "MATCH (a:Point {name: p[0]}) MATCH (b:Point {name: p[1]}) RETURN a, b",
+             context,
+             program);
+
+    const size_t firstJoin = program.find("db.hash_join");
+    ASSERT_NE(firstJoin, std::string::npos) << program;
+    EXPECT_NE(program.find("db.hash_join", firstJoin + 1), std::string::npos) << program;
+    EXPECT_EQ(program.find("db.cross_product"), std::string::npos) << program;
+
+    generate("UNWIND ['point1', 'point2', 'point3'] AS x MATCH (a:Point {name: x}) RETURN a",
+             context,
+             program);
+
+    EXPECT_NE(program.find("db.hash_join"), std::string::npos) << program;
+    EXPECT_EQ(program.find("db.or"), std::string::npos) << program;
+}
+
 // The two overrides: forcing takes every cut the pass matches whatever the estimate says,
 // and clearing use takes none.
 TEST_F(HashJoinCostModelTest, forcingFusesTheSmallestProduct) {

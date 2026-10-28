@@ -33,6 +33,8 @@ add_ir_tests(test_query_ir_hash_join_embedding_key HashJoinEmbeddingKeyTest.cpp)
 # The key type cases run fuse_hash_join over hand-written db IR, with no graph.
 add_ir_tests(test_query_ir_hash_join_key_type HashJoinKeyTypeTest.cpp)
 
+add_turing_test(test_query_ir_hash_join_cross_type_key HashJoinCrossTypeKeyTest.cpp)
+
 # The build index cases group rows by key and walk the buckets directly, with no graph or IR.
 add_ir_tests(test_query_ir_hash_join_index NLHashJoinIndexTest.cpp)
 

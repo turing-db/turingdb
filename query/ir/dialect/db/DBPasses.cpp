@@ -1234,6 +1234,15 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
         return false;
     }
 
+    // The disjunction is tested on every row of the relation, which only pays where it is a
+    // lookup: node IDs, which fuse_scan_by_node_ids scans directly, or one element, a single
+    // equality. A longer list of keys is a cut fuse_hash_join indexes.
+    const bool comparesNodeIDs = static_cast<bool>(comparedNodeColumn(match._comparedColumn));
+    const bool unwindsOneElement = match._unwind.getElements().size() == 1;
+    if (!comparesNodeIDs && !unwindsOneElement) {
+        return false;
+    }
+
     // Codegen carries every column in flight, so the filter holding the elements does not
     // mean anything reads them: an unused result is dropped rather than stood in for, and
     // only a column something does read has to be one the compared column can replace.
@@ -7501,34 +7510,13 @@ struct EqualityCross {
     bool _buildsTheLeftFactor {false};
 };
 
-// The type a key's rows carry at run time, when its db column fixes it: a column the
-// product yields, or a property read, whose chunk lowering builds from the type it
-// declares. Null for a column typed none, and for a key computed by any other op, whose
-// type lowering derives from its operands rather than from the one the op declares.
-Type fixedKeyType(const JoinKeySide& side) {
-    const llvm::SmallVector<Operation*>& coneOps = side._cone._ops;
-    const Type keyType = side._key.getType();
+// Whether a key's rows can be hashed. The two keys need not share a type: the join hashes
+// each side by its own and compares them as the equality does. A path has no value to hash,
+// as two paths are equal when they run through the same nodes and edges.
+bool isHashableKey(const JoinKeySide& side) {
+    const Type keyType = cast<ColumnType>(side._key.getType()).getType();
 
-    const bool isAColumn = coneOps.empty();
-    const bool isAPropertyRead = coneOps.size() == 1
-                              && isa<GetNodeProperties, GetEdgeProperties>(coneOps.front());
-    const bool typeIsResolved = !isa<mlir::NoneType>(cast<ColumnType>(keyType).getType());
-
-    if ((isAColumn || isAPropertyRead) && typeIsResolved) {
-        return keyType;
-    }
-
-    return nullptr;
-}
-
-// Whether the two sides' keys are provably columns of one type. The join matches a build
-// key against a probe key by the bytes each serializes to, so two columns that could
-// serialize differently - an integer property against a string one, a node against a
-// number - would answer a comparison the equality did not.
-bool keysShareAColumnType(const JoinKeySide& left, const JoinKeySide& right) {
-    const Type leftType = fixedKeyType(left);
-
-    return leftType && leftType == fixedKeyType(right);
+    return !isa<storage::PathType, storage::PathRefType>(keyType);
 }
 
 // Reads into side the one product column a key is computed over, along with the ops
@@ -7537,7 +7525,7 @@ bool keysShareAColumnType(const JoinKeySide& left, const JoinKeySide& right) {
 // first side, and is set to the one this side found.
 bool matchKeySide(Value key, JoinKeySide& side, CrossProduct& product) {
     side._key = key;
-    side._cone = collectMaskCone(key);
+    collectRowCone({key}, key.getParentBlock(), side._cone);
 
     if (side._cone._inputs.size() != 1) {
         return false;
@@ -8140,7 +8128,7 @@ bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
     match._left._factor = &product.getLeftFactor();
     match._right._factor = &product.getRightFactor();
 
-    if (!keysShareAColumnType(match._left, match._right)) {
+    if (!isHashableKey(match._left) || !isHashableKey(match._right)) {
         return false;
     }
 

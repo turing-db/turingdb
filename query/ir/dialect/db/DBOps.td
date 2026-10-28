@@ -2122,9 +2122,10 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
 
     `on` names the key column of each side as an index into that factor's
     db.yield - the left factor's first, the right factor's second. A result row
-    pairs a left row with a right row whose keys hold the same value. A row whose
-    key is null joins with nothing, which is what the equality it replaces did:
-    `=` against a null gives null and the filter keeps only the true rows.
+    pairs a left row with a right row whose keys `=` holds equal, so the two keys
+    need not share a type: 32 joins 32.0. A row whose key is null joins with
+    nothing, which is what the equality it replaces did: `=` against a null gives
+    null and the filter keeps only the true rows.
 
     The right factor is the built side and the left the probed one, so a left
     row's matches come out together and in right-factor order, however either

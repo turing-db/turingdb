@@ -42,9 +42,10 @@ using namespace db;
 using namespace turing::test;
 
 
-// An UNWIND of a literal list whose elements are only compared against a property is the
-// disjunction that comparison spells out, so the db program the query compiles to reads
-// the same as the OR's - one scan, filtered - with no product of the list against it.
+// An UNWIND of a literal list whose elements are only compared against a column folds into
+// the disjunction that comparison spells out where the disjunction is a lookup: node IDs,
+// which are scanned directly, or one element, a single equality. A longer list of keys
+// stays a factor of its own, for the hash join to index.
 class UnwindValueFilterCodegenTest : public TuringTest {
 public:
     void initialize() override {
@@ -132,26 +133,23 @@ private:
     mlir::MLIRContext _context;
 };
 
-TEST_F(UnwindValueFilterCodegenTest, inlineConstraintCompilesToADisjunction) {
+// A disjunction of K property equalities is evaluated on every node, K x N, where the
+// join reads the nodes once.
+TEST_F(UnwindValueFilterCodegenTest, inlineConstraintOfManyKeysCompilesToAHashJoin) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("UNWIND [32, 99] AS a MATCH (n {age: a}) RETURN n.name, a");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
-
-    // One equality per element, folded into the single mask the one filter reads.
-    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 2u);
-    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
 }
 
-TEST_F(UnwindValueFilterCodegenTest, whereEqualityCompilesToADisjunction) {
+TEST_F(UnwindValueFilterCodegenTest, whereEqualityOfManyKeysCompilesToAHashJoin) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("UNWIND [32, 99] AS a MATCH (n) WHERE n.age = a RETURN n.name, a");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::OrOp>(*module), 0u);
 }
 
 TEST_F(UnwindValueFilterCodegenTest, aSingleElementNeedsNoDisjunction) {
@@ -164,28 +162,29 @@ TEST_F(UnwindValueFilterCodegenTest, aSingleElementNeedsNoDisjunction) {
 }
 
 // A repeated element emits the row it matches once per copy, which a disjunction - a set
-// membership - cannot express, so the product stands.
-TEST_F(UnwindValueFilterCodegenTest, repeatedElementsKeepTheProduct) {
+// membership - cannot express, so the unwind stands.
+TEST_F(UnwindValueFilterCodegenTest, repeatedElementsKeepTheUnwind) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
-        generate("UNWIND [32, 32] AS a MATCH (n {age: a}) RETURN n.name, a");
+        generate("UNWIND [0, 0] AS x MATCH (n) WHERE n = x RETURN n");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
 }
 
-TEST_F(UnwindValueFilterCodegenTest, anEmptyListKeepsTheProduct) {
+TEST_F(UnwindValueFilterCodegenTest, anEmptyListKeepsTheUnwind) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
         generate("UNWIND [] AS a MATCH (n {age: a}) RETURN n.name, a");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
 }
 
 // A null element is no value to compare against - and neither is a nested list - so the
 // list is left to the column it already rides.
-TEST_F(UnwindValueFilterCodegenTest, aNullElementKeepsTheProduct) {
+TEST_F(UnwindValueFilterCodegenTest, aNullElementKeepsTheUnwind) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
-        generate("UNWIND [32, null] AS a MATCH (n {age: a}) RETURN n.name, a");
+        generate("UNWIND [null] AS a MATCH (n {age: a}) RETURN n.name, a");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
 }
 
 // The elements reach the projection as well as the comparison, so dropping the unwind has
@@ -246,18 +245,19 @@ TEST_F(UnwindValueFilterCodegenTest, projectsTheNodeIDElementsBesideWhatTheyMatc
 }
 
 // A mixed list rides the type-erased column whose cells are compared by their own tag, so
-// a string cell simply matches no age - which one typed comparison per element, against a
-// column of integers, cannot express.
-TEST_F(UnwindValueFilterCodegenTest, heterogeneousElementsKeepTheProduct) {
+// a string cell simply matches no node - which one typed comparison per element, against a
+// column of node IDs, cannot express.
+TEST_F(UnwindValueFilterCodegenTest, heterogeneousElementsKeepTheUnwind) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
-        generate("UNWIND [32, 'x'] AS a MATCH (n) WHERE n.age = a RETURN n.name, a");
+        generate("UNWIND [0, 'x'] AS x MATCH (n) WHERE n = x RETURN n");
 
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
 }
 
-TEST_F(UnwindValueFilterCodegenTest, dropsTheElementsWhenNothingProjectsThem) {
+TEST_F(UnwindValueFilterCodegenTest, dropsTheElementWhenNothingProjectsIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module =
-        generate("UNWIND [32, 99] AS a MATCH (n {age: a}) RETURN n.name");
+        generate("UNWIND [32] AS a MATCH (n {age: a}) RETURN n.name");
 
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);

@@ -70,7 +70,7 @@ TEST_F(NestedProductFilterTest, cutsTwoComponentsByAComparison) {
 TEST_F(NestedProductFilterTest, cutsAComponentByTheRowsASubqueryImports) {
     expectJoinedCount("UNWIND ['Remy', 'Adam'] AS nm CALL (nm) { WITH nm WHERE nm = 'Remy' "
                       "MATCH (a:Person {name: nm}), (b:Interest) RETURN b } RETURN count(*)",
-                      0,
+                      1,
                       10);
 }
 

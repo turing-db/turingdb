@@ -16,10 +16,9 @@
 
 using namespace turing::test;
 
-// Which keys fuse_hash_join trusts to serialize alike. The join matches keys by their
-// bytes, so the two sides must carry one runtime column type: a key that is a column or a
-// property read carries the type its db column declares, a computed one the type lowering
-// derives from its operands. With no graph in the pass context, every match it trusts fuses.
+// Which keys fuse_hash_join joins on. Each side hashes by its own runtime type and a probe
+// key is compared to a build key as `=` compares them, so the two need not share a type -
+// one the db level types none included. With no graph in the pass context, every match fuses.
 class HashJoinKeyTypeTest : public ::testing::Test {
 protected:
     HashJoinKeyTypeTest() {
@@ -125,6 +124,46 @@ func.func @main() {
 }
 )mlir";
 
+// UNWIND [[32, 1], [20, 2]] AS p MATCH (n) WHERE n.age = p[0] RETURN n: the element is
+// typed none until lowering reads the list it is taken from
+const char* const listElementAgainstAProperty = R"mlir(
+func.func @main() {
+  %p:2 = db.cross_product factor {
+    %pairs = db.unwind_const([[32, 1], [20, 2]]) : !db.column<!storage.list<i64>>
+    db.yield %pairs : !db.column<!storage.list<i64>>
+  } factor {
+    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %n : !db.column<!storage.node_id>
+  }
+  %age = db.get_node_properties(%p#1, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+  %zero = db.constant(0 : i64)
+  %first = db.list_index %p#0, %zero : (!db.column<!storage.list<i64>>, !db.column<i64>) -> !db.column<none>
+  %eq = db.eq %age, %first : (!db.column<!storage.nullable<i64>>, !db.column<none>) -> !db.column<!storage.bool>
+  %n = db.filter(%eq, {%p#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%n) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A path has no value to hash: it is compared as the nodes and edges it runs through
+const char* const twoPaths = R"mlir(
+func.func @main() {
+  %p:2 = db.cross_product factor {
+    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    %path = db.make_path(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.path>
+    db.yield %path : !db.column<!storage.path>
+  } factor {
+    %m = db.scan_nodes() : !db.column<!storage.node_id>
+    %path = db.make_path(%m) : (!db.column<!storage.node_id>) -> !db.column<!storage.path>
+    db.yield %path : !db.column<!storage.path>
+  }
+  %eq = db.eq %p#0, %p#1 : (!db.column<!storage.path>, !db.column<!storage.path>) -> !db.column<!storage.bool>
+  %n, %m = db.filter(%eq, {%p#0, %p#1}) : (!db.column<!storage.bool>, !db.column<!storage.path>, !db.column<!storage.path>) -> (!db.column<!storage.path>, !db.column<!storage.path>)
+  db.output(%n, %m) : !db.column<!storage.path>, !db.column<!storage.path>
+  return
+}
+)mlir";
+
 TEST_F(HashJoinKeyTypeTest, fusesTwoPropertiesOfOneType) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoStringProperties);
     ASSERT_TRUE(module);
@@ -134,13 +173,13 @@ TEST_F(HashJoinKeyTypeTest, fusesTwoPropertiesOfOneType) {
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
 }
 
-TEST_F(HashJoinKeyTypeTest, keepsTheProductOverPropertiesOfTwoTypes) {
+TEST_F(HashJoinKeyTypeTest, fusesPropertiesOfTwoTypes) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(propertiesOfTwoTypes);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuseHashJoin(*module));
 
-    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
 }
 
 TEST_F(HashJoinKeyTypeTest, fusesAPropertyReadAgainstAYieldedPropertyOfItsType) {
@@ -152,8 +191,26 @@ TEST_F(HashJoinKeyTypeTest, fusesAPropertyReadAgainstAYieldedPropertyOfItsType) 
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
 }
 
-TEST_F(HashJoinKeyTypeTest, keepsTheProductOverTwoComputedKeys) {
+TEST_F(HashJoinKeyTypeTest, fusesTwoComputedKeys) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoComparisons);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuseHashJoin(*module));
+
+    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+}
+
+TEST_F(HashJoinKeyTypeTest, fusesAKeyTypedNoneAgainstAProperty) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(listElementAgainstAProperty);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuseHashJoin(*module));
+
+    EXPECT_EQ(countOps<mlir::db::HashJoin>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+}
+
+TEST_F(HashJoinKeyTypeTest, keepsTheProductOverTwoPaths) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoPaths);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuseHashJoin(*module));
 

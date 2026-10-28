@@ -18,6 +18,7 @@
 #include <spdlog/fmt/bundled/format.h>
 #include <llvm/Support/MathExtras.h>
 
+#include "NumberOrder.h"
 #include "TypeUtils.h"
 #include "columns/ContainerKind.h"
 #include "iterators/GetEdgesIterator.h"
@@ -58,6 +59,7 @@
 #include "columns/UnaryPredicates.h"
 #include "CellOrder.h"
 #include "CellUtils.h"
+#include "list/ListHash.h"
 #include "map/MapHash.h"
 #include "map/MapUtils.h"
 #include "list/PathTrie.h"
@@ -2739,61 +2741,68 @@ void distinctAppendElementBytes(std::string& key, const CellView element) {
     bioassert(false, "Unknown CellTag");
 }
 
-// A chunk of this kind holds neither a null nor a NaN - an ID column, a plainly-held
-// value of any other type - so every row of it carries a key a join can match on.
+// A chunk of this kind holds neither a null nor a NaN - an ID column, a mask - so every
+// row of it carries a key a join can match on.
 bool everyRowMatchable(const Column* column, size_t row) {
     return true;
 }
 
-// Whether one row of a nullable value column carries a key a join can match. A null does
-// not: `=` against a null gives null, and the filter this join replaces kept only the
-// true rows.
+// Whether a join key value can equal anything at all. A NaN equals nothing, itself
+// included, and neither does a vector holding one. A list holding a null among its own
+// elements is no list's equal either: [1, null] = [1, null] is null, where a null nested
+// deeper compares as a value.
+template <typename Value>
+bool keyValueIsMatchable(const Value& value) {
+    return true;
+}
+
+bool keyValueIsMatchable(types::Double::Primitive value) {
+    return !std::isnan(value);
+}
+
+bool keyValueIsMatchable(types::Embedding::Primitive embedding) {
+    const auto isNaN = [](float value) { return std::isnan(value); };
+
+    return std::none_of(embedding.begin(), embedding.end(), isNaN);
+}
+
+bool keyValueIsMatchable(ListView list) {
+    const auto isNull = [](CellView element) { return element.getTag() == CellTag::Null; };
+
+    return std::none_of(list.begin(), list.end(), isNull);
+}
+
+bool keyValueIsMatchable(CellView cell) {
+    const CellTag tag = cell.getTag();
+
+    if (tag == CellTag::Null) {
+        return false;
+    } else if (tag == CellTag::Double) {
+        return keyValueIsMatchable(cell.getAs<types::Double::Primitive>());
+    } else if (tag == CellTag::Embedding) {
+        return keyValueIsMatchable(cell.getAs<types::Embedding::Primitive>());
+    } else if (tag == CellTag::ListView) {
+        return keyValueIsMatchable(cell.getAs<ListView>());
+    }
+
+    return true;
+}
+
+template <typename ElementType>
+bool columnRowMatchable(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+
+    return keyValueIsMatchable(raw[row]);
+}
+
+// A null does not match: `=` against a null gives null, and the filter this join replaces
+// kept only the true rows
 template <typename Primitive>
 bool optColumnRowMatchable(const Column* column, size_t row) {
     const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+    const std::optional<Primitive>& value = raw[row];
 
-    return raw[row].has_value();
-}
-
-// The double sibling, which rejects a NaN as well: NaN = NaN is false, so a NaN key
-// matches nothing - not even another NaN. The key bytes cannot say so, since the
-// serializer maps every NaN payload to one canonical NaN so that DISTINCT groups them.
-bool optDoubleColumnRowMatchable(const Column* column, size_t row) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<types::Double::Primitive>>*>(column)->getRaw();
-    const std::optional<types::Double::Primitive>& value = raw[row];
-
-    return value.has_value() && !std::isnan(*value);
-}
-
-// The plainly-held double sibling: no row of such a column is null, so only a NaN keeps
-// one out of the join.
-bool plainDoubleColumnRowMatchable(const Column* column, size_t row) {
-    const auto& raw = static_cast<const ColumnVector<types::Double::Primitive>*>(column)->getRaw();
-
-    return !std::isnan(raw[row]);
-}
-
-// Whether one row of a nullable embedding column carries a key a join can match. A null
-// does not, and neither does a vector holding a NaN: TuringEqual compares two embeddings
-// element by element, so such a row equals nothing - not even itself.
-bool optEmbeddingColumnRowMatchable(const Column* column, size_t row) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<types::Embedding::Primitive>>*>(column)->getRaw();
-    const std::optional<types::Embedding::Primitive>& embedding = raw[row];
-    if (!embedding.has_value()) {
-        return false;
-    }
-
-    const auto isNaN = [](float value) { return std::isnan(value); };
-
-    return std::none_of(embedding->begin(), embedding->end(), isNaN);
-}
-
-// Whether one row of a type-erased column of tagged scalars carries a matchable key - the
-// cell's own tag says whether it is null, where a nullable column has a present flag.
-bool cellColumnRowMatchable(const Column* column, size_t row) {
-    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
-
-    return raw[row].getTag() != CellTag::Null;
+    return value.has_value() && keyValueIsMatchable(*value);
 }
 
 // Serialize one row of a type-erased column of tagged scalars into the row key.
@@ -2898,10 +2907,20 @@ uint64_t hashKeyValue(types::Duration::Primitive value) {
     return mixKeyBits(static_cast<uint64_t>(value.getMicroseconds()));
 }
 
-// -0.0 hashes as +0.0, the one value it equals; a NaN never reaches a lookup
+// The two keys of a join need not share a type, so two values `=` holds equal hash alike
+// whatever they are held as: a double holding a whole number hashes as that integer. -0.0
+// hashes as +0.0, the one value it equals; a NaN never reaches a lookup.
 uint64_t hashKeyValue(double value) {
-    const double normalized = (value == 0.0) ? 0.0 : value;
-    return mixKeyBits(std::bit_cast<uint64_t>(normalized));
+    types::Int64::Primitive integer = 0;
+    types::UInt64::Primitive unsignedInteger = 0;
+
+    if (convertNumberExactly(value, integer)) {
+        return hashKeyValue(integer);
+    } else if (convertNumberExactly(value, unsignedInteger)) {
+        return hashKeyValue(unsignedInteger);
+    }
+
+    return mixKeyBits(std::bit_cast<uint64_t>(value));
 }
 
 uint64_t hashKeyValue(std::string_view value) {
@@ -2921,6 +2940,71 @@ uint64_t hashKeyValue(types::Embedding::Primitive embedding) {
     }
 
     return hash;
+}
+
+uint64_t hashKeyValue(ListView list) {
+    return mixKeyBits(hashList(list));
+}
+
+// A tagged cell hashes as its value does in a column of that value's type
+uint64_t hashKeyValue(CellView cell) {
+    switch (cell.getTag()) {
+        case CellTag::Int:
+            return hashKeyValue(cell.getAs<types::Int64::Primitive>());
+        break;
+
+        case CellTag::UInt:
+            return hashKeyValue(cell.getAs<types::UInt64::Primitive>());
+        break;
+
+        case CellTag::Double:
+            return hashKeyValue(cell.getAs<types::Double::Primitive>());
+        break;
+
+        case CellTag::Bool:
+            return hashKeyValue(cell.getAs<types::Bool::Primitive>());
+        break;
+
+        case CellTag::String:
+            return hashKeyValue(cell.getAs<types::String::Primitive>());
+        break;
+
+        case CellTag::Embedding:
+            return hashKeyValue(cell.getAs<types::Embedding::Primitive>());
+        break;
+
+        case CellTag::ListView:
+            return hashKeyValue(cell.getAs<ListView>());
+        break;
+
+        case CellTag::MapView:
+            return hashKeyValue(cell.getAs<MapView>());
+        break;
+
+        case CellTag::NodeID:
+            return hashKeyValue(cell.getAs<NodeID>());
+        break;
+
+        case CellTag::EdgeID:
+            return hashKeyValue(cell.getAs<EdgeID>());
+        break;
+
+        case CellTag::DateTime:
+            return hashKeyValue(cell.getAs<types::DateTime::Primitive>());
+        break;
+
+        case CellTag::Duration:
+            return hashKeyValue(cell.getAs<types::Duration::Primitive>());
+        break;
+
+        case CellTag::Null:
+        case CellTag::INVALID:
+            return 0;
+        break;
+    }
+
+    bioassert(false, "Unknown CellTag");
+    return 0;
 }
 
 template <typename ElementType>
@@ -2943,47 +3027,12 @@ void hashOptKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
     });
 }
 
-// A tagged scalar hashes through the bytes DISTINCT keys it by, so an integer and a float
-// holding one value hash alike, as they compare equal
-void hashCellKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
-    const auto& raw = static_cast<const ColumnVector<CellView>*>(column)->getRaw();
+void hashMaskKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnMask*>(column)->getRaw();
     hashes.resize(raw.size());
 
-    std::string bytes;
-    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const CellView element) {
-        bytes.clear();
-        distinctAppendElementBytes(bytes, element);
-        return hashKeyValue(std::string_view(bytes));
-    });
-}
-
-void hashListKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
-    const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
-    hashes.resize(raw.size());
-
-    std::string bytes;
-    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const ListView list) {
-        bytes.clear();
-        distinctAppendListBytes(bytes, list);
-        return hashKeyValue(std::string_view(bytes));
-    });
-}
-
-// The nullable sibling, for a list read out of a property: an absent list hashes to the
-// zero a null key takes everywhere else, and a present one hashes as a plain column's does.
-void hashOptListKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
-    const auto& raw = static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
-    hashes.resize(raw.size());
-
-    std::string bytes;
-    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const std::optional<ListView>& list) {
-        if (!list.has_value()) {
-            return uint64_t {0};
-        }
-
-        bytes.clear();
-        distinctAppendListBytes(bytes, *list);
-        return hashKeyValue(std::string_view(bytes));
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [](ColumnMask::Bool_t value) {
+        return hashKeyValue(static_cast<bool>(value));
     });
 }
 
@@ -3022,10 +3071,42 @@ NLJoinKeyFunctions optJoinKeyFunctions() {
     return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>};
 }
 
-template <>
-NLJoinKeyFunctions optJoinKeyFunctions<ListView>() {
-    return {&hashOptListKeyColumn, &keyEqualOptColumn<ListView>};
+bool keyEqualMaskColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
+    const auto& probeRaw = static_cast<const ColumnMask*>(probe)->getRaw();
+    const auto& buildRaw = static_cast<const ColumnMask*>(build)->getRaw();
+
+    return static_cast<bool>(probeRaw[probeRow]) == static_cast<bool>(buildRaw[buildRow]);
 }
+
+// A probe key and a build key of two types, compared by the `=` of the filter the join
+// replaces: an unknown answer matches nothing, as the filter kept only the true rows
+template <typename ProbeColumn, typename BuildColumn>
+bool keyEqualAcrossTypes(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
+    const auto& probeRaw = static_cast<const ProbeColumn*>(probe)->getRaw();
+    const auto& buildRaw = static_cast<const BuildColumn*>(build)->getRaw();
+
+    const auto equal = Eq {}(probeRaw[probeRow], buildRaw[buildRow]);
+    if constexpr (TypeUtils::is_optional_v<std::decay_t<decltype(equal)>>) {
+        return equal.has_value() && equal->_boolean;
+    } else {
+        return static_cast<bool>(equal);
+    }
+}
+
+template <typename KeyColumn>
+concept RowKeyColumn = std::same_as<KeyColumn, ColumnMask>
+                    || std::same_as<KeyColumn, ColumnVector<typename KeyColumn::ValueType>>;
+
+struct CrossTypeKeyEqualSelector {
+    NLKeyEqualFunction _equal {nullptr};
+
+    template <typename ProbeColumn, typename BuildColumn>
+    void operator()(const ProbeColumn*, const BuildColumn*) {
+        if constexpr (RowKeyColumn<ProbeColumn> && RowKeyColumn<BuildColumn>) {
+            _equal = &keyEqualAcrossTypes<ProbeColumn, BuildColumn>;
+        }
+    }
+};
 
 // The group of build rows carrying a key, or noRow when no indexed row carries it. One
 // bucket chains the groups of every key that falls in it, so a group's key is confirmed
@@ -11735,16 +11816,7 @@ NLKeyIsMatchableFunction NLExecutor::everyKeyMatchable() {
     return &everyRowMatchable;
 }
 
-// Selected per column from its value type. A double and an embedding answer their own way,
-// since neither a NaN nor a vector holding one equals itself; every other value type
-// matches on any present row.
 NLKeyIsMatchableFunction NLExecutor::selectOptKeyMatchableFunction(ValueType valueType) {
-    if (valueType == ValueType::Double) {
-        return &optDoubleColumnRowMatchable;
-    } else if (valueType == ValueType::Embedding) {
-        return &optEmbeddingColumnRowMatchable;
-    }
-
     NLKeyIsMatchableFunction isMatchable = nullptr;
     const auto select = [&]<SupportedType T>() {
         isMatchable = &optColumnRowMatchable<typename T::Primitive>;
@@ -11758,14 +11830,22 @@ NLKeyIsMatchableFunction NLExecutor::selectOptKeyMatchableFunction(ValueType val
 // a row a join cannot match on.
 NLKeyIsMatchableFunction NLExecutor::selectPlainKeyMatchableFunction(ValueType valueType) {
     if (valueType == ValueType::Double) {
-        return &plainDoubleColumnRowMatchable;
+        return &columnRowMatchable<types::Double::Primitive>;
     }
 
     return &everyRowMatchable;
 }
 
+NLKeyIsMatchableFunction NLExecutor::selectListKeyMatchableFunction() {
+    return &columnRowMatchable<ListView>;
+}
+
 NLKeyIsMatchableFunction NLExecutor::selectCellKeyMatchableFunction() {
-    return &cellColumnRowMatchable;
+    return &columnRowMatchable<CellView>;
+}
+
+NLKeyIsMatchableFunction NLExecutor::selectOptCellKeyMatchableFunction() {
+    return &optColumnRowMatchable<CellView>;
 }
 
 NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
@@ -11815,7 +11895,7 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
         break;
 
         case NLChunkKind::List:
-            return {&hashListKeyColumn, &keyEqualColumn<ListView>};
+            return joinKeyFunctions<ListView>();
         break;
 
         case NLChunkKind::Map:
@@ -11874,7 +11954,33 @@ NLJoinKeyFunctions NLExecutor::selectPlainJoinKeyFunctions(ValueType valueType) 
 }
 
 NLJoinKeyFunctions NLExecutor::selectCellJoinKeyFunctions() {
-    return {&hashCellKeyColumn, &keyEqualColumn<CellView>};
+    return joinKeyFunctions<CellView>();
+}
+
+NLJoinKeyFunctions NLExecutor::selectOptCellJoinKeyFunctions() {
+    return optJoinKeyFunctions<CellView>();
+}
+
+NLJoinKeyFunctions NLExecutor::selectMaskJoinKeyFunctions() {
+    return {&hashMaskKeyColumn, &keyEqualMaskColumn};
+}
+
+// The pairs `=` compares are the pairs its kernel takes, so a pair the kernel has no
+// comparison for never reaches a join: the filter it replaces could not have run.
+NLKeyEqualFunction NLExecutor::selectCrossTypeKeyEqualFunction(const Column* probe, const Column* build) {
+    using Pairs = PairRestrictions<OP_EQUAL>;
+
+    CrossTypeKeyEqualSelector selector;
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           CrossTypeKeyEqualSelector,
+                           typename Pairs::Excluded>::dispatch(probe, build, selector);
+
+    if (!selector._equal) {
+        throw IRException("A hash join key must be a column holding one value per row");
+    }
+
+    return selector._equal;
 }
 
 // An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,

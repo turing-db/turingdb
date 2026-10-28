@@ -2,7 +2,9 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "HashJoinQueryTest.h"
@@ -151,15 +153,23 @@ TEST_F(HashJoinTest, cutsTheJoinedRowsWithALimit) {
     expectRows("MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 3", expected);
 }
 
-// Two columns whose types the db level cannot tell apart are left to the cross product:
-// the join matches keys by the bytes they serialize to, and an edge ID beside a number
-// would answer a comparison the equality did not.
-TEST_F(HashJoinTest, keepsTheProductWhenTheKeysNeedNotShareAType) {
-    std::string program;
-    dbProgram("MATCH ()-[e]->(), (m) WHERE e = m.age RETURN e, m", program);
+// An edge equals the integer its ID is: edge 0 is 32 less the age of Remy (0) and Adam (1)
+TEST_F(HashJoinTest, joinsAnEdgeToTheIntegerOfItsID) {
+    const std::string_view query = "MATCH ()-[e]->(), (m) WHERE e = m.age - 32 RETURN e, m";
 
-    EXPECT_TRUE(contains(program, "db.cross_product")) << program;
-    EXPECT_FALSE(contains(program, "db.hash_join")) << program;
+    std::string program;
+    dbProgram(query, program);
+    EXPECT_TRUE(contains(program, "db.hash_join")) << program;
+    EXPECT_FALSE(contains(program, "db.cross_product")) << program;
+
+    StringRowSink sink;
+    runQuery(query, sink);
+
+    Rows rows = sink.getRows();
+    std::sort(rows.begin(), rows.end());
+
+    const Rows expected {{"0", "0"}, {"0", "1"}};
+    EXPECT_EQ(rows, expected);
 }
 
 // Two property names of one value type are read into one column type, so a shared name is
@@ -228,17 +238,16 @@ TEST_F(HashJoinTest, keepsTheProductWhenTheEqualityReadsOneFactor) {
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
 }
 
-// A column a procedure yielded carries no type until lowering resolves it, so two of them
-// could hold two kinds of value: nothing here proves the join would answer the equality
-// the way the filter does, and the product stays.
-TEST_F(HashJoinTest, keepsTheProductWhenNeitherKeyHasAResolvedType) {
+// A column a procedure yields is typed at lowering only, and the join compares whatever
+// the two turn out to hold as the filter did
+TEST_F(HashJoinTest, joinsTwoKeysTypedAtLoweringOnly) {
     std::string program;
     dbProgram("CALL db.labels() YIELD label CALL db.edgeTypes() YIELD edgeType "
               "WHERE label = edgeType RETURN label, edgeType",
               program);
 
-    EXPECT_TRUE(contains(program, "db.cross_product")) << program;
-    EXPECT_FALSE(contains(program, "db.hash_join")) << program;
+    EXPECT_TRUE(contains(program, "db.hash_join")) << program;
+    EXPECT_FALSE(contains(program, "db.cross_product")) << program;
 }
 
 // The built side is buffered whole while the probed side streams, so the join builds the
