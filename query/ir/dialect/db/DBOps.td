@@ -1882,7 +1882,7 @@ def MakePath : TuringOp<"make_path", [Pure]> {
 /**
 * PathElements
 */
-def PathElements : TuringOp<"path_elements", [Pure]> {
+def PathElements : TuringOp<"path_elements", [Pure, ConstantThroughOperands]> {
   let summary = "Read the nodes, the relationships or the length of each named path";
 
   let description = [{
@@ -1915,7 +1915,7 @@ def PathElements : TuringOp<"path_elements", [Pure]> {
 /**
 * GetNodeProperties
 */
-def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
+def GetNodeProperties : TuringOp<"get_node_properties", [Pure, ConstantThroughOperands]> {
   let summary = "Read one named property of each node as a column of values";
 
   let description = [{
@@ -1971,7 +1971,7 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
 /**
 * GetEdgeProperties
 */
-def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
+def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure, ConstantThroughOperands]> {
   let summary = "Read one named property of each edge as a column of values";
 
   let description = [{
@@ -3194,6 +3194,34 @@ def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
   let assemblyFormat = [{
     `(` $value (`,` $driver^)? `)` attr-dict `:` functional-type(operands, results)
   }];
+}
+
+def RowConstant : TuringOp<"row_constant", [Pure, ConstantResult, SameOperandsAndResultType]> {
+  let summary = "Read an argument of a body run once per row as a constant";
+  let description = [{
+    A db.call_subquery, db.exists_subquery, db.count_subquery or db.collect_subquery
+    without `carries_scope` runs its body once per input row, so each argument of that
+    body holds one value for the whole run. This reads such an argument as the constant
+    it is, as Postgres reads a correlated parameter of a subplan: no op carries it
+    through the body, and an op reading it per row has it laid out over its own rows.
+
+      %r:2 = db.call_subquery(%p) {
+      ^bb0(%pIn: !db.column<!storage.node_id>):
+        %pc = db.row_constant %pIn : !db.column<!storage.node_id>
+        %s, %e, %et, %i = db.get_out_edges(%pc, {}) : ...
+        %name = db.get_node_properties(%pc, "name") : ...
+        db.subquery_yield {%name, %i} : ...
+      } : ...
+
+    The operand is an argument of a body run once per row.
+  }];
+
+  let arguments = (ins Column:$row);
+  let results = (outs Column:$result);
+
+  let assemblyFormat = "$row attr-dict `:` type($row)";
+
+  let hasVerifier = 1;
 }
 
 def ToNullable : TuringOp<"to_nullable", [Pure, ConstantThroughOperands]> {

@@ -2588,7 +2588,16 @@ def RowConstant : NLOp<"row_constant", [Pure, ConstantResult, SameOperandsAndRes
       %row = nl.range %from, %to : (...) -> !nl.chunk<!storage.nullable<!storage.list<i64>>>
       %list = nl.row_constant %row : !nl.chunk<!storage.nullable<!storage.list<i64>>>
 
-      No row of a step may reach the operand: it is computed from constants alone.
+      A body run once per row reads each row of an nl.each_row step as a constant for the
+      same reason, which is what db.row_constant lowers to:
+
+      %rows = nl.each_row {%p} : {!nl.chunk<!storage.node_id>}
+      nl.for %row in %rows : !nl.iter<!nl.chunk<!storage.node_id>> {
+        %pc = nl.row_constant %row : !nl.chunk<!storage.node_id>
+        ...
+      }
+
+      No row of any other step may reach the operand.
   }];
 
   let arguments = (ins NLChunk:$row);

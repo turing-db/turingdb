@@ -6,6 +6,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
@@ -112,6 +113,8 @@ public:
     mlir::func::FuncOp lower(mlir::func::FuncOp dbFunction, mlir::ModuleOp module);
 
 private:
+    using ChunkPredicate = llvm::function_ref<bool(mlir::Value)>;
+
     struct ProducerWalkVisit {
         bool _reachedALoop {false};
         bool _rowsDroppedBeforeTheCut {false};
@@ -234,6 +237,19 @@ private:
 
     // Lowers @param operation with its constants laid out over the rows reaching it
     void lowerOverReachingRows(mlir::Operation& operation);
+
+    // Lowers @param operation with each constant operand @param laysOut picks laid out
+    // over @param cardinality, or over a single row where it is null
+    void lowerWithConstantsLaidOut(mlir::Operation& operation, mlir::Value cardinality, ChunkPredicate laysOut);
+
+    // Whether @param chunk is a constant node, edge or path, which no kernel reads as a
+    // constant: every op reading one has it laid out over its rows first
+    bool holdsConstantEntities(mlir::Value chunk);
+    bool readsConstantEntities(mlir::Operation& operation);
+
+    // The chunk of the rows @param operation reads: its first operand that carries rows, or
+    // the relation driving the step
+    mlir::Value rowsReadBy(mlir::Operation& operation);
 
     // Moves @param computation, and the ops it reads that were placed after the first loop
     // of its block, ahead of that loop, where every loop reading it can see it
@@ -525,6 +541,7 @@ private:
     // Lays the constant out over the rows of its driver, the layout rowAlignedChunk
     // performs for every consumer that reads a constant per row
     void lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast);
+    void lowerRowConstant(mlir::db::RowConstant rowConstant);
     void lowerToNullable(mlir::db::ToNullable toNullable);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);

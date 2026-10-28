@@ -19,6 +19,7 @@ def DB : Dialect {
 }
 
 def ConstantThroughOperands : NativeOpTrait<"ConstantThroughOperands">;
+def ConstantResult : NativeOpTrait<"ConstantResult">;
 
 // Base, from which all TuringDB dialects are derived.
 //

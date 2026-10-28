@@ -676,6 +676,9 @@ public:
     static NLBroadcastConstantFunction selectConstantMapBroadcast();
     static NLBroadcastConstantFunction selectConstantCellBroadcast();
 
+    // The node, edge and path siblings, which ride the plain chunk their kind names
+    static NLBroadcastConstantFunction selectConstantPlainBroadcast(NLChunkKind kind, const Column* value);
+
     // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
     // no value type to dispatch on
     static NLBroadcastConstantFunction selectOptCellBroadcast(const Column* value);

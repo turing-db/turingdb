@@ -1225,10 +1225,59 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerOnceOverConstants(operation);
     } else if (raisesOverConstants(operation)) {
         lowerOverReachingRows(operation);
+    } else if (readsConstantEntities(operation)) {
+        lowerWithConstantsLaidOut(operation, rowsReadBy(operation), [this](mlir::Value chunk) {
+            return holdsConstantEntities(chunk);
+        });
     } else {
         lowerOperationByKind(operation);
     }
 
+}
+
+bool DBLowering::holdsConstantEntities(mlir::Value chunk) {
+    const bool holdsEntities = isEntityChunk(chunk.getType()) || isPathChunk(chunk.getType());
+
+    return holdsEntities && yieldsConstantColumn(chunk, _constantColumns);
+}
+
+bool DBLowering::readsConstantEntities(mlir::Operation& operation) {
+    return llvm::any_of(operation.getOperands(), [this](mlir::Value operand) {
+        const mlir::Value chunk = _valueMap.lookup(operand);
+        return chunk && holdsConstantEntities(chunk);
+    });
+}
+
+mlir::Value DBLowering::rowsReadBy(mlir::Operation& operation) {
+    for (const mlir::Value operand : operation.getOperands()) {
+        const mlir::Value chunk = _valueMap.lookup(operand);
+        if (chunk && !yieldsConstantColumn(chunk, _constantColumns)) {
+            return chunk;
+        }
+    }
+
+    return _innermostCardinality;
+}
+
+void DBLowering::lowerWithConstantsLaidOut(mlir::Operation& operation,
+                                           mlir::Value cardinality,
+                                           ChunkPredicate laysOut) {
+    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> laidOutChunks;
+    for (const mlir::Value operand : operation.getOperands()) {
+        const mlir::Value chunk = _valueMap.lookup(operand);
+        if (!chunk || !laysOut(chunk)) {
+            continue;
+        }
+
+        laidOutChunks.emplace_back(operand, chunk);
+        _valueMap[operand] = rowAlignedChunk(chunk, cardinality);
+    }
+
+    lowerOperationByKind(operation);
+
+    for (const auto& [operand, chunk] : llvm::reverse(laidOutChunks)) {
+        _valueMap[operand] = chunk;
+    }
 }
 
 bool DBLowering::computesOnceOverConstants(mlir::Operation& operation) {
@@ -1247,31 +1296,23 @@ bool DBLowering::raisesOverConstants(mlir::Operation& operation) {
 }
 
 void DBLowering::lowerOverReachingRows(mlir::Operation& operation) {
-    llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> constantChunks;
-    for (const mlir::Value operand : operation.getOperands()) {
-        const mlir::Value chunk = mapValue(operand);
-        constantChunks.emplace_back(operand, chunk);
-        _valueMap[operand] = rowAlignedChunk(chunk, _innermostCardinality);
-    }
-
-    lowerOperationByKind(operation);
-
-    for (const auto& [operand, chunk] : llvm::reverse(constantChunks)) {
-        _valueMap[operand] = chunk;
-    }
+    lowerWithConstantsLaidOut(operation, _innermostCardinality, [](mlir::Value) { return true; });
 }
 
 void DBLowering::lowerOnceOverConstants(mlir::Operation& operation) {
     const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _innermostCardinality = {};
 
-    lowerOperationByKind(operation);
+    lowerWithConstantsLaidOut(operation, mlir::Value(), [this](mlir::Value chunk) {
+        return holdsConstantEntities(chunk);
+    });
 
     _innermostCardinality = previousInnermostCardinality;
 
     for (const mlir::Value result : operation.getResults()) {
         const mlir::Value row = mapValue(result);
         if (yieldsConstantColumn(row, _constantColumns)) {
+            moveAheadOfLoops(row.getDefiningOp());
             continue;
         }
 
@@ -1506,6 +1547,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerCurrentDateTime(currentDateTime);
     } else if (mlir::db::BroadcastConstant broadcast = mlir::dyn_cast<mlir::db::BroadcastConstant>(operation)) {
         lowerBroadcastConstant(broadcast);
+    } else if (mlir::db::RowConstant rowConstant = mlir::dyn_cast<mlir::db::RowConstant>(operation)) {
+        lowerRowConstant(rowConstant);
     } else if (mlir::db::ToNullable toNullable = mlir::dyn_cast<mlir::db::ToNullable>(operation)) {
         lowerToNullable(toNullable);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
@@ -6045,6 +6088,13 @@ void DBLowering::lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast) {
     _valueMap[broadcast.getResult()] = rowAlignedChunk(mapValue(broadcast.getValue()), driverChunk);
 }
 
+void DBLowering::lowerRowConstant(mlir::db::RowConstant rowConstant) {
+    const mlir::Value row = mapValue(rowConstant.getRow());
+
+    _builder.setInsertionPointAfterValue(row);
+    _valueMap[rowConstant.getResult()] = _builder.create<nl::RowConstant>(_builder.getUnknownLoc(), row).getResult();
+}
+
 void DBLowering::lowerToNullable(mlir::db::ToNullable toNullable) {
     const mlir::Value chunk = mapValue(toNullable.getOperand());
     const mlir::Type element = mlir::cast<nl::ChunkType>(chunk.getType()).getElementType();
@@ -7416,9 +7466,11 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // what every fold, key serialization and reduction reads a value column as. A list or
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
+    // A node, an edge or a path rides the plain chunk every hop and read takes it in.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const bool staysPlain = isContainer && !nullable;
+    const bool isEntityOrPath = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType>(valueElement);
+    const bool staysPlain = (isContainer && !nullable) || isEntityOrPath;
     const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);

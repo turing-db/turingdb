@@ -604,6 +604,20 @@ LogicalResult verifyCarriedResults(Operation* op, OperandRange carriedColumns, R
     return success();
 }
 
+bool runsItsBodyPerRow(Operation* op) {
+    if (auto call = dyn_cast<CallSubquery>(op)) {
+        return !call.getCarriesScope();
+    } else if (auto exists = dyn_cast<ExistsSubquery>(op)) {
+        return !exists.getCarriesScope();
+    } else if (auto count = dyn_cast<CountSubquery>(op)) {
+        return !count.getCarriesScope();
+    } else if (auto collect = dyn_cast<CollectSubquery>(op)) {
+        return !collect.getCarriesScope();
+    }
+
+    return false;
+}
+
 }
 
 #define GET_OP_CLASSES
@@ -2285,6 +2299,17 @@ LogicalResult CountSubquery::verify() {
 
 LogicalResult CollectSubquery::verify() {
     return verifySubqueryExpression<CollectSubqueryYield>(*this);
+}
+
+LogicalResult RowConstant::verify() {
+    const auto argument = dyn_cast<BlockArgument>(getRow());
+    Operation* const body = argument ? argument.getOwner()->getParentOp() : nullptr;
+
+    if (!body || !runsItsBodyPerRow(body)) {
+        return emitOpError("operand must be an argument of a body run once per row");
+    }
+
+    return success();
 }
 
 LogicalResult CallSubquery::verify() {

@@ -235,3 +235,6 @@ add_call_v3_test(test_query_ir_sibling_per_row_subquery SiblingPerRowSubqueryTes
 
 # The textual form of db.collect_subquery_yield prints and parses back, with a tag or none.
 add_ir_tests(test_query_ir_collect_subquery_yield_format CollectSubqueryYieldFormatTest.cpp)
+
+# db.row_constant: a node, an edge or a path a body run once per row reads as a constant.
+add_ir_tests(test_query_ir_row_constant RowConstantTest.cpp)

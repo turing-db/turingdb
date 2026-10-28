@@ -995,11 +995,17 @@ LogicalResult RowConstant::verify() {
         }
 
         Operation* const definingOp = value.getDefiningOp();
-        if (!definingOp) {
-            return emitOpError("operand must be computed from constants, not from the rows of a step");
+        if (definingOp) {
+            worklist.append(definingOp->operand_begin(), definingOp->operand_end());
+            continue;
         }
 
-        worklist.append(definingOp->operand_begin(), definingOp->operand_end());
+        For loop = dyn_cast<For>(cast<BlockArgument>(value).getOwner()->getParentOp());
+        const bool bindsOneRow = loop && loop.getIterator().getDefiningOp<EachRow>();
+        if (!bindsOneRow) {
+            return emitOpError("operand must be computed from constants or from the one row of an nl.each_row step, "
+                               "not from the rows of a step");
+        }
     }
 
     return success();

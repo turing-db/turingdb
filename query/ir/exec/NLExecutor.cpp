@@ -1805,13 +1805,13 @@ void broadcastNullColumn(const Column* value, size_t rowCount, Column* output) {
     outputRaw.assign(rowCount, std::optional<int64_t> {});
 }
 
-// The view sibling of broadcastConstantColumn: a list, a map or a map entry is a view over
-// the query's buffers and carries no absence of its own, so the rows are a plain column of
-// that one view.
-template <typename View>
-void broadcastConstantViewColumn(const Column* value, size_t rowCount, Column* output) {
-    const ColumnConst<View>* typedValue = static_cast<const ColumnConst<View>*>(value);
-    ColumnVector<View>* typedOutput = static_cast<ColumnVector<View>*>(output);
+// The plain sibling of broadcastConstantColumn: a list, a map, a map entry, a node, an edge
+// or a path carries no absence of its own as a value does, so the rows are a plain column
+// of the one element the constant holds.
+template <typename Element>
+void broadcastConstantPlainColumn(const Column* value, size_t rowCount, Column* output) {
+    const ColumnConst<Element>* typedValue = static_cast<const ColumnConst<Element>*>(value);
+    ColumnVector<Element>* typedOutput = static_cast<ColumnVector<Element>*>(output);
 
     auto& outputRaw = typedOutput->getRaw();
     outputRaw.resize(rowCount);
@@ -11321,15 +11321,25 @@ NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
-    return &broadcastConstantViewColumn<ListView>;
+    return &broadcastConstantPlainColumn<ListView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantMapBroadcast() {
-    return &broadcastConstantViewColumn<MapView>;
+    return &broadcastConstantPlainColumn<MapView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantCellBroadcast() {
-    return &broadcastConstantViewColumn<CellView>;
+    return &broadcastConstantPlainColumn<CellView>;
+}
+
+NLBroadcastConstantFunction NLExecutor::selectConstantPlainBroadcast(NLChunkKind kind, const Column* value) {
+    bioassert(value->getContainerKind() == ContainerKind::code<ColumnConst>(),
+              "A node, an edge or a path laid out over rows is read as the constant nl.row_constant made of it");
+
+    NLBroadcastConstantFunction fill = nullptr;
+    dispatchChunkKind(kind, [&]<typename Element>() { fill = &broadcastConstantPlainColumn<Element>; });
+
+    return fill;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectOptCellBroadcast(const Column* value) {
@@ -11395,6 +11405,7 @@ NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, 
     selectForElement.template operator()<std::optional<types::Duration::Primitive>>();
     selectForElement.template operator()<NodeID>();
     selectForElement.template operator()<EdgeID>();
+    selectForElement.template operator()<GraphPath>();
     selectForElement.template operator()<ListView>();
     selectForElement.template operator()<std::optional<ListView>>();
     selectForElement.template operator()<CellView>();
