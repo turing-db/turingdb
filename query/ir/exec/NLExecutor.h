@@ -457,6 +457,10 @@ public:
     // position over the rows whose list reaches it, reading and replacing their accumulator
     static void runReduce(NLExecutionContext* context, NLFunctionData* data);
 
+    // Decide one truth value per row (nl.all_reduce): the fold runs as nl.reduce's does,
+    // and a row leaves it at the first step whose predicate is false
+    static void runAllReduce(NLExecutionContext* context, NLFunctionData* data);
+
     // Size a type-erased accumulator to the step's rows, every cell a tagged null
     static NLCaseResetFn selectTaggedCellReset();
     static NLCaseWriteFn selectNullCellWrite();

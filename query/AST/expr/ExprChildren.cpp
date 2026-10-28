@@ -18,6 +18,7 @@
 #include "LogicalExpr.h"
 #include "PropertyLookupExpr.h"
 #include "ReduceExpr.h"
+#include "AllReduceExpr.h"
 #include "StringExpr.h"
 #include "UnaryExpr.h"
 
@@ -150,6 +151,18 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             children.push_back(reduce->getInitialValue());
             children.push_back(reduce->getSource());
             children.push_back(reduce->getExpression());
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::ALL_REDUCE: {
+            const AllReduceExpr* allReduce = static_cast<const AllReduceExpr*>(expr);
+
+            children.push_back(allReduce->getInitialValue());
+            children.push_back(allReduce->getSource());
+            children.push_back(allReduce->getExpression());
+            children.push_back(allReduce->getPredicate());
 
             return true;
         }

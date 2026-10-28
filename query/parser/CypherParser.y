@@ -93,6 +93,7 @@
     #include "expr/ListComprehensionExpr.h"
     #include "expr/ListPredicateExpr.h"
     #include "expr/ReduceExpr.h"
+    #include "expr/AllReduceExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
@@ -216,6 +217,7 @@
 %token<std::string_view> FALSE
 %token<std::string_view> COUNT
 %token<std::string_view> REDUCE
+%token<std::string_view> ALLREDUCE
 %token<std::string_view> NORMALIZE
 %token<std::string_view> NORMALIZED
 %token<std::string_view> NFC
@@ -358,6 +360,7 @@
 %type<db::ListComprehensionExpr*> filterExpr
 %type<db::Expr*> filterWith
 %type<db::Expr*> reduceExpr
+%type<db::Expr*> allReduceExpr
 %type<db::ListPredicateExpr::Quantifier> filterKeyword
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
@@ -1359,9 +1362,9 @@ setItem
     | entityTypeExpr { $$ = SetItem::create(ast, static_cast<EntityTypeExpr*>($1)); LOC($$, @$); }
     ;
 
-// A | after a label test in a comprehension, a reduce or a FOREACH ends the expression,
-// as it did before label expressions, so a disjunction there takes parentheses. Elsewhere
-// the | continues the disjunction: IELR keeps the two contexts apart, LALR merges them.
+// A | after a label test in a comprehension, a reduce, an allReduce or a FOREACH ends the
+// expression, as it did before label expressions, so a disjunction there takes parentheses.
+// Elsewhere the | continues the disjunction: IELR keeps the two contexts apart, LALR merges them.
 labelExpression
     : COLON labelDisjunction %prec LABEL_EXPRESSION { $$ = $2; }
     | IS labelDisjunction %prec LABEL_EXPRESSION { $$ = $2; }
@@ -1617,6 +1620,7 @@ atomExpr
     | bracketExpr { $$ = $1; }
     | filterWith { $$ = $1; }
     | reduceExpr { $$ = $1; }
+    | allReduceExpr { $$ = $1; }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | subqueryExist { $$ = $1; }
     | subqueryCount { $$ = $1; }
@@ -1951,6 +1955,13 @@ reduceExpr
       }
     ;
 
+allReduceExpr
+    : ALLREDUCE OPAREN symbol ASSIGN expr COMMA symbol IN expr PIPE expr COMMA expr CPAREN {
+        $$ = AllReduceExpr::create(ast, $3, $5, $7, $9, $11, $13);
+        LOC($$, @$);
+      }
+    ;
+
 filterKeyword
     : ALL { $$ = ListPredicateExpr::Quantifier::All; }
     | ANY { $$ = ListPredicateExpr::Quantifier::Any; }
@@ -2263,6 +2274,7 @@ reservedWord
     | EUCLID { $$ = Symbol::create(ast, $1); }
     | METRIC { $$ = Symbol::create(ast, $1); }
     | REDUCE { $$ = Symbol::create(ast, $1); }
+    | ALLREDUCE { $$ = Symbol::create(ast, $1); }
     | SEARCH { $$ = Symbol::create(ast, $1); }
     | VECTOR { $$ = Symbol::create(ast, $1); }
     | LIMIT { $$ = Symbol::create(ast, $1); }

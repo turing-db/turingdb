@@ -279,6 +279,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::REDUCE:
             analyzeReduceExpr(static_cast<ReduceExpr*>(expr));
         break;
+        case Expr::Kind::ALL_REDUCE:
+            analyzeAllReduceExpr(static_cast<AllReduceExpr*>(expr));
+        break;
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
         break;
@@ -2010,7 +2013,8 @@ void ExprAnalyzer::analyzeListPredicateExpr(ListPredicateExpr* expr) {
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool));
 }
 
-void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
+template <typename FoldExpr>
+void ExprAnalyzer::openFoldScope(FoldExpr* expr, std::string_view foldName) {
     Expr* const initialValue = expr->getInitialValue();
     Expr* const source = expr->getSource();
     analyzeExpr(initialValue);
@@ -2023,7 +2027,7 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
                             || sourceType == EvaluatedType::Null;
 
     if (!iteratesAList) {
-        throwError(fmt::format("A reduce iterates a list, not '{}'", EvaluatedTypeName::value(sourceType)),
+        throwError(fmt::format("{} iterates a list, not '{}'", foldName, EvaluatedTypeName::value(sourceType)),
                    expr);
     }
 
@@ -2087,25 +2091,62 @@ void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
         accumulatorDecl->setExprType(widened);
         forgetAnalysis(expression);
     }
+}
 
-    _ctxt->dropVariable(itemName);
-    _ctxt->dropVariable(accumulatorName);
+template <typename FoldExpr>
+void ExprAnalyzer::closeFoldScope(FoldExpr* expr) {
+    _ctxt->dropVariable(expr->getItemSymbol()->getName());
+    _ctxt->dropVariable(expr->getAccumulatorSymbol()->getName());
+}
 
-    if (expression->isAggregate()) {
+void ExprAnalyzer::analyzeReduceExpr(ReduceExpr* expr) {
+    openFoldScope(expr, "A reduce");
+    closeFoldScope(expr);
+
+    if (expr->getExpression()->isAggregate()) {
         throwError(fmt::format("Aggregate functions may not be used over the elements of a "
                                "reduce: '{}' names one element, not a group",
-                               itemName),
+                               expr->getItemSymbol()->getName()),
                    expr);
     }
 
-    expr->setExprType(accumulatorDecl->getExprType());
+    expr->setExprType(expr->getAccumulatorDecl()->getExprType());
     expr->setDynamic();
 
-    if (initialValue->isAggregate() || source->isAggregate()) {
+    if (expr->getInitialValue()->isAggregate() || expr->getSource()->isAggregate()) {
         expr->setAggregate();
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, expr->getType()));
+}
+
+void ExprAnalyzer::analyzeAllReduceExpr(AllReduceExpr* expr) {
+    openFoldScope(expr, "An allReduce");
+
+    Expr* const predicate = expr->getPredicate();
+    analyzeExpr(predicate);
+
+    closeFoldScope(expr);
+
+    if (expr->getExpression()->isAggregate() || predicate->isAggregate()) {
+        throwError(fmt::format("Aggregate functions may not be used over the elements of an "
+                               "allReduce: '{}' names one element, not a group",
+                               expr->getItemSymbol()->getName()),
+                   expr);
+    }
+
+    if (!namesATruthValue(predicate->getType())) {
+        throwError("The predicate of an allReduce must be a boolean", predicate);
+    }
+
+    expr->setType(EvaluatedType::Bool);
+    expr->setDynamic();
+
+    if (expr->getInitialValue()->isAggregate() || expr->getSource()->isAggregate()) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool));
 }
 
 void ExprAnalyzer::forgetAnalysis(const Expr* expr) {

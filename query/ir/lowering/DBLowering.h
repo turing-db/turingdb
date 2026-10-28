@@ -298,14 +298,27 @@ private:
                                       mlir::Block* nlBody,
                                       mlir::Value& rowTagChunk,
                                       mlir::Value& valueChunk);
-    // Lowers `reduce(acc = init, x IN xs | f(acc, x))`, settling the accumulator's type on
-    // what the initial value and the body's value share
+    // Lowers `reduce(acc = init, x IN xs | f(acc, x))`, into an op whose result is the
+    // accumulator
     void lowerReduce(mlir::db::Reduce reduce);
 
-    // Lowers a db.reduce's body into @param nlBody, whose arguments are already bound, and
-    // hands back the chunk its yield names. The caller creates the nl yield, then erases
-    // the placeholder terminator this returns
-    mlir::Operation* lowerReduceBody(mlir::Block& dbBody, mlir::Block* nlBody, mlir::Value& valueChunk);
+    // Lowers `allReduce(acc = init, x IN xs | f(acc, x), p(acc, x))`, into an op whose
+    // result is one nullable truth value per row
+    void lowerAllReduce(mlir::db::AllReduce allReduce);
+
+    using FoldResultType = llvm::function_ref<mlir::Type(mlir::nl::ChunkType)>;
+
+    // What the two share: lowers the operands and the body of @param fold into an
+    // @param NLFoldOp of the type @param resultTypeOf gives for the accumulator's, settling
+    // the accumulator's type on what the initial value and the body's value share
+    template <typename NLFoldOp, typename DBFoldOp>
+    NLFoldOp lowerFold(DBFoldOp fold, FoldResultType resultTypeOf);
+
+    // Lowers a region of a fold into @param nlBlock, whose arguments are already bound, and
+    // hands back the chunk its yield names. The caller creates the nl yield, then erases the
+    // placeholder terminator this returns
+    template <typename NLFoldYield>
+    mlir::Operation* lowerFoldRegion(mlir::Block& dbBlock, mlir::Block* nlBlock, mlir::Value& valueChunk);
 
     // The element type an accumulator holds once it has held @param accumulated and then a
     // chunk of @param chunkType: numbers promote, lists of two element types hold tagged

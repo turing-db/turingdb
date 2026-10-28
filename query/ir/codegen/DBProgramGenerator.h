@@ -58,6 +58,7 @@ class ListLiteral;
 class ListComprehensionExpr;
 class ListPredicateExpr;
 class ReduceExpr;
+class AllReduceExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class CollectSubqueryExpr;
@@ -107,6 +108,7 @@ public:
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
     using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
     using CaseRegionGenerator = llvm::function_ref<mlir::Value(mlir::Value)>;
+    using FoldBodyGenerator = llvm::function_ref<void()>;
     using LabelSetCheck = llvm::function_ref<mlir::Value(const SymbolChain*)>;
 
     // Maps a Cypher variable to the last column defined for it, the one the projection
@@ -1264,6 +1266,19 @@ private:
     // initial value columns, the columns in flight its body reads as its carry set, and a
     // body region binding the element and the accumulator, yielding the next accumulator
     void translateReduceExpr(const Expr* expr, const ReduceExpr* reduce);
+
+    // Emits the db.all_reduce of `allReduce(acc = init, x IN xs | f(acc, x), p(acc, x))`:
+    // db.reduce's operands and body, and a predicate region over the same arguments
+    void translateAllReduceExpr(const Expr* expr, const AllReduceExpr* allReduce);
+
+    // Generates a region of a db.reduce or a db.all_reduce: the entry block binds the
+    // element and the accumulator to their variables and takes the carry set, and
+    // @param generateBody emits what the region computes and its yield over them
+    void generateFoldRegion(mlir::Region& region,
+                            const CarrySet& carrySet,
+                            const VarDecl* itemDecl,
+                            const VarDecl* accumulatorDecl,
+                            FoldBodyGenerator generateBody);
 
     // The columns an op over the elements of one row's list may carry: every column in
     // flight, since the body reads the elements rather than the rows

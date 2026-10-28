@@ -1100,6 +1100,18 @@ private:
     // Translate an nl.list_predicate the same way, into the nullable mask the step fills
     void translateListPredicate(mlir::nl::ListPredicate predicate, NLStmtContainer* body);
     void translateReduce(mlir::nl::Reduce reduce, NLStmtContainer* body);
+    void translateAllReduce(mlir::nl::AllReduce allReduce, NLStmtContainer* body);
+
+    // What nl.reduce and nl.all_reduce allocate alike: the drain the source's shape takes,
+    // the element chunk, and the fold over @param accumulator. @param extra is what
+    // @param Data adds.
+    template <typename Data, typename Op, typename... Extra>
+    Data* allocFoldData(Op op, Column* accumulator, Extra... extra);
+
+    // What they translate alike: the element, the accumulator and the carry set gathered
+    // into the body's chunks, the body, and the writes of the accumulator it yields
+    template <typename Op>
+    void translateFoldBody(Op op, NLFoldData* data);
 
     // What the two share: the element chunk and the row tag bound over the source's
     // cells, allocated into @param data's own, then the carry set and the body translated

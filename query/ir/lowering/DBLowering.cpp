@@ -1378,6 +1378,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerListPredicate(listPredicate);
     } else if (mlir::db::Reduce reduce = mlir::dyn_cast<mlir::db::Reduce>(operation)) {
         lowerReduce(reduce);
+    } else if (mlir::db::AllReduce allReduce = mlir::dyn_cast<mlir::db::AllReduce>(operation)) {
+        lowerAllReduce(allReduce);
     } else if (mlir::db::PatternComprehension patternComprehension = mlir::dyn_cast<mlir::db::PatternComprehension>(operation)) {
         lowerPatternComprehension(patternComprehension);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
@@ -2073,13 +2075,47 @@ void DBLowering::lowerListPredicate(mlir::db::ListPredicate predicate) {
     _valueMap[predicate.getResult()] = truths.getResult();
 }
 
-void DBLowering::lowerReduce(mlir::db::Reduce reduce) {
+template <typename NLFoldYield>
+mlir::Operation* DBLowering::lowerFoldRegion(mlir::Block& dbBlock, mlir::Block* nlBlock, mlir::Value& valueChunk) {
+    const mlir::Value elementChunk = nlBlock->getArgument(0);
+
+    // The yield the region decides is only known once it is lowered, and every insertion
+    // goes before a block's terminator, so one stands in for it meanwhile
+    _builder.setInsertionPointToEnd(nlBlock);
+    mlir::Operation* const placeholderYield = _builder.create<NLFoldYield>(_builder.getUnknownLoc(), elementChunk);
+
+    for (size_t argumentIndex = 0; argumentIndex < nlBlock->getNumArguments(); argumentIndex++) {
+        const unsigned index = static_cast<unsigned>(argumentIndex);
+        _valueMap[dbBlock.getArgument(index)] = nlBlock->getArgument(index);
+    }
+
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostLoopBody = nlBlock;
+    _innermostCardinality = elementChunk;
+
+    for (mlir::Operation& operation : dbBlock.without_terminator()) {
+        lowerOperation(operation);
+    }
+
+    valueChunk = mapValue(dbBlock.getTerminator()->getOperand(0));
+
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    valueChunk = rowAlignedChunk(valueChunk, elementChunk);
+
+    return placeholderYield;
+}
+
+template <typename NLFoldOp, typename DBFoldOp>
+NLFoldOp DBLowering::lowerFold(DBFoldOp fold, FoldResultType resultTypeOf) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
     ElementOperands operands;
-    lowerElementOperands(reduce.getSource(), reduce.getColumnsToFilter(), operands);
+    lowerElementOperands(fold.getSource(), fold.getColumnsToFilter(), operands);
 
-    const mlir::Value initialChunk = rowAlignedChunk(mapValue(reduce.getInitialValue()), operands._sourceChunk);
+    const mlir::Value initialChunk = rowAlignedChunk(mapValue(fold.getInitialValue()), operands._sourceChunk);
 
     // The body is lowered over an accumulator of the type the initial value has, and again
     // over a wider one whenever what it computes does not fit: `s + x` over an integer s
@@ -2094,24 +2130,24 @@ void DBLowering::lowerReduce(mlir::db::Reduce reduce) {
         operandChunks.append(operands._carriedChunks.begin(), operands._carriedChunks.end());
         setInsertionForNaryOp(operandChunks);
 
-        nl::Reduce reduced = _builder.create<nl::Reduce>(loc,
-                                                         accumulatorType,
-                                                         operands._sourceChunk,
-                                                         initialAccumulator,
-                                                         operands._carriedChunks);
+        NLFoldOp folded = _builder.create<NLFoldOp>(loc,
+                                                    resultTypeOf(accumulatorType),
+                                                    operands._sourceChunk,
+                                                    initialAccumulator,
+                                                    operands._carriedChunks);
 
         llvm::SmallVector<mlir::Type, 4> argumentTypes = operands._argumentTypes;
         argumentTypes[1] = accumulatorType;
 
-        mlir::Block* const bodyBlock = &reduced.getBody().emplaceBlock();
+        mlir::Block* const bodyBlock = &folded.getBody().emplaceBlock();
         bodyBlock->addArguments(argumentTypes, operands._argumentLocations);
 
         mlir::Value valueChunk;
-        mlir::Operation* const placeholderYield = lowerReduceBody(reduce.getBody().front(), bodyBlock, valueChunk);
+        mlir::Operation* const placeholderYield = lowerFoldRegion<nl::ReduceYield>(fold.getBody().front(), bodyBlock, valueChunk);
 
         const mlir::Type widened = accumulatedElement(accumulated, valueChunk.getType());
         if (widened != accumulated) {
-            reduced->erase();
+            folded->erase();
             accumulated = widened;
             continue;
         }
@@ -2122,44 +2158,42 @@ void DBLowering::lowerReduce(mlir::db::Reduce reduce) {
         _builder.create<nl::ReduceYield>(loc, valueChunk);
         placeholderYield->erase();
 
-        _valueMap[reduce.getResult()] = reduced.getResult();
-        return;
+        return folded;
     }
 }
 
-mlir::Operation* DBLowering::lowerReduceBody(mlir::Block& dbBody, mlir::Block* nlBody, mlir::Value& valueChunk) {
-    const mlir::Value elementChunk = nlBody->getArgument(0);
+void DBLowering::lowerReduce(mlir::db::Reduce reduce) {
+    nl::Reduce reduced = lowerFold<nl::Reduce>(reduce, [](nl::ChunkType accumulatorType) {
+        return accumulatorType;
+    });
 
-    // The yield the body decides is only known once it is lowered, and every insertion
-    // goes before a block's terminator, so one stands in for it meanwhile
-    _builder.setInsertionPointToEnd(nlBody);
-    mlir::Operation* const placeholderYield = _builder.create<nl::ReduceYield>(_builder.getUnknownLoc(), elementChunk);
+    _valueMap[reduce.getResult()] = reduced.getResult();
+}
 
-    for (size_t argumentIndex = 0; argumentIndex < nlBody->getNumArguments(); argumentIndex++) {
-        const unsigned index = static_cast<unsigned>(argumentIndex);
-        _valueMap[dbBody.getArgument(index)] = nlBody->getArgument(index);
-    }
+void DBLowering::lowerAllReduce(mlir::db::AllReduce allReduce) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType resultType =
+        nl::ChunkType::get(context, storage::NullableType::get(context, _builder.getI1Type()));
 
-    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-    const mlir::Value previousInnermostCardinality = _innermostCardinality;
-    _innermostLoopBody = nlBody;
-    _innermostCardinality = elementChunk;
+    nl::AllReduce decided = lowerFold<nl::AllReduce>(allReduce, [resultType](nl::ChunkType) {
+        return resultType;
+    });
 
-    for (mlir::Operation& operation : dbBody) {
-        mlir::db::ReduceYield yield = mlir::dyn_cast<mlir::db::ReduceYield>(operation);
-        if (yield) {
-            valueChunk = mapValue(yield.getValue());
-        } else {
-            lowerOperation(operation);
-        }
-    }
+    mlir::Block& bodyBlock = decided.getBody().front();
+    mlir::Block* const predicateBlock = &decided.getPredicate().emplaceBlock();
+    const llvm::SmallVector<mlir::Location, 4> argumentLocations(bodyBlock.getNumArguments(), loc);
+    predicateBlock->addArguments(bodyBlock.getArgumentTypes(), argumentLocations);
 
-    _innermostLoopBody = previousInnermostLoopBody;
-    _innermostCardinality = previousInnermostCardinality;
+    mlir::Value holdsChunk;
+    mlir::Operation* const placeholderYield =
+        lowerFoldRegion<nl::AllReduceYield>(allReduce.getPredicate().front(), predicateBlock, holdsChunk);
 
-    valueChunk = rowAlignedChunk(valueChunk, elementChunk);
+    _builder.setInsertionPointToEnd(predicateBlock);
+    _builder.create<nl::AllReduceYield>(loc, holdsChunk);
+    placeholderYield->erase();
 
-    return placeholderYield;
+    _valueMap[allReduce.getResult()] = decided.getResult();
 }
 
 mlir::Type DBLowering::accumulatedElement(mlir::Type accumulated, mlir::Type chunkType) {

@@ -100,6 +100,7 @@
 #include "expr/ListComprehensionExpr.h"
 #include "expr/ListPredicateExpr.h"
 #include "expr/ReduceExpr.h"
+#include "expr/AllReduceExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
@@ -7901,6 +7902,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::ALL_REDUCE: {
+            const AllReduceExpr* allReduce = static_cast<const AllReduceExpr*>(expr);
+            translateAllReduceExpr(expr, allReduce);
+        }
+        break;
+
         case Expr::Kind::LIST:
             throwError(fmt::format("Unsupported expression: {}",
                                    ExprKindDescription::value(kind)),
@@ -8044,6 +8051,58 @@ void DBProgramGenerator::translateReduceExpr(const Expr* expr, const ReduceExpr*
                                                         initialValue,
                                                         carrySet._columns);
 
+    generateFoldRegion(reduceOp.getBody(), carrySet, reduce->getItemDecl(), reduce->getAccumulatorDecl(), [&]() {
+        const mlir::Value value = getOrTranslateExprColumn(reduce->getExpression());
+        _opBuilder.create<mlir::db::ReduceYield>(loc, value);
+    });
+
+    dropUnreadCarriedColumns(reduceOp, reduceOp.getColumnsToFilter());
+
+    _part._exprMap[expr] = reduceOp.getResult();
+}
+
+void DBProgramGenerator::translateAllReduceExpr(const Expr* expr, const AllReduceExpr* allReduce) {
+    const mlir::Value initialValue = getOrTranslateExprColumn(allReduce->getInitialValue());
+    const mlir::Value source = getOrTranslateExprColumn(allReduce->getSource());
+
+    CarrySet carrySet;
+    collectElementCarrySet(carrySet);
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    auto allReduceOp = _opBuilder.create<mlir::db::AllReduce>(loc,
+                                                              boolType,
+                                                              source,
+                                                              initialValue,
+                                                              carrySet._columns);
+
+    const VarDecl* const itemDecl = allReduce->getItemDecl();
+    const VarDecl* const accumulatorDecl = allReduce->getAccumulatorDecl();
+
+    generateFoldRegion(allReduceOp.getBody(), carrySet, itemDecl, accumulatorDecl, [&]() {
+        const mlir::Value value = getOrTranslateExprColumn(allReduce->getExpression());
+        _opBuilder.create<mlir::db::ReduceYield>(loc, value);
+    });
+
+    generateFoldRegion(allReduceOp.getPredicate(), carrySet, itemDecl, accumulatorDecl, [&]() {
+        const mlir::Value holds = getOrTranslateExprColumn(allReduce->getPredicate());
+        _opBuilder.create<mlir::db::AllReduceYield>(loc, holds);
+    });
+
+    dropUnreadCarriedColumns(allReduceOp, allReduceOp.getColumnsToFilter());
+
+    _part._exprMap[expr] = allReduceOp.getResult();
+}
+
+void DBProgramGenerator::generateFoldRegion(mlir::Region& region,
+                                            const CarrySet& carrySet,
+                                            const VarDecl* itemDecl,
+                                            const VarDecl* accumulatorDecl,
+                                            FoldBodyGenerator generateBody) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
     llvm::SmallVector<mlir::Type> argumentTypes {noneType, noneType};
     llvm::SmallVector<mlir::Location> argumentLocations {loc, loc};
 
@@ -8053,7 +8112,7 @@ void DBProgramGenerator::translateReduceExpr(const Expr* expr, const ReduceExpr*
     }
 
     const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
-    mlir::Block* const bodyBlock = _opBuilder.createBlock(&reduceOp.getBody(), {}, argumentTypes, argumentLocations);
+    mlir::Block* const bodyBlock = _opBuilder.createBlock(&region, {}, argumentTypes, argumentLocations);
 
     const VariableIdentityMap outerVarMap = _part._varMap;
     const EdgeTypeColumnMap outerEdgeTypeMap = _part._edgeTypeMap;
@@ -8069,11 +8128,10 @@ void DBProgramGenerator::translateReduceExpr(const Expr* expr, const ReduceExpr*
     _part._exprMap.clear();
     rebindCarrySet(carriedArguments, /*firstColumn=*/0, carrySet);
     rebindProjectedColumns(carrySet._columns, carriedArguments);
-    _part._comprehensionElements[reduce->getItemDecl()] = bodyBlock->getArgument(0);
-    _part._comprehensionElements[reduce->getAccumulatorDecl()] = bodyBlock->getArgument(1);
+    _part._comprehensionElements[itemDecl] = bodyBlock->getArgument(0);
+    _part._comprehensionElements[accumulatorDecl] = bodyBlock->getArgument(1);
 
-    const mlir::Value value = getOrTranslateExprColumn(reduce->getExpression());
-    _opBuilder.create<mlir::db::ReduceYield>(loc, value);
+    generateBody();
 
     _part._varMap = outerVarMap;
     _part._edgeTypeMap = outerEdgeTypeMap;
@@ -8083,10 +8141,6 @@ void DBProgramGenerator::translateReduceExpr(const Expr* expr, const ReduceExpr*
     _part._exprMap = outerExprMap;
     _part._projectedColumns = outerProjectedColumns;
     _part._namedPaths = outerNamedPaths;
-
-    dropUnreadCarriedColumns(reduceOp, reduceOp.getColumnsToFilter());
-
-    _part._exprMap[expr] = reduceOp.getResult();
 }
 
 void DBProgramGenerator::collectElementCarrySet(CarrySet& carrySet) {

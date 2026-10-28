@@ -50,6 +50,7 @@
 #include "expr/PatternComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/ReduceExpr.h"
+#include "expr/AllReduceExpr.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "stmt/ShortestPathStmt.h"
@@ -96,6 +97,36 @@ const FunctionSignature* aggregateSignatureOf(const Expr* expr) {
     }
 
     return signature;
+}
+
+// The variables @param expr binds per element for its child @param child to read: a list
+// comprehension's element, and a fold's element and accumulator, which neither the list
+// iterated nor the initial value sees
+void collectElementDecls(const Expr* expr, const Expr* child, std::vector<const VarDecl*>& decls) {
+    const Expr::Kind kind = expr->getKind();
+
+    if (kind == Expr::Kind::LIST_COMPREHENSION) {
+        const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
+
+        if (child != comprehension->getSource()) {
+            decls.push_back(comprehension->getDecl());
+        }
+    } else if (kind == Expr::Kind::REDUCE) {
+        const ReduceExpr* reduce = static_cast<const ReduceExpr*>(expr);
+
+        if (child == reduce->getExpression()) {
+            decls.push_back(reduce->getItemDecl());
+            decls.push_back(reduce->getAccumulatorDecl());
+        }
+    } else if (kind == Expr::Kind::ALL_REDUCE) {
+        const AllReduceExpr* allReduce = static_cast<const AllReduceExpr*>(expr);
+
+        const bool readsTheFold = child == allReduce->getExpression() || child == allReduce->getPredicate();
+        if (readsTheFold) {
+            decls.push_back(allReduce->getItemDecl());
+            decls.push_back(allReduce->getAccumulatorDecl());
+        }
+    }
 }
 
 constexpr std::string_view shortestPathErr = "Cannot return {} after SHORTESTPATH.";
@@ -1441,26 +1472,11 @@ void CypherAnalyzer::throwOnImplicitGroupingKey(const Expr* expr,
         return;
     }
 
-    const ListComprehensionExpr* comprehension = nullptr;
-    const ReduceExpr* reduce = nullptr;
-    if (expr->getKind() == Expr::Kind::LIST_COMPREHENSION) {
-        comprehension = static_cast<const ListComprehensionExpr*>(expr);
-    } else if (expr->getKind() == Expr::Kind::REDUCE) {
-        reduce = static_cast<const ReduceExpr*>(expr);
-    }
-
+    std::vector<const VarDecl*> elementDecls;
     for (const Expr* child : children) {
-        const bool readsTheElement = comprehension && child != comprehension->getSource();
-        const VarDecl* elementDecl = readsTheElement ? comprehension->getDecl() : nullptr;
-        if (readsTheElement) {
-            elements.insert(elementDecl);
-        }
-
-        const bool readsTheAccumulator = reduce && child == reduce->getExpression();
-        if (readsTheAccumulator) {
-            elements.insert(reduce->getItemDecl());
-            elements.insert(reduce->getAccumulatorDecl());
-        }
+        elementDecls.clear();
+        collectElementDecls(expr, child, elementDecls);
+        elements.insert(elementDecls.begin(), elementDecls.end());
 
         if (child->isAggregate()) {
             throwOnImplicitGroupingKey(child, projection, elements);
@@ -1470,13 +1486,8 @@ void CypherAnalyzer::throwOnImplicitGroupingKey(const Expr* expr,
                        child);
         }
 
-        if (readsTheElement) {
-            elements.erase(elementDecl);
-        }
-
-        if (readsTheAccumulator) {
-            elements.erase(reduce->getItemDecl());
-            elements.erase(reduce->getAccumulatorDecl());
+        for (const VarDecl* decl : elementDecls) {
+            elements.erase(decl);
         }
     }
 }
@@ -1545,41 +1556,6 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         const SymbolExpr* symbol = static_cast<const SymbolExpr*>(expr);
 
         return elements.contains(symbol->getDecl());
-    } else if (kind == Expr::Kind::LIST_COMPREHENSION) {
-        const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
-
-        if (!isGroupWise(comprehension->getSource(), projection, elements)) {
-            return false;
-        }
-
-        const VarDecl* const elementDecl = comprehension->getDecl();
-        elements.insert(elementDecl);
-
-        const bool predicateIsGroupWise = isGroupWise(comprehension->getPredicate(), projection, elements);
-        const bool projectionIsGroupWise = isGroupWise(comprehension->getProjection(), projection, elements);
-
-        elements.erase(elementDecl);
-
-        return predicateIsGroupWise && projectionIsGroupWise;
-    } else if (kind == Expr::Kind::REDUCE) {
-        const ReduceExpr* reduce = static_cast<const ReduceExpr*>(expr);
-
-        const bool operandsAreGroupWise = isGroupWise(reduce->getInitialValue(), projection, elements)
-                                       && isGroupWise(reduce->getSource(), projection, elements);
-
-        if (!operandsAreGroupWise) {
-            return false;
-        }
-
-        elements.insert(reduce->getItemDecl());
-        elements.insert(reduce->getAccumulatorDecl());
-
-        const bool expressionIsGroupWise = isGroupWise(reduce->getExpression(), projection, elements);
-
-        elements.erase(reduce->getItemDecl());
-        elements.erase(reduce->getAccumulatorDecl());
-
-        return expressionIsGroupWise;
     } else if (kind == Expr::Kind::PATTERN_COMPREHENSION) {
         const PatternComprehensionExpr* comprehension = static_cast<const PatternComprehensionExpr*>(expr);
 
@@ -1603,7 +1579,24 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr,
         return false;
     }
 
-    return isGroupWise(children, projection, elements);
+    std::vector<const VarDecl*> elementDecls;
+    for (const Expr* child : children) {
+        elementDecls.clear();
+        collectElementDecls(expr, child, elementDecls);
+        elements.insert(elementDecls.begin(), elementDecls.end());
+
+        const bool childIsGroupWise = isGroupWise(child, projection, elements);
+
+        for (const VarDecl* decl : elementDecls) {
+            elements.erase(decl);
+        }
+
+        if (!childIsGroupWise) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // A pattern comprehension reduces the matches of its pattern to one list, so it holds one
@@ -1726,18 +1719,6 @@ void CypherAnalyzer::collectReadDecls(DeclSet& read) const {
             pending.push_back(sourceIt->second);
         }
     }
-}
-
-bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs,
-                                 const Projection* projection,
-                                 DeclSet& elements) const {
-    for (const Expr* expr : exprs) {
-        if (!isGroupWise(expr, projection, elements)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 void CypherAnalyzer::analyzeShortestPathReturn(const SinglePartQuery* query) const {
