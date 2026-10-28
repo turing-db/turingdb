@@ -52,6 +52,7 @@ class ListComprehensionExpr;
 class PatternComprehensionExpr;
 class ListPredicateExpr;
 class ReduceExpr;
+class AllReduceExpr;
 class CaseExpr;
 class Pattern;
 class PatternElement;
@@ -167,6 +168,7 @@ public:
     friend PatternComprehensionExpr;
     friend ListPredicateExpr;
     friend ReduceExpr;
+    friend AllReduceExpr;
     friend CaseExpr;
     friend Pattern;
     friend PatternElement;

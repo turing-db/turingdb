@@ -6913,16 +6913,18 @@ void trimLazyCase(LazyCase caseOp) {
 }
 
 // The ops over the elements of a list repeat every carried column once per element, so a
-// column the body does not read leaves the operands and the body's arguments together. A
-// constant list is laid out over the rows of a carried column, so one row-carrying column
-// stays for it.
-void trimElementCarrySet(Operation* op, Value source, OperandRange carried, Block& body) {
-    const size_t argumentOffset = body.getNumArguments() - carried.size();
-
+// column none of their regions reads leaves the operands and every region's arguments
+// together. A constant list is laid out over the rows of a carried column, so one
+// row-carrying column stays for it.
+void trimElementCarrySet(Operation* op, Value source, OperandRange carried) {
     llvm::SmallBitVector keep(carried.size());
-    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        if (!body.getArgument(argumentOffset + carriedIndex).use_empty()) {
-            keep.set(carriedIndex);
+    for (Region& region : op->getRegions()) {
+        const Block::BlockArgListType carriedArguments = region.front().getArguments().take_back(carried.size());
+
+        for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+            if (!carriedArguments[carriedIndex].use_empty()) {
+                keep.set(carriedIndex);
+            }
         }
     }
 
@@ -6937,20 +6939,31 @@ void trimElementCarrySet(Operation* op, Value source, OperandRange carried, Bloc
     const size_t operandOffset = carried.getBeginOperandIndex();
 
     llvm::BitVector erasedOperands(op->getNumOperands());
-    llvm::BitVector erasedArguments(body.getNumArguments());
     for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
         if (!keep[carriedIndex]) {
             erasedOperands.set(operandOffset + carriedIndex);
-            erasedArguments.set(argumentOffset + carriedIndex);
         }
     }
 
-    body.eraseArguments(erasedArguments);
+    for (Region& region : op->getRegions()) {
+        Block& block = region.front();
+        const size_t argumentOffset = block.getNumArguments() - carried.size();
+
+        llvm::BitVector erasedArguments(block.getNumArguments());
+        for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+            if (!keep[carriedIndex]) {
+                erasedArguments.set(argumentOffset + carriedIndex);
+            }
+        }
+
+        block.eraseArguments(erasedArguments);
+    }
+
     op->eraseOperands(erasedOperands);
 }
 
 bool readsCarriedColumnsInItsRegions(Operation* op) {
-    return isa<LazyCase, ListComprehension, ListPredicate, Reduce>(op);
+    return isa<LazyCase, ListComprehension, ListPredicate, Reduce, AllReduce>(op);
 }
 
 struct TrimVisit {
@@ -7014,11 +7027,13 @@ void trimUnreadColumnsOf(Operation* op, mlir::OpBuilder& builder) {
     if (LazyCase caseOp = dyn_cast<LazyCase>(op)) {
         trimLazyCase(caseOp);
     } else if (ListComprehension comprehension = dyn_cast<ListComprehension>(op)) {
-        trimElementCarrySet(op, comprehension.getSource(), comprehension.getColumnsToFilter(), comprehension.getBody().front());
+        trimElementCarrySet(op, comprehension.getSource(), comprehension.getColumnsToFilter());
     } else if (ListPredicate predicate = dyn_cast<ListPredicate>(op)) {
-        trimElementCarrySet(op, predicate.getSource(), predicate.getColumnsToFilter(), predicate.getBody().front());
+        trimElementCarrySet(op, predicate.getSource(), predicate.getColumnsToFilter());
     } else if (Reduce reduce = dyn_cast<Reduce>(op)) {
-        trimElementCarrySet(op, reduce.getSource(), reduce.getColumnsToFilter(), reduce.getBody().front());
+        trimElementCarrySet(op, reduce.getSource(), reduce.getColumnsToFilter());
+    } else if (AllReduce allReduce = dyn_cast<AllReduce>(op)) {
+        trimElementCarrySet(op, allReduce.getSource(), allReduce.getColumnsToFilter());
     } else if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
         trimCrossProduct(product, builder);
     } else if (HashJoin join = dyn_cast<HashJoin>(op)) {

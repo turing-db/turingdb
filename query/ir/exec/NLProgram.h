@@ -4759,31 +4759,31 @@ private:
     std::vector<size_t> _nullCounts;
 };
 
-// nl.reduce data: the per-row fold of `reduce(acc = init, x IN xs | f(acc, x))`. The
-// result column is the accumulator: it is reset, takes the initial value of each row whose
-// source cell holds a list, then the body's value once per element. The body runs once
-// per element position over the rows whose list reaches it; the carried columns gather
-// those rows' cells of the accumulator, of the source where its cells are the elements,
-// and of the carry set.
-class NLReduceData : public NLFunctionData {
+// The per-row fold of `reduce(acc = init, x IN xs | f(acc, x))`, nl.reduce's data and
+// the part of nl.all_reduce's it shares. The accumulator, nl.reduce's result, is reset,
+// takes the initial value of each row whose source cell holds a list, then the body's
+// value once per element. The body runs once per element position over the rows whose
+// list reaches it; the carried columns gather those rows' cells of the accumulator, of
+// the source where its cells are the elements, and of the carry set.
+class NLFoldData : public NLFunctionData {
 public:
     using CarriedColumns = std::vector<NLCarriedColumn>;
 
-    NLReduceData(const Column* source,
-                 NLUnwindElementCountFunction elementCount,
-                 NLUnwindElementEmitFunction elementEmit,
-                 NLCellAbsentFunction cellAbsent,
-                 Column* elementOutput,
-                 const Column* initialValue,
-                 Column* result,
-                 NLStepBuffers* stepBuffers)
+    NLFoldData(const Column* source,
+               NLUnwindElementCountFunction elementCount,
+               NLUnwindElementEmitFunction elementEmit,
+               NLCellAbsentFunction cellAbsent,
+               Column* elementOutput,
+               const Column* initialValue,
+               Column* accumulator,
+               NLStepBuffers* stepBuffers)
         : _source(source),
         _elementCount(elementCount),
         _elementEmit(elementEmit),
         _cellAbsent(cellAbsent),
         _elementOutput(elementOutput),
         _initialValue(initialValue),
-        _result(result),
+        _accumulator(accumulator),
         _stepBuffers(stepBuffers)
     {
     }
@@ -4794,7 +4794,7 @@ public:
     NLCellAbsentFunction getCellAbsentFunc() const { return _cellAbsent; }
     Column* getElementOutput() const { return _elementOutput; }
     const Column* getInitialValue() const { return _initialValue; }
-    Column* getResult() const { return _result; }
+    Column* getAccumulator() const { return _accumulator; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
 
     const CarriedColumns& carriedColumns() const { return _carriedColumns; }
@@ -4822,6 +4822,7 @@ public:
 
     std::vector<size_t>& elementCounts() { return _elementCounts; }
     std::vector<size_t>& reachingRows() { return _reachingRows; }
+    std::vector<size_t>& endedRows() { return _endedRows; }
 
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
@@ -4845,7 +4846,7 @@ private:
     NLCellAbsentFunction _cellAbsent {nullptr};
     Column* _elementOutput {nullptr};
     const Column* _initialValue {nullptr};
-    Column* _result {nullptr};
+    Column* _accumulator {nullptr};
     NLStepBuffers* _stepBuffers {nullptr};
     const Column* _value {nullptr};
     NLCaseResetFn _reset {nullptr};
@@ -4862,6 +4863,65 @@ private:
     ColumnVector<size_t> _positions;
     std::vector<size_t> _elementCounts;
     std::vector<size_t> _reachingRows;
+    std::vector<size_t> _endedRows;
+};
+
+// nl.all_reduce data: nl.reduce's fold, whose accumulator is a column of its own, the
+// predicate run after each step over the accumulators it wrote, and what the predicate
+// answered for each row: false at some step, which ends the row's fold, or null at some
+// step. The predicate reads the body's element and carried chunks; only the accumulator
+// is gathered again.
+class NLAllReduceData : public NLFoldData {
+public:
+    NLAllReduceData(const Column* source,
+                    NLUnwindElementCountFunction elementCount,
+                    NLUnwindElementEmitFunction elementEmit,
+                    NLCellAbsentFunction cellAbsent,
+                    Column* elementOutput,
+                    const Column* initialValue,
+                    Column* accumulator,
+                    NLStepBuffers* stepBuffers,
+                    Column* result)
+        : NLFoldData(source, elementCount, elementEmit, cellAbsent, elementOutput, initialValue, accumulator, stepBuffers),
+        _result(result)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+
+    Column* getTestedAccumulator() const { return _testedAccumulator; }
+    NLGatherFunction getAccumulatorGather() const { return _accumulatorGather; }
+
+    void setTestedAccumulator(Column* testedAccumulator, NLGatherFunction accumulatorGather) {
+        _testedAccumulator = testedAccumulator;
+        _accumulatorGather = accumulatorGather;
+    }
+
+    NLStmtContainer* getPredicateStmts() { return &_predicateStmts; }
+    const NLStmtContainer* getPredicateStmts() const { return &_predicateStmts; }
+
+    const Column* getHolds() const { return _holds; }
+    NLTruthReadFunction getTruthRead() const { return _truthRead; }
+
+    void setHolds(const Column* holds, NLTruthReadFunction truthRead) {
+        _holds = holds;
+        _truthRead = truthRead;
+    }
+
+    std::vector<bool>& failedRows() { return _failedRows; }
+    std::vector<bool>& unknownRows() { return _unknownRows; }
+
+private:
+    Column* _result {nullptr};
+    Column* _testedAccumulator {nullptr};
+    NLGatherFunction _accumulatorGather {nullptr};
+    const Column* _holds {nullptr};
+    NLTruthReadFunction _truthRead {nullptr};
+
+    NLStmtContainer _predicateStmts;
+
+    std::vector<bool> _failedRows;
+    std::vector<bool> _unknownRows;
 };
 
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context,

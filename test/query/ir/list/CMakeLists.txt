@@ -101,6 +101,9 @@ target_include_directories(test_query_ir_list_comprehension PRIVATE ${IR_TEST_DI
 add_turing_test(test_query_ir_reduce ReduceTest.cpp)
 target_include_directories(test_query_ir_reduce PRIVATE ${IR_TEST_DIR})
 
+add_turing_test(test_query_ir_all_reduce AllReduceTest.cpp)
+target_include_directories(test_query_ir_all_reduce PRIVATE ${IR_TEST_DIR})
+
 add_turing_test(test_query_ir_list_comprehension_edge_variable ListComprehensionEdgeVariableTest.cpp)
 target_include_directories(test_query_ir_list_comprehension_edge_variable PRIVATE ${IR_TEST_DIR})
 

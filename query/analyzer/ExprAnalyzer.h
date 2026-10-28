@@ -44,6 +44,7 @@ class ListExpr;
 class ListComprehensionExpr;
 class ListPredicateExpr;
 class ReduceExpr;
+class AllReduceExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class CollectSubqueryExpr;
@@ -100,6 +101,7 @@ public:
     void analyzePatternComprehensionExpr(PatternComprehensionExpr* expr);
     void analyzeListPredicateExpr(ListPredicateExpr* expr);
     void analyzeReduceExpr(ReduceExpr* expr);
+    void analyzeAllReduceExpr(AllReduceExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeExistsExpr(ExistsExpr* expr);
     void analyzeCountSubqueryExpr(CountSubqueryExpr* expr);
@@ -168,6 +170,12 @@ private:
     // Lets @param expr and the expressions under it be analyzed again, as a reduce's body
     // is once its accumulator has widened
     void forgetAnalysis(const Expr* expr);
+
+    template <typename FoldExpr>
+    void openFoldScope(FoldExpr* expr, std::string_view foldName);
+
+    template <typename FoldExpr>
+    void closeFoldScope(FoldExpr* expr);
 
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
     void analyzeMapEntries(Expr* expr, const MapLiteral* map);

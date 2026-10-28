@@ -124,6 +124,7 @@ using Token = db::YCypherParser::token;
 "INDEXES" { KEYWORD(INDEXES) }
 "COUNT"/[ \t\r\n]*[({] { KEYWORD(COUNT) }
 "REDUCE"/[ \t\r\n]*"(" { KEYWORD(REDUCE) }
+"ALLREDUCE"/[ \t\r\n]*"(" { KEYWORD(ALLREDUCE) }
 "NORMALIZE"/[ \t\r\n]*"(" { KEYWORD(NORMALIZE) }
 "NORMALIZED" { KEYWORD(NORMALIZED) }
 "HEADERS" { KEYWORD(HEADERS) }

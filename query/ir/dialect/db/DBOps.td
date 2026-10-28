@@ -814,13 +814,70 @@ def Reduce : TuringOp<"reduce", [Pure, ConstantThroughOperands]> {
 /**
 * ReduceYield
 */
-def ReduceYield : TuringOp<"reduce_yield", [Pure, Terminator, HasParent<"Reduce">]> {
-  let summary = "Name the accumulator a db.reduce's body computed for each element";
+def ReduceYield : TuringOp<"reduce_yield", [Pure, Terminator, ParentOneOf<["Reduce", "AllReduce"]>]> {
+  let summary = "Name the accumulator a db.reduce's or a db.all_reduce's body computed for each element";
 
   let arguments = (ins Column:$value);
 
   let assemblyFormat = [{
     $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
+* AllReduce
+*/
+def AllReduce : TuringOp<"all_reduce", [Pure, ConstantThroughOperands]> {
+  let summary = "Decide, per row, whether a predicate holds after every step of a fold over that row's list";
+
+  let description = [{
+    Cypher's `allReduce(acc = init, x IN xs | f(acc, x), p(acc, x))`. The op folds each
+    row's list as db.reduce does, and produces one boolean per row: whether the predicate
+    held on the accumulator after every step.
+
+      %ok = db.all_reduce(%xs, %zero, {%n}) ({
+        ^bb0(%x: !db.column<none>, %acc: !db.column<none>, %nIn: !db.column<!storage.node_id>):
+          %next = db.add %acc, %x : (!db.column<none>, !db.column<none>) -> !db.column<none>
+          db.reduce_yield %next : !db.column<none>
+      }) predicate ({
+        ^bb0(%x: !db.column<none>, %acc: !db.column<none>, %nIn: !db.column<!storage.node_id>):
+          %holds = db.lt %acc, %ten : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+          db.all_reduce_yield %holds : !db.column<!storage.bool>
+      }) : (!db.column<none>, !db.column<none>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+
+    The body is db.reduce's. The predicate region takes the same arguments, its
+    accumulator the one the body just computed, as the fold holds it, and yields whether
+    the predicate holds on it. The initial value is never tested. A row stops folding at
+    the first step whose predicate is false, and gets false. A row with no false step gets
+    null when one was null, and true otherwise, so an empty list gets true. A row whose
+    source cell is null gets null.
+  }];
+
+  let arguments = (ins Column:$source, Column:$initial_value, Variadic<Column>:$columns_to_filter);
+  let results   = (outs ColumnBools:$result);
+
+  // Exactly one block each, the body ending in a db.reduce_yield and the predicate in a
+  // db.all_reduce_yield.
+  let regions = (region SizedRegion<1>:$body, SizedRegion<1>:$predicate);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` $initial_value `,` `{` $columns_to_filter `}` `)` $body `predicate` $predicate attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* AllReduceYield
+*/
+def AllReduceYield : TuringOp<"all_reduce_yield", [Pure, Terminator, HasParent<"AllReduce">]> {
+  let summary = "Name whether a db.all_reduce's predicate holds on the accumulator each element left";
+
+  let arguments = (ins Column:$holds);
+
+  let assemblyFormat = [{
+    $holds attr-dict `:` qualified(type($holds))
   }];
 }
 

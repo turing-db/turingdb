@@ -637,13 +637,77 @@ def Reduce : NLOp<"reduce", [Pure, RowAlignedThroughOperands]> {
 /**
 * ReduceYield
 */
-def ReduceYield : NLOp<"reduce_yield", [Pure, Terminator, HasParent<"Reduce">]> {
-  let summary = "Name the accumulator an nl.reduce's body computed for each element";
+def ReduceYield : NLOp<"reduce_yield", [Pure, Terminator, ParentOneOf<["Reduce", "AllReduce"]>]> {
+  let summary = "Name the accumulator an nl.reduce's or an nl.all_reduce's body computed for each element";
 
   let arguments = (ins NLChunk:$value);
 
   let assemblyFormat = [{
     $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
+* AllReduce
+*/
+def AllReduce : NLOp<"all_reduce", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise decision of whether a predicate holds after every step of a fold over that row's list";
+
+  let description = [{
+    Imperative counterpart of db.all_reduce. Row r of the result is whether the predicate
+    the body yields held after every step of the fold of row r's list:
+
+      %ok = nl.all_reduce(%xs, %zero, {%n}) ({
+        ^bb0(%x: !nl.chunk<!storage.nullable<i64>>,
+             %acc: !nl.chunk<!storage.nullable<i64>>,
+             %nIn: !nl.chunk<!storage.node_id>):
+          %next = nl.add %acc, %x : ...
+          nl.reduce_yield %next : !nl.chunk<!storage.nullable<i64>>
+      }) predicate ({
+        ^bb0(%x: !nl.chunk<!storage.nullable<i64>>,
+             %acc: !nl.chunk<!storage.nullable<i64>>,
+             %nIn: !nl.chunk<!storage.node_id>):
+          %holds = nl.lt %acc, %ten : ...
+          nl.all_reduce_yield %holds : !nl.chunk<!storage.nullable<i1>>
+      }) : (!nl.chunk<!storage.nullable<!storage.list<i64>>>,
+            !nl.chunk<i64>,
+            !nl.chunk<!storage.node_id>)
+        -> !nl.chunk<!storage.nullable<i1>>
+
+    The body runs as nl.reduce's does, once per element position, and its value is
+    written into the accumulator, of the type of the body's accumulator argument. The
+    predicate region then runs over the same rows, its accumulator argument read back
+    from the accumulator just written. A row leaves the fold at the first step whose
+    predicate is false, so the body never runs on its later elements. The result is
+    nullable: a row whose source cell holds no list gets a null, and so does a row with
+    no false step and a null one.
+  }];
+
+  let arguments = (ins NLChunk:$source, NLChunk:$initial_value, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLChunk:$result);
+
+  // Exactly one block each, the body ending in an nl.reduce_yield and the predicate in an
+  // nl.all_reduce_yield.
+  let regions = (region SizedRegion<1>:$body, SizedRegion<1>:$predicate);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` $initial_value `,` `{` $columns_to_filter `}` `)` $body `predicate` $predicate attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* AllReduceYield
+*/
+def AllReduceYield : NLOp<"all_reduce_yield", [Pure, Terminator, HasParent<"AllReduce">]> {
+  let summary = "Name whether an nl.all_reduce's predicate holds on the accumulator each element left";
+
+  let arguments = (ins NLChunk:$holds);
+
+  let assemblyFormat = [{
+    $holds attr-dict `:` qualified(type($holds))
   }];
 }
 

@@ -239,9 +239,6 @@ private:
                                     DeclSet& elements) const;
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
     bool isGroupWise(const Expr* expr, const Projection* projection, DeclSet& elements) const;
-    bool isGroupWise(std::span<const Expr* const> exprs,
-                     const Projection* projection,
-                     DeclSet& elements) const;
     bool isGroupWise(const PatternComprehensionExpr* comprehension,
                      const Projection* projection,
                      DeclSet& elements) const;

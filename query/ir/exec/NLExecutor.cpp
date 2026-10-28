@@ -2389,6 +2389,104 @@ void writeCell(Column* result,
     static_cast<ColumnVector<CellView>*>(result)->getRaw()[resultRow] = values.ownCell(item);
 }
 
+// Folds each row's list into the accumulator, the body running once per element position
+// over the rows whose list reaches it. @param testStep runs after each chunk of rows a step
+// folded has its accumulators written, and hands back the rows whose fold ends there.
+template <typename TestStep>
+void foldElements(NLExecutionContext* context, NLFoldData* fold, TestStep testStep) {
+    const Column* source = fold->getSource();
+    const NLUnwindElementCountFunction elementCount = fold->getElementCountFunc();
+    const NLUnwindElementEmitFunction elementEmit = fold->getElementEmitFunc();
+    const NLCellAbsentFunction cellAbsent = fold->getCellAbsentFunc();
+    const Column* initialValue = fold->getInitialValue();
+    const Column* value = fold->getValue();
+    const NLStmtContainer* body = fold->getStmts();
+    Column* accumulator = fold->getAccumulator();
+    NLStepBuffers* const memory = fold->getStepBuffers();
+    memory->clear();
+    NLCompactingValueStore& accumulatorValues = fold->accumulatorValues();
+    const NLReownFunction reown = fold->getReown();
+    const NLReownRowsFunction reownRows = fold->getReownRows();
+
+    const size_t sourceRows = source->size();
+    const size_t chunkSize = context->getChunkSize();
+
+    const auto write = [&](const NLCellWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
+        writeCell(accumulator, row, rowWrite, written, writtenRow, memory, accumulatorValues.getActive());
+    };
+
+    accumulatorValues.clear();
+    fold->getReset()(accumulator, sourceRows);
+
+    std::vector<size_t>& elementCounts = fold->elementCounts();
+    std::vector<size_t>& reachingRows = fold->reachingRows();
+    std::vector<size_t>& endedRows = fold->endedRows();
+    elementCounts.assign(sourceRows, 0);
+    reachingRows.clear();
+
+    // A row whose cell holds no list keeps the null the reset left it, as Cypher reads
+    // `reduce(s = 0, x IN null | s + x)`
+    for (size_t row = 0; row < sourceRows; row++) {
+        if (cellAbsent(source, row)) {
+            continue;
+        }
+
+        write(fold->getInitialWrite(), row, initialValue, row);
+
+        elementCounts[row] = elementCount(source, row);
+        if (elementCounts[row] > 0) {
+            reachingRows.push_back(row);
+        }
+    }
+
+    std::vector<size_t>& rowsRaw = fold->getRows()->getRaw();
+    std::vector<size_t>& positionsRaw = fold->getPositions()->getRaw();
+
+    for (size_t position = 0; !reachingRows.empty(); position++) {
+        for (size_t first = 0; first < reachingRows.size(); first += chunkSize) {
+            const size_t last = std::min(first + chunkSize, reachingRows.size());
+            rowsRaw.assign(reachingRows.begin() + first, reachingRows.begin() + last);
+
+            if (elementEmit) {
+                positionsRaw.assign(rowsRaw.size(), position);
+                elementEmit(source, fold->getRows(), fold->getPositions(), fold->getElementOutput());
+            }
+
+            for (const NLCarriedColumn& carriedColumn : fold->carriedColumns()) {
+                const auto gatherFunc = carriedColumn.getGatherFunc();
+                gatherFunc(carriedColumn.getInput(), fold->getRows(), carriedColumn.getOutput());
+            }
+
+            runBody(context, body);
+
+            bioassert(value->size() == rowsRaw.size(),
+                      "Yielded accumulator of a fold is not row-aligned with its elements.");
+
+            for (size_t index = 0; index < rowsRaw.size(); index++) {
+                write(fold->getValueWrite(), rowsRaw[index], value, index);
+            }
+
+            if (reownRows) {
+                reownRows(accumulator, rowsRaw, accumulatorValues.getActive());
+            }
+
+            endedRows.clear();
+            testStep(endedRows);
+
+            for (const size_t row : endedRows) {
+                elementCounts[row] = position + 1;
+            }
+        }
+
+        std::erase_if(reachingRows, [&](size_t row) { return elementCounts[row] == position + 1; });
+
+        if (reown && !reachingRows.empty() && accumulatorValues.needsCompaction(sourceRows)) {
+            reown(accumulator, accumulatorValues.getSpare());
+            accumulatorValues.flip();
+        }
+    }
+}
+
 void resetTaggedCells(Column* result, size_t rowCount) {
     std::vector<CellView>& results = static_cast<ColumnVector<CellView>*>(result)->getRaw();
     results.assign(rowCount, CellView::nullElement());
@@ -8727,89 +8825,67 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
 }
 
 void NLExecutor::runReduce(NLExecutionContext* context, NLFunctionData* data) {
-    NLReduceData* reduce = static_cast<NLReduceData*>(data);
+    NLFoldData* fold = static_cast<NLFoldData*>(data);
 
-    const Column* source = reduce->getSource();
-    const NLUnwindElementCountFunction elementCount = reduce->getElementCountFunc();
-    const NLUnwindElementEmitFunction elementEmit = reduce->getElementEmitFunc();
-    const NLCellAbsentFunction cellAbsent = reduce->getCellAbsentFunc();
-    const Column* initialValue = reduce->getInitialValue();
-    const Column* value = reduce->getValue();
-    const NLStmtContainer* body = reduce->getStmts();
-    Column* accumulator = reduce->getResult();
-    NLStepBuffers* const memory = reduce->getStepBuffers();
-    memory->clear();
-    NLCompactingValueStore& accumulatorValues = reduce->accumulatorValues();
-    const NLReownFunction reown = reduce->getReown();
-    const NLReownRowsFunction reownRows = reduce->getReownRows();
+    foldElements(context, fold, [](std::vector<size_t>& endedRows) {
+    });
+}
+
+void NLExecutor::runAllReduce(NLExecutionContext* context, NLFunctionData* data) {
+    NLAllReduceData* allReduce = static_cast<NLAllReduceData*>(data);
+
+    const Column* source = allReduce->getSource();
+    const NLCellAbsentFunction cellAbsent = allReduce->getCellAbsentFunc();
+    ColumnVector<size_t>* rows = allReduce->getRows();
+    const Column* accumulator = allReduce->getAccumulator();
+    Column* testedAccumulator = allReduce->getTestedAccumulator();
+    const NLGatherFunction accumulatorGather = allReduce->getAccumulatorGather();
+    const NLStmtContainer* predicate = allReduce->getPredicateStmts();
+    const NLTruthReadFunction truthRead = allReduce->getTruthRead();
+    const Column* holds = allReduce->getHolds();
 
     const size_t sourceRows = source->size();
-    const size_t chunkSize = context->getChunkSize();
 
-    const auto write = [&](const NLCellWrite& rowWrite, size_t row, const Column* written, size_t writtenRow) {
-        writeCell(accumulator, row, rowWrite, written, writtenRow, memory, accumulatorValues.getActive());
-    };
+    std::vector<bool>& failedRows = allReduce->failedRows();
+    std::vector<bool>& unknownRows = allReduce->unknownRows();
+    failedRows.assign(sourceRows, false);
+    unknownRows.assign(sourceRows, false);
 
-    accumulatorValues.clear();
-    reduce->getReset()(accumulator, sourceRows);
+    foldElements(context, allReduce, [&](std::vector<size_t>& endedRows) {
+        accumulatorGather(accumulator, rows, testedAccumulator);
+        runBody(context, predicate);
 
-    std::vector<size_t>& elementCounts = reduce->elementCounts();
-    std::vector<size_t>& reachingRows = reduce->reachingRows();
-    elementCounts.assign(sourceRows, 0);
-    reachingRows.clear();
+        const std::vector<size_t>& rowsRaw = rows->getRaw();
 
-    // A row whose cell holds no list keeps the null the reset left it, as Cypher reads
-    // `reduce(s = 0, x IN null | s + x)`
+        bioassert(holds->size() == rowsRaw.size(),
+                  "Yielded predicate of an nl.all_reduce is not row-aligned with its elements.");
+
+        for (size_t index = 0; index < rowsRaw.size(); index++) {
+            const size_t row = rowsRaw[index];
+            const std::optional<bool> truth = truthRead(holds, index);
+
+            if (!truth.has_value()) {
+                unknownRows[row] = true;
+            } else if (!*truth) {
+                failedRows[row] = true;
+                endedRows.push_back(row);
+            }
+        }
+    });
+
+    std::vector<std::optional<CustomBool>>& resultRaw =
+        static_cast<ColumnOptMask*>(allReduce->getResult())->getRaw();
+    resultRaw.resize(sourceRows);
+
     for (size_t row = 0; row < sourceRows; row++) {
         if (cellAbsent(source, row)) {
-            continue;
-        }
-
-        write(reduce->getInitialWrite(), row, initialValue, row);
-
-        elementCounts[row] = elementCount(source, row);
-        if (elementCounts[row] > 0) {
-            reachingRows.push_back(row);
-        }
-    }
-
-    std::vector<size_t>& rowsRaw = reduce->getRows()->getRaw();
-    std::vector<size_t>& positionsRaw = reduce->getPositions()->getRaw();
-
-    for (size_t position = 0; !reachingRows.empty(); position++) {
-        for (size_t first = 0; first < reachingRows.size(); first += chunkSize) {
-            const size_t last = std::min(first + chunkSize, reachingRows.size());
-            rowsRaw.assign(reachingRows.begin() + first, reachingRows.begin() + last);
-
-            if (elementEmit) {
-                positionsRaw.assign(rowsRaw.size(), position);
-                elementEmit(source, reduce->getRows(), reduce->getPositions(), reduce->getElementOutput());
-            }
-
-            for (const NLCarriedColumn& carriedColumn : reduce->carriedColumns()) {
-                const auto gatherFunc = carriedColumn.getGatherFunc();
-                gatherFunc(carriedColumn.getInput(), reduce->getRows(), carriedColumn.getOutput());
-            }
-
-            runBody(context, body);
-
-            bioassert(value->size() == rowsRaw.size(),
-                      "Yielded accumulator of an nl.reduce is not row-aligned with its elements.");
-
-            for (size_t index = 0; index < rowsRaw.size(); index++) {
-                write(reduce->getValueWrite(), rowsRaw[index], value, index);
-            }
-
-            if (reownRows) {
-                reownRows(accumulator, rowsRaw, accumulatorValues.getActive());
-            }
-        }
-
-        std::erase_if(reachingRows, [&](size_t row) { return elementCounts[row] == position + 1; });
-
-        if (reown && !reachingRows.empty() && accumulatorValues.needsCompaction(sourceRows)) {
-            reown(accumulator, accumulatorValues.getSpare());
-            accumulatorValues.flip();
+            resultRaw[row] = std::nullopt;
+        } else if (failedRows[row]) {
+            resultRaw[row] = CustomBool(false);
+        } else if (unknownRows[row]) {
+            resultRaw[row] = std::nullopt;
+        } else {
+            resultRaw[row] = CustomBool(true);
         }
     }
 }

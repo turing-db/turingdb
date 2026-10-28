@@ -1052,6 +1052,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateListPredicate(listPredicate, body);
         } else if (nl::Reduce reduce = mlir::dyn_cast<nl::Reduce>(operation)) {
             translateReduce(reduce, body);
+        } else if (nl::AllReduce allReduce = mlir::dyn_cast<nl::AllReduce>(operation)) {
+            translateAllReduce(allReduce, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -1220,7 +1222,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateProcedure(procedureOp, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
-        } else if (mlir::isa<nl::Yield, nl::ComprehensionYield, nl::ReduceYield, nl::UnwindYield, mlir::func::ReturnOp>(operation)) {
+        } else if (mlir::isa<nl::Yield, nl::ComprehensionYield, nl::ReduceYield, nl::AllReduceYield, nl::UnwindYield, mlir::func::ReturnOp>(operation)) {
             // Structural terminators carry no behavior
         } else if (!_systemTranslator->translate(operation, body)) {
             throw IRException(fmt::format("NLTranslator cannot translate operation '{}'",
@@ -3928,15 +3930,12 @@ void NLTranslator::translateListPredicate(nl::ListPredicate predicate, NLStmtCon
     body->emplaceStmt(&NLExecutor::runListPredicate, data);
 }
 
-void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
-    const mlir::Value sourceValue = reduce.getSource();
+template <typename Data, typename Op, typename... Extra>
+Data* NLTranslator::allocFoldData(Op op, Column* accumulator, Extra... extra) {
+    const mlir::Value sourceValue = op.getSource();
     const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
-    const Column* source = getColumn(sourceValue);
 
-    // The body binds the element, then the accumulator, then one chunk per carried column
-    mlir::Block& bodyBlock = reduce.getBody().front();
-    const mlir::Value elementValue = bodyBlock.getArgument(0);
-    const mlir::Value accumulatorValue = bodyBlock.getArgument(1);
+    const mlir::Value elementValue = op.getBody().front().getArgument(0);
 
     NLUnwindElementCountFunction elementCount = nullptr;
     NLUnwindElementEmitFunction elementEmit = nullptr;
@@ -3944,40 +3943,45 @@ void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
 
     Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
 
-    const mlir::Value resultValue = reduce.getResult();
-    const mlir::Type resultType = resultValue.getType();
-    Column* const result = allocColumnForChunkType(resultType);
-    _valueSlots[resultValue] = result;
+    return _program->allocFunctionData<Data>(getColumn(sourceValue),
+                                             elementCount,
+                                             elementEmit,
+                                             selectCellAbsent(sourceElement),
+                                             elementOutput,
+                                             getColumn(op.getInitialValue()),
+                                             accumulator,
+                                             _program->allocStepBuffers(),
+                                             extra...);
+}
 
-    const mlir::Value initialValue = reduce.getInitialValue();
-    const Column* initial = getColumn(initialValue);
+template <typename Op>
+void NLTranslator::translateFoldBody(Op op, NLFoldData* data) {
+    const mlir::Value sourceValue = op.getSource();
+    Column* const accumulator = data->getAccumulator();
 
-    NLReduceData* data = _program->allocFunctionData<NLReduceData>(source,
-                                                                   elementCount,
-                                                                   elementEmit,
-                                                                   selectCellAbsent(sourceElement),
-                                                                   elementOutput,
-                                                                   initial,
-                                                                   result,
-                                                                   _program->allocStepBuffers());
+    // The body binds the element, then the accumulator, then one chunk per carried column
+    mlir::Block& bodyBlock = op.getBody().front();
+    const mlir::Value elementValue = bodyBlock.getArgument(0);
+    const mlir::Value accumulatorValue = bodyBlock.getArgument(1);
+    const mlir::Type accumulatorType = accumulatorValue.getType();
 
     const size_t chunkSize = _program->getChunkSize();
     data->getRows()->reserve(chunkSize);
     data->getPositions()->reserve(chunkSize);
 
-    if (!elementEmit) {
-        const NLCarriedColumn elementColumn(source,
+    if (!data->getElementEmitFunc()) {
+        const NLCarriedColumn elementColumn(data->getSource(),
                                             allocColumn(elementValue),
                                             selectGatherForChunkType(sourceValue.getType()));
         data->addCarriedColumn(elementColumn);
     }
 
-    const NLCarriedColumn accumulatorColumn(result,
+    const NLCarriedColumn accumulatorColumn(accumulator,
                                             allocColumn(accumulatorValue),
-                                            selectGatherForChunkType(resultType));
+                                            selectGatherForChunkType(accumulatorType));
     data->addCarriedColumn(accumulatorColumn);
 
-    const mlir::OperandRange carriedColumns = reduce.getColumnsToFilter();
+    const mlir::OperandRange carriedColumns = op.getColumnsToFilter();
     for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
         const mlir::Value bodyChunk = bodyBlock.getArgument(static_cast<unsigned>(2 + carriedIndex));
 
@@ -3989,21 +3993,65 @@ void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
 
     translateBlock(bodyBlock, data->getStmts());
 
-    const mlir::Value yieldedValue = mlir::cast<nl::ReduceYield>(bodyBlock.back()).getValue();
+    const mlir::Value yieldedValue = mlir::cast<nl::ReduceYield>(bodyBlock.getTerminator()).getValue();
     const Column* yielded = getColumn(yieldedValue);
     data->setValue(yielded);
 
-    const bool accumulatesTaggedCells = isAnyChunk(resultType);
+    const mlir::Value initialValue = op.getInitialValue();
+    const bool accumulatesTaggedCells = isAnyChunk(accumulatorType);
 
-    data->setReset(selectCaseResetForChunkType(resultType));
-    data->setWrites(selectCellWriteForChunkType(resultType, initial, initialValue.getType()),
-                    selectCellWriteForChunkType(resultType, yielded, yieldedValue.getType()));
+    data->setReset(selectCaseResetForChunkType(accumulatorType));
+    data->setWrites(selectCellWriteForChunkType(accumulatorType, data->getInitialValue(), initialValue.getType()),
+                    selectCellWriteForChunkType(accumulatorType, yielded, yieldedValue.getType()));
 
     const NLReownRowsFunction reownRows = accumulatesTaggedCells ? nullptr
-                                                                 : NLExecutor::selectReownRowsFunction(result);
-    data->setReowns(NLExecutor::selectReownFunction(result), reownRows);
+                                                                 : NLExecutor::selectReownRowsFunction(accumulator);
+    data->setReowns(NLExecutor::selectReownFunction(accumulator), reownRows);
+}
+
+void NLTranslator::translateReduce(nl::Reduce reduce, NLStmtContainer* body) {
+    const mlir::Value resultValue = reduce.getResult();
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLFoldData* data = allocFoldData<NLFoldData>(reduce, result);
+    translateFoldBody(reduce, data);
 
     body->emplaceStmt(&NLExecutor::runReduce, data);
+}
+
+void NLTranslator::translateAllReduce(nl::AllReduce allReduce, NLStmtContainer* body) {
+    mlir::Block& bodyBlock = allReduce.getBody().front();
+    Column* const accumulator = allocColumnForChunkType(bodyBlock.getArgument(1).getType());
+
+    const mlir::Value resultValue = allReduce.getResult();
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLAllReduceData* data = allocFoldData<NLAllReduceData>(allReduce, accumulator, result);
+    translateFoldBody(allReduce, data);
+
+    mlir::Block& predicateBlock = allReduce.getPredicate().front();
+    const mlir::Value testedAccumulatorValue = predicateBlock.getArgument(1);
+
+    for (const mlir::BlockArgument argument : predicateBlock.getArguments()) {
+        if (argument != testedAccumulatorValue) {
+            _valueSlots[argument] = getColumn(bodyBlock.getArgument(argument.getArgNumber()));
+        }
+    }
+
+    data->setTestedAccumulator(allocColumn(testedAccumulatorValue),
+                               selectGatherForChunkType(testedAccumulatorValue.getType()));
+
+    translateBlock(predicateBlock, data->getPredicateStmts());
+
+    const mlir::Value holdsValue = mlir::cast<nl::AllReduceYield>(predicateBlock.getTerminator()).getHolds();
+    const mlir::Type holdsType = holdsValue.getType();
+    const bool nullable = mlir::isa<storage::NullableType>(mlir::cast<nl::ChunkType>(holdsType).getElementType());
+    data->setHolds(getColumn(holdsValue),
+                   NLExecutor::selectTruthRead(nullable, isUntypedNullChunk(holdsType), isAnyChunk(holdsType)));
+
+    body->emplaceStmt(&NLExecutor::runAllReduce, data);
 }
 
 template <typename CaseOp>

@@ -336,6 +336,41 @@ LogicalResult verifyElementBody(Operation* op, Block& bodyBlock, OperandRange ca
     return success();
 }
 
+// A region of a fold over the elements of one row's list: one block taking the element,
+// the accumulator and one argument per carried column, ending in a @param YieldOp
+template <typename YieldOp>
+LogicalResult verifyFoldRegion(Operation* op, Block& block, OperandRange carried, llvm::StringLiteral yieldName) {
+    if (block.empty() || !isa<YieldOp>(block.back())) {
+        return op->emitOpError("region must end with a ") << yieldName;
+    }
+
+    const size_t expectedArguments = carried.size() + 2;
+
+    if (block.getNumArguments() != expectedArguments) {
+        return op->emitOpError("region takes the element and the accumulator plus one argument per "
+                               "carried column, ")
+               << "expected " << expectedArguments << " but has " << block.getNumArguments();
+    }
+
+    for (size_t argumentIndex = 0; argumentIndex < 2; argumentIndex++) {
+        if (!llvm::isa<ColumnType>(block.getArgument(argumentIndex).getType())) {
+            return op->emitOpError("argument ") << argumentIndex << " must be a column";
+        }
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const mlir::Type argumentType = block.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return op->emitOpError("argument ") << carriedIndex + 2
+                                                << " must have the type of carried column "
+                                                << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // Parses `factor { ... }` into a fresh region of result. The factor takes no
 // operands and no block arguments, so the region is parsed with an empty
 // argument list.
@@ -1929,41 +1964,18 @@ LogicalResult ListPredicate::verify() {
     return verifyElementBody(getOperation(), getBody().front(), getColumnsToFilter());
 }
 
-// The body binds the element, the accumulator and one argument per carried column, and
-// ends naming the next accumulator.
 LogicalResult Reduce::verify() {
-    Block& bodyBlock = getBody().front();
+    return verifyFoldRegion<ReduceYield>(getOperation(), getBody().front(), getColumnsToFilter(), "db.reduce_yield");
+}
 
-    if (bodyBlock.empty() || !isa<ReduceYield>(bodyBlock.back())) {
-        return emitOpError("body region must end with a db.reduce_yield");
-    }
-
+LogicalResult AllReduce::verify() {
     const OperandRange carried = getColumnsToFilter();
-    const size_t expectedArguments = carried.size() + 2;
 
-    if (bodyBlock.getNumArguments() != expectedArguments) {
-        return emitOpError("body region takes the element and the accumulator plus one argument per "
-                           "carried column, ")
-               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    if (failed(verifyFoldRegion<ReduceYield>(getOperation(), getBody().front(), carried, "db.reduce_yield"))) {
+        return failure();
     }
 
-    for (size_t argumentIndex = 0; argumentIndex < 2; argumentIndex++) {
-        if (!llvm::isa<ColumnType>(bodyBlock.getArgument(argumentIndex).getType())) {
-            return emitOpError("body argument ") << argumentIndex << " must be a column";
-        }
-    }
-
-    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
-
-        if (argumentType != carried[carriedIndex].getType()) {
-            return emitOpError("body argument ") << carriedIndex + 2
-                                                 << " must have the type of carried column "
-                                                 << carriedIndex;
-        }
-    }
-
-    return success();
+    return verifyFoldRegion<AllReduceYield>(getOperation(), getPredicate().front(), carried, "db.all_reduce_yield");
 }
 
 // The pattern takes one argument per input column and the row tag, and ends naming what

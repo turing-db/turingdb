@@ -162,6 +162,50 @@ LogicalResult verifyElementBody(Operation* op, Block& bodyBlock, OperandRange ca
 
     return success();
 }
+
+// A region of a fold over the elements of one row's list: one block taking the element,
+// the accumulator and one chunk per carried column, ending in a @param YieldOp
+template <typename YieldOp>
+LogicalResult verifyFoldRegion(Operation* op, Block& block, OperandRange carried, llvm::StringLiteral yieldName) {
+    if (block.empty() || !isa<YieldOp>(block.back())) {
+        return op->emitOpError("region must end with an ") << yieldName;
+    }
+
+    const size_t expectedArguments = carried.size() + 2;
+
+    if (block.getNumArguments() != expectedArguments) {
+        return op->emitOpError("region takes the element and the accumulator plus one chunk per "
+                               "carried column, ")
+               << "expected " << expectedArguments << " but has " << block.getNumArguments();
+    }
+
+    if (!llvm::isa<ChunkType>(block.getArgument(0).getType())) {
+        return op->emitOpError("argument 0 must be the chunk of elements");
+    }
+
+    if (!llvm::isa<ChunkType>(block.getArgument(1).getType())) {
+        return op->emitOpError("argument 1 must be the chunk of accumulators");
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
+        const Type argumentType = block.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != carried[carriedIndex].getType()) {
+            return op->emitOpError("argument ") << carriedIndex + 2
+                                                << " must have the type of carried chunk "
+                                                << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
+bool holdsNullableBooleans(Value chunk) {
+    const Type elementType = llvm::cast<ChunkType>(chunk.getType()).getElementType();
+    const auto nullableType = llvm::dyn_cast<storage::NullableType>(elementType);
+
+    return nullableType && nullableType.getValueType().isInteger(1);
+}
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -996,41 +1040,39 @@ LogicalResult ListComprehension::verify() {
     return success();
 }
 
-// The body binds the element, the accumulator - of the result's type - and one chunk per
-// carried column, and ends naming the next accumulator.
 LogicalResult Reduce::verify() {
     Block& bodyBlock = getBody().front();
 
-    auto yield = dyn_cast_or_null<ReduceYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
-    if (!yield) {
-        return emitOpError("body region must end with an nl.reduce_yield");
-    }
-
-    const OperandRange carried = getColumnsToFilter();
-    const size_t expectedArguments = carried.size() + 2;
-
-    if (bodyBlock.getNumArguments() != expectedArguments) {
-        return emitOpError("body region takes the element and the accumulator plus one chunk per "
-                           "carried column, ")
-               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
-    }
-
-    if (!llvm::isa<ChunkType>(bodyBlock.getArgument(0).getType())) {
-        return emitOpError("body argument 0 must be the chunk of elements");
+    if (failed(verifyFoldRegion<ReduceYield>(getOperation(), bodyBlock, getColumnsToFilter(), "nl.reduce_yield"))) {
+        return failure();
     }
 
     if (bodyBlock.getArgument(1).getType() != getResult().getType()) {
         return emitOpError("body argument 1 must be the accumulator, of the result's type");
     }
 
-    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
-        const Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+    return success();
+}
 
-        if (argumentType != carried[carriedIndex].getType()) {
-            return emitOpError("body argument ") << carriedIndex + 2
-                                                 << " must have the type of carried chunk "
-                                                 << carriedIndex;
-        }
+LogicalResult AllReduce::verify() {
+    Block& bodyBlock = getBody().front();
+    Block& predicateBlock = getPredicate().front();
+    const OperandRange carried = getColumnsToFilter();
+
+    if (failed(verifyFoldRegion<ReduceYield>(getOperation(), bodyBlock, carried, "nl.reduce_yield"))) {
+        return failure();
+    }
+
+    if (failed(verifyFoldRegion<AllReduceYield>(getOperation(), predicateBlock, carried, "nl.all_reduce_yield"))) {
+        return failure();
+    }
+
+    if (predicateBlock.getArgumentTypes() != bodyBlock.getArgumentTypes()) {
+        return emitOpError("predicate region must take the arguments of the body");
+    }
+
+    if (!holdsNullableBooleans(getResult())) {
+        return emitOpError("result must be a chunk of nullable booleans");
     }
 
     return success();
@@ -1043,10 +1085,7 @@ LogicalResult ListPredicate::verify() {
         return failure();
     }
 
-    const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
-    const auto nullableType = llvm::dyn_cast<storage::NullableType>(elementType);
-
-    if (!nullableType || !nullableType.getValueType().isInteger(1)) {
+    if (!holdsNullableBooleans(getResult())) {
         return emitOpError("result must be a chunk of nullable booleans");
     }
 

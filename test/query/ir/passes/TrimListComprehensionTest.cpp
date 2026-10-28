@@ -143,6 +143,47 @@ TEST_F(TrimListComprehensionTest, dropsTheCarriedColumnsAReduceDoesNotRead) {
     EXPECT_TRUE(carried.front().getDefiningOp<mlir::db::ScanNodes>());
 }
 
+// MATCH (n) RETURN n.name, allReduce(s = 0, z IN [1, 2] | s + z, s < n.age)
+const char* const allReduceTestingTheNode = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+  %zero = db.constant(0 : i64)
+  %zs = db.constant([1, 2])
+  %r = db.all_reduce(%zs, %zero, {%name, %n}) {
+  ^bb0(%z: !db.column<none>, %s: !db.column<none>, %nameIn: !db.column<!storage.nullable<!storage.string>>, %nIn: !db.column<!storage.node_id>):
+    %next = db.add %s, %z : (!db.column<none>, !db.column<none>) -> !db.column<none>
+    db.reduce_yield %next : !db.column<none>
+  } predicate {
+  ^bb0(%z: !db.column<none>, %s: !db.column<none>, %nameIn: !db.column<!storage.nullable<!storage.string>>, %nIn: !db.column<!storage.node_id>):
+    %age = db.get_node_properties(%nIn, "age") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<i64>>
+    %holds = db.lt %s, %age : (!db.column<none>, !db.column<!storage.nullable<i64>>) -> !db.column<!storage.bool>
+    db.all_reduce_yield %holds : !db.column<!storage.bool>
+  } : (!db.column<!storage.list<i64>>, !db.column<i64>, !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  db.output(%name, %r) : !db.column<!storage.nullable<!storage.string>>, !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// The node is read by the predicate alone, so it stays carried in both regions
+TEST_F(TrimListComprehensionTest, keepsTheCarriedColumnsOnlyThePredicateReads) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(allReduceTestingTheNode);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runTrim(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::AllReduce> allReduces = collect<mlir::db::AllReduce>(*module);
+    ASSERT_EQ(allReduces.size(), 1u);
+
+    mlir::db::AllReduce allReduce = allReduces.front();
+    const mlir::OperandRange carried = allReduce.getColumnsToFilter();
+    ASSERT_EQ(carried.size(), 1u);
+    EXPECT_TRUE(carried.front().getDefiningOp<mlir::db::ScanNodes>());
+
+    EXPECT_EQ(allReduce.getBody().front().getNumArguments(), 3u);
+    EXPECT_EQ(allReduce.getPredicate().front().getNumArguments(), 3u);
+}
+
 // MATCH (n) RETURN n.name, [x IN [n.name, 'x'] | x]
 const char* const comprehensionOverARowList = R"mlir(
 func.func @main() {
