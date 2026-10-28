@@ -31,6 +31,7 @@
 #include "views/GraphView.h"
 
 #include "IRConstantColumn.h"
+#include "DBColumnElement.h"
 #include "StorageAttributes.h"
 #include "PropertyScanLiteral.h"
 #include "PathHopArguments.h"
@@ -1053,6 +1054,7 @@ struct UnwindEqualityCross {
     bool _unwindOnTheLeft {false};
     bool _readsTheIDs {false};
     bool _readsTheIntegers {false};
+    bool _readsTheElement {false};
     Value _unwoundColumn;
     Value _comparedColumn;
     EqOp _equality {nullptr};
@@ -1076,37 +1078,51 @@ UnwindConst matchUnwindFactor(Region& factor) {
     return yield.getColumns().front().getDefiningOp<UnwindConst>();
 }
 
+// Whether = holds two elements equal. A double equals every double it compares equal to, so
+// 0.0 and -0.0 are one value and a NaN equals none.
+bool holdsEqualElements(ArrayAttr elements) {
+    llvm::SmallDenseSet<Attribute, 8> seen;
+
+    for (const Attribute element : elements) {
+        const FloatAttr floating = dyn_cast<FloatAttr>(element);
+        if (floating && floating.getValue().isNaN()) {
+            continue;
+        }
+
+        const bool isZero = floating && floating.getValue().isZero();
+        const Attribute value = isZero ? FloatAttr::get(floating.getType(), 0.0) : element;
+
+        if (!seen.insert(value).second) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Whether one comparison per element stands in for what the unwound column is compared to.
 // A heterogeneous list rides the type-erased column whose cells are compared by the tag
-// each carries, which no set of typed comparisons reproduces, and a repeated element emits
-// the rows it matches once per copy, which a membership test does not express.
+// each carries, which no set of typed comparisons reproduces, and two equal elements - 0.0
+// and -0.0 among them - emit the rows they match once each, which a membership test does not.
 bool elementsCompareDistinctly(UnwindConst unwind) {
     const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
     if (isa<storage::AnyType>(column.getType())) {
         return false;
     }
 
-    llvm::SmallDenseSet<Attribute, 8> seen;
-    for (const Attribute element : unwind.getElements()) {
-        if (!isa<IntegerAttr, FloatAttr, StringAttr>(element)) {
-            return false;
-        }
+    const ArrayAttr elements = unwind.getElements();
+    const bool literalElements = llvm::all_of(elements, [](Attribute element) {
+        return isa<IntegerAttr, FloatAttr, StringAttr>(element);
+    });
 
-        if (!seen.insert(element).second) {
-            return false;
-        }
-    }
-
-    return true;
+    return literalElements && !holdsEqualElements(elements);
 }
 
 // On every row the filter keeps, the elements hold the value of the column they were
 // compared to. A node or an edge equals an integer by the ID it carries, so a projection
 // reads the elements back through id() of an entity column, never through the entity.
 bool comparesAnEntity(Value comparedColumn) {
-    const ColumnType column = cast<ColumnType>(comparedColumn.getType());
-
-    return isa<storage::NodeIDType, storage::EdgeIDType>(column.getType());
+    return isa<storage::NodeIDType, storage::EdgeIDType>(::db::inferredColumnElement(comparedColumn));
 }
 
 bool unwindsIntegers(UnwindConst unwind) {
@@ -1121,14 +1137,22 @@ bool unwindsFloats(UnwindConst unwind) {
     return isa<mlir::Float64Type>(column.getType());
 }
 
-// Whether a column is declared to hold integers. A column typed none is resolved only in
-// lowering, and can turn out to hold floats or tagged cells.
+// Whether a column holds integers. A column typed none that no function produces is resolved
+// only in lowering, and can turn out to hold floats or tagged cells.
 bool holdsIntegers(Value column) {
-    const Type element = cast<ColumnType>(column.getType()).getType();
-    const storage::NullableType nullable = dyn_cast<storage::NullableType>(element);
-    const Type value = nullable ? nullable.getValueType() : element;
+    return ::db::inferredColumnElement(column).isInteger(64);
+}
 
-    return value.isInteger(64);
+// Whether every value of the column equal to an element is that element. A number can equal
+// another without being it - 32 = 32.0, 0 = -0.0 - which a string or a boolean cannot.
+bool equalsOnlyTheElements(UnwindConst unwind, Value comparedColumn) {
+    if (unwindsFloats(unwind)) {
+        return false;
+    } else if (unwindsIntegers(unwind)) {
+        return holdsIntegers(comparedColumn);
+    }
+
+    return true;
 }
 
 // A count(*) reads how many rows a column has, never what it holds, so any column of the
@@ -1250,13 +1274,12 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     const ResultRange filtered = match._filter.getFilteredColumns();
 
     const bool entityCompared = comparesAnEntity(match._comparedColumn);
-    const bool integersCompared = holdsIntegers(match._comparedColumn);
     const bool integerElements = unwindsIntegers(match._unwind);
-    const bool floatElements = unwindsFloats(match._unwind);
+    const bool standsForTheElements = equalsOnlyTheElements(match._unwind, match._comparedColumn);
 
-    // A number can equal another without being it - 32 = 32.0, 0.0 = -0.0 - so integer
-    // elements are read back through toInteger of a column not declared to hold integers,
-    // and float elements are not stood in for.
+    // One element is what every row the filter keeps was compared equal to, whatever the
+    // compared column holds. Otherwise, or where a region spells the elements' type, an
+    // integer element is read back as toInteger of the value equal to it, a float one not at all.
     size_t survivingColumns = 0;
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
@@ -1264,25 +1287,25 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
         if (holdsTheElements) {
             const Value elements = filtered[index];
             const bool readsTheValues = !onlyCountsRows(elements);
+            const bool sameType = elements.getType() == match._comparedColumn.getType();
+            const bool acceptsTheComparedType = sameType || !readThroughABlockArgument(elements);
             const bool readsTheIDs = entityCompared && readsTheValues;
-            const bool readsTheIntegers = integerElements && !integersCompared && !entityCompared && readsTheValues;
-            const bool readsTheFloats = floatElements && readsTheValues;
-            const bool convertsTheStandIn = readsTheIDs || readsTheIntegers;
-            const Type standInType = convertsTheStandIn ? elements.getType() : match._comparedColumn.getType();
-            const bool changesTheType = elements.getType() != standInType;
+            const bool readsTheComparedColumn = !entityCompared && standsForTheElements && acceptsTheComparedType;
+            const bool convertsTheStandIn = readsTheValues && !readsTheIDs && !readsTheComparedColumn;
+            const bool readsTheElement = convertsTheStandIn && unwindsOneElement && !readThroughABlockArgument(elements);
+            const bool readsTheIntegers = convertsTheStandIn && !readsTheElement && integerElements;
 
             if (elements.use_empty()) {
                 continue;
             } else if (readsTheIDs && !integerElements) {
                 return false;
-            } else if (readsTheFloats) {
-                return false;
-            } else if (changesTheType && readThroughABlockArgument(elements)) {
+            } else if (convertsTheStandIn && !readsTheElement && !readsTheIntegers) {
                 return false;
             }
 
             match._readsTheIDs = match._readsTheIDs || readsTheIDs;
             match._readsTheIntegers = match._readsTheIntegers || readsTheIntegers;
+            match._readsTheElement = match._readsTheElement || readsTheElement;
         }
 
         survivingColumns++;
@@ -1358,7 +1381,7 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
     const Operation::operand_range carried = match._filter.getColumnsToFilter();
     const ResultRange filtered = match._filter.getFilteredColumns();
 
-    const bool convertsTheStandIn = match._readsTheIDs || match._readsTheIntegers;
+    const bool convertsTheStandIn = match._readsTheIDs || match._readsTheIntegers || match._readsTheElement;
 
     llvm::SmallVector<Value> columns;
     llvm::SmallVector<Type> resultTypes;
@@ -1399,8 +1422,19 @@ void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
         const Location loc = match._filter.getLoc();
         const Type elementsType = match._unwoundColumn.getType();
         const Value standIn = fused.getResult(comparedIndex);
-        const Value elements = match._readsTheIDs ? builder.create<ElementID>(loc, elementsType, standIn).getResult()
-                                                  : builder.create<ToInteger>(loc, elementsType, standIn).getResult();
+
+        Value elements;
+        if (match._readsTheIDs) {
+            elements = builder.create<ElementID>(loc, elementsType, standIn).getResult();
+        } else if (match._readsTheIntegers) {
+            elements = builder.create<ToInteger>(loc, elementsType, standIn).getResult();
+        } else {
+            MLIRContext* const context = builder.getContext();
+            const Type noneColumn = ColumnType::get(context, NoneType::get(context));
+            ConstantOp element = builder.create<ConstantOp>(loc, match._unwind.getElements()[0]);
+
+            elements = builder.create<BroadcastConstant>(loc, noneColumn, element.getResult(), standIn).getResult();
+        }
 
         for (const size_t index : elementsReadConverted) {
             filtered[index].replaceAllUsesWith(elements);
