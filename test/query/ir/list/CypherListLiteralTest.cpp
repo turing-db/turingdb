@@ -594,11 +594,9 @@ TEST_F(CypherListLiteralTest, cutsTheMatchedEmptyListRows) {
     expectRows("MATCH (n) RETURN [] LIMIT 2", expected);
 }
 
-TEST_F(CypherListLiteralTest, returnsTheListBesideAnAggregateOverAnEmptyMatch) {
-    // An aggregate answers one row whether or not the match kept any, so the list stands
-    // beside a count of nothing rather than the projection collapsing to no row.
-    const Rows expected = {{"[1, 2]", "0"}};
-    expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN [1, 2], count(n)", expected);
+TEST_F(CypherListLiteralTest, groupsNoRowUnderTheListOverAnEmptyMatch) {
+    // The list is a grouping key, so a match that kept no row makes no group
+    expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN [1, 2], count(n)", {});
 }
 
 TEST_F(CypherListLiteralTest, holdsNullListElements) {

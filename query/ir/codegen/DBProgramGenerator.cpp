@@ -10515,14 +10515,6 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
     }
 
-    // Every non-aggregate item was constant, so nothing tells the matched rows apart: the
-    // projection is the one keyless group, whichever way it spells its key - RETURN 1 AS
-    // x, count(n) counts the whole match, as RETURN count(n) does
-    if (keyColumns.empty()) {
-        generateKeylessAggregates(projection);
-        return;
-    }
-
     // A key may order the groups by an aggregate the projection does not return -
     // RETURN a.name ORDER BY count(b) - which the aggregation has to compute all the same.
     // Its result column is then read by the sort alone, and no db.output reads it, which is
@@ -10641,6 +10633,12 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             writtenKey._masked = true;
             keyColumns.push_back(pending);
         }
+    }
+
+    // Every key is constant, so the rows fall in one group. A group still needs a row:
+    // RETURN 1 AS x, count(n) over no match returns no row, where RETURN count(n) returns 0
+    if (keyColumns.empty()) {
+        keyColumns.push_back(constantBool(true));
     }
 
     const size_t keyCount = keyColumns.size();

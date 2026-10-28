@@ -4661,6 +4661,8 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = filteredChunks[resultIndex];
     }
+
+    followCardinalityThrough(chunks, filteredChunks);
 }
 
 void DBLowering::lowerCount(mlir::db::Count count) {

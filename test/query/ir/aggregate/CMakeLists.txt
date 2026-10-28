@@ -179,3 +179,5 @@ target_link_libraries(test_query_ir_aggregate_over_computed_constant PRIVATE
 target_include_directories(test_query_ir_aggregate_over_computed_constant PRIVATE ${IR_TEST_DIR})
 
 add_call_v3_test(test_query_ir_grouped_count_distinct GroupedCountDistinctTest.cpp)
+
+add_call_v3_test(test_query_ir_constant_key_empty_input ConstantKeyEmptyInputTest.cpp)
