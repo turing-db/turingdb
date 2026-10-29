@@ -5081,16 +5081,19 @@ private:
 
 // nl.row_lists_collect data: stages what this step of the body's rows contributes, each
 // value under the row its tag names, through the read its column shape takes. The tag is
-// null when the accumulator covers a single row.
+// null when every value belongs to one row: the one the row chunk holds the position of,
+// or the single row of the step when that is null too.
 class NLRowListsCollectData : public NLFunctionData {
 public:
     NLRowListsCollectData(NLRowListsState* state,
                           const ColumnVector<uint64_t>* tag,
+                          const ColumnVector<uint64_t>* row,
                           const Column* value,
                           NLListItemReadFunction valueRead,
                           NLStepBuffers* stepBuffers)
         : _state(state),
         _tag(tag),
+        _row(row),
         _value(value),
         _valueRead(valueRead),
         _stepBuffers(stepBuffers)
@@ -5099,6 +5102,7 @@ public:
 
     NLRowListsState* getState() const { return _state; }
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
+    const ColumnVector<uint64_t>* getRow() const { return _row; }
     const Column* getValue() const { return _value; }
     NLListItemReadFunction getValueRead() const { return _valueRead; }
     NLStepBuffers* getStepBuffers() const { return _stepBuffers; }
@@ -5106,6 +5110,7 @@ public:
 private:
     NLRowListsState* _state {nullptr};
     const ColumnVector<uint64_t>* _tag {nullptr};
+    const ColumnVector<uint64_t>* _row {nullptr};
     const Column* _value {nullptr};
     NLListItemReadFunction _valueRead {nullptr};
     NLStepBuffers* _stepBuffers {nullptr};
@@ -5228,9 +5233,9 @@ private:
     ColumnVector<uint64_t>* _tag {nullptr};
 };
 
-// nl.exists_mark data: marks the input rows the tag names. An accumulator with no input
-// column is answered for by the columns instead: the step is the single empty row, which
-// this step's rows mark when they hold one at all.
+// nl.exists_mark data: marks the input rows the tag names. With no tag the columns answer
+// for one row instead, which this step's rows mark when they hold one at all: the row the
+// row chunk holds the position of, or the single empty row when that is null too.
 class NLExistsMarkData : public NLFunctionData {
 public:
     NLExistsMarkData(NLExistsState* state)
@@ -5243,6 +5248,9 @@ public:
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
     void setTag(const ColumnVector<uint64_t>* tag) { _tag = tag; }
 
+    const ColumnVector<uint64_t>* getRow() const { return _row; }
+    void setRow(const ColumnVector<uint64_t>* row) { _row = row; }
+
     const std::vector<const Column*>& columns() const { return _columns; }
 
     void addColumn(const Column* column) { _columns.push_back(column); }
@@ -5250,6 +5258,7 @@ public:
 private:
     NLExistsState* _state {nullptr};
     const ColumnVector<uint64_t>* _tag {nullptr};
+    const ColumnVector<uint64_t>* _row {nullptr};
     std::vector<const Column*> _columns;
 };
 
@@ -5276,7 +5285,7 @@ class NLCountSubqueryState : public NLSubqueryExpressionState {
 public:
     void reset() override;
 
-    void addRows(size_t rowCount);
+    void addRows(uint64_t row, size_t rowCount);
     void addTaggedRows(std::span<const uint64_t> tag);
 
     const std::vector<uint64_t>& getCounts() const { return _counts; }
@@ -5286,18 +5295,24 @@ private:
 };
 
 // nl.count_subquery_tally data: counts the entries of the tag toward the rows they name,
-// or, with no tag, the rows of @param rows toward the single row the step answers for
+// or, with no tag, the rows of @param rows toward the one row they answer for: the row
+// @param row holds the position of, or the single row of the step when it is null
 class NLCountSubqueryTallyData : public NLFunctionData {
 public:
-    NLCountSubqueryTallyData(NLCountSubqueryState* state, const ColumnVector<uint64_t>* tag, const Column* rows);
+    NLCountSubqueryTallyData(NLCountSubqueryState* state,
+                             const ColumnVector<uint64_t>* tag,
+                             const ColumnVector<uint64_t>* row,
+                             const Column* rows);
 
     NLCountSubqueryState* getState() const { return _state; }
     const ColumnVector<uint64_t>* getTag() const { return _tag; }
+    const ColumnVector<uint64_t>* getRow() const { return _row; }
     const Column* getRows() const { return _rows; }
 
 private:
     NLCountSubqueryState* _state {nullptr};
     const ColumnVector<uint64_t>* _tag {nullptr};
+    const ColumnVector<uint64_t>* _row {nullptr};
     const Column* _rows {nullptr};
 };
 

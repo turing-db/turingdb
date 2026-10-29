@@ -179,14 +179,18 @@ TEST_F(ExistsSubqueryCodegenTest, aBodyOverNoRowInFlightTakesNoTag) {
     EXPECT_FALSE(contains(nlProgram, "nl.each_row")) << nlProgram;
 }
 
-TEST_F(ExistsSubqueryCodegenTest, anOuterLimitBudgetsTheLoopOverSingleRows) {
+// Every row of the step is answered for before the rows are emitted, so the budget stops
+// the scan and leaves the loop over single rows whole
+TEST_F(ExistsSubqueryCodegenTest, anOuterLimitBudgetsTheScanAndNotTheLoopOverSingleRows) {
     StringRowSink sink;
     explain("EXPLAIN (codegen, nl) MATCH (p:Person) "
             "RETURN p.name, EXISTS { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } LIMIT 3",
             sink);
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
-    const std::string rowLoop = "in " + std::string(resultOf(nlProgram, "nl.each_row")) + " limit ";
+    const std::string scanLoop = "in " + std::string(resultOf(nlProgram, "nl.scan_nodes_by_label")) + " limit ";
+    const std::string rowLoop = "in " + std::string(resultOf(nlProgram, "nl.each_row")) + " : ";
+    EXPECT_TRUE(contains(nlProgram, scanLoop)) << nlProgram;
     EXPECT_TRUE(contains(nlProgram, rowLoop)) << nlProgram;
 }
 

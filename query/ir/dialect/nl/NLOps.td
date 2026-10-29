@@ -1661,7 +1661,9 @@ def EachRow : NLOp<"each_row", [Pure, InferTypeOpAdaptor]> {
 
     This is how a CALL subquery whose body aggregates, sorts, cuts or dedups runs
     once per row in flight: the body's loops nest in this loop and its accumulators
-    are hoisted into its body, so they cover one input row at a time. The columns
+    are hoisted into its body, so they cover one input row at a time. An EXISTS, COUNT
+    or COLLECT body run this way walks its buffer's tag beside the rows, so each step
+    names the row of the step it answers for. The columns
     must be row-aligned with each other, and there must be at least one - the step's
     row count is read from the first. A `limit` on the enclosing nl.for stops the
     walk over the rows once the budget is spent.
@@ -3907,18 +3909,26 @@ def ExistsMark : NLOp<"exists_mark", [AttrSizedOperandSegments]> {
 
       nl.exists_mark %state, %tag, (%k) : {!nl.chunk<!storage.node_id>}
 
-    The tag is absent when the accumulator has no input column: the step is then the
-    single empty row, which the columns mark when they hold a row at all - which is
-    what they are named for, an untagged mark having nothing else to answer from.
+    The tag is absent when every row the body produced answers for one input row, which
+    the columns mark when they hold a row at all - which is what they are named for, an
+    untagged mark having nothing else to answer from. That row is the one whose position
+    the one-row `row` chunk holds: the row of the step a body run one row at a time is
+    handed, its tag read through nl.each_row. With no `row` it is the single empty row an
+    accumulator with no input column holds.
+
+      nl.exists_mark %state, row %r, (%k) : {!nl.chunk<!storage.node_id>}
   }];
 
   let arguments = (ins NLExistsStateHandle:$state,
                        Optional<NLUInt64Chunk>:$tag,
+                       Optional<NLUInt64Chunk>:$row,
                        Variadic<NLChunk>:$columns);
 
   let assemblyFormat = [{
-    $state `,` ($tag^ `,`)? `(` $columns `)` attr-dict (`:` `{` qualified(type($columns))^ `}`)?
+    $state `,` ($tag^ `,`)? (`row` $row^ `,`)? `(` $columns `)` attr-dict (`:` `{` qualified(type($columns))^ `}`)?
   }];
+
+  let hasVerifier = 1;
 }
 
 /**
@@ -3990,18 +4000,20 @@ def CountSubqueryTally : NLOp<"count_subquery_tally", [AttrSizedOperandSegments]
 
       nl.count_subquery_tally %state, %tag
 
-    A body with no tag answers for a single row - the single empty row, or the one row a
-    body run per row is handed - and adds the row count of `rows` to it instead.
+    A body with no tag answers for a single row and adds the row count of `rows` to it
+    instead: the row whose position the one-row `row` chunk holds - the row of the step a
+    body run one row at a time is handed - or, with no `row`, the single empty row.
 
-      nl.count_subquery_tally %state rows(%k : !nl.chunk<!storage.node_id>)
+      nl.count_subquery_tally %state row %r rows(%k : !nl.chunk<!storage.node_id>)
   }];
 
   let arguments = (ins NLCountSubqueryStateHandle:$state,
                        Optional<NLUInt64Chunk>:$tag,
+                       Optional<NLUInt64Chunk>:$row,
                        Optional<NLChunk>:$rows);
 
   let assemblyFormat = [{
-    $state (`,` $tag^)? (`rows` `(` $rows^ `:` qualified(type($rows)) `)`)? attr-dict
+    $state (`,` $tag^)? (`row` $row^)? (`rows` `(` $rows^ `:` qualified(type($rows)) `)`)? attr-dict
   }];
 
   let hasVerifier = 1;
@@ -4073,7 +4085,7 @@ def RowListsBuffer : NLOp<"row_lists_buffer", [RowAlignedThroughOperands]> {
 */
 // NOT Pure: it stages this step's values in the accumulator, so it must run exactly
 // where it sits (like nl.optional_collect).
-def RowListsCollect : NLOp<"row_lists_collect", []> {
+def RowListsCollect : NLOp<"row_lists_collect", [AttrSizedOperandSegments]> {
   let summary = "Stage what this step of a body's rows contribute to the lists";
 
   let description = [{
@@ -4083,18 +4095,23 @@ def RowListsCollect : NLOp<"row_lists_collect", []> {
 
       nl.row_lists_collect %state, tag %tag, %name : !nl.chunk<!storage.nullable<!storage.string>>
 
-    The tag is absent when the step is a single row: the single empty row where nothing
-    is in flight, or the one row a per-row COLLECT body runs over. Every value belongs to
-    it.
+    The tag is absent when every value belongs to one row: the row whose position the
+    one-row `row` chunk holds - the row of the step a COLLECT body run one row at a time
+    is handed - or, with no `row`, the single empty row where nothing is in flight.
+
+      nl.row_lists_collect %state, row %r, %name : !nl.chunk<!storage.nullable<!storage.string>>
   }];
 
   let arguments = (ins NLRowListsStateHandle:$state,
                        Optional<NLUInt64Chunk>:$tag,
+                       Optional<NLUInt64Chunk>:$row,
                        NLChunk:$value);
 
   let assemblyFormat = [{
-    $state `,` (`tag` $tag^ `,`)? $value attr-dict `:` qualified(type($value))
+    $state `,` (`tag` $tag^ `,`)? (`row` $row^ `,`)? $value attr-dict `:` qualified(type($value))
   }];
+
+  let hasVerifier = 1;
 }
 
 /**

@@ -51,7 +51,9 @@ nl.for ... {
 
 A body with no tag - one run per row, or one over the single empty row - is tallied off the
 row count of a chunk it holds: `nl.count_subquery_tally %state rows(%k : ...)`. That chunk
-is the first one that is not a constant, since a constant holds one cell for every row.
+is the first one that is not a constant, since a constant holds one cell for every row. A
+body run per row names the row it counts toward, `nl.count_subquery_tally %state row %r
+rows(...)`, with the tag `nl.each_row` hands it.
 
 ## 3. UNION
 
@@ -60,20 +62,32 @@ so each branch keeps the tagged path when it can take it. A chain holding a `UNI
 `db.count_subquery` whose body is the `db.union` a CALL body's UNION generates
 (`generateSubqueryUnion`), run one input row at a time so the dedup covers that row alone.
 
-## 4. A body run per row, beside other columns
+## 4. A body run per row
 
-A body run one row at a time opens an `nl.each_row` loop over the step, and the rest of the
-query is lowered inside it. A column computed over the step ahead of the op and read after
-it would still hold the whole step there:
+A body run one row at a time opens an `nl.each_row` loop over the step's chunks and the
+buffer's tag. The accumulator is opened over the whole step ahead of the loop, and the counts
+are read over the step once the loop closes:
+
+```
+%state, %tag = nl.count_subquery_buffer(%p) : {!nl.chunk<!storage.node_id>}
+%rows = nl.each_row{%p, %tag} : {!nl.chunk<!storage.node_id>, !nl.chunk<ui64>}
+nl.for %p1, %r in %rows {
+  ...
+  nl.count_subquery_tally %state row %r rows(%k : !nl.chunk<!storage.node_id>)
+}
+%n = nl.count_subquery_result(%state, %p) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<ui64>
+```
+
+So the op is one count per row of the step on either path, and nothing after it is lowered
+inside the loop. It stands wherever an expression does - a CASE branch, a comprehension, a
+reduce, an UNWIND - and a column read off the step before it is read after it unchanged:
 
 ```
 MATCH (p:Person) RETURN p.name, COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 }
 ```
 
-`p.name` is read off `p` before the COUNT and output after it. `collectReadPastRowLoop` in
-`DBLowering.cpp` finds those columns and the loop takes them along beside the op's inputs.
-It serves `db.exists_subquery` as well, which failed on the same query with "operand does not
-dominate this use".
+An outer LIMIT budgets the scan feeding the step, so at most one chunk of rows runs the body
+past the budget.
 
 ## 5. Tests
 

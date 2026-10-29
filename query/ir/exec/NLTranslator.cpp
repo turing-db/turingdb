@@ -4910,6 +4910,10 @@ void NLTranslator::translateExistsMark(nl::ExistsMark mark, NLStmtContainer* bod
         data->setTag(static_cast<const ColumnVector<uint64_t>*>(getColumn(tag)));
     }
 
+    if (const mlir::Value row = mark.getRow()) {
+        data->setRow(static_cast<const ColumnVector<uint64_t>*>(getColumn(row)));
+    }
+
     for (const mlir::Value column : mark.getColumns()) {
         data->addColumn(getColumn(column));
     }
@@ -4966,12 +4970,17 @@ void NLTranslator::translateCountSubqueryTally(nl::CountSubqueryTally tally, NLS
         tag = static_cast<const ColumnVector<uint64_t>*>(getColumn(tagValue));
     }
 
+    const ColumnVector<uint64_t>* row = nullptr;
+    if (const mlir::Value rowValue = tally.getRow()) {
+        row = static_cast<const ColumnVector<uint64_t>*>(getColumn(rowValue));
+    }
+
     const Column* rows = nullptr;
     if (const mlir::Value rowsValue = tally.getRows()) {
         rows = getColumn(rowsValue);
     }
 
-    NLCountSubqueryTallyData* data = _program->allocFunctionData<NLCountSubqueryTallyData>(state, tag, rows);
+    NLCountSubqueryTallyData* data = _program->allocFunctionData<NLCountSubqueryTallyData>(state, tag, row, rows);
     body->emplaceStmt(&NLExecutor::runCountSubqueryTally, data);
 }
 
@@ -5012,15 +5021,22 @@ void NLTranslator::translateRowListsCollect(nl::RowListsCollect collect, NLStmtC
 
     const mlir::Value value = collect.getValue();
     const mlir::Value tag = collect.getTag();
+    const mlir::Value row = collect.getRow();
 
     const ColumnVector<uint64_t>* tagColumn = nullptr;
     if (tag) {
         tagColumn = static_cast<const ColumnVector<uint64_t>*>(getColumn(tag));
     }
 
+    const ColumnVector<uint64_t>* rowColumn = nullptr;
+    if (row) {
+        rowColumn = static_cast<const ColumnVector<uint64_t>*>(getColumn(row));
+    }
+
     NLRowListsCollectData* data =
         _program->allocFunctionData<NLRowListsCollectData>(state,
                                                            tagColumn,
+                                                           rowColumn,
                                                            getColumn(value),
                                                            selectListItemRead(value.getType()),
                                                            _program->allocStepBuffers());
