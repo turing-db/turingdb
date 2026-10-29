@@ -1066,6 +1066,19 @@ bool dropsRows(mlir::Operation* operation) {
                      mlir::db::RemoveDuplicates>(operation);
 }
 
+// A walk's end set is one relation every seed shares, consumed in full before the walk
+// runs: no column of the rows in flight, though a pass binds it ahead of the function
+bool readsASharedRelation(mlir::OpOperand& operand) {
+    mlir::db::ExplorePaths exploration = mlir::dyn_cast<mlir::db::ExplorePaths>(operand.getOwner());
+    if (!exploration) {
+        return false;
+    }
+
+    const mlir::MutableOperandRange endNodes = exploration.getEndNodesMutable();
+
+    return !endNodes.empty() && &endNodes[0] == &operand;
+}
+
 // Hands every row it reads on as at least one row, and writes nothing. An optional match
 // qualifies: a row its pattern misses comes out padded.
 bool keepsEveryRow(mlir::Operation* operation) {
@@ -4209,8 +4222,10 @@ void DBLowering::lowerConditional(mlir::db::Conditional conditional) {
         outerChunks.push_back(mapValue(column));
     }
 
+    // Codegen hands a WHEN its rows through the columns its branches read, so one reading
+    // none runs once: the loop open before it may be a set a pass scanned ahead of it
     llvm::SmallVector<mlir::Value, 8> reaching(outerChunks.begin(), outerChunks.end());
-    mlir::Value reachingCardinality = cardinalityDriver(reaching);
+    mlir::Value reachingCardinality = reaching.empty() ? mlir::Value() : reaching.front();
 
     const mlir::MutableArrayRef<mlir::Region> regions = conditional.getBranches();
     const size_t conditionCount = regions.size() / 2;
@@ -4365,10 +4380,11 @@ void DBLowering::collectRowColumnsReadByBranches(mlir::db::Conditional condition
             return;
         }
 
-        for (mlir::Value operand : operation->getOperands()) {
+        for (mlir::OpOperand& use : operation->getOpOperands()) {
+            mlir::Value operand = use.get();
             const bool readFromAbove = !holder->isAncestor(operand.getParentRegion()->getParentOp());
             const bool isColumn = mlir::isa<mlir::db::ColumnType>(operand.getType());
-            if (!readFromAbove || !isColumn || seen.contains(operand)) {
+            if (!readFromAbove || !isColumn || readsASharedRelation(use) || seen.contains(operand)) {
                 continue;
             }
 
