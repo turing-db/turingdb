@@ -4,9 +4,10 @@ func.func @main() {
   %1 = db.get_node_properties(%0, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
   %2 = db.count_subquery(%0) {
   ^bb0(%arg0: !db.column<!storage.node_id>):
-    %3, %4, %5, %6 = db.get_out_edges_by_type(%arg0, ["INTERESTED_IN"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-    %7 = db.limit(%6) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
-    db.count_subquery_yield {%7} : {!db.column<!storage.node_id>}
+    %3 = db.row_constant %arg0 : !db.column<!storage.node_id>
+    %4, %5, %6, %7 = db.get_out_edges_by_type(%3, ["INTERESTED_IN"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+    %8 = db.limit(%7) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    db.count_subquery_yield {%8} : {!db.column<!storage.node_id>}
   } : (!db.column<!storage.node_id>) -> !db.column<ui64>
   db.output(%1, %2) names ["p.name", "COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 2 }"] : !db.column<!storage.nullable<!storage.string>>, !db.column<ui64>
   return

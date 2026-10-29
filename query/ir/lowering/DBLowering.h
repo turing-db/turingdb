@@ -242,14 +242,17 @@ private:
     // over @param cardinality, or over a single row where it is null
     void lowerWithConstantsLaidOut(mlir::Operation& operation, mlir::Value cardinality, ChunkPredicate laysOut);
 
-    // Whether @param chunk is a constant node, edge or path, which no kernel reads as a
-    // constant: every op reading one has it laid out over its rows first
-    bool holdsConstantEntities(mlir::Value chunk);
-    bool readsConstantEntities(mlir::Operation& operation);
+    // Whether @param chunk is a constant node, edge, path or mask, which no kernel reads as
+    // a constant: every op reading one has it laid out over its rows first
+    bool isConstantReadAsRows(mlir::Value chunk);
+    bool readsConstantsAsRows(mlir::Operation& operation);
 
     // The chunk of the rows @param operation reads: its first operand that carries rows, or
-    // the relation driving the step
+    // the rows in flight
     mlir::Value rowsReadBy(mlir::Operation& operation);
+
+    // The relation driving the step, or the row the step binds when none does
+    mlir::Value rowsInFlight() const;
 
     // Moves @param computation, and the ops it reads that were placed after the first loop
     // of its block, ahead of that loop, where every loop reading it can see it
@@ -863,8 +866,8 @@ private:
     void rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
 
     // The chunk whose rows the constants of a step are laid out over: the first of
-    // @param chunks carrying rows of its own, and the innermost loop's cardinality when
-    // every one of them is a constant, or there are none.
+    // @param chunks carrying rows of its own, and the rows in flight when every one of
+    // them is a constant, or there are none.
     mlir::Value cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks);
 
     // Follows the cardinality driver through a step that narrows the relation, from the

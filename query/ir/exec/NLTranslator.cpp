@@ -3336,12 +3336,15 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     const bool isList = llvm::isa<storage::ListType>(resultElement);
     const bool isMap = llvm::isa<storage::MapType>(resultElement);
     const bool isEntityOrPath = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType>(resultElement);
+    const bool isMask = llvm::isa<storage::BoolType>(resultElement);
 
     NLBroadcastConstantFunction fill = nullptr;
     if (isUntypedNull) {
         fill = NLExecutor::selectNullConstantBroadcast();
     } else if (isEntityOrPath) {
         fill = NLExecutor::selectConstantPlainBroadcast(chunkKindFromElementType(resultElement), value);
+    } else if (isMask) {
+        fill = NLExecutor::selectConstantMaskBroadcast(value);
     } else if (isList) {
         fill = NLExecutor::selectConstantListBroadcast();
     } else if (isMap) {

@@ -401,6 +401,16 @@ it tells no two rows of that invocation apart. The one barrier it stops at is a 
 over no grouping key: carrying the import would key the reduction, and a keyed reduction
 over no row reports no group where a keyless one still reports its single row.
 
+Past that barrier, and past a NEXT segment, the analyzer declares the import again in the
+new scope under the body's own declaration (`CypherAnalyzer::redeclareDroppedImports`)
+and records it on the WITH or the segment. Both barriers only occur in a body run one
+input row at a time, where an import holds one value for the whole run, as Postgres's
+correlated parameter of a subplan does. The code generator reads each argument of such a
+body through a `db.row_constant` at its top, so an import is a constant there: nothing
+carries it, and an op reading it per row has it laid out over its own rows. Each body
+records its constant imports (`_runConstants`), and a barrier binds the ones it declared
+again from there. Tests: `PerRunImportTest.cpp`.
+
 Tested against the 21 examples of Neo4j's CALL subquery manual page on its own dataset.
 Every example whose other features the engine has returns Neo4j's rows, and each example
 the page marks as rejected is rejected. The rest need `CALL (*)`, conditional
@@ -464,6 +474,5 @@ subquery: the rows pass through, and nothing the body declares is visible after 
 body takes updating clauses only, FOREACH included. Tests: `ForeachTest.cpp`,
 `CallSubqueryImportEverythingTest.cpp`.
 
-Still open: the vectorised forms of section 4, an import read below a keyless reduction in
-the body, and trimming inside the region. The scope
+Still open: the vectorised forms of section 4, and trimming inside the region. The scope
 clause alias is settled: the grammar rejects `CALL (t AS teams)`, as Neo4j does.

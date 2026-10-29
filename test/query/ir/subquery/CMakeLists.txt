@@ -238,3 +238,6 @@ add_ir_tests(test_query_ir_collect_subquery_yield_format CollectSubqueryYieldFor
 
 # db.row_constant: a node, an edge or a path a body run once per row reads as a constant.
 add_ir_tests(test_query_ir_row_constant RowConstantTest.cpp)
+
+# A body run once per row reads its imports past every barrier: TUR-304.
+add_turing_test(test_query_ir_per_run_import PerRunImportTest.cpp)

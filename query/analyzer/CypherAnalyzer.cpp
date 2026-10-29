@@ -425,7 +425,7 @@ void CypherAnalyzer::analyze(WithStmt* withSt) {
     analyzeWithAliases(projection);
     analyzeProjection(projection, withSt);
 
-    openWithScope(projection);
+    openWithScope(withSt);
 
     const WhereClause* where = withSt->getWhere();
     if (!where) {
@@ -461,10 +461,17 @@ void CypherAnalyzer::analyze(WithStmt* withSt) {
 
 // The names a WITH gives its columns are the whole scope of what follows, so a statement
 // after the barrier resolves its items and nothing the projection dropped
-void CypherAnalyzer::openWithScope(Projection* projection) {
+void CypherAnalyzer::openWithScope(WithStmt* withSt) {
     DeclContext* scope = DeclContext::create(_ast, _ctxt);
 
-    publishProjection(projection, scope);
+    publishProjection(withSt->getProjection(), scope);
+
+    std::vector<const VarDecl*> redeclared;
+    redeclareDroppedImports(scope, redeclared);
+
+    for (const VarDecl* decl : redeclared) {
+        withSt->addRedeclaredImport(decl);
+    }
 
     setScope(scope);
 }
@@ -536,64 +543,17 @@ void CypherAnalyzer::analyze(NextSegmentStmt* segment) {
     DeclContext* scope = DeclContext::create(_ast, _ctxt);
 
     if (body->isReturning()) {
-        carrySegmentImports(body, returnScopes);
         publishBranchReturns(body, scope);
-    } else {
-        for (const std::string_view import : _subqueryImports) {
-            const VarDecl* decl = _ctxt->getDecl(import);
-            if (!decl) {
-                continue;
-            }
+    }
 
-            VarDecl* carried = scope->getOrCreateNamedVariable(_ast, decl->getType(), import);
-            carried->setExprType(decl->getExprType());
-            carried->setIsQuantifiedPath(decl->isQuantifiedPath());
-            _declSources[carried] = decl;
+    std::vector<const VarDecl*> redeclared;
+    redeclareDroppedImports(scope, redeclared);
 
-            segment->addCarriedImport(carried);
-        }
+    for (const VarDecl* decl : redeclared) {
+        segment->addRedeclaredImport(decl);
     }
 
     setScope(scope);
-}
-
-// The branches return one table, so either every one of them carries the imports of the
-// CALL around the segment or none does
-void CypherAnalyzer::carrySegmentImports(RegularQuery* body, std::span<DeclContext* const> returnScopes) {
-    if (_subqueryImports.empty()) {
-        return;
-    }
-
-    std::vector<SinglePartQuery*> branches;
-    RegularQuery::collectSingleQueries(body, branches);
-
-    // A keyless aggregate, or a WITH of the branch that dropped an import, stops the imports
-    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        const ReturnStmt* returnStmt = branches[branchIndex]->getReturnStmt();
-        const Projection* projection = returnStmt->getProjection();
-        const DeclContext* returnScope = returnScopes[branchIndex];
-
-        const bool keyless = projection->isAggregate() && !projection->hasGroupingKeys();
-        const auto dropped = [returnScope](std::string_view import) {
-            return !returnScope->getDecl(import);
-        };
-
-        if (keyless || std::ranges::any_of(_subqueryImports, dropped)) {
-            return;
-        }
-    }
-
-    DeclContext* const outer = _ctxt;
-
-    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
-        ReturnStmt* returnStmt = branches[branchIndex]->getReturnStmt();
-        Projection* projection = returnStmt->getProjection();
-
-        setScope(returnScopes[branchIndex]);
-        carrySubqueryImports(projection, projection->isAggregate(), projection->hasGroupingKeys());
-    }
-
-    setScope(outer);
 }
 
 void CypherAnalyzer::analyzeSubqueryBody(RegularQuery* body,
@@ -655,10 +615,10 @@ DeclContext* CypherAnalyzer::analyzeSubqueryBranch(SinglePartQuery* query,
     // does a segment, whose WITH reads the whole table and groups it on its own keys.
     const bool keepsEnclosingImports = mode == BranchImports::NEXT_SEGMENT;
 
-    std::vector<std::string_view> outerImports;
+    std::vector<VarDecl*> outerImports;
     if (mode == BranchImports::SCOPE_CLAUSE) {
         for (const Symbol* import : imports) {
-            outerImports.push_back(import->getName());
+            outerImports.push_back(inner->getDecl(import->getName()));
         }
     }
 
@@ -846,7 +806,7 @@ void CypherAnalyzer::analyzeCorrelatedPredicates(ConditionalQuery* conditional) 
     DeclContext* const outer = _ctxt;
     DeclContext* const inner = conditional->getDeclContext();
 
-    std::vector<std::string_view> correlated;
+    std::vector<VarDecl*> correlated;
     importCorrelatedVariables(inner, correlated);
 
     setScope(inner);
@@ -865,7 +825,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
     // Each variable in flight stays readable through the whole body, as what a CALL's scope
     // clause names does: a WITH inside it carries them past the barrier rather than descoping
     // them, which is what keeps a pattern below that WITH reading the row the EXISTS answers for
-    std::vector<std::string_view> correlated;
+    std::vector<VarDecl*> correlated;
     importCorrelatedVariables(inner, correlated);
 
     const Projection* const orderedProjection = std::exchange(_orderedProjection, nullptr);
@@ -893,7 +853,7 @@ void CypherAnalyzer::analyzeExistsBranch(const SinglePartQuery* body) {
 
 // EXISTS is correlated: the body reads every variable in flight, through declarations of
 // its own, so the variables it binds stay inside it
-void CypherAnalyzer::importCorrelatedVariables(DeclContext* inner, std::vector<std::string_view>& correlated) {
+void CypherAnalyzer::importCorrelatedVariables(DeclContext* inner, std::vector<VarDecl*>& correlated) {
     DeclContext* const outer = _ctxt;
 
     const auto importDecl = [this, inner, &correlated](std::string_view name, const VarDecl* decl) {
@@ -904,7 +864,7 @@ void CypherAnalyzer::importCorrelatedVariables(DeclContext* inner, std::vector<s
         _declSources[imported] = decl;
         _exprAnalyzer->importCSVSource(imported, decl);
 
-        correlated.push_back(name);
+        correlated.push_back(imported);
     };
 
     for (const VarDecl* decl : outer->decls()) {
@@ -1066,7 +1026,8 @@ bool CypherAnalyzer::carrySubqueryImports(Projection* projection,
 
     bool carried = false;
 
-    for (const std::string_view import : _subqueryImports) {
+    for (const VarDecl* importDecl : _subqueryImports) {
+        const std::string_view import = importDecl->getName();
         VarDecl* decl = _ctxt->getDecl(import);
         if (!decl) {
             continue;
@@ -1084,6 +1045,15 @@ bool CypherAnalyzer::carrySubqueryImports(Projection* projection,
     }
 
     return carried;
+}
+
+void CypherAnalyzer::redeclareDroppedImports(DeclContext* scope, std::vector<const VarDecl*>& redeclared) const {
+    for (VarDecl* importDecl : _subqueryImports) {
+        if (!scope->getDecl(importDecl->getName())) {
+            scope->redeclare(importDecl);
+            redeclared.push_back(importDecl);
+        }
+    }
 }
 
 void CypherAnalyzer::throwOnRedeclaredImport(const Projection* projection,
@@ -1396,7 +1366,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
 
     const bool rebindsAnImport = declared
                                  && declared != aliasedDecl
-                                 && std::ranges::find(_subqueryImports, alias) != _subqueryImports.end();
+                                 && std::ranges::find(_subqueryImports, alias, &VarDecl::getName) != _subqueryImports.end();
 
     if (rebindsAnImport) {
         throwError(fmt::format("Variable '{}' is imported by the subquery: a clause of the subquery "

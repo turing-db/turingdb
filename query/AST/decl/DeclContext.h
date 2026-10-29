@@ -63,6 +63,10 @@ public:
 
     void declareAlias(std::string_view name, VarDecl* decl);
 
+    // Declares @param decl, a variable of an enclosing scope, in this one too, where a
+    // wildcard returns it as it returns the variables this scope declares
+    void redeclare(VarDecl* decl);
+
 private:
     DeclContext* _parent {nullptr};
     bool _readsEnclosing {false};

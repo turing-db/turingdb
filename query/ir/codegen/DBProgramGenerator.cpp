@@ -4438,11 +4438,18 @@ const DBProgramGenerator::PartScope::WrittenEntity* DBProgramGenerator::findWrit
     }
 
     const auto findIt = _part._writtenEntities.find(decl);
-    if (findIt == end(_part._writtenEntities)) {
-        return nullptr;
+    if (findIt != end(_part._writtenEntities)) {
+        return &findIt->second;
     }
 
-    return &findIt->second;
+    // An import of a body run once per row is what the write ahead of the body left it,
+    // past every barrier of the body
+    const auto runConstantIt = _runConstants.find(decl);
+    if (runConstantIt != _runConstants.end() && runConstantIt->second._written) {
+        return &*runConstantIt->second._written;
+    }
+
+    return nullptr;
 }
 
 bool DBProgramGenerator::isPendingThroughout(const VarDecl* decl) const {
@@ -5691,6 +5698,10 @@ void DBProgramGenerator::publishProjection(const Projection* projection,
         collectPendingMasks(projection, names, carriedColumns);
     }
 
+    if (with) {
+        appendRedeclaredImports(with->redeclaredImports(), carriedColumns);
+    }
+
     translateProjectionTail(projection, variableColumns, projected, carriedColumns);
 
     publishBoundColumns(projection, names, projected, carriedColumns);
@@ -5888,14 +5899,14 @@ void DBProgramGenerator::generateNextSegment(const NextSegmentStmt* segment) {
     if (!body->isReturning()) {
         generateUpdatingSegment(segment);
     } else if (body->getBody()->getKind() == QueryCommand::Kind::CONDITIONAL_QUERY) {
-        generateConditionalSegment(body);
+        generateConditionalSegment(segment);
     } else {
-        generateUnionSegment(body);
+        generateUnionSegment(segment);
     }
 }
 
-void DBProgramGenerator::generateUnionSegment(const CallSubqueryStmt* body) {
-    const UnionQuery* unionQuery = static_cast<const UnionQuery*>(body->getBody());
+void DBProgramGenerator::generateUnionSegment(const NextSegmentStmt* segment) {
+    const UnionQuery* unionQuery = static_cast<const UnionQuery*>(segment->getBody()->getBody());
     const UnionQuery::Branches& branches = unionQuery->branches();
     const size_t dedupedBranches = unionQuery->getDedupedBranchCount();
     mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
@@ -5943,15 +5954,19 @@ void DBProgramGenerator::generateUnionSegment(const CallSubqueryStmt* body) {
 
     std::swap(_importedCSVRows, outerImportedCSVRows);
 
+    appendRedeclaredImports(segment->redeclaredImports(), yielded);
+
     rebindScope(yielded);
     bindReturnedEntities(returnedEntities);
 }
 
 // What a branch returns replaces the row, so a name the row held and the branch returns
 // again is bound afresh rather than beside the input it came from
-void DBProgramGenerator::generateConditionalSegment(const CallSubqueryStmt* body) {
+void DBProgramGenerator::generateConditionalSegment(const NextSegmentStmt* segment) {
     SubqueryResults results;
-    emitCallSubquery(body, results);
+    emitCallSubquery(segment->getBody(), results);
+
+    appendRedeclaredImports(segment->redeclaredImports(), results._returned);
 
     rebindScope(results._returned);
     bindReturnedEntities(results._returnedEntities);
@@ -6024,16 +6039,10 @@ void DBProgramGenerator::generateUpdatingSegment(const NextSegmentStmt* segment)
                                                                              /*optional=*/false);
     callOp.getBody().takeBody(bodyRegion);
 
-    llvm::SmallVector<PublishedColumn> carried;
-    for (const VarDecl* decl : segment->getCarriedImports()) {
-        const std::string_view name = decl->getName();
-        const auto columnIt = std::ranges::find(_subqueryRowColumns, name, &PublishedColumn::_name);
-        bioassert(columnIt != _subqueryRowColumns.end(), "Import '{}' of no CALL row", name);
+    llvm::SmallVector<PublishedColumn> redeclared;
+    appendRedeclaredImports(segment->redeclaredImports(), redeclared);
 
-        carried.push_back({decl, std::string(name), columnIt->_column});
-    }
-
-    rebindScope(carried);
+    rebindScopeKeepingWrittenEntities(redeclared);
 }
 
 void DBProgramGenerator::materializeTable(SegmentTable& table) {
@@ -6151,15 +6160,13 @@ void DBProgramGenerator::emitCallSubquery(const CallSubqueryStmt* subquery, Subq
     std::unordered_set<std::string_view> outerImportedCSVRows;
     std::swap(_importedCSVRows, outerImportedCSVRows);
 
-    llvm::SmallVector<PublishedColumn> rowColumns(constants.begin(), constants.end());
-    for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
-        const PublishedColumn& input = inputs[inputIndex];
-        rowColumns.push_back({input._decl, input._name, inputArguments[inputIndex]});
-    }
-
-    std::swap(_subqueryRowColumns, rowColumns);
+    const std::unordered_map<const VarDecl*, RunConstant> outerRunConstants = _runConstants;
 
     _opBuilder.setInsertionPointToStart(bodyBlock);
+
+    if (!carriesScope) {
+        readArgumentsAsRunConstants(bodyBlock, scopes);
+    }
 
     llvm::SmallVector<PublishedColumn> yielded;
     CarriedEntities returnedEntities;
@@ -6245,7 +6252,7 @@ void DBProgramGenerator::emitCallSubquery(const CallSubqueryStmt* subquery, Subq
     _vdg = std::move(outerGraph);
 
     std::swap(_importedCSVRows, outerImportedCSVRows);
-    std::swap(_subqueryRowColumns, rowColumns);
+    _runConstants = outerRunConstants;
 
     if (!returning) {
         return;
@@ -6539,6 +6546,8 @@ void DBProgramGenerator::rebindSubqueryBranchScope(const BranchScope& scope) {
         _part._writtenEntities[decl] = written;
     }
 
+    registerRunConstants(scope);
+
     _importedCSVRows.clear();
 
     for (const PublishedColumn& column : scope._columns) {
@@ -6550,6 +6559,99 @@ void DBProgramGenerator::rebindSubqueryBranchScope(const BranchScope& scope) {
         } else if (decl && decl->getType() == EvaluatedType::StringTable) {
             _importedCSVRows.insert(decl->getName());
         }
+    }
+}
+
+void DBProgramGenerator::readArgumentsAsRunConstants(mlir::Block* bodyBlock, BodyScopes& scopes) {
+    llvm::SmallVector<bool> read(bodyBlock->getNumArguments(), false);
+
+    for (const auto& [query, scope] : scopes) {
+        for (const PublishedColumn& column : scope._columns) {
+            const auto argument = mlir::dyn_cast<mlir::BlockArgument>(column._column);
+            if (argument && argument.getOwner() == bodyBlock) {
+                read[argument.getArgNumber()] = true;
+            }
+        }
+    }
+
+    llvm::DenseMap<mlir::Value, mlir::Value> constants;
+    for (const mlir::BlockArgument argument : bodyBlock->getArguments()) {
+        if (read[argument.getArgNumber()]) {
+            constants[argument] = _opBuilder.create<mlir::db::RowConstant>(_opBuilder.getUnknownLoc(), argument).getResult();
+        }
+    }
+
+    for (auto& [query, scope] : scopes) {
+        for (PublishedColumn& column : scope._columns) {
+            const auto constantIt = constants.find(column._column);
+            if (constantIt != constants.end()) {
+                column._column = constantIt->second;
+            }
+        }
+    }
+}
+
+void DBProgramGenerator::registerRunConstants(const BranchScope& scope) {
+    for (const PublishedColumn& column : scope._columns) {
+        if (column._decl && yieldsConstantColumn(column._column, _constantColumns)) {
+            _runConstants[column._decl] = RunConstant {{column}, std::nullopt};
+        }
+    }
+
+    // A mask is read beside the entity it is the mask of, so it is bound with that entity
+    for (const PublishedColumn& column : scope._columns) {
+        const std::string_view name = column._name;
+        if (!name.starts_with(pendingMaskPrefix) || !yieldsConstantColumn(column._column, _constantColumns)) {
+            continue;
+        }
+
+        const std::string_view entityName = name.substr(pendingMaskPrefix.size());
+        const auto entityIt = std::ranges::find(scope._columns, entityName, &PublishedColumn::_name);
+        const auto runConstantIt = entityIt != scope._columns.end() ? _runConstants.find(entityIt->_decl)
+                                                                    : _runConstants.end();
+
+        if (runConstantIt != _runConstants.end()) {
+            runConstantIt->second._columns.push_back(column);
+        }
+    }
+
+    for (const auto& [decl, written] : scope._importedEntities) {
+        const auto runConstantIt = _runConstants.find(decl);
+        if (runConstantIt != _runConstants.end()) {
+            runConstantIt->second._written = written;
+        }
+    }
+}
+
+void DBProgramGenerator::appendRedeclaredImports(std::span<const VarDecl* const> redeclared,
+                                                 llvm::SmallVectorImpl<PublishedColumn>& published) const {
+    const auto append = [&published](const RunConstant& runConstant) {
+        for (const PublishedColumn& column : runConstant._columns) {
+            if (std::ranges::find(published, column._name, &PublishedColumn::_name) == published.end()) {
+                published.push_back(column);
+            }
+        }
+    };
+
+    for (const VarDecl* decl : redeclared) {
+        // A CSV row is bound through the columns of the fields it is read through, each
+        // under the field's declaration
+        if (decl->getType() == EvaluatedType::StringTable) {
+            for (const auto& [fieldDecl, runConstant] : _runConstants) {
+                if (findCSVFieldRow(fieldDecl) == decl->getName()) {
+                    append(runConstant);
+                }
+            }
+
+            continue;
+        }
+
+        const auto runConstantIt = _runConstants.find(decl);
+        bioassert(runConstantIt != _runConstants.end(),
+                  "Import '{}' declared again past a barrier, with no constant for the run",
+                  decl->getName());
+
+        append(runConstantIt->second);
     }
 }
 
@@ -8640,6 +8742,10 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
         }
     }
 
+    if (!carriesScope) {
+        readArgumentsAsRunConstants(bodyBlock, scopes);
+    }
+
     // What the query holds is set aside while the body builds a scope of its own: the body
     // binds nothing the query goes on to read, the op handing back one column and no other
     PartScope outerPart = std::move(_part);
@@ -8647,6 +8753,8 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
 
     std::unordered_set<std::string_view> outerImportedCSVRows;
     std::swap(_importedCSVRows, outerImportedCSVRows);
+
+    const std::unordered_map<const VarDecl*, RunConstant> outerRunConstants = _runConstants;
 
     llvm::SmallVector<PublishedColumn> held;
 
@@ -8702,6 +8810,7 @@ mlir::Value DBProgramGenerator::generateSubqueryExpression(const RegularQuery* b
     _vdg = std::move(outerGraph);
 
     std::swap(_importedCSVRows, outerImportedCSVRows);
+    _runConstants = outerRunConstants;
 
     return subqueryOp.getResult();
 }

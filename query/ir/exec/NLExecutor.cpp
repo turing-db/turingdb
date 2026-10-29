@@ -1819,6 +1819,26 @@ void broadcastConstantPlainColumn(const Column* value, size_t rowCount, Column* 
     std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
 }
 
+// The mask sibling of broadcastConstantPlainColumn: a mask holds its rows as flags, and
+// its constant as the boolean every row carries
+void broadcastConstantMaskColumn(const Column* value, size_t rowCount, Column* output) {
+    const auto* typedValue = static_cast<const ColumnConst<types::Bool::Primitive>*>(value);
+    ColumnMask* typedOutput = static_cast<ColumnMask*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, ColumnMask::Bool_t(typedValue->getRaw()._boolean));
+}
+
+// The one row of a mask, held as the boolean constant it stands for
+void readSingleMaskRowAsConstant(Column* result, const Column* row) {
+    const std::vector<ColumnMask::Bool_t>& rowRaw = static_cast<const ColumnMask*>(row)->getRaw();
+    bioassert(rowRaw.size() == 1, "A computation over constants did not write a single row.");
+
+    static_cast<ColumnConst<types::Bool::Primitive>*>(result)->set(types::Bool::Primitive(rowRaw.front()));
+}
+
 // The one row a computation over constants wrote, held as the constant it stands for
 template <typename Element>
 void readSingleRowAsConstant(Column* result, const Column* row) {
@@ -11342,6 +11362,13 @@ NLBroadcastConstantFunction NLExecutor::selectConstantPlainBroadcast(NLChunkKind
     return fill;
 }
 
+NLBroadcastConstantFunction NLExecutor::selectConstantMaskBroadcast(const Column* value) {
+    bioassert(value->getKind() == ColumnConst<types::Bool::Primitive>::staticKind(),
+              "A mask laid out over rows is read as the boolean nl.row_constant made of it");
+
+    return &broadcastConstantMaskColumn;
+}
+
 NLBroadcastConstantFunction NLExecutor::selectOptCellBroadcast(const Column* value) {
     const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
     const bool holdsOptional = value->getInternalKind() == InternalKind::code<std::optional<CellView>>();
@@ -11378,6 +11405,11 @@ NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueT
 }
 
 NLUnaryFn NLExecutor::selectRowConstant(const Column* row, LocalMemory* memory, Column*& result) {
+    if (row->getKind() == ColumnMask::staticKind()) {
+        result = memory->alloc<ColumnConst<types::Bool::Primitive>>();
+        return &readSingleMaskRowAsConstant;
+    }
+
     NLUnaryFn read = nullptr;
 
     const auto selectForElement = [&]<typename Element>() {

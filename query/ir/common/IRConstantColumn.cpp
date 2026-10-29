@@ -19,7 +19,9 @@ void collectReadValues(mlir::Operation* operation, llvm::SmallVectorImpl<mlir::V
         }
 
         for (mlir::Value operand : nested->getOperands()) {
-            if (!operation->isAncestor(operand.getParentRegion()->getParentOp())) {
+            // A body is built in a region no op holds yet, and what it binds is read from above
+            mlir::Operation* const definingScope = operand.getParentRegion()->getParentOp();
+            if (!definingScope || !operation->isAncestor(definingScope)) {
                 reads.push_back(operand);
             }
         }

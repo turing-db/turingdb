@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -327,9 +328,17 @@ private:
     // handed the field's column with it
     std::unordered_map<const VarDecl*, std::string_view> _csvFieldRows;
 
-    // The columns of the row the CALL body being generated runs for, as its block
-    // arguments and the constants it reads where they are bound
-    llvm::SmallVector<PublishedColumn> _subqueryRowColumns;
+    // An import of a body as the body binds it: its column, its pending mask and the fields
+    // of a CSV row, and what a write ahead of the body knows of it
+    struct RunConstant {
+        llvm::SmallVector<PublishedColumn> _columns;
+        std::optional<PartScope::WrittenEntity> _written;
+    };
+
+    // The constant imports of every body, by the declaration the body reads them under. In a
+    // body run once per row each import holds one value for the run, and a barrier of that
+    // body that drops one declares it again, bound again from here.
+    std::unordered_map<const VarDecl*, RunConstant> _runConstants;
 
     // The LOAD CSV rows the subquery body being generated imports. A body that groups or
     // dedups runs one input row at a time, so such a row holds one record there and the
@@ -394,8 +403,8 @@ private:
     void generateCallSubquery(const CallSubqueryStmt* subquery);
 
     void generateNextSegment(const NextSegmentStmt* segment);
-    void generateUnionSegment(const CallSubqueryStmt* body);
-    void generateConditionalSegment(const CallSubqueryStmt* body);
+    void generateUnionSegment(const NextSegmentStmt* segment);
+    void generateConditionalSegment(const NextSegmentStmt* segment);
     void generateUpdatingSegment(const NextSegmentStmt* segment);
 
     void splitConstantColumns(llvm::ArrayRef<PublishedColumn> columns,
@@ -644,6 +653,18 @@ private:
     };
 
     void rebindSubqueryBranchScope(const BranchScope& scope);
+
+    // A body run once per row reads each argument of @param bodyBlock that @param scopes
+    // bind as the constant it is for the run: a db.row_constant at the top of the body
+    void readArgumentsAsRunConstants(mlir::Block* bodyBlock, BodyScopes& scopes);
+
+    // Records the constant imports @param scope binds in _runConstants
+    void registerRunConstants(const BranchScope& scope);
+
+    // Appends to @param published the columns each import of @param redeclared is bound
+    // through for the run: a barrier dropped it, and the analyzer declared it again behind
+    void appendRedeclaredImports(std::span<const VarDecl* const> redeclared,
+                                 llvm::SmallVectorImpl<PublishedColumn>& published) const;
 
     void generateConditionRegion(const Expr* predicate,
                                  mlir::Block* bodyBlock,

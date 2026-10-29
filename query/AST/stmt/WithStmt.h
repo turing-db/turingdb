@@ -25,17 +25,23 @@ public:
     // The variables the WHERE reads that the projection drops
     const std::vector<const VarDecl*>& filterImports() const { return _filterImports; }
 
+    // The imports of a body run once per row that the projection drops, declared again
+    // behind it: each holds one value for the whole run
+    const std::vector<const VarDecl*>& redeclaredImports() const { return _redeclaredImports; }
+
     // Whether this is the RETURN a NEXT follows, which imports nothing into a CALL body
     bool isSegmentReturn() const { return _segmentReturn; }
 
     void setWhere(WhereClause* where) { _where = where; }
     void addFilterImport(const VarDecl* decl) { _filterImports.push_back(decl); }
+    void addRedeclaredImport(const VarDecl* decl) { _redeclaredImports.push_back(decl); }
     void setSegmentReturn(bool segmentReturn) { _segmentReturn = segmentReturn; }
 
 private:
     Projection* _projection {nullptr};
     WhereClause* _where {nullptr};
     std::vector<const VarDecl*> _filterImports;
+    std::vector<const VarDecl*> _redeclaredImports;
     bool _segmentReturn {false};
 
     explicit WithStmt(Projection* projection);

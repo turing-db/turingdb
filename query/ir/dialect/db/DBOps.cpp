@@ -538,6 +538,22 @@ LogicalResult verifyHopRegion(Operation* op, Region& hop, size_t step, ValueRang
     return success();
 }
 
+// A body run once per row holds one value per argument for the whole run, and reads it as
+// the constant it is: read directly, an argument would be a column of its own rows
+LogicalResult verifyArgumentsReadAsRunConstants(Operation* subquery, Block& body) {
+    for (BlockArgument argument : body.getArguments()) {
+        for (Operation* user : argument.getUsers()) {
+            if (!isa<RowConstant>(user)) {
+                return subquery->emitOpError("a body run once per row reads argument ")
+                       << argument.getArgNumber() << " through db.row_constant, not through "
+                       << user->getName();
+            }
+        }
+    }
+
+    return success();
+}
+
 template <typename YieldOp, typename SubqueryOp>
 LogicalResult verifySubqueryExpression(SubqueryOp subquery) {
     Block& bodyBlock = subquery.getBody().front();
@@ -580,6 +596,10 @@ LogicalResult verifySubqueryExpression(SubqueryOp subquery) {
     // one; a tagged body is answered for by the tag, and holds whatever its clauses left.
     if (!tagsRows && yield.getColumns().empty()) {
         return subquery.emitOpError("an untagged body must yield at least one column, to answer from its rows");
+    }
+
+    if (!subquery.getCarriesScope()) {
+        return verifyArgumentsReadAsRunConstants(subquery.getOperation(), bodyBlock);
     }
 
     return success();
@@ -2345,6 +2365,12 @@ LogicalResult CallSubquery::verify() {
     const bool yieldsATag = yield.getTag() != nullptr;
     if (tagsRows != yieldsATag) {
         return emitOpError("the body yields a row tag exactly when it takes one");
+    }
+
+    const bool readsArgumentsAsColumns = !getCarriesScope()
+                                      && failed(verifyArgumentsReadAsRunConstants(getOperation(), bodyBlock));
+    if (readsArgumentsAsColumns) {
+        return failure();
     }
 
     const ValueRange yieldedColumns = yield.getColumns();

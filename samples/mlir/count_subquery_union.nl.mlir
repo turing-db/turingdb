@@ -10,25 +10,28 @@ func.func @main() {
     nl.for %arg1, %arg2 in %5 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>> {
       %6 = nl.row_buffer
       %7 = nl.distinct
+      %8 = nl.row_constant %arg1 : <!storage.node_id>
       %state, %tag = nl.count_subquery_buffer(%arg1) : {!nl.chunk<!storage.node_id>}
-      %8 = nl.get_out_edges_by_type(%arg1, %1, {})
-      nl.for %arg3, %arg4, %arg5, %arg6 in %8 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
-        %12 = nl.get_node_properties(%arg6, %2) : !nl.chunk<!storage.nullable<!storage.string>>
-        %14 = nl.distinct_filter %7, (%12) : !nl.chunk<!storage.nullable<!storage.string>>
-        nl.row_collect %6, (%14) : !nl.chunk<!storage.nullable<!storage.string>>
+      %9 = nl.broadcast_constant %8, %arg1 : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+      %10 = nl.get_out_edges_by_type(%9, %1, {})
+      nl.for %arg3, %arg4, %arg5, %arg6 in %10 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+        %15 = nl.get_node_properties(%arg6, %2) : !nl.chunk<!storage.nullable<!storage.string>>
+        %16 = nl.distinct_filter %7, (%15) : !nl.chunk<!storage.nullable<!storage.string>>
+        nl.row_collect %6, (%16) : !nl.chunk<!storage.nullable<!storage.string>>
       }
-      %9 = nl.get_out_edges_by_type(%arg1, %0, {})
-      nl.for %arg3, %arg4, %arg5, %arg6 in %9 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
-        %12 = nl.get_node_properties(%arg6, %2) : !nl.chunk<!storage.nullable<!storage.string>>
-        %14 = nl.distinct_filter %7, (%12) : !nl.chunk<!storage.nullable<!storage.string>>
-        nl.row_collect %6, (%14) : !nl.chunk<!storage.nullable<!storage.string>>
+      %11 = nl.broadcast_constant %8, %arg1 : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+      %12 = nl.get_out_edges_by_type(%11, %0, {})
+      nl.for %arg3, %arg4, %arg5, %arg6 in %12 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+        %15 = nl.get_node_properties(%arg6, %2) : !nl.chunk<!storage.nullable<!storage.string>>
+        %16 = nl.distinct_filter %7, (%15) : !nl.chunk<!storage.nullable<!storage.string>>
+        nl.row_collect %6, (%16) : !nl.chunk<!storage.nullable<!storage.string>>
       }
-      %10 = nl.row_drain(%6) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>>
-      nl.for %arg3 in %10 : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>> {
+      %13 = nl.row_drain(%6) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>>
+      nl.for %arg3 in %13 : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>> {
         nl.count_subquery_tally %state rows(%arg3 : !nl.chunk<!storage.nullable<!storage.string>>)
       }
-      %11 = nl.count_subquery_result(%state, %arg1) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<ui64>
-      nl.output(%arg2, %11) names ["p.name", "COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i.name AS name UNION MATCH (p)-[:KNOWS_WELL]->(k) RETURN k.name AS name }"] : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<ui64>
+      %14 = nl.count_subquery_result(%state, %arg1) : (!nl.chunk<!storage.node_id>) -> !nl.chunk<ui64>
+      nl.output(%arg2, %14) names ["p.name", "COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i.name AS name UNION MATCH (p)-[:KNOWS_WELL]->(k) RETURN k.name AS name }"] : !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<ui64>
     }
   }
   return

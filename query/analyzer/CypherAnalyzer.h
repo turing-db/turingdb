@@ -130,11 +130,11 @@ private:
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
 
-    // The names the scope clause of the subquery being analyzed imports, empty outside one
-    // and while a nested body is analyzed under its own. A body importing through a
-    // leading WITH holds none: those names are an ordinary projection, which an ordinary
-    // WITH descopes.
-    std::vector<std::string_view> _subqueryImports;
+    // What the scope clause of the subquery being analyzed imports, as the body declares
+    // it, empty outside one and while a nested body is analyzed under its own. A body
+    // importing through a leading WITH holds none: those names are an ordinary projection,
+    // which an ordinary WITH descopes.
+    std::vector<VarDecl*> _subqueryImports;
 
     constexpr static int64_t MAX_VECTOR_INDEX_DIMENSION = 8192;
 
@@ -158,7 +158,7 @@ private:
     void analyzeQueryBody(const SinglePartQuery* query, bool returnRequired);
 
     void analyzeProjection(Projection* projection, const Stmt* clause);
-    void openWithScope(Projection* projection);
+    void openWithScope(WithStmt* withSt);
 
     // Declares one variable per projected item in @param scope, under the name the item
     // publishes, and records it on the projection for the code generator to bind
@@ -191,7 +191,6 @@ private:
                                       BranchImports mode);
     void analyzePredicates(const ConditionalQuery* conditional);
 
-    void carrySegmentImports(RegularQuery* body, std::span<DeclContext* const> returnScopes);
     void importIntoQuery(RegularQuery* query,
                          std::span<const Symbol* const> imports,
                          DeclContext* outer,
@@ -209,8 +208,8 @@ private:
     void analyzeExistsBranch(const SinglePartQuery* body);
 
     // Declares in @param inner every variable in flight, and fills @param correlated with
-    // their names
-    void importCorrelatedVariables(DeclContext* inner, std::vector<std::string_view>& correlated);
+    // those declarations
+    void importCorrelatedVariables(DeclContext* inner, std::vector<VarDecl*>& correlated);
 
     // Declares what a returning body publishes in the scope around the CALL, rejecting a
     // name that scope already holds
@@ -224,6 +223,12 @@ private:
     // Adds to a barrier of a subquery body the imports it does not project, so what the
     // scope clause named stays readable below it. Answers whether it added one.
     bool carrySubqueryImports(Projection* projection, bool isAggregate, bool hasGroupingKeys) const;
+
+    // Declares again in @param scope, opened by a barrier of a subquery body, each import
+    // the barrier did not carry, and fills @param redeclared with them. A barrier that
+    // carries nothing is one only a body run once per row has, where an import holds one
+    // value for the whole run.
+    void redeclareDroppedImports(DeclContext* scope, std::vector<const VarDecl*>& redeclared) const;
 
     // Rejects the item that publishes an imported name under another variable
     void throwOnRedeclaredImport(const Projection* projection,

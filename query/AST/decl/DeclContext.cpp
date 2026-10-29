@@ -127,6 +127,11 @@ void DeclContext::declareAlias(std::string_view name, VarDecl* decl) {
     _declMap[name] = decl;
 }
 
+void DeclContext::redeclare(VarDecl* decl) {
+    _declMap[decl->getName()] = decl;
+    _decls.push_back(decl);
+}
+
 void DeclContext::addDecl(VarDecl* decl) {
     _decls.push_back(decl);
 }

@@ -1225,9 +1225,9 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerOnceOverConstants(operation);
     } else if (raisesOverConstants(operation)) {
         lowerOverReachingRows(operation);
-    } else if (readsConstantEntities(operation)) {
+    } else if (readsConstantsAsRows(operation)) {
         lowerWithConstantsLaidOut(operation, rowsReadBy(operation), [this](mlir::Value chunk) {
-            return holdsConstantEntities(chunk);
+            return isConstantReadAsRows(chunk);
         });
     } else {
         lowerOperationByKind(operation);
@@ -1235,28 +1235,47 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
 
 }
 
-bool DBLowering::holdsConstantEntities(mlir::Value chunk) {
-    const bool holdsEntities = isEntityChunk(chunk.getType()) || isPathChunk(chunk.getType());
+bool DBLowering::isConstantReadAsRows(mlir::Value chunk) {
+    const auto chunkType = mlir::dyn_cast<nl::ChunkType>(chunk.getType());
+    if (!chunkType) {
+        return false;
+    }
 
-    return holdsEntities && yieldsConstantColumn(chunk, _constantColumns);
+    const mlir::Type element = chunkType.getElementType();
+    const bool readAsRows = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::BoolType>(element);
+
+    return readAsRows && yieldsConstantColumn(chunk, _constantColumns);
 }
 
-bool DBLowering::readsConstantEntities(mlir::Operation& operation) {
+bool DBLowering::readsConstantsAsRows(mlir::Operation& operation) {
     return llvm::any_of(operation.getOperands(), [this](mlir::Value operand) {
         const mlir::Value chunk = _valueMap.lookup(operand);
-        return chunk && holdsConstantEntities(chunk);
+        return chunk && isConstantReadAsRows(chunk);
     });
 }
 
 mlir::Value DBLowering::rowsReadBy(mlir::Operation& operation) {
+    llvm::SmallVector<mlir::Value, 4> chunks;
     for (const mlir::Value operand : operation.getOperands()) {
-        const mlir::Value chunk = _valueMap.lookup(operand);
-        if (chunk && !yieldsConstantColumn(chunk, _constantColumns)) {
-            return chunk;
+        if (const mlir::Value chunk = _valueMap.lookup(operand)) {
+            chunks.push_back(chunk);
         }
     }
 
-    return _innermostCardinality;
+    return cardinalityDriver(chunks);
+}
+
+mlir::Value DBLowering::rowsInFlight() const {
+    if (_innermostCardinality) {
+        return _innermostCardinality;
+    }
+
+    // With no relation in flight, an op of a body run once per row, or of a WHEN branch,
+    // reads the one row each step of the nl.each_row its dataflow is rooted in binds
+    nl::For rootLoop = mlir::dyn_cast_or_null<nl::For>(_rootBlock->getParentOp());
+    const bool bindsOneRow = rootLoop && rootLoop.getIterator().getDefiningOp<nl::EachRow>();
+
+    return bindsOneRow ? _rootBlock->getArgument(0) : mlir::Value();
 }
 
 void DBLowering::lowerWithConstantsLaidOut(mlir::Operation& operation,
@@ -1296,7 +1315,7 @@ bool DBLowering::raisesOverConstants(mlir::Operation& operation) {
 }
 
 void DBLowering::lowerOverReachingRows(mlir::Operation& operation) {
-    lowerWithConstantsLaidOut(operation, _innermostCardinality, [](mlir::Value) { return true; });
+    lowerWithConstantsLaidOut(operation, rowsInFlight(), [](mlir::Value) { return true; });
 }
 
 void DBLowering::lowerOnceOverConstants(mlir::Operation& operation) {
@@ -1304,7 +1323,7 @@ void DBLowering::lowerOnceOverConstants(mlir::Operation& operation) {
     _innermostCardinality = {};
 
     lowerWithConstantsLaidOut(operation, mlir::Value(), [this](mlir::Value chunk) {
-        return holdsConstantEntities(chunk);
+        return isConstantReadAsRows(chunk);
     });
 
     _innermostCardinality = previousInnermostCardinality;
@@ -2347,7 +2366,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
 
     // The matches the value is read against are the ones the tag counts, since a WHERE has
     // cut both together
-    valueChunk = rowListsValueChunk(valueChunk, rowTagChunk ? rowTagChunk : _innermostCardinality);
+    valueChunk = rowListsValueChunk(valueChunk, rowTagChunk ? rowTagChunk : rowsInFlight());
 
     llvm::SmallVector<mlir::Value, 2> stagedChunks {valueChunk};
     if (rowTagChunk) {
@@ -4712,7 +4731,7 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // The nl chunk the counted column lowered to; the update reads its per-step
     // non-null row count. A constant column counts the rows it stands for, not the
     // one row it is, so it is laid out over the driving relation first.
-    const mlir::Value inputChunk = rowAlignedChunk(mapValue(count.getInput()), _innermostCardinality);
+    const mlir::Value inputChunk = rowAlignedChunk(mapValue(count.getInput()), rowsInFlight());
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -4788,7 +4807,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The nl chunk the aggregated column lowered to; the update folds its per-step
     // non-null values into the accumulator. A constant column is reduced over the
     // rows it stands for, so it is laid out over the driving relation first.
-    const mlir::Value alignedChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
+    const mlir::Value alignedChunk = rowAlignedChunk(mapValue(input), rowsInFlight());
 
     const mlir::Value inputChunk = reducedValueChunk(alignedChunk);
 
@@ -4983,7 +5002,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     // over the single row it is, so it is laid out over the chunk the grouping keys are
     // read from - the driving relation when the collect has no keys. The aggregate
     // inputs beside it are laid out the same way, as lowerGroupAggregate lays its own.
-    const mlir::Value cardinality = keyCount > 0 ? chunks.front() : _innermostCardinality;
+    const mlir::Value cardinality = keyCount > 0 ? chunks.front() : rowsInFlight();
     for (size_t inputIndex = keyCount; inputIndex < chunks.size(); inputIndex++) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
     }
@@ -5771,9 +5790,15 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
 
     coercePropertyWriteChunks(createNode.getPropNames(), propChunks);
 
+    // A constant stands for the rows in flight, which is how many nodes the op writes
     mlir::Value cardinalityChunk;
     if (createNode.getCardinality()) {
         cardinalityChunk = mapValue(createNode.getCardinality());
+
+        const mlir::Value rows = rowsInFlight();
+        if (rows) {
+            cardinalityChunk = rowAlignedChunk(cardinalityChunk, rows);
+        }
     }
 
     if (cardinalityChunk) {
@@ -7283,13 +7308,7 @@ void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks
 // constants are laid out first: over the relation driving the step, or - where none drives
 // it - over the single row the projection is.
 void DBLowering::rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunks) {
-    mlir::Value cardinality = _innermostCardinality;
-    for (const mlir::Value chunk : chunks) {
-        if (!yieldsConstantColumn(chunk, _constantColumns)) {
-            cardinality = chunk;
-            break;
-        }
-    }
+    const mlir::Value cardinality = cardinalityDriver(chunks);
 
     for (mlir::Value& chunk : chunks) {
         chunk = rowAlignedChunk(chunk, cardinality);
@@ -7299,12 +7318,13 @@ void DBLowering::rowAlignBufferedChunks(llvm::MutableArrayRef<mlir::Value> chunk
 void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
     // With no relation driving the projection a constant is the single row that
     // projection is, and the cut charges it as it stands.
-    if (!_innermostCardinality) {
+    const mlir::Value rows = rowsInFlight();
+    if (!rows) {
         return;
     }
 
     for (mlir::Value& chunk : chunks) {
-        chunk = rowAlignedChunk(chunk, _innermostCardinality);
+        chunk = rowAlignedChunk(chunk, rows);
     }
 }
 
@@ -7446,7 +7466,7 @@ mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) {
         }
     }
 
-    return _innermostCardinality;
+    return rowsInFlight();
 }
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {
@@ -7466,11 +7486,11 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     // what every fold, key serialization and reduction reads a value column as. A list or
     // a map literal is laid out as the plain container chunk an nl.collect drain emits
     // instead, since no row of a literal is absent; one a function answered may be null.
-    // A node, an edge or a path rides the plain chunk every hop and read takes it in.
+    // A node, an edge, a path or a mask rides the plain chunk every op takes it in.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
-    const bool isEntityOrPath = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType>(valueElement);
-    const bool staysPlain = (isContainer && !nullable) || isEntityOrPath;
+    const bool isReadAsRows = llvm::isa<storage::NodeIDType, storage::EdgeIDType, storage::PathType, storage::BoolType>(valueElement);
+    const bool staysPlain = (isContainer && !nullable) || isReadAsRows;
     const mlir::Type resultElement = staysPlain ? valueElement
                                                 : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);

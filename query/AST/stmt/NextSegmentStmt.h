@@ -22,15 +22,15 @@ public:
 
     CallSubqueryStmt* getBody() const { return _body; }
 
-    // What the scope clause of a CALL around a segment that returns nothing imports,
-    // declared again after it: the segment's table is gone, the CALL's row is not
-    const std::vector<const VarDecl*>& getCarriedImports() const { return _carriedImports; }
+    // The imports of the body run once per row around the segment that the segment drops,
+    // declared again behind it: each holds one value for the whole run
+    const std::vector<const VarDecl*>& redeclaredImports() const { return _redeclaredImports; }
 
-    void addCarriedImport(const VarDecl* decl) { _carriedImports.push_back(decl); }
+    void addRedeclaredImport(const VarDecl* decl) { _redeclaredImports.push_back(decl); }
 
 private:
     CallSubqueryStmt* _body {nullptr};
-    std::vector<const VarDecl*> _carriedImports;
+    std::vector<const VarDecl*> _redeclaredImports;
 
     explicit NextSegmentStmt(CallSubqueryStmt* body);
     ~NextSegmentStmt() final;

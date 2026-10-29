@@ -297,6 +297,35 @@ func.func @main() {
 }
 )mlir";
 
+// A body run once per row reads its arguments through db.row_constant, not as columns
+const char* const directArgumentProgram = R"mlir(
+func.func @main() {
+  %p = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %r:2 = db.call_subquery(%p) {
+  ^bb0(%pIn: !db.column<!storage.node_id>):
+    %name = db.get_node_properties(%pIn, "name") : (!db.column<!storage.node_id>) -> !db.column<!storage.nullable<!storage.string>>
+    db.subquery_yield {%name} : {!db.column<!storage.nullable<!storage.string>>}
+  } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.nullable<!storage.string>>)
+  db.output(%r#1) : !db.column<!storage.nullable<!storage.string>>
+  return
+}
+)mlir";
+
+// The same of a COUNT body
+const char* const directCountArgumentProgram = R"mlir(
+func.func @main() {
+  %p = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %c = db.count_subquery(%p) {
+  ^bb0(%pIn: !db.column<!storage.node_id>):
+    %s, %e, %et, %i = db.get_out_edges_by_type(%pIn, ["INTERESTED_IN"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+    %first = db.limit(%i) count 1 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    db.count_subquery_yield {%first} : {!db.column<!storage.node_id>}
+  } : (!db.column<!storage.node_id>) -> !db.column<ui64>
+  db.output(%c) : !db.column<ui64>
+  return
+}
+)mlir";
+
 // The eight people a MATCH (x:Person) in a body walks, in sorted order
 const char* const personNames[] = {"Adam", "Cyrus", "Doruk", "Luc", "Martina", "Maxime", "Remy", "Suhas"};
 
@@ -564,6 +593,11 @@ TEST_F(RowConstantTest, rejectsAnArgumentOfABodyCarryingTheScope) {
 
 TEST_F(RowConstantTest, rejectsAColumnTheBodyComputed) {
     EXPECT_FALSE(parse(computedOperandProgram));
+}
+
+TEST_F(RowConstantTest, rejectsABodyRunOncePerRowReadingAnArgumentAsAColumn) {
+    EXPECT_FALSE(parse(directArgumentProgram));
+    EXPECT_FALSE(parse(directCountArgumentProgram));
 }
 
 int main(int argc, char** argv) {
