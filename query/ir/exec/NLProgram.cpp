@@ -321,9 +321,9 @@ void NLCountSubqueryState::reset() {
     _counts.assign(getRowCount(), 0);
 }
 
-void NLCountSubqueryState::addRows(size_t rowCount) {
-    bioassert(_counts.size() == 1, "An untagged step answers for 1 row, not {}", _counts.size());
-    _counts.front() += rowCount;
+void NLCountSubqueryState::addRows(uint64_t row, size_t rowCount) {
+    bioassert(row < _counts.size(), "Row {} is outside the {} rows of the step", row, _counts.size());
+    _counts[row] += rowCount;
 }
 
 void NLCountSubqueryState::addTaggedRows(std::span<const uint64_t> tag) {
@@ -339,9 +339,13 @@ NLSubqueryExpressionResetData::NLSubqueryExpressionResetData(NLSubqueryExpressio
 {
 }
 
-NLCountSubqueryTallyData::NLCountSubqueryTallyData(NLCountSubqueryState* state, const ColumnVector<uint64_t>* tag, const Column* rows)
+NLCountSubqueryTallyData::NLCountSubqueryTallyData(NLCountSubqueryState* state,
+                                                   const ColumnVector<uint64_t>* tag,
+                                                   const ColumnVector<uint64_t>* row,
+                                                   const Column* rows)
     : _state(state),
     _tag(tag),
+    _row(row),
     _rows(rows)
 {
 }

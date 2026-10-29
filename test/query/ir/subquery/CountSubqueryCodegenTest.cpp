@@ -123,8 +123,8 @@ TEST_F(CountSubqueryCodegenTest, aPatternBodyCarriesTheRows) {
     EXPECT_FALSE(contains(nlProgram, "nl.each_row")) << nlProgram;
 }
 
-// The loop over single rows takes p.name along, which was read off p before the COUNT and is
-// output after it
+// The loop over single rows hands the body each row of the scan with its tag, the tally
+// counts toward that row, and the counts are read over the scan's chunk once it closes
 TEST_F(CountSubqueryCodegenTest, aLimitingBodyRunsOneRowAtATime) {
     StringRowSink sink;
     explainCount("MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1", sink);
@@ -134,10 +134,10 @@ TEST_F(CountSubqueryCodegenTest, aLimitingBodyRunsOneRowAtATime) {
     EXPECT_FALSE(contains(codegen, "carries_scope")) << codegen;
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
-    EXPECT_TRUE(contains(nlProgram, "nl.each_row{%arg0, %3} : {!nl.chunk<!storage.node_id>, "
-                                    "!nl.chunk<!storage.nullable<!storage.string>>}")) << nlProgram;
-    EXPECT_TRUE(contains(nlProgram, "nl.count_subquery_tally %state rows(")) << nlProgram;
-    EXPECT_TRUE(contains(nlProgram, "nl.output(%arg2, %7)")) << nlProgram;
+    EXPECT_TRUE(contains(nlProgram, "nl.each_row{%arg0, %tag} : {!nl.chunk<!storage.node_id>, !nl.chunk<ui64>}"))
+        << nlProgram;
+    EXPECT_TRUE(contains(nlProgram, "nl.count_subquery_tally %state row %arg2 rows(")) << nlProgram;
+    EXPECT_TRUE(contains(nlProgram, "nl.count_subquery_result(%state, %arg0)")) << nlProgram;
 }
 
 TEST_F(CountSubqueryCodegenTest, aUnionBodyIsOneCountOverTheUnion) {
@@ -179,14 +179,18 @@ TEST_F(CountSubqueryCodegenTest, aBodyOverNoRowInFlightTakesNoTag) {
     EXPECT_TRUE(contains(nlProgram, "rows(")) << nlProgram;
 }
 
-TEST_F(CountSubqueryCodegenTest, anOuterLimitBudgetsTheLoopOverSingleRows) {
+// Every row of the step is answered for before the rows are emitted, so the budget stops
+// the scan and leaves the loop over single rows whole
+TEST_F(CountSubqueryCodegenTest, anOuterLimitBudgetsTheScanAndNotTheLoopOverSingleRows) {
     StringRowSink sink;
     explain("EXPLAIN (codegen, nl) MATCH (p:Person) "
             "RETURN p.name, COUNT { MATCH (p)-[:INTERESTED_IN]->(i) RETURN i LIMIT 1 } LIMIT 3",
             sink);
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
-    const std::string rowLoop = "in " + std::string(resultOf(nlProgram, "nl.each_row")) + " limit ";
+    const std::string scanLoop = "in " + std::string(resultOf(nlProgram, "nl.scan_nodes_by_label")) + " limit ";
+    const std::string rowLoop = "in " + std::string(resultOf(nlProgram, "nl.each_row")) + " : ";
+    EXPECT_TRUE(contains(nlProgram, scanLoop)) << nlProgram;
     EXPECT_TRUE(contains(nlProgram, rowLoop)) << nlProgram;
 }
 

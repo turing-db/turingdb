@@ -468,17 +468,11 @@ private:
     // Lower a db.exists_subquery to an nl.exists_buffer, the body's loop nest ending in an
     // nl.exists_mark, and an nl.exists_result; a db.count_subquery to the count_subquery
     // buffer, tally and result; a db.collect_subquery to the row_lists buffer, collect and
-    // result. A body that cannot carry its input rows runs under a loop over them, and the
-    // rest of the query goes on inside that loop.
+    // result. A body that cannot carry its input rows runs under a loop over them, each
+    // answered for under its row's tag, and the answers are read over the whole step once
+    // the loop closes, as a body carrying its rows has them read.
     template <typename SubqueryOp, typename YieldOp>
     void lowerSubqueryExpression(SubqueryOp subquery);
-
-    // The db values bound over @param stepBlock ahead of @param subquery, and read after it,
-    // that are not its inputs. What follows a body run a row at a time is lowered inside the
-    // loop over the step's rows, so that loop hands these on a row at a time as well.
-    void collectReadPastRowLoop(mlir::Operation* subquery,
-                                mlir::Block* stepBlock,
-                                llvm::SmallVectorImpl<mlir::Value>& readPast);
 
     // Lower a db.call_subquery. A body carrying its scope, and a unit body, are lowered in
     // place: the block arguments become the step's chunks, the body's loops nest in the

@@ -122,8 +122,7 @@ TEST_F(CollectSubqueryCodegenTest, aSortingBodyRunsOneRowAtATime) {
 
     const std::string_view nlProgram = dumpOf(sink, "nl");
     EXPECT_TRUE(contains(nlProgram, "nl.each_row")) << nlProgram;
-    EXPECT_TRUE(contains(nlProgram, "nl.row_lists_collect")) << nlProgram;
-    EXPECT_FALSE(contains(nlProgram, "nl.row_lists_collect %state, tag")) << nlProgram;
+    EXPECT_TRUE(contains(nlProgram, "nl.row_lists_collect %state, row")) << nlProgram;
 }
 
 TEST_F(CollectSubqueryCodegenTest, aUnionBodyIsOneCollectOverTheUnion) {

@@ -964,12 +964,6 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::ScanMaterialized>(operation);
 }
 
-// An EXISTS, a COUNT or a COLLECT: a subquery standing in an expression, one value per
-// row in flight
-bool isSubqueryExpression(mlir::Operation* operation) {
-    return mlir::isa<mlir::db::ExistsSubquery, mlir::db::CountSubquery, mlir::db::CollectSubquery>(operation);
-}
-
 // A body whose own dataflow cannot keep the input rows paired with what it makes of them
 // runs one input row at a time, whatever it ends on
 bool runsPerRow(mlir::Operation* operation) {
@@ -1020,14 +1014,8 @@ bool opensRowLoop(mlir::Operation* operation) {
     const bool returningSubquery = mlir::isa<mlir::db::CallSubquery>(operation)
                                    && operation->getNumResults() > 0;
 
-    // A subquery expression answering for the rows in flight opens no loop of its own; one
-    // run a row at a time opens the loop over those rows, which the ops after it are
-    // emitted into.
-    const bool perRowExpression = isSubqueryExpression(operation) && runsPerRow(operation);
-
     return opensSourceLoop(operation)
         || returningSubquery
-        || perRowExpression
         || mlir::isa<mlir::db::CrossProduct,
                      mlir::db::HashJoin,
                      mlir::db::Sort,
@@ -2290,7 +2278,7 @@ void DBLowering::lowerPatternComprehension(mlir::db::PatternComprehension compre
     }
 
     setInsertionInto(deepestOwnerBlock(stagedChunks, stepBlock));
-    _builder.create<nl::RowListsCollect>(loc, state, rowTagChunk, valueChunk);
+    _builder.create<nl::RowListsCollect>(loc, state, rowTagChunk, mlir::Value(), valueChunk);
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
@@ -3499,10 +3487,9 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
     mlir::MLIRContext* const context = _builder.getContext();
-    const mlir::OperandRange inputColumns = subquery.getInputColumns();
 
     llvm::SmallVector<mlir::Value, 4> inputChunks;
-    for (const mlir::Value column : inputColumns) {
+    for (const mlir::Value column : subquery.getInputColumns()) {
         inputChunks.push_back(mapValue(column));
     }
 
@@ -3510,39 +3497,9 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     // for, so it is emptied once per chunk of them - and the body's nest and the read of
     // the answers both go there, the read after the nest.
     mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
+    const mlir::Value cardinality = inputChunks.empty() ? mlir::Value() : inputChunks.front();
 
-    // A body run one row at a time makes the accumulator's step one input row: the loop
-    // over the rows is opened first and the body roots in it. A body carrying the scope,
-    // and one over the single empty row, run in the step block as they otherwise would.
-    const bool bodyRunsPerRow = runsPerRow(subquery);
-    const bool perRow = bodyRunsPerRow && !inputChunks.empty();
-
-    mlir::Block* bodyRoot = stepBlock;
-    llvm::SmallVector<mlir::Value, 4> stepChunks(inputChunks.begin(), inputChunks.end());
-
-    llvm::SmallVector<mlir::Value, 4> readPast;
-
-    if (perRow) {
-        const mlir::Value limitHandle = _loopLimitHandle.lookup(subquery.getOperation());
-
-        collectReadPastRowLoop(subquery, stepBlock, readPast);
-
-        llvm::SmallVector<mlir::Value, 4> rowChunks(inputChunks.begin(), inputChunks.end());
-        for (const mlir::Value value : readPast) {
-            rowChunks.push_back(mapValue(value));
-        }
-
-        setInsertionInto(stepBlock);
-        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
-        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
-        bodyRoot = rowLoop.getBody();
-
-        stepChunks.assign(bodyRoot->args_begin(), bodyRoot->args_begin() + inputChunks.size());
-    }
-
-    const mlir::Value cardinality = stepChunks.empty() ? mlir::Value() : stepChunks.front();
-
-    setInsertionInto(bodyRoot);
+    setInsertionInto(stepBlock);
 
     mlir::Value state;
     mlir::Value tag;
@@ -3552,21 +3509,44 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
         state = buffer.getState();
         tag = buffer.getTag();
     } else if constexpr (countsRows) {
-        nl::CountSubqueryBuffer buffer = _builder.create<nl::CountSubqueryBuffer>(loc, stepChunks);
+        nl::CountSubqueryBuffer buffer = _builder.create<nl::CountSubqueryBuffer>(loc, inputChunks);
         state = buffer.getState();
         tag = buffer.getTag();
     } else {
-        nl::ExistsBuffer buffer = _builder.create<nl::ExistsBuffer>(loc, stepChunks);
+        nl::ExistsBuffer buffer = _builder.create<nl::ExistsBuffer>(loc, inputChunks);
         state = buffer.getState();
         tag = buffer.getTag();
+    }
+
+    // A body run one row at a time is handed the step's rows a row at a time, each with its
+    // tag, so what it holds is answered for under that row and the answers are read over the
+    // whole step. A body carrying the scope, and one over the single empty row, run in the
+    // step block as they otherwise would.
+    const bool bodyRunsPerRow = runsPerRow(subquery);
+    const bool perRow = bodyRunsPerRow && !inputChunks.empty();
+
+    mlir::Block* bodyRoot = stepBlock;
+    llvm::SmallVector<mlir::Value, 4> bodyChunks(inputChunks.begin(), inputChunks.end());
+    mlir::Value rowTag;
+
+    if (perRow) {
+        llvm::SmallVector<mlir::Value, 4> rowChunks(inputChunks.begin(), inputChunks.end());
+        rowChunks.push_back(tag);
+
+        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, rowChunks);
+        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), mlir::Value());
+        bodyRoot = rowLoop.getBody();
+
+        bodyChunks.assign(bodyRoot->args_begin(), bodyRoot->args_begin() + inputChunks.size());
+        rowTag = bodyRoot->getArgument(static_cast<unsigned>(inputChunks.size()));
     }
 
     // The body reads this step's rows through its block arguments, and the row tag through
     // the trailing one; a body run per row, or with nothing to join onto, takes no tag.
     mlir::Region& body = subquery.getBody();
     mlir::Block& bodyBlock = body.front();
-    for (size_t inputIndex = 0; inputIndex < stepChunks.size(); inputIndex++) {
-        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputIndex))] = stepChunks[inputIndex];
+    for (size_t inputIndex = 0; inputIndex < bodyChunks.size(); inputIndex++) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputIndex))] = bodyChunks[inputIndex];
     }
 
     if (bodyBlock.getNumArguments() > inputChunks.size()) {
@@ -3626,23 +3606,23 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     setInsertionInto(deepestOwnerBlock(answeredChunks, bodyRoot));
 
     if constexpr (collectsValues) {
-        _builder.create<nl::RowListsCollect>(loc, state, heldTag, collectedValue);
+        _builder.create<nl::RowListsCollect>(loc, state, heldTag, rowTag, collectedValue);
     } else if constexpr (countsRows) {
-        _builder.create<nl::CountSubqueryTally>(loc, state, heldTag, heldRows);
+        _builder.create<nl::CountSubqueryTally>(loc, state, heldTag, rowTag, heldRows);
     } else {
         llvm::SmallVector<mlir::Value, 1> markedRows;
         if (heldRows) {
             markedRows.push_back(heldRows);
         }
 
-        _builder.create<nl::ExistsMark>(loc, state, heldTag, markedRows);
+        _builder.create<nl::ExistsMark>(loc, state, heldTag, rowTag, markedRows);
     }
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
     _innermostCardinality = previousInnermostCardinality;
 
-    setInsertionInto(bodyRoot);
+    setInsertionInto(stepBlock);
 
     mlir::Value answer;
 
@@ -3663,73 +3643,6 @@ void DBLowering::lowerSubqueryExpression(SubqueryOp subquery) {
     }
 
     _valueMap[subquery.getResult()] = answer;
-
-    if (!perRow) {
-        return;
-    }
-
-    // The answer is one per row of the loop's own chunks, so what follows the op reads the
-    // rows in flight through those: the rest of the query goes on inside the loop, where
-    // every column of the step is bound a row at a time.
-    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
-        _valueMap[inputColumns[inputIndex]] = stepChunks[inputIndex];
-    }
-
-    for (size_t readIndex = 0; readIndex < readPast.size(); readIndex++) {
-        _valueMap[readPast[readIndex]] = bodyRoot->getArgument(static_cast<unsigned>(inputChunks.size() + readIndex));
-    }
-
-    _innermostLoopBody = bodyRoot;
-    _innermostCardinality = stepChunks.front();
-}
-
-void DBLowering::collectReadPastRowLoop(mlir::Operation* subquery,
-                                        mlir::Block* stepBlock,
-                                        llvm::SmallVectorImpl<mlir::Value>& readPast) {
-    mlir::Block* const block = subquery->getBlock();
-    const mlir::OperandRange inputs = subqueryInputColumns(subquery);
-
-    const auto readAfterTheOp = [block, subquery](mlir::Value value) {
-        for (mlir::Operation* user : value.getUsers()) {
-            mlir::Operation* const userInBlock = block->findAncestorOpInBlock(*user);
-
-            if (userInBlock && subquery->isBeforeInBlock(userInBlock)) {
-                return true;
-            }
-        }
-
-        return false;
-    };
-
-    const auto collect = [&](mlir::Value value) {
-        const auto chunkIt = _valueMap.find(value);
-        if (chunkIt == _valueMap.end()) {
-            return;
-        }
-
-        const mlir::Value chunk = chunkIt->second;
-        const bool holdsTheStep = mlir::isa<nl::ChunkType>(chunk.getType())
-                                  && !yieldsConstantColumn(chunk, _constantColumns)
-                                  && ownerBlock(chunk) == stepBlock;
-
-        if (holdsTheStep && !llvm::is_contained(inputs, value) && readAfterTheOp(value)) {
-            readPast.push_back(value);
-        }
-    };
-
-    for (const mlir::BlockArgument argument : block->getArguments()) {
-        collect(argument);
-    }
-
-    for (mlir::Operation& operation : *block) {
-        if (&operation == subquery) {
-            break;
-        }
-
-        for (const mlir::Value result : operation.getResults()) {
-            collect(result);
-        }
-    }
 }
 
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
@@ -5420,12 +5333,6 @@ void DBLowering::visitProducer(mlir::Value column,
                                                mlir::db::GroupAggregate,
                                                mlir::db::OptionalMatch>(definingOp);
 
-    // A subquery expression run one row at a time loops over the rows in flight, a row a
-    // step, and the rest of the query goes on inside that loop
-    const bool loopsOverSingleRows = isSubqueryExpression(definingOp)
-                                     && runsPerRow(definingOp)
-                                     && !subqueryInputColumns(definingOp).empty();
-
     // A sort or a grouped aggregate accumulates the whole relation before emitting any of
     // it, so the loops feeding it have to see every row: the walk stops and the limit
     // budgets the emit loop alone. So does a materialize, whose scans are the emit loops.
@@ -5437,7 +5344,7 @@ void DBLowering::visitProducer(mlir::Value column,
                                                   mlir::db::Materialize>(definingOp);
     const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
-    frame._reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop || loopsOverSingleRows;
+    frame._reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop;
 
     // A loop's budget only stops it from taking another step, so bounding one never trims
     // the step it is in. A cross product's or a hash join's budget cuts the rows it pairs,
@@ -5449,7 +5356,7 @@ void DBLowering::visitProducer(mlir::Value column,
     // producer the walk found, so reachedALoop stands and the cut keeps its nest.
     const bool boundsCrossProduct = isCrossProduct && !rowsDroppedBeforeTheCut;
     const bool boundsHashJoin = isHashJoin && !rowsDroppedBeforeTheCut;
-    const bool takesTheHandle = opensLoop || boundsCrossProduct || boundsHashJoin || emitsThroughLoop || loopsOverSingleRows;
+    const bool takesTheHandle = opensLoop || boundsCrossProduct || boundsHashJoin || emitsThroughLoop;
 
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.

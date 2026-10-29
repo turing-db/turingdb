@@ -659,12 +659,30 @@ LogicalResult MakePath::verify() {
     return verifyMakePath(getOperation(), elementTypes, getReversedPaths());
 }
 
+LogicalResult ExistsMark::verify() {
+    if (getTag() && getRow()) {
+        return emitOpError("marks either the rows a tag names or the one row `row` names, not both");
+    }
+
+    return success();
+}
+
 LogicalResult CountSubqueryTally::verify() {
     const bool hasTag = getTag() != nullptr;
     const bool hasRows = getRows() != nullptr;
 
     if (hasTag == hasRows) {
         return emitOpError("counts either the rows of a tag or a row count, exactly one of the two");
+    } else if (getRow() && !hasRows) {
+        return emitOpError("names the row a row count answers for, which a tagged tally has none of");
+    }
+
+    return success();
+}
+
+LogicalResult RowListsCollect::verify() {
+    if (getTag() && getRow()) {
+        return emitOpError("stages under either the rows a tag names or the one row `row` names, not both");
     }
 
     return success();

@@ -57,8 +57,10 @@ nl.for ... {
 `db.pattern_comprehension` keeps its own db op and lowering, and ends on the same three nl
 ops.
 
-A body run one row at a time opens the `nl.each_row` loop a COUNT body does. The step is
-then one row, and `nl.row_lists_collect` takes no tag: every value goes into that row's list.
+A body run one row at a time opens the `nl.each_row` loop a COUNT body does, over the step and
+the buffer's tag. `nl.row_lists_collect` then takes no tag but the row the loop hands the
+body, `nl.row_lists_collect %state, row %r, %value`: every value goes into that row's list,
+and the lists are built over the whole step once the loop closes.
 
 ## 3. UNION
 

@@ -103,6 +103,12 @@ using namespace db;
 
 namespace {
 
+// The step row an untagged mark, tally or collect answers for: the position its row chunk
+// holds, or the single row of the step when it has none
+uint64_t untaggedRow(const ColumnVector<uint64_t>* row) {
+    return row ? row->getRaw().front() : 0;
+}
+
 template <typename Handler>
 void dispatchIDChunkKind(NLChunkKind kind, Handler&& handler) {
     switch (kind) {
@@ -8563,9 +8569,10 @@ void NLExecutor::runRowListsCollect(NLExecutionContext* context, NLFunctionData*
     const ColumnVector<uint64_t>* const tag = collect->getTag();
 
     if (!tag) {
-        // No input row to tag: every value belongs to the single row the step is
+        const uint64_t row = untaggedRow(collect->getRow());
+
         for (size_t match = 0; match < value->size(); match++) {
-            state->stage(0, valueRead(value, match, memory));
+            state->stage(row, valueRead(value, match, memory));
         }
 
         return;
@@ -10006,13 +10013,13 @@ void NLExecutor::runExistsMark(NLExecutionContext* context, NLFunctionData* data
 
     const ColumnVector<uint64_t>* tag = mark->getTag();
     if (!tag) {
-        // No input row to tag: the step is the single empty row, which this step's rows
-        // mark - and a predicate that cut them all leaves nothing to mark it.
+        // Every row of this step answers for one input row, which they mark - and a
+        // predicate that cut them all leaves nothing to mark it.
         const std::vector<const Column*>& columns = mark->columns();
         bioassert(!columns.empty(), "nl.exists_mark needs at least one column when it has no tag");
 
         if (columns.front()->size() > 0) {
-            state->markMatched(0);
+            state->markMatched(untaggedRow(mark->getRow()));
         }
 
         return;
@@ -10042,7 +10049,7 @@ void NLExecutor::runCountSubqueryTally(NLExecutionContext* context, NLFunctionDa
     const ColumnVector<uint64_t>* tag = tally->getTag();
     if (!tag) {
         const Column* rows = tally->getRows();
-        state->addRows(rows->size());
+        state->addRows(untaggedRow(tally->getRow()), rows->size());
 
         return;
     }

@@ -222,3 +222,7 @@ add_turing_test(test_query_ir_subquery_body_forms SubqueryBodyFormsTest.cpp)
 
 # exists(<pattern>): the pattern predicate, written as a function.
 add_turing_test(test_query_ir_exists_function ExistsFunctionTest.cpp)
+
+# A subquery expression whose body runs one row at a time, inside a CASE, a comprehension,
+# a reduce, a list predicate and an UNWIND.
+add_turing_test(test_query_ir_per_row_subquery_expression PerRowSubqueryExpressionTest.cpp)

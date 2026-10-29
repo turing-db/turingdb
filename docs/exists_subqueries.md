@@ -85,13 +85,16 @@ A body whose own dataflow keeps each row paired with the input row it came from 
 tag, and the whole step is answered in one walk. A barrier inside the body carries the tag
 past it under a hidden name no clause can spell, exactly as a CALL body's tag is carried.
 
-A body that cannot - one that aggregates, sorts, cuts or dedups - runs one input row at a
-time, under an `nl.each_row` loop over the step's rows, and a row is marked when the body
-yielded anything at all for it. The rest of the query goes on inside that loop, where every
-column of the step is bound a row at a time, so the boolean stays row-aligned with them.
-`runsPerRow` in `DBLowering.cpp` answers for both this op and `db.call_subquery`, and a
-limit inside a per-row body is hoisted into that body's step, so its budget resets per input
-row.
+A body that cannot - one that aggregates, sorts, cuts, dedups, unions or branches - runs one
+input row at a time, under an `nl.each_row` loop over the step's rows and the buffer's tag.
+The accumulator is opened over the whole step, and the body marks the row whose tag the loop
+hands it, `nl.exists_mark %state, row %r, (...)`, when it yielded anything at all for it. The
+booleans are read over the step once the loop closes, so the op is one value per row in
+flight on either path, and it stands in a CASE, a comprehension, a reduce or an UNWIND as
+any expression does. An outer LIMIT budgets the loops feeding the step, not the loop over
+single rows. `runsPerRow` in `DBLowering.cpp` answers for both this op and
+`db.call_subquery`, and a limit inside a per-row body is hoisted into that body's step, so
+its budget resets per input row.
 
 ## 4. Tests
 
