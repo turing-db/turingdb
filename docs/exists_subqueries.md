@@ -23,6 +23,11 @@ MATCH (p:Person) WHERE EXISTS { MATCH (p)-[:KNOWS_WELL]->(k) WHERE k.age = p.age
 The pattern shorthand is one MATCH the parser builds; everything below reads the same for
 both.
 
+The pattern predicate `(p)-[:KNOWS_WELL]->()` and its function form
+`exists((p)-[:KNOWS_WELL]->())` parse into the same body, but bind no new variable. `exists()`
+takes a pattern and nothing else: Neo4j 5 dropped `exists(p.name)`, which is
+`p.name IS NOT NULL`.
+
 EXISTS is correlated and imports nothing: every variable in flight is readable inside the
 body, under no scope clause, and stays readable through the whole of it - a WITH inside the
 body carries those variables past the barrier rather than descoping them, as a CALL carries

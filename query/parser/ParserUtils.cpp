@@ -448,6 +448,16 @@ ExistsExpr* ParserUtils::createPatternPredicate(CypherAST* ast,
     return predicate;
 }
 
+ExistsExpr* ParserUtils::findPatternPredicate(Expr* argument) {
+    if (argument->getKind() != Expr::Kind::EXISTS) {
+        return nullptr;
+    }
+
+    ExistsExpr* predicate = static_cast<ExistsExpr*>(argument);
+
+    return predicate->getPredicatePattern() ? predicate : nullptr;
+}
+
 PropertyExpr* ParserUtils::createParenthesizedPropertyAccess(CypherAST* ast, Expr* base, Symbol* propertyName) {
     if (base->getKind() != Expr::Kind::SYMBOL) {
         return nullptr;

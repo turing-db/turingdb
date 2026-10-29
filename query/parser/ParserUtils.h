@@ -102,6 +102,9 @@ public:
                                               PatternElement* element,
                                               const SourceLocation& location);
 
+    // `exists(<pattern>)` is the pattern predicate it wraps; null for any other argument
+    static ExistsExpr* findPatternPredicate(Expr* argument);
+
     static PropertyExpr* createParenthesizedPropertyAccess(CypherAST* ast,
                                                            Expr* base,
                                                            Symbol* propertyName);
