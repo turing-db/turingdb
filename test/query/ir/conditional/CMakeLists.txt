@@ -21,3 +21,6 @@ add_turing_test(test_query_ir_conditional_create_merge ConditionalCreateMergeTes
 
 # `{ WHEN ... } UNION { WHEN ... }`, at the top of a query and in a CALL body.
 add_turing_test(test_query_ir_conditional_union ConditionalUnionTest.cpp)
+
+# A WHEN branch walking to the end set fuse_explore_end_set scans ahead of the function.
+add_turing_test(test_query_ir_conditional_explore_end_set ConditionalExploreEndSetTest.cpp)

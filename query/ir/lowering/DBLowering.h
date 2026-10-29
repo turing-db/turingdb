@@ -413,7 +413,8 @@ private:
                                 mlir::Operation* holder);
 
     // The columns the regions of @param conditional read from around it, but for the
-    // constants, which stand for every row and are read where they are bound
+    // constants, which stand for every row and are read where they are bound, and the
+    // relations an op reads in full, which are no rows of the ones in flight
     void collectRowColumnsReadByBranches(mlir::db::Conditional conditional,
                                          llvm::SmallVectorImpl<mlir::Value>& columns);
 
