@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <string_view>
 
 /**
@@ -48,6 +49,16 @@ struct EnumToString {
 
         static constexpr std::string_view value(TEnum e) {
             return Strings[(std::size_t)e];
+        }
+
+        static constexpr std::optional<TEnum> fromString(std::string_view name) {
+            for (std::size_t index = 0; index < EnumCount; index++) {
+                if (Strings[index] == name) {
+                    return EnumValues[index];
+                }
+            }
+
+            return std::nullopt;
         }
 
         static_assert(containsOnlyUnique(EnumValues),

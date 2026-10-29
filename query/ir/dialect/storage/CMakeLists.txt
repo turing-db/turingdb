@@ -33,6 +33,7 @@ add_mlir_library(turing_db_ir_storagedialect_s
   PathStepsFormat.cpp
   PathHopArguments.cpp
   LabelAlternativesFormat.cpp
+  ValueTypeSetFormat.cpp
   MergePatternShape.cpp
   MakePathShape.cpp
   NullLiteralType.cpp
@@ -47,6 +48,7 @@ add_mlir_library(turing_db_ir_storagedialect_s
   MLIRSupport
   MLIRFuncDialect
   MLIRBuiltinToLLVMIRTranslation
+  turing_db_storage_s
 )
 
 target_include_directories(turing_db_ir_storagedialect_s PUBLIC

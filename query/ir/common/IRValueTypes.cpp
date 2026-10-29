@@ -81,32 +81,7 @@ mlir::Type db::valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueT
 }
 
 ValueType db::elementTypeToValueType(mlir::Type elementType) {
-    if (mlir::isa<mlir::storage::StringType>(elementType)) {
-        return ValueType::String;
-    } else if (mlir::isa<mlir::storage::EmbeddingType>(elementType)) {
-        return ValueType::Embedding;
-    } else if (mlir::isa<mlir::storage::ListType>(elementType)) {
-        return ValueType::List;
-    } else if (mlir::isa<mlir::storage::DateTimeType>(elementType)) {
-        return ValueType::DateTime;
-    } else if (mlir::isa<mlir::storage::DurationType>(elementType)) {
-        return ValueType::Duration;
-    } else if (mlir::isa<mlir::storage::MapType>(elementType)) {
-        return ValueType::Map;
-    } else if (mlir::isa<mlir::Float64Type>(elementType)) {
-        return ValueType::Double;
-    }
-
-    const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
-    if (!intType) {
-        return ValueType::Invalid;
-    } else if (intType.getWidth() == 1) {
-        return ValueType::Bool;
-    } else if (intType.isUnsigned()) {
-        return ValueType::UInt64;
-    }
-
-    return ValueType::Int64;
+    return mlir::storage::valueTypeOf(elementType).value_or(ValueType::Invalid);
 }
 
 mlir::Type db::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {

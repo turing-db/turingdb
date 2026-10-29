@@ -13,6 +13,9 @@
 #include "StorageDialect.h"
 #include "StorageTypes.h"
 
+#include "metadata/PropertyType.h"
+#include "metadata/ValueTypeSet.h"
+
 namespace {
 
 class ParameterAttributeTest : public ::testing::Test {
@@ -50,6 +53,57 @@ protected:
 };
 
 constexpr const char* PARAMETER_TEXT = "#storage.parameter<\"label\"> : !storage.label_id";
+constexpr const char* ACCEPTED_SET_TEXT = "#storage.parameter<\"min\"> : !storage.dynamic<[Int64, Double]>";
+
+constexpr const char* acceptedSetOnAFunction = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"min"> : !storage.dynamic<[Int64, Double]>} {
+  return
+}
+)mlir";
+
+constexpr const char* acceptedSetWrittenInAnotherOrder = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"min"> : !storage.dynamic<[Double, Int64]>} {
+  return
+}
+)mlir";
+
+constexpr const char* EVERY_VALUE_TYPE_TEXT = "#storage.parameter<\"x\"> : !storage.dynamic<[Int64, UInt64, Double, String, Bool, Embedding, List, DateTime, Map, Duration]>";
+
+constexpr const char* everyValueTypeDynamic = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"x"> : !storage.dynamic<[Int64, UInt64, Double, String, Bool, Embedding, List, DateTime, Map, Duration]>} {
+  return
+}
+)mlir";
+
+constexpr const char* noType = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"x">} {
+  return
+}
+)mlir";
+
+constexpr const char* singleMemberAcceptedSet = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"min"> : !storage.dynamic<[Int64]>} {
+  return
+}
+)mlir";
+
+constexpr const char* emptyDynamicType = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"x"> : !storage.dynamic<[]>} {
+  return
+}
+)mlir";
+
+constexpr const char* setOnTheAttribute = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"min", [Int64, Double]> : !storage.dynamic<[Int64, Double]>} {
+  return
+}
+)mlir";
+
+constexpr const char* unknownValueTypeName = R"mlir(
+func.func @main() attributes {p = #storage.parameter<"min"> : !storage.dynamic<[Int64, Banana]>} {
+  return
+}
+)mlir";
 
 constexpr const char* attributeOnAFunction = R"mlir(
 func.func @main() attributes {p = #storage.parameter<"label"> : !storage.label_id} {
@@ -246,4 +300,67 @@ TEST_F(ParameterAttributeTest, anEdgeTypeCheckMixesNamesAndParameters) {
 
     ASSERT_FALSE(printed.empty());
     EXPECT_NE(printed.find("[\"KNOWS_WELL\", #storage.parameter<\"type\"> : !storage.edge_type_id]"), std::string::npos) << printed;
+}
+
+
+TEST_F(ParameterAttributeTest, anAcceptedSetRoundTripsThroughText) {
+    const std::string printed = roundTrip(acceptedSetOnAFunction);
+
+    ASSERT_FALSE(printed.empty());
+    EXPECT_NE(printed.find(ACCEPTED_SET_TEXT), std::string::npos) << printed;
+}
+
+TEST_F(ParameterAttributeTest, anAcceptedSetPrintsInOneOrder) {
+    const std::string printed = roundTrip(acceptedSetWrittenInAnotherOrder);
+
+    ASSERT_FALSE(printed.empty());
+    EXPECT_NE(printed.find(ACCEPTED_SET_TEXT), std::string::npos) << printed;
+}
+
+TEST_F(ParameterAttributeTest, everyValueTypeIsDynamic) {
+    const std::string printed = roundTrip(everyValueTypeDynamic);
+
+    ASSERT_FALSE(printed.empty());
+    EXPECT_NE(printed.find(EVERY_VALUE_TYPE_TEXT), std::string::npos) << printed;
+}
+
+TEST_F(ParameterAttributeTest, aParameterWithNoTypeIsRejected) {
+    EXPECT_FALSE(parses(noType));
+}
+
+TEST_F(ParameterAttributeTest, aSingleMemberAcceptedSetIsRejected) {
+    EXPECT_FALSE(parses(singleMemberAcceptedSet));
+}
+
+TEST_F(ParameterAttributeTest, anEmptyDynamicTypeIsRejected) {
+    EXPECT_FALSE(parses(emptyDynamicType));
+}
+
+TEST_F(ParameterAttributeTest, anAttributeTakesNoSet) {
+    EXPECT_FALSE(parses(setOnTheAttribute));
+}
+
+TEST_F(ParameterAttributeTest, anUnknownValueTypeNameIsRejected) {
+    EXPECT_FALSE(parses(unknownValueTypeName));
+}
+
+TEST_F(ParameterAttributeTest, theTypeImpliesTheAcceptedSet) {
+    const mlir::Type integerType = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type dynamicType = mlir::storage::DynamicType::get(&_context, db::ValueTypeSet::any().getBits());
+    const mlir::Type labelType = mlir::storage::LabelIDType::get(&_context);
+
+    EXPECT_EQ(mlir::storage::ParameterAttr::get(&_context, "min", integerType).getAcceptedSet(), db::ValueTypeSet::of(db::ValueType::Int64));
+    EXPECT_EQ(mlir::storage::ParameterAttr::get(&_context, "x", dynamicType).getAcceptedSet(), db::ValueTypeSet::any());
+    EXPECT_EQ(mlir::storage::ParameterAttr::get(&_context, "label", labelType).getAcceptedSet(), db::ValueTypeSet());
+}
+
+TEST_F(ParameterAttributeTest, aDynamicTypeIsUniquedByItsSet) {
+    const uint32_t numeric = db::ValueTypeSet::of({db::ValueType::Int64, db::ValueType::Double}).getBits();
+    const uint32_t temporal = db::ValueTypeSet::of({db::ValueType::DateTime, db::ValueType::Duration}).getBits();
+
+    const mlir::storage::DynamicType numericType = mlir::storage::DynamicType::get(&_context, numeric);
+
+    EXPECT_EQ(numericType.getAcceptedSet(), db::ValueTypeSet::fromBits(numeric));
+    EXPECT_EQ(numericType, mlir::storage::DynamicType::get(&_context, numeric));
+    EXPECT_NE(numericType, mlir::storage::DynamicType::get(&_context, temporal));
 }
