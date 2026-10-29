@@ -219,3 +219,6 @@ add_turing_test(test_query_ir_call_without_inputs_after_rows CallWithoutInputsAf
 
 # Every { } holds a single query, a UNION, a WHEN or a NEXT chain, nested in any of the others.
 add_turing_test(test_query_ir_subquery_body_forms SubqueryBodyFormsTest.cpp)
+
+# exists(<pattern>): the pattern predicate, written as a function.
+add_turing_test(test_query_ir_exists_function ExistsFunctionTest.cpp)

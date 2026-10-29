@@ -1833,6 +1833,15 @@ subqueryExist
         $$ = ExistsExpr::create(ast, body);
         LOC($$, @$);
       }
+    | EXISTS OPAREN expr CPAREN {
+        $$ = ParserUtils::findPatternPredicate($3);
+
+        if (!$$) {
+            scanner.syntaxError(@3, "exists() takes a pattern: test a property with IS NOT NULL");
+        }
+
+        LOC($$, @$);
+      }
     ;
 
 subqueryCount
