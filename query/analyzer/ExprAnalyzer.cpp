@@ -227,6 +227,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::ALL_REDUCE:
             analyzeAllReduceExpr(static_cast<AllReduceExpr*>(expr));
         break;
+        case Expr::Kind::MAP_PROJECTION:
+            analyzeMapProjectionExpr(static_cast<MapProjectionExpr*>(expr));
+        break;
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
         break;
@@ -2081,6 +2084,64 @@ void ExprAnalyzer::analyzeAllReduceExpr(AllReduceExpr* expr) {
     }
 
     expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::Bool));
+}
+
+void ExprAnalyzer::analyzeMapProjectionExpr(MapProjectionExpr* expr) {
+    SymbolExpr* const base = expr->getBase();
+    analyzeExpr(base);
+
+    const EvaluatedType baseType = base->getType();
+
+    // A tagged cell names no type until a row is in hand, and a null projects to null
+    const bool projectsAnEntity = baseType == EvaluatedType::NodePattern
+                               || baseType == EvaluatedType::EdgePattern;
+    const bool projectsAMap = baseType == EvaluatedType::Map
+                           || baseType == EvaluatedType::Any;
+    const bool projectsNull = baseType == EvaluatedType::Null;
+
+    if (!projectsAnEntity && !projectsAMap && !projectsNull) {
+        throwError(fmt::format("A map projection reads a node, a relationship or a map, and '{}' is '{}'",
+                               base->getSymbol()->getName(),
+                               EvaluatedTypeName::value(baseType)),
+                   base);
+    }
+
+    bool aggregate = false;
+
+    for (MapProjectionExpr::Item& item : expr->getItems()) {
+        const bool readsAProperty = item._kind == MapProjectionExpr::ItemKind::Property;
+
+        // `.key` reads what `v.key` reads, so it is analyzed as that read
+        if (readsAProperty && !item._value) {
+            QualifiedName* name = QualifiedName::create(_ast);
+            name->addName(base->getSymbol());
+            name->addName(item._key);
+
+            PropertyExpr* read = PropertyExpr::create(_ast, name);
+            read->setEntityVarDecl(base->getDecl());
+            item._value = read;
+        }
+
+        if (!item._value) {
+            continue;
+        }
+
+        analyzeExpr(item._value);
+        aggregate = aggregate || item._value->isAggregate();
+    }
+
+    const EvaluatedType type = projectsNull ? EvaluatedType::Null : EvaluatedType::Map;
+    expr->setType(type);
+
+    if (base->isDynamic()) {
+        expr->setDynamic();
+    }
+
+    if (aggregate) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, type));
 }
 
 void ExprAnalyzer::forgetAnalysis(const Expr* expr) {

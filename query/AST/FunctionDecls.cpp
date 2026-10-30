@@ -230,6 +230,12 @@ void FunctionDecls::initDefault() {
     collectLists->setIsAggregate(true);
     collectLists->setCollectsItsArgument(true);
 
+    FunctionSignature* collectMaps = createFunction("collect");
+    collectMaps->setArguments({EvaluatedType::Map});
+    collectMaps->setReturnTypes({{EvaluatedType::List}});
+    collectMaps->setIsAggregate(true);
+    collectMaps->setCollectsItsArgument(true);
+
     // A type-erased cell collects too: the list gathers the values the cells hold, each
     // keeping its own type, so the list is homogeneous in nothing and hands tagged
     // scalars back out.

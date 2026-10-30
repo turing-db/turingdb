@@ -2784,6 +2784,11 @@ void distinctAppendMapBytes(std::string& key, const MapView map) {
     }
 }
 
+// The map sibling of the ListView overload: a map keys by its entries, not by its span
+void distinctAppendValueBytes(std::string& key, const MapView value) {
+    distinctAppendMapBytes(key, value);
+}
+
 // Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
 // two types never collide because the tag leads, and a null is the tag alone, so all
 // nulls dedup together as they do in a nullable value column.
@@ -4866,23 +4871,24 @@ void collectTaggedListEmit(const Column* values,
     }
 }
 
-// The list sibling of collectValidIDFoldDistinct: two cells are the same value when their
-// elements are, so a cell keys by the list serialized element by element rather than by
-// the ListView's own span, which two equal lists never share.
-void collectListFoldDistinct(Column* values,
-                             const Column* input,
-                             const std::vector<size_t>& groups,
-                             std::vector<std::vector<size_t>>& groupPositions,
-                             NLGroupDistinctTally& distinct,
-                             NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<ListView>*>(values)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnVector<ListView>*>(input)->getRaw();
+// The list and map sibling of collectValidIDFoldDistinct: two cells are the same value
+// when their elements are, so a cell keys by the container serialized element by element
+// rather than by its view's own span, which two equal containers never share.
+template <typename Container>
+void collectContainerFoldDistinct(Column* values,
+                                  const Column* input,
+                                  const std::vector<size_t>& groups,
+                                  std::vector<std::vector<size_t>>& groupPositions,
+                                  NLGroupDistinctTally& distinct,
+                                  NLValueStore& store) {
+    auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<Container>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         const size_t group = groups[row];
 
         distinct.beginKey(group);
-        distinctAppendListBytes(distinct.getKey(), inputRaw[row]);
+        distinctAppendValueBytes(distinct.getKey(), inputRaw[row]);
 
         if (!distinct.insertIfNew()) {
             continue;
@@ -4894,58 +4900,60 @@ void collectListFoldDistinct(Column* values,
     }
 }
 
-// The nullable siblings of collectCellFold and collectListFoldDistinct for a list chunk: a
-// row an OPTIONAL MATCH left with no list is dropped, as collectFold drops an absent
-// optional, so the buffer they fill is a plain list column either way.
-void collectOptListFold(Column* values,
-                        const Column* input,
-                        const std::vector<size_t>& groups,
-                        std::vector<std::vector<size_t>>& groupPositions,
-                        NLGroupDistinctTally& distinct,
-                        NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<ListView>*>(values)->getRaw();
-    const std::vector<std::optional<ListView>>& inputRaw =
-        static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
+// The nullable siblings of collectCellFold and collectContainerFoldDistinct for a list or a
+// map chunk: a row an OPTIONAL MATCH left with no container is dropped, as collectFold drops
+// an absent optional, so the buffer they fill is a plain container column either way.
+template <typename Container>
+void collectOptContainerFold(Column* values,
+                             const Column* input,
+                             const std::vector<size_t>& groups,
+                             std::vector<std::vector<size_t>>& groupPositions,
+                             NLGroupDistinctTally& distinct,
+                             NLValueStore& store) {
+    auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
+    const std::vector<std::optional<Container>>& inputRaw =
+        static_cast<const ColumnOptVector<Container>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListView>& list = inputRaw[row];
-        if (!list.has_value()) {
+        const std::optional<Container>& container = inputRaw[row];
+        if (!container.has_value()) {
             continue;
         }
 
         const size_t position = valuesRaw.size();
-        valuesRaw.push_back(store.ownElement(*list));
+        valuesRaw.push_back(store.ownElement(*container));
         groupPositions[groups[row]].push_back(position);
     }
 }
 
-void collectOptListFoldDistinct(Column* values,
-                                const Column* input,
-                                const std::vector<size_t>& groups,
-                                std::vector<std::vector<size_t>>& groupPositions,
-                                NLGroupDistinctTally& distinct,
-                                NLValueStore& store) {
-    auto& valuesRaw = static_cast<ColumnVector<ListView>*>(values)->getRaw();
-    const std::vector<std::optional<ListView>>& inputRaw =
-        static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
+template <typename Container>
+void collectOptContainerFoldDistinct(Column* values,
+                                     const Column* input,
+                                     const std::vector<size_t>& groups,
+                                     std::vector<std::vector<size_t>>& groupPositions,
+                                     NLGroupDistinctTally& distinct,
+                                     NLValueStore& store) {
+    auto& valuesRaw = static_cast<ColumnVector<Container>*>(values)->getRaw();
+    const std::vector<std::optional<Container>>& inputRaw =
+        static_cast<const ColumnOptVector<Container>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListView>& list = inputRaw[row];
-        if (!list.has_value()) {
+        const std::optional<Container>& container = inputRaw[row];
+        if (!container.has_value()) {
             continue;
         }
 
         const size_t group = groups[row];
 
         distinct.beginKey(group);
-        distinctAppendListBytes(distinct.getKey(), *list);
+        distinctAppendValueBytes(distinct.getKey(), *container);
 
         if (!distinct.insertIfNew()) {
             continue;
         }
 
         const size_t position = valuesRaw.size();
-        valuesRaw.push_back(store.ownElement(*list));
+        valuesRaw.push_back(store.ownElement(*container));
         groupPositions[group].push_back(position);
     }
 }
@@ -8577,6 +8585,80 @@ void NLExecutor::runMakeMap(NLExecutionContext*, NLFunctionData* data) {
 }
 
 template <typename Result>
+void NLExecutor::runMergeMaps(NLExecutionContext*, NLFunctionData* data) {
+    const NLMergeMapsData* merge = static_cast<NLMergeMapsData*>(data);
+
+    const std::vector<NLMergeMapsData::Operand>& operands = merge->operands();
+    NLStepBuffers* memory = merge->getStepBuffers();
+    memory->clear();
+    MapBuffer<>& mapBuffer = memory->mapBuffer();
+
+    const size_t rowCount = operands.front()._column->size();
+
+    const auto isRowAligned = [rowCount](const NLMergeMapsData::Operand& operand) {
+        return operand._column->size() == rowCount;
+    };
+    bioassert(std::ranges::all_of(operands, isRowAligned),
+              "Map columns of a merge are not row-aligned.");
+
+    std::vector<Result>& outputRaw = static_cast<ColumnVector<Result>*>(merge->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::vector<MapEntryView> entries;
+    std::vector<MapBuffer<>::MapKeyValuePair> merged;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        entries.clear();
+
+        bool holdsEveryMap = true;
+        for (const NLMergeMapsData::Operand& operand : operands) {
+            const NLKeyedValue keyed = operand._read(operand._column, rowIndex);
+            const MapView* map = std::get_if<MapView>(&keyed);
+
+            if (!map) {
+                holdsEveryMap = false;
+                break;
+            }
+
+            entries.insert(entries.end(), map->begin(), map->end());
+        }
+
+        if constexpr (TypeUtils::is_optional_v<Result>) {
+            if (!holdsEveryMap) {
+                outputRaw[rowIndex] = std::nullopt;
+                continue;
+            }
+        } else {
+            bioassert(holdsEveryMap, "A merge typed as never null read a row holding no map.");
+        }
+
+        // Equal keys keep their operand order, so the last of each run is the one that stays
+        std::ranges::stable_sort(entries, std::less {}, &MapEntryView::getKey);
+
+        merged.clear();
+        for (size_t index = 0; index < entries.size(); index++) {
+            const MapEntryView entry = entries[index];
+
+            const bool replacedLater = index + 1 < entries.size()
+                                    && entries[index + 1].getKey() == entry.getKey();
+            if (replacedLater) {
+                continue;
+            }
+
+            merged.push_back(MapBuffer<>::MapKeyValuePair {
+                .key = entry.getKey(),
+                .value = taggedItem<MapBuffer<>::MapItemVariant>(entry.getValue()),
+            });
+        }
+
+        outputRaw[rowIndex] = mapBuffer.insert(merged);
+    }
+}
+
+template void NLExecutor::runMergeMaps<MapView>(NLExecutionContext* context, NLFunctionData* data);
+template void NLExecutor::runMergeMaps<std::optional<MapView>>(NLExecutionContext* context, NLFunctionData* data);
+
+template <typename Result>
 void NLExecutor::runSubstring(NLExecutionContext*, NLFunctionData* data) {
     const NLSubstringData* substring = static_cast<NLSubstringData*>(data);
 
@@ -9864,6 +9946,8 @@ NLUnaryFunctionKernel NLExecutor::selectProperties(const Column* input, bool inp
         return selectFunction<NLPropertiesFunction<EdgeID>>(input, inputNullable, memory, result);
     } else if (readsTaggedCells(input)) {
         return selectTaggedCellFunction<NLTaggedPropertiesFunction>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<MapView>(input)) {
+        return selectFunction<MapPropertiesFunction>(input, inputNullable, memory, result);
     }
 
     throw IRException("properties() reads a node, a relationship or a map column");
@@ -11136,19 +11220,34 @@ void NLExecutor::selectCollectOptEntityHandlers(NLChunkKind kind,
 
 // A list cell is present in every row, so it folds with no null to drop; only the dedup
 // differs, keying on the elements rather than on the cell.
-void NLExecutor::selectCollectListHandlers(bool distinctValues,
-                                           NLCollectFoldFunction& fold,
-                                           NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectListFoldDistinct : &collectCellFold<ListView>;
-    listEmit = &collectListEmit<ListView>;
+template <typename Container>
+void NLExecutor::selectCollectContainerHandlers(bool distinctValues,
+                                                NLCollectFoldFunction& fold,
+                                                NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectContainerFoldDistinct<Container> : &collectCellFold<Container>;
+    listEmit = &collectListEmit<Container>;
 }
 
-void NLExecutor::selectCollectOptListHandlers(bool distinctValues,
-                                             NLCollectFoldFunction& fold,
-                                             NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectOptListFoldDistinct : &collectOptListFold;
-    listEmit = &collectListEmit<ListView>;
+template <typename Container>
+void NLExecutor::selectCollectOptContainerHandlers(bool distinctValues,
+                                                   NLCollectFoldFunction& fold,
+                                                   NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectOptContainerFoldDistinct<Container> : &collectOptContainerFold<Container>;
+    listEmit = &collectListEmit<Container>;
 }
+
+template void NLExecutor::selectCollectContainerHandlers<ListView>(bool distinctValues,
+                                                                   NLCollectFoldFunction& fold,
+                                                                   NLCollectListEmitFunction& listEmit);
+template void NLExecutor::selectCollectContainerHandlers<MapView>(bool distinctValues,
+                                                                  NLCollectFoldFunction& fold,
+                                                                  NLCollectListEmitFunction& listEmit);
+template void NLExecutor::selectCollectOptContainerHandlers<ListView>(bool distinctValues,
+                                                                      NLCollectFoldFunction& fold,
+                                                                      NLCollectListEmitFunction& listEmit);
+template void NLExecutor::selectCollectOptContainerHandlers<MapView>(bool distinctValues,
+                                                                     NLCollectFoldFunction& fold,
+                                                                     NLCollectListEmitFunction& listEmit);
 
 // A type-erased cell carries its own type, so the fold drops the ones tagged null and the
 // emit writes each survivor back under the type its tag names.

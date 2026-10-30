@@ -549,7 +549,7 @@ LogicalResult ExplorePaths::verify() {
                            "read a chunk that holds one value per seed");
     }
 
-    MLIRContext* context = getContext();
+    MLIRContext* const context = getContext();
     const Type nodeChunk = getNodeIDChunkType(context);
     const Type edgeChunk = getEdgeIDChunkType(context);
 
@@ -955,6 +955,34 @@ LogicalResult MakeMap::verify() {
         if (!seenKeys.insert(llvm::cast<StringAttr>(key).getValue()).second) {
             return emitOpError("requires distinct keys");
         }
+    }
+
+    return success();
+}
+
+// Only a plain chunk of maps holds one in every row, so a result over any other operand is
+// nullable.
+LogicalResult MergeMaps::verify() {
+    if (getMaps().size() < 2) {
+        return emitOpError("requires at least two map chunks");
+    }
+
+    const auto operandTypes = getMaps().getTypes();
+
+    if (!llvm::all_of(operandTypes, holdsAMapPerRow)) {
+        return emitOpError("operands must be chunks of maps or of tagged cells");
+    }
+
+    const bool everyRowHoldsAMap = llvm::all_of(operandTypes, [](Type operandType) {
+        return isa<storage::MapType>(cast<ChunkType>(operandType).getElementType());
+    });
+
+    MLIRContext* const context = getContext();
+    const Type mapType = storage::MapType::get(context);
+    const Type expected = everyRowHoldsAMap ? mapType : storage::NullableType::get(context, mapType);
+
+    if (cast<ChunkType>(getResult().getType()).getElementType() != expected) {
+        return emitOpError("result must be a chunk of maps, nullable unless every operand holds a map in every row");
     }
 
     return success();

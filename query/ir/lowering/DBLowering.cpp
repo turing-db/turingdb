@@ -1424,6 +1424,8 @@ void DBLowering::lowerOperationByKind(mlir::Operation& operation) {
         lowerMakeList(makeList);
     } else if (mlir::db::MakeMap makeMap = mlir::dyn_cast<mlir::db::MakeMap>(operation)) {
         lowerMakeMap(makeMap);
+    } else if (mlir::db::MergeMaps merge = mlir::dyn_cast<mlir::db::MergeMaps>(operation)) {
+        lowerMergeMaps(merge);
     } else if (mlir::db::StaticMapKey mapKey = mlir::dyn_cast<mlir::db::StaticMapKey>(operation)) {
         lowerStaticMapKey(mapKey);
     } else if (mlir::db::DynamicMapKey dynamicMapKey = mlir::dyn_cast<mlir::db::DynamicMapKey>(operation)) {
@@ -2680,6 +2682,39 @@ void DBLowering::lowerMakeMap(mlir::db::MakeMap makeMap) {
 
     nl::MakeMap maps = _builder.create<nl::MakeMap>(_builder.getUnknownLoc(), chunks, makeMap.getKeys());
     _valueMap[makeMap.getResult()] = maps.getResult();
+}
+
+void DBLowering::lowerMergeMaps(mlir::db::MergeMaps merge) {
+    llvm::SmallVector<mlir::Value, 4> maps;
+    for (const mlir::Value column : merge.getMaps()) {
+        maps.push_back(mapValue(column));
+    }
+
+    const mlir::Value cardinality = cardinalityDriver(maps);
+
+    bool everyRowHoldsAMap = true;
+
+    for (mlir::Value& map : maps) {
+        map = rowAlignedChunk(map, cardinality);
+
+        const mlir::Type mapChunkType = map.getType();
+        if (!holdsAMapPerRow(mapChunkType)) {
+            throw IRException("db.merge_maps merges map columns, or columns of tagged cells");
+        }
+
+        const mlir::Type element = mlir::cast<nl::ChunkType>(mapChunkType).getElementType();
+        everyRowHoldsAMap = everyRowHoldsAMap && mlir::isa<storage::MapType>(element);
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type mapType = storage::MapType::get(context);
+    const mlir::Type resultElement = everyRowHoldsAMap ? mapType : storage::NullableType::get(context, mapType);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
+
+    setInsertionForNaryOp(maps);
+
+    nl::MergeMaps merged = _builder.create<nl::MergeMaps>(_builder.getUnknownLoc(), resultType, maps);
+    _valueMap[merge.getResult()] = merged.getResult();
 }
 
 void DBLowering::lowerRange(mlir::db::Range range) {
@@ -5016,8 +5051,8 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
     }
 
-    // An entity column collects as the IDs it carries, a list column as the cells it
-    // holds, and a type-erased one as the tagged cells - all present in every row, the
+    // An entity column collects as the IDs it carries, a list or a map column as the cells
+    // it holds, and a type-erased one as the tagged cells - all present in every row, the
     // tagged null among them, which the fold drops rather than the column. Only a scalar
     // value column is read as nullable, the way a property fetch is.
     for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
@@ -5026,6 +5061,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
                                                               storage::EdgeIDType,
                                                               storage::ListType,
+                                                              storage::MapType,
                                                               storage::AnyType>(collectedElement);
 
         if (!collectsCellsPresentInEveryRow) {

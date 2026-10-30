@@ -102,6 +102,7 @@
 #include "expr/ListPredicateExpr.h"
 #include "expr/ReduceExpr.h"
 #include "expr/AllReduceExpr.h"
+#include "expr/MapProjectionExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/ListSliceExpr.h"
 #include "expr/LiteralExpr.h"
@@ -1286,6 +1287,16 @@ mlir::Value DBProgramGenerator::translateMapOfColumns(const MapLiteral* map) {
 
     for (const auto& [key, valueExpr] : *map) {
         entries.emplace_back(key->getName(), valueExpr);
+    }
+
+    return emitMakeMap(entries);
+}
+
+mlir::Value DBProgramGenerator::emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries) {
+    if (entries.empty()) {
+        mlir::db::ConstantOp empty = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
+                                                                             _opBuilder.getDictionaryAttr({}));
+        return empty.getResult();
     }
 
     // Sorted on key name, as the DictionaryAttr of a constant map is
@@ -8055,6 +8066,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::MAP_PROJECTION: {
+            const MapProjectionExpr* projection = static_cast<const MapProjectionExpr*>(expr);
+            translateMapProjectionExpr(expr, projection);
+        }
+        break;
+
         case Expr::Kind::LIST:
             throwError(fmt::format("Unsupported expression: {}",
                                    ExprKindDescription::value(kind)),
@@ -8240,6 +8257,63 @@ void DBProgramGenerator::translateAllReduceExpr(const Expr* expr, const AllReduc
     dropUnreadCarriedColumns(allReduceOp, allReduceOp.getColumnsToFilter());
 
     _part._exprMap[expr] = allReduceOp.getResult();
+}
+
+void DBProgramGenerator::translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection) {
+    if (projection->getType() == EvaluatedType::Null) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
+    const mlir::Value base = getOrTranslateExprColumn(projection->getBase());
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    llvm::SmallVector<mlir::Value, 4> maps;
+    llvm::SmallVector<std::pair<std::string_view, const Expr*>> entries;
+
+    for (const MapProjectionExpr::Item& item : projection->getItems()) {
+        if (item._kind == MapProjectionExpr::ItemKind::AllProperties) {
+            if (!entries.empty()) {
+                maps.push_back(emitMakeMap(entries));
+                entries.clear();
+            }
+
+            maps.push_back(_opBuilder.create<mlir::db::PropertyMap>(loc, noneType, base).getResult());
+            continue;
+        }
+
+        const std::string_view key = item._key->getName();
+        const auto entryIt = std::ranges::find_if(entries, [key](const auto& entry) {
+            return entry.first == key;
+        });
+
+        if (entryIt != entries.end()) {
+            entryIt->second = item._value;
+        } else {
+            entries.emplace_back(key, item._value);
+        }
+    }
+
+    if (!entries.empty() || maps.empty()) {
+        maps.push_back(emitMakeMap(entries));
+    }
+
+    mlir::Value map = maps.front();
+    if (maps.size() > 1) {
+        map = _opBuilder.create<mlir::db::MergeMaps>(loc, noneType, maps).getResult();
+    }
+
+    const mlir::Value holdsABase = _opBuilder.create<mlir::db::IsNotNullOp>(loc, boolType, base).getResult();
+
+    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
+                                                             noneType,
+                                                             mlir::ValueRange {holdsABase},
+                                                             mlir::ValueRange {map},
+                                                             mlir::Value {})
+                               .getResult();
 }
 
 void DBProgramGenerator::generateFoldRegion(mlir::Region& region,

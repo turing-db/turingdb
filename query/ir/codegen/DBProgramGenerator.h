@@ -60,6 +60,7 @@ class ListComprehensionExpr;
 class ListPredicateExpr;
 class ReduceExpr;
 class AllReduceExpr;
+class MapProjectionExpr;
 class ExistsExpr;
 class CountSubqueryExpr;
 class CollectSubqueryExpr;
@@ -1295,6 +1296,11 @@ private:
     // db.reduce's operands and body, and a predicate region over the same arguments
     void translateAllReduceExpr(const Expr* expr, const AllReduceExpr* allReduce);
 
+    // Emits a map projection: one db.make_map per run of items other than `.*`, the base's
+    // db.properties for each `.*`, a db.merge_maps of them in item order where there are
+    // several, and a db.case keeping the map only where the base is not null
+    void translateMapProjectionExpr(const Expr* expr, const MapProjectionExpr* projection);
+
     // Generates a region of a db.reduce or a db.all_reduce: the entry block binds the
     // element and the accumulator to their variables and takes the carry set, and
     // @param generateBody emits what the region computes and its yield over them
@@ -1426,6 +1432,10 @@ private:
     mlir::Value translateListOfColumns(const ListLiteral* list);
 
     mlir::Value translateMapOfColumns(const MapLiteral* map);
+
+    // The db.make_map of @param entries, each a key and the expression its value is read
+    // from, which this sorts on key. The constant empty map when there is none.
+    mlir::Value emitMakeMap(llvm::SmallVectorImpl<std::pair<std::string_view, const Expr*>>& entries);
 
     void addScanNodes(const VariableDependency* var);
 

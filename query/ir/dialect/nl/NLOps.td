@@ -391,6 +391,33 @@ def MakeMap : NLOp<"make_map", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* MergeMaps
+*/
+def MergeMaps : NLOp<"merge_maps", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise merge of the maps of every operand, later keys replacing earlier ones";
+  let description = [{
+    Imperative counterpart of db.merge_maps. Row r of the result holds every key the
+    operands' maps hold at row r, under the value of the last operand holding it, written
+    into the step's map buffer as one contiguous run sorted on key:
+
+      %m = nl.merge_maps(%properties, %entries)
+             : (!nl.chunk<!storage.nullable<!storage.map>>, !nl.chunk<!storage.map>)
+             -> !nl.chunk<!storage.nullable<!storage.map>>
+
+    An operand is a chunk of maps, nullable or not, or of tagged cells. A row where one
+    holds no map gets none, so the result is nullable unless every operand is a plain
+    chunk of maps. Every operand carries rows - lowering lays a constant one out over them
+    first.
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$maps);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $maps `)` attr-dict `:` functional-type(operands, results)";
+}
+
+/**
 * StaticMapKey
 */
 def StaticMapKey : NLOp<"static_map_key", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {

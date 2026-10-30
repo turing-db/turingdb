@@ -585,6 +585,12 @@ bool isNullableList(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListType>(nullableType.getValueType());
 }
 
+bool isNullableMap(mlir::Type elementType) {
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
+
+    return nullableType && mlir::isa<storage::MapType>(nullableType.getValueType());
+}
+
 // The property value type a chunk writes, which is not quite the shape it holds: a mask
 // writes a Bool property, so it is recognised here and not in valueTypeFromElementType,
 // which answers what nullable value column a chunk needs.
@@ -1031,6 +1037,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translatePercentile(&operation, body);
         } else if (nl::MakeMap makeMap = mlir::dyn_cast<nl::MakeMap>(operation)) {
             translateMakeMap(makeMap, body);
+        } else if (nl::MergeMaps merge = mlir::dyn_cast<nl::MergeMaps>(operation)) {
+            translateMergeMaps(merge, body);
         } else if (nl::StaticMapKey mapKey = mlir::dyn_cast<nl::StaticMapKey>(operation)) {
             translateStaticMapKey(mapKey, body);
         } else if (nl::DynamicMapKey dynamicMapKey = mlir::dyn_cast<nl::DynamicMapKey>(operation)) {
@@ -3593,6 +3601,32 @@ void NLTranslator::translateMakeMap(nl::MakeMap makeMap, NLStmtContainer* body) 
     body->emplaceStmt(&NLExecutor::runMakeMap, data);
 }
 
+void NLTranslator::translateMergeMaps(nl::MergeMaps merge, NLStmtContainer* body) {
+    const mlir::Value resultValue = merge.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLMergeMapsData* data = _program->allocFunctionData<NLMergeMapsData>(result, _program->allocStepBuffers());
+
+    for (const mlir::Value mapChunk : merge.getMaps()) {
+        const Column* const map = getColumn(mapChunk);
+
+        data->addOperand(NLMergeMapsData::Operand {
+            ._column = map,
+            ._read = NLExecutor::selectKeyedRead(map),
+        });
+    }
+
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultValue.getType()).getElementType();
+
+    if (mlir::isa<storage::NullableType>(resultElement)) {
+        body->emplaceStmt(&NLExecutor::runMergeMaps<std::optional<MapView>>, data);
+    } else {
+        body->emplaceStmt(&NLExecutor::runMergeMaps<MapView>, data);
+    }
+}
+
 void NLTranslator::translateStaticMapKey(nl::StaticMapKey mapKey, NLStmtContainer* body) {
     const mlir::Value resultValue = mapKey.getResult();
 
@@ -5932,9 +5966,17 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         if (isNullableList(element)) {
             NLCollectFoldFunction fold = nullptr;
             NLCollectListEmitFunction listEmit = nullptr;
-            NLExecutor::selectCollectOptListHandlers(isDistinct, fold, listEmit);
+            NLExecutor::selectCollectOptContainerHandlers<ListView>(isDistinct, fold, listEmit);
 
             value._buffer = allocListColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (isNullableMap(element)) {
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectOptContainerHandlers<MapView>(isDistinct, fold, listEmit);
+
+            value._buffer = allocColumnForKind(NLChunkKind::Map);
             value._fold = fold;
             value._listEmit = listEmit;
         } else if (isNullableAny(element)) {
@@ -5967,9 +6009,17 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         } else if (mlir::isa<storage::ListType>(element)) {
             NLCollectFoldFunction fold = nullptr;
             NLCollectListEmitFunction listEmit = nullptr;
-            NLExecutor::selectCollectListHandlers(isDistinct, fold, listEmit);
+            NLExecutor::selectCollectContainerHandlers<ListView>(isDistinct, fold, listEmit);
 
             value._buffer = allocListColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (mlir::isa<storage::MapType>(element)) {
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectContainerHandlers<MapView>(isDistinct, fold, listEmit);
+
+            value._buffer = allocColumnForKind(NLChunkKind::Map);
             value._fold = fold;
             value._listEmit = listEmit;
         } else if (mlir::isa<storage::AnyType>(element)) {
