@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "ID.h"
+#include "datapart/DataPartSpan.h"
 
 namespace db {
 
@@ -26,7 +27,7 @@ public:
     DataPartRebaser& operator=(DataPartRebaser&&) = default;
 
     bool rebase(const MetadataRebaser& metadata,
-                const DataPart& prevPart,
+                DataPartSpan earlierParts,
                 DataPart& part);
 private:
     EntityIDRebaser* _idRebaser {nullptr};

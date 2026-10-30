@@ -3,6 +3,7 @@
 #include "ArcManager.h"
 #include "versioning/CommitHash.h"
 #include "versioning/CommitHistory.h"
+#include "versioning/CommitStatistics.h"
 #include "metadata/EdgeBranchingCache.h"
 #include "metadata/GraphMetadata.h"
 #include "versioning/Tombstones.h"
@@ -39,6 +40,7 @@ public:
     [[nodiscard]] CommitHash hash() const { return _hash; }
     [[nodiscard]] const Tombstones& tombstones() const { return _tombstones; }
     [[nodiscard]] EdgeBranchingCache& branchingCache() const { return _branchingCache; }
+    [[nodiscard]] CommitStatistics& statistics() const { return _statistics; }
     std::span<const WeakArc<Index>> indexes() const { return _history.validIndexes(); }
 
 private:
@@ -56,6 +58,7 @@ private:
     Tombstones _tombstones;
 
     mutable EdgeBranchingCache _branchingCache;
+    mutable CommitStatistics _statistics;
 };
 
 }

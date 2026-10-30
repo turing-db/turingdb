@@ -4,6 +4,8 @@
 #include "NodeContainerComparator.h"
 #include "EdgeContainerComparator.h"
 #include "EdgeIndexerComparator.h"
+#include "EdgeCountsComparator.h"
+#include "DegreeProductsComparator.h"
 #include "PropertyManagerComparator.h"
 #include "comparators/StringIndexerComparator.h"
 #include "spdlog/spdlog.h"
@@ -28,6 +30,14 @@ bool DataPartComparator::same(const DataPart& a, const DataPart& b) {
     }
 
     if (!EdgeIndexerComparator::same(a.edgeIndexer(), b.edgeIndexer())) {
+        return false;
+    }
+
+    if (!EdgeCountsComparator::same(a.edgeCounts(), b.edgeCounts())) {
+        return false;
+    }
+
+    if (!DegreeProductsComparator::same(a.degreeProducts(), b.degreeProducts())) {
         return false;
     }
 

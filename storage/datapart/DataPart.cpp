@@ -11,6 +11,8 @@
 #include "ID.h"
 #include "NodeContainer.h"
 #include "EdgeContainer.h"
+#include "EdgeCounts.h"
+#include "DegreeProducts.h"
 #include "TuringException.h"
 #include "indexers/EdgeIndexer.h"
 #include "indexers/StringPropertyIndexer.h"
@@ -36,6 +38,8 @@ DataPart::DataPart(NodeID firstNodeID,
     : _firstNodeID(firstNodeID),
     _firstEdgeID(firstEdgeID),
     _id(id),
+    _edgeCounts(std::make_unique<EdgeCounts>()),
+    _degreeProducts(std::make_unique<DegreeProducts>()),
     _nodeStrPropIdx(std::make_unique<StringPropertyIndexer>()),
     _edgeStrPropIdx(std::make_unique<StringPropertyIndexer>())
     
@@ -247,6 +251,9 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                                        patchNodeLabelSets,
                                        builder.getOutPatchEdgeCount(),
                                        builder.getInPatchEdgeCount());
+
+    _edgeCounts = EdgeCounts::create(*_edgeIndexer, *_nodes);
+    _degreeProducts = DegreeProducts::create(*_edges, *_edgeIndexer, *_nodes, view.dataparts());
 
     jobs.wait();
 

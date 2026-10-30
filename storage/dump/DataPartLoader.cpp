@@ -1,6 +1,8 @@
 #include "DataPartLoader.h"
 
 #include "datapart/DataPart.h"
+#include "datapart/EdgeCounts.h"
+#include "datapart/DegreeProducts.h"
 #include "DumpConfig.h"
 #include "DumpResult.h"
 #include "FilePageReader.h"
@@ -14,6 +16,8 @@
 #include "indexers/EdgeIndexer.h"
 #include "DataPartInfoLoader.h"
 #include "EdgeIndexerLoader.h"
+#include "EdgeCountsLoader.h"
+#include "DegreeProductsLoader.h"
 #include "NodeContainerLoader.h"
 #include "EdgeContainerLoader.h"
 #include "PropertyContainerLoader.h"
@@ -27,6 +31,7 @@ using namespace db;
 DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
                                                    const fs::Path& dataPartDir,
                                                    const GraphMetadata& metadata,
+                                                   DataPartSpan earlierParts,
                                                    VersionController* versionController) {
     Profile profile("DataPartLoader::load");
 
@@ -113,6 +118,40 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
         }
 
         part->_edgeIndexer = std::move(res.value());
+    }
+
+    // Loading edge counts, or counting them for a part dumped without them
+    const fs::Path edgeCountsFile = dataPartDir / "edge-counts";
+    if (edgeCountsFile.exists()) {
+        auto reader = fs::FilePageReader::open(edgeCountsFile, DumpConfig::PAGE_SIZE);
+        if (!reader) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_COUNTS, reader.error());
+        }
+
+        EdgeCountsLoader loader(reader.value());
+
+        if (auto res = loader.load(metadata, *part->_edgeCounts); !res) {
+            return res.get_unexpected();
+        }
+    } else if (part->_edgeIndexer) {
+        part->_edgeCounts = EdgeCounts::create(*part->_edgeIndexer, *part->_nodes);
+    }
+
+    // Loading degree products, or computing them for a part dumped without them
+    const fs::Path degreeProductsFile = dataPartDir / "degree-products";
+    if (degreeProductsFile.exists()) {
+        auto reader = fs::FilePageReader::open(degreeProductsFile, DumpConfig::PAGE_SIZE);
+        if (!reader) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_DEGREE_PRODUCTS, reader.error());
+        }
+
+        DegreeProductsLoader loader(reader.value());
+
+        if (auto res = loader.load(metadata, *part->_degreeProducts); !res) {
+            return res.get_unexpected();
+        }
+    } else if (part->_edgeIndexer) {
+        part->_degreeProducts = DegreeProducts::create(*part->_edges, *part->_edgeIndexer, *part->_nodes, earlierParts);
     }
 
     // Listing files in the folder

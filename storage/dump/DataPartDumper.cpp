@@ -1,6 +1,8 @@
 #include "DataPartDumper.h"
 
 #include "datapart/DataPart.h"
+#include "datapart/EdgeCounts.h"
+#include "datapart/DegreeProducts.h"
 #include "DumpConfig.h"
 #include "FilePageWriter.h"
 #include "Path.h"
@@ -10,6 +12,8 @@
 #include "properties/PropertyManager.h"
 #include "DataPartInfoDumper.h"
 #include "EdgeIndexerDumper.h"
+#include "EdgeCountsDumper.h"
+#include "DegreeProductsDumper.h"
 #include "NodeContainerDumper.h"
 #include "EdgeContainerDumper.h"
 #include "PropertyContainerDumper.h"
@@ -177,6 +181,38 @@ DumpResult<void> DataPartDumper::dump(const DataPart& part, const fs::Path& part
 
     if (auto res = dumper.dump(edgeIndexer); !res) {
         return res.get_unexpected();
+    }
+
+    // Dumping edge counts
+    {
+        const fs::Path edgeCountsFile = partDir / "edge-counts";
+
+        auto writer = fs::FilePageWriter::open(edgeCountsFile, DumpConfig::PAGE_SIZE);
+        if (!writer) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_EDGE_COUNTS, writer.error());
+        }
+
+        EdgeCountsDumper dumper(writer.value());
+
+        if (auto res = dumper.dump(part.edgeCounts()); !res) {
+            return res.get_unexpected();
+        }
+    }
+
+    // Dumping degree products
+    {
+        const fs::Path degreeProductsFile = partDir / "degree-products";
+
+        auto writer = fs::FilePageWriter::open(degreeProductsFile, DumpConfig::PAGE_SIZE);
+        if (!writer) {
+            return DumpError::result(DumpErrorType::CANNOT_OPEN_DATAPART_DEGREE_PRODUCTS, writer.error());
+        }
+
+        DegreeProductsDumper dumper(writer.value());
+
+        if (auto res = dumper.dump(part.degreeProducts()); !res) {
+            return res.get_unexpected();
+        }
     }
 
     // Dumping node properties

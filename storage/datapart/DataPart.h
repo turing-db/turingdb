@@ -19,6 +19,8 @@ class DataPartBuilder;
 class GraphView;
 class GraphReader;
 class EdgeIndexer;
+class EdgeCounts;
+class DegreeProducts;
 class DataPartLoader;
 class DataPartRebaser;
 class JobSystem;
@@ -72,6 +74,8 @@ public:
     const PropertyManager& edgeProperties() const { return *_edgeProperties; }
     const EdgeContainer& edges() const { return *_edges; }
     const EdgeIndexer& edgeIndexer() const { return *_edgeIndexer; }
+    const EdgeCounts& edgeCounts() const { return *_edgeCounts; }
+    const DegreeProducts& degreeProducts() const { return *_degreeProducts; }
     const StringPropertyIndexer& getNodeStrPropIndexer() const;
     const StringPropertyIndexer& getEdgeStrPropIndexer() const;
 
@@ -92,6 +96,8 @@ private:
     std::unique_ptr<PropertyManager> _nodeProperties;
     std::unique_ptr<PropertyManager> _edgeProperties;
     std::unique_ptr<EdgeIndexer> _edgeIndexer;
+    std::unique_ptr<EdgeCounts> _edgeCounts;
+    std::unique_ptr<DegreeProducts> _degreeProducts;
     std::unique_ptr<StringPropertyIndexer> _nodeStrPropIdx;
     std::unique_ptr<StringPropertyIndexer> _edgeStrPropIdx;
 };

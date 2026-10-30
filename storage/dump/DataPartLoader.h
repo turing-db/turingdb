@@ -4,6 +4,7 @@
 #include "Path.h"
 #include "DumpResult.h"
 #include "ArcManager.h"
+#include "datapart/DataPartSpan.h"
 
 namespace db {
 
@@ -17,6 +18,7 @@ public:
     [[nodiscard]] static DumpResult<WeakArc<DataPart>> load(DataPartID partID,
                                                             const fs::Path& dataPartDir,
                                                             const GraphMetadata& metadata,
+                                                            DataPartSpan earlierParts,
                                                             VersionController* versionController);
 
 private:

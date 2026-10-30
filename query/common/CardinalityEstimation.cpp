@@ -25,6 +25,26 @@ size_t CardinalityEstimation::estimateEdgeCount() const {
     return reader.getEdgeCount();
 }
 
+size_t CardinalityEstimation::estimateEdgeCount(const LabelSet& source, const LabelSet& target) const {
+    GraphReader reader(_graphView);
+
+    return reader.getEdgeCount(source.handle(), target.handle());
+}
+
+size_t CardinalityEstimation::estimateEdgeCount(const LabelSet& source, EdgeTypeID edgeType, const LabelSet& target) const {
+    GraphReader reader(_graphView);
+
+    return reader.getEdgeCount(source.handle(), edgeType, target.handle());
+}
+
+size_t CardinalityEstimation::estimateDegreeProducts(const LabelSet& labels,
+                                                     const DegreeSelection& first,
+                                                     const DegreeSelection& second) const {
+    GraphReader reader(_graphView);
+
+    return reader.sumDegreeProducts(labels.handle(), first, second);
+}
+
 size_t CardinalityEstimation::estimateOutEdgeCount(const LabelSet& labelset) const {
     GraphReader reader(_graphView);
 
