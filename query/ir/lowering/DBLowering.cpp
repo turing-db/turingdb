@@ -1248,16 +1248,17 @@ bool DBLowering::isConstantReadAsRows(mlir::Value chunk) {
 }
 
 bool DBLowering::readsConstantsAsRows(mlir::Operation& operation) {
-    return llvm::any_of(operation.getOperands(), [this](mlir::Value operand) {
-        const mlir::Value chunk = _valueMap.lookup(operand);
-        return chunk && isConstantReadAsRows(chunk);
+    return llvm::any_of(operation.getOpOperands(), [this](mlir::OpOperand& operand) {
+        const mlir::Value chunk = _valueMap.lookup(operand.get());
+        return chunk && !readsASharedRelation(operand) && isConstantReadAsRows(chunk);
     });
 }
 
 mlir::Value DBLowering::rowsReadBy(mlir::Operation& operation) {
     llvm::SmallVector<mlir::Value, 4> chunks;
-    for (const mlir::Value operand : operation.getOperands()) {
-        if (const mlir::Value chunk = _valueMap.lookup(operand)) {
+    for (mlir::OpOperand& operand : operation.getOpOperands()) {
+        const mlir::Value chunk = _valueMap.lookup(operand.get());
+        if (chunk && !readsASharedRelation(operand)) {
             chunks.push_back(chunk);
         }
     }
@@ -1282,9 +1283,10 @@ void DBLowering::lowerWithConstantsLaidOut(mlir::Operation& operation,
                                            mlir::Value cardinality,
                                            ChunkPredicate laysOut) {
     llvm::SmallVector<std::pair<mlir::Value, mlir::Value>, 2> laidOutChunks;
-    for (const mlir::Value operand : operation.getOperands()) {
+    for (mlir::OpOperand& use : operation.getOpOperands()) {
+        const mlir::Value operand = use.get();
         const mlir::Value chunk = _valueMap.lookup(operand);
-        if (!chunk || !laysOut(chunk)) {
+        if (!chunk || readsASharedRelation(use) || !laysOut(chunk)) {
             continue;
         }
 
