@@ -55,6 +55,16 @@ protected:
         EXPECT_EQ(actual, sortedExpected) << "query: " << query;
     }
 
+    void expectError(std::string_view query, std::string_view expectedError) {
+        StringRowSink sink;
+        QueryStatus status;
+        runQuery(query, sink, status);
+
+        ASSERT_FALSE(status.isOk()) << "query: " << query << "\nexpected it to fail";
+        EXPECT_NE(status.getError().find(expectedError), std::string::npos)
+            << "query: " << query << "\nerror: " << status.getError();
+    }
+
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
@@ -75,4 +85,41 @@ TEST_F(MapLiteralLookupTest, readsAKeyOfAMapLiteralBuiltFromTheRow) {
 
 TEST_F(MapLiteralLookupTest, readsAPropertyOfTheNodeAMapLiteralHolds) {
     expectRows("MATCH (p:Person {name: 'Remy'}) RETURN {k: p}.k.name", {{"Remy"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAKeyOfAParenthesizedMapLiteral) {
+    expectRows("RETURN ({k: 1}).k", {{"1"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAKeyOfTheMapAMapLiteralHolds) {
+    expectRows("RETURN {k: {j: 2}}.k.j", {{"2"}});
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN {k: {j: p}}.k.j.name", {{"Remy"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAPropertyOfTheEdgeAMapLiteralHolds) {
+    expectRows("MATCH (p:Person {name: 'Remy'})-[e]->(q:Person {name: 'Adam'}) RETURN {e: e}.e.name",
+               {{"Remy -> Adam"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAKeyOfTheMapACaseGives) {
+    expectRows("RETURN CASE WHEN true THEN {k: 1} ELSE {k: 2} END.k", {{"1"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAKeyOfTheMapAReduceGives) {
+    expectRows("RETURN reduce(acc = {k: 0}, x IN [1, 2] | {k: acc.k + x}).k", {{"3"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAPropertyOfTheNodeACollectSubqueryGives) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN COLLECT { MATCH (q:Person {name: 'Remy'}) RETURN q }[0].name",
+               {{"Remy"}});
+}
+
+TEST_F(MapLiteralLookupTest, readsAPropertyOfAParenthesizedValue) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) WITH {k: p} AS m RETURN (m.k).name", {{"Remy"}});
+    expectRows("RETURN (datetime('2024-01-02T00:00:00Z')).year", {{"2024"}});
+}
+
+TEST_F(MapLiteralLookupTest, rejectsAPropertyOfAValueThatHasNone) {
+    expectError("RETURN (1 + 2).foo", "A value of type 'Integer' has no property 'foo'");
+    expectError("RETURN [1, 2].foo", "A value of type 'List' has no property 'foo'");
 }

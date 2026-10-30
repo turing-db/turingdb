@@ -358,8 +358,9 @@
 %type<db::Expr*> stringExpr
 %type<db::Expr*> entityTypeExpr
 %type<db::Expr*> labelTestOperand
-%type<db::Expr*> propertyLookupExpr
+%type<db::Expr*> lookupOperand
 %type<db::Expr*> propertyExpr
+%type<db::Expr*> variablePropertyExpr
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
 %type<db::Expr*> bracketExpr
@@ -824,7 +825,7 @@ indexType
     ;
 
 createNodePropertyIndexQuery
-    : CREATE INDEX name FOR nodePattern ON propertyExpr {
+    : CREATE INDEX name FOR nodePattern ON variablePropertyExpr {
         if ($5->getWhere()) {
             scanner.syntaxError(@5, "WHERE is not allowed in an index pattern");
         }
@@ -835,7 +836,7 @@ createNodePropertyIndexQuery
     ;
 
 createEdgePropertyIndexQuery
-    : CREATE INDEX name FOR OBRACK edgeDetail CBRACK ON propertyExpr {
+    : CREATE INDEX name FOR OBRACK edgeDetail CBRACK ON variablePropertyExpr {
         if ($6->getWhere()) {
             scanner.syntaxError(@6, "WHERE is not allowed in an index pattern");
         }
@@ -1185,7 +1186,7 @@ removeSt
     ;
 
 removeItem
-    : propertyExpr { $$ = static_cast<PropertyExpr*>($1); }
+    : variablePropertyExpr { $$ = static_cast<PropertyExpr*>($1); }
     | entityTypeExpr { scanner.notImplemented(@$, "REMOVE of a label"); }
     ;
 
@@ -1388,7 +1389,7 @@ setSt
     ;
 
 setItem
-    : propertyExpr ASSIGN expr { $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), $3); LOC($$, @$); }
+    : variablePropertyExpr ASSIGN expr { $$ = SetItem::create(ast, static_cast<PropertyExpr*>($1), $3); LOC($$, @$); }
     | symbol ADD_ASSIGN expr { $$ = SetItem::create(ast, $1, $3); LOC($$, @$); }
     | entityTypeExpr { $$ = SetItem::create(ast, static_cast<EntityTypeExpr*>($1)); LOC($$, @$); }
     ;
@@ -1575,8 +1576,13 @@ atomicExpr
 
 labelTestOperand
     : propertyExpr { $$ = $1; }
-    | propertyLookupExpr { $$ = $1; }
-    | atomExpr { $$ = $1; }
+    | lookupOperand { $$ = $1; }
+    ;
+
+// Every operand of a property lookup but a variable, whose lookups qualifiedName reads
+lookupOperand
+    : atomExpr { $$ = $1; }
+    | lookupOperand DOT name { $$ = ParserUtils::createPropertyLookup(ast, $1, $3); LOC($$, @$); }
     | atomicExpr OBRACK expr CBRACK {
         $$ = IndexExpr::create(ast, $1, $3); LOC($$, @$);
       }
@@ -1600,30 +1606,17 @@ entityTypeExpr
 
 propertyExpr
     : qualifiedName DOT name { $1->addName($3); $$ = PropertyExpr::create(ast, $1); LOC($$, @$); }
+    ;
+
+variablePropertyExpr
+    : propertyExpr { $$ = $1; }
     | parenthesizedExpr DOT name {
-        // check whether the parenthesised expr is a valid thing for a property access
         $$ = ParserUtils::createParenthesizedPropertyAccess(ast, $1, $3);
 
         if (!$$) {
             scanner.syntaxError(@1, "Invalid property access. Only a variable can be parenthesized on the left of '.'");
         }
 
-        LOC($$, @$);
-      }
-    ;
-
-propertyLookupExpr
-    : functionInvocation DOT name {
-        Expr* call = FunctionInvocationExpr::create(ast, $1);
-        LOC(call, @1);
-        $$ = PropertyLookupExpr::create(ast, call, $3->getName());
-        LOC($$, @$);
-      }
-    | propertyLookupExpr DOT name { $$ = PropertyLookupExpr::create(ast, $1, $3->getName()); LOC($$, @$); }
-    | atomicExpr OBRACK expr CBRACK DOT name {
-        Expr* indexed = IndexExpr::create(ast, $1, $3);
-        LOC(indexed, SourceLocation::join(@1, @4));
-        $$ = PropertyLookupExpr::create(ast, indexed, $6->getName());
         LOC($$, @$);
       }
     ;
