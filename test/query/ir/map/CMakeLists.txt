@@ -68,3 +68,7 @@ target_include_directories(test_query_ir_map_null_test PRIVATE ${IR_TEST_DIR})
 
 add_turing_test(test_query_ir_null_inside_value_equality NullInsideValueEqualityTest.cpp)
 target_include_directories(test_query_ir_null_inside_value_equality PRIVATE ${IR_TEST_DIR})
+
+add_call_v3_test(test_query_ir_map_holding_a_node MapHoldingANodeTest.cpp)
+
+add_call_v3_test(test_query_ir_map_holding_a_path MapHoldingAPathTest.cpp)

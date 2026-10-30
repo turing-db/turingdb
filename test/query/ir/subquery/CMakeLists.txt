@@ -226,3 +226,6 @@ add_turing_test(test_query_ir_exists_function ExistsFunctionTest.cpp)
 # A subquery expression whose body runs one row at a time, inside a CASE, a comprehension,
 # a reduce, a list predicate and an UNWIND.
 add_turing_test(test_query_ir_per_row_subquery_expression PerRowSubqueryExpressionTest.cpp)
+
+# A COLLECT subquery or a pattern comprehension whose body returns a map.
+add_call_v3_test(test_query_ir_subquery_collecting_a_map SubqueryCollectingAMapTest.cpp)
