@@ -98,6 +98,31 @@ protected:
         ASSERT_TRUE(submitResult);
     }
 
+    // A hundred Point nodes, the first ten Rare as well, with three LINKS edges out of each,
+    // a RARE_LINK edge out of Rare nodes 0 and 1 into node 50, and thirty FANS edges out of
+    // node 50 alone, so a walk reaching node 50 by RARE_LINK has every FANS edge to follow.
+    void buildGraphWithRareLinks() {
+        buildGraph(100, 10, 3);
+
+        auto change = _graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        const EdgeTypeID rareLinkType = metadata.getOrCreateEdgeType("RARE_LINK");
+        const EdgeTypeID fansType = metadata.getOrCreateEdgeType("FANS");
+        const NodeID hub {50};
+
+        builder.addEdge(rareLinkType, NodeID {0}, hub);
+        builder.addEdge(rareLinkType, NodeID {1}, hub);
+        for (size_t fan = 60; fan < 90; fan++) {
+            builder.addEdge(fansType, hub, NodeID {fan});
+        }
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        ASSERT_TRUE(submitResult);
+    }
+
     // The db program the pipeline leaves for a query on this graph, as text.
     void generate(std::string_view query, const mlir::db::DBPassContext& context, std::string& program) {
         const FrozenCommitTx transaction = _graph->openTransaction();
@@ -374,6 +399,56 @@ TEST_F(HashJoinCostModelTest, clearingUseFusesTheLargestProduct) {
 
     EXPECT_EQ(program.find("db.hash_join"), std::string::npos) << program;
     EXPECT_NE(program.find("db.cross_product"), std::string::npos) << program;
+}
+
+// An edge scan by type is read at the edges of its type: the two RARE_LINK edges against the
+// hundred nodes of the bare scan, so the edges are the side to hold, where every edge of the
+// graph would have been 308.
+TEST_F(HashJoinCostModelTest, sizesAnEdgeScanByItsType) {
+    buildGraphWithRareLinks();
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (a)-[:RARE_LINK]->(b), (m) WHERE b.name = m.name RETURN a, m", forced, program);
+
+    EXPECT_LT(program.find("} factor {"), program.find("RARE_LINK")) << program;
+}
+
+// A typed hop out of the ten Rare nodes makes the two edges of its type, not the 3.2 edges
+// of every type each Rare node has, so it is the side to hold against the ten.
+TEST_F(HashJoinCostModelTest, sizesAHopByTheEdgesOfItsType) {
+    buildGraphWithRareLinks();
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (m:Rare), (n:Rare)-[:RARE_LINK]->(x) WHERE m.name = x.name RETURN m, x", forced, program);
+
+    EXPECT_LT(program.find("} factor {"), program.find("RARE_LINK")) << program;
+}
+
+// Both RARE_LINK edges reach node 50, which has all thirty FANS edges, so the two hops make
+// sixty rows rather than the 0.6 the average FANS out-degree of the hundred nodes gives, and
+// the ten Rare nodes are the side to hold.
+TEST_F(HashJoinCostModelTest, sizesASecondHopByTheNodesTheFirstReaches) {
+    buildGraphWithRareLinks();
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (m:Rare), (n:Rare)-[:RARE_LINK]->(h)-[:FANS]->(x) WHERE m.name = x.name RETURN m, x", forced, program);
+
+    EXPECT_LT(program.find("RARE_LINK"), program.find("} factor {")) << program;
 }
 
 int main(int argc, char** argv) {
